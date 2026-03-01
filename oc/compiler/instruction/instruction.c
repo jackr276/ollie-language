@@ -5707,6 +5707,27 @@ static inline three_addr_var_t* duplicate_variable(three_addr_var_t* variable){
 
 
 /**
+ * Duplicate a constant. This is used for copy instructions where we need to maintain a
+ * separation
+ */
+static inline three_addr_const_t* duplicate_constant(three_addr_const_t* constant){
+	//If it's empty just leave
+	if(constant == NULL){
+		return NULL;
+	}
+
+	//Complete duplication
+	three_addr_const_t* copy = calloc(1, sizeof(three_addr_const_t));
+
+	//And a full copy over
+	memcpy(copy, constant, sizeof(three_addr_const_t));
+
+	//Give it back
+	return copy;
+}
+
+
+/**
  * Emit a complete copy of whatever was in here previously
  */
 instruction_t* copy_instruction(instruction_t* copied){
@@ -5720,6 +5741,8 @@ instruction_t* copy_instruction(instruction_t* copied){
 	copy->assignee = duplicate_variable(copied->assignee);
 	copy->op1 = duplicate_variable(copied->op1);
 	copy->op2 = duplicate_variable(copied->op2);
+	copy->offset = duplicate_constant(copied->offset);
+	copy->op1_const = duplicate_constant(copied->op1_const);
 
 	//If we have function call parameters, emit a copy of them
 	if(copied->parameters.internal_array != NULL){

@@ -9257,7 +9257,6 @@ static void select_instruction_patterns(instruction_window_t* window){
 			break;
 		//For a phi function, we perform an exact 1:1 mapping
 		case THREE_ADDR_CODE_PHI_FUNC:
-			//This is all we'll need
 			instruction->instruction_type = PHI_FUNCTION;
 			break;
 		//Handle a neg statement
