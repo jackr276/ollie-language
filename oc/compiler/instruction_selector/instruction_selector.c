@@ -8340,6 +8340,22 @@ static void handle_store_instruction(instruction_t* instruction){
 
 			break;
 
+		/**
+		 * A parameter address is a different type entirely. This will never be a global var
+		 * and it will never be 0. We need to emit a special kind of constant here to represent
+		 * what this is
+		 */
+		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+			//The first address calc register will be the stack pointer
+			instruction->address_calc_reg1 = stack_pointer_variable;
+
+			//And we need to store the offset
+			instruction->offset = emit_stack_passed_parameter_offset_constant(instruction->assignee->associated_memory_region.stack_region, u64);
+
+			//This counts for our destination only
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+			break;
 			
 		/**
 		 * Regular pointer dereference, nothing too bad here
