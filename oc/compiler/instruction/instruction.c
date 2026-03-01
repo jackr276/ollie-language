@@ -5715,6 +5715,11 @@ instruction_t* copy_instruction(instruction_t* copied){
 		copy->parameters = clone_dynamic_array(&(copied->parameters));
 	}
 
+	//IMPORTANT: null out the next/previous for the instruction
+	copy->next_statement = NULL;
+	copy->previous_statement = NULL;
+	copy->block_contained_in = NULL;
+
 	//Give back the copied one
 	return copied;
 }
