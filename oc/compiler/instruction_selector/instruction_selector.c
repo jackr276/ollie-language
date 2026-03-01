@@ -5561,6 +5561,8 @@ static inline void handle_binary_operation_instruction(instruction_window_t* win
 	//We're looking at the first instruciton
 	instruction_t* instruction = window->instruction1;
 
+	if(instruction->instruction_type != NO_INSTRUCTION_SELECTED) return;
+
 	//Go based on what we have as the operation
 	switch(instruction->op){
 		/**
@@ -5631,9 +5633,8 @@ static inline void handle_binary_operation_instruction(instruction_window_t* win
 			break;
 
 		default:
-			printf("Fatal internal compiler error: unreachable path hit for binary operation selection with opcode %s\n", operator_token_to_string(instruction->op));
+			printf("Fatal internal compiler error: unreachable path hit for binary operation in block .L%d, selection with opcode %s\n", ((basic_block_t*)instruction->block_contained_in)->block_id, operator_token_to_string(instruction->op));
 			//Print the window for debugging
-			//print_instruction_window_three_address_code(window);
 			print_instruction_window(window);
 			exit(1);
 	}

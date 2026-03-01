@@ -1418,10 +1418,10 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			if(jumping_to_block->exit_statement->statement_type == THREE_ADDR_CODE_BRANCH_STMT
 				&& is_block_only_branch(jumping_to_block) == TRUE){
 
+				printf("HERE\n");
+
 				//Stash this branch for reference
 				instruction_t* branch_statement = jumping_to_block->exit_statement;
-
-				printf("HERE\n\n\n");
 
 				//Let's delete the jump in the current block
 				delete_statement(current->exit_statement);
@@ -1439,7 +1439,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 
 					//Add the cloned statement into the current block
 					add_statement(current, copy);
-					
+
 					//Bump this up
 					cursor = cursor->next_statement;
 				}
@@ -1447,13 +1447,6 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				//Update the successors for the current block to include the new branch
 				add_successor(current, branch_statement->if_block);
 				add_successor(current, branch_statement->else_block);
-
-
-				cursor = current->leader_statement;
-				while(cursor != NULL){
-					print_three_addr_code_stmt(stdout, cursor);
-					cursor = cursor->next_statement;
-				}
 
 				//This is a change
 				changed = TRUE;
