@@ -5375,35 +5375,13 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				break;
 		}
 
-
 	/**
-	 * Is the left hand variable a regular variable or is it a stack address variable? If it's a
-	 * variable that is on the stack, then a regular assignment just won't do. We'll need to
-	 * emit a store operation
+	 * If we have a variable that is on the stack or is a global variable, then a regular assignment won't
+	 * work. We'll need to do a store here
 	 */
-	} else if(left_hand_var->linked_var == NULL 
-		|| (left_hand_var->linked_var->stack_variable == FALSE
-		&& left_hand_var->linked_var->membership != GLOBAL_VARIABLE)){
+	} else if(left_hand_var->linked_var != NULL
+				&& (left_hand_var->linked_var->stack_variable == TRUE || left_hand_var->linked_var->membership == GLOBAL_VARIABLE)){
 
-		//Finally we'll struct the whole thing
-		instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
-
-		//Copy this over if there is one
-		left_hand_var->associated_memory_region.stack_region = final_op1->associated_memory_region.stack_region;
-
-		//If this is not a temp var, then we can flag it as being assigned
-		add_assigned_variable(current_block, left_hand_var);
-
-		//This counts as a use
-		add_used_variable(current_block, final_op1);
-		
-		//Now add thi statement in here
-		add_statement(current_block, final_assignment);
-
-	/**
-	 * Otherwise, we'll need to emit a store operation here
-	 */
-	} else {
 		//Emit the memory address var for this variable
 		three_addr_var_t* memory_address = emit_memory_address_var(left_hand_var->linked_var);
 
@@ -5434,6 +5412,26 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 
 		//If this is not a temp var, then we can flag it as being assigned
 		add_assigned_variable(current_block, memory_address);
+		
+		//Now add thi statement in here
+		add_statement(current_block, final_assignment);
+	
+	/**
+	 * If we get here, then we just have a regular variable that is not on the stack at all and is not a global variable,
+	 * so a regular assignment will work just fine
+	 */
+	} else {
+		//Finally we'll struct the whole thing
+		instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
+
+		//Copy this over if there is one
+		left_hand_var->associated_memory_region.stack_region = final_op1->associated_memory_region.stack_region;
+
+		//If this is not a temp var, then we can flag it as being assigned
+		add_assigned_variable(current_block, left_hand_var);
+
+		//This counts as a use
+		add_used_variable(current_block, final_op1);
 		
 		//Now add thi statement in here
 		add_statement(current_block, final_assignment);
