@@ -631,7 +631,7 @@ symtab_variable_record_t* create_parameter_alias_variable(symtab_variable_record
  * is more than the max per class register passing value, we will add that into the specialized stack
  * data area
  */
-void add_function_parameter(symtab_function_record_t* function_record, symtab_variable_record_t* variable_record){
+void add_function_parameter(type_symtab_t* symtab, symtab_function_record_t* function_record, symtab_variable_record_t* variable_record){
 	//Store it in the function's parameters
 	dynamic_array_add(&(function_record->function_parameters), variable_record);
 	
@@ -646,8 +646,20 @@ void add_function_parameter(symtab_function_record_t* function_record, symtab_va
 			stack_data_area_alloc(&(function_record->stack_passed_parameters), STACK_TYPE_PARAMETER_PASSING);
 		}
 
-		//Add this type into said stack region
-		variable_record->stack_region = create_stack_region_for_type(&(function_record->stack_passed_parameters), variable_record->type_defined_as);
+		//Special adjustments based on the types we have
+		switch(variable_record->type_defined_as->type_class){
+			//Array types are always passed by reference. We need to make sure that
+			//we represent this accurately inside of the stack region. We can use a generic pointer to do so
+			case TYPE_CLASS_ARRAY:
+				//Add this type into said stack region
+				//TODO
+				variable_record->stack_region = create_stack_region_for_type(&(function_record->stack_passed_parameters), variable_record->type_defined_as);
+			
+			default:
+				//Add this type into said stack region
+				variable_record->stack_region = create_stack_region_for_type(&(function_record->stack_passed_parameters), variable_record->type_defined_as);
+				break;
+		}
 
 		//This is a stack variable, we need to note it as such
 		variable_record->stack_variable = TRUE;
