@@ -4078,7 +4078,7 @@ static inline void insert_caller_saved_register_logic(basic_block_t* function_en
  * NOTE: since all SSE registers are caller-saved, we actually don't need to worry about any SSE registers here because
  * they will all be handled by the caller anyway
  */
-static void insert_callee_saving_logic(cfg_t* cfg, basic_block_t* function_entry, basic_block_t* function_exit){
+static void insert_callee_saving_logic(basic_block_t* function_entry, basic_block_t* function_exit){
 	//Keep a reference to the original entry instruction that we had before
 	//we insert any pushes. This will be important for when we need to
 	//reassign the function's leader statement
@@ -4175,7 +4175,7 @@ static inline void insert_saving_logic(cfg_t* cfg, basic_block_t* function_entry
 	insert_caller_saved_register_logic(function_entry_block);
 
 	//Then we'll do all callee saving
-	insert_callee_saving_logic(cfg, function_entry_block, function_exit_block);
+	insert_callee_saving_logic(function_entry_block, function_exit_block);
 }
 
 

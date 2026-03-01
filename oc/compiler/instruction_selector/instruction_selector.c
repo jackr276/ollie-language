@@ -8029,6 +8029,35 @@ static void handle_load_with_variable_offset_instruction(instruction_window_t* w
 
 			break;
 
+		/**
+		 * A stack param memory address requires special treatment. It will never be 0, and it will never be a global
+		 * variable, so we can ignore those cases. The stack memory address will have a special constant emitted
+		 * that will be updated by the register allocator once all allocations are done
+		 */
+		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+			//We'll have something like <offset>(%rsp, t4)
+			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+
+			//Emit hte specialized offset constant for this
+			load_instruction->offset = emit_stack_passed_parameter_offset_constant(load_instruction->op1->associated_memory_region.stack_region, u64);
+
+			//This will be the stack pointer
+			load_instruction->address_calc_reg1 = stack_pointer_variable;
+
+			//And this is whatever was there before
+			load_instruction->address_calc_reg2 = load_instruction->op2;
+
+			/**
+			 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+			 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+			 * must adhere to this one's type
+			 */
+			if(is_converting_move_required(load_instruction->address_calc_reg1->type, load_instruction->address_calc_reg2->type) == TRUE){
+				load_instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(load_instruction, load_instruction->address_calc_reg2, load_instruction->address_calc_reg1->type);
+			}
+
+			break;
+
 		//Base case we just have the variable
 		default:
 			//Just have registers here
