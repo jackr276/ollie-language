@@ -7927,13 +7927,6 @@ static void handle_load_with_constant_offset_instruction(instruction_window_t* w
  * This usually generates addressing mode expressions with registers and offsets
  *
  * NOTE: We assume that the load instruction is always the first in the window
- *
- *
- *
- *
- *
- *
- * TODO IMPLEMENT
  */
 static void handle_load_with_variable_offset_instruction(instruction_window_t* window){
 	//As noted above, this is the assumption
@@ -7942,95 +7935,119 @@ static void handle_load_with_variable_offset_instruction(instruction_window_t* w
 	//Handle the destination assignment
 	handle_load_instruction_type_and_destination(window);
 
-	//If we have a memory address variable(super common), we'll need to
-	//handle this now
-	if(load_instruction->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-		//If this is *not* a global variable
-		if(load_instruction->op1->linked_var->membership != GLOBAL_VARIABLE){
-			//This is our stack offset, it will be needed going forward
-			int64_t stack_offset = load_instruction->op1->linked_var->stack_region->function_local_base_address;
+	/**
+	 * Based on what variable type we have here, we will need to handle
+	 * things differently
+	 */
+	switch(load_instruction->op1->variable_type){
+		/**
+		 * The most common case is a memory address variable. These variables are function-local
+		 * so we can emit an offset here safely without having to worry about future adjustments. It
+		 * is possible that this is also a global variable memory address as well
+		 */
+		case VARIABLE_TYPE_MEMORY_ADDRESS:
+			//If this is *not* a global variable
+			if(load_instruction->op1->linked_var->membership != GLOBAL_VARIABLE){
+				//This is our stack offset, it will be needed going forward
+				int64_t stack_offset = load_instruction->op1->linked_var->stack_region->function_local_base_address;
 
-			//If we actually have a stack offset to deal with
-			if(stack_offset != 0){
-				//We'll have something like <offset>(%rsp, t4)
-				load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+				//If we actually have a stack offset to deal with
+				if(stack_offset != 0){
+					//We'll have something like <offset>(%rsp, t4)
+					load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
 
-				//Emit the offset
-				load_instruction->offset = emit_direct_integer_or_char_constant(stack_offset, i64);
+					//Emit the offset
+					load_instruction->offset = emit_direct_integer_or_char_constant(stack_offset, i64);
 
-				//This will be the stack pointer
-				load_instruction->address_calc_reg1 = stack_pointer_variable;
+					//This will be the stack pointer
+					load_instruction->address_calc_reg1 = stack_pointer_variable;
 
-				//And this is whatever was there before
-				load_instruction->address_calc_reg2 = load_instruction->op2;
+					//And this is whatever was there before
+					load_instruction->address_calc_reg2 = load_instruction->op2;
 
-				//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-				//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-				//must adhere to this one's type
-				if(is_converting_move_required(load_instruction->address_calc_reg1->type, load_instruction->address_calc_reg2->type) == TRUE){
-					load_instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(load_instruction, load_instruction->address_calc_reg2, load_instruction->address_calc_reg1->type);
+					/**
+					 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+					 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+					 * must adhere to this one's type
+					 */
+					if(is_converting_move_required(load_instruction->address_calc_reg1->type, load_instruction->address_calc_reg2->type) == TRUE){
+						load_instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(load_instruction, load_instruction->address_calc_reg2, load_instruction->address_calc_reg1->type);
+					}
+
+				//Otherwise there's no stack offset, so we'll keep the op2 and only have registers
+				} else {
+					//Change the mode
+					load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+					
+					//Copy both over
+					load_instruction->address_calc_reg1 = stack_pointer_variable;
+					load_instruction->address_calc_reg2 = load_instruction->op2;
+
+					/**
+					 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+					 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+					 * must adhere to this one's type
+					 */
+					if(is_converting_move_required(load_instruction->address_calc_reg1->type, load_instruction->address_calc_reg2->type) == TRUE){
+						load_instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(load_instruction, load_instruction->address_calc_reg2, load_instruction->address_calc_reg1->type);
+					}
 				}
 
-			//Otherwise there's no stack offset, so we'll keep the op2 and only have registers
+			/**
+			 * Otherwise, we are loading a global variable with a subsequent offset. We will need to first
+			 * load the address of said global variable, and then use that with an address calculation. We 
+			 * are not able to combine the 2 in such a way
+			 */
 			} else {
-				//Change the mode
+				//Let the helper do the work
+				instruction_t* global_variable_address = emit_global_variable_address_calculation_x86(load_instruction->op1, instruction_pointer_variable, u64);
+
+				//Now insert this before the given instruction
+				insert_instruction_before_given(global_variable_address, load_instruction);
+
+				//These are registers only
 				load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
-				
-				//Copy both over
-				load_instruction->address_calc_reg1 = stack_pointer_variable;
+
+				/**
+				 * The destination of the global variable address will be our new address calc reg 1. 
+				 * We already have the offset loaded in, so that remains unchanged
+				 */
+				load_instruction->address_calc_reg1 = global_variable_address->destination_register;
+
+				//The second address calc register is whatever is in op2
 				load_instruction->address_calc_reg2 = load_instruction->op2;
 
-				//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-				//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-				//must adhere to this one's type
+				/**
+				 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+				 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+				 * must adhere to this one's type
+				 */
 				if(is_converting_move_required(load_instruction->address_calc_reg1->type, load_instruction->address_calc_reg2->type) == TRUE){
 					load_instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(load_instruction, load_instruction->address_calc_reg2, load_instruction->address_calc_reg1->type);
 				}
 			}
 
-		//Otherwise, we are loading a global variable with a subsequent offset. We will need to first
-		//load the address of said global variable, and then use that with an address calculation. We 
-		//are not able to combine the 2 in such a way
-		} else {
-			//Let the helper do the work
-			instruction_t* global_variable_address = emit_global_variable_address_calculation_x86(load_instruction->op1, instruction_pointer_variable, u64);
+			break;
 
-			//Now insert this before the given instruction
-			insert_instruction_before_given(global_variable_address, load_instruction);
-
-			//These are registers only
+		//Base case we just have the variable
+		default:
+			//Just have registers here
 			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
 
-			//The destination of the global variable address will be our new address calc reg 1. 
-			//We already have the offset loaded in, so that remains unchanged
-			load_instruction->address_calc_reg1 = global_variable_address->destination_register;
-
-			//The second address calc register is whatever is in op2
+			//Assign over like such
+			load_instruction->address_calc_reg1 = load_instruction->op1;
 			load_instruction->address_calc_reg2 = load_instruction->op2;
 
-			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-			//must adhere to this one's type
+			/**
+			 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+			 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+			 * must adhere to this one's type
+			 */
 			if(is_converting_move_required(load_instruction->address_calc_reg1->type, load_instruction->address_calc_reg2->type) == TRUE){
 				load_instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(load_instruction, load_instruction->address_calc_reg2, load_instruction->address_calc_reg1->type);
 			}
-		}
 
-	//Otherwise we aren't on the stack, so we can just keep both registers
-	} else {
-		//Just have registers here
-		load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
-
-		//Assign over like such
-		load_instruction->address_calc_reg1 = load_instruction->op1;
-		load_instruction->address_calc_reg2 = load_instruction->op2;
-
-		//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-		//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-		//must adhere to this one's type
-		if(is_converting_move_required(load_instruction->address_calc_reg1->type, load_instruction->address_calc_reg2->type) == TRUE){
-			load_instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(load_instruction, load_instruction->address_calc_reg2, load_instruction->address_calc_reg1->type);
-		}
+			break;
 	}
 }
 
