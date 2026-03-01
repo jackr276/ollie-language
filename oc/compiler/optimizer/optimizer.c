@@ -1417,7 +1417,40 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			 */
 			if(jumping_to_block->exit_statement->statement_type == THREE_ADDR_CODE_BRANCH_STMT
 				&& is_block_only_branch(jumping_to_block) == TRUE){
+
+				//Stash this branch for reference
+				instruction_t* branch_statement = jumping_to_block->exit_statement;
+
 				printf("HERE\n\n\n");
+
+				//Let's delete the jump in the current block
+				delete_statement(current->exit_statement);
+
+				//We can also remove the jumping to block as a successor
+				delete_successor(current, jumping_to_block);
+
+				//Now we need to completely copy every instruction from the jumping to
+				//block over to this block
+
+				instruction_t* cursor = jumping_to_block->leader_statement;
+
+				while(cursor != NULL){
+					//Create a complete copy
+					instruction_t* copy = copy_instruction(cursor);
+
+					//Add the cloned statement into the current block
+					add_statement(current, copy);
+					
+					//Bump this up
+					cursor = cursor->next_statement;
+				}
+
+				//Update the successors for the current block to include the new branch
+				add_successor(current, branch_statement->if_block);
+				add_successor(current, branch_statement->else_block);
+
+				//This is a change
+				changed = TRUE;
 			}
 		}
 	}
