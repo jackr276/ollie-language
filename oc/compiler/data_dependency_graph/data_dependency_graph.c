@@ -42,7 +42,7 @@ data_dependency_graph_t dependency_graph_alloc(u_int32_t num_nodes){
 /**
  * Reset the visited status for the graph
  */
-static void reset_dependency_graph_visited_status(data_dependency_graph_t* graph){
+static inline void reset_dependency_graph_visited_status(data_dependency_graph_t* graph){
 	//Run through them all
 	for(u_int32_t i = 0; i < graph->node_count; i++){
 		//Clear it out
