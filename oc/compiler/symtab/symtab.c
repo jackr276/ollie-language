@@ -916,6 +916,18 @@ u_int16_t add_all_basic_types(type_symtab_t* symtab){
 	type = create_basic_type("void", VOID, NOT_MUTABLE);
 	num_collisions += insert_type(symtab, create_type_record(type));
 
+	//Create the immutable void*
+	type = create_pointer_type(type, 0, NOT_MUTABLE);
+	num_collisions += insert_type(symtab, create_type_record(type));
+
+	//Add in void type
+	type = create_basic_type("void", VOID, MUTABLE);
+	num_collisions += insert_type(symtab, create_type_record(type));
+
+	//Create the mutable void*
+	type = create_pointer_type(type, 0, NOT_MUTABLE);
+	num_collisions += insert_type(symtab, create_type_record(type));
+
 	// ================================ Immutable versions of our primitive types ================================
 	//s_int8 type
 	type = create_basic_type("i8", I8, NOT_MUTABLE);
