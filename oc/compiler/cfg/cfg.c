@@ -144,6 +144,22 @@ static inline u_int8_t is_lea_compatible_power_of_2(int64_t value){
 
 
 /**
+ * When we do stack passed parameters, array types and 
+ * pointer types are always passed as pointers, while
+ * struct types and union types are passed by copy
+ */
+static inline u_int8_t is_type_stack_passed_by_reference(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_POINTER:	
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Delete a block, including all of the needed internal
  * bookkeeping
  */
@@ -3144,6 +3160,28 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		//not anything else with it
 		return emit_memory_address_var(ident_node->variable);
 	}
+
+	if(ident_node->variable->passed_by_stack == TRUE && is_type_stack_passed_by_reference(ident_node->variable->type_defined_as) == TRUE){
+		//Extract the "true type" here in case we are dealing with a reference type
+		generic_type_t* type = ident_node->variable->type_defined_as;
+
+		//Emit the memory address var for later on
+		three_addr_var_t* memory_address = emit_memory_address_var(ident_node->variable);
+
+		//Emit the load instruction. We need to be sure to use the "true type" here in case we are dealing with 
+		//a reference
+		instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(type), memory_address, type);
+
+		//This counts as a use
+		add_used_variable(basic_block, load_instruction->op1);
+
+		//Add it to the block
+		add_statement(basic_block, load_instruction);
+
+		//Just give back the temp var here
+		return load_instruction->assignee;
+	}
+
 
 	/**
 	 * If we're on the right side of the equation and this is a stack variable, when we want to use 
