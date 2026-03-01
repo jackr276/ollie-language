@@ -1429,11 +1429,10 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				//We can also remove the jumping to block as a successor
 				delete_successor(current, jumping_to_block);
 
-				//Now we need to completely copy every instruction from the jumping to
-				//block over to this block
-
+				//Grab an instruction cursor
 				instruction_t* cursor = jumping_to_block->leader_statement;
 
+				//Run through every single instruction
 				while(cursor != NULL){
 					//Create a complete copy
 					instruction_t* copy = copy_instruction(cursor);

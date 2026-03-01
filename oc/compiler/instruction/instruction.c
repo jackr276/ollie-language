@@ -5700,15 +5700,6 @@ instruction_t* copy_instruction(instruction_t* copied){
 
 	//Perform a complete memory copy
 	memcpy(copy, copied, sizeof(instruction_t));
-
-	//Now we'll check for special values. NOTE: if we're using this, we should NOT have
-	//any phi functions OR assembly in here. The only thing that we might have are
-	//function calls
-	
-	//Null these out, better safe than sorry
-	copy->inlined_assembly = copied->inlined_assembly;
-	copy->next_statement = NULL;
-	copy->previous_statement = NULL;
 	
 	//If we have function call parameters, emit a copy of them
 	if(copied->parameters.internal_array != NULL){
@@ -5719,6 +5710,13 @@ instruction_t* copy_instruction(instruction_t* copied){
 	copy->next_statement = NULL;
 	copy->previous_statement = NULL;
 	copy->block_contained_in = NULL;
+
+	printf("ORIGINAL:\n");
+	print_three_addr_code_stmt(stdout, copied);
+	printf("\n");
+	printf("CLONE:\n");
+	print_three_addr_code_stmt(stdout, copy);
+	printf("\n");
 
 	//Give back the copied one
 	return copied;

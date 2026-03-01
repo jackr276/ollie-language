@@ -5638,7 +5638,7 @@ static inline void handle_binary_operation_instruction(instruction_window_t* win
 			break;
 
 		default:
-			printf("Fatal internal compiler error: unreachable path hit for binary operation selection\n");
+			printf("Fatal internal compiler error: unreachable path hit for binary operation selection with opcode %s\n", operator_token_to_string(instruction->op));
 			//Print the window for debugging
 			print_instruction_window_three_address_code(window);
 			exit(1);
