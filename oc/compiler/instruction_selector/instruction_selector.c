@@ -8290,56 +8290,68 @@ static void handle_store_instruction(instruction_t* instruction){
 	//Store is to memory
 	instruction->memory_access_type = WRITE_TO_MEMORY;
 
-	//If we have a memory address var here(very common)
-	if(instruction->assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-		//If it is *not* a global variable(most common case)
-		if(instruction->assignee->linked_var->membership != GLOBAL_VARIABLE){
-			//Get the stack offset
-			int64_t stack_offset = instruction->assignee->linked_var->stack_region->function_local_base_address;
+	//Handle based on the assignee type
+	switch(instruction->assignee->variable_type){
+		/**
+		 * This is the most common case. When we have a memory address, we are going to need
+		 * to handle it differently based on whether or not it's a global variable, and based
+		 * on what the stack offset is
+		 */
+		case VARIABLE_TYPE_MEMORY_ADDRESS:
+			//If it is *not* a global variable(most common case)
+			if(instruction->assignee->linked_var->membership != GLOBAL_VARIABLE){
+				//Get the stack offset
+				int64_t stack_offset = instruction->assignee->linked_var->stack_region->function_local_base_address;
 
-			//If it's not 0, we need to do some arithmetic
-			if(stack_offset != 0){
-				//Let's get the offset from this memory address
-				three_addr_const_t* offset = emit_direct_integer_or_char_constant(instruction->assignee->linked_var->stack_region->function_local_base_address, u64);
+				//If it's not 0, we need to do some arithmetic
+				if(stack_offset != 0){
+					//Let's get the offset from this memory address
+					three_addr_const_t* offset = emit_direct_integer_or_char_constant(instruction->assignee->linked_var->stack_region->function_local_base_address, u64);
 
-				//The first address calc register will be the stack pointer
-				instruction->address_calc_reg1 = stack_pointer_variable;
+					//The first address calc register will be the stack pointer
+					instruction->address_calc_reg1 = stack_pointer_variable;
 
-				//And we need to store the offset
-				instruction->offset = offset;
+					//And we need to store the offset
+					instruction->offset = offset;
 
-				//This counts for our destination only
-				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+					//This counts for our destination only
+					instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
-			//If it is 0, we only need to deref the stack pointer
+				//If it is 0, we only need to deref the stack pointer
+				} else {
+					//This is the stack pointer, no offset is needed
+					instruction->destination_register = stack_pointer_variable;
+
+					//Just dereference the destination here, nothing more
+					instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
+				}
+
+			//Otherwise, this is a global variable so we need to take special steps to deal with it
 			} else {
-				//This is the stack pointer, no offset is needed
-				instruction->destination_register = stack_pointer_variable;
+				//This is going to be a global variable movement
+				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
 
-				//Just dereference the destination here, nothing more
-				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
+				//The address calc reg1 is the instruction pointer
+				instruction->address_calc_reg1 = instruction_pointer_variable;
+
+				//The global variable is held by the offset
+				instruction->rip_offset_variable = instruction->assignee;
 			}
 
-		//Otherwise, this is a global variable so we need to take special steps to deal with it
-		} else {
-			//This is going to be a global variable movement
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
+			break;
 
-			//The address calc reg1 is the instruction pointer
-			instruction->address_calc_reg1 = instruction_pointer_variable;
+			
+		/**
+		 * Regular pointer dereference, nothing too bad here
+		 */
+		default:
+			//Otherwise this is just the destination register
+			instruction->destination_register = instruction->assignee;
 
-			//The global variable is held by the offset
-			instruction->rip_offset_variable = instruction->assignee;
-		}
-
-	//Otherwise this is something like a pointer dereference, just a pure store so we'll
-	//be using the assignee as the destination
-	} else {
-		//Otherwise this is just the destination register
-		instruction->destination_register = instruction->assignee;
-
-		//This counts for our destination only
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
+			//This counts for our destination only
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
+			
+			break;
 	}
 
 	//Invoke the helper to determine the type and instruction type
