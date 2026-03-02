@@ -559,7 +559,7 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 				if(is_block_ret_instruction_only(jumping_to_block) == TRUE
 					&& does_block_contain_more_than_one_jump_to_target(current, jumping_to_block) == FALSE){
 
-					printf("CANDIDATES: .L%d and .L%d\n\n", current->block_id, jumping_to_block->block_id);
+					//printf("CANDIDATES: .L%d and .L%d\n\n", current->block_id, jumping_to_block->block_id);
 
 				}
 			}
@@ -588,21 +588,25 @@ static void condense(cfg_t* cfg, basic_block_t* function_entry_block){
 	u_int8_t changed;
 
 	//The postorder traversal array
-	dynamic_array_t postorder;
+	dynamic_array_t postorder = dynamic_array_alloc();
 
 	//Now we'll do the actual clean algorithm
 	do {
-		//Compute the new postorder
-		postorder = compute_post_order_traversal(function_entry_block);
+		//Reset the array
+		clear_dynamic_array(&postorder);
+
+		//Compute the new postorder. Remember that the recursive
+		//rule puts the result inside of the array that we've allocated
+		post_order_traversal_rec(&postorder, function_entry_block);
 
 		//Call onepass() for the reduction
 		changed = branch_reduce_postprocess(cfg, &postorder);
-
-		//We can free up the old postorder now
-		dynamic_array_dealloc(&postorder);
 		
 	//We keep going so long as branch_reduce changes something 
 	} while(changed == TRUE);
+
+	//Release the memory
+	dynamic_array_dealloc(&postorder);
 }
 
 
