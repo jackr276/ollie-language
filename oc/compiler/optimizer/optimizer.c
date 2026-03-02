@@ -1319,8 +1319,21 @@ static inline u_int8_t is_block_only_branch(basic_block_t* block){
  *
  * If we were going to hoist this into the target, odds are we'd have a phi function mess. So, we only 
  * hoist *if* the target itself is *not* one of the branch targets
+ *
+ * Additionally, it is imperative that we do not attempt to hoist a loop entry block. This would be disastrous as
+ * it would destroy the single loop entry properly. We need to ensure that the only way into a loop is through the header
+ * block, and absolutely nothing else. As such, if we see that the hoisting block is a loop entry block, we leave immediately
  */
-static inline u_int8_t are_blocks_eligible_for_branch_hoisting(basic_block_t* target, basic_block_t* hoisting_block){
+static inline u_int8_t are_blocks_eligible_for_branch_hoisting(basic_block_t* destination, basic_block_t* hoisting_block){
+	/**
+	 * First potential issue. If we are trying to hoist a loop header into some other area, that is not
+	 * allowed. Doing this would break our invariance and uase big issues down the line. If we see
+	 * that the hoisting block is a loop entry block, we stop
+	 */
+	if(hoisting_block->block_type == BLOCK_TYPE_LOOP_ENTRY){
+		return FALSE;
+	}
+
 	//Extract the branch
 	instruction_t* branch = hoisting_block->exit_statement;
 
@@ -1329,14 +1342,12 @@ static inline u_int8_t are_blocks_eligible_for_branch_hoisting(basic_block_t* ta
 	basic_block_t* else_block = branch->else_block;
 
 	//We have a match - we can't do this
-	if(if_block->block_id == target->block_id){
-		printf("BAD\n");
+	if(if_block->block_id == destination->block_id){
 		return FALSE;
 	}
 
 	//We have a match - we can't do this
-	if(else_block->block_id == target->block_id){
-		printf("BAD\n");
+	if(else_block->block_id == destination->block_id){
 		return FALSE;
 	}
 
