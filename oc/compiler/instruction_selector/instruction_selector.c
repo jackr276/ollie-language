@@ -341,9 +341,6 @@ static void order_blocks(cfg_t* cfg){
 				//We'll add this in as a direct successor
 				previous->direct_successor = current;
 
-				//Do we end in a jump?
-				basic_block_t* end_jumps_to = does_block_end_in_jump(previous);
-
 				//Add this in as well
 				previous = current;
 			}

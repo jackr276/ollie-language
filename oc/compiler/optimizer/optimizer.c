@@ -1647,9 +1647,6 @@ static inline void hoist_branch(basic_block_t* target, basic_block_t* branch_blo
  * 				replace transfers to i with transfers to j
  * 			if j has only one predecessor then
  * 				merge i and j
- * 			if j is empty and ends in a conditional branch then
- * 				overwrite i's jump with a copy of j's branch
- * 				remediate SSA statements inside of i and j
  */
 static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 	//Have we seen a change? By default we assume not
@@ -1739,28 +1736,6 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 
 				//And we're done here
 				continue;
-			}
-
-			/**
-			 * if j is empty and ends in a conditional branch then
-			 * 	 overwrite i's jump with a copy of j's branch
-			 *
-			 * CAVEAT: if i jumps to j and j's branch goes back to i, we will not
-			 * be doing any of this because that is a loop header
-			 *
-			 * This is referred to as branch hoisting
-			 */
-			if(jumping_to_block->exit_statement->statement_type == THREE_ADDR_CODE_BRANCH_STMT
-				&& are_blocks_eligible_for_branch_hoisting(current, jumping_to_block) == TRUE
-				&& is_block_only_branch(jumping_to_block) == TRUE){
-
-				printf("HERE\n");
-
-				//Let the helper perform the actual hoist
-				hoist_branch(current, jumping_to_block);
-
-				//This is a change
-				changed = TRUE;
 			}
 		}
 	}
