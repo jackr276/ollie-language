@@ -2925,25 +2925,30 @@ static inline void clean(cfg_t* cfg, dynamic_array_t* current_function_blocks, b
 	//Have we seen a change?
 	u_int8_t changed;
 
-	//The postorder traversal array
-	dynamic_array_t postorder;
+	//Allocate the postorder traversal array
+	dynamic_array_t postorder = dynamic_array_alloc();
 
 	//Now we'll do the actual clean algorithm
 	do {
+		//Clear out the old postorder array
+		clear_dynamic_array(&postorder);
+
 		//Reset the function's visited status
 		reset_visit_status_for_function(current_function_blocks);
 
-		//Compute the new postorder
-		postorder = compute_post_order_traversal(function_entry_block);
+		//Use the recursive function to compute the postorder traversal.
+		//Note that the result is going to be stored inside of the array that
+		//we've already allocated
+		post_order_traversal_rec(&postorder, function_entry_block);
 
 		//Call onepass() for the reduction
 		changed = branch_reduce(cfg, &postorder);
 
-		//We can free up the old postorder now
-		dynamic_array_dealloc(&postorder);
-		
 	//We keep going so long as branch_reduce changes something 
 	} while(changed == TRUE);
+
+	//Release the memory
+	dynamic_array_dealloc(&postorder);
 }
 
 
