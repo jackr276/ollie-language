@@ -5759,13 +5759,6 @@ instruction_t* copy_instruction(instruction_t* copied){
 	copy->previous_statement = NULL;
 	copy->block_contained_in = NULL;
 
-	printf("ORIGINAL:\n");
-	print_three_addr_code_stmt(stdout, copied);
-	printf("\n");
-	printf("CLONE:\n");
-	print_three_addr_code_stmt(stdout, copy);
-	printf("\n");
-
 	//Give back the copied one
 	return copied;
 }

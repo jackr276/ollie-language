@@ -18,6 +18,23 @@ static three_addr_var_t* instruction_pointer_variable;
 //A pointer to the cfg
 static cfg_t* cfg_reference;
 
+
+/**
+ * We are going to need to maintain a mapping of temporary
+ * variables to replacement variables. Remember that the SSA 
+ * property dictates that temp variables are single use only, 
+ * so when we are copying things, we'll need to account for
+ * that with this mapping
+ */
+typedef struct temporary_variable_mapping_t{
+	//The temp var id of the source variable
+	u_int32_t source_temp_var_id;
+	//The replacement variable
+	three_addr_var_t* replacement_var;
+
+} temporary_variable_mapping_t;
+
+
 /**
  * Add an item to the current stack worklist
  */
@@ -1376,6 +1393,45 @@ static inline u_int8_t does_block_assign_variable(basic_block_t* block, three_ad
 }
 
 
+/**
+ * Clone a constant. This will create separate memory so we maintain
+ * complete separation
+ */
+static inline three_addr_const_t* clone_constant(three_addr_const_t* constant){
+	//If it's empty just leave
+	if(constant == NULL){
+		return NULL;
+	}
+
+	//Complete duplication
+	three_addr_const_t* copy = calloc(1, sizeof(three_addr_const_t));
+
+	//And a full copy over
+	memcpy(copy, constant, sizeof(three_addr_const_t));
+
+	//Give it back
+	return copy;
+}
+
+
+/**
+ * Use the mapping array to either find the reference for this variable *or* create a new
+ * mapping of a temp var number to a new cloned temp var
+ */
+static inline three_addr_var_t* clone_temp_var(three_addr_var_t* variable, temporary_variable_mapping_t mapping[], u_int32_t mapping_array_max_index){
+
+}
+
+
+/**
+ * Clone the entire instruction. This cloning process is going
+ * to involve us copying over variables in a way that
+ * changes the temp var numbers for correctness
+ */
+static instruction_t* clone_instruction(instruction_t* cloned){
+
+} 
+
 
 /**
  * Hoist a branch from the branch_block into the target block. Note that this operation
@@ -1400,8 +1456,7 @@ static inline void hoist_branch(basic_block_t* target, basic_block_t* branch_blo
 
 	//Run through every single instruction
 	while(cursor != NULL){
-		//Do not copy phi-functions - they will be incorrect no matter what
-		//we do
+		//Do not copy phi-functions - they would be wrong if we did
 		if(cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
 			cursor = cursor->next_statement;
 			continue;
