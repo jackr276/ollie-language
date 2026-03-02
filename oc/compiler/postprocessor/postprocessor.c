@@ -513,7 +513,7 @@ static instruction_t* clone_instruction(instruction_t* source){
  * NOTE: This function will not delete anything. We are doing a straight copy from the source
  * to the destination *with the exception of any phi-functions*
  */
-static inline void copy_block(basic_block_t* destination, basic_block_t* source){
+static void copy_block(basic_block_t* destination, basic_block_t* source){
 	//Grab a cursor
 	instruction_t* cursor = source->leader_statement;
 
@@ -524,6 +524,8 @@ static inline void copy_block(basic_block_t* destination, basic_block_t* source)
 			//Clone the cursor
 			instruction_t* clone = clone_instruction(cursor);
 
+			//Add this into the block
+			add_statement(destination, clone);
 		}
 
 		//Advance
@@ -658,8 +660,10 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 			 * save us on instructions
 			 */
 			} else {
-				//Eligibility is: the block we're going to is just a "ret" *AND*
-				//our block doesn't already have multiple jumps to this one target
+				/**
+				 * Eligibility is: the block we're going to is just a "ret" *AND*
+				 * our block doesn't already have multiple jumps to this one target
+				 */
 				if(is_block_ret_instruction_only(jumping_to_block) == TRUE
 					&& does_block_contain_more_than_one_jump_to_target(current, jumping_to_block) == FALSE){
 
@@ -669,10 +673,18 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 					//Decouple these as predecessors/successors
 					delete_successor(current, jumping_to_block);
 
-					//Once that is done, we can copy the 
+					//Once that is done, we can copy the block over
+					copy_block(current, jumping_to_block);
 
-					//printf("CANDIDATES: .L%d and .L%d\n\n", current->block_id, jumping_to_block->block_id);
+					//Add the successor of the jumping to block(which will be the function end block) to
+					//the current block
+					add_successor(current, dynamic_array_get_at(&(jumping_to_block->successors), 0));
 
+					//This is a change
+					changed = TRUE;
+
+					//Done here
+					continue;
 				}
 			}
 		}
