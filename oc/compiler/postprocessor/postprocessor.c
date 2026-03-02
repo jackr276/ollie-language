@@ -402,6 +402,20 @@ static inline u_int8_t does_block_contain_more_than_one_jump_to_target(basic_blo
 
 
 /**
+ * Is a block exclusively a return statement? This is a pretty easy check
+ * which is why this entire function is inlined
+ */
+static inline u_int8_t is_block_ret_only(basic_block_t* block){
+	//We want a block that is *exclusively* a return statement
+	if(block->leader_statement != NULL && block->leader_statement->instruction_type == RET){
+		return TRUE;
+	} else {
+		return FALSE;
+	}
+}
+
+
+/**
  * The branch reduce function is what we use on each pass of the function
  * postorder
  *
@@ -420,12 +434,9 @@ static inline u_int8_t does_block_contain_more_than_one_jump_to_target(basic_blo
  * 				replace transfers to i with transfers to j
  * 			if j has only one predecessor then
  * 				merge i and j
- * 			
- *
- *
- * 			TODO:
- *
- * 			if j has more than one predecessor and is exclusively a "ret" statement
+ * 			else if j has more than one predecessor and is exclusively a "ret" statement
+ * 				delete the jump from i to j
+ * 				remove j as a successor to i
  * 				copy the ret from j to it's predecessor i
  */
 static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder){
