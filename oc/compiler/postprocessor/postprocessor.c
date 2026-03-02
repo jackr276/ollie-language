@@ -420,6 +420,13 @@ static inline u_int8_t does_block_contain_more_than_one_jump_to_target(basic_blo
  * 				replace transfers to i with transfers to j
  * 			if j has only one predecessor then
  * 				merge i and j
+ * 			
+ *
+ *
+ * 			TODO:
+ *
+ * 			if j has more than one predecessor and is exclusively a "ret" statement
+ * 				copy the ret from j to it's predecessor i
  */
 static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder){
 	//Have we seen a change? By default we assume not
