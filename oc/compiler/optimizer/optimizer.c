@@ -1445,12 +1445,64 @@ static inline three_addr_var_t* clone_temp_var(three_addr_var_t* variable, tempo
 
 
 /**
+ * Clone a variable. This function will decide whether to clone as a temp var or to clone as 
+ * a non-temp var
+ */
+static inline three_addr_var_t* clone_variable(three_addr_var_t* variable, temporary_variable_mapping_t mapping[], u_int32_t* mapping_array_current_index){
+	//If it's NULL then return NULL
+	if(variable == NULL){
+		return NULL;
+	}
+
+	//If the variable is temporary(most common), we will use
+	//our temp var logic
+	if(variable->variable_type == VARIABLE_TYPE_TEMP){
+		return clone_temp_var(variable, mapping, mapping_array_current_index);
+
+	//Otherise just emit a straight copy
+	} else {
+		return emit_var_copy(variable);
+	}
+}
+
+
+
+/**
  * Clone the entire instruction. This cloning process is going
  * to involve us copying over variables in a way that
  * changes the temp var numbers for correctness
  */
 static instruction_t* clone_instruction(instruction_t* cloned, temporary_variable_mapping_t mapping[], u_int32_t* mapping_max_index){
+	//First we allocate
+	instruction_t* copy = calloc(1, sizeof(instruction_t));
 
+	//Perform a complete memory copy
+	memcpy(copy, cloned, sizeof(instruction_t));
+	
+	//Duplicate the variables
+	copy->assignee = duplicate_variable(copied->assignee);
+	copy->op1 = duplicate_variable(copied->op1);
+	copy->op2 = duplicate_variable(copied->op2);
+	copy->offset = duplicate_constant(copied->offset);
+	copy->op1_const = duplicate_constant(copied->op1_const);
+
+	//If we have function call parameters, emit a copy of them
+	if(cloned->parameters.internal_array != NULL){
+		copy->parameters = dynamic_array_alloc();
+	}
+
+	//Run through and copy individually
+	for(u_int32_t i = 0; i < cloned->parameters.current_index; i++){
+		dynamic_array_add(&(copy->parameters), duplicate_variable(dynamic_array_get_at(&(copied->parameters), i)));
+	}
+
+	//IMPORTANT: null out the next/previous for the instruction
+	copy->next_statement = NULL;
+	copy->previous_statement = NULL;
+	copy->block_contained_in = NULL;
+
+	//Give back the clond one
+	return cloned;
 } 
 
 
