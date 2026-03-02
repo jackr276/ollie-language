@@ -406,8 +406,23 @@ static inline u_int8_t does_block_contain_more_than_one_jump_to_target(basic_blo
  * which is why this entire function is inlined
  */
 static inline u_int8_t is_block_ret_only(basic_block_t* block){
+	//Get the leader statement
+	instruction_t* leader_statement = block->leader_statement;
+
+	/**
+	 * Remember that blocks may have phi functions on them. At this point in the code
+	 * however, these are irrelevant and they're completely ignored. So, we need to
+	 * skip past all of them(because they will be here) in order to reach what we're
+	 * looking for
+	 */
+	while(leader_statement != NULL && leader_statement->instruction_type == PHI_FUNCTION){
+		//Bump it up
+		leader_statement = leader_statement->next_statement;
+	}
+
+
 	//We want a block that is *exclusively* a return statement
-	if(block->leader_statement != NULL && block->leader_statement->instruction_type == RET){
+	if(leader_statement != NULL && leader_statement->instruction_type == RET){
 		return TRUE;
 	} else {
 		return FALSE;
@@ -515,23 +530,38 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 			 * floating point comparisons, but it is there so
 			 * we need to account for it
 			 */
-			if(jumping_to_block->predecessors.current_index == 1
+			if(jumping_to_block->predecessors.current_index == 1){
 				//Check to see if it does or does not contain more than one jump
-				&& does_block_contain_more_than_one_jump_to_target(current, jumping_to_block) == FALSE){
-				//Delete the jump statement because it's now useless
-				delete_statement(exit_statement);
+				if(does_block_contain_more_than_one_jump_to_target(current, jumping_to_block) == FALSE){
+					//Delete the jump statement because it's now useless
+					delete_statement(exit_statement);
 
-				//Decouple these as predecessors/successors
-				delete_successor(current, jumping_to_block);
+					//Decouple these as predecessors/successors
+					delete_successor(current, jumping_to_block);
 
-				//Combine the two
-				combine_blocks(cfg, current, jumping_to_block);
+					//Combine the two
+					combine_blocks(cfg, current, jumping_to_block);
 
-				//Counts as a change 
-				changed = TRUE;
+					//Counts as a change 
+					changed = TRUE;
 
-				//And we're done here
-				continue;
+					//And we're done here
+					continue;
+				}
+
+			/**
+			 * Otherwise, the jumping to block has more than one predecessor.
+			 * If the jumping to block is exclusively a return statement *but* it has more than
+			 * one predecessor, we may be able to copy the ret over to the current block. This will
+			 * save us on instructions
+			 */
+			} else {
+				if(is_block_jump_instruction_only(jumping_to_block) == TRUE
+					&& does_block_contain_more_than_one_jump_to_target(current, jumping_to_block) == FALSE){
+
+					printf("CANDIDATES: .L%d and .L%d\n\n", current->block_id, jumping_to_block->block_id);
+
+				}
 			}
 		}
 	}
