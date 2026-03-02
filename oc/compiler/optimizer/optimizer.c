@@ -1418,8 +1418,29 @@ static inline three_addr_const_t* clone_constant(three_addr_const_t* constant){
  * Use the mapping array to either find the reference for this variable *or* create a new
  * mapping of a temp var number to a new cloned temp var
  */
-static inline three_addr_var_t* clone_temp_var(three_addr_var_t* variable, temporary_variable_mapping_t mapping[], u_int32_t mapping_array_max_index){
+static inline three_addr_var_t* clone_temp_var(three_addr_var_t* variable, temporary_variable_mapping_t mapping[], u_int32_t* mapping_array_current_index){
+	//Run through the entire array
+	for(u_int32_t i = 0; i < *mapping_array_current_index; i++){
+		//If this happens, then we've found what we're supposed to map our temp var to
+		if(variable->temp_var_number == mapping[i].source_temp_var_id){
+			//Return a duplicate of this replacement
+			return emit_var_copy(mapping[i].replacement_var);
+		}
+	}
 
+	//If we make it down here, then we need to do an entirely new mapping
+	mapping[*mapping_array_current_index].source_temp_var_id = variable->temp_var_number;
+
+	//We will still emit a duplicate here
+	three_addr_var_t* replacement_var = emit_var_copy(variable);
+	//Update the ID to be something new
+	replacement_var->temp_var_number = increment_and_get_temp_id();
+
+	//This is the replacement var
+	mapping[*mapping_array_current_index].replacement_var = replacement_var;
+
+	//And give back the replacement
+	return replacement_var;
 }
 
 
@@ -1428,7 +1449,7 @@ static inline three_addr_var_t* clone_temp_var(three_addr_var_t* variable, tempo
  * to involve us copying over variables in a way that
  * changes the temp var numbers for correctness
  */
-static instruction_t* clone_instruction(instruction_t* cloned){
+static instruction_t* clone_instruction(instruction_t* cloned, temporary_variable_mapping_t mapping[], u_int32_t* mapping_max_index){
 
 } 
 
@@ -1450,6 +1471,17 @@ static inline void hoist_branch(basic_block_t* target, basic_block_t* branch_blo
 	//Grab pointers to these two blocks. We will need them for relation management
 	basic_block_t* if_block = branch_block->exit_statement->if_block;
 	basic_block_t* else_block = branch_block->exit_statement->else_block;
+
+	/**
+	 * We will need to replace temporary variables as we go so that we don't
+	 * violate the SSA property. To do this, we will maintain a mapping of
+	 * temporary variables that we've seen and the new temp vars that they
+	 * map to. To allocate this, we will combine the used variable count plus
+	 * the assigned variable count. Since only non-temp vars can be assigned, this
+	 * should give us a safe upper limit for this array
+	 */
+	temporary_variable_mapping_t mapping[branch_block->used_variables.current_index + branch_block->assigned_variables.current_index];
+	u_int32_t mapping_max_index = 0;
 
 	//Grab an instruction cursor
 	instruction_t* cursor = branch_block->leader_statement;
