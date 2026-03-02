@@ -1355,6 +1355,27 @@ static inline u_int8_t are_blocks_eligible_for_branch_hoisting(basic_block_t* de
 	return TRUE;
 }
 
+/**
+ * Does a given block define a non-temporary variable? If so, we'll find out here by searching
+ * through the block's "assigned" sets
+ */
+static inline u_int8_t does_block_assign_variable(basic_block_t* block, three_addr_var_t* variable){
+	//Run through every assigned variable
+	for(u_int32_t i = 0; i < block->assigned_variables.current_index; i++){
+		//Extract it
+		three_addr_var_t* candidate = dynamic_array_get_at(&(block->assigned_variables), i);
+
+		//If they're equal then get out
+		if(variables_equal(variable, candidate, FALSE) == TRUE){
+			return TRUE;
+		}
+	}
+
+	//Otherwise they're not so 
+	return FALSE;
+}
+
+
 
 /**
  * Hoist a branch from the branch_block into the target block. Note that this operation
