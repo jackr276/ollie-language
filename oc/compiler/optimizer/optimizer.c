@@ -1537,7 +1537,27 @@ static void remediate_phi_functions(basic_block_t* target, basic_block_t* former
 			break;
 		}
 
+		//Run through all of the parameters
+		for(u_int32_t i = 0; i < phi_function_cursor->parameters.current_index; i++){
+			//Extract the parameter
+			three_addr_var_t* parameter = dynamic_array_get_at(&(phi_function_cursor->parameters), i);
 
+			/**
+			 * What this means: the former predecessor that we've now removed
+			 * as a predecessor assigned this variable. Remember that the phi-function
+			 * gets these variables from what has been assigned in it's predecessors. As
+			 * such, if these are a match, we need to delete this variable from the phi
+			 * function
+			 */
+			if(does_block_assign_variable(former_predecessor, parameter) == TRUE){
+				//Scrap it
+				dynamic_array_delete_at(&(phi_function_cursor->parameters), i);
+
+				//We can also leave the loop now. One predecessor block cannot be represented
+				//more than once in a given phi-function
+				break;
+			}
+		}
 
 		//Bump this up to the next statement
 		phi_function_cursor = phi_function_cursor->next_statement;
