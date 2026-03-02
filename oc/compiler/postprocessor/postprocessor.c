@@ -405,7 +405,7 @@ static inline u_int8_t does_block_contain_more_than_one_jump_to_target(basic_blo
  * Is a block exclusively a return statement? This is a pretty easy check
  * which is why this entire function is inlined
  */
-static inline u_int8_t is_block_ret_only(basic_block_t* block){
+static inline u_int8_t is_block_ret_instruction_only(basic_block_t* block){
 	//Get the leader statement
 	instruction_t* leader_statement = block->leader_statement;
 
@@ -556,7 +556,7 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 			 * save us on instructions
 			 */
 			} else {
-				if(is_block_jump_instruction_only(jumping_to_block) == TRUE
+				if(is_block_ret_instruction_only(jumping_to_block) == TRUE
 					&& does_block_contain_more_than_one_jump_to_target(current, jumping_to_block) == FALSE){
 
 					printf("CANDIDATES: .L%d and .L%d\n\n", current->block_id, jumping_to_block->block_id);
