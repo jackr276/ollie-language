@@ -8,6 +8,7 @@
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/select.h>
 #include <sys/types.h>
 
@@ -1418,7 +1419,7 @@ static inline three_addr_const_t* clone_constant(three_addr_const_t* constant){
  * Use the mapping array to either find the reference for this variable *or* create a new
  * mapping of a temp var number to a new cloned temp var
  */
-static inline three_addr_var_t* clone_temp_var(three_addr_var_t* variable, temporary_variable_mapping_t mapping[], u_int32_t* mapping_array_current_index){
+static inline three_addr_var_t* clone_temp_var(three_addr_var_t* variable, temporary_variable_mapping_t* mapping, u_int32_t* mapping_array_current_index, u_int32_t* mapping_max_size){
 	//Run through the entire array
 	for(u_int32_t i = 0; i < *mapping_array_current_index; i++){
 		//If this happens, then we've found what we're supposed to map our temp var to
@@ -1426,6 +1427,12 @@ static inline three_addr_var_t* clone_temp_var(three_addr_var_t* variable, tempo
 			//Return a duplicate of this replacement
 			return emit_var_copy(mapping[i].replacement_var);
 		}
+	}
+
+	//Dynamically reup this if we need to
+	if(*mapping_array_current_index == *mapping_max_size){
+		*mapping_max_size *= 2;
+		mapping = realloc(mapping, sizeof(temporary_variable_mapping_t) * *mapping_max_size);
 	}
 
 	//If we make it down here, then we need to do an entirely new mapping
@@ -1439,6 +1446,9 @@ static inline three_addr_var_t* clone_temp_var(three_addr_var_t* variable, tempo
 	//This is the replacement var
 	mapping[*mapping_array_current_index].replacement_var = replacement_var;
 
+	//Bump this up
+	(*mapping_array_current_index)++;
+
 	//And give back the replacement
 	return replacement_var;
 }
@@ -1448,7 +1458,7 @@ static inline three_addr_var_t* clone_temp_var(three_addr_var_t* variable, tempo
  * Clone a variable. This function will decide whether to clone as a temp var or to clone as 
  * a non-temp var
  */
-static inline three_addr_var_t* clone_variable(three_addr_var_t* variable, temporary_variable_mapping_t mapping[], u_int32_t* mapping_array_current_index){
+static inline three_addr_var_t* clone_variable(three_addr_var_t* variable, temporary_variable_mapping_t* mapping, u_int32_t* mapping_array_current_index, u_int32_t* mapping_max_size){
 	//If it's NULL then return NULL
 	if(variable == NULL){
 		return NULL;
@@ -1457,7 +1467,7 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* variable, tempo
 	//If the variable is temporary(most common), we will use
 	//our temp var logic
 	if(variable->variable_type == VARIABLE_TYPE_TEMP){
-		return clone_temp_var(variable, mapping, mapping_array_current_index);
+		return clone_temp_var(variable, mapping, mapping_array_current_index, mapping_max_size);
 
 	//Otherise just emit a straight copy
 	} else {
@@ -1466,13 +1476,12 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* variable, tempo
 }
 
 
-
 /**
  * Clone the entire instruction. This cloning process is going
  * to involve us copying over variables in a way that
  * changes the temp var numbers for correctness
  */
-static instruction_t* clone_instruction(instruction_t* cloned, temporary_variable_mapping_t mapping[], u_int32_t* mapping_max_index){
+static instruction_t* clone_instruction(instruction_t* cloned, temporary_variable_mapping_t* mapping, u_int32_t* mapping_current_index, u_int32_t* mapping_max_size){
 	//First we allocate
 	instruction_t* copy = calloc(1, sizeof(instruction_t));
 
@@ -1480,11 +1489,11 @@ static instruction_t* clone_instruction(instruction_t* cloned, temporary_variabl
 	memcpy(copy, cloned, sizeof(instruction_t));
 	
 	//Duplicate the variables
-	copy->assignee = duplicate_variable(copied->assignee);
-	copy->op1 = duplicate_variable(copied->op1);
-	copy->op2 = duplicate_variable(copied->op2);
-	copy->offset = duplicate_constant(copied->offset);
-	copy->op1_const = duplicate_constant(copied->op1_const);
+	copy->assignee = clone_variable(cloned->assignee, mapping, mapping_current_index, mapping_max_size);
+	copy->op1 = clone_variable(cloned->op1, mapping, mapping_current_index, mapping_max_size);
+	copy->op2 = clone_variable(cloned->op2, mapping, mapping_current_index, mapping_max_size);
+	copy->offset = clone_constant(cloned->offset);
+	copy->op1_const = clone_constant(cloned->op1_const);
 
 	//If we have function call parameters, emit a copy of them
 	if(cloned->parameters.internal_array != NULL){
@@ -1493,7 +1502,7 @@ static instruction_t* clone_instruction(instruction_t* cloned, temporary_variabl
 
 	//Run through and copy individually
 	for(u_int32_t i = 0; i < cloned->parameters.current_index; i++){
-		dynamic_array_add(&(copy->parameters), duplicate_variable(dynamic_array_get_at(&(copied->parameters), i)));
+		dynamic_array_add(&(copy->parameters), clone_variable(dynamic_array_get_at(&(cloned->parameters), i), mapping, mapping_current_index, mapping_max_size));
 	}
 
 	//IMPORTANT: null out the next/previous for the instruction
@@ -1501,8 +1510,8 @@ static instruction_t* clone_instruction(instruction_t* cloned, temporary_variabl
 	copy->previous_statement = NULL;
 	copy->block_contained_in = NULL;
 
-	//Give back the clond one
-	return cloned;
+	//Give back the copied one
+	return copy;
 } 
 
 
@@ -1532,8 +1541,9 @@ static inline void hoist_branch(basic_block_t* target, basic_block_t* branch_blo
 	 * the assigned variable count. Since only non-temp vars can be assigned, this
 	 * should give us a safe upper limit for this array
 	 */
-	temporary_variable_mapping_t mapping[branch_block->used_variables.current_index + branch_block->assigned_variables.current_index];
-	u_int32_t mapping_max_index = 0;
+	u_int32_t mapping_max_size = 20;
+	temporary_variable_mapping_t* mapping = calloc(sizeof(temporary_variable_mapping_t), mapping_max_size);
+	u_int32_t mapping_current_index = 0;
 
 	//Grab an instruction cursor
 	instruction_t* cursor = branch_block->leader_statement;
@@ -1547,7 +1557,7 @@ static inline void hoist_branch(basic_block_t* target, basic_block_t* branch_blo
 		}
 
 		//Create a complete copy
-		instruction_t* copy = copy_instruction(cursor);
+		instruction_t* copy = clone_instruction(cursor, mapping, &mapping_current_index, &mapping_max_size);
 
 		//Add the cloned statement into the current block
 		add_statement(target, copy);
@@ -1555,6 +1565,9 @@ static inline void hoist_branch(basic_block_t* target, basic_block_t* branch_blo
 		//Bump this up
 		cursor = cursor->next_statement;
 	}
+
+	//Release this when done
+	free(mapping);
 
 	//Update the successors for the current block to include the new branch
 	add_successor(target, if_block);
@@ -1689,10 +1702,10 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				printf("HERE\n");
 
 				//Let the helper perform the actual hoist
-				//hoist_branch(current, jumping_to_block);
+				hoist_branch(current, jumping_to_block);
 
 				//This is a change
-				//changed = TRUE;
+				changed = TRUE;
 			}
 		}
 	}
