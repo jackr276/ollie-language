@@ -1516,6 +1516,36 @@ static instruction_t* clone_instruction(instruction_t* cloned, temporary_variabl
 
 
 /**
+ * Remediate the phi functions(if there are any) at the top of
+ * this block. We know that the "removed" block has been
+ * deleted as a successor, so we'll need to find any variables
+ * that it assigned and get rid of them in the phi functions
+ */
+static void remediate_phi_functions(basic_block_t* target, basic_block_t* former_predecessor){
+	instruction_t* phi_function_cursor = target->leader_statement;
+
+	//Run through the whole block
+	while(TRUE){
+		//Very rare but checking doesn't hurt
+		if(phi_function_cursor == NULL){
+			break;
+		}
+
+		//If this is not a phi function, we get out. Remember that all
+		//phi functions always apears at the top of the block
+		if(phi_function_cursor->statement_type != THREE_ADDR_CODE_PHI_FUNC){
+			break;
+		}
+
+
+
+		//Bump this up to the next statement
+		phi_function_cursor = phi_function_cursor->next_statement;
+	}
+}
+
+
+/**
  * Hoist a branch from the branch_block into the target block. Note that this operation
  * will *not* remove the old branch. It will simply copy it verbatim into the new branch
  *
@@ -1550,7 +1580,7 @@ static inline void hoist_branch(basic_block_t* target, basic_block_t* branch_blo
 
 	//Run through every single instruction
 	while(cursor != NULL){
-		//Do not copy phi-functions - they would be wrong if we did
+		//This will be handled later
 		if(cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
 			cursor = cursor->next_statement;
 			continue;
@@ -1573,7 +1603,12 @@ static inline void hoist_branch(basic_block_t* target, basic_block_t* branch_blo
 	add_successor(target, if_block);
 	add_successor(target, else_block);
 
-	//TODO - we now need to remediate any SSA flowing through the branch block
+	/**
+	 * Since we've messed with the predecessors of this block, we'll need
+	 * to rework it's phi functions(if it has any). We will let a helper 
+	 * do this
+	 */
+	remediate_phi_functions(branch_block, target);
 }
 
 
