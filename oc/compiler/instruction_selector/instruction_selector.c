@@ -6677,11 +6677,105 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 		//Reconstruct the window starting at the movzbl
 		reconstruct_window(window, move_instruction);
 
+	//Otherwise we are dealing with the floating point case
 	} else {
+		//Hold onto what the floating point type is
+		generic_type_t* operand_type = logical_or->op1->type;
 
+		/**
+		 * For all of our holders here, we have a unique case. We need the op1/op2
+		 * results to be 1 byte for the setp instructions, and we'll need our
+		 * cmovX holders to be at least 2 bytes. We will achieve this by using
+		 * variable copying here. Whatever our end variable size is it does 
+		 * not matter to us
+		 */
+		three_addr_var_t* op1_result = emit_temp_var(u8);
+		three_addr_var_t* op2_result = emit_temp_var(u8);
+
+		//We'll also need holders for the result of the op1/op2 CMOVNE instructions
+		three_addr_var_t* op1_cmovne_result = emit_var_copy(op1_result);
+		three_addr_var_t* op2_cmovne_result = emit_var_copy(op2_result);
+
+		//Make the size a u16
+		op1_cmovne_result->type = u16;
+		op2_cmovne_result->type = u16;
+
+		//This is a "WORD" sized variable for compliance reasons with the conditional move's limitations
+		op1_cmovne_result->variable_size = WORD;
+		op2_cmovne_result->variable_size = WORD;
+
+		//We'll need something to hold onto the one for us
+		three_addr_var_t* one_temporary_holder = emit_temp_var(u16);
+
+		//We'll also need a variable that's been 0'd out to compare with
+		three_addr_var_t* zeroed_out_variable = emit_temp_var(operand_type);
+
+		//The first thing that we need is an assignment to 1
+		instruction_t* assign_one = emit_constant_move_instruction(one_temporary_holder, emit_direct_integer_or_char_constant(1, one_temporary_holder->type));
+
+		//This goes in after the logical and
+		insert_instruction_after_given(assign_one, logical_or);
+
+		//Emit the PXOR instruction to get 0
+		instruction_t* clear_instruction = emit_sse_register_clear_instruction(zeroed_out_variable);
+
+		//We'll put this right after the logical and
+		insert_instruction_after_given(clear_instruction, assign_one);
+		
+		//Now compare the op1 against 0 using FP comparison
+		instruction_t* op1_comparison = emit_float_comparison_instruction(logical_or->op1, zeroed_out_variable, TRUE);
+
+		//This goes right after the clear instruction
+		insert_instruction_after_given(op1_comparison, clear_instruction);
+
+		//Following that, we'll need our setp instruction
+		instruction_t* op1_setp = emit_setp_instruction(op1_result, op1_comparison->assignee);
+
+		//Throw this in after the comparison
+		insert_instruction_after_given(op1_setp, op1_comparison);
+
+		//Following this, we'll need our conditional move to take place
+		instruction_t* op1_conditional_move = emit_cmovX_instruction(op1_cmovne_result, one_temporary_holder, NOT_EQUALS);
+
+		//This goes in after the setP
+		insert_instruction_after_given(op1_conditional_move, op1_setp);
+		
+		//Now compare the op2 against 0 using FP comparison
+		instruction_t* op2_comparison = emit_float_comparison_instruction(logical_or->op2, zeroed_out_variable, TRUE);
+
+		//This goes right after the op1 conditional move 
+		insert_instruction_after_given(op2_comparison, op1_conditional_move);
+
+		//Following that, we'll need our setp instruction
+		instruction_t* op2_setp = emit_setp_instruction(op2_result, op2_comparison->assignee);
+
+		//Throw this in after the comparison for op2
+		insert_instruction_after_given(op2_setp, op2_comparison);
+
+		//Following this, we'll need our conditional move to take place
+		instruction_t* op2_conditional_move = emit_cmovX_instruction(op2_cmovne_result, one_temporary_holder, NOT_EQUALS);
+
+		//This goes in after the setP
+		insert_instruction_after_given(op2_conditional_move, op2_setp);
+
+		//Emit the loigcal or, the final result is in the op1_setp
+		instruction_t* final_or = emit_or_instruction(op1_setp->destination_register, op2_setp->destination_register);
+
+		//This goes after the conditional move
+		insert_instruction_after_given(final_or, op2_conditional_move);
+
+		//And we need one final assignment into the destination
+		instruction_t* final_assignment = emit_move_instruction(logical_or->assignee, final_or->destination_register);
+
+		//This is the last thing that goes int
+		insert_instruction_after_given(final_assignment, final_or);
+
+		//And after all of that, the logical or is now useless to us so we will scrap it
+		delete_statement(logical_or);
+
+		//Reconstruct the window starting at the final move
+		reconstruct_window(window, final_assignment);
 	}
-
-
 }
 
 
