@@ -6629,6 +6629,9 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 /**
  * Handle a logical and instruction
  *
+ *
+ * ** General Purpose case **
+ *
  * t32 <- t32 && t19
  *
  * This will translate to:
@@ -6641,6 +6644,10 @@ static void handle_logical_or_instruction(instruction_window_t* window){
  *
  * Since this will spawn multiple instructions, it will be invoked from the multiple instruction
  * pattern selector
+ * 
+ * ** Floating point case **
+ *
+ *
  * 
  * NOTE: We guarantee that the first instruction in the window is the one that we're after
  * in this case
@@ -6656,114 +6663,125 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 	three_addr_var_t* op1_result;
 	three_addr_var_t* op2_result;
 
-	//The eventual 2 things that will be anded together
-
 	//Grab it out for convenience
 	instruction_t* logical_and = window->instruction1;
 
-	//Preserve this for ourselves
-	instruction_t* after_logical_and = logical_and->next_statement;
+	//Is this a floating point logical and or not?
+	u_int8_t is_floating_point = IS_FLOATING_POINT(logical_and->op1->type);
 
-	//Grab a cursor to see where the operands came from
-	instruction_t* cursor = logical_and->previous_statement;
+	//If this is not a floating point operation(most common)
+	if(is_floating_point == FALSE){
+		//Preserve this for ourselves
+		instruction_t* after_logical_and = logical_and->next_statement;
 
-	//Crawl back through the block to try and see if we can tell
-	//where these all came from. Worst case we need to crawl the whole
-	//block, which isn't bad because these blocks aren't enormous 99.9% of
-	//the time
-	while(cursor != NULL){
-		//Did we find where op1 got assigned?. If so, check to see
-		//if the operation that made it generated a truthful byte value(0 or 1)
-		//or not
-		if(variables_equal(logical_and->op1, cursor->assignee, FALSE)){
-			if(does_operator_generate_truthful_byte_value(cursor->op) == TRUE){
-				op1_came_from_setX = TRUE;
+		//Grab a cursor to see where the operands came from
+		instruction_t* cursor = logical_and->previous_statement;
+
+		//Crawl back through the block to try and see if we can tell
+		//where these all came from. Worst case we need to crawl the whole
+		//block, which isn't bad because these blocks aren't enormous 99.9% of
+		//the time
+		while(cursor != NULL){
+			//Did we find where op1 got assigned?. If so, check to see
+			//if the operation that made it generated a truthful byte value(0 or 1)
+			//or not
+			if(variables_equal(logical_and->op1, cursor->assignee, FALSE)){
+				if(does_operator_generate_truthful_byte_value(cursor->op) == TRUE){
+					op1_came_from_setX = TRUE;
+				}
+
+			//Give op2 the exact same treatment
+			} else if(variables_equal(logical_and->op2, cursor->assignee, FALSE)){
+				if(does_operator_generate_truthful_byte_value(cursor->op) == TRUE){
+					op2_came_from_setX = TRUE;
+				}
 			}
 
-		//Give op2 the exact same treatment
-		} else if(variables_equal(logical_and->op2, cursor->assignee, FALSE)){
-			if(does_operator_generate_truthful_byte_value(cursor->op) == TRUE){
-				op2_came_from_setX = TRUE;
-			}
+			//Push it back
+			cursor = cursor->previous_statement;
 		}
 
-		//Push it back
-		cursor = cursor->previous_statement;
-	}
+		//We expect that it *not* being from
+		//setX is the most likely case
+		if(op1_came_from_setX == FALSE){
+			//Let's first emit our test instruction
+			instruction_t* test_instruction = emit_direct_test_instruction(logical_and->op1, logical_and->op1);
 
-	//We expect that it *not* being from
-	//setX is the most likely case
-	if(op1_came_from_setX == FALSE){
-		//Let's first emit our test instruction
-		instruction_t* test_instruction = emit_direct_test_instruction(logical_and->op1, logical_and->op1);
+			//Emit a var to hold the result of op1
+			op1_result = emit_temp_var(u8);
 
-		//Emit a var to hold the result of op1
-		op1_result = emit_temp_var(u8);
+			//Now we'll need a setne(not zero) instruction that will the op1 result
+			instruction_t* set_instruction = emit_setne_instruction(op1_result, logical_and->op1);
 
-		//Now we'll need a setne(not zero) instruction that will the op1 result
-		instruction_t* set_instruction = emit_setne_instruction(op1_result, logical_and->op1);
+			//IMPORTANT - flag that this depends on the source register
+			set_instruction->op1 = test_instruction->source_register;
 
-		//IMPORTANT - flag that this depends on the source register
-		set_instruction->op1 = test_instruction->source_register;
+			//Insert these in order. The test comes first, then the set(relies on the flags from test)
+			insert_instruction_before_given(test_instruction, after_logical_and);
+			insert_instruction_before_given(set_instruction, after_logical_and);
 
-		//Insert these in order. The test comes first, then the set(relies on the flags from test)
-		insert_instruction_before_given(test_instruction, after_logical_and);
-		insert_instruction_before_given(set_instruction, after_logical_and);
+		} else {
+			//If we make it here, we know that op1 already came from a setX instruction. So, we can just
+			//assign here and be done
+			op1_result = emit_var_copy(logical_and->op1);
+			//We will emit a type-coerced version of our value
+			op1_result->type = u8;
+			op1_result->variable_size = get_type_size(u8);
+		}
 
+		//We expect that it *not* being from
+		//setX is the most likely case
+		if(op2_came_from_setX == FALSE){
+			//Test the 2 together
+			instruction_t* test_instruction = emit_direct_test_instruction(logical_and->op2, logical_and->op2);
+
+			//Emit a var to hold the result of op2
+			op2_result = emit_temp_var(u8);
+
+			//Set if it's not zero
+			instruction_t* set_instruction = emit_setne_instruction(op2_result, logical_and->op1);
+
+			//IMPORTANT - flag that this depends on the source register
+			set_instruction->op1 = test_instruction->source_register;
+
+			//Insert these in order. The test comes first, then the set(relies on the flags from test)
+			insert_instruction_before_given(test_instruction, after_logical_and);
+			insert_instruction_before_given(set_instruction, after_logical_and);
+		} else {
+			//If we make it here, we know that op2 already came from a setX instruction. So, we can just
+			//assign here and be done
+			op2_result = emit_var_copy(logical_and->op2);
+			//We will emit a type-coerced version of our value
+			op2_result->type = u8;
+			op2_result->variable_size = get_type_size(u8);
+		}
+
+		//Now we'll need to ANDx these two values together to see if they're both 1
+		instruction_t* and_inst = emit_and_instruction(op1_result, op2_result);
+
+		//The final thing that we need is a movzx
+		instruction_t* move_instruction = emit_move_instruction(logical_and->assignee, and_inst->destination_register);
+
+		//Select this one's size 
+		logical_and->assignee->variable_size = get_type_size(logical_and->assignee->type);
+
+		//We no longer need the logical and statement
+		delete_statement(logical_and);
+
+		//Now insert these in order. First comes the and instruction, then the final move
+		insert_instruction_before_given(and_inst, after_logical_and);
+		insert_instruction_before_given(move_instruction, after_logical_and);
+		
+		//Reconstruct the window starting at the final move
+		reconstruct_window(window, move_instruction);
+
+	//Otherwise we are specifically doing a floating point logical and
 	} else {
-		//If we make it here, we know that op1 already came from a setX instruction. So, we can just
-		//assign here and be done
-		op1_result = emit_var_copy(logical_and->op1);
-		//We will emit a type-coerced version of our value
-		op1_result->type = u8;
-		op1_result->variable_size = get_type_size(u8);
+
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(1);
+
 	}
-
-	//We expect that it *not* being from
-	//setX is the most likely case
-	if(op2_came_from_setX == FALSE){
-		//Test the 2 together
-		instruction_t* test_instruction = emit_direct_test_instruction(logical_and->op2, logical_and->op2);
-
-		//Emit a var to hold the result of op2
-		op2_result = emit_temp_var(u8);
-
-		//Set if it's not zero
-		instruction_t* set_instruction = emit_setne_instruction(op2_result, logical_and->op1);
-
-		//IMPORTANT - flag that this depends on the source register
-		set_instruction->op1 = test_instruction->source_register;
-
-		//Insert these in order. The test comes first, then the set(relies on the flags from test)
-		insert_instruction_before_given(test_instruction, after_logical_and);
-		insert_instruction_before_given(set_instruction, after_logical_and);
-	} else {
-		//If we make it here, we know that op2 already came from a setX instruction. So, we can just
-		//assign here and be done
-		op2_result = emit_var_copy(logical_and->op2);
-		//We will emit a type-coerced version of our value
-		op2_result->type = u8;
-		op2_result->variable_size = get_type_size(u8);
-	}
-
-	//Now we'll need to ANDx these two values together to see if they're both 1
-	instruction_t* and_inst = emit_and_instruction(op1_result, op2_result);
-
-	//The final thing that we need is a movzx
-	instruction_t* move_instruction = emit_move_instruction(logical_and->assignee, and_inst->destination_register);
-
-	//Select this one's size 
-	logical_and->assignee->variable_size = get_type_size(logical_and->assignee->type);
-
-	//We no longer need the logical and statement
-	delete_statement(logical_and);
-
-	//Now insert these in order. First comes the and instruction, then the final move
-	insert_instruction_before_given(and_inst, after_logical_and);
-	insert_instruction_before_given(move_instruction, after_logical_and);
-	
-	//Reconstruct the window starting at the final move
-	reconstruct_window(window, move_instruction);
 }
 
 
@@ -9131,7 +9149,6 @@ static void select_instruction_patterns(instruction_window_t* window){
 		switch(window->instruction1->op){
 			//Handle the logical and case
 			case DOUBLE_AND:
-				//TODO FLOAT VERSION NEEDED
 				handle_logical_and_instruction(window);
 				return;
 
