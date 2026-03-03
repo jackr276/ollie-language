@@ -868,6 +868,7 @@ static inline void integer_to_floating_point(type_symtab_t* symtab, generic_type
 	//Go based on what we have as our basic type
 	switch((*a)->basic_type_token){
 		//These all decome f32's
+		case BOOL:
 		case U8:
 		case I8:
 		case CHAR:
