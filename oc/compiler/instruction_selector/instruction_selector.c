@@ -11,6 +11,7 @@
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -4125,6 +4126,32 @@ static inline instruction_t* emit_setnp_instruction(three_addr_var_t* destinatio
 
 
 /**
+ * Emit a setp instruction
+ *
+ * The setp instruction is used on a byte. We have a "relies_on" field to tell the instruction
+ * scheduler what this setne relies on in the future, but this op1 is never actually displayed/printed,
+ * it is just for tracking
+ */
+static inline instruction_t* emit_setp_instruction(three_addr_var_t* destination, three_addr_var_t* relies_on){
+	//First we'll allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//And we'll set the class
+	instruction->instruction_type = SETP;
+
+	//We store what this instruction relies on in it's op1 value. This is necessary for scheduling reasons,
+	//but it is completely ignored at the selector level
+	instruction->op1 = relies_on;
+
+	//Finally we set the destination
+	instruction->destination_register = destination;
+
+	//And now we'll give it back
+	return instruction;
+}
+
+
+/**
  * Emit an ANDx instruction
  */
 static inline instruction_t* emit_and_instruction(three_addr_var_t* destination, three_addr_var_t* source){
@@ -6789,6 +6816,34 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 
 	//Otherwise we are specifically doing a floating point logical and
 	} else {
+		//Hold onto what the floating point type is
+		generic_type_t* operand_type = logical_and->op1->type;
+
+		//Grab a pointer to what comes after
+		instruction_t* after_logical_and = logical_and->next_statement;
+
+		//First we will need our zeroed out variable to compare with
+		three_addr_var_t* zeroed_out_variable = emit_temp_var(operand_type);
+
+		//Emit the PXOR instruction to get 0
+		instruction_t* clear_instruction = emit_sse_register_clear_instruction(zeroed_out_variable);
+
+		//We'll put this right after the logical and
+		insert_instruction_after_given(clear_instruction, logical_and);
+		
+		//Now compare the op1 against 0 using FP comparison
+		instruction_t* op1_comparison = emit_float_comparison_instruction(logical_and->op1, zeroed_out_variable, TRUE);
+
+		//This goes right after the clear instruction
+		insert_instruction_after_given(op1_comparison, logical_and);
+
+		instruction_t* op1_result = emit_temp_var()
+
+		//Following that, we'll need our setX instruction
+		
+
+
+
 
 		printf("TODO NOT IMPLEMENTED\n");
 		exit(1);
