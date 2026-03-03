@@ -11,7 +11,6 @@
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -6303,6 +6302,10 @@ static inline instruction_t* emit_float_comparison_instruction(three_addr_var_t*
 	comparison_instruction->source_register = source_register;
 	comparison_instruction->source_register2 = source_register2;
 
+	//Emit a dummy temp var in the assignee for tracking reasons. This will not
+	//be used anywhere else
+	comparison_instruction->assignee = emit_temp_var(u8);
+
 	//Give the instruction back
 	return comparison_instruction;
 }
@@ -6675,15 +6678,14 @@ static void handle_logical_or_instruction(instruction_window_t* window){
  * ** Floating point case **
  * t32(int) <- t33(float) && t34(float)
  *
+ * movl $1, t37 	 <--- Load up a 1 because cmovX can't have immediate values
  * pxor t35, t35  	 <--- Get a value that's 0, we'll use it for comparing
  * ucomiss t35, t33  <--- Compare t33 against 0
  * setp t36			 <--- Set the parity flag. If t33 was NaN, in Ollie, that counts as not 0
- * movl $1, t37 	 <--- Load up a 1 because cmovX can't have immediate values
  * cmovne t37, t36   <--- Conditionally move t37 into t36 if the ZF isn't set
  * ucomiss t35, t34  <--- Compare t34 against 0
  * setp t38			 <--- If t34 was NaN, set this as true because NaN != 0
- * movl $1, t39		 <--- Again load up a 1
- * cmovne t39, t38   <--- Move the 1 into our result *if* ZF isn't set
+ * cmovne t37, t38   <--- Move the 1 into our result *if* ZF isn't set
  * andl t36, t38	 <--- Finally *and* the two results
  *
  * Our final logical and result is in t38
@@ -6819,6 +6821,46 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		//Hold onto what the floating point type is
 		generic_type_t* operand_type = logical_and->op1->type;
 
+		//Hang onto the destination type
+		generic_type_t* destination_type = logical_and->assignee->type;
+
+		//We'll need something to hold onto the one for us
+		three_addr_var_t* one_temporary_holder = emit_temp_var(destination_type);
+
+		//Holders for the op1/op2 result types
+		three_addr_var_t* op1_result = emit_temp_var(destination_type);
+		three_addr_var_t* op2_result = emit_temp_var(destination_type);
+
+		//We'll also need holders for the result of the op1/op2 CMOVNE instructions
+		three_addr_var_t* op1_cmovne_result = op1_result;
+		three_addr_var_t* op2_cmovne_result = op2_result;
+
+
+		/**
+		 * Do we need to emit a special kind of assignee here that is 16 bits?
+		 * If so, we will need to do that now by determining if the size is
+		 * below our threshold
+		 */
+		if(destination_type->type_size <= 8){
+			//Emit a carbon copy of both
+			op1_cmovne_result = emit_var_copy(op1_result);
+			op2_cmovne_result = emit_var_copy(op2_result);
+
+			//Make the size a u16
+			op1_cmovne_result->type = u16;
+			op2_cmovne_result->type = u16;
+
+			//This is a "WORD" sized variable for compliance reasons with the conditional move's limitations
+			op1_cmovne_result->variable_size = WORD;
+			op2_cmovne_result->variable_size = WORD;
+
+			//Let's also change the one assignment destination type
+			one_temporary_holder->type = u16;
+
+			//This will also be forced to be a word
+			one_temporary_holder->variable_size = WORD;
+		}
+
 		//Grab a pointer to what comes after
 		instruction_t* after_logical_and = logical_and->next_statement;
 
@@ -6837,9 +6879,16 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		//This goes right after the clear instruction
 		insert_instruction_after_given(op1_comparison, logical_and);
 
-		instruction_t* op1_result = emit_temp_var()
+		//Emit a result for op1
+		three_addr_var_t* op1_result = emit_temp_var(logical_and->assignee->type);
 
-		//Following that, we'll need our setX instruction
+		//Following that, we'll need our setp instruction
+		instruction_t* op1_setp = emit_setp_instruction(op1_result, op1_comparison->assignee);
+
+		//Throw this in after the comparison
+		insert_instruction_after_given(op1_setp, op1_comparison);
+
+		//Following this, we'll need our conditional move to take place
 		
 
 
