@@ -6646,8 +6646,20 @@ static void handle_logical_or_instruction(instruction_window_t* window){
  * pattern selector
  * 
  * ** Floating point case **
+ * t32(int) <- t33(float) && t34(float)
  *
+ * pxor t35, t35  	 <--- Get a value that's 0, we'll use it for comparing
+ * ucomiss t35, t33  <--- Compare t33 against 0
+ * setp t36			 <--- Set the parity flag. If t33 was NaN, in Ollie, that counts as not 0
+ * movl $1, t37 	 <--- Load up a 1 because cmovX can't have immediate values
+ * cmovne t37, t36   <--- Conditionally move t37 into t36 if the ZF isn't set
+ * ucomiss t35, t34  <--- Compare t34 against 0
+ * setp t38			 <--- If t34 was NaN, set this as true because NaN != 0
+ * movl $1, t39		 <--- Again load up a 1
+ * cmovne t39, t38   <--- Move the 1 into our result *if* ZF isn't set
+ * andl t36, t38	 <--- Finally *and* the two results
  *
+ * Our final logical and result is in t38
  * 
  * NOTE: We guarantee that the first instruction in the window is the one that we're after
  * in this case
