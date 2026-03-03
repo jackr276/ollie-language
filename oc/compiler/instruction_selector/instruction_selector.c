@@ -6825,44 +6825,33 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		//Hang onto the destination type
 		generic_type_t* destination_type = logical_and->assignee->type;
 
-		//We'll need something to hold onto the one for us
-		three_addr_var_t* one_temporary_holder = emit_temp_var(destination_type);
-
-		//Holders for the op1/op2 result types
-		three_addr_var_t* op1_result = emit_temp_var(destination_type);
-		three_addr_var_t* op2_result = emit_temp_var(destination_type);
+		/**
+		 * For all of our holders here, we have a unique case. We need the op1/op2
+		 * results to be 1 byte for the setp instructions, and we'll need our
+		 * cmovX holders to be at least 2 bytes. We will achieve this by using
+		 * variable copying here. Whatever our end variable size is it does 
+		 * not matter to us
+		 */
+		three_addr_var_t* op1_result = emit_temp_var(u8);
+		three_addr_var_t* op2_result = emit_temp_var(u8);
 
 		//We'll also need holders for the result of the op1/op2 CMOVNE instructions
-		three_addr_var_t* op1_cmovne_result = op1_result;
-		three_addr_var_t* op2_cmovne_result = op2_result;
+		three_addr_var_t* op1_cmovne_result = emit_var_copy(op1_result);
+		three_addr_var_t* op2_cmovne_result = emit_var_copy(op2_result);
+
+		//Make the size a u16
+		op1_cmovne_result->type = u16;
+		op2_cmovne_result->type = u16;
+
+		//This is a "WORD" sized variable for compliance reasons with the conditional move's limitations
+		op1_cmovne_result->variable_size = WORD;
+		op2_cmovne_result->variable_size = WORD;
+
+		//We'll need something to hold onto the one for us
+		three_addr_var_t* one_temporary_holder = emit_temp_var(u16);
 
 		//We'll also need a variable that's been 0'd out to compare with
 		three_addr_var_t* zeroed_out_variable = emit_temp_var(operand_type);
-
-		/**
-		 * Do we need to emit a special kind of assignee here that is 16 bits?
-		 * If so, we will need to do that now by determining if the size is
-		 * below our threshold
-		 */
-		if(destination_type->type_size <= 8){
-			//Emit a carbon copy of both
-			op1_cmovne_result = emit_var_copy(op1_result);
-			op2_cmovne_result = emit_var_copy(op2_result);
-
-			//Make the size a u16
-			op1_cmovne_result->type = u16;
-			op2_cmovne_result->type = u16;
-
-			//This is a "WORD" sized variable for compliance reasons with the conditional move's limitations
-			op1_cmovne_result->variable_size = WORD;
-			op2_cmovne_result->variable_size = WORD;
-
-			//Let's also change the one assignment destination type
-			one_temporary_holder->type = u16;
-
-			//This will also be forced to be a word
-			one_temporary_holder->variable_size = WORD;
-		}
 
 		//The first thing that we need is an assignment to 1
 		instruction_t* assign_one = emit_constant_move_instruction(one_temporary_holder, emit_direct_integer_or_char_constant(1, one_temporary_holder->type));
