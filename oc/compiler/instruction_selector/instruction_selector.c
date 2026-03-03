@@ -6606,6 +6606,8 @@ static inline void handle_setne_instruction(instruction_t* instruction){
 /**
  * Handle a logical OR instruction
  * 
+ * ** General purpose case **
+ *
  * t32 <- t32 || t19
  *
  * Will become:
@@ -6614,6 +6616,22 @@ static inline void handle_setne_instruction(instruction_t* instruction){
  * setne t33 <------------ if it isn't 0, we eval to TRUE(1)
  * movzx t33, t32  <-------------- move this into the result
  *
+ * ** Floating point case **
+ * t32(int) <- t33(float) || t34(float)
+ *
+ * movl $1, t37 	 <--- Load up a 1 because cmovX can't have immediate values
+ * pxor t35, t35  	 <--- Get a value that's 0, we'll use it for comparing
+ * ucomiss t35, t33  <--- Compare t33 against 0
+ * setp t36			 <--- Set the parity flag. If t33 was NaN, in Ollie, that counts as not 0
+ * cmovne t37, t36   <--- Conditionally move t37 into t36 if the ZF isn't set
+ * ucomiss t35, t34  <--- Compare t34 against 0
+ * setp t38			 <--- If t34 was NaN, set this as true because NaN != 0
+ * cmovne t37, t38   <--- Move the 1 into our result *if* ZF isn't set
+ * orl t36, t38	 	 <--- Finally *or* the two results
+ * t32 <- t38 		 <--- Assign the result over
+ *
+ * Our final logical and result is in t38
+ *
  * NOTE: We guarantee that the first instruction in the window is the one that
  * we're after in this case
  */
@@ -6621,38 +6639,49 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 	//Grab it out for convenience
 	instruction_t* logical_or = window->instruction1;
 
-	//Save the after instruction
-	instruction_t* after_logical_or = window->instruction2;
+	//Is this a floating point operation or not? This will determine how we handle things
+	u_int8_t is_floating_point = IS_FLOATING_POINT(logical_or->op1->type);
 
-	//Let's first emit the or instruction
-	instruction_t* or_instruction = emit_or_instruction(logical_or->op1, logical_or->op2);
+	//Most common case - we are doing GP logical or
+	if(is_floating_point == FALSE){
+		//Save the after instruction
+		instruction_t* after_logical_or = window->instruction2;
 
-	//Now we need the setne instruction
-	instruction_t* setne_instruction = emit_setne_instruction(emit_temp_var(u8), logical_or->op1);
+		//Let's first emit the or instruction
+		instruction_t* or_instruction = emit_or_instruction(logical_or->op1, logical_or->op2);
 
-	//Flag that thsi relies on the above or instruction
-	setne_instruction->op1 = logical_or->op1;
+		//Now we need the setne instruction
+		instruction_t* setne_instruction = emit_setne_instruction(emit_temp_var(u8), logical_or->op1);
 
-	//Following that we'll need the final movzx instruction
-	instruction_t* move_instruction = emit_move_instruction(logical_or->assignee, setne_instruction->destination_register);
+		//Flag that thsi relies on the above or instruction
+		setne_instruction->op1 = logical_or->op1;
 
-	//Select this one's size 
-	logical_or->assignee->variable_size = get_type_size(logical_or->assignee->type);
+		//Following that we'll need the final movzx instruction
+		instruction_t* move_instruction = emit_move_instruction(logical_or->assignee, setne_instruction->destination_register);
 
-	//Now we can delete the old logical or instruction
-	delete_statement(logical_or);
+		//Select this one's size 
+		logical_or->assignee->variable_size = get_type_size(logical_or->assignee->type);
 
-	//First insert the or instruction
-	insert_instruction_before_given(or_instruction, after_logical_or);
+		//Now we can delete the old logical or instruction
+		delete_statement(logical_or);
 
-	//Then we need the setne
-	insert_instruction_before_given(setne_instruction, after_logical_or);
+		//First insert the or instruction
+		insert_instruction_before_given(or_instruction, after_logical_or);
 
-	//And finally we need the movzx
-	insert_instruction_before_given(move_instruction, after_logical_or);
+		//Then we need the setne
+		insert_instruction_before_given(setne_instruction, after_logical_or);
 
-	//Reconstruct the window starting at the movzbl
-	reconstruct_window(window, move_instruction);
+		//And finally we need the movzx
+		insert_instruction_before_given(move_instruction, after_logical_or);
+
+		//Reconstruct the window starting at the movzbl
+		reconstruct_window(window, move_instruction);
+
+	} else {
+
+	}
+
+
 }
 
 
@@ -6822,9 +6851,6 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		//Hold onto what the floating point type is
 		generic_type_t* operand_type = logical_and->op1->type;
 
-		//Hang onto the destination type
-		generic_type_t* destination_type = logical_and->assignee->type;
-
 		/**
 		 * For all of our holders here, we have a unique case. We need the op1/op2
 		 * results to be 1 byte for the setp instructions, and we'll need our
@@ -6915,6 +6941,9 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 
 		//And after all of that, the logical and is now useless to us so we will scrap it
 		delete_statement(logical_and);
+
+		//Reconstruct the window starting at the final move
+		reconstruct_window(window, final_assignment);
 	}
 }
 
@@ -9288,7 +9317,6 @@ static void select_instruction_patterns(instruction_window_t* window){
 
 			//Handle logical or
 			case DOUBLE_OR:
-				//TODO FLOAT VERSION NEEDED
 				handle_logical_or_instruction(window);
 				return;
 
