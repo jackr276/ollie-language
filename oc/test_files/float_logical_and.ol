@@ -4,7 +4,12 @@
 */
 
 
-pub fn float_logical_and(x:f32, y:f32) -> i32 {
+pub fn float_logical_and_expand(x:f32, y:f32) -> i32 {
+	ret x && y;
+}
+
+
+pub fn float_logical_and(x:f32, y:f32) -> i8 {
 	ret x && y;
 }
 
