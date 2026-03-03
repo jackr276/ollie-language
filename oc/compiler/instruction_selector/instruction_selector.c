@@ -3813,6 +3813,7 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 				break;
 
 			//Unsigned values, we'll use a u32
+			case BOOL:
 			case U8:
 			case U16:
 				//Move the old value into a u32 slot
