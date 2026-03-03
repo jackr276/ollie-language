@@ -6539,17 +6539,13 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 				//Emit a carbon copy
 				cmovne_destination = emit_var_copy(cmovne_destination);
 
-				//Make the size a u16
-				cmovne_destination->type = u16;
+				//Make the size a u32 for these both
+				cmovne_destination->type = u32;
+				zero_assignment_dest->type = u32;
 
-				//This is a "WORD" sized variable for compliance reasons with the conditional move's limitations
-				cmovne_destination->variable_size = WORD;
-
-				//Let's also change the zero assignment destination type
-				zero_assignment_dest->type = u16;
-
-				//This will also be forced to be a word
-				zero_assignment_dest->variable_size = WORD;
+				//These are "DOUBLE_WORD" sized variables for compliance reasons with the conditional move's limitations
+				cmovne_destination->variable_size = DOUBLE_WORD;
+				zero_assignment_dest->variable_size = DOUBLE_WORD;
 			}
 
 			//Now let's have a 0 on hand. We need a 0 because unfortunately the conditional move operations
@@ -6697,16 +6693,16 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 		three_addr_var_t* op1_cmovne_result = emit_var_copy(op1_result);
 		three_addr_var_t* op2_cmovne_result = emit_var_copy(op2_result);
 
-		//Make the size a u16
-		op1_cmovne_result->type = u16;
-		op2_cmovne_result->type = u16;
+		//Make the size a u32 
+		op1_cmovne_result->type = u32;
+		op2_cmovne_result->type = u32;
 
-		//This is a "WORD" sized variable for compliance reasons with the conditional move's limitations
-		op1_cmovne_result->variable_size = WORD;
-		op2_cmovne_result->variable_size = WORD;
+		//This is a "DOUBLE_WORD" sized variable for compliance reasons with the conditional move's limitations
+		op1_cmovne_result->variable_size = DOUBLE_WORD;
+		op2_cmovne_result->variable_size = DOUBLE_WORD;
 
 		//We'll need something to hold onto the one for us
-		three_addr_var_t* one_temporary_holder = emit_temp_var(u16);
+		three_addr_var_t* one_temporary_holder = emit_temp_var(u32);
 
 		//We'll also need a variable that's been 0'd out to compare with
 		three_addr_var_t* zeroed_out_variable = emit_temp_var(operand_type);
@@ -6960,16 +6956,16 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		three_addr_var_t* op1_cmovne_result = emit_var_copy(op1_result);
 		three_addr_var_t* op2_cmovne_result = emit_var_copy(op2_result);
 
-		//Make the size a u16
-		op1_cmovne_result->type = u16;
-		op2_cmovne_result->type = u16;
+		//Make the size a u32
+		op1_cmovne_result->type = u32;
+		op2_cmovne_result->type = u32;
 
-		//This is a "WORD" sized variable for compliance reasons with the conditional move's limitations
-		op1_cmovne_result->variable_size = WORD;
-		op2_cmovne_result->variable_size = WORD;
+		//This is a "DOUBLE_WORD" sized variable for compliance reasons with the conditional move's limitations
+		op1_cmovne_result->variable_size = DOUBLE_WORD;
+		op2_cmovne_result->variable_size = DOUBLE_WORD;
 
 		//We'll need something to hold onto the one for us
-		three_addr_var_t* one_temporary_holder = emit_temp_var(u16);
+		three_addr_var_t* one_temporary_holder = emit_temp_var(u32);
 
 		//We'll also need a variable that's been 0'd out to compare with
 		three_addr_var_t* zeroed_out_variable = emit_temp_var(operand_type);
