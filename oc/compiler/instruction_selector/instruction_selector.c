@@ -6687,6 +6687,7 @@ static void handle_logical_or_instruction(instruction_window_t* window){
  * setp t38			 <--- If t34 was NaN, set this as true because NaN != 0
  * cmovne t37, t38   <--- Move the 1 into our result *if* ZF isn't set
  * andl t36, t38	 <--- Finally *and* the two results
+ * t32 <- t38 		 <--- Assign the result over
  *
  * Our final logical and result is in t38
  * 
@@ -6835,6 +6836,8 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		three_addr_var_t* op1_cmovne_result = op1_result;
 		three_addr_var_t* op2_cmovne_result = op2_result;
 
+		//We'll also need a variable that's been 0'd out to compare with
+		three_addr_var_t* zeroed_out_variable = emit_temp_var(operand_type);
 
 		/**
 		 * Do we need to emit a special kind of assignee here that is 16 bits?
@@ -6861,26 +6864,23 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 			one_temporary_holder->variable_size = WORD;
 		}
 
-		//Grab a pointer to what comes after
-		instruction_t* after_logical_and = logical_and->next_statement;
+		//The first thing that we need is an assignment to 1
+		instruction_t* assign_one = emit_constant_move_instruction(one_temporary_holder, emit_direct_integer_or_char_constant(1, one_temporary_holder->type));
 
-		//First we will need our zeroed out variable to compare with
-		three_addr_var_t* zeroed_out_variable = emit_temp_var(operand_type);
+		//This goes in after the logical and
+		insert_instruction_after_given(assign_one, logical_and);
 
 		//Emit the PXOR instruction to get 0
 		instruction_t* clear_instruction = emit_sse_register_clear_instruction(zeroed_out_variable);
 
 		//We'll put this right after the logical and
-		insert_instruction_after_given(clear_instruction, logical_and);
+		insert_instruction_after_given(clear_instruction, assign_one);
 		
 		//Now compare the op1 against 0 using FP comparison
 		instruction_t* op1_comparison = emit_float_comparison_instruction(logical_and->op1, zeroed_out_variable, TRUE);
 
 		//This goes right after the clear instruction
-		insert_instruction_after_given(op1_comparison, logical_and);
-
-		//Emit a result for op1
-		three_addr_var_t* op1_result = emit_temp_var(logical_and->assignee->type);
+		insert_instruction_after_given(op1_comparison, clear_instruction);
 
 		//Following that, we'll need our setp instruction
 		instruction_t* op1_setp = emit_setp_instruction(op1_result, op1_comparison->assignee);
@@ -6889,14 +6889,43 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		insert_instruction_after_given(op1_setp, op1_comparison);
 
 		//Following this, we'll need our conditional move to take place
+		instruction_t* op1_conditional_move = emit_cmovX_instruction(op1_cmovne_result, one_temporary_holder, NOT_EQUALS);
+
+		//This goes in after the setP
+		insert_instruction_after_given(op1_conditional_move, op1_setp);
 		
+		//Now compare the op2 against 0 using FP comparison
+		instruction_t* op2_comparison = emit_float_comparison_instruction(logical_and->op2, zeroed_out_variable, TRUE);
 
+		//This goes right after the op1 conditional move 
+		insert_instruction_after_given(op2_comparison, op1_conditional_move);
 
+		//Following that, we'll need our setp instruction
+		instruction_t* op2_setp = emit_setp_instruction(op2_result, op2_comparison->assignee);
 
+		//Throw this in after the comparison for op2
+		insert_instruction_after_given(op2_setp, op2_comparison);
 
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(1);
+		//Following this, we'll need our conditional move to take place
+		instruction_t* op2_conditional_move = emit_cmovX_instruction(op2_cmovne_result, one_temporary_holder, NOT_EQUALS);
 
+		//This goes in after the setP
+		insert_instruction_after_given(op2_conditional_move, op2_setp);
+
+		//Emit the loigcal and, the final result is in the op1_setp
+		instruction_t* final_and = emit_and_instruction(op1_setp->destination_register, op2_setp->destination_register);
+
+		//This goes after the conditional move
+		insert_instruction_after_given(final_and, op2_conditional_move);
+
+		//And we need one final assignment into the destination
+		instruction_t* final_assignment = emit_move_instruction(logical_and->assignee, final_and->destination_register);
+
+		//This is the last thing that goes int
+		insert_instruction_after_given(final_assignment, final_and);
+
+		//And after all of that, the logical and is now useless to us so we will scrap it
+		delete_statement(logical_and);
 	}
 }
 
