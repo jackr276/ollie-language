@@ -8,6 +8,7 @@
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/select.h>
 #include <sys/types.h>
 
@@ -17,6 +18,23 @@ static three_addr_var_t* instruction_pointer_variable;
 
 //A pointer to the cfg
 static cfg_t* cfg_reference;
+
+
+/**
+ * We are going to need to maintain a mapping of temporary
+ * variables to replacement variables. Remember that the SSA 
+ * property dictates that temp variables are single use only, 
+ * so when we are copying things, we'll need to account for
+ * that with this mapping
+ */
+typedef struct temporary_variable_mapping_t{
+	//The temp var id of the source variable
+	u_int32_t source_temp_var_id;
+	//The replacement variable
+	three_addr_var_t* replacement_var;
+
+} temporary_variable_mapping_t;
+
 
 /**
  * Add an item to the current stack worklist
@@ -1298,6 +1316,323 @@ static inline u_int8_t is_block_only_branch(basic_block_t* block){
 
 
 /**
+ * Are blocks eligible for branch hoisting checks to make sure we aren't trying to 
+ * hoist a loop header inside of a loop
+ *
+ * Remember: hoisting blocks have *more than one* predecessor. This is not like a simple
+ * jump thread where we know there's only one thing before it. Doing this kind of hoist breaks
+ * the loop invariant and causes issues down the road
+ *
+ * Example:
+ *
+ * target(.L3):
+ *   .....
+ *   Stuff inside of here
+ *   .....
+ * 	jmp .L5(hoisting block)
+ *
+ * hoisting block(.L5):
+ * 	t35 <- t3 > 52
+ * 	cbranch_ne .L3 else .L4
+ *
+ * If we were going to hoist this into the target, odds are we'd have a phi function mess. So, we only 
+ * hoist *if* the target itself is *not* one of the branch targets
+ *
+ * Additionally, it is imperative that we do not attempt to hoist a loop entry block. This would be disastrous as
+ * it would destroy the single loop entry properly. We need to ensure that the only way into a loop is through the header
+ * block, and absolutely nothing else. As such, if we see that the hoisting block is a loop entry block, we leave immediately
+ */
+static inline u_int8_t are_blocks_eligible_for_branch_hoisting(basic_block_t* destination, basic_block_t* hoisting_block){
+	/**
+	 * First potential issue. If we are trying to hoist a loop header into some other area, that is not
+	 * allowed. Doing this would break our invariance and uase big issues down the line. If we see
+	 * that the hoisting block is a loop entry block, we stop
+	 */
+	if(hoisting_block->block_type == BLOCK_TYPE_LOOP_ENTRY){
+		return FALSE;
+	}
+
+	//Extract the branch
+	instruction_t* branch = hoisting_block->exit_statement;
+
+	//Get the if and else blocks out
+	basic_block_t* if_block = branch->if_block;
+	basic_block_t* else_block = branch->else_block;
+
+	//We have a match - we can't do this
+	if(if_block->block_id == destination->block_id){
+		return FALSE;
+	}
+
+	//We have a match - we can't do this
+	if(else_block->block_id == destination->block_id){
+		return FALSE;
+	}
+
+	//If we survive to here then it's fine
+	return TRUE;
+}
+
+/**
+ * Does a given block define a non-temporary variable? If so, we'll find out here by searching
+ * through the block's "assigned" sets
+ */
+static inline u_int8_t does_block_assign_variable(basic_block_t* block, three_addr_var_t* variable){
+	//Run through every assigned variable
+	for(u_int32_t i = 0; i < block->assigned_variables.current_index; i++){
+		//Extract it
+		three_addr_var_t* candidate = dynamic_array_get_at(&(block->assigned_variables), i);
+
+		//If they're equal then get out
+		if(variables_equal(variable, candidate, FALSE) == TRUE){
+			return TRUE;
+		}
+	}
+
+	//Otherwise they're not so 
+	return FALSE;
+}
+
+
+/**
+ * Clone a constant. This will create separate memory so we maintain
+ * complete separation
+ */
+static inline three_addr_const_t* clone_constant(three_addr_const_t* constant){
+	//If it's empty just leave
+	if(constant == NULL){
+		return NULL;
+	}
+
+	//Complete duplication
+	three_addr_const_t* copy = calloc(1, sizeof(three_addr_const_t));
+
+	//And a full copy over
+	memcpy(copy, constant, sizeof(three_addr_const_t));
+
+	//Give it back
+	return copy;
+}
+
+
+/**
+ * Use the mapping array to either find the reference for this variable *or* create a new
+ * mapping of a temp var number to a new cloned temp var
+ */
+static inline three_addr_var_t* clone_temp_var(three_addr_var_t* variable, temporary_variable_mapping_t* mapping, u_int32_t* mapping_array_current_index, u_int32_t* mapping_max_size){
+	//Run through the entire array
+	for(u_int32_t i = 0; i < *mapping_array_current_index; i++){
+		//If this happens, then we've found what we're supposed to map our temp var to
+		if(variable->temp_var_number == mapping[i].source_temp_var_id){
+			//Return a duplicate of this replacement
+			return emit_var_copy(mapping[i].replacement_var);
+		}
+	}
+
+	//Dynamically reup this if we need to
+	if(*mapping_array_current_index == *mapping_max_size){
+		*mapping_max_size *= 2;
+		mapping = realloc(mapping, sizeof(temporary_variable_mapping_t) * *mapping_max_size);
+	}
+
+	//If we make it down here, then we need to do an entirely new mapping
+	mapping[*mapping_array_current_index].source_temp_var_id = variable->temp_var_number;
+
+	//We will still emit a duplicate here
+	three_addr_var_t* replacement_var = emit_var_copy(variable);
+	//Update the ID to be something new
+	replacement_var->temp_var_number = increment_and_get_temp_id();
+
+	//This is the replacement var
+	mapping[*mapping_array_current_index].replacement_var = replacement_var;
+
+	//Bump this up
+	(*mapping_array_current_index)++;
+
+	//And give back the replacement
+	return replacement_var;
+}
+
+
+/**
+ * Clone a variable. This function will decide whether to clone as a temp var or to clone as 
+ * a non-temp var
+ */
+static inline three_addr_var_t* clone_variable(three_addr_var_t* variable, temporary_variable_mapping_t* mapping, u_int32_t* mapping_array_current_index, u_int32_t* mapping_max_size){
+	//If it's NULL then return NULL
+	if(variable == NULL){
+		return NULL;
+	}
+
+	//If the variable is temporary(most common), we will use
+	//our temp var logic
+	if(variable->variable_type == VARIABLE_TYPE_TEMP){
+		return clone_temp_var(variable, mapping, mapping_array_current_index, mapping_max_size);
+
+	//Otherise just emit a straight copy
+	} else {
+		return emit_var_copy(variable);
+	}
+}
+
+
+/**
+ * Clone the entire instruction. This cloning process is going
+ * to involve us copying over variables in a way that
+ * changes the temp var numbers for correctness
+ */
+static instruction_t* clone_instruction(instruction_t* cloned, temporary_variable_mapping_t* mapping, u_int32_t* mapping_current_index, u_int32_t* mapping_max_size){
+	//First we allocate
+	instruction_t* copy = calloc(1, sizeof(instruction_t));
+
+	//Perform a complete memory copy
+	memcpy(copy, cloned, sizeof(instruction_t));
+	
+	//Duplicate the variables
+	copy->assignee = clone_variable(cloned->assignee, mapping, mapping_current_index, mapping_max_size);
+	copy->op1 = clone_variable(cloned->op1, mapping, mapping_current_index, mapping_max_size);
+	copy->op2 = clone_variable(cloned->op2, mapping, mapping_current_index, mapping_max_size);
+	copy->offset = clone_constant(cloned->offset);
+	copy->op1_const = clone_constant(cloned->op1_const);
+
+	//If we have function call parameters, emit a copy of them
+	if(cloned->parameters.internal_array != NULL){
+		copy->parameters = dynamic_array_alloc();
+	}
+
+	//Run through and copy individually
+	for(u_int32_t i = 0; i < cloned->parameters.current_index; i++){
+		dynamic_array_add(&(copy->parameters), clone_variable(dynamic_array_get_at(&(cloned->parameters), i), mapping, mapping_current_index, mapping_max_size));
+	}
+
+	//IMPORTANT: null out the next/previous for the instruction
+	copy->next_statement = NULL;
+	copy->previous_statement = NULL;
+	copy->block_contained_in = NULL;
+
+	//Give back the copied one
+	return copy;
+} 
+
+
+/**
+ * Remediate the phi functions(if there are any) at the top of
+ * this block. We know that the "removed" block has been
+ * deleted as a successor, so we'll need to find any variables
+ * that it assigned and get rid of them in the phi functions
+ */
+static void remediate_phi_functions(basic_block_t* target, basic_block_t* former_predecessor){
+	instruction_t* phi_function_cursor = target->leader_statement;
+
+	//Run through the whole block
+	while(TRUE){
+		//Very rare but checking doesn't hurt
+		if(phi_function_cursor == NULL){
+			break;
+		}
+
+		//If this is not a phi function, we get out. Remember that all
+		//phi functions always apears at the top of the block
+		if(phi_function_cursor->statement_type != THREE_ADDR_CODE_PHI_FUNC){
+			break;
+		}
+
+		//Run through all of the parameters
+		for(u_int32_t i = 0; i < phi_function_cursor->parameters.current_index; i++){
+			//Extract the parameter
+			three_addr_var_t* parameter = dynamic_array_get_at(&(phi_function_cursor->parameters), i);
+
+			/**
+			 * What this means: the former predecessor that we've now removed
+			 * as a predecessor assigned this variable. Remember that the phi-function
+			 * gets these variables from what has been assigned in it's predecessors. As
+			 * such, if these are a match, we need to delete this variable from the phi
+			 * function
+			 */
+			if(does_block_assign_variable(former_predecessor, parameter) == TRUE){
+				//Scrap it
+				dynamic_array_delete_at(&(phi_function_cursor->parameters), i);
+
+				//We can also leave the loop now. One predecessor block cannot be represented
+				//more than once in a given phi-function
+				break;
+			}
+		}
+
+		//Bump this up to the next statement
+		phi_function_cursor = phi_function_cursor->next_statement;
+	}
+}
+
+
+/**
+ * Hoist a branch from the branch_block into the target block. Note that this operation
+ * will *not* remove the old branch. It will simply copy it verbatim into the new branch
+ *
+ * Once we do this, we are going to need to redo the SSA/temp variable assignments within the block
+ * itself
+ */
+static inline void hoist_branch(basic_block_t* target, basic_block_t* branch_block){
+	//Let's delete the jump in the current block
+	delete_statement(target->exit_statement);
+
+	//We can also remove the jumping to block as a successor
+	delete_successor(target, branch_block);
+
+	//Grab pointers to these two blocks. We will need them for relation management
+	basic_block_t* if_block = branch_block->exit_statement->if_block;
+	basic_block_t* else_block = branch_block->exit_statement->else_block;
+
+	/**
+	 * We will need to replace temporary variables as we go so that we don't
+	 * violate the SSA property. To do this, we will maintain a mapping of
+	 * temporary variables that we've seen and the new temp vars that they
+	 * map to. To allocate this, we will combine the used variable count plus
+	 * the assigned variable count. Since only non-temp vars can be assigned, this
+	 * should give us a safe upper limit for this array
+	 */
+	u_int32_t mapping_max_size = 20;
+	temporary_variable_mapping_t* mapping = calloc(sizeof(temporary_variable_mapping_t), mapping_max_size);
+	u_int32_t mapping_current_index = 0;
+
+	//Grab an instruction cursor
+	instruction_t* cursor = branch_block->leader_statement;
+
+	//Run through every single instruction
+	while(cursor != NULL){
+		//This will be handled later
+		if(cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
+			cursor = cursor->next_statement;
+			continue;
+		}
+
+		//Create a complete copy
+		instruction_t* copy = clone_instruction(cursor, mapping, &mapping_current_index, &mapping_max_size);
+
+		//Add the cloned statement into the current block
+		add_statement(target, copy);
+
+		//Bump this up
+		cursor = cursor->next_statement;
+	}
+
+	//Release this when done
+	free(mapping);
+
+	//Update the successors for the current block to include the new branch
+	add_successor(target, if_block);
+	add_successor(target, else_block);
+
+	/**
+	 * Since we've messed with the predecessors of this block, we'll need
+	 * to rework it's phi functions(if it has any). We will let a helper 
+	 * do this
+	 */
+	remediate_phi_functions(branch_block, target);
+}
+
+
+/**
  * The branch reduce function is what we use on each pass of the function
  * postorder
  *
@@ -1312,14 +1647,6 @@ static inline u_int8_t is_block_only_branch(basic_block_t* block){
  * 				replace transfers to i with transfers to j
  * 			if j has only one predecessor then
  * 				merge i and j
- *
- *
- * 			NOTE: For this last one - we've never really seen a benefit from having it
- * 			turned on at all. We will leave this turned *off* for now and we may
- * 			eventually implement this later
- *
- * 			if j is empty and ends in a conditional branch then
- * 				overwrite i's jump with a copy of j's branch
  */
 static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 	//Have we seen a change? By default we assume not
@@ -2598,25 +2925,30 @@ static inline void clean(cfg_t* cfg, dynamic_array_t* current_function_blocks, b
 	//Have we seen a change?
 	u_int8_t changed;
 
-	//The postorder traversal array
-	dynamic_array_t postorder;
+	//Allocate the postorder traversal array
+	dynamic_array_t postorder = dynamic_array_alloc();
 
 	//Now we'll do the actual clean algorithm
 	do {
+		//Clear out the old postorder array
+		clear_dynamic_array(&postorder);
+
 		//Reset the function's visited status
 		reset_visit_status_for_function(current_function_blocks);
 
-		//Compute the new postorder
-		postorder = compute_post_order_traversal(function_entry_block);
+		//Use the recursive function to compute the postorder traversal.
+		//Note that the result is going to be stored inside of the array that
+		//we've already allocated
+		post_order_traversal_rec(&postorder, function_entry_block);
 
 		//Call onepass() for the reduction
 		changed = branch_reduce(cfg, &postorder);
 
-		//We can free up the old postorder now
-		dynamic_array_dealloc(&postorder);
-		
 	//We keep going so long as branch_reduce changes something 
 	} while(changed == TRUE);
+
+	//Release the memory
+	dynamic_array_dealloc(&postorder);
 }
 
 

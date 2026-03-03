@@ -265,6 +265,11 @@ void reset_function_visited_status(basic_block_t* function_entry_block, u_int8_t
 void basic_block_dealloc(basic_block_t* block);
 
 /**
+ * A recursive post order simplifies the code, so it's what we'll use here
+ */
+void post_order_traversal_rec(dynamic_array_t* post_order_traversal, basic_block_t* entry);
+
+/**
  * Compute the postorder traversal for a function-level cfg
  */
 dynamic_array_t compute_post_order_traversal(basic_block_t* entry);

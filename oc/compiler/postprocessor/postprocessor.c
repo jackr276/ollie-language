@@ -402,6 +402,139 @@ static inline u_int8_t does_block_contain_more_than_one_jump_to_target(basic_blo
 
 
 /**
+ * Is a block exclusively a return statement? This is a pretty easy check
+ * which is why this entire function is inlined
+ */
+static inline u_int8_t is_block_ret_instruction_only(basic_block_t* block){
+	//Get the leader statement
+	instruction_t* leader_statement = block->leader_statement;
+
+	/**
+	 * Remember that blocks may have phi functions on them. At this point in the code
+	 * however, these are irrelevant and they're completely ignored. So, we need to
+	 * skip past all of them(because they will be here) in order to reach what we're
+	 * looking for
+	 */
+	while(leader_statement != NULL && leader_statement->instruction_type == PHI_FUNCTION){
+		//Bump it up
+		leader_statement = leader_statement->next_statement;
+	}
+
+
+	//We want a block that is *exclusively* a return statement
+	if(leader_statement != NULL && leader_statement->instruction_type == RET){
+		return TRUE;
+	} else {
+		return FALSE;
+	}
+}
+
+
+/**
+ * Clone a constant. This will create separate memory so we maintain
+ * complete separation
+ */
+static inline three_addr_const_t* clone_constant(three_addr_const_t* constant){
+	//If it's empty just leave
+	if(constant == NULL){
+		return NULL;
+	}
+
+	//Complete duplication
+	three_addr_const_t* copy = calloc(1, sizeof(three_addr_const_t));
+
+	//And a full copy over
+	memcpy(copy, constant, sizeof(three_addr_const_t));
+
+	//Give it back
+	return copy;
+}
+
+/**
+ * Clone a variable. This handles the case if we are NULL
+ */
+static inline three_addr_var_t* clone_variable(three_addr_var_t* source){
+	//Get out
+	if(source == NULL){
+		return NULL;
+	}
+
+	//Otherwise do a straight copy
+	return emit_var_copy(source);
+}
+
+
+/**
+ * Clone the entire instruction. This cloning process is going
+ * to involve us copying over variables in a way that
+ * changes the temp var numbers for correctness
+ */
+static instruction_t* clone_instruction(instruction_t* source){
+	//First we allocate
+	instruction_t* copy = calloc(1, sizeof(instruction_t));
+
+	//Perform a complete memory copy
+	memcpy(copy, source, sizeof(instruction_t));
+	
+	//Duplicate the variables
+	copy->destination_register = clone_variable(source->destination_register);
+	copy->source_register = clone_variable(source->source_register);
+	copy->source_register2 = clone_variable(source->source_register2);
+	copy->address_calc_reg1 = clone_variable(source->address_calc_reg1);
+	copy->address_calc_reg2 = clone_variable(source->address_calc_reg2);
+	copy->offset = clone_constant(source->offset);
+	copy->source_immediate = clone_constant(source->source_immediate);
+
+	//If we have function call parameters, emit a copy of them
+	if(source->parameters.internal_array != NULL){
+		copy->parameters = dynamic_array_alloc();
+	}
+
+	//Run through and copy individually
+	for(u_int32_t i = 0; i < source->parameters.current_index; i++){
+		dynamic_array_add(&(copy->parameters), clone_variable(dynamic_array_get_at(&(source->parameters), i)));
+	}
+
+	//IMPORTANT: null out the next/previous for the instruction
+	copy->next_statement = NULL;
+	copy->previous_statement = NULL;
+	copy->block_contained_in = NULL;
+
+	//Give back the copied one
+	return copy;
+} 
+
+
+/**
+ * Perform a copy from one block to another. This is currently
+ * only used in the event that we have a return statement and we
+ * can hoist a block's instructions into a predecessor
+ *
+ * NOTE: This function will not delete anything. We are doing a straight copy from the source
+ * to the destination *with the exception of any phi-functions*
+ */
+static void copy_block(basic_block_t* destination, basic_block_t* source){
+	//Grab a cursor
+	instruction_t* cursor = source->leader_statement;
+
+	//Run through everything
+	while(cursor != NULL){
+		//If it's not a phi function, copy it
+		if(cursor->instruction_type != PHI_FUNCTION){
+			//Clone the cursor
+			instruction_t* clone = clone_instruction(cursor);
+
+			//Add this into the block
+			add_statement(destination, clone);
+		}
+
+		//Advance
+		cursor = cursor->next_statement;
+	}
+}
+
+
+/**
  * The branch reduce function is what we use on each pass of the function
  * postorder
  *
@@ -420,6 +553,10 @@ static inline u_int8_t does_block_contain_more_than_one_jump_to_target(basic_blo
  * 				replace transfers to i with transfers to j
  * 			if j has only one predecessor then
  * 				merge i and j
+ * 			else if j has more than one predecessor and is exclusively a "ret" statement
+ * 				delete the jump from i to j
+ * 				remove j as a successor to i
+ * 				copy the ret from j to it's predecessor i
  */
 static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder){
 	//Have we seen a change? By default we assume not
@@ -497,23 +634,58 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 			 * floating point comparisons, but it is there so
 			 * we need to account for it
 			 */
-			if(jumping_to_block->predecessors.current_index == 1
+			if(jumping_to_block->predecessors.current_index == 1){
 				//Check to see if it does or does not contain more than one jump
-				&& does_block_contain_more_than_one_jump_to_target(current, jumping_to_block) == FALSE){
-				//Delete the jump statement because it's now useless
-				delete_statement(exit_statement);
+				if(does_block_contain_more_than_one_jump_to_target(current, jumping_to_block) == FALSE){
+					//Delete the jump statement because it's now useless
+					delete_statement(exit_statement);
 
-				//Decouple these as predecessors/successors
-				delete_successor(current, jumping_to_block);
+					//Decouple these as predecessors/successors
+					delete_successor(current, jumping_to_block);
 
-				//Combine the two
-				combine_blocks(cfg, current, jumping_to_block);
+					//Combine the two
+					combine_blocks(cfg, current, jumping_to_block);
 
-				//Counts as a change 
-				changed = TRUE;
+					//Counts as a change 
+					changed = TRUE;
 
-				//And we're done here
-				continue;
+					//And we're done here
+					continue;
+				}
+
+			/**
+			 * Otherwise, the jumping to block has more than one predecessor.
+			 * If the jumping to block is exclusively a return statement *but* it has more than
+			 * one predecessor, we may be able to copy the ret over to the current block. This will
+			 * save us on instructions
+			 */
+			} else {
+				/**
+				 * Eligibility is: the block we're going to is just a "ret" *AND*
+				 * our block doesn't already have multiple jumps to this one target
+				 */
+				if(is_block_ret_instruction_only(jumping_to_block) == TRUE
+					&& does_block_contain_more_than_one_jump_to_target(current, jumping_to_block) == FALSE){
+
+					//Delete the jump statement
+					delete_statement(exit_statement);
+
+					//Decouple these as predecessors/successors
+					delete_successor(current, jumping_to_block);
+
+					//Once that is done, we can copy the block over
+					copy_block(current, jumping_to_block);
+
+					//Add the successor of the jumping to block(which will be the function end block) to
+					//the current block
+					add_successor(current, dynamic_array_get_at(&(jumping_to_block->successors), 0));
+
+					//This is a change
+					changed = TRUE;
+
+					//Done here
+					continue;
+				}
 			}
 		}
 	}
@@ -540,21 +712,25 @@ static void condense(cfg_t* cfg, basic_block_t* function_entry_block){
 	u_int8_t changed;
 
 	//The postorder traversal array
-	dynamic_array_t postorder;
+	dynamic_array_t postorder = dynamic_array_alloc();
 
 	//Now we'll do the actual clean algorithm
 	do {
-		//Compute the new postorder
-		postorder = compute_post_order_traversal(function_entry_block);
+		//Reset the array
+		clear_dynamic_array(&postorder);
+
+		//Compute the new postorder. Remember that the recursive
+		//rule puts the result inside of the array that we've allocated
+		post_order_traversal_rec(&postorder, function_entry_block);
 
 		//Call onepass() for the reduction
 		changed = branch_reduce_postprocess(cfg, &postorder);
-
-		//We can free up the old postorder now
-		dynamic_array_dealloc(&postorder);
 		
 	//We keep going so long as branch_reduce changes something 
 	} while(changed == TRUE);
+
+	//Release the memory
+	dynamic_array_dealloc(&postorder);
 }
 
 

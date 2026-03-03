@@ -341,16 +341,6 @@ static void order_blocks(cfg_t* cfg){
 				//We'll add this in as a direct successor
 				previous->direct_successor = current;
 
-				//Do we end in a jump?
-				basic_block_t* end_jumps_to = does_block_end_in_jump(previous);
-
-				//If we do AND what we're jumping to is the direct successor, then we'll
-				//delete the jump statement as it is now unnecessary
-				if(end_jumps_to == previous->direct_successor){
-					//Get rid of this jump as it's no longer needed
-					//delete_statement(previous->exit_statement);
-				}
-
 				//Add this in as well
 				previous = current;
 			}
@@ -5637,8 +5627,14 @@ static inline void handle_binary_operation_instruction(instruction_window_t* win
 			handle_cmp_instruction(window);
 			break;
 
+		//Hard exit here - this means that nothing is working
 		default:
-			printf("Fatal internal compiler error: unreachable path hit for binary operation selection");
+			printf("Fatal internal compiler error: unreachable path hit for binary operation in block .L%d, selection with opcode %s\n",
+		  			((basic_block_t*)instruction->block_contained_in)->block_id,
+		 			 operator_token_to_string(instruction->op));
+
+			//Print the window for debugging
+			print_instruction_window(window);
 			exit(1);
 	}
 }
@@ -9257,12 +9253,10 @@ static void select_instruction_patterns(instruction_window_t* window){
 			break;
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 		case THREE_ADDR_CODE_BIN_OP_STMT:
-			//Let the helper deal with this
 			handle_binary_operation_instruction(window);
 			break;
 		//For a phi function, we perform an exact 1:1 mapping
 		case THREE_ADDR_CODE_PHI_FUNC:
-			//This is all we'll need
 			instruction->instruction_type = PHI_FUNCTION;
 			break;
 		//Handle a neg statement
