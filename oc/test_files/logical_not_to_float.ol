@@ -5,8 +5,9 @@
 
 
 pub fn logical_not_to_float_int(x:i32) -> f32 {
-	let x_not:f32 = !x;
-	ret x_not;
+	let y:f32 = 3.3;
+
+	ret y + !x;
 }
 
 
