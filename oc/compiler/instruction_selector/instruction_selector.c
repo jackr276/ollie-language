@@ -46,6 +46,15 @@ typedef enum {
 	PRINT_INSTRUCTION
 } instruction_printing_mode_t;
 
+/**
+ * What kind of insertion do we want? Do we want to insert before
+ * or after a given instruction?
+ */
+typedef enum {
+	INSERTION_ORDER_BEFORE,
+	INSERTION_ORDER_AFTER
+} insertion_order_t ;
+
 
 /**
  * The widow that we have here will store three instructions at once. This allows
@@ -566,10 +575,7 @@ static void update_constant_with_log2_value(three_addr_const_t* constant){
  */
 static instruction_window_t initialize_instruction_window(basic_block_t* head){
 	//Grab the window
-	instruction_window_t window;
-	window.instruction1 = NULL;
-	window.instruction2 = NULL;
-	window.instruction3 = NULL;
+	instruction_window_t window = {NULL, NULL, NULL};
 
 	//The first instruction is the leader statement
 	window.instruction1 = head->leader_statement;
@@ -3689,6 +3695,60 @@ static inline instruction_t* emit_direct_xmm_xorpX_instruction(three_addr_var_t*
 
 	return instruction;
 }
+
+
+/**
+ * Emit and insert a move instruction based on the order given. We specifically have things this way
+ * because due to how byte/short to float/double conversions work, it is possible that we will
+ * generate more than one instruction to do this
+ */
+static void emit_and_insert_move_instruction(three_addr_var_t* destination, three_addr_var_t* source, instruction_t* relative_instruction, insertion_order_t insertion_order){
+	/**
+	 * Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
+	 * movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
+	 * zero pad when 32 bit moves happen
+	 */
+	if(is_type_unsigned_64_bit(destination->type) == TRUE && is_type_32_bit_int(source->type) == TRUE){
+		//Emit a variable copy of the source
+		source = emit_var_copy(source);
+
+		//Reassign it's type to be the desired type
+		source->type = destination->type;
+
+		//Select the size appropriately after the type is reassigned
+		source->variable_size = get_type_size(destination->type);
+
+	/**
+	 * Another possibility - are we moving into a floating point
+	 * destination type? If so, we need to account for the (uncommon)
+	 * case where the user is moving from an 8/16 bit source into an f32/f64.
+	 * This is not natively supported in x86 assembly, but we support it,
+	 * so we'll do so here
+	 */
+	} else if(is_type_floating_point(destination->type) == TRUE) {
+		//Go based on what the source is
+		switch(source->type->basic_type_token){
+			//Unsigned values
+			case BOOL:
+			case U8:
+			case U16:
+				break;
+
+			//Unsigned values
+			case CHAR:
+			case I8:
+			case I16:
+				break;
+
+			//By default just do nothing
+			default:
+				break;
+		}
+
+	}
+
+}
+
 
 
 /**
