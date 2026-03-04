@@ -3703,20 +3703,24 @@ static inline instruction_t* emit_direct_xmm_xorpX_instruction(three_addr_var_t*
  * generate more than one instruction to do this
  */
 static void emit_and_insert_move_instruction(three_addr_var_t* destination, three_addr_var_t* source, instruction_t* relative_instruction, insertion_order_t insertion_order){
+	//The "true_source" is what we'll need to use after type conversions
+	three_addr_var_t* true_source = source;
+	three_addr_var_t* intermediate_destination;
+
 	/**
 	 * Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
 	 * movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
 	 * zero pad when 32 bit moves happen
 	 */
-	if(is_type_unsigned_64_bit(destination->type) == TRUE && is_type_32_bit_int(source->type) == TRUE){
+	if(is_type_unsigned_64_bit(destination->type) == TRUE && is_type_32_bit_int(true_source->type) == TRUE){
 		//Emit a variable copy of the source
-		source = emit_var_copy(source);
+		true_source = emit_var_copy(true_source);
 
 		//Reassign it's type to be the desired type
-		source->type = destination->type;
+		true_source->type = destination->type;
 
 		//Select the size appropriately after the type is reassigned
-		source->variable_size = get_type_size(destination->type);
+		true_source->variable_size = get_type_size(destination->type);
 
 	/**
 	 * Another possibility - are we moving into a floating point
@@ -3726,18 +3730,83 @@ static void emit_and_insert_move_instruction(three_addr_var_t* destination, thre
 	 * so we'll do so here
 	 */
 	} else if(is_type_floating_point(destination->type) == TRUE) {
+		//Holder in case we need it
+		instruction_t* intermediate_move;
+
 		//Go based on what the source is
 		switch(source->type->basic_type_token){
 			//Unsigned values
 			case BOOL:
 			case U8:
 			case U16:
+				//Allocate it
+				intermediate_move = calloc(1, sizeof(instruction_t));
+
+				//We'll have a new true source for later
+				intermediate_destination = emit_temp_var(u32);
+
+				//We will go from the true source to the intermediary destination
+				intermediate_move->destination_register = intermediate_destination;
+				intermediate_move->source_register = true_source;
+
+				//Let the helper get the converting move for us
+				intermediate_move->instruction_type = select_move_instruction(get_type_size(intermediate_destination->type), get_type_size(true_source->type), FALSE, TRUE);
+
+				//Based on the instructions, we will insert this appropriately
+				switch(insertion_order){
+					case INSERTION_ORDER_BEFORE:
+						//Put this in before the given value - no need to change anything here
+						insert_instruction_before_given(intermediate_move, relative_instruction);
+						break;
+
+					case INSERTION_ORDER_AFTER:
+						//Put this in after the given value, we'll need to update the relative 
+						//instruction for later
+						insert_instruction_after_given(intermediate_move, relative_instruction);
+						relative_instruction = intermediate_move;
+						break;
+				}
+
+				//Once this is all done, our true source is the intermediate destination
+				true_source = intermediate_destination;
+				
 				break;
 
 			//Unsigned values
 			case CHAR:
 			case I8:
 			case I16:
+				//Allocate it
+				intermediate_move = calloc(1, sizeof(instruction_t));
+
+				//We'll have a new true source for later
+				intermediate_destination = emit_temp_var(i32);
+
+				//We will go from the true source to the intermediary destination
+				intermediate_move->destination_register = intermediate_destination;
+				intermediate_move->source_register = true_source;
+
+				//Let the helper get the converting move for us
+				intermediate_move->instruction_type = select_move_instruction(get_type_size(intermediate_destination->type), get_type_size(true_source->type), FALSE, TRUE);
+
+				//Based on the instructions, we will insert this appropriately
+				switch(insertion_order){
+					case INSERTION_ORDER_BEFORE:
+						//Put this in before the given value - no need to change anything here
+						insert_instruction_before_given(intermediate_move, relative_instruction);
+						break;
+
+					case INSERTION_ORDER_AFTER:
+						//Put this in after the given value, we'll need to update the relative 
+						//instruction for later
+						insert_instruction_after_given(intermediate_move, relative_instruction);
+						relative_instruction = intermediate_move;
+						break;
+				}
+
+				//Once this is all done, our true source is the intermediate destination
+				true_source = intermediate_destination;
+
 				break;
 
 			//By default just do nothing
