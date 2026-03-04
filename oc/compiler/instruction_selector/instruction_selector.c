@@ -6815,16 +6815,6 @@ static void handle_logical_or_instruction(instruction_window_t* window){
  * in this case
  */
 static void handle_logical_and_instruction(instruction_window_t* window){
-	//These operands - did they already come from a setX instruction
-	//or not? An example would be if we're doing something like x > y && y < z.
-	//Both of these operations res
-	u_int8_t op1_came_from_setX = FALSE;
-	u_int8_t op2_came_from_setX = FALSE;
-
-	//Store the result variable for both of our test paths
-	three_addr_var_t* op1_result;
-	three_addr_var_t* op2_result;
-
 	//Grab it out for convenience
 	instruction_t* logical_and = window->instruction1;
 
@@ -6833,6 +6823,15 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 
 	//If this is not a floating point operation(most common)
 	if(is_floating_point == FALSE){
+		//These operands - did they already come from a setX instruction
+		//or not? An example would be if we're doing something like x > y && y < z.
+		u_int8_t op1_came_from_setX = FALSE;
+		u_int8_t op2_came_from_setX = FALSE;
+
+		//Store the result variable for both of our test paths
+		three_addr_var_t* op1_result;
+		three_addr_var_t* op2_result;
+
 		//Preserve this for ourselves
 		instruction_t* after_logical_and = logical_and->next_statement;
 
