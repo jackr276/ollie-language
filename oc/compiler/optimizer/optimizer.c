@@ -358,13 +358,14 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 	}
 
 	//Run through everything here
-	for(u_int16_t _ = 0; _ < current_function_blocks->current_index; _++){
+	for(u_int32_t _ = 0; _ < current_function_blocks->current_index; _++){
 		//Grab the block out
 		basic_block_t* block = dynamic_array_get_at(current_function_blocks, _);
 
 		//This is always where we start
 		instruction_t* stmt = block->exit_statement;
 
+		//Our logic is based on the variable type
 		switch(variable->variable_type){
 			case VARIABLE_TYPE_NON_TEMP:
 			case VARIABLE_TYPE_MEMORY_ADDRESS:
@@ -423,7 +424,7 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 				break;
 
 			default:
-				printf("Fatal internal compiler error: attempting to mark invalid variable type\n");
+				printf("Fatal internal compiler error: attempting to mark invalid variable type: %s\n", variable_type_to_string(variable->variable_type));
 				exit(1);
 		}
 	}
@@ -1172,7 +1173,7 @@ static void mark_and_add_definition_block_local(instruction_t* starting_point, t
 			break;
 
 		default:
-			printf("Fatal internal compiler error: attempting to mark invalid variable type\n");
+			printf("Fatal internal compiler error: attempting to mark invalid variable type: %s\n", variable_type_to_string(variable->variable_type));
 			exit(1);
 	}
 }

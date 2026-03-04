@@ -57,6 +57,29 @@ dynamic_array_t emitted_consts;
 
 
 /**
+ * A helper function that converts a variable type to a string for debugging
+ */
+const char* variable_type_to_string(variable_type_t type){
+	switch(type){
+		case VARIABLE_TYPE_FUNCTION_ADDRESS:
+			return "VARIABLE_TYPE_FUNCTION_ADDRESS";
+		case VARIABLE_TYPE_MEMORY_ADDRESS:
+			return "VARIABLE_TYPE_MEMORY_ADDRESS";
+		case VARIABLE_TYPE_TEMP:
+			return "VARIABLE_TYPE_TEMP";
+		case VARIABLE_TYPE_LOCAL_CONSTANT:
+			return "VARIABLE_TYPE_LOCAL_CONSTANT";
+		case VARIABLE_TYPE_NON_TEMP:
+			return "VARIABLE_TYPE_NON_TEMP";
+		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+			return "VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS";
+		default:
+			return "INVALID VARIABLE TYPE";
+	}
+}
+
+
+/**
  * Initialize the memory management system
  */
 void initialize_varible_and_constant_system(){
