@@ -46,6 +46,15 @@ typedef enum {
 	PRINT_INSTRUCTION
 } instruction_printing_mode_t;
 
+/**
+ * What kind of insertion do we want? Do we want to insert before
+ * or after a given instruction?
+ */
+typedef enum {
+	INSERTION_ORDER_BEFORE,
+	INSERTION_ORDER_AFTER
+} insertion_order_t ;
+
 
 /**
  * The widow that we have here will store three instructions at once. This allows
@@ -566,10 +575,7 @@ static void update_constant_with_log2_value(three_addr_const_t* constant){
  */
 static instruction_window_t initialize_instruction_window(basic_block_t* head){
 	//Grab the window
-	instruction_window_t window;
-	window.instruction1 = NULL;
-	window.instruction2 = NULL;
-	window.instruction3 = NULL;
+	instruction_window_t window = {NULL, NULL, NULL};
 
 	//The first instruction is the leader statement
 	window.instruction1 = head->leader_statement;
@@ -3692,6 +3698,151 @@ static inline instruction_t* emit_direct_xmm_xorpX_instruction(three_addr_var_t*
 
 
 /**
+ * Emit and insert a move instruction based on the order given. We specifically have things this way
+ * because due to how byte/short to float/double conversions work, it is possible that we will
+ * generate more than one instruction to do this
+ */
+static instruction_t* emit_and_insert_move_instruction(three_addr_var_t* destination, three_addr_var_t* source, instruction_t* relative_instruction, insertion_order_t insertion_order){
+	//The "true_source" is what we'll need to use after type conversions
+	three_addr_var_t* true_source = source;
+	three_addr_var_t* intermediate_destination;
+
+	/**
+	 * Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
+	 * movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
+	 * zero pad when 32 bit moves happen
+	 */
+	if(is_type_unsigned_64_bit(destination->type) == TRUE && is_type_32_bit_int(true_source->type) == TRUE){
+		//Emit a variable copy of the source
+		true_source = emit_var_copy(true_source);
+
+		//Reassign it's type to be the desired type
+		true_source->type = destination->type;
+
+		//Select the size appropriately after the type is reassigned
+		true_source->variable_size = get_type_size(destination->type);
+
+	/**
+	 * Another possibility - are we moving into a floating point
+	 * destination type? If so, we need to account for the (uncommon)
+	 * case where the user is moving from an 8/16 bit source into an f32/f64.
+	 * This is not natively supported in x86 assembly, but we support it,
+	 * so we'll do so here
+	 */
+	} else if(is_type_floating_point(destination->type) == TRUE) {
+		//Holder in case we need it
+		instruction_t* intermediate_move;
+
+		//Go based on what the source is
+		switch(source->type->basic_type_token){
+			//Unsigned values
+			case BOOL:
+			case U8:
+			case U16:
+				//Allocate it
+				intermediate_move = calloc(1, sizeof(instruction_t));
+
+				//We'll have a new true source for later
+				intermediate_destination = emit_temp_var(u32);
+
+				//We will go from the true source to the intermediary destination
+				intermediate_move->destination_register = intermediate_destination;
+				intermediate_move->source_register = true_source;
+
+				//Let the helper get the converting move for us
+				intermediate_move->instruction_type = select_move_instruction(get_type_size(intermediate_destination->type), get_type_size(true_source->type), FALSE, TRUE);
+
+				//Based on the instructions, we will insert this appropriately
+				switch(insertion_order){
+					case INSERTION_ORDER_BEFORE:
+						//Put this in before the given value - no need to change anything here
+						insert_instruction_before_given(intermediate_move, relative_instruction);
+						break;
+
+					case INSERTION_ORDER_AFTER:
+						//Put this in after the given value, we'll need to update the relative 
+						//instruction for later
+						insert_instruction_after_given(intermediate_move, relative_instruction);
+						relative_instruction = intermediate_move;
+						break;
+				}
+
+				//Once this is all done, our true source is the intermediate destination
+				true_source = intermediate_destination;
+				
+				break;
+
+			//Unsigned values
+			case CHAR:
+			case I8:
+			case I16:
+				//Allocate it
+				intermediate_move = calloc(1, sizeof(instruction_t));
+
+				//We'll have a new true source for later
+				intermediate_destination = emit_temp_var(i32);
+
+				//We will go from the true source to the intermediary destination
+				intermediate_move->destination_register = intermediate_destination;
+				intermediate_move->source_register = true_source;
+
+				//Let the helper get the converting move for us
+				intermediate_move->instruction_type = select_move_instruction(get_type_size(intermediate_destination->type), get_type_size(true_source->type), TRUE, TRUE);
+
+				//Based on the instructions, we will insert this appropriately
+				switch(insertion_order){
+					case INSERTION_ORDER_BEFORE:
+						//Put this in before the given value - no need to change anything here
+						insert_instruction_before_given(intermediate_move, relative_instruction);
+						break;
+
+					case INSERTION_ORDER_AFTER:
+						//Put this in after the given value, we'll need to update the relative 
+						//instruction for later
+						insert_instruction_after_given(intermediate_move, relative_instruction);
+						relative_instruction = intermediate_move;
+						break;
+				}
+
+				//Once this is all done, our true source is the intermediate destination
+				true_source = intermediate_destination;
+
+				break;
+
+			//By default just do nothing
+			default:
+				break;
+		}
+	}
+
+	//Once we're down here and done with everything, we can now emit the true move
+	instruction_t* move_instruction = calloc(1, sizeof(instruction_t));
+
+	//Emit the actual move here
+	move_instruction->instruction_type = select_move_instruction(get_type_size(destination->type), get_type_size(true_source->type), is_type_signed(destination->type), is_source_register_clean(true_source));
+
+	//Update the source/dest
+	move_instruction->source_register = true_source;
+	move_instruction->destination_register = destination;
+
+	//Now based on the insertion type we put this in
+	switch(insertion_order){
+		case INSERTION_ORDER_BEFORE:
+			insert_instruction_before_given(move_instruction, relative_instruction);
+			break;
+
+		case INSERTION_ORDER_AFTER:
+			insert_instruction_after_given(move_instruction, relative_instruction);
+			break;
+	}
+
+	//We always give back the last instruction we inserted, just in case the user wants to rebuild the window around it
+	return move_instruction;
+}
+
+
+
+/**
  * Emit a movX instruction
  *
  * This movement instruction will handle all converting move logic internally
@@ -6653,12 +6804,6 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 		//Flag that thsi relies on the above or instruction
 		setne_instruction->op1 = logical_or->op1;
 
-		//Following that we'll need the final movzx instruction
-		instruction_t* move_instruction = emit_move_instruction(logical_or->assignee, setne_instruction->destination_register);
-
-		//Select this one's size 
-		logical_or->assignee->variable_size = get_type_size(logical_or->assignee->type);
-
 		//Now we can delete the old logical or instruction
 		delete_statement(logical_or);
 
@@ -6668,8 +6813,8 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 		//Then we need the setne
 		insert_instruction_before_given(setne_instruction, after_logical_or);
 
-		//And finally we need the movzx
-		insert_instruction_before_given(move_instruction, after_logical_or);
+		//Emit and insert our final move. Note that this function will handle
+		instruction_t* move_instruction = emit_and_insert_move_instruction(logical_or->assignee, setne_instruction->destination_register, after_logical_or, INSERTION_ORDER_BEFORE);
 
 		//Reconstruct the window starting at the movzbl
 		reconstruct_window(window, move_instruction);
@@ -6762,10 +6907,7 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 		insert_instruction_after_given(final_or, op2_conditional_move);
 
 		//And we need one final assignment into the destination
-		instruction_t* final_assignment = emit_move_instruction(logical_or->assignee, final_or->destination_register);
-
-		//This is the last thing that goes int
-		insert_instruction_after_given(final_assignment, final_or);
+		instruction_t* final_assignment = emit_and_insert_move_instruction(logical_or->assignee, final_or->destination_register, final_or, INSERTION_ORDER_AFTER);
 
 		//And after all of that, the logical or is now useless to us so we will scrap it
 		delete_statement(logical_or);
@@ -6920,19 +7062,15 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		//Now we'll need to ANDx these two values together to see if they're both 1
 		instruction_t* and_inst = emit_and_instruction(op1_result, op2_result);
 
-		//The final thing that we need is a movzx
-		instruction_t* move_instruction = emit_move_instruction(logical_and->assignee, and_inst->destination_register);
+		//Now insert these in order. First comes the and instruction, then the final move
+		insert_instruction_before_given(and_inst, after_logical_and);
 
-		//Select this one's size 
-		logical_and->assignee->variable_size = get_type_size(logical_and->assignee->type);
+		//Now emit our final move. Let the helper do this in case we have converitng moves
+		instruction_t* move_instruction = emit_and_insert_move_instruction(logical_and->assignee, and_inst->destination_register, after_logical_and, INSERTION_ORDER_BEFORE);
 
 		//We no longer need the logical and statement
 		delete_statement(logical_and);
 
-		//Now insert these in order. First comes the and instruction, then the final move
-		insert_instruction_before_given(and_inst, after_logical_and);
-		insert_instruction_before_given(move_instruction, after_logical_and);
-		
 		//Reconstruct the window starting at the final move
 		reconstruct_window(window, move_instruction);
 
@@ -7024,10 +7162,7 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		insert_instruction_after_given(final_and, op2_conditional_move);
 
 		//And we need one final assignment into the destination
-		instruction_t* final_assignment = emit_move_instruction(logical_and->assignee, final_and->destination_register);
-
-		//This is the last thing that goes int
-		insert_instruction_after_given(final_assignment, final_and);
+		instruction_t* final_assignment = emit_and_insert_move_instruction(logical_and->assignee, final_and->destination_register, final_and, INSERTION_ORDER_AFTER);
 
 		//And after all of that, the logical and is now useless to us so we will scrap it
 		delete_statement(logical_and);
