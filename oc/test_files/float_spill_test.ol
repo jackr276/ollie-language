@@ -14,6 +14,14 @@ pub fn float_spill(x:f32, y:f32, z:f32, a:f32, b:f32, c:f32) -> f32 {
 	let local4:f32 = 3.33;
 	let local5:f32 = 3.33;
 	let local6:f32 = 3.33;
+	let local8:f32 = 3.33;
+	let local9:f32 = 3.33;
+	let local10:f32 = 3.33;
+	let local11:f32 = 3.33;
+	let local12:f32 = 3.33;
+	let local13:f32 = 3.33;
+	let local14:f32 = 3.33;
+	let local15:f32 = 3.33;
 	
 	//Keep this around to encourage interference
 	let result1:f32 = local1 * local2 * 4;
@@ -28,11 +36,12 @@ pub fn float_spill(x:f32, y:f32, z:f32, a:f32, b:f32, c:f32) -> f32 {
 		result5 = local6 + local5;
 
 	} else {
-		result5 = local6 - local5;
+		result5 = local6 - local5 + local11;
 	}
 	
 	//Keep these all around
-	ret result1 + result2 + result3 + result4 + result5 + local6;
+	ret result1 + result2 + result3 + result4 
+			+ result5 + local6 + local8 + local9 + local10 + local12 + local13 + local14 + local15;
 }
 
 
