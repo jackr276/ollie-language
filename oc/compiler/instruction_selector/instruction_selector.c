@@ -7062,19 +7062,15 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		//Now we'll need to ANDx these two values together to see if they're both 1
 		instruction_t* and_inst = emit_and_instruction(op1_result, op2_result);
 
-		//The final thing that we need is a movzx
-		instruction_t* move_instruction = emit_move_instruction(logical_and->assignee, and_inst->destination_register);
+		//Now insert these in order. First comes the and instruction, then the final move
+		insert_instruction_before_given(and_inst, after_logical_and);
 
-		//Select this one's size 
-		logical_and->assignee->variable_size = get_type_size(logical_and->assignee->type);
+		//Now emit our final move. Let the helper do this in case we have converitng moves
+		instruction_t* move_instruction = emit_and_insert_move_instruction(logical_and->assignee, and_inst->destination_register, after_logical_and, INSERTION_ORDER_BEFORE);
 
 		//We no longer need the logical and statement
 		delete_statement(logical_and);
 
-		//Now insert these in order. First comes the and instruction, then the final move
-		insert_instruction_before_given(and_inst, after_logical_and);
-		insert_instruction_before_given(move_instruction, after_logical_and);
-		
 		//Reconstruct the window starting at the final move
 		reconstruct_window(window, move_instruction);
 
@@ -7166,10 +7162,7 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		insert_instruction_after_given(final_and, op2_conditional_move);
 
 		//And we need one final assignment into the destination
-		instruction_t* final_assignment = emit_move_instruction(logical_and->assignee, final_and->destination_register);
-
-		//This is the last thing that goes int
-		insert_instruction_after_given(final_assignment, final_and);
+		instruction_t* final_assignment = emit_and_insert_move_instruction(logical_and->assignee, final_and->destination_register, final_and, INSERTION_ORDER_AFTER);
 
 		//And after all of that, the logical and is now useless to us so we will scrap it
 		delete_statement(logical_and);
