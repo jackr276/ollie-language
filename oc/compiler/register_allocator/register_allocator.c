@@ -4443,6 +4443,12 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	 *
 	 * We will need to do this every single time we reallocate. This is also a "2-for-1",
 	 * meaning that it will count for both general purpose and SSE registers
+	 *
+	 *
+	 *
+	 * TODO - this is currently *100% WRONG*
+	 *
+	 * USE[B] - the set of all variables that are *used before definition* inside of a block
 	*/
 	calculate_live_range_liveness_sets(function_entry);
 
@@ -4721,8 +4727,14 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 		//Initial attempt - this will trigger the spiller if it's not possible
 		u_int8_t colorable_sse = graph_color_and_allocate_sse(function_entry, &sse_live_ranges);
 
+
+		int count = 0;
+
 		//So long as we could not color the graph
 		while(colorable_sse == FALSE){
+			count++;
+
+
 			//Dev printing only
 			if(print_irs == TRUE){
 				printf("============ After Spilling =============== \n");
@@ -4779,6 +4791,8 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 			 * graph_color_and_allocate returns a successful result
 			 */
 			colorable_sse = graph_color_and_allocate_sse(function_entry, &sse_live_ranges);
+
+			if(count > 5) exit(1);
 		}
 	}
 

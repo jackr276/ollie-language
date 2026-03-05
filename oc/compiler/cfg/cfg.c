@@ -10263,6 +10263,11 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 		(*num_errors_ref)++;
 	}
 
+
+	//TODO USED AND ASSIGNED ARE TOTALLY WRONG
+	//
+	//WE NEED TO COMPUTE THESE AT THE END OF A FUNCTION
+
 	//Add all phi functions for SSA
 	insert_phi_functions(cfg, results->variable_symtab);
 
