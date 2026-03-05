@@ -762,6 +762,9 @@ static inline void print_cfg_message(error_message_type_t message_type, char* in
  * A simple helper function that allows us to add a used variable into the block's
  * header. It is important to note that only actual variables(not temp variables) count
  * as live
+ *
+ *
+ * TODO DEPRECATE 100%
  */
 void add_used_variable(basic_block_t* basic_block, three_addr_var_t* var){
 	//This can happen, so we'll check here to avoid complexity elsewhere
@@ -799,6 +802,9 @@ void add_used_variable(basic_block_t* basic_block, three_addr_var_t* var){
  * A simple helper function that allows us to add an assigned-to variable into the block's
  * header. It is important to note that only actual variables(not temp variables) count
  * as live
+ *
+ *
+ * TODO DEPRECATE 100%
  */
 void add_assigned_variable(basic_block_t* basic_block, three_addr_var_t* var){
 	//If it's temp just don't add it
@@ -1950,6 +1956,35 @@ static int16_t symtab_record_variable_dynamic_array_contains(dynamic_array_t* va
 
 
 /**
+ * Compute the USE and DEF sets for every single block inside of a function
+ *
+ * USE[b] -> the set of all variables that are used *before assignment* in block b
+ * DEF[b] -> the set of all variables that are defined(assigned) in block b
+ *
+ * Algorithm comute_use_def_sets:
+ * 	for each block b in a function:
+ * 		USE[b] <- {}
+ * 		DEF[b] <- {}
+ *
+ * 		for each instruction i in b:
+ * 			for each variable v that i uses:
+ * 				if(v not in DEF[b]):
+ * 					USE[b] U {v}
+ *
+ * 			for each variable v that i defines:
+ * 				DEF[b] U {v}
+ *
+ *
+ * We will of course need to make some special caveats here like for example function
+ * entry blocks with functino parameters. Those parameters really were assigned
+ * at the very top, but we just didn't see it
+ */
+static void compute_use_and_def_sets_for_function(dynamic_array_t* function_blocks){
+
+}
+
+
+/**
  * Are two variable dynamic arrays equal? We again use special rules for these kind of comparisons
  * that are not applicable to regular dynamic arrays
  */
@@ -1994,8 +2029,13 @@ static void variable_dynamic_array_add(dynamic_array_t* array, three_addr_var_t*
 /**
  * Calculate the "live_in" and "live_out" sets for each basic block
  *
- * General algorithm
+ * This assumes that the USE and DEF sets have already been computed for each
+ * and every block. Remember that USE is the set of all variables that are
+ * used *before* being assigned in block b and DEF is the set of all variables that
+ * are assigned inside of the block. If these sets are wrong, then the liveness
+ * will be way overblown
  *
+ * Algorithm calculateLiveness:
  * for each block n
  * 	live_out[n] = {}
  * 	live_in[n] = {}
@@ -2008,7 +2048,6 @@ static void variable_dynamic_array_add(dynamic_array_t* array, three_addr_var_t*
  *
  * NOTE: The algorithm converges very fast when the CFG is done in reverse order.
  * As such, we'll go back to front here
- *
  */
 static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_block_t* function_entry_block){
 	//Reset the visited status for the function
@@ -2029,7 +2068,7 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
 	 * avoids us needing to recompute the entire CFG every time the disjoint-union-find does not work
 	 */
 	//Run the algorithm until we have no difference found
-	do{
+	do {
 		//We'll assume we didn't find a difference each iteration
 		difference_found = FALSE;
 
@@ -10271,10 +10310,6 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 		print_parse_message(MESSAGE_TYPE_ERROR, "CFG was unable to be constructed", 0);
 		(*num_errors_ref)++;
 	}
-
-	//TODO USED AND ASSIGNED ARE TOTALLY WRONG
-	//
-	//WE NEED TO COMPUTE THESE AT THE END OF A FUNCTION
 
 	//Add all phi functions for SSA
 	insert_phi_functions(cfg, results->variable_symtab);
