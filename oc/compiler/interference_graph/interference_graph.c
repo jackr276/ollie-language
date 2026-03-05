@@ -59,9 +59,31 @@ void add_interference(live_range_t* a, live_range_t* b){
 		return;
 	}
 
-	//Stack pointer - this never interferes with anything
-	if(a->reg.gen_purpose == RSP || b->reg.gen_purpose == RSP){
-		return;
+
+	/**
+	 * *IF* these are general purpose live ranges, we need to check this.
+	 * If they aren't then we're going to have unintented consequences
+	 * becase %RSP may related to an FP LR
+	 */
+	if(a->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+		switch(a->reg.gen_purpose){
+			case RSP:
+			case RIP:
+				return;
+			default:
+				break;
+		}
+	}
+
+	//Do the same for B
+	if(b->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+		switch(b->reg.gen_purpose){
+			case RSP:
+			case RIP:
+				return;
+			default:
+				break;
+		}
 	}
 
 	//Add b to a's neighbors if it's not already there
