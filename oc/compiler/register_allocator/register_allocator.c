@@ -2288,6 +2288,9 @@ static void precolor_function(basic_block_t* function_entry, dynamic_array_t* ge
  *
  * Actually, we may need to do this for the whole CFG due to the way the live ranges are not tied to their
  * variables. We will likely need to recompute at CFG level
+ *
+ *
+ * TODO WRONG - look at CFG algorithm for how we really need to be doing this
  */
 static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 	//Wipe these two values out
@@ -2320,12 +2323,12 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 				break;
 
 			default:
-				//Handle destination 1
+				//Handle destination 1 - these should go after the use calc
 				if(cursor->destination_register != NULL){
 					update_use_assignment_for_destination_variable(cursor, block);
 				}
 
-				//Handle destination 2(this is rare but we have it sometimes)
+				//Handle destination 2(this is rare but we have it sometimes) - these should go after the use calc
 				if(cursor->destination_register2 != NULL){
 					add_assigned_live_range(cursor->destination_register2->associated_live_range, block);
 				}
