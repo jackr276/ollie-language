@@ -1911,9 +1911,6 @@ static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* f
 
 		//Throw it into the block
 		add_statement(original_block, test);
-
-		//This now counts as a use
-		add_used_variable(original_block, first_half_cursor->assignee);
 	}
 
 	//Determine an appropriate branch. Remember, if this *fails* the if condition
@@ -1952,9 +1949,6 @@ static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* f
 
 		//Throw it into the block
 		add_statement(second_half_block, test);
-
-		//This now counts as a use
-		add_used_variable(original_block, second_half_cursor->assignee);
 	}
 
 	//Determine the appropriate inverse jump here
@@ -2094,9 +2088,6 @@ static void optimize_logical_or_branch_logic(symtab_function_record_t* function,
 
 		//Throw it into the block
 		add_statement(original_block, test);
-
-		//This now counts as a use
-		add_used_variable(original_block, first_half_cursor->assignee);
 	}
 
 	//Determine an appropriate branch. Remember, if this *fails* the if condition
@@ -2135,9 +2126,6 @@ static void optimize_logical_or_branch_logic(symtab_function_record_t* function,
 
 		//Throw it into the block
 		add_statement(second_half_block, test);
-
-		//This now counts as a use
-		add_used_variable(original_block, second_half_cursor->assignee);
 	}
 
 	//Determine an appropriate branch. Remember, if this *succeeds* the if condition
@@ -2277,9 +2265,6 @@ static void optimize_logical_and_inverse_branch_logic(symtab_function_record_t* 
 
 		//Throw it into the block
 		add_statement(original_block, test);
-
-		//This now counts as a use
-		add_used_variable(original_block, first_half_cursor->assignee);
 	}
 
 	//Determine the appropriate branch using an inverse jump
@@ -2317,9 +2302,6 @@ static void optimize_logical_and_inverse_branch_logic(symtab_function_record_t* 
 
 		//Throw it into the block
 		add_statement(second_half_block, test);
-
-		//This now counts as a use
-		add_used_variable(original_block, second_half_cursor->assignee);
 	}
 
 	//Determine the appropriate branch using an inverse jump
@@ -2459,9 +2441,6 @@ static void optimize_logical_and_branch_logic(symtab_function_record_t* function
 
 		//Throw it into the block
 		add_statement(original_block, test);
-
-		//This now counts as a use
-		add_used_variable(original_block, first_half_cursor->assignee);
 	}
 
 	//Determine an appropriate branch. Remember, if this *fails* the if condition
@@ -2500,9 +2479,6 @@ static void optimize_logical_and_branch_logic(symtab_function_record_t* function
 
 		//Throw it into the block
 		add_statement(second_half_block, test);
-
-		//This now counts as a use
-		add_used_variable(original_block, second_half_cursor->assignee);
 	}
 
 	//Determine an appropriate branch. Remember, if this *succeeds* the if condition
