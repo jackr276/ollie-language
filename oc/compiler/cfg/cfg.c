@@ -9249,7 +9249,14 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	calculate_all_control_relations(function_starting_block, current_function_blocks);
 
 	/**
-	 * Finally, we will calculate the liveness sets for thsi function
+	 * Finally, we will calculate the liveness sets for this function
+	 *
+	 *
+	 * TODO THIS IS WRONG - to do our liveness sets we should first be
+	 * calculating used/assigned sets via a function crawl
+	 *
+	 * Remember - *USED* means that a variable is used in a block *BEFORE*
+	 * it is assigned
 	 */
 	calculate_liveness_sets(current_function_blocks, function_starting_block);
 
@@ -10016,8 +10023,10 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 	while(ast_cursor != NULL){
 		//Switch based on the class of cursor that we have here
 		switch(ast_cursor->ast_node_type){
-			//We can see a function definition. In this case, we'll
-			//allow the helper to do it
+			/**
+			 * We've seen a function defintion. In this case we'll
+			 * let the helper deal with it
+			 */
 			case AST_NODE_TYPE_FUNC_DEF:
 				//Visit the function definition
 				block = visit_function_definition(cfg, ast_cursor);
@@ -10262,7 +10271,6 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 		print_parse_message(MESSAGE_TYPE_ERROR, "CFG was unable to be constructed", 0);
 		(*num_errors_ref)++;
 	}
-
 
 	//TODO USED AND ASSIGNED ARE TOTALLY WRONG
 	//
