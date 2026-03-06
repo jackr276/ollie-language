@@ -587,9 +587,6 @@ static three_addr_var_t* handle_conditional_identifier_copy_if_needed(basic_bloc
 	//Add it into the block
 	add_statement(block, copy);
 
-	//Add it in as used
-	add_used_variable(block, variable);
-
 	//Give back the copy var
 	return copy->assignee;
 }
@@ -2836,9 +2833,6 @@ static three_addr_var_t* emit_indirect_jump_address_calculation(basic_block_t* b
 	//We'll need a new temp var for the assignee
 	three_addr_var_t* assignee = emit_temp_var(u64);
 
-	//If the multiplicand is not temporary we have a new used variable
-	add_used_variable(basic_block, mutliplicand);
-
 	//Use the helper to emit it - type size is 8 because it's an address
 	instruction_t* stmt = emit_indir_jump_address_calc_instruction(assignee, initial_address, mutliplicand, 8);
 
@@ -2918,9 +2912,6 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 		 */
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(ret_node->inferred_type), return_variable);
 
-		//Add this in as a used variable - make sure we're using the "current" block
-		add_used_variable(current, return_variable);
-
 		//Add it into the block
 		add_statement(current, assignment);
 
@@ -2933,9 +2924,6 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 
 	//We'll use the ret stmt feature here
 	instruction_t* ret_stmt = emit_ret_instruction(return_variable);
-
-	//This variable is now used
-	add_used_variable(current, return_variable);
 
 	//Once it's been emitted, we'll add it in as a statement
 	add_statement(current, ret_stmt);
@@ -2984,9 +2972,6 @@ void emit_branch(basic_block_t* basic_block, basic_block_t* if_destination, basi
 	//Store whether or not this relies on a floating point comparison. This will be important
 	//down the road in the instruction selecotr
 	branch_instruction->relies_on_fp_comparison = relies_on_fp_comparison;
-
-	//This counts as a use for the result variable
-	add_used_variable(basic_block, conditional_result);
 
 	//Add the statement into the block
 	add_statement(basic_block, branch_instruction);
@@ -3119,10 +3104,6 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 				//this clearing will be a PXOR statement
 				instruction_t* clear_instruction = emit_floating_point_clear_instruction(cleared_var);
 
-				//This is an assignment and a use
-				add_used_variable(basic_block, cleared_var);
-				add_assigned_variable(basic_block, cleared_var);
-
 				//Add it into the block
 				add_statement(basic_block, clear_instruction);
 
@@ -3165,10 +3146,6 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 				//We will now use a specialized IR instruction to clear this variable out. In reality
 				//this clearing will be a PXOR statement
 				instruction_t* clear_instruction = emit_floating_point_clear_instruction(cleared_var);
-
-				//This is an assignment and a use
-				add_used_variable(basic_block, cleared_var);
-				add_assigned_variable(basic_block, cleared_var);
 
 				//Add it into the block
 				add_statement(basic_block, clear_instruction);
@@ -3264,9 +3241,6 @@ static inline three_addr_var_t* emit_automatic_load_from_memory(basic_block_t* b
 	//Emit the load instruction. We need to be sure to use the "true type" here in case we are dealing with 
 	//a reference
 	instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(type), memory_address, type);
-
-	//This counts as a use
-	add_used_variable(block, load_instruction->op1);
 
 	//Add it to the block
 	add_statement(block, load_instruction);
@@ -3403,12 +3377,6 @@ static inline three_addr_var_t* emit_general_purpose_inc_code(basic_block_t* bas
 	//Create the code
 	instruction_t* inc_code = emit_inc_instruction(incrementee);
 
-	//This will count as live if we read from it
-	add_assigned_variable(basic_block, inc_code->assignee);
-
-	//This is a rare case were we're assigning to AND using
-	add_used_variable(basic_block, incrementee);
-
 	//Add it into the block
 	add_statement(basic_block, inc_code);
 
@@ -3449,13 +3417,6 @@ static inline three_addr_var_t* emit_sse_inc_code(basic_block_t* basic_block, th
 
 	add_statement(basic_block, final_addition);
 
-	//This counts as a use
-	add_used_variable(basic_block, incrementee);
-	add_used_variable(basic_block, constant_value);
-
-	//And this is also an assignment
-	add_assigned_variable(basic_block, final_assignee);
-
 	//Finally, the result that we give back is the incrementee
 	return final_assignee;
 }
@@ -3467,12 +3428,6 @@ static inline three_addr_var_t* emit_sse_inc_code(basic_block_t* basic_block, th
 static inline three_addr_var_t* emit_general_purpose_dec_code(basic_block_t* basic_block, three_addr_var_t* decrementee){
 	//Create the code
 	instruction_t* dec_code = emit_dec_instruction(decrementee);
-
-	//This will count as live if we read from it
-	add_assigned_variable(basic_block, dec_code->assignee);
-
-	//This is a rare case were we're assigning to AND using
-	add_used_variable(basic_block, decrementee);
 
 	//Add it into the block
 	add_statement(basic_block, dec_code);
@@ -3514,13 +3469,6 @@ static inline three_addr_var_t* emit_sse_dec_code(basic_block_t* basic_block, th
 
 	add_statement(basic_block, final_addition);
 
-	//This counts as a use
-	add_used_variable(basic_block, decrementee);
-	add_used_variable(basic_block, constant_value);
-
-	//And this is also an assignment
-	add_assigned_variable(basic_block, final_assignee);
-
 	//Finally, the result that we give back is the incrementee
 	return final_assignee;
 }
@@ -3536,9 +3484,6 @@ static inline three_addr_var_t* emit_sse_dec_code(basic_block_t* basic_block, th
 static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, three_addr_var_t* tested_variable, ollie_token_t* operator){
 	//Emit the instruction
 	instruction_t* test_if_not_zero = emit_test_if_not_zero_statement(emit_temp_var(u8), tested_variable);
-
-	//This counts as a use for op1
-	add_used_variable(basic_block, tested_variable);
 
 	//Now we'll add it into the block
 	add_statement(basic_block, test_if_not_zero);
@@ -3567,12 +3512,6 @@ static inline three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_
 	//We will still save op1 here, for tracking reasons
 	not_stmt->op1 = var;
 
-	//The assignee was assigned
-	add_assigned_variable(basic_block, assignee);
-
-	//Regardless this is still used here
-	add_used_variable(basic_block, var);
-
 	//Add this into the block
 	add_statement(basic_block, not_stmt);
 
@@ -3585,12 +3524,6 @@ static inline three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_
  * Emit a binary operation statement with a constant built in
  */
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_const_t* constant){
-	//Assigned variables need to be non-constant
-	add_assigned_variable(basic_block, assignee);
-
-	//Add op1 as a used variable
-	add_used_variable(basic_block, op1);
-
 	//First let's create it
 	instruction_t* stmt = emit_binary_operation_with_const_instruction(assignee, op1, op, constant);
 
@@ -3688,10 +3621,6 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 			//Emit the load
 			load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(u64), *base_address, *current_offset, (*base_address)->type);
 
-			//This counts as a use for both
-			add_used_variable(current_block, *base_address);
-			add_used_variable(current_block, *current_offset);
-
 			//Add it into the block
 			add_statement(current_block, load_instruction);
 
@@ -3705,9 +3634,6 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 		} else {
 			//Regular load here
 			load_instruction = emit_load_ir_code(emit_temp_var(u64), *base_address, (*base_address)->type);
-
-			//This counts as a use
-			add_used_variable(current_block, *base_address);
 			
 			//Get it into the block
 			add_statement(current_block, load_instruction);
@@ -3802,10 +3728,6 @@ static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block
 			//Emit the load
 			load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(u64), *base_address, *current_offset, (*base_address)->type);
 
-			//This counts as a use for both
-			add_used_variable(block, *base_address);
-			add_used_variable(block, *current_offset);
-
 			//Add it into the block
 			add_statement(block, load_instruction);
 
@@ -3819,9 +3741,6 @@ static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block
 		} else {
 			//Regular load here
 			load_instruction = emit_load_ir_code(emit_temp_var(u64), *base_address, (*base_address)->type);
-
-			//This counts as a use
-			add_used_variable(block, *base_address);
 			
 			//Get it into the block
 			add_statement(block, load_instruction);
@@ -3908,10 +3827,6 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 			//Emit the load
 			load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(u64), *base_address, *current_offset, raw_struct_type);
 
-			//This counts as a use for both
-			add_used_variable(block, *base_address);
-			add_used_variable(block, *current_offset);
-
 			//Add it into the block
 			add_statement(block, load_instruction);
 
@@ -3925,9 +3840,6 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 		} else {
 			//Regular load here
 			load_instruction = emit_load_ir_code(emit_temp_var(u64), *base_address, raw_struct_type);
-
-			//This counts as a use
-			add_used_variable(block, *base_address);
 			
 			//Get it into the block
 			add_statement(block, load_instruction);
@@ -3994,10 +3906,6 @@ static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block,
 			//Emit the load
 			load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(u64), *base_address, *current_offset, (*base_address)->type);
 
-			//This counts as a use for both
-			add_used_variable(block, *base_address);
-			add_used_variable(block, *current_offset);
-
 			//Add it into the block
 			add_statement(block, load_instruction);
 
@@ -4011,9 +3919,6 @@ static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block,
 		} else {
 			//Regular load here
 			load_instruction = emit_load_ir_code(emit_temp_var(u64), *base_address, (*base_address)->type);
-
-			//This counts as a use
-			add_used_variable(block, *base_address);
 			
 			//Get it into the block
 			add_statement(block, load_instruction);
@@ -4067,10 +3972,6 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
 			//Emit the load
 			load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(u64), *base_address, *current_offset, raw_union_type);
 
-			//This counts as a use for both
-			add_used_variable(block, *base_address);
-			add_used_variable(block, *current_offset);
-
 			//Add it into the block
 			add_statement(block, load_instruction);
 
@@ -4084,9 +3985,6 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
 		} else {
 			//Regular load here
 			load_instruction = emit_load_ir_code(emit_temp_var(u64), *base_address, raw_union_type);
-
-			//This counts as a use
-			add_used_variable(block, *base_address);
 			
 			//Get it into the block
 			add_statement(block, load_instruction);
@@ -4290,10 +4188,6 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 					//Intentionally leave the storee null, it will be populated down the line
 					store_instruction = emit_store_with_variable_offset_ir_code(base_address, current_offset, NULL, original_memory_access_type);
 
-					//Counts as uses for both
-					add_used_variable(current_block, base_address);
-					add_used_variable(current_block, current_offset);
-
 					//Add it into the block
 					add_statement(current_block, store_instruction);
 
@@ -4305,9 +4199,6 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 					//Emit the store here - remember we leave the op1 NULL so that
 					//a later rule can fill it in
 					store_instruction = emit_store_ir_code(base_address, NULL, original_memory_access_type);
-
-					//Counts as a use
-					add_used_variable(current_block, base_address);
 
 					//Add it into our block
 					add_statement(current_block, store_instruction);
@@ -4325,10 +4216,6 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 					//Calculate our load here
 					load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(parent_node_type), base_address, current_offset, original_memory_access_type);
 
-					//Counts as uses for both
-					add_used_variable(current_block, base_address);
-					add_used_variable(current_block, current_offset);
-
 					//Add it into the block
 					add_statement(current_block, load_instruction);
 
@@ -4340,9 +4227,6 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 				} else {
 					//Emit the load instruction between the base address and the parent node type
 					load_instruction = emit_load_ir_code(emit_temp_var(parent_node_type), base_address, original_memory_access_type);
-
-					//Counts as a use
-					add_used_variable(current_block, base_address);
 
 					//Add it into the block
 					add_statement(current_block, load_instruction);
@@ -4362,10 +4246,6 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 		if(current_offset != NULL){
 			//Just do base address + offset
 			instruction_t* address_calculation = emit_binary_operation_instruction(emit_temp_var(base_address->type), base_address, PLUS, current_offset);
-
-			//These count as uses
-			add_used_variable(current_block, base_address);
-			add_used_variable(current_block, current_offset);
 
 			//Add the instruction in
 			add_statement(current_block, address_calculation);
@@ -4421,9 +4301,6 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 
 	//Emit the assignment
 	instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
-
-	//This counts as a use for the assignee
-	add_used_variable(current_block, assignee);
 
 	//Add this statement in
 	add_statement(current_block, temp_assignment);
@@ -4534,16 +4411,10 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 					break;
 			}
 
-			//No matter what happened, we used this
-			add_used_variable(current_block, assignee);
-
 		//Otherwise we just have a regular assignment
 		} else {
 			//And finally, we'll emit the save instruction that stores the value that we've incremented into the location we got it from
 			instruction_t* assignment_instruction = emit_assignment_instruction(copied_package.assignee, assignee);
-
-			//This counts as a use
-			add_used_variable(current_block, assignee);
 
 			//Add this into the block
 			add_statement(current_block, assignment_instruction);
@@ -4564,9 +4435,6 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 
 		//Now we need to add the final store
 		instruction_t* store_instruction = emit_store_ir_code(memory_address_var, assignee, type);
-
-		//Counts as a use
-		add_used_variable(current_block, assignee);
 
 		//Get this in there
 		add_statement(current_block, store_instruction);
@@ -4726,16 +4594,10 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 							break;
 					}
 
-					//No matter what happened, we used this
-					add_used_variable(current_block, assignee);
-
 				//Otherwise we just have a regular assignment
 				} else {
 					//And finally, we'll emit the save instruction that stores the value that we've incremented into the location we got it from
 					instruction_t* assignment_instruction = emit_assignment_instruction(copied_package.assignee, assignee);
-
-					//This counts as a use
-					add_used_variable(current_block, assignee);
 
 					//Add this into the block
 					add_statement(current_block, assignment_instruction);
@@ -4752,9 +4614,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 				//Now we need to add the final store
 				instruction_t* store_instruction = emit_store_ir_code(memory_address_var, assignee, type);
-
-				//Counts as a use
-				add_used_variable(current_block, assignee);
 
 				//Get this in there
 				add_statement(current_block, store_instruction);
@@ -4809,9 +4668,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				//Emit the assignment
 				instruction_t* assignment_instruction = emit_assignment_instruction(emit_temp_var(dereferenced_type), assignee);
 
-				//Counts as a use
-				add_used_variable(current_block, assignee);
-
 				//Get this into the block
 				add_statement(current_block, assignment_instruction);
 
@@ -4834,9 +4690,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				//We will intentionally leave op1 blank so that it can be filled in down the line
 				instruction_t* store_instruction = emit_store_ir_code(assignee, NULL, dereferenced_type);
 
-				//This counts as a use
-				add_used_variable(current_block, assignee);
-
 				//Now let's get this into the block
 				add_statement(current_block, store_instruction);
 
@@ -4850,9 +4703,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			} else {
 				//If the side type here is right, we'll need a load instruction
 				instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(unary_expression_parent->inferred_type), assignee, dereferenced_type);
-
-				//The dereferenced variable has been used
-				add_used_variable(current_block, assignee);
 
 				//Add it in
 				add_statement(current_block, load_instruction);
@@ -4900,9 +4750,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//Get it into the block right after the unary expression
 			add_statement(current_block, logical_not_statement);
 
-			//This counts as a use
-			add_used_variable(current_block, assignee);
-
 			//The package's assignee is now the result of this logical not instruction
 			unary_package.assignee = logical_not_statement->assignee;
 
@@ -4936,17 +4783,11 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//only ever on the RHS
 			assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
 
-			//The assignee here counts as used
-			add_used_variable(current_block, assignee);
-
 			//Add this into the block
 			add_statement(current_block, assignment);
 
 			//Now emit the instruction itself
 			instruction_t* negation_instruction = emit_neg_instruction(assignment->assignee);
-
-			//This counts as a use
-			add_used_variable(current_block, assignment->assignee);
 
 			//Now get the whole statement into the block
 			add_statement(current_block, negation_instruction);
@@ -5147,12 +4988,6 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	//Add this into the if block
 	add_statement(if_block, if_assignment);
 
-	//This counts as the result being assigned in the if block
-	add_assigned_variable(if_block, if_result);
-
-	//This counts as a use
-	add_used_variable(if_block, if_branch.assignee);
-
 	//Now add a direct jump to the end
 	emit_jump(if_block, end_block);
 
@@ -5172,12 +5007,6 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 
 	//Add this into the else block
 	add_statement(else_block, else_assignment);
-
-	//This counts as an assignment in the else block
-	add_assigned_variable(else_block, else_result);
-
-	//This counts as a use
-	add_used_variable(else_block, else_branch.assignee);
 
 	//Now add a direct jump to the end
 	emit_jump(else_block, end_block);
@@ -5268,9 +5097,6 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 		//Add it into here
 		add_statement(current_block, left_side_temp_assignment);
-		
-		//We can mark that op1 was used
-		add_used_variable(current_block, left_side.assignee);
 
 		//Grab the assignee out
 		op1 = left_side_temp_assignment->assignee;
@@ -5301,9 +5127,6 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 				//Add to the block
 				add_statement(current_block, right_side_assignment);
 
-				//This counts as a use
-				add_used_variable(current_block, op2);
-
 				//Be sure to reassign what op2 is
 				op2 = right_side_assignment->assignee;
 			}
@@ -5332,15 +5155,6 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	
 	//Emit the binary operator expression using our helper
 	instruction_t* binary_operation = emit_binary_operation_instruction(assignee, op1, binary_operator, op2);
-
-	//If this isn't temporary, it's being assigned
-	add_assigned_variable(current_block, assignee);
-
-	//If these are not temporary, they're being used
-	add_used_variable(current_block, op1);
-
-	//Same deal with this one
-	add_used_variable(current_block, op2);
 
 	//Add this statement to the block
 	add_statement(current_block, binary_operation);
@@ -5392,9 +5206,6 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		//Emit the assignment
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(u64), final_op1);
 
-		//Counts as a use
-		add_used_variable(current_block, final_op1);
-
 		//Insert this into the block before the store
 		insert_instruction_after_given(assignment, last_instruction);
 
@@ -5435,9 +5246,6 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 					//This is now our op1
 					current_block->exit_statement->op1 = final_op1;
 
-					//No matter what happened, we used this
-					add_used_variable(current_block, final_op1);
-
 				//Otherwise, we can do a small optimization here by scrapping the 
 				//constant assignment and just putting the constant in directly
 				} else {
@@ -5461,9 +5269,6 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 					|| last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
 					//This is now our op1
 					current_block->exit_statement->op2 = final_op1;
-
-					//No matter what happened, we used this
-					add_used_variable(current_block, final_op1);
 
 				//Otherwise, we can do a small optimization here by scrapping the 
 				//constant assignment and just putting the constant in directly
@@ -5504,9 +5309,6 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			//This is now our op1
 			final_assignment->op1 = final_op1;
 
-			//No matter what happened, we used this
-			add_used_variable(current_block, final_op1);
-
 		//Otherwise, we can do a small optimization here by scrapping the 
 		//constant assignment and just putting the constant in directly
 		} else {
@@ -5519,9 +5321,6 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			//Set the store statement's op1_const to be this
 			final_assignment->op1_const = constant_assignee;
 		}
-
-		//If this is not a temp var, then we can flag it as being assigned
-		add_assigned_variable(current_block, memory_address);
 		
 		//Now add thi statement in here
 		add_statement(current_block, final_assignment);
@@ -5536,12 +5335,6 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 
 		//Copy this over if there is one
 		left_hand_var->associated_memory_region.stack_region = final_op1->associated_memory_region.stack_region;
-
-		//If this is not a temp var, then we can flag it as being assigned
-		add_assigned_variable(current_block, left_hand_var);
-
-		//This counts as a use
-		add_used_variable(current_block, final_op1);
 		
 		//Now add thi statement in here
 		add_statement(current_block, final_assignment);
@@ -5759,9 +5552,6 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	//Emit the final call here
 	instruction_t* func_call_stmt = emit_indirect_function_call_instruction(function_pointer_var, assignee);
 
-	//This is a use of the function pointer variable itself - very important to track for SSA reasons
-	add_used_variable(basic_block, function_pointer_var);
-
 	//Let's grab a param cursor for ourselves
 	generic_ast_node_t* param_cursor = indirect_function_call_node->first_child;
 
@@ -5862,17 +5652,11 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 					first_assignment_instruction = assignment;
 				}
 
-				//Counts as a use
-				add_used_variable(basic_block, result);
-
 				//Add this into the block
 				add_statement(basic_block, assignment);
 
 				//Add the parameter in
 				dynamic_array_add(&(func_call_stmt->parameters), assignment->assignee);
-
-				//The assignment here is used implicitly by the function call
-				add_used_variable(current_block, assignment->assignee);
 
 			//If we get here then we need to do a stack allocation
 			} else {
@@ -5890,9 +5674,6 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 					first_assignment_instruction = store_operation;
 				}
 
-				//This counts as a use for our result
-				add_used_variable(current_block, result);
-
 				//Add the store operation in
 				add_statement(current_block, store_operation);
 			}
@@ -5906,9 +5687,6 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 				//Add the final assignment
 				instruction_t* assignment = emit_assignment_instruction(emit_temp_var(paramter_type), result);
 
-				//Counts as a use
-				add_used_variable(basic_block, result);
-
 				//Add this into the block
 				add_statement(basic_block, assignment);
 
@@ -5919,9 +5697,6 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 
 				//Add the parameter in
 				dynamic_array_add(&(func_call_stmt->parameters), assignment->assignee);
-
-				//The assignment here is used implicitly by the function call
-				add_used_variable(current_block, assignment->assignee);
 
 			//If we get here then we need to do a stack allocation
 			} else {
@@ -5939,9 +5714,6 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 				if(first_assignment_instruction == NULL){
 					first_assignment_instruction = store_operation;
 				}
-
-				//This counts as a use for our result
-				add_used_variable(current_block, result);
 
 				//Add the store operation in
 				add_statement(current_block, store_operation);
@@ -5996,9 +5768,6 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		//allocation to avoid interference
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
 
-		//The assignee here is used
-		add_used_variable(current_block, assignee);
-				
 		//Reassign this value
 		assignee = assignment->assignee;
 
@@ -6177,17 +5946,11 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			//We need one more assignment here
 			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(parameter_type), result);
 
-			//Counts as a use
-			add_used_variable(current_block, result);
-
 			//Add this into the block
 			add_statement(current_block, assignment);
 
 			//Add the parameter in
 			dynamic_array_add(&func_call_stmt->parameters, assignment->assignee);
-
-			//The assignment here is used implicitly by the function call
-			add_used_variable(current_block, assignment->assignee);
 
 		//However if we do have a stack region, we need to instead emit a store that gets this
 		//variable into the appopriate spot
@@ -6198,9 +5961,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 			//Emit the store instruction
 			instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(stack_pointer_variable, offset, result, parameter_type);
-
-			//This counts as a use
-			add_used_variable(current_block, result);
 
 			//Now get it into the block
 			add_statement(current_block, store_instruction);
