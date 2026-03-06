@@ -2101,18 +2101,38 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 
 					break;
 
-
 				//Same for indirect function calls - also have params
 				case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+					//Indirect function calls also have their op1's used
+					add_variable_to_use_set(cursor->op1, block);
 
+					//Run through the params and add them
+					for(u_int32_t _ = 0; _ < cursor->parameters.current_index; _++){
+						//Grab the param out
+						three_addr_var_t* parameter = dynamic_array_get_at(&(cursor->parameters), _);
+
+						//Add it into the USE set
+						add_variable_to_use_set(parameter, block);
+					}
+
+					//Add the DEF var in
+					add_variable_to_def_set(cursor->assignee, block);
 
 					break;
+
+				//For STOREs, the assignee is a memory address, so it's actually
+				//used but not defined
+				case THREE_ADDR_CODE_STORE_STATEMENT:
+				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+					//Op1/Op2 go into use if they exist
+					add_variable_to_use_set(cursor->op1, block);
+					add_variable_to_use_set(cursor->op2, block);
 					
+					//Assignee is defined in this unique case
+					add_variable_to_use_set(cursor->assignee, block);
 
-
-
-
-
+					break;
 
 				//In the default case, we just add the USE/DEF for each 
 				//variable that we can see
