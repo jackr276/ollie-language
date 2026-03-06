@@ -1956,6 +1956,54 @@ static int16_t symtab_record_variable_dynamic_array_contains(dynamic_array_t* va
 
 
 /**
+ * Add a variable into the USE set *if* it's appropriate. Remember that we do not care
+ * about temporary variables here, and we need to ensure that this variable is not
+ * also in the DEF set when we're adding this, because USE specifically is for
+ * variables that are used in a block *before* they're defined in the block
+ */
+static inline void add_variable_to_use_set(three_addr_var_t* variable, dynamic_array_t* use_set, dynamic_array_t* def_set){
+	//Is the variable NULL? If so then return
+	if(variable == NULL){
+		return;
+	}
+
+	//Update the USE count regardless
+	variable->use_count++;
+
+	//Is the variable temporary? If so we don't care about it
+	if(variable->variable_type == VARIABLE_TYPE_TEMP){
+		return;
+	}
+
+	//Otherwise, let's make sure it's not also in DEF
+	for(u_int32_t i = 0; i < def_set->current_index; i++){
+		//Grab it out
+		three_addr_var_t* defined = dynamic_array_get_at(def_set, i);
+
+		//It's been defined in this block, so we don't care
+		if(variables_equal_no_ssa(defined, variable, FALSE) == TRUE){
+			return;
+		}
+	}
+
+	//Otherwise, we need to add this into the USE set *if* it's unique. We don't want to add
+	//things more than once
+	for(u_int32_t i = 0; i < use_set->current_index; i++){
+		//Grab it out
+		three_addr_var_t* used = dynamic_array_get_at(use_set, i);
+
+		//It's been defined in this block, so we don't care
+		if(variables_equal_no_ssa(used, variable, FALSE) == TRUE){
+			return;
+		}
+	}
+
+	//If we make it all of the way down here, then we can add it
+	dynamic_array_add(use_set, variable);
+}
+
+
+/**
  * Compute the USE and DEF sets for every single block inside of a function
  *
  * USE[b] -> the set of all variables that are used *before assignment* in block b
@@ -1986,11 +2034,27 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
 
 		//Let's allocate the USE/DEF sets for each block
-		block->used_before_definition 	  = dynamic_array_alloc();
+		block->used_before_definition = dynamic_array_alloc();
 		block->assigned_variables = dynamic_array_alloc();
 
-	}
+		//Now grab a cursor for our instruction call
+		instruction_t* cursor = block->leader_statement;
 
+		//Run through everything
+		while(cursor != NULL){
+			switch(cursor->statement_type){
+
+
+				//In the default case, we just add the USE/DEF for each 
+				//variable that we can see
+				default:
+					
+			}
+
+			//Bump it up
+			cursor = cursor->next_statement;
+		}
+	}
 }
 
 
