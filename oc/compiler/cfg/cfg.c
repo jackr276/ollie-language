@@ -7505,9 +7505,6 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	//To avoid violating SSA rules, we'll emit a temporary assignment here
 	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_results.assignee);
 
-	//This has now been used once more
-	add_used_variable(root_level_block, input_results.assignee);
-
 	//Add it into the block
 	add_statement(jump_calculation_block, temporary_variable_assignent);
 
@@ -7727,9 +7724,6 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 	//To avoid violating SSA rules, we'll emit a temporary assignment here
 	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_results.assignee);
-
-	//This has now been used once more
-	add_used_variable(root_level_block, input_results.assignee);
 
 	//Add it into the block
 	add_statement(jump_calculation_block, temporary_variable_assignent);
@@ -8836,9 +8830,6 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 
 				//We'll now manually insert a ret 0 based on whatever the return type of the function is
 				instruction_t* return_instruction = emit_ret_instruction(assignment->assignee);
-
-				//This counts as a use
-				add_used_variable(block, assignment->assignee);
 				
 				//We'll now add this at the very end of the block
 				add_statement(block, return_instruction);
@@ -8984,10 +8975,6 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 			//Emit the assignment here
 			instruction_t* alias_assignment = emit_assignment_instruction(alias_var, parameter_var);
 
-			//Counts as a use for the parameter
-			add_used_variable(function_entry_block, parameter_var);
-			add_assigned_variable(function_entry_block, alias_var);
-
 			//Now add the statement in
 			add_statement(function_entry_block, alias_assignment);
 			
@@ -9005,10 +8992,6 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 
 			//Now we'll need to do our initial load
 			instruction_t* store_code = emit_store_ir_code(parameter_var, emit_var(parameter), parameter->type_defined_as);
-
-			//Bookkeeping here
-			add_used_variable(function_entry_block, store_code->op1);
-			add_used_variable(function_entry_block, store_code->assignee);
 
 			//Add it into the starting block
 			add_statement(function_entry_block, store_code);
@@ -9102,19 +9085,18 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	delete_all_unreachable_blocks(current_function_blocks);
 
 	/**
+	 * Let's now use the helper to compute all of the USE/DEF sets for each
+	 * block in the function
+	 */
+	compute_use_and_def_sets_for_function(current_function_blocks);
+
+	/**
 	 * Now compute the dominance relations
 	 */
 	calculate_all_control_relations(function_starting_block, current_function_blocks);
 
 	/**
 	 * Finally, we will calculate the liveness sets for this function
-	 *
-	 *
-	 * TODO THIS IS WRONG - to do our liveness sets we should first be
-	 * calculating used/assigned sets via a function crawl
-	 *
-	 * Remember - *USED* means that a variable is used in a block *BEFORE*
-	 * it is assigned
 	 */
 	calculate_liveness_sets(current_function_blocks, function_starting_block);
 
@@ -9430,9 +9412,6 @@ static cfg_result_package_t emit_final_initialization(basic_block_t* current_blo
 	//Now we need to emit the store operation
 	instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(base_address, offset_constant, NULL, inferred_type);
 
-	//This counts as a use for both of these
-	add_used_variable(current_block, base_address);
-
 	//If the last instruction is *not* a constant assignment, we can go ahead like this
 	if(last_instruction == NULL
 		|| last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
@@ -9458,9 +9437,6 @@ static cfg_result_package_t emit_final_initialization(basic_block_t* current_blo
 
 		//This is now our op2
 		store_instruction->op2 = final_assignee;
-
-		//No matter what happened, we used this
-		add_used_variable(current_block, final_assignee);
 
 	//Otherwise, we can do a small optimization here by scrapping the 
 	//constant assignment and just putting the constant in directly
@@ -9583,9 +9559,6 @@ static cfg_result_package_t emit_string_initializer(basic_block_t* current_block
 
 		//We can skip the assignment here and just directly put the constant in
 		store_instruction->op1_const = constant;
-
-		//These both count as used
-		add_used_variable(current_block, base_address);
 
 		//Add the instruction in
 		add_statement(current_block, store_instruction);
@@ -9729,9 +9702,6 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 		//Emit the assignment
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(u64), final_op1);
 
-		//Counts as a use
-		add_used_variable(current_block, final_op1);
-
 		//Add this at the very end of the block. Remember - there is a chance that
 		//the last instruction is NULL so we'll dodge that here by doing this
 		add_statement(current_block, assignment);
@@ -9755,12 +9725,6 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 		//The actual statement is the assignment of right to left
 		instruction_t* assignment_statement = emit_assignment_instruction(let_variable, final_op1);
 
-		//The let variable was assigned
-		add_assigned_variable(current_block, let_variable);
-
-		//If this is not temporary, then it counts as used
-		add_used_variable(current_block, final_op1);
-
 		//Finally we'll add this into the overall block
 		add_statement(current_block, assignment_statement);
 			
@@ -9778,18 +9742,12 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 		//Emit the store code
 		instruction_t* store_statement = emit_store_ir_code(base_address, NULL, true_stored_type);
 
-		//This counts as a use
-		add_used_variable(current_block, base_address);
-
 		//If the last instruction is *not* a constant assignment, we can go ahead like this
 		if(last_instruction == NULL
 			|| last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
 
 			//This is now our op1
 			store_statement->op1 = final_op1;
-
-			//No matter what happened, we used this
-			add_used_variable(current_block, final_op1);
 
 		//Otherwise, we can do a small optimization here by scrapping the 
 		//constant assignment and just putting the constant in directly
