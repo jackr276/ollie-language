@@ -968,6 +968,9 @@ static inline void assign_live_range_to_source_variable(dynamic_array_t* general
 
 /**
  * Handle the live range that comes from the source of an instruction
+ *
+ *
+ * TODO DEPRECATE - we don't need this anymore - it was created due to a lack of understanding
  */
 static inline void assign_live_range_to_implicit_source_variable(dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges, basic_block_t* block, three_addr_var_t* source_variable){
 	//Just leave if it's NULL
@@ -1235,16 +1238,14 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 		 * for live range coalescing
 		 */
 
-		//TODO FLIP
-
-		//Handle the destination variable
-		assign_live_range_to_destination_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current);
-
 		//Assign all of the source variable live ranges
 		assign_live_range_to_source_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current->source_register);
 		assign_live_range_to_source_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current->source_register2);
 		assign_live_range_to_source_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current->address_calc_reg1);
 		assign_live_range_to_source_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current->address_calc_reg2);
+
+		//Handle the destination variable
+		assign_live_range_to_destination_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current);
 
 		//Advance it down
 		current = current->next_statement;
@@ -2329,12 +2330,16 @@ static void precolor_function(basic_block_t* function_entry, dynamic_array_t* ge
  * Actually, we may need to do this for the whole CFG due to the way the live ranges are not tied to their
  * variables. We will likely need to recompute at CFG level
  *
+ * USE[b] <- all live ranges in block b that are used *before* definition in the block. Specifically we 
+ * 			 must guarantee that any LR in here is not in DEF[b]
+ * DEF[b] <- all live ranges in block b that are defined in the block
+ *
  *
  * TODO WRONG - look at CFG algorithm for how we really need to be doing this
  */
 static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
-	//Wipe these two values out
-	clear_dynamic_array(&(block->used_variables));
+	//We can reset these completely
+	clear_dynamic_array(&(block->used_before_definition));
 	clear_dynamic_array(&(block->assigned_variables));
 
 	//Instruction cursor
@@ -2343,11 +2348,10 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 	//Now we run through the block to recompute
 	while(cursor != NULL){
 		switch(cursor->instruction_type){
-			//These two have no use associated with them
+			//For a phi-function we can skip it, it won't affect us
 			case PHI_FUNCTION:
-			case RET:
 				break;
-
+				
 			case INCB:
 			case INCW:
 			case INCL:
@@ -2358,16 +2362,11 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 			case DECQ:
 			case PXOR_CLEAR:
 				//This counts as both an assignment and a use
-				add_assigned_live_range(cursor->destination_register->associated_live_range, block);
 				add_used_live_range(cursor->destination_register->associated_live_range, block);
+				add_assigned_live_range(cursor->destination_register->associated_live_range, block);
 				break;
 
 			default:
-				//Handle destination 1 - these should go after the use calc
-				if(cursor->destination_register != NULL){
-					update_use_assignment_for_destination_variable(cursor, block);
-				}
-
 				//Handle destination 2(this is rare but we have it sometimes) - these should go after the use calc
 				if(cursor->destination_register2 != NULL){
 					add_assigned_live_range(cursor->destination_register2->associated_live_range, block);
@@ -2391,6 +2390,11 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 				//And then the usual procedure for the address calc reg
 				if(cursor->address_calc_reg2 != NULL){
 					add_used_live_range(cursor->address_calc_reg2->associated_live_range, block);
+				}
+
+				//Handle destination 1 - these should go after the use calc
+				if(cursor->destination_register != NULL){
+					update_use_assignment_for_destination_variable(cursor, block);
 				}
 					
 				break;
