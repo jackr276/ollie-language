@@ -759,78 +759,6 @@ static inline void print_cfg_message(error_message_type_t message_type, char* in
 
 
 /**
- * A simple helper function that allows us to add a used variable into the block's
- * header. It is important to note that only actual variables(not temp variables) count
- * as live
- *
- *
- * TODO DEPRECATE 100%
- */
-void add_used_variable(basic_block_t* basic_block, three_addr_var_t* var){
-	//This can happen, so we'll check here to avoid complexity elsewhere
-	if(var == NULL){
-		return;
-	}
-
-	//Increment the use count of this variable, regardless of what it is
-	var->use_count++;
-
-	//If this is a temporary var, then we're done here, we'll simply bail out
-	if(var->variable_type == VARIABLE_TYPE_TEMP){
-		return;
-	}
-
-	//If this is NULL, we'll need to allocate it
-	if(basic_block->used_before_definition.internal_array == NULL){
-		basic_block->used_before_definition = dynamic_array_alloc();
-	}
-
-	//We need a special kind of comparison here, so we can't use the canned method
-	for(u_int16_t i = 0; i < basic_block->used_before_definition.current_index; i++){
-		//If the linked variables are the same, we're out
-		if(((three_addr_var_t*)(basic_block->used_before_definition.internal_array[i]))->linked_var == var->linked_var){
-			return;
-		}
-	}
-	
-	//we didn't find it, so we will add
-	dynamic_array_add(&(basic_block->used_before_definition), var); 
-}
-
-
-/**
- * A simple helper function that allows us to add an assigned-to variable into the block's
- * header. It is important to note that only actual variables(not temp variables) count
- * as live
- *
- *
- * TODO DEPRECATE 100%
- */
-void add_assigned_variable(basic_block_t* basic_block, three_addr_var_t* var){
-	//If it's temp just don't add it
-	if(var->variable_type == VARIABLE_TYPE_TEMP){
-		return;
-	}
-
-	//If the assigned variable dynamic array is NULL, we'll allocate it here
-	if(basic_block->assigned_variables.internal_array == NULL){
-		basic_block->assigned_variables = dynamic_array_alloc();
-	}
-
-	//We need a special kind of comparison here, so we can't use the canned method
-	for(u_int16_t i = 0; i < basic_block->assigned_variables.current_index; i++){
-		//If the linked variables are the same, we're out
-		if(((three_addr_var_t*)(basic_block->assigned_variables.internal_array[i]))->linked_var == var->linked_var){
-			return;
-		}
-	}
-
-	//We didn't find it, so we'll add it
-	dynamic_array_add(&(basic_block->assigned_variables), var);
-}
-
-
-/**
  * Print a block our for reading
 */
 static void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_selection_t print_df){
@@ -2823,9 +2751,6 @@ static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, o
 	//We need this temp assignment for bookkeeping reasons
 	instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
 
-	//If the assignee is not temporary, it counts as used
-	add_used_variable(basic_block, assignee);
-
 	//Add this to the block
 	add_statement(basic_block, temp_assignment);
 
@@ -2835,20 +2760,11 @@ static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, o
 	//We need to emit a temp assignment for the assignee
 	instruction_t* operation = emit_binary_operation_with_const_instruction(emit_temp_var(assignee->type), temp_assignment->assignee, op, constant);
 
-	//This now counts as used
-	add_used_variable(basic_block, temp_assignment->assignee);
-
 	//Add this to the block
 	add_statement(basic_block, operation);
 
 	//We need one final assignment
 	instruction_t* final_assignment = emit_assignment_instruction(emit_var_copy(assignee), operation->assignee);
-
-	//This now counts as used
-	add_used_variable(basic_block, operation->assignee);
-
-	//This variable was assigned, so we must mark it
-	add_assigned_variable(basic_block, final_assignment->assignee); 
 
 	//And add this one in
 	add_statement(basic_block, final_assignment);
@@ -2871,10 +2787,6 @@ static three_addr_var_t* emit_array_address_calculation(basic_block_t* basic_blo
 		//Let the helper emit the lea
 		instruction_t* address_calculation = emit_lea_multiplier_and_operands(assignee, base_addr, offset, member_type->type_size);
 
-		//Do our used variable tracking as needed
-		add_used_variable(basic_block, base_addr);
-		add_used_variable(basic_block, offset);
-
 		//Get this into the block
 		add_statement(basic_block, address_calculation);
 
@@ -2887,15 +2799,8 @@ static three_addr_var_t* emit_array_address_calculation(basic_block_t* basic_blo
 		//Let the helper emit the entire thing. We'll store into a temp var there
 		three_addr_var_t* final_offset = emit_binary_operation_with_constant(basic_block, emit_temp_var(i64), offset, STAR, type_size);
 
-		//The offset has been used here
-		add_used_variable(basic_block, offset);
-
 		//And now that we have the incompatible multiplication over with, we can use a lea to add
 		instruction_t* lea_statement = emit_lea_operands_only(assignee, base_addr, final_offset);
-
-		//This counts as a use
-		add_used_variable(basic_block, base_addr);
-		add_used_variable(basic_block, final_offset);
 
 		//Insert into the block
 		add_statement(basic_block, lea_statement);
@@ -2915,9 +2820,6 @@ static three_addr_var_t* emit_struct_address_calculation(basic_block_t* basic_bl
 
 	//Use the lea helper to emit this
 	instruction_t* stmt = emit_lea_offset_only(assignee, current_offset, offset);
-
-	//The true base address was used here
-	add_used_variable(basic_block, current_offset);
 
 	//Now add the statement into the block
 	add_statement(basic_block, stmt);
