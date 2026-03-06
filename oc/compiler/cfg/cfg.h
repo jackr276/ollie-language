@@ -98,8 +98,9 @@ struct basic_block_t{
 	//For convenience here. This is the successor that we use to
 	//"drill" to the bottom
 	basic_block_t* direct_successor;
-	//The array of used variables
-	dynamic_array_t used_variables;
+	//The set of "used_before_definition" defines all variables that were used
+	//before they were assigned in the block
+	dynamic_array_t used_before_definition;
 	//The array of all assigned variables
 	dynamic_array_t assigned_variables;
 	//The blocks dominance frontier

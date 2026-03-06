@@ -202,10 +202,10 @@ void reset_block_variable_tracking(basic_block_t* block){
 	}
 
 	//Do the same with the used variables
-	if(block->used_variables.internal_array == NULL){
-		block->used_variables = dynamic_array_alloc();
+	if(block->used_before_definition.internal_array == NULL){
+		block->used_before_definition = dynamic_array_alloc();
 	} else {
-		clear_dynamic_array(&(block->used_variables));
+		clear_dynamic_array(&(block->used_before_definition));
 	}
 
 	//Reset live in completely
@@ -781,20 +781,20 @@ void add_used_variable(basic_block_t* basic_block, three_addr_var_t* var){
 	}
 
 	//If this is NULL, we'll need to allocate it
-	if(basic_block->used_variables.internal_array == NULL){
-		basic_block->used_variables = dynamic_array_alloc();
+	if(basic_block->used_before_definition.internal_array == NULL){
+		basic_block->used_before_definition = dynamic_array_alloc();
 	}
 
 	//We need a special kind of comparison here, so we can't use the canned method
-	for(u_int16_t i = 0; i < basic_block->used_variables.current_index; i++){
+	for(u_int16_t i = 0; i < basic_block->used_before_definition.current_index; i++){
 		//If the linked variables are the same, we're out
-		if(((three_addr_var_t*)(basic_block->used_variables.internal_array[i]))->linked_var == var->linked_var){
+		if(((three_addr_var_t*)(basic_block->used_before_definition.internal_array[i]))->linked_var == var->linked_var){
 			return;
 		}
 	}
 	
 	//we didn't find it, so we will add
-	dynamic_array_add(&(basic_block->used_variables), var); 
+	dynamic_array_add(&(basic_block->used_before_definition), var); 
 }
 
 
@@ -854,16 +854,16 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 
 	//Now, we will print all of the active variables that this block has
-	if(block->used_variables.internal_array != NULL){
+	if(block->used_before_definition.internal_array != NULL){
 		printf("(");
 
 		//Run through all of the live variables and print them out
-		for(u_int16_t i = 0; i < block->used_variables.current_index; i++){
+		for(u_int16_t i = 0; i < block->used_before_definition.current_index; i++){
 			//Print it out
-			print_variable(stdout, block->used_variables.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
+			print_variable(stdout, block->used_before_definition.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
 
 			//If it isn't the very last one, we need a comma
-			if(i != block->used_variables.current_index - 1){
+			if(i != block->used_before_definition.current_index - 1){
 				printf(", ");
 			}
 		}
@@ -1980,6 +1980,16 @@ static int16_t symtab_record_variable_dynamic_array_contains(dynamic_array_t* va
  * at the very top, but we just didn't see it
  */
 static void compute_use_and_def_sets_for_function(dynamic_array_t* function_blocks){
+	//For every single block in the set of all function blocks
+	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+		//Grab the block out
+		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
+
+		//Let's allocate the USE/DEF sets for each block
+		block->used_before_definition 	  = dynamic_array_alloc();
+		block->assigned_variables = dynamic_array_alloc();
+
+	}
 
 }
 
@@ -2109,7 +2119,7 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
 
 			//Since we need all of the used variables, we'll just clone this
 			//dynamic array so that we start off with them all
-			current->live_in = clone_dynamic_array(&(current->used_variables));
+			current->live_in = clone_dynamic_array(&(current->used_before_definition));
 
 			//Now we need to add every variable that is in LIVE_OUT but NOT in assigned
 			//If we have any live out vars
@@ -2290,7 +2300,7 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 						//----------------------------------------
 
 						//Let's see if we can find it in one of these. We'll record if we can
-						if(symtab_record_variable_dynamic_array_contains(&(df_node->used_variables), record) == NOT_FOUND
+						if(symtab_record_variable_dynamic_array_contains(&(df_node->used_before_definition), record) == NOT_FOUND
 							&& symtab_record_variable_dynamic_array_contains(&(df_node->live_out), record) == NOT_FOUND){
 							continue;
 						}
@@ -6293,8 +6303,8 @@ void basic_block_dealloc(basic_block_t* block){
 	}
 
 	//Deallocate the live variable array
-	if(block->used_variables.internal_array != NULL){
-		dynamic_array_dealloc(&(block->used_variables));
+	if(block->used_before_definition.internal_array != NULL){
+		dynamic_array_dealloc(&(block->used_before_definition));
 	}
 
 	//Deallocate the assigned variable array
@@ -6639,18 +6649,6 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	//IMPORTANT--wipe b's statements out
 	b->leader_statement = NULL;
 	b->exit_statement = NULL;
-
-	//We'll now need to ensure that all of the used variables in B are also in A
-	for(u_int16_t i = 0; i < b->used_variables.current_index; i++){
-		//Add these in one by one to A
-		add_used_variable(a, b->used_variables.internal_array[i]);
-	}
-
-	//Copy over all of the assigned variables too
-	for(u_int16_t i = 0; i < b->assigned_variables.current_index; i++){
-		//Add these in one by one
-		add_assigned_variable(a, b->assigned_variables.internal_array[i]);
-	}
 
 	//Update the instruction counts
 	a->number_of_instructions += b->number_of_instructions;

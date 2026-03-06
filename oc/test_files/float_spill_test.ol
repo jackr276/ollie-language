@@ -8,6 +8,7 @@
 
 
 pub fn float_spill(x:f32, y:f32, z:f32, a:f32, b:f32, c:f32) -> f32 {
+	/*
 	let local1:f32 = 3.33;
 	let local2:f32 = 3.33;
 	let local3:f32 = 3.33;
@@ -42,6 +43,7 @@ pub fn float_spill(x:f32, y:f32, z:f32, a:f32, b:f32, c:f32) -> f32 {
 	//Keep these all around
 	ret result1 + result2 + result3 + result4 
 			+ result5 + local6 + local8 + local9 + local10 + local12 + local13 + local14 + local15;
+		*/
 }
 
 
