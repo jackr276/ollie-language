@@ -779,7 +779,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 
 	//Now, we will print all of the active variables that this block has
-	if(block->used_before_definition.internal_array != NULL){
+	if(block->used_before_definition.current_index != 0){
 		printf("(");
 
 		//Run through all of the live variables and print them out
@@ -847,7 +847,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 	printf("}\n");
 
 	//If we have some assigned variables, we will dislay those for debugging
-	if(block->assigned_variables.internal_array != NULL){
+	if(block->assigned_variables.current_index != 0){
 		printf("Assigned: (");
 
 		for(u_int16_t i = 0; i < block->assigned_variables.current_index; i++){
@@ -1892,12 +1892,26 @@ static void add_variable_to_use_set(three_addr_var_t* variable, basic_block_t* b
 		return;
 	}
 
+	//We do not need to bother tracking these variables - they are a sure thing
+	if(variable == instruction_pointer_var || variable == stack_pointer_variable){
+		return;
+	}
+
 	//Update the USE count regardless
 	variable->use_count++;
 
-	//Is the variable temporary? If so we don't care about it
-	if(variable->variable_type == VARIABLE_TYPE_TEMP){
-		return;
+	/**
+	 * If we have variables that are temporary or "memory addresses", then
+	 * they are not going to change so we do not need to track them
+	 */
+	switch(variable->variable_type){
+		case VARIABLE_TYPE_TEMP:
+		case VARIABLE_TYPE_MEMORY_ADDRESS:
+		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+		case VARIABLE_TYPE_LOCAL_CONSTANT:
+			return;
+		default:
+			break;
 	}
 
 	//Extract the two sets we'll be working with
@@ -1910,7 +1924,7 @@ static void add_variable_to_use_set(three_addr_var_t* variable, basic_block_t* b
 		three_addr_var_t* defined = dynamic_array_get_at(def_set, i);
 
 		//It's been defined in this block, so we don't care
-		if(variables_equal_no_ssa(defined, variable, FALSE) == TRUE){
+		if(variables_equal_no_ssa(defined, variable, TRUE) == TRUE){
 			return;
 		}
 	}
@@ -1921,8 +1935,8 @@ static void add_variable_to_use_set(three_addr_var_t* variable, basic_block_t* b
 		//Grab it out
 		three_addr_var_t* used = dynamic_array_get_at(use_set, i);
 
-		//It's been defined in this block, so we don't care
-		if(variables_equal_no_ssa(used, variable, FALSE) == TRUE){
+		//If it's already been used then we don't need to care
+		if(variables_equal_no_ssa(used, variable, TRUE) == TRUE){
 			return;
 		}
 	}
@@ -1943,9 +1957,23 @@ static inline void add_variable_to_def_set(three_addr_var_t* variable, basic_blo
 		return;
 	}
 
-	//Is the variable temporary? If so we don't care about it
-	if(variable->variable_type == VARIABLE_TYPE_TEMP){
+	//We do not need to bother tracking these variables - they are a sure thing
+	if(variable == instruction_pointer_var || variable == stack_pointer_variable){
 		return;
+	}
+
+	/**
+	 * If we have variables that are temporary or "memory addresses", then
+	 * they are not going to change so we do not need to track them
+	 */
+	switch(variable->variable_type){
+		case VARIABLE_TYPE_TEMP:
+		case VARIABLE_TYPE_MEMORY_ADDRESS:
+		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+		case VARIABLE_TYPE_LOCAL_CONSTANT:
+			return;
+		default:
+			break;
 	}
 
 	//Extract the set that we'll be working with
@@ -1957,7 +1985,7 @@ static inline void add_variable_to_def_set(three_addr_var_t* variable, basic_blo
 		three_addr_var_t* defined = dynamic_array_get_at(def_set, i);
 
 		//It's been defined in this block, so we don't care
-		if(variables_equal_no_ssa(defined, variable, FALSE) == TRUE){
+		if(variables_equal_no_ssa(defined, variable, TRUE) == TRUE){
 			return;
 		}
 	}
