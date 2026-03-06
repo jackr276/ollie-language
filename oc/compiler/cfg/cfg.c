@@ -1876,6 +1876,7 @@ static void add_variable_to_use_set(three_addr_var_t* variable, basic_block_t* b
 	switch(variable->variable_type){
 		case VARIABLE_TYPE_TEMP:
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
+		case VARIABLE_TYPE_FUNCTION_ADDRESS:
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
 		case VARIABLE_TYPE_LOCAL_CONSTANT:
 			return;
@@ -1938,6 +1939,7 @@ static inline void add_variable_to_def_set(three_addr_var_t* variable, basic_blo
 	switch(variable->variable_type){
 		case VARIABLE_TYPE_TEMP:
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
+		case VARIABLE_TYPE_FUNCTION_ADDRESS:
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
 		case VARIABLE_TYPE_LOCAL_CONSTANT:
 			return;
