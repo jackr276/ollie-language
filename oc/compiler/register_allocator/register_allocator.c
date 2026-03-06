@@ -665,40 +665,72 @@ static void compute_spill_costs(dynamic_array_t* live_ranges){
 
 /**
  * Add an assigned live range to a block
+ *
+ * DEF[b] <- all live ranges in block b that are assigned in that block
  */
 static void add_assigned_live_range(live_range_t* live_range, basic_block_t* block){
-	//Assigning a live range to a variable means that this variable was *assigned* in the block
-	//Do note that it may very well have also been used, but we do not handle that here
+	/**
+	 * There is no point in tracking uses here - these live ranges are not impacted
+	 * by interference
+	 */
+	if(live_range == stack_pointer_lr || live_range == instruction_pointer_lr){
+		return;
+	} 
+
+	/**
+	 * Assigning a live range to a variable means that this variable was *assigned* in the block
+	 * Do note that it may very well have also been used, but we do not handle that here
+	 */
 	if(dynamic_array_contains(&(block->assigned_variables), live_range) == NOT_FOUND){
 		dynamic_array_add(&(block->assigned_variables), live_range);
 	}
 
-	//Up the assignment count by adding the estimated execution frequency of the block
-	//For example, if the block is in a loop and the loop runs 10 times, this line of
-	//code will end up being executed 10 times instead of 1
+	/**
+	 * Up the assignment count by adding the estimated execution frequency of the block
+	 * For example, if the block is in a loop and the loop runs 10 times, this line of
+	 * code will end up being executed 10 times instead of 1
+	 */
 	live_range->assignment_count += block->estimated_execution_frequency;
 }
 
 
 /**
  * Add a used live range to a block
+ *
+ * USE[b] <- all live ranges in block b that are used *before* they are assigned in that block
  */
-static void add_used_live_range(live_range_t* live_range, basic_block_t* block){
-	//There is no point in tracking uses here - these live ranges are not impacted
-	//by interference
+static void add_used_before_definition_live_range(live_range_t* live_range, basic_block_t* block){
+	/**
+	 * There is no point in tracking uses here - these live ranges are not impacted
+	 * by interference
+	 */
 	if(live_range == stack_pointer_lr || live_range == instruction_pointer_lr){
 		return;
 	} 
 
-	//Assigning a live range to a variable means that this variable was *used* in the block
-	if(dynamic_array_contains(&(block->used_variables), live_range) == NOT_FOUND){
-		dynamic_array_add(&(block->used_variables), live_range);
+	/**
+	 * Up the use count by adding the estimated execution frequency of the block
+	 * For example, if the block is in a loop and the loop runs 10 times, this line of 
+	 * code will end up being executed 10 times instead of 1
+	 */
+	live_range->use_count += block->estimated_execution_frequency;
+
+	/**
+	 * As part of the criteria, we need to ensure that this live range is
+	 * *not* inside of the set of all ranges assigned by that block b
+	 */
+	if(dynamic_array_contains(&(block->assigned_variables), live_range) != NOT_FOUND){
+		return;
 	}
 
-	//Up the use count by adding the estimated execution frequency of the block
-	//For example, if the block is in a loop and the loop runs 10 times, this line of
-	//code will end up being executed 10 times instead of 1
-	live_range->use_count += block->estimated_execution_frequency;
+	/**
+	 * If we've survived all the way down here, the last thing that we need to do 
+	 * is check that this LR isn't already accounted for in the set. If it's not,
+	 * then we'll add it
+	 */
+	if(dynamic_array_contains(&(block->used_before_definition), live_range) == NOT_FOUND){
+		dynamic_array_add(&(block->used_before_definition), live_range);
+	}
 }
 
 
@@ -707,6 +739,9 @@ static void add_used_live_range(live_range_t* live_range, basic_block_t* block){
  */
 static void add_live_now_live_range(live_range_t* live_range, dynamic_array_t* LIVE_NOW){
 	//Don't bother adding these
+	//
+	//TODO is this needed? I don't think so because we already
+	//filter it out in USE/DEF
 	if(live_range == instruction_pointer_lr || live_range == stack_pointer_lr){
 		return;
 	}
