@@ -1109,10 +1109,48 @@ static inline void construct_function_call_live_ranges(dynamic_array_t* general_
 
 
 /**
+ * Reset the used, live in, live out, and assigned arrays in a block
+ */
+static inline void reset_block_variable_tracking(basic_block_t* block){
+	//Let's first wipe everything regarding this block's used and assigned variables. If they don't exist,
+	//we'll allocate them fresh
+	if(block->assigned_variables.internal_array == NULL){
+		block->assigned_variables = dynamic_array_alloc();
+	} else {
+		clear_dynamic_array(&(block->assigned_variables));
+	}
+
+	//Do the same with the used variables
+	if(block->used_before_definition.internal_array == NULL){
+		block->used_before_definition = dynamic_array_alloc();
+	} else {
+		clear_dynamic_array(&(block->used_before_definition));
+	}
+
+	//Reset live in completely
+	if(block->live_in.internal_array != NULL){
+		dynamic_array_dealloc(&(block->live_in));
+	}
+
+	//Reset live out completely
+	if(block->live_out.internal_array != NULL){
+		dynamic_array_dealloc(&(block->live_out));
+	}
+}
+
+
+/**
  * Run through every instruction in a block and construct the live ranges
  *
  * We invoke special processing functions to handle exception cases like phi functions, inc/dec instructions,
  * and function calls
+ *
+ * USE[b]: all live ranges that have been used *before* assignment in block b
+ * DEF[b]: all live ranges that have been assigned in block b
+ *
+ * Note how we always update USE first, and then DEF. This is intentional because we want to
+ * always be sure we're catching cases where something is used before it's defined in the block. That
+ * is the criteria for USE that is eventually going to help us in our liveness analysis
  */
 static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges){
 	//Call the helper API to wipe out any old variable tracking in here
@@ -1196,6 +1234,8 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 		 * the target architecture. Here we can construct our live ranges and exploit any opportunities
 		 * for live range coalescing
 		 */
+
+		//TODO FLIP
 
 		//Handle the destination variable
 		assign_live_range_to_destination_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current);

@@ -190,37 +190,6 @@ static inline void reset_visit_status_for_function(dynamic_array_t* function_blo
 
 
 /**
- * Reset the used, live in, live out, and assigned arrays in a block
- */
-void reset_block_variable_tracking(basic_block_t* block){
-	//Let's first wipe everything regarding this block's used and assigned variables. If they don't exist,
-	//we'll allocate them fresh
-	if(block->assigned_variables.internal_array == NULL){
-		block->assigned_variables = dynamic_array_alloc();
-	} else {
-		clear_dynamic_array(&(block->assigned_variables));
-	}
-
-	//Do the same with the used variables
-	if(block->used_before_definition.internal_array == NULL){
-		block->used_before_definition = dynamic_array_alloc();
-	} else {
-		clear_dynamic_array(&(block->used_before_definition));
-	}
-
-	//Reset live in completely
-	if(block->live_in.internal_array != NULL){
-		dynamic_array_dealloc(&(block->live_in));
-	}
-
-	//Reset live out completely
-	if(block->live_out.internal_array != NULL){
-		dynamic_array_dealloc(&(block->live_out));
-	}
-}
-
-
-/**
  * For any blocks that are completely impossible to reach, we will scrap them all now
  * to avoid any confusion later in the process
  *
