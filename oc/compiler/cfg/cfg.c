@@ -1961,7 +1961,7 @@ static int16_t symtab_record_variable_dynamic_array_contains(dynamic_array_t* va
  * also in the DEF set when we're adding this, because USE specifically is for
  * variables that are used in a block *before* they're defined in the block
  */
-static inline void add_variable_to_use_set(three_addr_var_t* variable, dynamic_array_t* use_set, dynamic_array_t* def_set){
+static void add_variable_to_use_set(three_addr_var_t* variable, basic_block_t* block){
 	//Is the variable NULL? If so then return
 	if(variable == NULL){
 		return;
@@ -1974,6 +1974,10 @@ static inline void add_variable_to_use_set(three_addr_var_t* variable, dynamic_a
 	if(variable->variable_type == VARIABLE_TYPE_TEMP){
 		return;
 	}
+
+	//Extract the two sets we'll be working with
+	dynamic_array_t* def_set = &(block->assigned_variables);
+	dynamic_array_t* use_set = &(block->used_before_definition);
 
 	//Otherwise, let's make sure it's not also in DEF
 	for(u_int32_t i = 0; i < def_set->current_index; i++){
@@ -2001,6 +2005,43 @@ static inline void add_variable_to_use_set(three_addr_var_t* variable, dynamic_a
 	//If we make it all of the way down here, then we can add it
 	dynamic_array_add(use_set, variable);
 }
+
+
+
+/**
+ * Add a variable into the DEF set. Unlike the use set, the only thing that we need to check and make sure of here
+ * is that the variable isn't already in there
+ */
+static inline void add_variable_to_def_set(three_addr_var_t* variable, basic_block_t* block){
+	//Is the variable NULL? If so then return
+	if(variable == NULL){
+		return;
+	}
+
+	//Is the variable temporary? If so we don't care about it
+	if(variable->variable_type == VARIABLE_TYPE_TEMP){
+		return;
+	}
+
+	//Extract the set that we'll be working with
+	dynamic_array_t* def_set = &(block->assigned_variables);
+
+	//Otherwise, let's make sure it's not also in DEF
+	for(u_int32_t i = 0; i < def_set->current_index; i++){
+		//Grab it out
+		three_addr_var_t* defined = dynamic_array_get_at(def_set, i);
+
+		//It's been defined in this block, so we don't care
+		if(variables_equal_no_ssa(defined, variable, FALSE) == TRUE){
+			return;
+		}
+	}
+
+	//If we make it all of the way down here, then we can add it
+	dynamic_array_add(def_set, variable);
+}
+
+
 
 
 /**
@@ -2043,12 +2084,46 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 		//Run through everything
 		while(cursor != NULL){
 			switch(cursor->statement_type){
+				//Function calls have parameters - so special case
+				case THREE_ADDR_CODE_FUNC_CALL:
+					//Run through the params and add them
+					for(u_int32_t _ = 0; _ < cursor->parameters.current_index; _++){
+						//Grab the param out
+						three_addr_var_t* parameter = dynamic_array_get_at(&(cursor->parameters), _);
+
+						//Add it into the USE set
+						add_variable_to_use_set(parameter, block);
+
+					}
+
+					//Add the DEF var in
+					add_variable_to_def_set(cursor->assignee, block);
+
+					break;
+
+
+				//Same for indirect function calls - also have params
+				case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+
+
+					break;
+					
+
+
+
+
 
 
 				//In the default case, we just add the USE/DEF for each 
 				//variable that we can see
 				default:
+					//Op1/Op2 go into use if they exist
+					add_variable_to_use_set(cursor->op1, block);
+					add_variable_to_use_set(cursor->op2, block);
 					
+					//The assignee is in the def set
+					add_variable_to_def_set(cursor->assignee, block);
+					break;
 			}
 
 			//Bump it up
