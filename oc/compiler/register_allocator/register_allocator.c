@@ -737,16 +737,8 @@ static void add_used_before_definition_live_range(live_range_t* live_range, basi
 /**
  * Add a LIVE_NOW live range
  */
-static void add_live_now_live_range(live_range_t* live_range, dynamic_array_t* LIVE_NOW){
-	//Don't bother adding these
-	//
-	//TODO is this needed? I don't think so because we already
-	//filter it out in USE/DEF
-	if(live_range == instruction_pointer_lr || live_range == stack_pointer_lr){
-		return;
-	}
-
-	//Avoid duplicate addition
+static inline void add_live_now_live_range(live_range_t* live_range, dynamic_array_t* LIVE_NOW){
+	//Avoid duplicate addition, that is the only check we need here
 	if(dynamic_array_contains(LIVE_NOW, live_range) == NOT_FOUND){
 		dynamic_array_add(LIVE_NOW, live_range);
 	}
@@ -819,7 +811,7 @@ static live_range_t* assign_live_range_to_variable(dynamic_array_t* live_ranges,
 /**
  * Create the stack pointer live range
  */
-static live_range_t* construct_stack_pointer_live_range(three_addr_var_t* stack_pointer){
+static inline live_range_t* construct_stack_pointer_live_range(three_addr_var_t* stack_pointer){
 	//Before we go any further, we'll construct the live
 	//range for the stack pointer. Special case here - stack pointer has no block
 	live_range_t* stack_pointer_live_range = live_range_alloc(NULL, LIVE_RANGE_CLASS_GEN_PURPOSE);
@@ -848,7 +840,7 @@ static live_range_t* construct_stack_pointer_live_range(three_addr_var_t* stack_
 /**
  * Create the instruction pointer live range
  */
-static live_range_t* construct_instruction_pointer_live_range(three_addr_var_t* instruction_pointer){
+static inline live_range_t* construct_instruction_pointer_live_range(three_addr_var_t* instruction_pointer){
 	//Before we go any further, we'll construct the live
 	//range for the instruction pointer.
 	live_range_t* instruction_pointer_live_range = live_range_alloc(NULL, LIVE_RANGE_CLASS_GEN_PURPOSE);
@@ -886,8 +878,8 @@ static void update_use_assignment_for_destination_variable(instruction_t* instru
 	//If this is the case, then we need to set this new LR as both used and assigned
 	if(is_destination_also_operand(instruction) == TRUE){
 		//Counts as both
-		add_assigned_live_range(live_range, block);
 		add_used_live_range(live_range, block);
+		add_assigned_live_range(live_range, block);
 
 	//If this is being derefenced, then it's not a true assignment, just a use
 	} else if(is_move_instruction_destination_assigned(instruction) == FALSE){
@@ -986,6 +978,7 @@ static inline void assign_live_range_to_source_variable(dynamic_array_t* general
 	//Holder for the live range
 	live_range_t* live_range;
 
+	//Based on the target class we add it
 	switch(target_class){
 		case LIVE_RANGE_CLASS_GEN_PURPOSE:
 			live_range = assign_live_range_to_variable(general_purpose_live_ranges, block, source_variable);
@@ -997,40 +990,7 @@ static inline void assign_live_range_to_source_variable(dynamic_array_t* general
 	}
 
 	//Add this as a used live range
-	add_used_live_range(live_range, block);
-}
-
-
-/**
- * Handle the live range that comes from the source of an instruction
- *
- *
- * TODO DEPRECATE - we don't need this anymore - it was created due to a lack of understanding
- */
-static inline void assign_live_range_to_implicit_source_variable(dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges, basic_block_t* block, three_addr_var_t* source_variable){
-	//Just leave if it's NULL
-	if(source_variable == NULL){
-		return;
-	}
-
-	//What live range class are we after
-	live_range_class_t target_class = get_live_range_class_for_variable(source_variable);
-
-	//Holder for the live range
-	live_range_t* live_range;
-
-	switch(target_class){
-		case LIVE_RANGE_CLASS_GEN_PURPOSE:
-			live_range = assign_live_range_to_variable(general_purpose_live_ranges, block, source_variable);
-			break;
-
-		case LIVE_RANGE_CLASS_SSE:
-			live_range = assign_live_range_to_variable(sse_live_ranges, block, source_variable);
-			break;
-	}
-
-	//Bump the use count by using the blocks estimated execution frequency
-	live_range->use_count += block->estimated_execution_frequency;
+	add_used_before_definition_live_range(live_range, block);
 }
 
 
@@ -1214,13 +1174,6 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 				current = current->next_statement;
 				continue;
 
-			case RET:
-				//Let the helper deal with it
-				assign_live_range_to_implicit_source_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current->source_register);
-				
-				current = current->next_statement;
-				continue;
-
 			/**
 			 * For increment/decrement instructions - the only variable that we have just so happens to also
 			 * be the source. As such, we need to ensure that both of these end up in the same live range
@@ -1281,6 +1234,7 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 
 		//Handle the destination variable
 		assign_live_range_to_destination_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current);
+
 
 		//Advance it down
 		current = current->next_statement;
@@ -2369,8 +2323,9 @@ static void precolor_function(basic_block_t* function_entry, dynamic_array_t* ge
  * 			 must guarantee that any LR in here is not in DEF[b]
  * DEF[b] <- all live ranges in block b that are defined in the block
  *
- *
- * TODO WRONG - look at CFG algorithm for how we really need to be doing this
+ * It is very important that we handle all source registers *first* to accurately capture
+ * whether or not an LR is being used before it's assigned. If we did the destinations first,
+ * we may end up inaccurately thinking that an LR is assigned before use when it is not
  */
 static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 	//We can reset these completely
@@ -2387,6 +2342,8 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 			case PHI_FUNCTION:
 				break;
 				
+			//These instructions have assignees who are also used. We always
+			//count the RHS(uses) first before the assignments
 			case INCB:
 			case INCW:
 			case INCL:
@@ -2396,41 +2353,67 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 			case DECL:
 			case DECQ:
 			case PXOR_CLEAR:
-				//This counts as both an assignment and a use
-				add_used_live_range(cursor->destination_register->associated_live_range, block);
+				//The use comes first
+				add_used_before_definition_live_range(cursor->destination_register->associated_live_range, block);
+
+				//And then the assignment
 				add_assigned_live_range(cursor->destination_register->associated_live_range, block);
+
+				break;
+
+			case CALL:
+				break;
+
+
+			case INDIRECT_CALL:
 				break;
 
 			default:
-				//Handle destination 2(this is rare but we have it sometimes) - these should go after the use calc
+				//Add all of the source *first*
+				if(cursor->source_register != NULL){
+					add_used_before_definition_live_range(cursor->source_register->associated_live_range, block);
+				}
+
+				if(cursor->source_register2 != NULL){
+					add_used_before_definition_live_range(cursor->source_register2->associated_live_range, block);
+				}
+
+				if(cursor->address_calc_reg1 != NULL){
+					add_used_before_definition_live_range(cursor->address_calc_reg1->associated_live_range, block);
+				}
+
+				if(cursor->address_calc_reg2 != NULL){
+					add_used_before_definition_live_range(cursor->address_calc_reg1->associated_live_range, block);
+				}
+
+				/**
+				 * Now handle the destination registers. For the second destination this is easy because
+				 * it can only ever be assigned. For the first destination, there is some nuance
+				 * because it can be treated as an operand also
+				 */
+				if(cursor->destination_register != NULL){
+					//Extract
+					live_range_t* destination_lr = cursor->destination_register->associated_live_range;
+
+					//Hanld
+					if(is_destination_also_operand(instruction) == TRUE){
+						//Counts as both
+						add_used_live_range(live_range, block);
+						add_assigned_live_range(live_range, block);
+
+					//If this is being derefenced, then it's not a true assignment, just a use
+					} else if(is_move_instruction_destination_assigned(instruction) == FALSE){
+						add_used_live_range(live_range, block);
+
+					//If we get all the way to here, then it was truly assigned
+					} else {
+						add_assigned_live_range(live_range, block);
+				}
+
 				if(cursor->destination_register2 != NULL){
 					add_assigned_live_range(cursor->destination_register2->associated_live_range, block);
 				}
 
-				//And then the usual procedure for source1 
-				if(cursor->source_register != NULL){
-					add_used_live_range(cursor->source_register->associated_live_range, block);
-				}
-
-				//And then the usual procedure for source2
-				if(cursor->source_register2 != NULL){
-					add_used_live_range(cursor->source_register2->associated_live_range, block);
-				}
-
-				//And then the usual procedure for the address calc reg
-				if(cursor->address_calc_reg1 != NULL){
-					add_used_live_range(cursor->address_calc_reg1->associated_live_range, block);
-				}
-
-				//And then the usual procedure for the address calc reg
-				if(cursor->address_calc_reg2 != NULL){
-					add_used_live_range(cursor->address_calc_reg2->associated_live_range, block);
-				}
-
-				//Handle destination 1 - these should go after the use calc
-				if(cursor->destination_register != NULL){
-					update_use_assignment_for_destination_variable(cursor, block);
-				}
 					
 				break;
 		}
@@ -4525,12 +4508,6 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	 *
 	 * We will need to do this every single time we reallocate. This is also a "2-for-1",
 	 * meaning that it will count for both general purpose and SSE registers
-	 *
-	 *
-	 *
-	 * TODO - this is currently *100% WRONG*
-	 *
-	 * USE[B] - the set of all variables that are *used before definition* inside of a block
 	*/
 	calculate_live_range_liveness_sets(function_entry);
 
