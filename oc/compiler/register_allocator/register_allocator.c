@@ -1202,7 +1202,7 @@ static void calculate_live_range_liveness_sets(basic_block_t* function_entry_blo
 
 			//Since we need all of the used variables, we'll just clone this
 			//dynamic array so that we start off with them all
-			current->live_in = clone_dynamic_array(&(current->used_variables));
+			current->live_in = clone_dynamic_array(&(current->used_before_definition));
 
 			//Now we need to add every variable that is in LIVE_OUT but NOT in assigned
 			for(u_int16_t j = 0; j  < current->live_out.current_index; j++){
@@ -2847,7 +2847,8 @@ static void handle_source_spill(dynamic_array_t* live_ranges, three_addr_var_t* 
 		dynamic_array_add(live_ranges, *currently_spilled);
 
 		//We can put the dummy in now
-		assign_live_range_to_variable(*currently_spilled, dummy);
+		dynamic_array_add(&((*currently_spilled)->variables), dummy);
+		dummy->associated_live_range = *currently_spilled;
 
 		//Handle the load instruction
 		instruction_t* load_instruction = emit_load_instruction(dummy, stack_pointer, type_symtab, offset);
@@ -2856,8 +2857,10 @@ static void handle_source_spill(dynamic_array_t* live_ranges, three_addr_var_t* 
 		insert_instruction_before_given(load_instruction, target);
 	}
 
-	//No matter what happened there, the target source now points to this new currently spilled LR
-	assign_live_range_to_variable(*currently_spilled, target_source);
+
+	//We can put the dummy in now
+	dynamic_array_add(&((*currently_spilled)->variables), target_source);
+	target_source->associated_live_range = *currently_spilled;
 }
 
 
