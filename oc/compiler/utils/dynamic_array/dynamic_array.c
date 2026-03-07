@@ -122,7 +122,7 @@ int16_t dynamic_array_contains(dynamic_array_t* array, void* ptr){
 	}
 
 	//We'll run through the entire array, comparing pointer by pointer
-	for(u_int16_t i = 0; i < array->current_index; i++){
+	for(u_int32_t i = 0; i < array->current_index; i++){
 		//If we find an exact memory address match return true
 		if(array->internal_array[i] == ptr){
 			return i;

@@ -811,6 +811,25 @@ static inline live_range_t* find_live_range_with_variable(dynamic_array_t* live_
 
 
 /**
+ * Insert a variable into the Live Range and do any bookkeeping required
+ */
+static inline void add_variable_to_live_range(live_range_t* live_range, three_addr_var_t* variable){
+	//Add the variable into the set of all variables 
+	if(dynamic_array_contains(&(live_range->variables), variable) == NOT_FOUND){
+		dynamic_array_add(&(live_range->variables), variable);
+	}
+
+	//Make this link as well
+	variable->associated_live_range = live_range;
+
+	//Assign this over too
+	if(variable->class_relative_parameter_order != 0){
+		live_range->class_relative_function_parameter_order = variable->class_relative_parameter_order;
+	}
+}
+
+
+/**
  * Get a live range for this variable. We either find an existing live range that is
  * appropriate and add the variable to it, or we create an entirely new live range
  *
@@ -847,13 +866,7 @@ static void assign_live_range_to_variable(dynamic_array_t* SSE_live_ranges, dyna
 			 * we will now add the variable to this live range and
 			 * associate the live range with the varibale
 			 */
-			dynamic_array_add(&(live_range->variables), variable);
-			variable->associated_live_range = live_range;
-
-			//Assign this over too
-			if(variable->class_relative_parameter_order != 0){
-				live_range->class_relative_function_parameter_order = variable->class_relative_parameter_order;
-			}
+			add_variable_to_live_range(live_range, variable);
 
 			break;
 
@@ -874,13 +887,7 @@ static void assign_live_range_to_variable(dynamic_array_t* SSE_live_ranges, dyna
 			 * we will now add the variable to this live range and
 			 * associate the live range with the varibale
 			 */
-			dynamic_array_add(&(live_range->variables), variable);
-			variable->associated_live_range = live_range;
-
-			//Assign this over too
-			if(variable->class_relative_parameter_order != 0){
-				live_range->class_relative_function_parameter_order = variable->class_relative_parameter_order;
-			}
+			add_variable_to_live_range(live_range, variable);
 
 			break;
 	}
@@ -892,9 +899,53 @@ static void assign_live_range_to_variable(dynamic_array_t* SSE_live_ranges, dyna
  * do with updating the USE/DEF for the LR, that comes after
  */
 static inline void handle_live_ranges_for_instruction(dynamic_array_t* SSE_live_ranges, dynamic_array_t* gp_live_ranges, basic_block_t* block, instruction_t* instruction){
-	//We don't care about phi functions, just live
-	if(instruction->instruction_type == PHI_FUNCTION){
-		return;
+	//Go based on the type for some special exceptions
+	switch(instruction->instruction_type){
+		//Skip it entirely
+		case PHI_FUNCTION:
+			return;
+
+		/**
+		 * These instructions are special cases because they only have one 
+		 * operand that acts both as a source and a destination. Due to this,
+		 * we need to make sure that the source and destination belong to the
+		 * same LR
+		 */
+		case INCB:
+		case INCW:
+		case INCL:
+		case INCQ:
+		case DECB:
+		case DECW:
+		case DECL:
+		case DECQ:
+		case NEGB:
+		case NEGW:
+		case NEGL:
+		case NEGQ:
+			//For non-temp vars, this should take care of itself
+			if(instruction->destination_register->variable_type == VARIABLE_TYPE_NON_TEMP){
+				assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->destination_register);
+				assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->source_register);
+
+			//For temp vars, we have to cook the books a bit
+			} else {
+				//Do the destination first
+				assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->destination_register);
+
+				//Get his LR out
+				live_range_t* lr = instruction->destination_register->associated_live_range;
+
+				//Doing this ensures that we always share LRs between souce and dest
+				add_variable_to_live_range(lr, instruction->source_register);
+			}
+
+			//Completely done after this
+			return;
+
+		//We'll be using the default rules
+		default:
+			break;
 	}
 
 	/**
