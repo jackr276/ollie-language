@@ -967,9 +967,13 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 			case DECW:
 			case DECL:
 			case DECQ:
+			case NEGB:
+			case NEGW:
+			case NEGL:
+			case NEGQ:
 			case PXOR_CLEAR:
 				//The use comes first
-				add_live_range_to_use_set(current->destination_register->associated_live_range, basic_block);
+				add_live_range_to_use_set(current->source_register->associated_live_range, basic_block);
 
 				//And then the assignment
 				add_live_range_to_def_set(current->destination_register->associated_live_range, basic_block);
@@ -2190,9 +2194,13 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 			case DECW:
 			case DECL:
 			case DECQ:
+			case NEGB:
+			case NEGW:
+			case NEGL:
+			case NEGQ:
 			case PXOR_CLEAR:
 				//The use comes first
-				add_live_range_to_use_set(cursor->destination_register->associated_live_range, block);
+				add_live_range_to_use_set(cursor->source_register->associated_live_range, block);
 
 				//And then the assignment
 				add_live_range_to_def_set(cursor->destination_register->associated_live_range, block);

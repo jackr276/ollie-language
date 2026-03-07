@@ -3336,6 +3336,14 @@ static void print_inc_instruction(FILE* fl, instruction_t* instruction, variable
 	}
 
 	print_variable(fl, instruction->destination_register, mode);
+
+	//Show this if we're in the intermediate mode
+	if(mode == PRINTING_LIVE_RANGES){
+		printf(" /* SOURCE ");
+		print_variable(fl, instruction->source_register, mode);
+		printf(" */ ");
+	}
+
 	fprintf(fl, "\n");
 }
 
@@ -3396,6 +3404,14 @@ static void print_dec_instruction(FILE* fl, instruction_t* instruction, variable
 	}
 
 	print_variable(fl, instruction->destination_register, mode);
+
+	//Show this if we're in the intermediate mode
+	if(mode == PRINTING_LIVE_RANGES){
+		printf(" /* SOURCE ");
+		print_variable(fl, instruction->source_register, mode);
+		printf(" */ ");
+	}
+
 	fprintf(fl, "\n");
 }
 
@@ -3670,6 +3686,13 @@ static void print_neg_instruction(FILE* fl, instruction_t* instruction, variable
 
 	//Now we'll print out the destination register
 	print_variable(fl, instruction->destination_register, mode);
+
+	//Show this if we're in the intermediate mode
+	if(mode == PRINTING_LIVE_RANGES){
+		printf(" /* SOURCE ");
+		print_variable(fl, instruction->source_register, mode);
+		printf(" */ ");
+	}
 
 	//And give it a newlinw and we're done
 	fprintf(fl, "\n");
