@@ -817,7 +817,12 @@ static inline live_range_t* find_live_range_with_variable(dynamic_array_t* live_
  * This function does *not* deal with anything related to USE/DEF set addition. That
  * is an entirely separate procedure
  */
-static inline void assign_live_range_to_variable(dynamic_array_t* SSE_live_ranges, dynamic_array_t* gp_live_ranges, basic_block_t* block, three_addr_var_t* variable){
+static void assign_live_range_to_variable(dynamic_array_t* SSE_live_ranges, dynamic_array_t* gp_live_ranges, basic_block_t* block, three_addr_var_t* variable){
+	//If it's NULL then just get out
+	if(variable == NULL){
+		return;
+	}
+
 	live_range_t* live_range;
 
 	//Get the live range class - is it SSE or GP?
@@ -876,16 +881,28 @@ static inline void assign_live_range_to_variable(dynamic_array_t* SSE_live_range
  * Handle the pure assignment/creation of live ranges in an instruction. This does *not* have anything to
  * do with updating the USE/DEF for the LR, that comes after
  */
-static inline void handle_live_ranges_for_instruction(instruction_t* instruction){
+static inline void handle_live_ranges_for_instruction(dynamic_array_t* SSE_live_ranges, dynamic_array_t* gp_live_ranges, basic_block_t* block, instruction_t* instruction){
 	//We don't care about phi functions, just live
 	if(instruction->instruction_type == PHI_FUNCTION){
 		return;
 	}
 
-	//Get all of the variables inside of this instruction to have a live range
-	//associated with them
-	
-	if(instruction->source_register != NULL){
+	/**
+	 * For each of the variables, we will try to assign a live range to it
+	 */
+	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->source_register);
+	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->source_register2);
+	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->address_calc_reg1);
+	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->address_calc_reg2);
+	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->destination_register);
+	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->destination_register2);
+
+	/**
+	 * There may be function params. If there are just spin through and handle them
+	 */
+	for(u_int32_t i = 0; i < instruction->parameters.current_index; i++){
+		three_addr_var_t* parameter = dynamic_array_get_at(&(instruction->parameters), i);
+		assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, parameter);
 	}
 }
 
@@ -913,79 +930,135 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 
 	//Run through every instruction in the block
 	while(current != NULL){
+		/**
+		 * The first thing that we need to do is just get the live ranges added for the function, and that's all
+		 */
+		handle_live_ranges_for_instruction(sse_live_ranges, general_purpose_live_ranges, basic_block, current);
 
-		//TODO - assign all of the LRs first, then do USE/DEF assignment
-		handle_live_ranges_for_instruction(current);
-
-
-
-
-
-
-		//Handle special cases
+		/**
+		 * Once every variable that we may care about has a live range associated to it, we can now hitch
+		 * a ride on this and update any/all USE/DEf live-ranges based on the kind of instruciton that
+		 * we have
+		 */
 		switch(current->instruction_type){
-			/**
-			 * For phi functions, we will simply mark that the variable has been assigned and create
-			 * the appropriate live range. We do not need to mark anything else here
-			 */
+			//For a phi-function we can skip it, it won't affect us
 			case PHI_FUNCTION:
-				construct_phi_function_live_range(general_purpose_live_ranges, sse_live_ranges, basic_block, current);
 				break;
-
+				
 			/**
-			 * For increment/decrement instructions - the only variable that we have just so happens to also
-			 * be the source. As such, we need to ensure that both of these end up in the same live range
+			 * These instructions have assignees who are also used. We always
+			 * count the RHS(uses) first before the assignments
 			 */
 			case INCB:
+			case INCW:
 			case INCL:
 			case INCQ:
-			case INCW:
-			case DECQ:
-			case DECL:
-			case DECW:
 			case DECB:
-			case NEGB:
-			case NEGW:
-			case NEGL:
-			case NEGQ:
-				construct_inc_dec_neg_live_range(general_purpose_live_ranges, sse_live_ranges, basic_block, current);
-				break;
-
-			//Specialized instruction, let the helper do it
+			case DECW:
+			case DECL:
+			case DECQ:
 			case PXOR_CLEAR:
-				construct_pxor_clear_live_range(general_purpose_live_ranges, sse_live_ranges, basic_block, current);
+				//The use comes first
+				add_live_range_to_use_set(current->destination_register->associated_live_range, basic_block);
+
+				//And then the assignment
+				add_live_range_to_def_set(current->destination_register->associated_live_range, basic_block);
+
 				break;
 
 			/**
-			 * Calls have hidden params that we need to account for
+			 * Function calls have a destination that was assigned and parameters that need
+			 * to be accounted for. Like always, we *must* handle the sources before the destination
 			 */
 			case CALL:
-				construct_function_call_live_ranges(general_purpose_live_ranges, sse_live_ranges, basic_block, current);
+				//Do all of the parameters first
+				for(u_int32_t i = 0; i < current->parameters.current_index; i++){
+					three_addr_var_t* parameter = dynamic_array_get_at(&(current->parameters), i);
+
+					//This should never be null so we don't need to check
+					add_live_range_to_use_set(parameter->associated_live_range, basic_block);
+				}
+
+				//Now the destination if one exists
+				if(current->destination_register != NULL){
+					add_live_range_to_def_set(current->destination_register->associated_live_range, basic_block);
+				}
+
 				break;
 
 			/**
-			 * Indirect calls have hidden params that we need to account for
+			 * Indirect function calls have a destination that was assigned and parameters that need
+			 * to be accounted for, as well as a source register that holds the function pointer for
+			 * us. Like always, we *must* handle the sources before the destination
 			 */
 			case INDIRECT_CALL:
+				//Handle the function pointer
+				add_live_range_to_use_set(current->source_register->associated_live_range, basic_block);
+
+				//Do all of the parameters first
+				for(u_int32_t i = 0; i < current->parameters.current_index; i++){
+					three_addr_var_t* parameter = dynamic_array_get_at(&(current->parameters), i);
+
+					//This should never be null so we don't need to check
+					add_live_range_to_use_set(parameter->associated_live_range, basic_block);
+				}
+
+				//Now the destination if one exists
+				if(current->destination_register != NULL){
+					add_live_range_to_def_set(current->destination_register->associated_live_range, basic_block);
+				}
+
 				break;
 
-			/**
-			 * If we make it here, we know that we have a normal instruction that exists on
-			 * the target architecture. Here we can construct our live ranges and exploit any opportunities
-			 * for live range coalescing
-			 */
 			default:
-				assign_live_range_to_source_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current->source_register);
-				assign_live_range_to_source_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current->source_register2);
-				assign_live_range_to_source_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current->address_calc_reg1);
-				assign_live_range_to_source_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current->address_calc_reg2);
+				//Add all of the source *first*
+				if(current->source_register != NULL){
+					add_live_range_to_use_set(current->source_register->associated_live_range, basic_block);
+				}
 
-				//The destintation variable absolutely *must* come last. This is to avoid incorrectly adding it to the DEF set prematurely
-				assign_live_range_to_destination_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current);
+				if(current->source_register2 != NULL){
+					add_live_range_to_use_set(current->source_register2->associated_live_range, basic_block);
+				}
 
-				//Account for the potential second destination variable too
-				assign_live_range_to_second_destination_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current->destination_register2);
+				if(current->address_calc_reg1 != NULL){
+					add_live_range_to_use_set(current->address_calc_reg1->associated_live_range, basic_block);
+				}
 
+				if(current->address_calc_reg2 != NULL){
+					add_live_range_to_use_set(current->address_calc_reg1->associated_live_range, basic_block);
+				}
+
+				/**
+				 * Now handle the destination registers. For the second destination this is easy because
+				 * it can only ever be assigned. For the first destination, there is some nuance
+				 * because it can be treated as an operand also
+				 */
+				if(current->destination_register != NULL){
+					live_range_t* destination_lr = current->destination_register->associated_live_range;
+
+					/**
+					 * Handle the case where it's also an operand(think add, sub, etc). If this is
+					 * the case, then it is essential that the use comes first
+					 */
+					if(is_destination_also_operand(current) == TRUE){
+						add_live_range_to_use_set(destination_lr, basic_block);
+						add_live_range_to_def_set(destination_lr, basic_block);
+
+					///Handle the case where we have something that is not a true assignment, just a use
+					} else if(is_move_instruction_destination_assigned(current) == FALSE){
+						add_live_range_to_use_set(destination_lr, basic_block);
+
+					//If we get all the way to here, then it was truly assigned
+					} else {
+						add_live_range_to_def_set(destination_lr, basic_block);
+					}
+				}
+
+				//This one is easier, if it's not null then it was assigned
+				if(current->destination_register2 != NULL){
+					add_live_range_to_def_set(current->destination_register2->associated_live_range, basic_block);
+				}
+					
 				break;
 		}
 
