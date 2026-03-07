@@ -57,6 +57,29 @@ dynamic_array_t emitted_consts;
 
 
 /**
+ * A helper function that converts a variable type to a string for debugging
+ */
+const char* variable_type_to_string(variable_type_t type){
+	switch(type){
+		case VARIABLE_TYPE_FUNCTION_ADDRESS:
+			return "VARIABLE_TYPE_FUNCTION_ADDRESS";
+		case VARIABLE_TYPE_MEMORY_ADDRESS:
+			return "VARIABLE_TYPE_MEMORY_ADDRESS";
+		case VARIABLE_TYPE_TEMP:
+			return "VARIABLE_TYPE_TEMP";
+		case VARIABLE_TYPE_LOCAL_CONSTANT:
+			return "VARIABLE_TYPE_LOCAL_CONSTANT";
+		case VARIABLE_TYPE_NON_TEMP:
+			return "VARIABLE_TYPE_NON_TEMP";
+		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+			return "VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS";
+		default:
+			return "INVALID VARIABLE TYPE";
+	}
+}
+
+
+/**
  * Initialize the memory management system
  */
 void initialize_varible_and_constant_system(){
@@ -3313,6 +3336,14 @@ static void print_inc_instruction(FILE* fl, instruction_t* instruction, variable
 	}
 
 	print_variable(fl, instruction->destination_register, mode);
+
+	//Show this if we're in the intermediate mode
+	if(mode == PRINTING_LIVE_RANGES){
+		printf(" /* SOURCE ");
+		print_variable(fl, instruction->source_register, mode);
+		printf(" */ ");
+	}
+
 	fprintf(fl, "\n");
 }
 
@@ -3373,6 +3404,14 @@ static void print_dec_instruction(FILE* fl, instruction_t* instruction, variable
 	}
 
 	print_variable(fl, instruction->destination_register, mode);
+
+	//Show this if we're in the intermediate mode
+	if(mode == PRINTING_LIVE_RANGES){
+		printf(" /* SOURCE ");
+		print_variable(fl, instruction->source_register, mode);
+		printf(" */ ");
+	}
+
 	fprintf(fl, "\n");
 }
 
@@ -3647,6 +3686,13 @@ static void print_neg_instruction(FILE* fl, instruction_t* instruction, variable
 
 	//Now we'll print out the destination register
 	print_variable(fl, instruction->destination_register, mode);
+
+	//Show this if we're in the intermediate mode
+	if(mode == PRINTING_LIVE_RANGES){
+		printf(" /* SOURCE ");
+		print_variable(fl, instruction->source_register, mode);
+		printf(" */ ");
+	}
 
 	//And give it a newlinw and we're done
 	fprintf(fl, "\n");

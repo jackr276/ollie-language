@@ -354,6 +354,12 @@ struct instruction_t{
 	} push_or_pop_reg;
 };
 
+
+/**
+ * A helper function that converts a variable type to a string for debugging
+ */
+const char* variable_type_to_string(variable_type_t type);
+
 /**
  * Initialize the memory management system
  */

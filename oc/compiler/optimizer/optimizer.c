@@ -358,13 +358,14 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 	}
 
 	//Run through everything here
-	for(u_int16_t _ = 0; _ < current_function_blocks->current_index; _++){
+	for(u_int32_t _ = 0; _ < current_function_blocks->current_index; _++){
 		//Grab the block out
 		basic_block_t* block = dynamic_array_get_at(current_function_blocks, _);
 
 		//This is always where we start
 		instruction_t* stmt = block->exit_statement;
 
+		//Our logic is based on the variable type
 		switch(variable->variable_type){
 			case VARIABLE_TYPE_NON_TEMP:
 			case VARIABLE_TYPE_MEMORY_ADDRESS:
@@ -423,7 +424,7 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 				break;
 
 			default:
-				printf("Fatal internal compiler error: attempting to mark invalid variable type\n");
+				printf("Fatal internal compiler error: attempting to mark invalid variable type: %s\n", variable_type_to_string(variable->variable_type));
 				exit(1);
 		}
 	}
@@ -1108,6 +1109,25 @@ static void mark_and_add_definition_block_local(instruction_t* starting_point, t
 		return;
 	}
 
+	//There is no point in trying to mark a variable like this, we will
+	//never find the definition since they exist by default
+	if(variable == stack_pointer_variable
+		|| variable == instruction_pointer_variable
+		|| variable->variable_type == VARIABLE_TYPE_LOCAL_CONSTANT
+		|| variable->variable_type == VARIABLE_TYPE_FUNCTION_ADDRESS
+		|| variable->variable_type == VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS){
+		return;
+	}
+
+	/**
+	 * If this variable has a stack region, then we will be marking
+	 * said stack region. We know that this discriminating union is a stack
+	 * region because of the if-check above that rules out local constants
+	 */
+	if(variable->associated_memory_region.stack_region != NULL){
+		mark_stack_region(variable->associated_memory_region.stack_region);
+	}
+
 	//Grab a cursor
 	instruction_t* cursor = starting_point;
 
@@ -1172,7 +1192,7 @@ static void mark_and_add_definition_block_local(instruction_t* starting_point, t
 			break;
 
 		default:
-			printf("Fatal internal compiler error: attempting to mark invalid variable type\n");
+			printf("Fatal internal compiler error: attempting to mark invalid variable type: %s\n", variable_type_to_string(variable->variable_type));
 			exit(1);
 	}
 }
@@ -1891,9 +1911,6 @@ static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* f
 
 		//Throw it into the block
 		add_statement(original_block, test);
-
-		//This now counts as a use
-		add_used_variable(original_block, first_half_cursor->assignee);
 	}
 
 	//Determine an appropriate branch. Remember, if this *fails* the if condition
@@ -1932,9 +1949,6 @@ static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* f
 
 		//Throw it into the block
 		add_statement(second_half_block, test);
-
-		//This now counts as a use
-		add_used_variable(original_block, second_half_cursor->assignee);
 	}
 
 	//Determine the appropriate inverse jump here
@@ -2074,9 +2088,6 @@ static void optimize_logical_or_branch_logic(symtab_function_record_t* function,
 
 		//Throw it into the block
 		add_statement(original_block, test);
-
-		//This now counts as a use
-		add_used_variable(original_block, first_half_cursor->assignee);
 	}
 
 	//Determine an appropriate branch. Remember, if this *fails* the if condition
@@ -2115,9 +2126,6 @@ static void optimize_logical_or_branch_logic(symtab_function_record_t* function,
 
 		//Throw it into the block
 		add_statement(second_half_block, test);
-
-		//This now counts as a use
-		add_used_variable(original_block, second_half_cursor->assignee);
 	}
 
 	//Determine an appropriate branch. Remember, if this *succeeds* the if condition
@@ -2257,9 +2265,6 @@ static void optimize_logical_and_inverse_branch_logic(symtab_function_record_t* 
 
 		//Throw it into the block
 		add_statement(original_block, test);
-
-		//This now counts as a use
-		add_used_variable(original_block, first_half_cursor->assignee);
 	}
 
 	//Determine the appropriate branch using an inverse jump
@@ -2297,9 +2302,6 @@ static void optimize_logical_and_inverse_branch_logic(symtab_function_record_t* 
 
 		//Throw it into the block
 		add_statement(second_half_block, test);
-
-		//This now counts as a use
-		add_used_variable(original_block, second_half_cursor->assignee);
 	}
 
 	//Determine the appropriate branch using an inverse jump
@@ -2439,9 +2441,6 @@ static void optimize_logical_and_branch_logic(symtab_function_record_t* function
 
 		//Throw it into the block
 		add_statement(original_block, test);
-
-		//This now counts as a use
-		add_used_variable(original_block, first_half_cursor->assignee);
 	}
 
 	//Determine an appropriate branch. Remember, if this *fails* the if condition
@@ -2480,9 +2479,6 @@ static void optimize_logical_and_branch_logic(symtab_function_record_t* function
 
 		//Throw it into the block
 		add_statement(second_half_block, test);
-
-		//This now counts as a use
-		add_used_variable(original_block, second_half_cursor->assignee);
 	}
 
 	//Determine an appropriate branch. Remember, if this *succeeds* the if condition

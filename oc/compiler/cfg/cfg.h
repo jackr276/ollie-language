@@ -98,8 +98,9 @@ struct basic_block_t{
 	//For convenience here. This is the successor that we use to
 	//"drill" to the bottom
 	basic_block_t* direct_successor;
-	//The array of used variables
-	dynamic_array_t used_variables;
+	//The set of "used_before_definition" defines all variables that were used
+	//before they were assigned in the block
+	dynamic_array_t used_before_definition;
 	//The array of all assigned variables
 	dynamic_array_t assigned_variables;
 	//The blocks dominance frontier
@@ -152,29 +153,10 @@ struct basic_block_t{
 
 
 /**
- * Reset the used, live in, live out, and assigned arrays in a block
- */
-void reset_block_variable_tracking(basic_block_t* block);
-
-/**
  * Build the entire CFG from the AST. This function returns the CFG struct, which
  * always has the root block
  */
 cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_int32_t* num_warnings);
-
-/**
- * A simple helper function that allows us to add an assigned-to variable into the block's
- * header. It is important to note that only actual variables(not temp variables) count
- * as live
- */
-void add_assigned_variable(basic_block_t* basic_block, three_addr_var_t* var);
-
-/**
- * A simple helper function that allows us to add a used variable into the block's
- * header. It is important to note that only actual variables(not temp variables) count
- * as live
- */
-void add_used_variable(basic_block_t* basic_block, three_addr_var_t* var);
 
 /**
  * Add a statement to the basic block
