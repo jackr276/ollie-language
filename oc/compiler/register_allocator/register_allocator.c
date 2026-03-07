@@ -2342,8 +2342,10 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 			case PHI_FUNCTION:
 				break;
 				
-			//These instructions have assignees who are also used. We always
-			//count the RHS(uses) first before the assignments
+			/**
+			 * These instructions have assignees who are also used. We always
+			 * count the RHS(uses) first before the assignments
+			 */
 			case INCB:
 			case INCW:
 			case INCL:
@@ -2361,11 +2363,48 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 
 				break;
 
+			/**
+			 * Function calls have a destination that was assigned and parameters that need
+			 * to be accounted for. Like always, we *must* handle the sources before the destination
+			 */
 			case CALL:
+				//Do all of the parameters first
+				for(u_int32_t i = 0; i < cursor->parameters.current_index; i++){
+					three_addr_var_t* parameter = dynamic_array_get_at(&(cursor->parameters), i);
+
+					//This should never be null so we don't need to check
+					add_used_before_definition_live_range(parameter->associated_live_range, block);
+				}
+
+				//Now the destination if one exists
+				if(cursor->destination_register != NULL){
+					add_assigned_live_range(cursor->destination_register->associated_live_range, block);
+				}
+
 				break;
 
-
+			/**
+			 * Indirect function calls have a destination that was assigned and parameters that need
+			 * to be accounted for, as well as a source register that holds the function pointer for
+			 * us. Like always, we *must* handle the sources before the destination
+			 */
 			case INDIRECT_CALL:
+				//Handle the function pointer
+				add_used_before_definition_live_range(cursor->source_register->associated_live_range, block);
+
+				//Do all of the parameters first
+				for(u_int32_t i = 0; i < cursor->parameters.current_index; i++){
+					three_addr_var_t* parameter = dynamic_array_get_at(&(cursor->parameters), i);
+
+					//This should never be null so we don't need to check
+					add_used_before_definition_live_range(parameter->associated_live_range, block);
+				}
+
+				//Now the destination if one exists
+				if(cursor->destination_register != NULL){
+					add_assigned_live_range(cursor->destination_register->associated_live_range, block);
+				}
+
 				break;
 
 			default:
@@ -2392,28 +2431,30 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 				 * because it can be treated as an operand also
 				 */
 				if(cursor->destination_register != NULL){
-					//Extract
 					live_range_t* destination_lr = cursor->destination_register->associated_live_range;
 
-					//Hanld
-					if(is_destination_also_operand(instruction) == TRUE){
-						//Counts as both
-						add_used_live_range(live_range, block);
-						add_assigned_live_range(live_range, block);
+					/**
+					 * Handle the case where it's also an operand(think add, sub, etc). If this is
+					 * the case, then it is essential that the use comes first
+					 */
+					if(is_destination_also_operand(cursor) == TRUE){
+						add_used_before_definition_live_range(destination_lr, block);
+						add_assigned_live_range(destination_lr, block);
 
-					//If this is being derefenced, then it's not a true assignment, just a use
-					} else if(is_move_instruction_destination_assigned(instruction) == FALSE){
-						add_used_live_range(live_range, block);
+					///Handle the case where we have something that is not a true assignment, just a use
+					} else if(is_move_instruction_destination_assigned(cursor) == FALSE){
+						add_used_before_definition_live_range(destination_lr, block);
 
 					//If we get all the way to here, then it was truly assigned
 					} else {
-						add_assigned_live_range(live_range, block);
+						add_assigned_live_range(destination_lr, block);
+					}
 				}
 
+				//This one is easier, if it's not null then it was assigned
 				if(cursor->destination_register2 != NULL){
 					add_assigned_live_range(cursor->destination_register2->associated_live_range, block);
 				}
-
 					
 				break;
 		}
