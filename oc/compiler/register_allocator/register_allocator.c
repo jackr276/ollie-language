@@ -61,256 +61,7 @@ typedef enum {
 } coalescence_result_t;
 
 
-/**
- * Crawl the data area and search for an exact pointer match. If there's not an exact
- * match, then NULL will be returned
- */
-static inline stack_region_t* get_stack_region_for_live_range(stack_data_area_t* data_area, live_range_t* lr){
-	for(u_int16_t i = 0; i < data_area->stack_regions.current_index; i++){
-		//Extract it
-		stack_region_t* region = dynamic_array_get_at(&(data_area->stack_regions), i);
-
-		//We need an exact memory address match. Anything short and
-		//this does not count
-		if(region->variable_referenced == lr){
-			return region;
-		}
-	}
-
-	//If we make it all the way down here, we found nothing so return NULL
-	return NULL;
-}
-
-
-/**
- * Does a live range for a given variable already exist? If so, we'll need to 
- * coalesce the two live ranges in a union
- *
- * Returns NULL if we found nothing
- */
-static inline live_range_t* find_live_range_with_variable(dynamic_array_t* live_ranges, three_addr_var_t* variable){
-	//Run through all of the live ranges that we currently have
-	for(u_int16_t _ = 0; _ < live_ranges->current_index; _++){
-		//Grab the given live range out
-		live_range_t* current = dynamic_array_get_at(live_ranges, _);
-
-		//If the variables are equal(ignoring SSA and dereferencing) then we have a match
-		for(u_int16_t i = 0 ; i < current->variables.current_index; i++){
-			if(variables_equal_no_ssa(variable, dynamic_array_get_at(&(current->variables), i), TRUE) == TRUE){
-				return current;
-			}
-		}
-	}
-
-	//If we get here we didn't find anything
-	return NULL;
-}
-
-
-/**
- * Get the live range class for a given variable, whether the variable is general purpose
- * or SSE
- */
-static inline live_range_class_t get_live_range_class_for_variable(three_addr_var_t* variable){
-	//All determined by the variable size
-	switch (variable->variable_size) {
-		case BYTE:
-		case WORD:
-		case DOUBLE_WORD:
-		case QUAD_WORD:
-			return LIVE_RANGE_CLASS_GEN_PURPOSE;
-
-		case SINGLE_PRECISION:
-		case DOUBLE_PRECISION:
-			return LIVE_RANGE_CLASS_SSE;
-
-		default:
-			printf("Fatal internal compiler error: undefined variable size given for live range class determination\n");
-			exit(1);
-	}
-}
-
-
-/**
- * Is the given general purpose register caller saved?
- */
-static inline u_int8_t is_general_purpose_register_caller_saved(general_purpose_register_t reg){
-	switch(reg){
-		case RAX:
-		case RDI:
-		case RSI:
-		case RDX:
-		case RCX:
-		case R8:
-		case R9:
-		case R10:
-		case R11:
-			return TRUE;
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
- * Is the given general purpose register callee saved?
- */
-static inline u_int8_t is_general_purpose_register_callee_saved(general_purpose_register_t reg){
-	//This is all determined based on the register type
-	switch(reg){
-		case RBX:
-		case RBP:
-		case R12:
-		case R13:
-		case R14:
-		case R15:
-			return TRUE;
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
- * Emit a stack allocation statement
- */
-static inline instruction_t* emit_stack_allocation_statement(three_addr_var_t* stack_pointer, type_symtab_t* type_symtab, u_int64_t offset){
-	//Allocate it
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	//This is always a subq statement
-	stmt->instruction_type = SUBQ;
-
-	//Store the destination as the stack pointer
-	stmt->destination_register = stack_pointer;
-
-	//Emit this directly
-	stmt->source_immediate = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type);
-
-	//Just give this back
-	return stmt;
-}
-
-
-/**
- * Emit a stack deallocation statement
- */
-static inline instruction_t* emit_stack_deallocation_statement(three_addr_var_t* stack_pointer, type_symtab_t* type_symtab, u_int64_t offset){
-	//Allocate it
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	//This is always an addq statement
-	stmt->instruction_type = ADDQ;
-
-	//Destination is always the stack pointer
-	stmt->destination_register = stack_pointer;
-
-	//Emit this directly
-	stmt->source_immediate = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type);
-
-	//Just give this back
-	return stmt;
-}
-
-
-/**
- * Developer utility function to validate the priority queue implementation
- */
-static void print_live_range_array(dynamic_array_t* live_ranges){
-	printf("{");
-
-	//Print everything out
-	for(u_int16_t i = 0; i < live_ranges->current_index; i++){
-		live_range_t* range = dynamic_array_get_at(live_ranges, i);
-
-		printf("LR%d(%d)", range->live_range_id, range->spill_cost);
-
-		if(i != live_ranges->current_index - 1){
-			printf(", ");
-		}
-	}
-
-	printf("}\n");
-}
-
-
-/**
- * Increment and return the live range ID
- */
-static inline u_int32_t increment_and_get_live_range_id(){
-	return live_range_id++;
-}
-
-
-/**
- * Create a live range
- */
-static live_range_t* live_range_alloc(symtab_function_record_t* function_defined_in, live_range_class_t live_range_class){
-	//Calloc it
-	live_range_t* live_range = calloc(1, sizeof(live_range_t));
-
-	//Give it a unique id
-	live_range->live_range_id = increment_and_get_live_range_id();
-
-	//And create it's dynamic array
-	live_range->variables = dynamic_array_alloc();
-
-	//Store what function this came from
-	live_range->function_defined_in = function_defined_in;
-
-	//What category of live range(gen purpose or SSE) is this
-	live_range->live_range_class = live_range_class;
-
-	//Create the neighbors array as well
-	live_range->neighbors = dynamic_array_alloc();
-
-	//Finally we'll return it
-	return live_range;
-}
-
-
-/**
- * Either find a live range with the given variable or create
- * one if it does not exist
- *
- * NOTE that this function does *not* add anything to the live range
- */
-static inline live_range_t* find_or_create_live_range(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* variable){
-	//Lookup the live range that is associated with this
-	live_range_t* live_range = find_live_range_with_variable(live_ranges, variable);
-
-	//If this is not null, then it means that we found it, so we can
-	//leave
-	if(live_range != NULL){
-		return live_range;
-	}
-
-	//Otherwise if we get here, we'll need to make it ourselves
-	live_range = live_range_alloc(block->function_defined_in, get_live_range_class_for_variable(variable));
-
-	//Add it into the live range
-	dynamic_array_add(live_ranges, live_range);
-
-	//Give it back
-	return live_range;
-}
-
-
-/**
- * Free all the memory that's reserved by a live range
- */
-static void live_range_dealloc(live_range_t* live_range){
-	//First we'll destroy the array that it has
-	dynamic_array_dealloc((&live_range->variables));
-
-	//Destroy the neighbors array as well
-	dynamic_array_dealloc((&live_range->neighbors));
-
-	//Then we can destroy the live range itself
-	free(live_range);
-}
-
-
+// ============================================================= Printing Utilities =====================================================
 /**
  * Print out the live ranges in a block
 */
@@ -352,14 +103,14 @@ static void print_block_with_live_ranges(basic_block_t* block){
 	}
 
 	//If we have some used variables, we will dislay those for debugging
-	if(block->used_variables.internal_array != NULL){
+	if(block->used_before_definition.internal_array != NULL){
 		printf("Used: (");
 
-		for(u_int16_t i = 0; i < block->used_variables.current_index; i++){
-			print_live_range(stdout, dynamic_array_get_at(&(block->used_variables), i));
+		for(u_int16_t i = 0; i < block->used_before_definition.current_index; i++){
+			print_live_range(stdout, dynamic_array_get_at(&(block->used_before_definition), i));
 
 			//If it isn't the very last one, we need a comma
-			if(i != block->used_variables.current_index - 1){
+			if(i != block->used_before_definition.current_index - 1){
 				printf(", ");
 			}
 		}
@@ -632,6 +383,258 @@ static void print_all_live_ranges(dynamic_array_t* general_purpose_live_ranges, 
 
 
 /**
+ * Developer utility function to validate the priority queue implementation
+ */
+static void print_live_range_array(dynamic_array_t* live_ranges){
+	printf("{");
+
+	//Print everything out
+	for(u_int16_t i = 0; i < live_ranges->current_index; i++){
+		live_range_t* range = dynamic_array_get_at(live_ranges, i);
+
+		printf("LR%d(%d)", range->live_range_id, range->spill_cost);
+
+		if(i != live_ranges->current_index - 1){
+			printf(", ");
+		}
+	}
+
+	printf("}\n");
+}
+
+// ============================================================= Printing Utilities =====================================================
+
+
+/**
+ * Crawl the data area and search for an exact pointer match. If there's not an exact
+ * match, then NULL will be returned
+ */
+static inline stack_region_t* get_stack_region_for_live_range(stack_data_area_t* data_area, live_range_t* lr){
+	for(u_int16_t i = 0; i < data_area->stack_regions.current_index; i++){
+		//Extract it
+		stack_region_t* region = dynamic_array_get_at(&(data_area->stack_regions), i);
+
+		//We need an exact memory address match. Anything short and
+		//this does not count
+		if(region->variable_referenced == lr){
+			return region;
+		}
+	}
+
+	//If we make it all the way down here, we found nothing so return NULL
+	return NULL;
+}
+
+
+/**
+ * Does a live range for a given variable already exist? If so, we'll need to 
+ * coalesce the two live ranges in a union
+ *
+ * Returns NULL if we found nothing
+ */
+static inline live_range_t* find_live_range_with_variable(dynamic_array_t* live_ranges, three_addr_var_t* variable){
+	//Run through all of the live ranges that we currently have
+	for(u_int16_t _ = 0; _ < live_ranges->current_index; _++){
+		//Grab the given live range out
+		live_range_t* current = dynamic_array_get_at(live_ranges, _);
+
+		//If the variables are equal(ignoring SSA and dereferencing) then we have a match
+		for(u_int16_t i = 0 ; i < current->variables.current_index; i++){
+			if(variables_equal_no_ssa(variable, dynamic_array_get_at(&(current->variables), i), TRUE) == TRUE){
+				return current;
+			}
+		}
+	}
+
+	//If we get here we didn't find anything
+	return NULL;
+}
+
+
+/**
+ * Get the live range class for a given variable, whether the variable is general purpose
+ * or SSE
+ */
+static inline live_range_class_t get_live_range_class_for_variable(three_addr_var_t* variable){
+	//All determined by the variable size
+	switch (variable->variable_size) {
+		case BYTE:
+		case WORD:
+		case DOUBLE_WORD:
+		case QUAD_WORD:
+			return LIVE_RANGE_CLASS_GEN_PURPOSE;
+
+		case SINGLE_PRECISION:
+		case DOUBLE_PRECISION:
+			return LIVE_RANGE_CLASS_SSE;
+
+		default:
+			printf("Fatal internal compiler error: undefined variable size given for live range class determination\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Is the given general purpose register caller saved?
+ */
+static inline u_int8_t is_general_purpose_register_caller_saved(general_purpose_register_t reg){
+	switch(reg){
+		case RAX:
+		case RDI:
+		case RSI:
+		case RDX:
+		case RCX:
+		case R8:
+		case R9:
+		case R10:
+		case R11:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Is the given general purpose register callee saved?
+ */
+static inline u_int8_t is_general_purpose_register_callee_saved(general_purpose_register_t reg){
+	//This is all determined based on the register type
+	switch(reg){
+		case RBX:
+		case RBP:
+		case R12:
+		case R13:
+		case R14:
+		case R15:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Emit a stack allocation statement
+ */
+static inline instruction_t* emit_stack_allocation_statement(three_addr_var_t* stack_pointer, type_symtab_t* type_symtab, u_int64_t offset){
+	//Allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//This is always a subq statement
+	stmt->instruction_type = SUBQ;
+
+	//Store the destination as the stack pointer
+	stmt->destination_register = stack_pointer;
+
+	//Emit this directly
+	stmt->source_immediate = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type);
+
+	//Just give this back
+	return stmt;
+}
+
+
+/**
+ * Emit a stack deallocation statement
+ */
+static inline instruction_t* emit_stack_deallocation_statement(three_addr_var_t* stack_pointer, type_symtab_t* type_symtab, u_int64_t offset){
+	//Allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//This is always an addq statement
+	stmt->instruction_type = ADDQ;
+
+	//Destination is always the stack pointer
+	stmt->destination_register = stack_pointer;
+
+	//Emit this directly
+	stmt->source_immediate = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type);
+
+	//Just give this back
+	return stmt;
+}
+
+
+/**
+ * Increment and return the live range ID
+ */
+static inline u_int32_t increment_and_get_live_range_id(){
+	return live_range_id++;
+}
+
+
+/**
+ * Create a live range
+ */
+static live_range_t* live_range_alloc(symtab_function_record_t* function_defined_in, live_range_class_t live_range_class){
+	//Calloc it
+	live_range_t* live_range = calloc(1, sizeof(live_range_t));
+
+	//Give it a unique id
+	live_range->live_range_id = increment_and_get_live_range_id();
+
+	//And create it's dynamic array
+	live_range->variables = dynamic_array_alloc();
+
+	//Store what function this came from
+	live_range->function_defined_in = function_defined_in;
+
+	//What category of live range(gen purpose or SSE) is this
+	live_range->live_range_class = live_range_class;
+
+	//Create the neighbors array as well
+	live_range->neighbors = dynamic_array_alloc();
+
+	//Finally we'll return it
+	return live_range;
+}
+
+
+/**
+ * Either find a live range with the given variable or create
+ * one if it does not exist
+ *
+ * NOTE that this function does *not* add anything to the live range
+ */
+static inline live_range_t* find_or_create_live_range(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* variable){
+	//Lookup the live range that is associated with this
+	live_range_t* live_range = find_live_range_with_variable(live_ranges, variable);
+
+	//If this is not null, then it means that we found it, so we can
+	//leave
+	if(live_range != NULL){
+		return live_range;
+	}
+
+	//Otherwise if we get here, we'll need to make it ourselves
+	live_range = live_range_alloc(block->function_defined_in, get_live_range_class_for_variable(variable));
+
+	//Add it into the live range
+	dynamic_array_add(live_ranges, live_range);
+
+	//Give it back
+	return live_range;
+}
+
+
+/**
+ * Free all the memory that's reserved by a live range
+ */
+static void live_range_dealloc(live_range_t* live_range){
+	//First we'll destroy the array that it has
+	dynamic_array_dealloc((&live_range->variables));
+
+	//Destroy the neighbors array as well
+	dynamic_array_dealloc((&live_range->neighbors));
+
+	//Then we can destroy the live range itself
+	free(live_range);
+}
+
+
+/**
  * Update the cost estimate for all live ranges in the event that we need to spill
  * them. This step is crucial in determining the ordering of live range values during register
  * allocation
@@ -664,11 +667,11 @@ static void compute_spill_costs(dynamic_array_t* live_ranges){
 
 
 /**
- * Add an assigned live range to a block
+ * Add an assigned live range(DEF set) to a block
  *
  * DEF[b] <- all live ranges in block b that are assigned in that block
  */
-static void add_assigned_live_range(live_range_t* live_range, basic_block_t* block){
+static void add_live_range_to_def_set(live_range_t* live_range, basic_block_t* block){
 	/**
 	 * There is no point in tracking uses here - these live ranges are not impacted
 	 * by interference
@@ -695,11 +698,11 @@ static void add_assigned_live_range(live_range_t* live_range, basic_block_t* blo
 
 
 /**
- * Add a used live range to a block
+ * Add a live range to the USE set for a block
  *
  * USE[b] <- all live ranges in block b that are used *before* they are assigned in that block
  */
-static void add_used_before_definition_live_range(live_range_t* live_range, basic_block_t* block){
+static void add_live_range_to_use_set(live_range_t* live_range, basic_block_t* block){
 	/**
 	 * There is no point in tracking uses here - these live ranges are not impacted
 	 * by interference
@@ -879,7 +882,7 @@ static void update_use_assignment_for_destination_variable(instruction_t* instru
 	if(is_destination_also_operand(instruction) == TRUE){
 		//Counts as both
 		add_used_live_range(live_range, block);
-		add_assigned_live_range(live_range, block);
+		add_live_range_to_def_set(live_range, block);
 
 	//If this is being derefenced, then it's not a true assignment, just a use
 	} else if(is_move_instruction_destination_assigned(instruction) == FALSE){
@@ -887,7 +890,7 @@ static void update_use_assignment_for_destination_variable(instruction_t* instru
 
 	//If we get all the way to here, then it was truly assigned
 	} else {
-		add_assigned_live_range(live_range, block);
+		add_live_range_to_def_set(live_range, block);
 	}
 }
 
@@ -959,7 +962,7 @@ static inline void assign_live_range_to_destination_variable(dynamic_array_t* ge
 	add_variable_to_live_range(live_range, destination_register2);
 
 	//This will *always* be a purely assigned live range
-	add_assigned_live_range(live_range, block);
+	add_live_range_to_def_set(live_range, block);
 }
 
 
@@ -990,7 +993,7 @@ static inline void assign_live_range_to_source_variable(dynamic_array_t* general
 	}
 
 	//Add this as a used live range
-	add_used_before_definition_live_range(live_range, block);
+	add_live_range_to_use_set(live_range, block);
 }
 
 
@@ -1060,7 +1063,7 @@ static inline void construct_inc_dec_neg_live_range(dynamic_array_t* general_pur
 		add_variable_to_live_range(live_range, instruction->destination_register);
 
 		//This does count as an assigned live range
-		add_assigned_live_range(live_range, basic_block);
+		add_live_range_to_def_set(live_range, basic_block);
 
 		//Assign the live range to op1 in here as well
 		add_variable_to_live_range(live_range, instruction->source_register);
@@ -2356,10 +2359,10 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 			case DECQ:
 			case PXOR_CLEAR:
 				//The use comes first
-				add_used_before_definition_live_range(cursor->destination_register->associated_live_range, block);
+				add_live_range_to_use_set(cursor->destination_register->associated_live_range, block);
 
 				//And then the assignment
-				add_assigned_live_range(cursor->destination_register->associated_live_range, block);
+				add_live_range_to_def_set(cursor->destination_register->associated_live_range, block);
 
 				break;
 
@@ -2373,12 +2376,12 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 					three_addr_var_t* parameter = dynamic_array_get_at(&(cursor->parameters), i);
 
 					//This should never be null so we don't need to check
-					add_used_before_definition_live_range(parameter->associated_live_range, block);
+					add_live_range_to_use_set(parameter->associated_live_range, block);
 				}
 
 				//Now the destination if one exists
 				if(cursor->destination_register != NULL){
-					add_assigned_live_range(cursor->destination_register->associated_live_range, block);
+					add_live_range_to_def_set(cursor->destination_register->associated_live_range, block);
 				}
 
 				break;
@@ -2390,19 +2393,19 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 			 */
 			case INDIRECT_CALL:
 				//Handle the function pointer
-				add_used_before_definition_live_range(cursor->source_register->associated_live_range, block);
+				add_live_range_to_use_set(cursor->source_register->associated_live_range, block);
 
 				//Do all of the parameters first
 				for(u_int32_t i = 0; i < cursor->parameters.current_index; i++){
 					three_addr_var_t* parameter = dynamic_array_get_at(&(cursor->parameters), i);
 
 					//This should never be null so we don't need to check
-					add_used_before_definition_live_range(parameter->associated_live_range, block);
+					add_live_range_to_use_set(parameter->associated_live_range, block);
 				}
 
 				//Now the destination if one exists
 				if(cursor->destination_register != NULL){
-					add_assigned_live_range(cursor->destination_register->associated_live_range, block);
+					add_live_range_to_def_set(cursor->destination_register->associated_live_range, block);
 				}
 
 				break;
@@ -2410,19 +2413,19 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 			default:
 				//Add all of the source *first*
 				if(cursor->source_register != NULL){
-					add_used_before_definition_live_range(cursor->source_register->associated_live_range, block);
+					add_live_range_to_use_set(cursor->source_register->associated_live_range, block);
 				}
 
 				if(cursor->source_register2 != NULL){
-					add_used_before_definition_live_range(cursor->source_register2->associated_live_range, block);
+					add_live_range_to_use_set(cursor->source_register2->associated_live_range, block);
 				}
 
 				if(cursor->address_calc_reg1 != NULL){
-					add_used_before_definition_live_range(cursor->address_calc_reg1->associated_live_range, block);
+					add_live_range_to_use_set(cursor->address_calc_reg1->associated_live_range, block);
 				}
 
 				if(cursor->address_calc_reg2 != NULL){
-					add_used_before_definition_live_range(cursor->address_calc_reg1->associated_live_range, block);
+					add_live_range_to_use_set(cursor->address_calc_reg1->associated_live_range, block);
 				}
 
 				/**
@@ -2438,22 +2441,22 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 					 * the case, then it is essential that the use comes first
 					 */
 					if(is_destination_also_operand(cursor) == TRUE){
-						add_used_before_definition_live_range(destination_lr, block);
-						add_assigned_live_range(destination_lr, block);
+						add_live_range_to_use_set(destination_lr, block);
+						add_live_range_to_def_set(destination_lr, block);
 
 					///Handle the case where we have something that is not a true assignment, just a use
 					} else if(is_move_instruction_destination_assigned(cursor) == FALSE){
-						add_used_before_definition_live_range(destination_lr, block);
+						add_live_range_to_use_set(destination_lr, block);
 
 					//If we get all the way to here, then it was truly assigned
 					} else {
-						add_assigned_live_range(destination_lr, block);
+						add_live_range_to_def_set(destination_lr, block);
 					}
 				}
 
 				//This one is easier, if it's not null then it was assigned
 				if(cursor->destination_register2 != NULL){
-					add_assigned_live_range(cursor->destination_register2->associated_live_range, block);
+					add_live_range_to_def_set(cursor->destination_register2->associated_live_range, block);
 				}
 					
 				break;
@@ -4827,14 +4830,8 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 		//Initial attempt - this will trigger the spiller if it's not possible
 		u_int8_t colorable_sse = graph_color_and_allocate_sse(function_entry, &sse_live_ranges);
 
-
-		int count = 0;
-
 		//So long as we could not color the graph
 		while(colorable_sse == FALSE){
-			count++;
-
-
 			//Dev printing only
 			if(print_irs == TRUE){
 				printf("============ After Spilling =============== \n");
@@ -4891,8 +4888,6 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 			 * graph_color_and_allocate returns a successful result
 			 */
 			colorable_sse = graph_color_and_allocate_sse(function_entry, &sse_live_ranges);
-
-			if(count > 5) exit(1);
 		}
 	}
 
