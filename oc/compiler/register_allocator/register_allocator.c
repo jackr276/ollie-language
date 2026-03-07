@@ -593,17 +593,90 @@ static live_range_t* live_range_alloc(symtab_function_record_t* function_defined
 
 
 /**
+ * Free all the memory that's reserved by a live range
+ */
+static void live_range_dealloc(live_range_t* live_range){
+	//First we'll destroy the array that it has
+	dynamic_array_dealloc((&live_range->variables));
+
+	//Destroy the neighbors array as well
+	dynamic_array_dealloc((&live_range->neighbors));
+
+	//Then we can destroy the live range itself
+	free(live_range);
+}
+
+
+/**
+ * Create the stack pointer live range
+ */
+static inline live_range_t* construct_stack_pointer_live_range(three_addr_var_t* stack_pointer){
+	//Before we go any further, we'll construct the live
+	//range for the stack pointer. Special case here - stack pointer has no block
+	live_range_t* stack_pointer_live_range = live_range_alloc(NULL, LIVE_RANGE_CLASS_GEN_PURPOSE);
+	//This is guaranteed to be RSP - so it's already been allocated
+	stack_pointer_live_range->reg.gen_purpose = RSP;
+	//And we absolutely *can not* spill it
+	stack_pointer_live_range->spill_cost = UINT32_MAX;
+
+	//This is precolor
+	stack_pointer_live_range->is_precolored = TRUE;
+
+	//Add the stack pointer to the dynamic array
+	dynamic_array_add(&(stack_pointer_live_range->variables), stack_pointer);
+	
+	//Store this here as well
+	stack_pointer->associated_live_range = stack_pointer_live_range;
+
+	//Store it in the global var for convenience
+	stack_pointer_lr = stack_pointer_live_range;
+
+	//Give it back
+	return stack_pointer_live_range;
+}
+
+
+/**
+ * Create the instruction pointer live range
+ */
+static inline live_range_t* construct_instruction_pointer_live_range(three_addr_var_t* instruction_pointer){
+	//Before we go any further, we'll construct the live
+	//range for the instruction pointer.
+	live_range_t* instruction_pointer_live_range = live_range_alloc(NULL, LIVE_RANGE_CLASS_GEN_PURPOSE);
+	//This is guaranteed to be RSP - so it's already been allocated
+	instruction_pointer_live_range->reg.gen_purpose = RIP;
+	//And we absolutely *can not* spill it
+	instruction_pointer_live_range->spill_cost = UINT32_MAX;
+
+	//This is precolor
+	instruction_pointer_live_range->is_precolored = TRUE;
+
+	//Add the stack pointer to the dynamic array
+	dynamic_array_add(&(instruction_pointer_live_range->variables), instruction_pointer);
+
+	//Save this to the global variable
+	instruction_pointer_lr = instruction_pointer_live_range;
+	
+	//Store this here as well
+	instruction_pointer->associated_live_range = instruction_pointer_live_range;
+
+	//Give it back
+	return instruction_pointer_live_range;
+}
+
+
+/**
  * Either find a live range with the given variable or create
  * one if it does not exist
  *
- * NOTE that this function does *not* add anything to the live range
+ * NOTE that this function does *not* add anything to the live range, it will
+ * only
  */
 static inline live_range_t* find_or_create_live_range(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* variable){
 	//Lookup the live range that is associated with this
 	live_range_t* live_range = find_live_range_with_variable(live_ranges, variable);
 
-	//If this is not null, then it means that we found it, so we can
-	//leave
+	//If this is not null, then it means that we found it
 	if(live_range != NULL){
 		return live_range;
 	}
@@ -616,21 +689,6 @@ static inline live_range_t* find_or_create_live_range(dynamic_array_t* live_rang
 
 	//Give it back
 	return live_range;
-}
-
-
-/**
- * Free all the memory that's reserved by a live range
- */
-static void live_range_dealloc(live_range_t* live_range){
-	//First we'll destroy the array that it has
-	dynamic_array_dealloc((&live_range->variables));
-
-	//Destroy the neighbors array as well
-	dynamic_array_dealloc((&live_range->neighbors));
-
-	//Then we can destroy the live range itself
-	free(live_range);
 }
 
 
@@ -751,7 +809,7 @@ static inline void add_live_now_live_range(live_range_t* live_range, dynamic_arr
 /**
  * Add a variable to a live range, if it isn't already in there
  */
-static void add_variable_to_live_range(live_range_t* live_range, three_addr_var_t* variable){
+static void assign_live_range_to_variable(live_range_t* live_range, three_addr_var_t* variable){
 	//If the literal memory address is already in here we leave
 	if(dynamic_array_contains(&(live_range->variables), variable) != NOT_FOUND){
 		return;
@@ -775,7 +833,7 @@ static void add_variable_to_live_range(live_range_t* live_range, three_addr_var_
  *
  * NOTE: We *only* get here if we have used variables. This means that assigned variables do not count
  */
-static live_range_t* assign_live_range_to_variable(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* variable){
+static live_range_t* get_live_range_for_variable(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* variable){
 	//If this is the case it already has one
 	if(variable->associated_live_range != NULL){
 		return variable->associated_live_range;
@@ -804,7 +862,7 @@ static live_range_t* assign_live_range_to_variable(dynamic_array_t* live_ranges,
 	}
 
 	//We now add this variable back into the live range
-	add_variable_to_live_range(live_range, variable);
+	assign_live_range_to_variable(live_range, variable);
 
 	//Give it back
 	return live_range;
@@ -812,109 +870,24 @@ static live_range_t* assign_live_range_to_variable(dynamic_array_t* live_ranges,
 
 
 /**
- * Create the stack pointer live range
+ * Handle the unique cases where we are assigning a live range to a destination variable. This includes
+ * updating the USE/DEF set appropriately when we have a destination that also acts as a source
+ * variable(think ADD/SUB)
  */
-static inline live_range_t* construct_stack_pointer_live_range(three_addr_var_t* stack_pointer){
-	//Before we go any further, we'll construct the live
-	//range for the stack pointer. Special case here - stack pointer has no block
-	live_range_t* stack_pointer_live_range = live_range_alloc(NULL, LIVE_RANGE_CLASS_GEN_PURPOSE);
-	//This is guaranteed to be RSP - so it's already been allocated
-	stack_pointer_live_range->reg.gen_purpose = RSP;
-	//And we absolutely *can not* spill it
-	stack_pointer_live_range->spill_cost = UINT32_MAX;
-
-	//This is precolor
-	stack_pointer_live_range->is_precolored = TRUE;
-
-	//Add the stack pointer to the dynamic array
-	dynamic_array_add(&(stack_pointer_live_range->variables), stack_pointer);
-	
-	//Store this here as well
-	stack_pointer->associated_live_range = stack_pointer_live_range;
-
-	//Store it in the global var for convenience
-	stack_pointer_lr = stack_pointer_live_range;
-
-	//Give it back
-	return stack_pointer_live_range;
-}
-
-
-/**
- * Create the instruction pointer live range
- */
-static inline live_range_t* construct_instruction_pointer_live_range(three_addr_var_t* instruction_pointer){
-	//Before we go any further, we'll construct the live
-	//range for the instruction pointer.
-	live_range_t* instruction_pointer_live_range = live_range_alloc(NULL, LIVE_RANGE_CLASS_GEN_PURPOSE);
-	//This is guaranteed to be RSP - so it's already been allocated
-	instruction_pointer_live_range->reg.gen_purpose = RIP;
-	//And we absolutely *can not* spill it
-	instruction_pointer_live_range->spill_cost = UINT32_MAX;
-
-	//This is precolor
-	instruction_pointer_live_range->is_precolored = TRUE;
-
-	//Add the stack pointer to the dynamic array
-	dynamic_array_add(&(instruction_pointer_live_range->variables), instruction_pointer);
-
-	//Save this to the global variable
-	instruction_pointer_lr = instruction_pointer_live_range;
-	
-	//Store this here as well
-	instruction_pointer->associated_live_range = instruction_pointer_live_range;
-
-	//Give it back
-	return instruction_pointer_live_range;
-}
-
-
-/**
- * Handle all of the special cases that a destination variable can have, depending on
- * whether it is a source & destination both or not
- */
-static void update_use_assignment_for_destination_variable(instruction_t* instruction, basic_block_t* block){
-	//Extract the LR
-	live_range_t* live_range = instruction->destination_register->associated_live_range;
-
-	//There are a few things that could happen here in terms of a variable use:
-	//If this is the case, then we need to set this new LR as both used and assigned
-	if(is_destination_also_operand(instruction) == TRUE){
-		//Counts as both
-		add_used_live_range(live_range, block);
-		add_live_range_to_def_set(live_range, block);
-
-	//If this is being derefenced, then it's not a true assignment, just a use
-	} else if(is_move_instruction_destination_assigned(instruction) == FALSE){
-		add_used_live_range(live_range, block);
-
-	//If we get all the way to here, then it was truly assigned
-	} else {
-		add_live_range_to_def_set(live_range, block);
-	}
-}
-
-
-/**
- * Handle a live range being assigned to a destination variable,
- * and all of the bookkeeping that comes with it
- */
-static inline void assign_live_range_to_destination_variable(dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges, basic_block_t* block, instruction_t* instruction){
-	//Bail out if this happens
-	if(instruction->destination_register == NULL){
-		return;
-	}
-
+static void assign_live_range_to_destination_variable(dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges, basic_block_t* block, instruction_t* instruction){
 	//Extract for convenience
 	three_addr_var_t* destination_register = instruction->destination_register;
 
-	//Get what class we need here
-	live_range_class_t target_class = get_live_range_class_for_variable(destination_register);
+	//Bail out if this happens
+	if(destination_register == NULL){
+		return;
+	}
 
-	//Holder for the live range
+	//We'll need to know where to put it
+	live_range_class_t target_class = get_live_range_class_for_variable(destination_register);
 	live_range_t* live_range;
 
-	//Use the appropiate dyn array based on the class
+	//Use the appropriate class that we have for this
 	switch(target_class){
 		case LIVE_RANGE_CLASS_GEN_PURPOSE:
 			live_range = find_or_create_live_range(general_purpose_live_ranges, block, destination_register);
@@ -926,13 +899,35 @@ static inline void assign_live_range_to_destination_variable(dynamic_array_t* ge
 	}
 
 	//Add this into the live range
-	add_variable_to_live_range(live_range, destination_register);
+	assign_live_range_to_variable(live_range, destination_register);
 
-	//Invoke the helper for this part
-	update_use_assignment_for_destination_variable(instruction, block);
+	/**
+	 * There are a few things that could happen here in terms of a variable use:
+	 * If this is the case, then we need to set this new LR as both used and assigned.
+	 * It is incredibly important that we count USE first and then DEF
+	 */
+	if(is_destination_also_operand(instruction) == TRUE){
+		add_live_range_to_use_set(live_range, block);
+		add_live_range_to_def_set(live_range, block);
 
-	//All done
-	if(instruction->destination_register2 == NULL){
+	//If this is being derefenced, then it's not a true assignment, just a use
+	} else if(is_move_instruction_destination_assigned(instruction) == FALSE){
+		add_live_range_to_use_set(live_range, block);
+
+	//If we get all the way to here, then it was truly assigned
+	} else {
+		add_live_range_to_def_set(live_range, block);
+	}
+}
+
+
+/**
+ * Assign a live range to the "destination_register2" variable. This is a super specialized
+ * case where we know the destination for sure is assigned to and not used
+ */
+static inline void assign_live_range_to_second_destination_variable(dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges, basic_block_t* block, three_addr_var_t* destination_register2){
+	//Extremely common
+	if(destination_register2 == NULL){
 		return;
 	}
 
@@ -941,11 +936,8 @@ static inline void assign_live_range_to_destination_variable(dynamic_array_t* ge
 	 * destination registers. These registers will always be strict assignees so we
 	 * don't need to do any of the manipulation like before.
 	 */
-	//Extract for convenience
-	three_addr_var_t* destination_register2 = instruction->destination_register2;
-	
-	//Get what class we need here
-	target_class = get_live_range_class_for_variable(destination_register2);
+	live_range_class_t target_class = get_live_range_class_for_variable(destination_register2);
+	live_range_t* live_range;
 
 	//Use the appropiate dyn array based on the class
 	switch(target_class){
@@ -959,7 +951,7 @@ static inline void assign_live_range_to_destination_variable(dynamic_array_t* ge
 	}
 
 	//Add this into the live range
-	add_variable_to_live_range(live_range, destination_register2);
+	assign_live_range_to_variable(live_range, destination_register2);
 
 	//This will *always* be a purely assigned live range
 	add_live_range_to_def_set(live_range, block);
@@ -1022,7 +1014,7 @@ static inline void construct_phi_function_live_range(dynamic_array_t* general_pu
 	}
 
 	//Add this into the live range
-	add_variable_to_live_range(live_range, instruction->assignee);
+	assign_live_range_to_variable(live_range, instruction->assignee);
 }
 
 
@@ -1042,8 +1034,6 @@ static inline void construct_pxor_clear_live_range(dynamic_array_t* general_purp
 
 
 /**
- * An increment/decrement/neg live range is a special case because the invisible "source" needs to be part of the
- * same live range as the destination. We ensure that that happens within this rule
  */
 static inline void construct_inc_dec_neg_live_range(dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges, basic_block_t* basic_block, instruction_t* instruction){
 	//If this is not temporary, we can handle it like any other statement
@@ -1060,13 +1050,13 @@ static inline void construct_inc_dec_neg_live_range(dynamic_array_t* general_pur
 		live_range_t* live_range = find_or_create_live_range(general_purpose_live_ranges, basic_block, instruction->destination_register);
 
 		//Add this into the live range
-		add_variable_to_live_range(live_range, instruction->destination_register);
+		assign_live_range_to_variable(live_range, instruction->destination_register);
 
 		//This does count as an assigned live range
 		add_live_range_to_def_set(live_range, basic_block);
 
 		//Assign the live range to op1 in here as well
-		add_variable_to_live_range(live_range, instruction->source_register);
+		assign_live_range_to_variable(live_range, instruction->source_register);
 
 		//Since we rely on this value being live for the instruction, this also counts
 		//as a use
@@ -1141,7 +1131,8 @@ static inline void reset_block_variable_tracking(basic_block_t* block){
 
 
 /**
- * Run through every instruction in a block and construct the live ranges
+ * Run through every instruction in a block and construct the live ranges. This is a 2-for-1 function. In
+ * doing this live range construction, we also handle the construction of the USE/DEF sets for the function
  *
  * We invoke special processing functions to handle exception cases like phi functions, inc/dec instructions,
  * and function calls
@@ -1170,7 +1161,6 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 			 * need to mark anything else here
 			 */
 			case PHI_FUNCTION:
-				//Invoke the helper rule for this
 				construct_phi_function_live_range(general_purpose_live_ranges, sse_live_ranges, basic_block, current);
 			
 				//And we're done - no need to go further
@@ -1193,7 +1183,6 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 			case NEGW:
 			case NEGL:
 			case NEGQ:
-				//These will always be general purpose
 				construct_inc_dec_neg_live_range(general_purpose_live_ranges, sse_live_ranges, basic_block, current);
 			
 				//And we're done - no need to go further
@@ -1208,7 +1197,9 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 				current = current->next_statement;
 				continue;
 
-			//Call and indirect call have hidden parameters that need to be accounted for
+			/**
+			 * Call and indirect calls have hitten params that we need to account for
+			 */
 			case CALL:
 			case INDIRECT_CALL:
 				//Let the helper rule handle it
@@ -1218,25 +1209,26 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 				current = current->next_statement;
 				continue;
 
-			//Just head out
+			/**
+			 * If we make it here, we know that we have a normal instruction that exists on
+			 * the target architecture. Here we can construct our live ranges and exploit any opportunities
+			 * for live range coalescing
+			 */
 			default:
+				assign_live_range_to_source_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current->source_register);
+				assign_live_range_to_source_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current->source_register2);
+				assign_live_range_to_source_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current->address_calc_reg1);
+				assign_live_range_to_source_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current->address_calc_reg2);
+
+				//The destintation variable absolutely *must* come last. This is to avoid incorrectly adding it to the DEF set prematurely
+				assign_live_range_to_destination_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current);
+
+
+
+
 				break;
 		}
 
-		/**
-		 * If we make it here, we know that we have a normal instruction that exists on
-		 * the target architecture. Here we can construct our live ranges and exploit any opportunities
-		 * for live range coalescing
-		 */
-
-		//Assign all of the source variable live ranges
-		assign_live_range_to_source_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current->source_register);
-		assign_live_range_to_source_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current->source_register2);
-		assign_live_range_to_source_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current->address_calc_reg1);
-		assign_live_range_to_source_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current->address_calc_reg2);
-
-		//Handle the destination variable
-		assign_live_range_to_destination_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current);
 
 
 		//Advance it down
@@ -3024,7 +3016,7 @@ static void handle_source_spill(dynamic_array_t* live_ranges, three_addr_var_t* 
 		dynamic_array_add(live_ranges, *currently_spilled);
 
 		//We can put the dummy in now
-		add_variable_to_live_range(*currently_spilled, dummy);
+		assign_live_range_to_variable(*currently_spilled, dummy);
 
 		//Handle the load instruction
 		instruction_t* load_instruction = emit_load_instruction(dummy, stack_pointer, type_symtab, offset);
@@ -3034,7 +3026,7 @@ static void handle_source_spill(dynamic_array_t* live_ranges, three_addr_var_t* 
 	}
 
 	//No matter what happened there, the target source now points to this new currently spilled LR
-	add_variable_to_live_range(*currently_spilled, target_source);
+	assign_live_range_to_variable(*currently_spilled, target_source);
 }
 
 
