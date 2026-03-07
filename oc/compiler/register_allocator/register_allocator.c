@@ -850,6 +850,11 @@ static void assign_live_range_to_variable(dynamic_array_t* SSE_live_ranges, dyna
 			dynamic_array_add(&(live_range->variables), variable);
 			variable->associated_live_range = live_range;
 
+			//Assign this over too
+			if(variable->class_relative_parameter_order != 0){
+				live_range->class_relative_function_parameter_order = variable->class_relative_parameter_order;
+			}
+
 			break;
 
 		case LIVE_RANGE_CLASS_SSE:
@@ -871,6 +876,11 @@ static void assign_live_range_to_variable(dynamic_array_t* SSE_live_ranges, dyna
 			 */
 			dynamic_array_add(&(live_range->variables), variable);
 			variable->associated_live_range = live_range;
+
+			//Assign this over too
+			if(variable->class_relative_parameter_order != 0){
+				live_range->class_relative_function_parameter_order = variable->class_relative_parameter_order;
+			}
 
 			break;
 	}
@@ -1910,7 +1920,7 @@ static inline void calculate_target_interferences_in_function(basic_block_t* fun
  */
 static inline void precolor_in_body_function_parameters(dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges){
 	//First we'll run through the general purpose ones
-	for(u_int16_t i = 0; i < general_purpose_live_ranges->current_index; i++){
+	for(u_int32_t i = 0; i < general_purpose_live_ranges->current_index; i++){
 		//Extract it
 		live_range_t* general_purpose_lr = dynamic_array_get_at(general_purpose_live_ranges, i);
 
@@ -1924,7 +1934,7 @@ static inline void precolor_in_body_function_parameters(dynamic_array_t* general
 	}
 
 	//Now do the exact same thing for SSE
-	for(u_int16_t i = 0; i < sse_live_ranges->current_index; i++){
+	for(u_int32_t i = 0; i < sse_live_ranges->current_index; i++){
 		//Extract it
 		live_range_t* sse_lr = dynamic_array_get_at(sse_live_ranges, i);
 

@@ -18,6 +18,8 @@
  * this will only serve to allocate the internal nodes
 */
 static inline interference_graph_t* interference_graph_alloc(u_int16_t live_range_count){
+	printf("LIVE RANGE COUNT IS %d\n", live_range_count);
+
 	//Allocate it
 	interference_graph_t* graph = calloc(1, sizeof(interference_graph_t));
 
