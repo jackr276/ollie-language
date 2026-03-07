@@ -1100,7 +1100,7 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 				}
 
 				if(current->address_calc_reg2 != NULL){
-					add_live_range_to_use_set(current->address_calc_reg1->associated_live_range, basic_block);
+					add_live_range_to_use_set(current->address_calc_reg2->associated_live_range, basic_block);
 				}
 
 				/**
@@ -2339,7 +2339,7 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 				}
 
 				if(cursor->address_calc_reg2 != NULL){
-					add_live_range_to_use_set(cursor->address_calc_reg1->associated_live_range, block);
+					add_live_range_to_use_set(cursor->address_calc_reg2->associated_live_range, block);
 				}
 
 				/**
