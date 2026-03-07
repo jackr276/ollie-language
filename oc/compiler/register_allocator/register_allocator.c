@@ -866,7 +866,7 @@ static void assign_live_range_to_variable(dynamic_array_t* SSE_live_ranges, dyna
 				live_range = live_range_alloc(block->function_defined_in, live_range_class);
 
 				//This goes into the set of all SSE live ranges
-				dynamic_array_add(gp_live_ranges, live_range);
+				dynamic_array_add(SSE_live_ranges, live_range);
 			}
 
 			/**
