@@ -54,6 +54,23 @@ static const u_int64_t mutability_salts[] = {
 
 
 /**
+ * Increment and return the current error id for the type symtab. This is done
+ * so we're always able to differentiate errors when it comes time to handle
+ * them at a function call site
+ */
+static inline u_int32_t increment_and_get_error_id(type_symtab_t* symtab){
+	//Extract
+	u_int32_t error_id = symtab->error_id;
+
+	//Increment
+	symtab->error_id++;
+
+	//Return
+	return error_id;
+}
+
+
+/**
  * Dynamically allocate a function symtab
  */
 function_symtab_t* function_symtab_alloc(){
@@ -870,6 +887,16 @@ u_int8_t insert_variable(variable_symtab_t* symtab, symtab_variable_record_t* re
  * this record exists in the table
  */
 u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record){
+	/**
+	 * If we have an error type, we need to keep track of what the error id for this
+	 * type is. This is done so we can uniquely identify errors down the road
+	 * via number
+	 */
+	if(record->type->type_class == TYPE_CLASS_ERROR){
+		//Update it internally here
+		record->type->internal_types.error_type_id = increment_and_get_error_id(symtab);
+	}
+
 	//While we're at it store this
 	record->lexical_level = symtab->current_lexical_scope;
 

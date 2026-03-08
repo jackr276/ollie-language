@@ -289,6 +289,8 @@ struct type_symtab_t{
 	dynamic_array_t sheafs;
 	//The current symtab sheaf
 	symtab_type_sheaf_t* current;
+	//The type symtab carries an atomically increasing error id
+	u_int32_t error_id;
 	//The current lexical scope
 	u_int16_t current_lexical_scope;
 };

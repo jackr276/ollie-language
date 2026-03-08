@@ -105,6 +105,8 @@ struct generic_type_t{
 	 * class
 	 */
 	union {
+		//The id for an error type. This is guaranteed to be unique per-error
+		u_int32_t error_type_id;
 		//What is the member type of an array
 		generic_type_t* member_type;
 		//What does a pointer type point to?

@@ -1483,7 +1483,7 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, ollie_token_t u
 			return TRUE;
 
 		//We can negate pointers, enums and basic types that are not void
-		case L_NOT:
+		case EXCLAMATION:
 			//Basic sanitation here, you can't negate these types
 			switch(type->type_class){
 				case TYPE_CLASS_ARRAY:
