@@ -10439,6 +10439,9 @@ static u_int8_t error_list(ollie_token_stream_t* token_stream, symtab_function_r
 	//Extract the internal function type
 	function_type_t* internal_function_type = function_type->internal_types.function_type;
 
+	//Allocate the internal potential errors array
+	internal_function_type->potential_errors = dynamic_array_alloc();
+
 	//The lookahead token
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
@@ -10448,6 +10451,55 @@ static u_int8_t error_list(ollie_token_stream_t* token_stream, symtab_function_r
 		num_errors++;
 		return FAILURE;
 	}
+
+	//Push onto the grouping stack
+	push_token(&grouping_stack, lookahead);
+
+	//Now we need to see at least one, but possibly many, error types in here
+	do {
+		//Get the next token
+		lookahead = get_next_token(token_stream, &parser_line_num);
+
+		//If we don't see an ident then this is a failure
+		if(lookahead.tok != IDENT){
+			sprintf(info, "Expected to see a custom error type, but instead say \"%s\"", lexitem_to_string(&lookahead));
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			num_errors++;
+			return FAILURE;
+		}
+
+		//If we make it here we're on the right track, let's see what we can find. Remember that all
+		//types are defacto immutalbe
+		symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, lookahead.lexeme.string, NOT_MUTABLE);
+
+		//We can't find it - big problem
+		if(found_type == NULL){
+			sprintf(info, "There exists no error type with the name \"%s\"", lookahead.lexeme.string);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			num_errors++;
+			return FAILURE;
+		}
+
+		//Get the inner type out
+		generic_type_t* error_type = found_type->type;
+
+		//Otherwise we did find it - but is it an ERROR? Remember we are only allowed to raise error types, not just any
+		//old type
+		if(error_type->type_class != TYPE_CLASS_ERROR){
+			sprintf(info, "Type \"%s\" is not an error type and cannot be raised by a function as one", lookahead.lexeme.string);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			num_errors++;
+			return FAILURE;
+		}
+
+		/**
+		 * Once we've gotten all the way down here, we've found our error type so we need to do
+		 * all of the appropriate internal bookkeeping
+		 */
+		dynamic_array_add(&(internal_function_type->potential_errors), error_type);
+
+
+	} while(TRUE);
 
 	
 
