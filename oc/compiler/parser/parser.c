@@ -10432,10 +10432,11 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
  * error
  *
  * <error-list> = (<error>+)
+ *
+ *
+ * TODO handle defining predeclared function case
  */
-static u_int8_t error_list(ollie_token_stream_t* token_stream, symtab_function_record_t* function_record, u_int8_t defining_predeclared_function){
-	//Extract the signature
-	generic_type_t* function_type = function_record->signature;
+static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* function_type, u_int8_t defining_predeclared_function){
 	//Extract the internal function type
 	function_type_t* internal_function_type = function_type->internal_types.function_type;
 
@@ -10497,6 +10498,11 @@ static u_int8_t error_list(ollie_token_stream_t* token_stream, symtab_function_r
 		 * all of the appropriate internal bookkeeping
 		 */
 		dynamic_array_add(&(internal_function_type->potential_errors), error_type);
+
+		if(defining_predeclared_function == TRUE){
+			//TODO
+		}
+
 
 		//Now we can either see a comma or the closing paren
 		lookahead = get_next_token(token_stream, &parser_line_num);
@@ -10762,7 +10768,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
  * promise that a function of this signature will exist at 
  * some point
  *
- * <function_predeclaration> ::= declare {pub}? fn <identifier>({param_declaration | void} {, <param_declaration}*) -> <type-specifier>
+ * <function_predeclaration> ::= declare {pub}? fn{!}? <identifier>({param_declaration | void} {, <param_declaration}*) {raises <error-list>}? -> <type-specifier>
  *
  * NOTE: by the time we get here, we've already seen the declare keyword
  */
@@ -10948,10 +10954,24 @@ after_rparen:
 		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
 	}
 
-	//TODO ERROR LIST
-
 	//Following this, we need to see the -> symbol
 	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	/**
+	 * If we are looking for something that raises errors, now is the time
+	 */
+	if(lookahead.tok == RAISES){
+		//Let the helper do it
+		u_int8_t success = error_list(token_stream, function_record->signature, FALSE);
+
+		//If this is a failure then leave
+		if(success == FAILURE){
+			return print_and_return_error("Invalid error list in function predeclaration", parser_line_num);
+		}
+
+		//Refresh the token
+		lookahead = get_next_token(token_stream, &parser_line_num);
+	}
 
 	//If we don't see it, we fail
 	if(lookahead.tok != ARROW){
@@ -11223,7 +11243,15 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		}
 
 		//Now that we've made it past that, we can let the helper do the parsing for us
-		u_int8_t success = error_list(token_stream, function_record, defining_predeclared_function);
+		u_int8_t success = error_list(token_stream, function_record->signature, defining_predeclared_function);
+
+		//Fail out if bad
+		if(success == FAILURE){
+			print_and_return_error("Invalid error list detected in function declaration", parser_line_num);
+		}
+
+		//Refresh the token
+		lookahead = get_next_token(token_stream, &parser_line_num);
 	}
 
 	//If it isn't an arrow, we're out of here
