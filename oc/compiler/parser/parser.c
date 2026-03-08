@@ -6402,21 +6402,6 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 	//We now need to see the arrow token
 	lookahead = get_next_token(stream, &parser_line_num);
 
-	//If we see the raises keyword, we have to see an error list afterwards
-	if(lookahead.tok == RAISES){
-		u_int8_t success = error_list(stream, function_type, FALSE);
-
-		//If this fails we're out
-		if(success == FAILURE){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid error list given in function pointer type", parser_line_num);
-			num_errors++;
-			return NULL;
-		}
-
-		//Refresh the token
-		lookahead = get_next_token(stream, &parser_line_num);
-	}
-
 	if(lookahead.tok != ARROW){
 		print_parse_message(MESSAGE_TYPE_ERROR, "\"->\" required before return type in function declaration", parser_line_num);
 		num_errors++;
@@ -6437,6 +6422,25 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 	function_type->internal_types.function_type->return_type = return_type;
 	//Also add the void flag in here just in case
 	function_type->internal_types.function_type->returns_void = IS_VOID_TYPE(return_type);
+
+	//We can now optionally see the RAISES keyword
+	lookahead = get_next_token(stream, &parser_line_num);
+
+	//If we see the raises keyword, we have to see an error list afterwards
+	if(lookahead.tok == RAISES){
+		u_int8_t success = error_list(stream, function_type, FALSE);
+
+		//If this fails we're out
+		if(success == FAILURE){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid error list given in function pointer type", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+	} else {
+		//Otherwise put it back
+		push_back_token(stream, &parser_line_num);
+	}
 
 	//Now we can generate the type name itself
 	generate_function_pointer_type_name(function_type);
@@ -10992,28 +10996,6 @@ after_rparen:
 	//Following this, we need to see the -> symbol
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
-	/**
-	 * If we are looking for something that raises errors, now is the time
-	 */
-	if(lookahead.tok == RAISES){
-		//If this is false, then we need to fail out. We must see fn! if we have an error-able function
-		if(raises_errors == FALSE){
-			sprintf(info, "Function \"%s\" was not defined to raise errors. Redefine using fn! to do this", function_name.string);
-			return print_and_return_error(info, parser_line_num);
-		}
-
-		//Let the helper do it
-		u_int8_t success = error_list(token_stream, function_record->signature, FALSE);
-
-		//If this is a failure then leave
-		if(success == FAILURE){
-			return print_and_return_error("Invalid error list in function predeclaration", parser_line_num);
-		}
-
-		//Refresh the token
-		lookahead = get_next_token(token_stream, &parser_line_num);
-	}
-
 	//If we don't see it, we fail
 	if(lookahead.tok != ARROW){
 		return print_and_return_error("-> expected after function parameter list", parser_line_num);
@@ -11030,6 +11012,34 @@ after_rparen:
 	//Otherwise, this is the return type
 	function_record->return_type = return_type;
 	function_record->signature->internal_types.function_type->return_type = return_type;
+
+	//We can now optionally see the RAISES keyword
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//If we see the raises keyword, we have to see an error list afterwards
+	if(lookahead.tok == RAISES){
+		if(raises_errors == FALSE){
+			sprintf(info, "Function \"%s\" was not declared as a function that may return errors. Declare using \"fn!\" to do this", function_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//Let the helper do it
+		u_int8_t success = error_list(token_stream, function_record->signature, FALSE);
+
+		//If this fails we're out
+		if(success == FAILURE){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid error list given in function pointer type", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+	} else {
+		//Otherwise put it back
+		push_back_token(token_stream, &parser_line_num);
+	}
+
+	//Generate the name for the function pointer type here
+	generate_function_pointer_type_name(function_record->signature);
 
 	//Otherwise this all worked. We can add this function to the symtab
 	insert_function(function_symtab, function_record);
@@ -11274,27 +11284,6 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 */
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
-	//Process error raising
-	if(lookahead.tok == RAISES){
-		//If we didn't denote that this could raise errors with the ! after fn, we
-		//need to fail out here
-		if(raises_errors == FALSE){
-			sprintf(info, "Function \"%s\" was not declared as a function that may return errors. Declare using \"fn!\" to do this", function_name.string);
-			return print_and_return_error(info, parser_line_num);
-		}
-
-		//Now that we've made it past that, we can let the helper do the parsing for us
-		u_int8_t success = error_list(token_stream, function_record->signature, defining_predeclared_function);
-
-		//Fail out if bad
-		if(success == FAILURE){
-			print_and_return_error("Invalid error list detected in function declaration", parser_line_num);
-		}
-
-		//Refresh the token
-		lookahead = get_next_token(token_stream, &parser_line_num);
-	}
-
 	//If it isn't an arrow, we're out of here
 	if(lookahead.tok != ARROW){
 		return print_and_return_error("Arrow(->) required after parameter-list in function", parser_line_num);
@@ -11332,6 +11321,34 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 
 	//Store the return type as well
 	function_record->signature->internal_types.function_type->return_type = type;
+
+	//We can optionally see the raises keyword here
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Process error raising
+	if(lookahead.tok == RAISES){
+		//If we didn't denote that this could raise errors with the ! after fn, we
+		//need to fail out here
+		if(raises_errors == FALSE){
+			sprintf(info, "Function \"%s\" was not declared as a function that may return errors. Declare using \"fn!\" to do this", function_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//Now that we've made it past that, we can let the helper do the parsing for us
+		u_int8_t success = error_list(token_stream, function_record->signature, defining_predeclared_function);
+
+		//Fail out if bad
+		if(success == FAILURE){
+			print_and_return_error("Invalid error list detected in function declaration", parser_line_num);
+		}
+
+		//Refresh the token
+		lookahead = get_next_token(token_stream, &parser_line_num);
+
+	} else {
+		//Otherwise put it back
+		push_back_token(token_stream, &parser_line_num);
+	}
 
 	//Now that the function record has been finalized, we'll need to produce the type name
 	generate_function_pointer_type_name(function_record->signature);
