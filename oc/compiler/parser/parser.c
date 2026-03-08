@@ -11186,12 +11186,6 @@ static generic_ast_node_t* declaration_partition(ollie_token_stream_t* token_str
 	//Grab the next token
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
-	if(lookahead.tok == ERROR){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Fatal error. Found error token\n", lookahead.line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-	}
-
 	//Switch based on the token
 	switch(lookahead.tok){
 		//We can either see the "pub"(public) keyword, "inline keyword" or we can see a straight fn keyword
