@@ -10863,7 +10863,7 @@ after_rparen:
  *
  * NOTE: We have already consumed the FUNC keyword by the time we arrive here, so we will not look for it in this function
  *
- * BNF Rule: <function-definition> ::= {pub | inline}? fn <identifer> {<parameter-list> -> <type-specifier> <compound-statement>
+ * BNF Rule: <function-definition> ::= {pub | inline}? fn{!}? <identifer> {<parameter-list> -> <type-specifier> <compound-statement>
  */
 static generic_ast_node_t* function_definition(ollie_token_stream_t* token_stream){
 	//Freeze the line number
@@ -10878,6 +10878,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	u_int8_t is_public = FALSE;
 	//Is this function inlined? By default no
 	u_int8_t is_inlined = FALSE;
+	//Does this funtion raise errors? We know based on the ! after the fn keyword
 
 	//Grab the token
 	lookahead = get_next_token(token_stream, &parser_line_num);

@@ -176,6 +176,8 @@ struct function_type_t{
 	//A list of parameters which are just types - since we encode everything
 	//that we need to into the type system
 	dynamic_array_t function_parameters;
+	//What errors does this function raise potentially?
+	dynamic_array_t potential_errors;
 	//The return type
 	generic_type_t* return_type;
 	//General purpose count
@@ -190,6 +192,8 @@ struct function_type_t{
 	u_int8_t is_inlined;
 	//Does this contain stack params?
 	u_int8_t contains_stack_params;
+	//Is it possible for this function to raise an error?
+	u_int8_t raises_errors;
 };
 
 
@@ -357,7 +361,7 @@ generic_type_t* create_aliased_type(char* type_name, generic_type_t* aliased_typ
 /**
  * Dynamically allocate and create a function pointer type
  */
-generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int8_t is_inlined, u_int32_t line_number, mutability_type_t mutability);
+generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int8_t is_inlined, u_int32_t line_number, u_int8_t raises_errors, mutability_type_t mutability);
 
 /**
  * Add a function's parameter in
