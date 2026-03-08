@@ -4,7 +4,7 @@
 */
 
 //We are able to define our own custom errors in Ollie. In reality
-//these are just types
+//these are just types that have special restrictions/a special purpose for us
 define error arithmetic_error_t;
 define error divide_by_zero_error_t;
 
@@ -25,11 +25,12 @@ pub fn! ollie_error(x:i32, y:i32) -> i32 raises arithemtic_error_t, divide_by_ze
 pub fn main() -> i32 {
 	//Is kind of a pseudo-switch statement in a way
 	//We make it so that you have no choice but to handle errors
+	//This is a hidden switch statement under the hood
 	let result:i32 = @ollie_error(x, y) -> {
 											arithmetic_error_t -> 0;
 											divide_by_zero_error_t -> 0;
 											error -> 0;
-											}
+						   				   }
 
 	ret result;
 }

@@ -6275,7 +6275,7 @@ static u_int8_t error_definer(ollie_token_stream_t* token_stream, u_int8_t in_gl
 
 	//If it's not a semicolon we fail out
 	if(lookahead.tok != SEMICOLON){
-		sprintf(info, "Expected ; but got \"%s\" instead", lexitem_to_string(&lookahead));
+		sprintf(info, "Expected \";\" but got \"%s\" instead", lexitem_to_string(&lookahead));
 		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		num_errors++;
 		return FAILURE;
