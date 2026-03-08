@@ -51,7 +51,7 @@ static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, ERROR, R
 				    EXTERNAL, TRUE_CONST, FALSE_CONST, INLINE, MACRO, ENDMACRO};
 
 //Direct one to one mapping
-static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", "raise", "raises", "error", "ret", "jump",
+static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", "error", "raise", "raises", "ret", "jump",
 						 "require", "u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "f32", "f64", 
 						  "char", "define", "enum", "register", "constant", "void", "typesize", "let", "declare", "when", "case", "default", "switch",
 						  "break", "continue", "struct", "as", "alias", "sizeof", "defer", "mut", "dependencies", "asm",
@@ -346,6 +346,12 @@ char* lexitem_to_string(lexitem_t* lexitem){
 			return "~";
 		case EXCLAMATION:
 			return "!";
+		case ERROR:
+			return "error";
+		case RAISE:
+			return "raise";
+		case RAISES:
+			return "raises";
 		case MACRO_PARAM:
 			sprintf(info, "%s", lexitem->lexeme.string);
 			return info;

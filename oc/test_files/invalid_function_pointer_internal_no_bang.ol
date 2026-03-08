@@ -6,7 +6,7 @@
 define error custom_error;
 
 pub fn main() -> i32 {
-	let x:fn error() -> i32 raises(custom_error);
+	let x:fn() -> i32 raises(custom_error);
 
 	ret 0;
 }

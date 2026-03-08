@@ -10212,7 +10212,8 @@ static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_globa
 
 		//Some failure here
 		default:
-			print_parse_message(MESSAGE_TYPE_ERROR, "Expected \"union\", \"struct\", \"fn\" or \"enum\" definer keywords", parser_line_num);
+			sprintf(info, "Expected \"union\", \"struct\", \"fn\", \"error\", or \"enum\" definer keywords but got \"%s\"", lexitem_to_string(&lookahead));
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			num_errors++;
 			return FAILURE;
 	}

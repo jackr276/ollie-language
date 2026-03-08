@@ -6,7 +6,7 @@
 define error custom_error;
 
 //Invalid - no bang
-pub fn error() -> i32 raises(custom_error){
+pub fn error_test() -> i32 raises(custom_error){
 	ret
 }
 
