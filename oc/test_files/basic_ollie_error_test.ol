@@ -3,6 +3,8 @@
 * A very basic test for Ollie errors with just one function
 */
 
+define error arithmetic_error_t;
+
 
 pub fn! ollie_error(x:i32, y:i32) -> i32|{artihmetic_error} {
 	if(y == 0){

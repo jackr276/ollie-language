@@ -133,8 +133,8 @@ char* lexitem_to_string(lexitem_t* lexitem){
 			return "->";
 		case FAT_ARROW:
 			return "=>";
-		case ERROR:
-			return "ERROR";
+		case LEXER_ERROR:
+			return "LEXER ERROR";
 		case DONE:
 			return "DONE";
 		case IDENT:
@@ -625,7 +625,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 	//Initialize the lexitem to be nothing at first
 	lexitem_t lex_item;
 	lex_item.constant_values.signed_long_value = 0;
-	lex_item.tok = ERROR;
+	lex_item.tok = LEXER_ERROR;
 	//By default we do not ignore
 	lex_item.ignore = FALSE;
 	lex_item.line_num = 0;
@@ -653,7 +653,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 				//Wipe out the stack lexitem again
 				lex_item.constant_values.signed_long_value = 0;
-				lex_item.tok = ERROR;
+				lex_item.tok = LEXER_ERROR;
 				lex_item.line_num = 0;
 				INITIALIZE_NULL_DYNAMIC_STRING(lex_item.lexeme);
 
@@ -1152,7 +1152,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 								//Hard fail in this case
 								default:
 									print_lexer_error("Invalid escape sequence character found. Please consult the ASCII manual(man ascii) for the list of escape characters", line_number);
-									lex_item.tok = ERROR;
+									lex_item.tok = LEXER_ERROR;
 									lex_item.line_num = line_number;
 									return FAILURE;
 							}

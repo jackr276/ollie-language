@@ -125,7 +125,7 @@ typedef enum {
 	DOLLAR, /* $ */
 	ARROW, /* -> */
 	FAT_ARROW, /* => */
-	ERROR,
+	LEXER_ERROR, // A special token that denotes a lexer error
 	DONE,
 	VOID,
 	U8,
