@@ -11437,18 +11437,34 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			return print_and_return_error(info, parser_line_num);
 		}
 
+		/**
+		 * What if we're defining a predeclared function that did not have the "raises" keyword on it? If so then this is wrong
+		 */
+		if(defining_predeclared_function == TRUE && function_record->signature->internal_types.function_type->potential_errors.current_index == 0){
+			sprintf(info, "Function \"%s\" was not declared as raising specific errors. \"raises\" is invalid in this context", function_record->func_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
 		//Now that we've made it past that, we can let the helper do the parsing for us
 		u_int8_t success = error_list(token_stream, function_record->signature, defining_predeclared_function);
 
 		//Fail out if bad
 		if(success == FAILURE){
-			print_and_return_error("Invalid error list detected in function declaration", parser_line_num);
+			return print_and_return_error("Invalid error list detected in function declaration", parser_line_num);
 		}
 
 		//Refresh the token
 		lookahead = get_next_token(token_stream, &parser_line_num);
 
 	} else {
+		/**
+		 * What if we're defining a predeclared function that *did* ave the "raises" keyword on it? If so then this is wrong
+		 */
+		if(defining_predeclared_function == TRUE && function_record->signature->internal_types.function_type->potential_errors.current_index != 0){
+			sprintf(info, "Function \"%s\" was declared as raising specific errors. \"raises\" is required in this context", function_record->func_name.string);
+		 	return print_and_return_error(info, parser_line_num);
+		}
+
 		//Otherwise put it back
 		push_back_token(token_stream, &parser_line_num);
 	}
