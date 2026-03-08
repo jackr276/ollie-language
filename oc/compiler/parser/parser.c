@@ -4973,7 +4973,7 @@ static u_int8_t struct_member_list(ollie_token_stream_t* token_stream, generic_t
  * A function pointer definer defines a function signature that can be used to dynamically call functions 
  * of the same signature
  *
- * define fn{!}?(<parameter_list>) -> {mut}? <type> as <identifier>;
+ * define fn{!}?(<parameter_list>) -> <type> {raises <error-list>}? as <identifier>;
  *
  * Unlike constructs & enums, we'll force the user to use an as keyword here for their type definition to
  * enforce readability
@@ -4984,12 +4984,23 @@ static u_int8_t struct_member_list(ollie_token_stream_t* token_stream, generic_t
  * a different function for live-parsing types inside of the type name itself
  */
 static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
+	//Do we raise errors or not? Will be determined soon
+	u_int8_t raises_errors = FALSE;
+
 	//Declare a token for search-ahead
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
+	//Let's see if we have a !, meaning that this function can raise an error
+	if(lookahead.tok == EXCLAMATION){
+		raises_errors = TRUE;
+
+		//Refresh the token
+		lookahead = get_next_token(token_stream, &parser_line_num);
+	}	 
+	
 	//Now we need to see an L_PAREN
 	if(lookahead.tok != L_PAREN){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Left parenthesis required after fn keyword", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Left parenthesis expected", parser_line_num);
 		num_errors++;
 		return FAILURE;
 	}
@@ -4997,13 +5008,12 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	//Otherwise push this onto the grouping stack for later
 	push_token(&grouping_stack, lookahead);
 
-	//TODO ADD ERROR RAISING
-
-
-	//Once we've gotten past this point, we're safe to allocate this type. Function
-	//pointers are always private and never inlined
-	generic_type_t* mutable_function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, MUTABLE);
-	generic_type_t* immutable_function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, NOT_MUTABLE);
+	/**
+	 * Once we've gotten past this point, we're safe to allocate this type. Function
+	 * pointers are always private and never inlined
+	 */
+	generic_type_t* mutable_function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, raises_errors, MUTABLE);
+	generic_type_t* immutable_function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, raises_errors, NOT_MUTABLE);
 
 	//Let's see if we have nothing in here. This is possible. We can also just see a "void"
 	//as an alternative way of saying this function takes no parameters
@@ -10961,6 +10971,12 @@ after_rparen:
 	 * If we are looking for something that raises errors, now is the time
 	 */
 	if(lookahead.tok == RAISES){
+		//If this is false, then we need to fail out. We must see fn! if we have an error-able function
+		if(raises_errors == FALSE){
+			sprintf(info, "Function \"%s\" was not defined to raise errors. Redefine using fn! to do this", function_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
 		//Let the helper do it
 		u_int8_t success = error_list(token_stream, function_record->signature, FALSE);
 
