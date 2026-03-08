@@ -105,6 +105,7 @@ static generic_ast_node_t* idle_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream);
+static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* function_type, u_int8_t defining_predeclared_function);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_global_scope);
 static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, u_int8_t is_global);
@@ -6312,19 +6313,27 @@ static u_int8_t error_definer(ollie_token_stream_t* token_stream, u_int8_t in_gl
  * Handle all of the parsing for a function pointer type. Note that this rule will create the function pointer
  * type if we cannot find it. It is unique in this way
  *
- * fn (<type-specifier>*) -> <type-specifier> {raises <error-list>}
+ * fn{!}? (<type-specifier>*) -> <type-specifier> {raises <error-list>}
  * NOTE: by the time we get here, we have already seen and consumed the "fn" token
  */
 static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_stream_t* stream, mutability_type_t mutability){
-	//Lookahead token for our use
-	lexitem_t lookahead;
+	//Does this raise errors or not? This will be important later
+	u_int8_t raises_errors = FALSE;
 
-	//We need to first see an open paren
-	lookahead = get_next_token(stream, &parser_line_num);
+	//Grab onto the first token
+	lexitem_t lookahead = get_next_token(stream, &parser_line_num);;
+
+	//Does this raise errors or not?
+	if(lookahead.tok == EXCLAMATION){
+		raises_errors = TRUE;
+
+		//Refresh the token
+		lookahead = get_next_token(stream, &parser_line_num);
+	}
 
 	//Fail if we don't see it
 	if(lookahead.tok != L_PAREN){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Opening parenthesis expected after fn keyword", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Opening parenthesis expected", parser_line_num);
 		num_errors++;
 		return NULL;
 	}
@@ -6334,7 +6343,7 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 
 	//Once we've gotten past this point, we're safe to allocate this type. We need it to be allocated for use
 	//down the road
-	generic_type_t* function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, mutability);
+	generic_type_t* function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, raises_errors, mutability);
 
 	//Let's see if we have nothing in here. This is possible. We can also just see a "void"
 	//as an alternative way of saying this function takes no parameters
@@ -6393,8 +6402,23 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 	//We now need to see the arrow token
 	lookahead = get_next_token(stream, &parser_line_num);
 
+	//If we see the raises keyword, we have to see an error list afterwards
+	if(lookahead.tok == RAISES){
+		u_int8_t success = error_list(stream, function_type, FALSE);
+
+		//If this fails we're out
+		if(success == FAILURE){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid error list given in function pointer type", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//Refresh the token
+		lookahead = get_next_token(stream, &parser_line_num);
+	}
+
 	if(lookahead.tok != ARROW){
-		print_parse_message(MESSAGE_TYPE_ERROR, "\"->\" required after parameter list in function declaration", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "\"->\" required before return type in function declaration", parser_line_num);
 		num_errors++;
 		return NULL;
 	}

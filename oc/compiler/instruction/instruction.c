@@ -5572,7 +5572,7 @@ instruction_t* emit_logical_not_instruction(three_addr_var_t* assignee, three_ad
 	stmt->op1 = op1;
 
 	//Flag that this does have an operator, even though we aren't strictly using it
-	stmt->op = L_NOT;
+	stmt->op = EXCLAMATION;
 
 	//Give the stmt back
 	return stmt;
@@ -7210,7 +7210,7 @@ branch_type_t select_appropriate_branch_statement(ollie_token_t op, branch_categ
 
 		//Logical not is *TRUE* when the value is zero, and not
 		//true when the value isn't zero
-		case L_NOT:
+		case EXCLAMATION:
 			if(branch_type == BRANCH_CATEGORY_INVERSE){
 				return BRANCH_NZ;
 			} else {

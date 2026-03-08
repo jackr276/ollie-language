@@ -4732,7 +4732,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			return unary_package;
 
 		//Logical not operator
-		case L_NOT:
+		case EXCLAMATION:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
 			//The assignee comes from the package
@@ -4753,7 +4753,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			unary_package.assignee = logical_not_statement->assignee;
 
 			//The operator here is logical not
-			unary_package.operator = L_NOT;
+			unary_package.operator = EXCLAMATION;
 
 			//Give the package back
 			return unary_package;

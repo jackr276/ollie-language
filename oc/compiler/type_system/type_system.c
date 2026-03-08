@@ -2515,6 +2515,13 @@ variable_size_t get_type_size(generic_type_t* type){
 
 /**
  * Generate the full name for the function pointer type
+ *
+ * TODO ERROR LIST
+ *
+ *
+ *
+ *
+ *
  */
 void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
 	//Reserve this for variable printing
