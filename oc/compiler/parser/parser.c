@@ -5125,11 +5125,34 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	mutable_function_type->internal_types.function_type->returns_void = IS_VOID_TYPE(return_type);
 	immutable_function_type->internal_types.function_type->returns_void = IS_VOID_TYPE(return_type);
 
-	//Otherwise this did work, so now we need to see the AS keyword. Ollie forces the user to use AS to avoid the
-	//confusing syntactical mess that C function pointer declarations have
-	
 	//Refresh the token
 	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//We can now optionally see the "raises" keyword if we raise errors
+	if(lookahead.tok == RAISES){
+		//If this was not flagged as a function that could raise errors, then this is invalid
+		if(raises_errors == FALSE){
+			print_parse_message(MESSAGE_TYPE_ERROR, "The function type was not declared as able to raise errors. Use fn! if you wish to have a function type that can raise errors", parser_line_num);
+			num_errors++;
+			return FALSE;
+		}
+
+		//Otherwise, we will need to parse the error list
+		u_int8_t success = error_list(token_stream, mutable_function_type, FALSE);
+
+		//If this failed out then we're done
+		if(success == FAILURE){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid error list given to function pointer type", parser_line_num);
+			num_errors++;
+			return FALSE;
+		}
+
+		//We're going to need to copy this over from the mutable function type to the immutable one
+		immutable_function_type->internal_types.function_type->potential_errors = clone_dynamic_array(&(mutable_function_type->internal_types.function_type->potential_errors));
+
+		//Refresh the token
+		lookahead = get_next_token(token_stream, &parser_line_num);
+	}
 
 	//If it isn't an AS keyword, we're done
 	if(lookahead.tok != AS){
@@ -5137,7 +5160,6 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 		num_errors++;
 		return FALSE;
 	}
-
 
 	//If we make it here then we know we're good to look for an identifier
 	lookahead = get_next_token(token_stream, &parser_line_num);
