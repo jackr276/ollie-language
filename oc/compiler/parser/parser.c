@@ -106,7 +106,7 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
-static u_int8_t definition(ollie_token_stream_t* token_stream);
+static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_global_scope);
 static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, u_int8_t is_global);
 
 
@@ -6224,6 +6224,35 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 
 
 /**
+ * Handle an Ollie error type definition. Ollie allows the user to define custom errors
+ * for their convenience. We also mandate that all errors be defined inside of
+ * the global scope. It would make no sense to define an error inside of a function, because
+ * any function that calls said function would need to know about the error
+ *
+ * NOTE: by the time we come here, we've already seen "define" and "error"
+ *
+ * BNF From:: define error <ident>;
+ */
+static u_int8_t error_definer(ollie_token_stream_t* stream, u_int8_t in_global_scope) {
+	//If we're not in the global scope, we leave
+	if(in_global_scope == FALSE){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Errors may not be declared in any scope other than the global scope", parser_line_num);
+	}
+
+	//Get the next token in the stream
+	lexitem_t lookahead = get_next_token(stream, &parser_line_num);
+
+
+
+	
+
+
+	//If we made it all the way down here then return success
+	return SUCCESS;
+}
+
+
+/**
  * Handle all of the parsing for a function pointer type. Note that this rule will create the function pointer
  * type if we cannot find it. It is unique in this way
  *
@@ -8946,7 +8975,7 @@ static generic_ast_node_t* statement(ollie_token_stream_t* token_stream){
 		//Type definition
 		case DEFINE:
 			//Call the helper
-			status = definition(token_stream);
+			status = definition(token_stream, FALSE);
 
 			//If it's bad, we'll return an error node
 			if(status == FAILURE){
@@ -10084,7 +10113,7 @@ static u_int8_t alias_statement(ollie_token_stream_t* token_stream){
  *
  * NOTE: We assume that there is a define or alias token for us to use to switch based on
  */
-static u_int8_t definition(ollie_token_stream_t* token_stream){
+static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_global_scope){
 	//We can now see construct or enum
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
@@ -10096,6 +10125,8 @@ static u_int8_t definition(ollie_token_stream_t* token_stream){
 			return union_definer(token_stream);
 		case ENUM:
 			return enum_definer(token_stream);
+		case ERROR:
+			return error_definer(token_stream, in_global_scope);
 		case FN:
 			return function_pointer_definer(token_stream);
 
@@ -11202,7 +11233,7 @@ static generic_ast_node_t* declaration_partition(ollie_token_stream_t* token_str
 		//Type definition
 		case DEFINE:
 			//Call the helper
-			status = definition(token_stream);
+			status = definition(token_stream, TRUE);
 
 			//If it's bad, we'll return an error node
 			if(status == FAILURE){
