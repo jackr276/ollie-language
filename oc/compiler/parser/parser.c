@@ -10605,7 +10605,6 @@ static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* f
 			return FAILURE;
 		}
 
-
 		/**
 		 * If we're not defining something that was predeclared, then all we need to do
 		 * is add this in
