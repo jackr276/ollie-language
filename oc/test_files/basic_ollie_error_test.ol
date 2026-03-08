@@ -3,18 +3,33 @@
 * A very basic test for Ollie errors with just one function
 */
 
+//We are able to define our own custom errors in Ollie. In reality
+//these are just types
 define error arithmetic_error_t;
+define error divide_by_zero_error_t;
 
-
-pub fn! ollie_error(x:i32, y:i32) -> i32|{artihmetic_error} {
+/**
+* To denote that a function can/may throw any error at all, 
+* we use the ! after the "fn" keyword. It is possible for
+* someone to use Ollie without using the error system at all
+*/
+pub fn! ollie_error(x:i32, y:i32) -> i32 raises arithemtic_error_t, divide_by_zero_error_t {
 	if(y == 0){
 		raise arithmetic_error;
-	}
+	} 
 
 	ret x / y;
 } 
 
 
 pub fn main() -> i32 {
-	let result:i32 = @ollie_error(x, y) -> {}
+	//Is kind of a pseudo-switch statement in a way
+	//We make it so that you have no choice but to handle errors
+	let result:i32 = @ollie_error(x, y) -> {
+											arithmetic_error_t -> 0;
+											divide_by_zero_error_t -> 0;
+											error -> 0;
+											}
+
+	ret result;
 }
