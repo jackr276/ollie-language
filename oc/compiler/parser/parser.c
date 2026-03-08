@@ -11044,7 +11044,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 
 		//If this is NULL, we'll error out
 		if(type == NULL){
-			print_and_return_error("Invalid parameter type given", parser_line_num);
+			return print_and_return_error("Invalid parameter type given", parser_line_num);
 		}
 
 		//Let the helper add the type in
@@ -11308,7 +11308,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			return print_and_return_error(info, parser_line_num);
 
 		//Other case, still a failure
-		} else if(function_record->signature->internal_types.function_type->is_public == TRUE && is_public == TRUE){
+		} else if(function_record->signature->internal_types.function_type->is_public == FALSE && is_public == TRUE){
 			sprintf(info, "Function \"%s\" was predeclared as private, but defined as public", function_record->func_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}

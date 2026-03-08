@@ -110,6 +110,9 @@ type_symtab_t* type_symtab_alloc(){
 	//Nothing has been initialized yet
 	symtab->current = NULL;
 
+	//The initial error id starts at 1. This is because 0 is reserved for NO_ERRORS
+	symtab->error_id = 1;
+
 	return symtab;
 }
 
