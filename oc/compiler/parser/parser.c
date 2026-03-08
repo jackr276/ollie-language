@@ -6494,6 +6494,13 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 
 	//If we see the raises keyword, we have to see an error list afterwards
 	if(lookahead.tok == RAISES){
+		//If we aren't raising errors, then we can't put this in
+		if(raises_errors == FALSE){
+			print_parse_message(MESSAGE_TYPE_ERROR, "The function pointer type was not declared as a function that may return errors. Declare using \"fn!\" to do this", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
 		u_int8_t success = error_list(stream, function_type, FALSE);
 
 		//If this fails we're out
