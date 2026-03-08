@@ -5030,32 +5030,55 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 			lookahead = get_next_token(token_stream, &parser_line_num);
 			break;
 
+		//We have an empty parameter list - also totally fine
+		case R_PAREN:
+			break;
+
+		//Otherwise we'll need to actually process this
 		default:
-			//If we hit the default, then we need to push the token back
+			//Push it back
 			push_back_token(token_stream, &parser_line_num);
+
+			//We need to at least one type in here
+			do {
+				//Now we need to see a valid type
+				generic_type_t* type = type_specifier(token_stream);
+
+				//If this is NULL, we'll error out
+				if(type == NULL){
+					return FALSE;
+				}
+
+				//Add it to the mutable version
+				add_parameter_to_function_type(mutable_function_type, type);
+
+				//Let's also add it to the immutable version
+				add_parameter_to_function_type(immutable_function_type, type);
+
+				//Refresh the lookahead token
+				lookahead = get_next_token(token_stream, &parser_line_num);
+
+				//If it's a comma keep going
+				if(lookahead.tok == COMMA){
+					continue;
+
+				//This is our exit criteria
+				} else if(lookahead.tok == R_PAREN){
+					break;
+
+				//Anything else it's an error
+				} else {
+					sprintf(info, "Expected , or ) but got \"%s\"", lexitem_to_string(&lookahead));
+					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+					num_errors++;
+					return FALSE;
+				}
+
+			//Keep going until we hit the exit condition
+			} while(TRUE);
+
 			break;
 	}
-
-	//Keep processing so long as we keep seeing commas
-	do {
-		//Now we need to see a valid type
-		generic_type_t* type = type_specifier(token_stream);
-
-		//If this is NULL, we'll error out
-		if(type == NULL){
-			return FALSE;
-		}
-
-		//Add it to the mutable version
-		add_parameter_to_function_type(mutable_function_type, type);
-
-		//Let's also add it to the immutable version
-		add_parameter_to_function_type(immutable_function_type, type);
-
-		//Refresh the lookahead token
-		lookahead = get_next_token(token_stream, &parser_line_num);
-
-	} while(lookahead.tok == COMMA);
 
 	//Now that we're done processing the list, we need to ensure that we have a right paren
 	if(lookahead.tok != R_PAREN){
