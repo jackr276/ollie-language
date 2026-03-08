@@ -2515,13 +2515,6 @@ variable_size_t get_type_size(generic_type_t* type){
 
 /**
  * Generate the full name for the function pointer type
- *
- * TODO ERROR LIST
- *
- *
- *
- *
- *
  */
 void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
 	//Reserve this for variable printing
@@ -2533,8 +2526,12 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
 	//Extract this out
 	function_type_t* function_type = function_pointer_type->internal_types.function_type;
 
-	//Set the type name initially
-	dynamic_string_set(&(function_pointer_type->type_name), "fn(");
+	//Initially add the appropriate fn or fn! name
+	if(function_type->raises_errors == FALSE){
+		dynamic_string_set(&(function_pointer_type->type_name), "fn(");
+	} else {
+		dynamic_string_set(&(function_pointer_type->type_name), "fn!(");
+	}
 
 	//Store this for our uses
 	u_int32_t num_params = function_type->function_parameters.current_index;
@@ -2569,6 +2566,30 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
 	} else {
 		//First print this to the buffer
 		sprintf(var_string, ") -> %s", function_type->return_type->type_name.string);
+	}
+
+	//Get the count
+	u_int32_t num_errors_to_raise = function_type->potential_errors.current_index;
+
+	//If we have potential errors that we raise, we'll add that now
+	if(num_errors_to_raise != 0){
+		sprintf(var_string, " raises (");
+
+		//Run through them all
+		for(u_int32_t i = 0; i < num_errors_to_raise; i++){
+			//Get it out
+			generic_type_t* error_type = dynamic_array_get_at(&function_type->potential_errors, i);
+
+			//Add it in
+			sprintf(var_string, "%s", error_type->type_name.string);
+
+			//Add comma where needed
+			if(i != num_errors_to_raise - 1){
+				sprintf(var_string, ", ");
+			}
+		}
+
+		sprintf(var_string, ")");
 	}
 
 	//Add the closing sequence
