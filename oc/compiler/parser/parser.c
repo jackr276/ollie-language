@@ -6233,19 +6233,62 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
  *
  * BNF From:: define error <ident>;
  */
-static u_int8_t error_definer(ollie_token_stream_t* stream, u_int8_t in_global_scope) {
+static u_int8_t error_definer(ollie_token_stream_t* token_stream, u_int8_t in_global_scope) {
 	//If we're not in the global scope, we leave
 	if(in_global_scope == FALSE){
 		print_parse_message(MESSAGE_TYPE_ERROR, "Errors may not be declared in any scope other than the global scope", parser_line_num);
+		num_errors++;
+		return FAILURE;
 	}
 
 	//Get the next token in the stream
-	lexitem_t lookahead = get_next_token(stream, &parser_line_num);
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
+	//If this isn't an identifier, we fail out
+	if(lookahead.tok != IDENT){
+		sprintf(info, "Expected identifier but got \"%s\" instead", lexitem_to_string(&lookahead));
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
 
-
+	//Now we've gotten an identifier, we need to make sure that there are not duplicates inside of 
+	char* error_name = lookahead.lexeme.string;
 	
+	//Check for duplicate functions, get out if this fails
+	if(do_duplicate_functions_exist(error_name) == TRUE){
+		return FAILURE;
+	}
 
+	//Check for duplicate variables
+	if(do_duplicate_variables_exist(error_name) == TRUE){
+		return FAILURE;
+	}
+
+	//Check for duplicate types
+	if(do_duplicate_types_exist(error_name) == TRUE){
+		return FAILURE;
+	}
+
+	//We should see a semicolon(remember this is the global scope)
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//If it's not a semicolon we fail out
+	if(lookahead.tok != SEMICOLON){
+		sprintf(info, "Expected ; but got \"%s\" instead", lexitem_to_string(&lookahead));
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//If we made it all of the way down here, then we know that we're not duplicating anything and we're safe to allocate
+	generic_type_t* error_type = create_error_type(error_name, parser_line_num);
+
+	//Create the associated record with it
+	symtab_type_record_t* record = create_type_record(error_type);
+
+	//Add it into the symtab
+	insert_type(type_symtab, record);
 
 	//If we made it all the way down here then return success
 	return SUCCESS;
