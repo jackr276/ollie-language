@@ -10544,9 +10544,6 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
  * error
  *
  * <error-list> = (<error>+)
- *
- *
- * TODO handle defining predeclared function case
  */
 static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* function_type, u_int8_t defining_predeclared_function){
 	//Extract the internal function type
@@ -10567,6 +10564,9 @@ static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* f
 
 	//Push onto the grouping stack
 	push_token(&grouping_stack, lookahead);
+
+	//Start the error count off at 0
+	u_int32_t error_count = 0;
 
 	//Now we need to see at least one, but possibly many, error types in here
 	do {
@@ -10605,16 +10605,38 @@ static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* f
 			return FAILURE;
 		}
 
-		/**
-		 * Once we've gotten all the way down here, we've found our error type so we need to do
-		 * all of the appropriate internal bookkeeping
-		 */
-		dynamic_array_add(&(internal_function_type->potential_errors), error_type);
 
-		if(defining_predeclared_function == TRUE){
-			//TODO
+		/**
+		 * If we're not defining something that was predeclared, then all we need to do
+		 * is add this in
+		 */
+		if(defining_predeclared_function == FALSE){
+			//Add it in
+			dynamic_array_add(&(internal_function_type->potential_errors), error_type);
+
+		} else {
+			//We have too many - we need to bail out
+			if(error_count > internal_function_type->potential_errors.current_index){
+				sprintf(info, "Function was predeclared as only having %d errors", internal_function_type->potential_errors.current_index); 
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				num_errors++;
+				return FAILURE;
+			}
+
+			//Extract the predeclared version
+			generic_type_t* predeclared_error = dynamic_array_get_at(&(internal_function_type->potential_errors), error_count);
+
+			//If this isn't an exact match, we fail out
+			if(predeclared_error != error_type){
+				sprintf(info, "Function was predeclared with error %d as \"%s\", but declared with \"%s\"", error_count + 1, predeclared_error->type_name.string, error_type->type_name.string);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				num_errors++;
+				return FAILURE;
+			}
 		}
 
+		//Bump the error count up
+		error_count++;
 
 		//Now we can either see a comma or the closing paren
 		lookahead = get_next_token(token_stream, &parser_line_num);
@@ -10637,6 +10659,14 @@ static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* f
 
 	//Loop forever until one of our exit cases is hit
 	} while(TRUE);
+
+	//Final check if we have a mismatch
+	if(defining_predeclared_function == TRUE && error_count != internal_function_type->potential_errors.current_index){
+		sprintf(info, "Mismatched error list lengths: predeclared wtih %d errors and declared with %d instead", internal_function_type->potential_errors.current_index, error_count);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
 
 	//We can only ever get here if we saw the R_PAREN. Make sure we can match it
 	if(pop_token(&grouping_stack).tok != L_PAREN){
