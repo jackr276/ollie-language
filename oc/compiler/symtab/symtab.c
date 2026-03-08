@@ -1591,6 +1591,12 @@ void print_type_record(symtab_type_record_t* record){
 	printf("Name: %s,\n", record->type->type_name.string);
 	printf("Hash: %ld,\n", record->hash);
 	printf("Lexical Level: %d,\n", record->lexical_level);
+
+	//If we have an error type print the error type ID
+	if(record->type->type_class == TYPE_CLASS_ERROR){
+		printf("Error ID: %d\n", record->type->internal_types.error_type_id);
+	}
+
 	printf("}\n");
 }
 

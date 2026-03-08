@@ -10427,6 +10427,35 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 
 
 /**
+ * An error list will handle all of the errors in a function definition if a function has a "raises" statement. It is
+ * important to note that this may not be empty. If we see the raises keyword, we need to raise at least one specific
+ * error
+ *
+ * <error-list> = (<error>+)
+ */
+static u_int8_t error_list(ollie_token_stream_t* token_stream, symtab_function_record_t* function_record, u_int8_t defining_predeclared_function){
+	//Extract the signature
+	generic_type_t* function_type = function_record->signature;
+	//Extract the internal function type
+	function_type_t* internal_function_type = function_type->internal_types.function_type;
+
+	//The lookahead token
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//If we do not see an open paren, we fail
+	if(lookahead.tok != L_PAREN){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Opening parenthesis required after raises keyword", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	
+
+}
+
+
+
+/**
  * A paramater list will handle all of the parameters in a function definition. It is important
  * to note that a parameter list may very well be empty, and that this rule will handle that case.
  * Regardless of the number of parameters(maximum of 6), a paramter list node will always be returned
@@ -10874,7 +10903,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	//Lookahead token
 	lexitem_t lookahead;
 	//Have we predeclared this function
-	u_int8_t definining_predeclared_function = FALSE;
+	u_int8_t defining_predeclared_function = FALSE;
 	//Is it the main function?
 	u_int8_t is_main_function = FALSE;
 	//Is this function public or private? Unless explicitly stated, all functions are private
@@ -11035,7 +11064,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	//If we get here, we know that we're defining a predeclared function
 	} else {
 		//Flag this
-		definining_predeclared_function = TRUE;
+		defining_predeclared_function = TRUE;
 		//Set this as well
 		current_function = function_record;
 
@@ -11081,17 +11110,31 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	//Now we must ensure that we see a valid parameter list. It is important to note that
 	//parameter lists can be empty, but whatever we have here we'll have to add in
 	//Parameter list parent is the function node
-	u_int8_t status = parameter_list(token_stream, function_record, definining_predeclared_function);
+	u_int8_t status = parameter_list(token_stream, function_record, defining_predeclared_function);
 
 	//We have a bad parameter list, we just fail out
 	if(status == FAILURE){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
-	//TODO ERROR RAISING
-
-	//Semantics here, we now must see a valid arrow symbol
+	/**
+	 * At this point, we can either see an error symbol or we can see the
+	 * "raises" keyword denoting that we want to see an error list
+	 */
 	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Process error raising
+	if(lookahead.tok == RAISES){
+		//If we didn't denote that this could raise errors with the ! after fn, we
+		//need to fail out here
+		if(raises_errors == FALSE){
+			sprintf(info, "Function \"%s\" was not declared as a function that may return errors. Declare using \"fn!\" to do this", function_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//Now that we've made it past that, we can let the helper do the parsing for us
+		u_int8_t success = error_list(token_stream, function_record, defining_predeclared_function);
+	}
 
 	//If it isn't an arrow, we're out of here
 	if(lookahead.tok != ARROW){
@@ -11112,7 +11155,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	generic_type_t* type = dealias_type(return_type);
 
 	//If we're defining a function that was previously implicit, the types have to match exactly
-	if(definining_predeclared_function == TRUE){
+	if(defining_predeclared_function == TRUE){
 		if(strcmp(type->type_name.string, function_record->return_type->type_name.string) != 0){
 			sprintf(info, "Function \"%s\" was predeclared with a return type of \"%s\", this may not be altered. First defined here:", function_name.string, function_record->return_type->type_name.string);
 			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
