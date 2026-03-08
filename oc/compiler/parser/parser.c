@@ -6302,7 +6302,7 @@ static u_int8_t error_definer(ollie_token_stream_t* token_stream, u_int8_t in_gl
  * Handle all of the parsing for a function pointer type. Note that this rule will create the function pointer
  * type if we cannot find it. It is unique in this way
  *
- * fn (<type-specifier>*) -> <type-specifier>
+ * fn (<type-specifier>*) -> <type-specifier> {raises <error-list>}
  * NOTE: by the time we get here, we have already seen and consumed the "fn" token
  */
 static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_stream_t* stream, mutability_type_t mutability){
@@ -10866,7 +10866,7 @@ after_rparen:
  *
  * NOTE: We have already consumed the FUNC keyword by the time we arrive here, so we will not look for it in this function
  *
- * BNF Rule: <function-definition> ::= {pub | inline}? fn{!}? <identifer> {<parameter-list> -> <type-specifier> <compound-statement>
+ * BNF Rule: <function-definition> ::= {pub | inline}? fn{!}? <identifer> {<parameter-list> -> <type-specifier> {raises <error-list>} <compound-statement>
  */
 static generic_ast_node_t* function_definition(ollie_token_stream_t* token_stream){
 	//Freeze the line number

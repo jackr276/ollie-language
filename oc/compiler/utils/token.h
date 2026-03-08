@@ -141,6 +141,8 @@ typedef enum {
 	F64,
 	CHAR,
 	PUB,
+	RAISE, //Error raising
+	RAISES, //For function definition
 	TRUE_CONST,
 	FALSE_CONST,
 	INLINE,

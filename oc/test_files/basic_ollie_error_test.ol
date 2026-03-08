@@ -13,7 +13,7 @@ define error divide_by_zero_error_t;
 * we use the ! after the "fn" keyword. It is possible for
 * someone to use Ollie without using the error system at all
 */
-pub fn! ollie_error(x:i32, y:i32) -> i32 raises arithemtic_error_t, divide_by_zero_error_t {
+pub fn! ollie_error(x:i32, y:i32) -> i32 raises(arithemtic_error_t, divide_by_zero_error_t) {
 	if(y == 0){
 		raise arithmetic_error;
 	} 
