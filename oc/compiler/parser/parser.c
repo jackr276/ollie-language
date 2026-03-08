@@ -10498,11 +10498,37 @@ static u_int8_t error_list(ollie_token_stream_t* token_stream, symtab_function_r
 		 */
 		dynamic_array_add(&(internal_function_type->potential_errors), error_type);
 
+		//Now we can either see a comma or the closing paren
+		lookahead = get_next_token(token_stream, &parser_line_num);
 
+		//If we have a comma then continue
+		if(lookahead.tok == COMMA){
+			continue;
+
+		//If we have an R_PAREN then get out
+		} else if(lookahead.tok == R_PAREN){
+			break;
+
+		//Otherwise this is an error
+		} else {
+			sprintf(info, "Expected , or ) but got \"%s\"", lexitem_to_string(&lookahead));
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			num_errors++;
+			return FAILURE;
+		}
+
+	//Loop forever until one of our exit cases is hit
 	} while(TRUE);
 
-	
+	//We can only ever get here if we saw the R_PAREN. Make sure we can match it
+	if(pop_token(&grouping_stack).tok != L_PAREN){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
 
+	//With that we are done, we can return success
+	return SUCCESS;
 }
 
 
@@ -10745,6 +10771,8 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	u_int8_t is_public = FALSE;
 	//Is this an inline function? Also assume no by default
 	u_int8_t is_inlined = FALSE;
+	//Does this funtion raise errors? We know based on the ! after the fn keyword
+	u_int8_t raises_errors = FALSE;
 
 	//Lookahead token
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
@@ -10812,6 +10840,14 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	//Following this, we need to see an identifier
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
+	//If we see an exclaimation point, then this function raises errors
+	if(lookahead.tok == EXCLAMATION){
+		raises_errors = TRUE;
+
+		//Refresh the token
+		lookahead = get_next_token(token_stream, &parser_line_num);
+	}
+
 	//If it's not an ident, we leave
 	if(lookahead.tok != IDENT){
 		return print_and_return_error("Identifier required after fn keyword in function predeclaration", parser_line_num);
@@ -10842,7 +10878,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	}
 
 	//Now that we've survived up to here, we can make the actual record
-	symtab_function_record_t* function_record = create_function_record(function_name, is_public, is_inlined, parser_line_num);
+	symtab_function_record_t* function_record = create_function_record(function_name, is_public, is_inlined, raises_errors, parser_line_num);
 
 	//Now we need to see an lparen to begin the parameters
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -10911,6 +10947,8 @@ after_rparen:
 	if(pop_token(&grouping_stack).tok != L_PAREN){
 		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
 	}
+
+	//TODO ERROR LIST
 
 	//Following this, we need to see the -> symbol
 	lookahead = get_next_token(token_stream, &parser_line_num);
