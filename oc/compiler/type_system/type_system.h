@@ -69,7 +69,8 @@ typedef enum type_class_t {
 	TYPE_CLASS_POINTER,
 	TYPE_CLASS_FUNCTION_SIGNATURE, /* Function pointer type */
 	TYPE_CLASS_UNION, /* For discriminating union types */
-	TYPE_CLASS_ALIAS /* Alias types */
+	TYPE_CLASS_ALIAS, /* Alias types */
+	TYPE_CLASS_ERROR, /* Specialized error types */
 } type_class_t;
 
 //========================= Utility Macros ============================
@@ -253,6 +254,11 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
  * Dynamically allocate and create a basic type
 */
 generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type, mutability_type_t mutability);
+
+/**
+ * Dynamically allocate and create an error type
+ */
+generic_type_t* create_error_type(char* type_name, u_int32_t line_number);
 
 /**
  * Strip any aliasing away from a type that we have

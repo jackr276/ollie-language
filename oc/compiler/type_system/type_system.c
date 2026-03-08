@@ -1786,6 +1786,29 @@ generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type, mut
 
 
 /**
+ * Dynamically allocate and create an error type
+ *
+ * Error types are always immutable, so we do not need a mutability passed along here
+ */
+generic_type_t* create_error_type(char* type_name, u_int32_t line_number){
+	//Allocate it first
+	generic_type_t* type = calloc(1, sizeof(generic_type_t));
+
+	//Make room for the name
+	type->type_name = dynamic_string_alloc();
+	dynamic_string_set(&(type->type_name), type_name);
+
+	//Update the type, line number and mutability
+	type->line_number = line_number;
+	type->type_class = TYPE_CLASS_ERROR;
+	type->mutability = NOT_MUTABLE;
+
+	//Give it back
+	return type;
+}
+
+
+/**
  * Create a pointer type dynamically. In order to have a pointer type, we must also
  * have what it points to.
  */
