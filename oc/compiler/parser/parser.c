@@ -10549,8 +10549,10 @@ static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* f
 	//Extract the internal function type
 	function_type_t* internal_function_type = function_type->internal_types.function_type;
 
-	//Allocate the internal potential errors array
-	internal_function_type->potential_errors = dynamic_array_alloc();
+	//Only do this if we're not defining from scratch
+	if(defining_predeclared_function == FALSE){
+		internal_function_type->potential_errors = dynamic_array_alloc();
+	}
 
 	//The lookahead token
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
@@ -10615,7 +10617,7 @@ static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* f
 
 		} else {
 			//We have too many - we need to bail out
-			if(error_count > internal_function_type->potential_errors.current_index){
+			if(error_count >= internal_function_type->potential_errors.current_index){
 				sprintf(info, "Function was predeclared as only having %d errors", internal_function_type->potential_errors.current_index); 
 				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				num_errors++;
@@ -10627,7 +10629,7 @@ static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* f
 
 			//If this isn't an exact match, we fail out
 			if(predeclared_error != error_type){
-				sprintf(info, "Function was predeclared with error %d as \"%s\", but declared with \"%s\"", error_count + 1, predeclared_error->type_name.string, error_type->type_name.string);
+				sprintf(info, "Function was predeclared with error number %d as \"%s\", but declared with \"%s\" as error number %d", error_count + 1, predeclared_error->type_name.string, error_type->type_name.string, error_count + 1);
 				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				num_errors++;
 				return FAILURE;
