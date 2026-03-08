@@ -404,7 +404,7 @@ void add_function_parameter(type_symtab_t* symtab, symtab_function_record_t* fun
 /**
  * Make a function record
  */
-symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t is_public, u_int8_t is_inlined, u_int32_t line_number);
+symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t is_public, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number);
 
 /**
  * Create a type record for the symbol table

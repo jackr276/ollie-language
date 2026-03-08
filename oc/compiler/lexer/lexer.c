@@ -346,7 +346,7 @@ char* lexitem_to_string(lexitem_t* lexitem){
 			return "!=";
 		case B_NOT:
 			return "~";
-		case L_NOT:
+		case EXCLAMATION:
 			return "!";
 		case MACRO_PARAM:
 			sprintf(info, "%s", lexitem->lexeme.string);
@@ -428,7 +428,7 @@ char* operator_token_to_string(ollie_token_t token){
 			return "!=";
 		case B_NOT:
 			return "~";
-		case L_NOT:
+		case EXCLAMATION:
 			return "!";
 		case BLANK:
 			return "BLANK OPERATOR";
@@ -1035,7 +1035,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 							default:
 								PUT_BACK_CHAR(fl);
-								lex_item.tok = L_NOT;
+								lex_item.tok = EXCLAMATION;
 								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;

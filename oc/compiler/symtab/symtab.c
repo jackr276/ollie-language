@@ -676,7 +676,7 @@ void add_function_parameter(type_symtab_t* type_symtab, symtab_function_record_t
 /**
  * Dynamically allocate a function record
 */
-symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t is_public, u_int8_t is_inlined, u_int32_t line_number){
+symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t is_public, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number){
 	//Allocate it
 	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
 
@@ -707,7 +707,7 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t
 	record->inlined = is_inlined;
 
 	//We know that we need to create this immediately
-	record->signature = create_function_pointer_type(is_public, is_inlined, line_number, NOT_MUTABLE);
+	record->signature = create_function_pointer_type(is_public, is_inlined, line_number, raises_errors, NOT_MUTABLE);
 
 	//And give it back
 	return record;

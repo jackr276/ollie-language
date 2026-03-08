@@ -2539,7 +2539,7 @@ static u_int8_t is_unary_operator(ollie_token_t tok){
 		case MINUS:
 		case MINUSMINUS:
 		case PLUSPLUS:
-		case L_NOT:
+		case EXCLAMATION:
 		case B_NOT:
 			return TRUE;
 		//By default no
@@ -2712,7 +2712,7 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 			break;
 
 		//Logical not case
-		case L_NOT:
+		case EXCLAMATION:
 			//Check to see if it's valid
 			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, unary_op_tok);
 
@@ -2835,7 +2835,7 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 				increment_constant_value(cast_expr);
 				return cast_expr;
 
-			case L_NOT:
+			case EXCLAMATION:
 				logical_not_constant_value(cast_expr);
 				return cast_expr;
 
@@ -4973,7 +4973,7 @@ static u_int8_t struct_member_list(ollie_token_stream_t* token_stream, generic_t
  * A function pointer definer defines a function signature that can be used to dynamically call functions 
  * of the same signature
  *
- * define fn(<parameter_list>) -> {mut}? <type> as <identifier>;
+ * define fn{!}?(<parameter_list>) -> {mut}? <type> as <identifier>;
  *
  * Unlike constructs & enums, we'll force the user to use an as keyword here for their type definition to
  * enforce readability
@@ -4996,6 +4996,9 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 
 	//Otherwise push this onto the grouping stack for later
 	push_token(&grouping_stack, lookahead);
+
+	//TODO ADD ERROR RAISING
+
 
 	//Once we've gotten past this point, we're safe to allocate this type. Function
 	//pointers are always private and never inlined
@@ -10879,6 +10882,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	//Is this function inlined? By default no
 	u_int8_t is_inlined = FALSE;
 	//Does this funtion raise errors? We know based on the ! after the fn keyword
+	u_int8_t raises_errors = FALSE;
 
 	//Grab the token
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -10943,6 +10947,21 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			return print_and_return_error(info, parser_line_num);
 	}
 
+	/**
+	 * It is possible for us to see the "!" for this function, in which case that means that this function
+	 * may raise errors of any kind. If we see this, we need to consume it and flag it here
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	
+	//If we see this it means that we can raise errors
+	if(lookahead.tok == EXCLAMATION){
+		raises_errors = TRUE;
+
+	//Otherwise put it back
+	} else {
+		push_back_token(token_stream, &parser_line_num);
+	}
+
 	//We also need to mark that we're in a function using the nesting stack
 	push_nesting_level(&nesting_stack, NESTING_FUNCTION);
 
@@ -10995,7 +11014,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-		function_record = create_function_record(function_name, is_public, is_inlined, parser_line_num);
+		function_record = create_function_record(function_name, is_public, is_inlined, raises_errors, parser_line_num);
 
 		//We'll put the function into the symbol table
 		//since we now know that everything worked
@@ -11039,6 +11058,16 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			sprintf(info, "Function \"%s\" was not predeclared as inline. Please add the inline keyword to the forward declaration", function_record->func_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
+
+		//Check the matching case for raises errors
+		if(function_record->signature->internal_types.function_type->raises_errors == TRUE && raises_errors == FALSE){
+			sprintf(info, "Function \"%s\" was predeclared as raising errors. Please add the ! signifier to the declaration", function_record->func_name.string);
+			return print_and_return_error(info, parser_line_num);
+
+		} else if(function_record->signature->internal_types.function_type->raises_errors == FALSE && raises_errors == TRUE){
+			sprintf(info, "Function \"%s\" was not predeclared as not raising errors. Please add the ! signifier to the forward declaration", function_record->func_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
 	}
 
 	//Associate this with the function node
@@ -11058,6 +11087,8 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	if(status == FAILURE){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
+
+	//TODO ERROR RAISING
 
 	//Semantics here, we now must see a valid arrow symbol
 	lookahead = get_next_token(token_stream, &parser_line_num);

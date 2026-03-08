@@ -83,7 +83,7 @@ typedef enum {
 	STAR,
 	F_SLASH,
 	MOD,
-	L_NOT,
+	EXCLAMATION,
 	B_NOT,
 	IDENT,
 	POUND, /* # */
