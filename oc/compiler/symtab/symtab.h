@@ -120,6 +120,8 @@ struct symtab_function_record_t{
 	dynamic_set_t called_functions;
 	//What's the return type?
 	generic_type_t* return_type;
+	//What is the set of all errors that this function may or may not raise?
+	dynamic_array_t raises_errors;
 	//The line number
 	u_int32_t line_number;
 	//A bitmap for all assigned general purpose registers

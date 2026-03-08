@@ -126,6 +126,7 @@ typedef enum {
 	ARROW, /* -> */
 	FAT_ARROW, /* => */
 	LEXER_ERROR, // A special token that denotes a lexer error
+	ERROR,
 	DONE,
 	VOID,
 	U8,
