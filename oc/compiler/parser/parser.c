@@ -11131,9 +11131,7 @@ after_rparen:
 
 		//If this fails we're out
 		if(success == FAILURE){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid error list given in function pointer type", parser_line_num);
-			num_errors++;
-			return NULL;
+			return print_and_return_error("Invalid error list given in function pointer type", parser_line_num);
 		}
 
 	} else {
@@ -11441,7 +11439,8 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		 * What if we're defining a predeclared function that did not have the "raises" keyword on it? If so then this is wrong
 		 */
 		if(defining_predeclared_function == TRUE && function_record->signature->internal_types.function_type->potential_errors.current_index == 0){
-			sprintf(info, "Function \"%s\" was not declared as raising specific errors. \"raises\" is invalid in this context", function_record->func_name.string);
+			sprintf(info, "Function \"%s\" was not declared as raising specific errors. \"raises\" is invalid in this context. Predeclared as type: %s",
+		   					function_record->func_name.string, function_record->signature->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -11461,7 +11460,8 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		 * What if we're defining a predeclared function that *did* ave the "raises" keyword on it? If so then this is wrong
 		 */
 		if(defining_predeclared_function == TRUE && function_record->signature->internal_types.function_type->potential_errors.current_index != 0){
-			sprintf(info, "Function \"%s\" was declared as raising specific errors. \"raises\" is required in this context", function_record->func_name.string);
+			sprintf(info, "Function \"%s\" was declared as raising specific errors. \"raises\" is required in this context. Predeclared as type: %s",
+		   					function_record->func_name.string, function_record->signature->type_name.string);
 		 	return print_and_return_error(info, parser_line_num);
 		}
 

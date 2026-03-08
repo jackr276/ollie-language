@@ -2568,12 +2568,15 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
 		sprintf(var_string, ") -> %s", function_type->return_type->type_name.string);
 	}
 
+	//Concatenate the var string in
+	dynamic_string_concatenate(&(function_pointer_type->type_name), var_string);
+
 	//Get the count
 	u_int32_t num_errors_to_raise = function_type->potential_errors.current_index;
 
 	//If we have potential errors that we raise, we'll add that now
 	if(num_errors_to_raise != 0){
-		sprintf(var_string, " raises (");
+		dynamic_string_concatenate(&(function_pointer_type->type_name), " raises (");
 
 		//Run through them all
 		for(u_int32_t i = 0; i < num_errors_to_raise; i++){
@@ -2583,17 +2586,18 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
 			//Add it in
 			sprintf(var_string, "%s", error_type->type_name.string);
 
+			//Concatenate this in
+			dynamic_string_concatenate(&(function_pointer_type->type_name), var_string);
+
 			//Add comma where needed
 			if(i != num_errors_to_raise - 1){
-				sprintf(var_string, ", ");
+				dynamic_string_concatenate(&(function_pointer_type->type_name), ", ");
 			}
 		}
 
-		sprintf(var_string, ")");
+		//Concatenate the var string in
+		dynamic_string_concatenate(&(function_pointer_type->type_name), ")");
 	}
-
-	//Add the closing sequence
-	dynamic_string_concatenate(&(function_pointer_type->type_name), var_string);
 }
 
 
