@@ -429,6 +429,9 @@ static inline u_int8_t does_block_end_in_ret_instruction(basic_block_t* block){
 			default:
 				return FALSE;
 		}
+
+		//Bump it up
+		cursor = cursor->previous_statement;
 	}
 
 	//If we survived to here, return true
