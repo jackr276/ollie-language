@@ -405,28 +405,34 @@ static inline u_int8_t does_block_contain_more_than_one_jump_to_target(basic_blo
  * Is a block exclusively a return statement? This is a pretty easy check
  * which is why this entire function is inlined
  */
-static inline u_int8_t is_block_ret_instruction_only(basic_block_t* block){
+static inline u_int8_t does_block_end_in_ret_instruction(basic_block_t* block){
 	//Get the leader statement
-	instruction_t* leader_statement = block->leader_statement;
+	instruction_t* exit_statement = block->exit_statement;
 
-	/**
-	 * Remember that blocks may have phi functions on them. At this point in the code
-	 * however, these are irrelevant and they're completely ignored. So, we need to
-	 * skip past all of them(because they will be here) in order to reach what we're
-	 * looking for
-	 */
-	while(leader_statement != NULL && leader_statement->instruction_type == PHI_FUNCTION){
-		//Bump it up
-		leader_statement = leader_statement->next_statement;
-	}
-
-
-	//We want a block that is *exclusively* a return statement
-	if(leader_statement != NULL && leader_statement->instruction_type == RET){
-		return TRUE;
-	} else {
+	//If this isn't a ret statement, we bail out
+	if(exit_statement->instruction_type != RET){
 		return FALSE;
 	}
+
+	/**
+	 * Now let's crawl our way back up the block. If we see anything like
+	 * a jump, conditional jump, or indirect jump, we fail out because that is not
+	 * something that we would want to combine in
+	 */
+	instruction_t* cursor = exit_statement->previous_statement;
+
+	while(cursor != NULL){
+		switch(cursor->instruction_type){
+			case PHI_FUNCTION:
+			case ADDQ:
+				break;
+			default:
+				return FALSE;
+		}
+	}
+
+	//If we survived to here, return true
+	return TRUE;
 }
 
 
@@ -553,7 +559,7 @@ static void copy_block(basic_block_t* destination, basic_block_t* source){
  * 				replace transfers to i with transfers to j
  * 			if j has only one predecessor then
  * 				merge i and j
- * 			else if j has more than one predecessor and is exclusively a "ret" statement
+ * 			else if j has more than one predecessor and ends in a "ret" statement
  * 				delete the jump from i to j
  * 				remove j as a successor to i
  * 				copy the ret from j to it's predecessor i
@@ -664,7 +670,7 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 				 * Eligibility is: the block we're going to is just a "ret" *AND*
 				 * our block doesn't already have multiple jumps to this one target
 				 */
-				if(is_block_ret_instruction_only(jumping_to_block) == TRUE
+				if(does_block_end_in_ret_instruction(jumping_to_block) == TRUE
 					&& does_block_contain_more_than_one_jump_to_target(current, jumping_to_block) == FALSE){
 
 					//Delete the jump statement
