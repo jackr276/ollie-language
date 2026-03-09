@@ -1827,6 +1827,11 @@ static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* f
 
 	//Some bookkeeping - all of the original blocks successors should no longer point to it
 	for(u_int16_t i = 0; i < original_block->successors.current_index; i++){
+		//TODO 100% WRONG
+		//
+		//You can't be doing things like this where we mutate the block as we
+		//run over it. We need to save things locally and then do it
+
 		basic_block_t* successor = dynamic_array_get_at(&(original_block->successors), i);
 
 		//Remove the successor/predecessor link
@@ -2004,6 +2009,12 @@ static void optimize_logical_or_branch_logic(symtab_function_record_t* function,
 
 	//Some bookkeeping - all of the original blocks successors should no longer point to it
 	for(u_int16_t i = 0; i < original_block->successors.current_index; i++){
+		//TODO 100% WRONG
+		//
+		//You can't be doing things like this where we mutate the block as we
+		//run over it. We need to save things locally and then do it
+
+
 		basic_block_t* successor = dynamic_array_get_at(&(original_block->successors), i);
 
 		//Remove the successor/predecessor link
@@ -2181,6 +2192,11 @@ static void optimize_logical_and_inverse_branch_logic(symtab_function_record_t* 
 
 	//Some bookkeeping - all of the original blocks successors should no longer point to it
 	for(u_int16_t i = 0; i < original_block->successors.current_index; i++){
+		//TODO 100% WRONG
+		//
+		//You can't be doing things like this where we mutate the block as we
+		//run over it. We need to save things locally and then do it
+
 		basic_block_t* successor = dynamic_array_get_at(&(original_block->successors), i);
 
 		//Remove the successor/predecessor link
@@ -2357,6 +2373,12 @@ static void optimize_logical_and_branch_logic(symtab_function_record_t* function
 
 	//Some bookkeeping - all of the original blocks successors should no longer point to it
 	for(u_int16_t i = 0; i < original_block->successors.current_index; i++){
+		//TODO WRONG
+		//
+		//
+		//We can't be doing things like modifying a dyn array as we loop over it
+
+
 		basic_block_t* successor = dynamic_array_get_at(&(original_block->successors), i);
 
 		//Remove the successor/predecessor link
