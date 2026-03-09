@@ -12,6 +12,15 @@
 #include <sys/types.h>
 
 /**
+ * We only want to perform ret-hoisting for small enough
+ * blocks. If we have gigantic ret blocks, hoisting them
+ * would case more trouble than it's worth because it would
+ * explode the binary size
+ */
+#define MAX_INSTRUCTIONS_FOR_HOISTING 3
+
+
+/**
  * Combine two blocks into one. This is different than other combine methods,
  * because post register-allocation, we do not really care about anything like
  * used variables, dominance relations, etc.
@@ -423,6 +432,14 @@ static inline u_int8_t is_block_eligible_for_ret_hoisting(basic_block_t* block){
 	 */
 	instruction_t* cursor = exit_statement->previous_statement;
 
+	/**
+	 * What is the count of "non-saving" related instructions? If it's more than
+	 * a certain amount, we probably don't want to ret hoist as we can end up
+	 * exploding the size of the program pretty easily if we have a giant
+	 * ret block
+	 */
+	u_int32_t number_of_non_call_management_instructions = 0;
+
 	//For every instruction
 	while(cursor != NULL){
 		/**
@@ -448,12 +465,37 @@ static inline u_int8_t is_block_eligible_for_ret_hoisting(basic_block_t* block){
 			case ASM_INLINE:
 				return FALSE;
 
+			//These are call management
+			case POP_DIRECT_GP:
+			case POP_DIRECT_SSE:
+				break;
+
+			case ADDQ:
+				//Only counts if this isn't the stack pointer
+				if(cursor->destination_register->is_stack_pointer == FALSE){
+					number_of_non_call_management_instructions++;
+				}
+
+				//Regardless this isn't a big deal
+				break;
+
 			default:
+				//Bump this up
+				number_of_non_call_management_instructions++;
 				break;
 		}
 
 		//Bump it up
 		cursor = cursor->previous_statement;
+	}
+
+	/**
+	 * If we exceed the predetermined amount of maximum instructions, we fail out.
+	 * Not because this would be wrong, but because we'd eventually get to a point
+	 * where our binary starts getting too big from all of the duplication
+	 */
+	if(number_of_non_call_management_instructions > MAX_INSTRUCTIONS_FOR_HOISTING){
+		return FALSE;
 	}
 
 	//If we survived to here, return true
