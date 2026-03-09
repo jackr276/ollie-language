@@ -402,10 +402,12 @@ static inline u_int8_t does_block_contain_more_than_one_jump_to_target(basic_blo
 
 
 /**
- * Is a block exclusively a return statement? This is a pretty easy check
- * which is why this entire function is inlined
+ * Is this block eligible for "ret hoisting", where we copy this entire block
+ * up to its predecessors to save on jump statements? If so, then this block
+ * must have no jumps, conditional jumps, or indirect jumps in it to ensure that
+ * we're maintaining all of our dominance relations
  */
-static inline u_int8_t does_block_end_in_ret_instruction(basic_block_t* block){
+static inline u_int8_t is_block_eligible_for_ret_hoisting(basic_block_t* block){
 	//Get the leader statement
 	instruction_t* exit_statement = block->exit_statement;
 
@@ -421,13 +423,33 @@ static inline u_int8_t does_block_end_in_ret_instruction(basic_block_t* block){
 	 */
 	instruction_t* cursor = exit_statement->previous_statement;
 
+	//For every instruction
 	while(cursor != NULL){
+		/**
+		 * Let's see if we have any disqualifiers in here
+		 */
 		switch(cursor->instruction_type){
-			case PHI_FUNCTION:
-			case ADDQ:
-				break;
-			default:
+			//All of these instruction types are things we wouldn't want to hoist
+			case JMP:
+			case JNE:
+			case JE:
+			case JNZ:
+			case JZ:
+			case JP:
+			case JL:
+			case JLE:
+			case JG:
+			case JGE:
+			case JB:
+			case JBE:
+			case JA:
+			case JAE:
+			case INDIRECT_JMP:
+			case ASM_INLINE:
 				return FALSE;
+
+			default:
+				break;
 		}
 
 		//Bump it up
@@ -673,7 +695,7 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 				 * Eligibility is: the block we're going to is just a "ret" *AND*
 				 * our block doesn't already have multiple jumps to this one target
 				 */
-				if(does_block_end_in_ret_instruction(jumping_to_block) == TRUE
+				if(is_block_eligible_for_ret_hoisting(jumping_to_block) == TRUE
 					&& does_block_contain_more_than_one_jump_to_target(current, jumping_to_block) == FALSE){
 
 					//Delete the jump statement
