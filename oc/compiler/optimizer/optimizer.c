@@ -1791,6 +1791,10 @@ static inline instruction_t* emit_test_not_zero_instruction(three_addr_var_t* de
  * Remove all of the successors from a given block. This handles all of the decoupling
  * that we need, so we shouldn't need to do anythign else to the block after this function
  * runs
+ *
+ * This is necessary because if we were to be deleting successors as we went along in the
+ * block, we would be messing with the size of the array as we went along. This could lead to
+ * memory corruption or to us missing some of the successors that we meant to delete
  */
 static inline void remove_all_successors(basic_block_t* block){
 	//Extract the number of successors
@@ -1799,6 +1803,19 @@ static inline void remove_all_successors(basic_block_t* block){
 	//We'll need a stack VLA to hold all of these successors
 	basic_block_t* successors_to_remove[number_of_successors];
 
+	//Run through everything here and populate the removal array
+	for(u_int32_t i = 0; i < number_of_successors; i++){
+		successors_to_remove[i] = dynamic_array_get_at(&(block->successors), i);
+	}
+
+	//Now we'll run through the array again and do our deletion
+	for(u_int32_t i = 0; i < number_of_successors; i++){
+		//Extract it
+		basic_block_t* successor_to_remove = successors_to_remove[i];
+
+		//Delete it
+		delete_successor(block, successor_to_remove);
+	}
 }
 
 
