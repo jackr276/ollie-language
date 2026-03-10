@@ -10613,6 +10613,21 @@ static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* f
 		 * is add this in
 		 */
 		if(defining_predeclared_function == FALSE){
+			//Let's first check for duplicated errors
+			for(u_int32_t i = 0; i < internal_function_type->potential_errors.current_index; i++){
+				//Extrace it
+				generic_type_t* candidate = dynamic_array_get_at(&(internal_function_type->potential_errors), i);
+
+				//TODO FIX THIS - MAKE IT TYPES EQUAL
+				//If they're equal at all, we fail out
+				if(error_type == candidate){
+					sprintf(info, "Function is already declared as raising an error of \"%s\"" , error_type->type_name.string);
+					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+					num_errors++;
+					return FAILURE;
+				}
+			}
+
 			//Add it in
 			dynamic_array_add(&(internal_function_type->potential_errors), error_type);
 
