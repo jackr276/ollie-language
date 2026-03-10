@@ -10618,9 +10618,8 @@ static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* f
 				//Extrace it
 				generic_type_t* candidate = dynamic_array_get_at(&(internal_function_type->potential_errors), i);
 
-				//TODO FIX THIS - MAKE IT TYPES EQUAL
 				//If they're equal at all, we fail out
-				if(error_type == candidate){
+				if(types_identical(candidate, error_type) == TRUE){
 					sprintf(info, "Function is already declared as raising an error of \"%s\"" , error_type->type_name.string);
 					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 					num_errors++;

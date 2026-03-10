@@ -257,6 +257,11 @@ generic_type_t* determine_compatibility_and_coerce(void* type_symtab, generic_ty
 generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_t* source_type);
 
 /**
+ * Are two types *exactly* equal or not? This will account for type aliasing as well
+ */
+u_int8_t types_identical(generic_type_t* a, generic_type_t* b);
+
+/**
  * Dynamically allocate and create a basic type
 */
 generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type, mutability_type_t mutability);

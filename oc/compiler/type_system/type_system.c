@@ -783,13 +783,39 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 
 /**
+ * Are two types *exactly* equal or not? This will account for type aliasing as well
+ */
+u_int8_t types_identical(generic_type_t* a, generic_type_t* b){
+	//Let's first dealias both types
+	generic_type_t* true_type_a = dealias_type(a);
+	generic_type_t* true_type_b = dealias_type(b);
+
+	//Unequal type classes is an automatic false
+	if(true_type_a->type_class != true_type_b->type_class){
+		return FALSE;
+	}
+
+	/**
+	 * We may eventually elaborate more on this, but for right now, it is
+	 * sufficient to just compare the raw pointers to see if they're
+	 * equal or not
+	 */
+	if(true_type_a == true_type_b){
+		return TRUE;
+	} else {
+		return FALSE;
+	}
+}
+
+
+/**
  * Convert a given basic type to the unsigned version of itself. We will *not*
  * perform any size manipulation here
  *
  * We'll need this because we always coerce to unsigned, *not* to signed,
  * if one operand in a certain equation is unsigned
  */
-static generic_type_t* convert_to_unsigned_version(type_symtab_t* symtab, generic_type_t* type){
+static inline generic_type_t* convert_to_unsigned_version(type_symtab_t* symtab, generic_type_t* type){
 	//Switch based on what we have
 	switch(type->basic_type_token){
 		//Char is already unsigned
