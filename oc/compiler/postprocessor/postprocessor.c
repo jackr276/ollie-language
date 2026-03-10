@@ -17,7 +17,7 @@
  * would case more trouble than it's worth because it would
  * explode the binary size
  */
-#define MAX_INSTRUCTIONS_FOR_HOISTING 3
+#define MAX_INSTRUCTIONS_FOR_HOISTING 2
 
 
 /**
