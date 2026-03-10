@@ -9,7 +9,7 @@ define error error2;
 define error error3;
 
 //Should never get past here
-pub fn! duplicate_errors(x:i32) -> i32 raises(error1, error2, error2);
+declare pub fn! duplicate_errors(i32) -> i32 raises(error1, error2, error2);
 
 pub fn! duplicate_errors(x:i32) -> i32 raises(error1, error2, error2) {
 	ret 0;

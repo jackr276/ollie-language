@@ -11454,9 +11454,6 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			return print_and_return_error("Invalid error list detected in function declaration", parser_line_num);
 		}
 
-		//Refresh the token
-		lookahead = get_next_token(token_stream, &parser_line_num);
-
 	} else {
 		/**
 		 * What if we're defining a predeclared function that *did* ave the "raises" keyword on it? If so then this is wrong
