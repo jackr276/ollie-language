@@ -12,6 +12,15 @@
 #include <sys/types.h>
 
 /**
+ * We only want to perform ret-hoisting for small enough
+ * blocks. If we have gigantic ret blocks, hoisting them
+ * would case more trouble than it's worth because it would
+ * explode the binary size
+ */
+#define MAX_INSTRUCTIONS_FOR_HOISTING 2
+
+
+/**
  * Combine two blocks into one. This is different than other combine methods,
  * because post register-allocation, we do not really care about anything like
  * used variables, dominance relations, etc.
@@ -402,31 +411,95 @@ static inline u_int8_t does_block_contain_more_than_one_jump_to_target(basic_blo
 
 
 /**
- * Is a block exclusively a return statement? This is a pretty easy check
- * which is why this entire function is inlined
+ * Is this block eligible for "ret hoisting", where we copy this entire block
+ * up to its predecessors to save on jump statements? If so, then this block
+ * must have no jumps, conditional jumps, or indirect jumps in it to ensure that
+ * we're maintaining all of our dominance relations
  */
-static inline u_int8_t is_block_ret_instruction_only(basic_block_t* block){
+static inline u_int8_t is_block_eligible_for_ret_hoisting(basic_block_t* block){
 	//Get the leader statement
-	instruction_t* leader_statement = block->leader_statement;
+	instruction_t* exit_statement = block->exit_statement;
 
-	/**
-	 * Remember that blocks may have phi functions on them. At this point in the code
-	 * however, these are irrelevant and they're completely ignored. So, we need to
-	 * skip past all of them(because they will be here) in order to reach what we're
-	 * looking for
-	 */
-	while(leader_statement != NULL && leader_statement->instruction_type == PHI_FUNCTION){
-		//Bump it up
-		leader_statement = leader_statement->next_statement;
-	}
-
-
-	//We want a block that is *exclusively* a return statement
-	if(leader_statement != NULL && leader_statement->instruction_type == RET){
-		return TRUE;
-	} else {
+	//If this isn't a ret statement, we bail out
+	if(exit_statement->instruction_type != RET){
 		return FALSE;
 	}
+
+	/**
+	 * Now let's crawl our way back up the block. If we see anything like
+	 * a jump, conditional jump, or indirect jump, we fail out because that is not
+	 * something that we would want to combine in
+	 */
+	instruction_t* cursor = exit_statement->previous_statement;
+
+	/**
+	 * What is the count of "non-saving" related instructions? If it's more than
+	 * a certain amount, we probably don't want to ret hoist as we can end up
+	 * exploding the size of the program pretty easily if we have a giant
+	 * ret block
+	 */
+	u_int32_t number_of_non_call_management_instructions = 0;
+
+	//For every instruction
+	while(cursor != NULL){
+		/**
+		 * Let's see if we have any disqualifiers in here
+		 */
+		switch(cursor->instruction_type){
+			//All of these instruction types are things we wouldn't want to hoist
+			case JMP:
+			case JNE:
+			case JE:
+			case JNZ:
+			case JZ:
+			case JP:
+			case JL:
+			case JLE:
+			case JG:
+			case JGE:
+			case JB:
+			case JBE:
+			case JA:
+			case JAE:
+			case INDIRECT_JMP:
+			case ASM_INLINE:
+				return FALSE;
+
+			//These are call management
+			case POP_DIRECT_GP:
+			case POP_DIRECT_SSE:
+				break;
+
+			case ADDQ:
+				//Only counts if this isn't the stack pointer
+				if(cursor->destination_register->is_stack_pointer == FALSE){
+					number_of_non_call_management_instructions++;
+				}
+
+				//Regardless this isn't a big deal
+				break;
+
+			default:
+				//Bump this up
+				number_of_non_call_management_instructions++;
+				break;
+		}
+
+		//Bump it up
+		cursor = cursor->previous_statement;
+	}
+
+	/**
+	 * If we exceed the predetermined amount of maximum instructions, we fail out.
+	 * Not because this would be wrong, but because we'd eventually get to a point
+	 * where our binary starts getting too big from all of the duplication
+	 */
+	if(number_of_non_call_management_instructions > MAX_INSTRUCTIONS_FOR_HOISTING){
+		return FALSE;
+	}
+
+	//If we survived to here, return true
+	return TRUE;
 }
 
 
@@ -553,7 +626,7 @@ static void copy_block(basic_block_t* destination, basic_block_t* source){
  * 				replace transfers to i with transfers to j
  * 			if j has only one predecessor then
  * 				merge i and j
- * 			else if j has more than one predecessor and is exclusively a "ret" statement
+ * 			else if j has more than one predecessor and ends in a "ret" statement
  * 				delete the jump from i to j
  * 				remove j as a successor to i
  * 				copy the ret from j to it's predecessor i
@@ -664,7 +737,7 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 				 * Eligibility is: the block we're going to is just a "ret" *AND*
 				 * our block doesn't already have multiple jumps to this one target
 				 */
-				if(is_block_ret_instruction_only(jumping_to_block) == TRUE
+				if(is_block_eligible_for_ret_hoisting(jumping_to_block) == TRUE
 					&& does_block_contain_more_than_one_jump_to_target(current, jumping_to_block) == FALSE){
 
 					//Delete the jump statement
