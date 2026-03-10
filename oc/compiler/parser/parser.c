@@ -8806,7 +8806,8 @@ static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream
 	
 	//If we don't see one, we fail out
 	if(lookahead.tok != L_CURLY){
-		return print_and_return_error("Left curly brace required at beginning of compound statement", parser_line_num);
+		sprintf(info, "Expected \"{\" at the beginning of a compound statement, but got \"%s\" instead", lexitem_to_string(&lookahead));
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Push onto the grouping stack so we can check matching
