@@ -1788,6 +1788,38 @@ static inline instruction_t* emit_test_not_zero_instruction(three_addr_var_t* de
 
 
 /**
+ * Remove all of the successors from a given block. This handles all of the decoupling
+ * that we need, so we shouldn't need to do anythign else to the block after this function
+ * runs
+ *
+ * This is necessary because if we were to be deleting successors as we went along in the
+ * block, we would be messing with the size of the array as we went along. This could lead to
+ * memory corruption or to us missing some of the successors that we meant to delete
+ */
+static inline void remove_all_successors(basic_block_t* block){
+	//Extract the number of successors
+	u_int32_t number_of_successors = block->successors.current_index;
+
+	//We'll need a stack VLA to hold all of these successors
+	basic_block_t* successors_to_remove[number_of_successors];
+
+	//Run through everything here and populate the removal array
+	for(u_int32_t i = 0; i < number_of_successors; i++){
+		successors_to_remove[i] = dynamic_array_get_at(&(block->successors), i);
+	}
+
+	//Now we'll run through the array again and do our deletion
+	for(u_int32_t i = 0; i < number_of_successors; i++){
+		//Extract it
+		basic_block_t* successor_to_remove = successors_to_remove[i];
+
+		//Delete it
+		delete_successor(block, successor_to_remove);
+	}
+}
+
+
+/**
  * Handle a logical or inverse branch statement optimization
  *
  * These statement will take what was once one block, and split it into 
@@ -1825,13 +1857,11 @@ static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* f
 	//VERY important that we copy this on over
 	second_half_block->function_defined_in = original_block->function_defined_in;
 
-	//Some bookkeeping - all of the original blocks successors should no longer point to it
-	for(u_int16_t i = 0; i < original_block->successors.current_index; i++){
-		basic_block_t* successor = dynamic_array_get_at(&(original_block->successors), i);
-
-		//Remove the successor/predecessor link
-		delete_successor(original_block, successor);
-	}
+	/**
+	 * We need to perform some decoupling here. We will remove all of the successors
+	 * from the original block. This will allow us to add new ones in as we see fit
+	 */
+	remove_all_successors(original_block);
 
 	//Extract the op1, we'll need to traverse
 	three_addr_var_t* op1 = short_circuit_statment->op1;
@@ -2002,13 +2032,11 @@ static void optimize_logical_or_branch_logic(symtab_function_record_t* function,
 	//VERY important that we copy this on over
 	second_half_block->function_defined_in = original_block->function_defined_in;
 
-	//Some bookkeeping - all of the original blocks successors should no longer point to it
-	for(u_int16_t i = 0; i < original_block->successors.current_index; i++){
-		basic_block_t* successor = dynamic_array_get_at(&(original_block->successors), i);
-
-		//Remove the successor/predecessor link
-		delete_successor(original_block, successor);
-	}
+	/**
+	 * We need to perform some decoupling here. We will remove all of the successors
+	 * from the original block. This will allow us to add new ones in as we see fit
+	 */
+	remove_all_successors(original_block);
 
 	//Extract the op1, we'll need to traverse
 	three_addr_var_t* op1 = short_circuit_statment->op1;
@@ -2179,13 +2207,11 @@ static void optimize_logical_and_inverse_branch_logic(symtab_function_record_t* 
 	//VERY important that we copy this on over
 	second_half_block->function_defined_in = original_block->function_defined_in;
 
-	//Some bookkeeping - all of the original blocks successors should no longer point to it
-	for(u_int16_t i = 0; i < original_block->successors.current_index; i++){
-		basic_block_t* successor = dynamic_array_get_at(&(original_block->successors), i);
-
-		//Remove the successor/predecessor link
-		delete_successor(original_block, successor);
-	}
+	/**
+	 * We need to perform some decoupling here. We will remove all of the successors
+	 * from the original block. This will allow us to add new ones in as we see fit
+	 */
+	remove_all_successors(original_block);
 
 	//Extract the op1, we'll need to traverse
 	three_addr_var_t* op1 = short_circuit_statment->op1;
@@ -2355,13 +2381,11 @@ static void optimize_logical_and_branch_logic(symtab_function_record_t* function
 	//VERY important that we copy this on over
 	second_half_block->function_defined_in = original_block->function_defined_in;
 
-	//Some bookkeeping - all of the original blocks successors should no longer point to it
-	for(u_int16_t i = 0; i < original_block->successors.current_index; i++){
-		basic_block_t* successor = dynamic_array_get_at(&(original_block->successors), i);
-
-		//Remove the successor/predecessor link
-		delete_successor(original_block, successor);
-	}
+	/**
+	 * We need to perform some decoupling here. We will remove all of the successors
+	 * from the original block. This will allow us to add new ones in as we see fit
+	 */
+	remove_all_successors(original_block);
 
 	//Extract the op1, we'll need to traverse
 	three_addr_var_t* op1 = short_circuit_statment->op1;
