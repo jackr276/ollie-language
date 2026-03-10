@@ -1788,6 +1788,21 @@ static inline instruction_t* emit_test_not_zero_instruction(three_addr_var_t* de
 
 
 /**
+ * Remove all of the successors from a given block. This handles all of the decoupling
+ * that we need, so we shouldn't need to do anythign else to the block after this function
+ * runs
+ */
+static inline void remove_all_successors(basic_block_t* block){
+	//Extract the number of successors
+	u_int32_t number_of_successors = block->successors.current_index;
+
+	//We'll need a stack VLA to hold all of these successors
+	basic_block_t* successors_to_remove[number_of_successors];
+
+}
+
+
+/**
  * Handle a logical or inverse branch statement optimization
  *
  * These statement will take what was once one block, and split it into 
@@ -1824,6 +1839,11 @@ static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* f
 	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency, function);
 	//VERY important that we copy this on over
 	second_half_block->function_defined_in = original_block->function_defined_in;
+
+	/**
+	 * We need to perform some decoupling here. We will remove all of the successors
+	 * from the original block. This will allow us to add new ones in as we see fit
+	 */
 
 	//Some bookkeeping - all of the original blocks successors should no longer point to it
 	for(u_int16_t i = 0; i < original_block->successors.current_index; i++){
