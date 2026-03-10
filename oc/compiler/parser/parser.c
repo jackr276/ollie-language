@@ -10599,6 +10599,9 @@ static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* f
 		//Get the inner type out
 		generic_type_t* error_type = found_type->type;
 
+		//Make sure that we dealias this - it is possible to alias any type
+		error_type = dealias_type(error_type);
+
 		//Otherwise we did find it - but is it an ERROR? Remember we are only allowed to raise error types, not just any
 		//old type
 		if(error_type->type_class != TYPE_CLASS_ERROR){
