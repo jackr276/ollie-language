@@ -2224,7 +2224,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			
 			//No matter what, print a newline
 			fprintf(fl, "\n");
-			
+			break;
 
 		/**
 		 * These print out as
