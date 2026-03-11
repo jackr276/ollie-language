@@ -294,6 +294,27 @@ static inline u_int8_t does_block_end_in_terminal_statement(basic_block_t* basic
 
 
 /**
+ * Does a block end in a function terminating statement? The only 2 such statements
+ * are "raise" and "ret" statements
+ */
+static inline u_int8_t does_block_end_in_function_termination_statement(basic_block_t* basic_block){
+	//Just a catch here if it's null
+	if(basic_block->exit_statement == NULL){
+		return FALSE;
+	}
+
+	//Checking for raise or ret
+	switch(basic_block->exit_statement->statement_type){
+		case THREE_ADDR_CODE_RET_STMT:
+		case THREE_ADDR_CODE_RAISE_STMT:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Simple helper that will add a local constant onto the cfg in the appropriate region
  *
  * This helper will also initialize the appropriate array if it is found to be null. This is
@@ -6697,10 +6718,7 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
 
 	//If we get this, we can't go forward. Just give it back
-	//
-	//TODO RAISE STATEMENT HANDLING?
-	if(compound_stmt_end->exit_statement != NULL
-		&& compound_stmt_end->exit_statement->statement_type == THREE_ADDR_CODE_RET_STMT){
+	if(does_block_end_in_function_termination_statement(compound_stmt_end) == FALSE){
 		//Since we have a return block here, we know that everything else is unreachable
 		result_package.final_block = compound_stmt_end;
 		//And give it back
@@ -7349,9 +7367,8 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 				//Switch based on what is in here
 				switch(previous_block->exit_statement->statement_type){
 					//And of course a return/branch statement means we can't add anything afterwards
-					//
-					//TODO RAISE STATMENT HANDLING?
 					case THREE_ADDR_CODE_BRANCH_STMT:
+					case THREE_ADDR_CODE_RAISE_STMT:
 					case THREE_ADDR_CODE_JUMP_STMT:
 					case THREE_ADDR_CODE_RET_STMT:
 						break;
@@ -7393,9 +7410,8 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 		//Switch based on what the end of the current block is
 		switch(current_block->exit_statement->statement_type){
 			//If it's a jump or ret statement, we don't need to add one
-			//
-			//TODO RAISE STATEMENT HANDLING?
 			case THREE_ADDR_CODE_RET_STMT:
+			case THREE_ADDR_CODE_RAISE_STMT:
 			case THREE_ADDR_CODE_JUMP_STMT:
 				break;
 
@@ -7831,7 +7847,8 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				generic_results.operator = BLANK;
 				generic_results.assignee = NULL;
 
-				break;
+				//We're done here - get out
+				return generic_results;
 
 			case AST_NODE_TYPE_RET_STMT:
 				//If for whatever reason the block is null, we'll create it
@@ -8371,7 +8388,8 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				results.operator = BLANK;
 				results.assignee = NULL;
 
-				break;
+				//We're done here - get out
+				return results;
 
 			case AST_NODE_TYPE_RET_STMT:
 				//If for whatever reason the block is null, we'll create it
@@ -8861,9 +8879,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
  *
  * In the event that a given function does not return where it should, a "ret 0" will be used.
  * This is technically undefined behavior, so users will get what they get here
- *
- *
- * TODO - we need to also check for raise statements here
  */
 static void determine_and_insert_return_statements(basic_block_t* function_exit_block){
 	//For convenience
@@ -8878,10 +8893,7 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 		basic_block_t* block = dynamic_array_get_at(&(function_exit_block->predecessors), i);
 
 		//If the exit statement is not a return statement or is null, we need to know what's happening here
-		//
-		//
-		//TODO RAISE STATMENT HANDLING?
-		if(block->exit_statement == NULL || block->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT){
+		if(does_block_end_in_function_termination_statement(block) == FALSE){
 			//If this isn't void, then we need to throw a warning
 			if((function_defined_in->return_type->type_class != TYPE_CLASS_BASIC
 				|| function_defined_in->return_type->basic_type_token != VOID)
