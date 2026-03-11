@@ -2215,6 +2215,17 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "\n");
 			break;
 
+		case THREE_ADDR_CODE_RAISE_STMT:
+			fprintf(fl, "raise ");
+
+			//This will always have a raised variable that comes
+			//from a constant assignment
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			
+			//No matter what, print a newline
+			fprintf(fl, "\n");
+			
+
 		/**
 		 * These print out as
 		 *
@@ -4944,6 +4955,22 @@ instruction_t* emit_ret_instruction(three_addr_var_t* returnee){
 	stmt->op1 = returnee;
 
 	//And that's all, so we'll hop out
+	return stmt;
+}
+
+
+/**
+ * Emit a raise statement. Unlike a ret statement we are guaranteed to have an op1 here
+ * because we must always be raising an error
+ */
+instruction_t* emit_raise_instruction(three_addr_var_t* raised_error){
+	//First we allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Now we populate
+	stmt->statement_type = THREE_ADDR_CODE_RAISE_STMT;
+	stmt->op1 = raised_error;
+
 	return stmt;
 }
 

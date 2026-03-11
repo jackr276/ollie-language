@@ -100,6 +100,8 @@ typedef enum {
 	THREE_ADDR_CODE_ASSN_CONST_STMT,
 	//A return statement
 	THREE_ADDR_CODE_RET_STMT,
+	//A raise statement(basically a RET)
+	THREE_ADDR_CODE_RAISE_STMT,
 	//A jump statement -- used for control flow
 	THREE_ADDR_CODE_JUMP_STMT,
 	//A branch statement, also used for control flow

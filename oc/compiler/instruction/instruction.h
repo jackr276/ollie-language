@@ -688,6 +688,12 @@ instruction_t* emit_store_instruction(three_addr_var_t* source, three_addr_var_t
 instruction_t* emit_ret_instruction(three_addr_var_t* returnee);
 
 /**
+ * Emit a raise statement. Unlike a ret statement we are guaranteed to have an op1 here
+ * because we must always be raising an error
+ */
+instruction_t* emit_raise_instruction(three_addr_var_t* raised_error);
+
+/**
  * Emit an increment instruction
  */
 instruction_t* emit_inc_instruction(three_addr_var_t* incrementee);
