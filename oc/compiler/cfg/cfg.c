@@ -7757,12 +7757,31 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 
 /**
- * Emit the appropriate handling for a raise statement
+ * Handle everything needed to emit a raise statement successfully. This includes updating the successor
+ * of this current block to be the function's exit block
  */
-static inline void handle_raise_statement(){
-	//TODO
-}
+static inline void handle_raise_statement(basic_block_t* basic_block, generic_ast_node_t* node){
+	//Let's first extract the error value from this
+	u_int64_t error_value = node->optional_storage.error_id;
 
+	//Now we'll emit the error constant
+	three_addr_const_t* error_constant = emit_direct_integer_or_char_constant(error_value, i64);
+
+	//Following that we'll need a temporary assignment for this
+	instruction_t* temp_assignment = emit_assignment_with_const_instruction(emit_temp_var(i64), error_constant);
+
+	//Add this into the block
+	add_statement(basic_block, temp_assignment);
+
+	//Now we can emit the raises statement itself
+	instruction_t* raise_statement = emit_raise_instruction(temp_assignment->assignee);
+
+	//Add this into the block
+	add_statement(basic_block, raise_statement);
+
+	//The successor of this block is now the function end block(remember that raise = ret)
+	add_successor(basic_block, function_exit_block);
+}
 
 
 /**
@@ -8312,8 +8331,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					starting_block = basic_block_alloc_and_estimate();
 					current_block = starting_block;
 				}
-
-				//We will first emit the constant 
 
 
 
