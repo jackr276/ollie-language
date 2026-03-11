@@ -8013,6 +8013,20 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 
 
 /**
+ * A raise statement allows a function to return in an error state. It is important to note that
+ * you can *only* raise errors, anything else will cause a compilation error. Errors may also only
+ * be raised in functions that are explicitly marked using the fn! keyword as raisable
+ *
+ * BNF Rule: <raise-statement> ::= raise <error-type>
+ */
+static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream){
+
+	//TODO FOR NOW
+	exit(0);
+}
+
+
+/**
  * A switch statement allows us to to see one or more labels defined by a certain expression. It allows
  * for the use of labeled statements followed by statements in general. We will do more static analysis
  * on this later. Like all rules in the system, this function returns the root node that it creates
@@ -8022,8 +8036,6 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
  * BNF Rule: <switch-statement> ::= switch on( <logical-or-expression> ) from(<constant>, <constant>) { {<case-statement | default-statement>}+ }
  */
 static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
-	//Freeze the line number
-	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 	//By default we have not found one of these
@@ -8048,7 +8060,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 
 	//Fail case
 	if(lookahead.tok != L_PAREN){
-		return print_and_return_error("Left parenthesis expected after on keyword", current_line);
+		return print_and_return_error("Left parenthesis expected after on keyword", parser_line_num);
 	}
 
 	//Push to stack for later matching
@@ -8059,7 +8071,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 
 	//If we see an invalid one we fail right out
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		return print_and_return_error("Invalid conditional expression provided to switch on", current_line);
+		return print_and_return_error("Invalid conditional expression provided to switch on", parser_line_num);
 	}
 	
 	//For a switch statement, we need an enum or some other kind of numeric type to switch based on. We cannot switch on
@@ -8098,12 +8110,12 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 
 	//Fail case
 	if(lookahead.tok != R_PAREN){
-		return print_and_return_error("Right parenthesis expected after expression in switch statement", current_line);
+		return print_and_return_error("Right parenthesis expected after expression in switch statement", parser_line_num);
 	}
 
 	//Check to make sure that the parenthesis match up
 	if(pop_token(&grouping_stack).tok != L_PAREN){
-		return print_and_return_error("Unmatched parenthesis detected", current_line);
+		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
 	}
 
 	//Now we must see an lcurly to begin the actual block
@@ -8111,7 +8123,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 
 	//Fail case
 	if(lookahead.tok != L_CURLY){
-		return print_and_return_error("Left curly brace expected after expression", current_line);
+		return print_and_return_error("Left curly brace expected after expression", parser_line_num);
 	}
 
 	//We will declare a new lexical scope here
@@ -8287,7 +8299,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 
 	//If we have an entirely empty switch statement, it's a failure
 	if(is_empty == TRUE){
-		return print_and_return_error("Switch statements with no cases are not allowed", current_line);
+		return print_and_return_error("Switch statements with no cases are not allowed", parser_line_num);
 	}
 
 	//Do we have a type that is eligible for a "exhaustive switch"? If so, this would
@@ -8352,14 +8364,14 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 					if(gap_found == FALSE){
 						//If we haven't found a default clause, it's a failure
 						if(found_default_clause == TRUE){
-							return print_and_return_error("\"default\" clause in exhaustive switch is unreachable", current_line);
+							return print_and_return_error("\"default\" clause in exhaustive switch is unreachable", parser_line_num);
 						}	
 
 					//Otherwise it's not exhaustive, so we do
 					} else {
 						//If we haven't found a default clause, it's a failure
 						if(found_default_clause == FALSE){
-							return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", current_line);
+							return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
 						}	
 					}
 
@@ -8367,7 +8379,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 				} else {
 					//If we haven't found a default clause, it's a failure
 					if(found_default_clause == FALSE){
-						return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", current_line);
+						return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
 					}	
 				}
 
@@ -8400,14 +8412,14 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 					if(gap_found == FALSE){
 						//If we haven't found a default clause, it's a failure
 						if(found_default_clause == TRUE){
-							return print_and_return_error("\"default\" clause in exhaustive switch is unreachable", current_line);
+							return print_and_return_error("\"default\" clause in exhaustive switch is unreachable", parser_line_num);
 						}	
 
 					//Otherwise it's not exhaustive, so we do
 					} else {
 						//If we haven't found a default clause, it's a failure
 						if(found_default_clause == FALSE){
-							return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", current_line);
+							return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
 						}	
 					}
 
@@ -8415,7 +8427,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 				} else {
 					//If we haven't found a default clause, it's a failure
 					if(found_default_clause == FALSE){
-						return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", current_line);
+						return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
 					}	
 				}
 
@@ -8431,7 +8443,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	} else {
 		//If we haven't found a default clause, it's a failure
 		if(found_default_clause == FALSE){
-			return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", current_line);
+			return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
 		}	
 	}
 
@@ -8444,11 +8456,11 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	//By the time we reach this, we should have seen a right curly
 	//However, we could still have matching issues, so we'll check for that here
 	if(pop_token(&grouping_stack).tok != L_CURLY){
-		return print_and_return_error("Unmatched curly braces detected", current_line);
+		return print_and_return_error("Unmatched curly braces detected", parser_line_num);
 	}
 
 	//Return the line number
-	switch_stmt_node->line_number = current_line;
+	switch_stmt_node->line_number = parser_line_num;
 
 	//Now that we're done, we will remove this variable scope
 	finalize_variable_scope(variable_symtab);
@@ -9211,6 +9223,10 @@ static generic_ast_node_t* statement(ollie_token_stream_t* token_stream){
 		//Handle a return statement
 		case RETURN:
 			return return_statement(token_stream);
+
+		//Handle a raise statement
+		case RAISE:
+			return raise_statement(token_stream);
 
 		//Handle a break statement
 		case BREAK:
