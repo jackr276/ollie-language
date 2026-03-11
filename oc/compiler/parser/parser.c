@@ -11,7 +11,6 @@
  *
  * NEXT IN LINE: Control Flow Graph, OIR constructor, SSA form implementation
 */
-#include <stdint.h>
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -8053,19 +8052,47 @@ static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream){
 	 */
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
+	//The error id value is what really matters under the hood
+	u_int32_t error_id_value = 0;
+
 	//We are seeing a non-generic error, we will handle using the
 	//type specifier
 	if(lookahead.tok != ERROR){
 		//Let the helper deal with it
 		generic_type_t* error_type = type_specifier(token_stream);
 
-	} else {
+		//Fail out if this ends up being null
+		if(error_type == NULL){
+			return print_and_return_error("Invalid error type given to raises statement", parser_line_num);
+		}
 
+		//Fully dealias this now that we know it's good
+		error_type = dealias_type(error_type);
+
+		//If this is not an error, we fail out
+		if(error_type->type_class != TYPE_CLASS_ERROR){
+			sprintf(info, "Type \"%s\" was not defined as an error type and therefore may not be raised", error_type->type_name.string); 
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//Otherwise we are good
+		error_id_value = error_type->internal_types.error_type_id;
+
+	} else {
+		//Since we're just raising a generic error, we use the generic error id
+		error_id_value = GENERIC_ERROR;
 	}
 
+	//Since we've made it all of the way down here, now is our time to create the ast node
+	//and give it back
+	generic_ast_node_t* raises_node = ast_node_alloc(AST_NODE_TYPE_RAISE_STMT, SIDE_TYPE_LEFT);
 
-	//TODO FOR NOW
-	exit(0);
+	//Store the line number and the error id value
+	raises_node->line_number = parser_line_num;
+	raises_node->optional_storage.error_id = error_id_value;
+
+	//And give it back
+	return raises_node;
 }
 
 
