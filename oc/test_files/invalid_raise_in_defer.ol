@@ -9,7 +9,7 @@ define error error1;
 
 
 //Should fail - cannot raise an error in a defer
-pub fn! error_in_defer(x:i32) -> i32 {
+pub fn! error_in_defer(x:mut i32) -> i32 {
 	defer{
 		x++;
 		raise error1;

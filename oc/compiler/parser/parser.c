@@ -8020,6 +8020,31 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
  * BNF Rule: <raise-statement> ::= raise <error-type>
  */
 static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream){
+	//Extract the function type for later use
+	function_type_t* function_type = current_function->signature->internal_types.function_type;
+
+	/**
+	 * Are we trying to raise an error inside of a defer statement? This is a big
+	 * issue, so we block it. Realistically I can't see any good reason why
+	 * someone would try
+	 */
+	if(nesting_stack_contains_level(&nesting_stack, NESTING_DEFER_STATEMENT) == TRUE){
+		return print_and_return_error("Invalid attempt to raise an error inside of a defer statement", parser_line_num);
+	}
+
+	/**
+	 * One additional thing to check - are we trying to to raise an error inside of a function
+	 * that cannot do so? If so then we fail out, it must be explicitly marked that it can
+	 * raise an error
+	 */
+	if(function_type->raises_errors == FALSE){
+		sprintf(info, "Function \"%s\" does not raise errors. Redeclare using \"fn!\" in order to make the function errorable. Currently declared as:", current_function->func_name.string);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		print_function_name(current_function);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
 
 	//TODO FOR NOW
 	exit(0);
