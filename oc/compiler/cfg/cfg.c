@@ -7809,6 +7809,30 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 	while(ast_cursor != NULL){
 		//Using switch/case for the efficiency gain
 		switch(ast_cursor->ast_node_type){
+			case AST_NODE_TYPE_RAISE_STMT:
+				//Allocate if we don't have
+				if(starting_block == NULL){
+					starting_block = basic_block_alloc_and_estimate();
+					current_block = starting_block;
+				}
+
+				//Let the helper do the work
+				handle_raise_statement(current_block, ast_cursor); 
+
+				//If there is anything after this statement, it is UNREACHABLE
+				if(ast_cursor->next_sibling != NULL){
+					print_cfg_message(MESSAGE_TYPE_WARNING, "Unreachable code detected after raise statement", ast_cursor->next_sibling->line_number);
+					(*num_warnings_ref)++;
+				}
+
+				//Package up the results package
+				generic_results.starting_block = current_block;
+				generic_results.final_block = current_block;
+				generic_results.operator = BLANK;
+				generic_results.assignee = NULL;
+
+				break;
+
 			case AST_NODE_TYPE_RET_STMT:
 				//If for whatever reason the block is null, we'll create it
 				if(starting_block == NULL){
@@ -8332,7 +8356,20 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					current_block = starting_block;
 				}
 
+				//Let the helper do the work
+				handle_raise_statement(current_block, ast_cursor); 
 
+				//If there is anything after this statement, it is UNREACHABLE
+				if(ast_cursor->next_sibling != NULL){
+					print_cfg_message(MESSAGE_TYPE_WARNING, "Unreachable code detected after raise statement", ast_cursor->next_sibling->line_number);
+					(*num_warnings_ref)++;
+				}
+
+				//Package up the results package
+				results.starting_block = current_block;
+				results.final_block = current_block;
+				results.operator = BLANK;
+				results.assignee = NULL;
 
 				break;
 
