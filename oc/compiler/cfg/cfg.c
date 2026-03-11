@@ -13,6 +13,7 @@
 */
 
 #include "cfg.h"
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -2846,14 +2847,12 @@ static three_addr_var_t* emit_indirect_jump_address_calculation(basic_block_t* b
 /**
  * Directly emit the assembly nop instruction
  */
-static void emit_idle(basic_block_t* basic_block){
+static inline void emit_idle(basic_block_t* basic_block){
 	//Use the helper
 	instruction_t* idle_stmt = emit_idle_instruction();
 	
 	//Add it into the block
 	add_statement(basic_block, idle_stmt);
-
-	//And that's all
 }
 
 
@@ -2861,14 +2860,12 @@ static void emit_idle(basic_block_t* basic_block){
  * Directly emit the assembly code for an inlined statement. Users who write assembly inline
  * want it directly inserted in order, nothing more, nothing less
  */
-static void emit_assembly_inline(basic_block_t* basic_block, generic_ast_node_t* asm_inline_node){
+static inline void emit_assembly_inline(basic_block_t* basic_block, generic_ast_node_t* asm_inline_node){
 	//First we allocate the whole thing
 	instruction_t* asm_inline_stmt = emit_asm_inline_instruction(asm_inline_node); 
 	
 	//Once done we add it into the block
 	add_statement(basic_block, asm_inline_stmt);
-	
-	//And that's all
 }
 
 
@@ -2885,10 +2882,12 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 	//This is what we'll be using to return
 	three_addr_var_t* return_variable = NULL;
 
-	//If the ret node's first child is not null, we'll let the expression rule
-	//handle it. We'll always do an assignment here because return statements present
-	//a special case. We always need our return variable to be in %rax, and that may
-	//not happen all the time naturally. As such, we need this assignment here
+	/**
+	 * If the ret node's first child is not null, we'll let the expression rule
+	 * handle it. We'll always do an assignment here because return statements present
+	 * a special case. We always need our return variable to be in %rax, and that may
+	 * not happen all the time naturally. As such, we need this assignment here
+	 */
 	if(ret_node->first_child != NULL){
 		//Perform the binary operation here
 		cfg_result_package_t expression_package = emit_expression(current, ret_node->first_child, FALSE);
@@ -8285,6 +8284,22 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 	while(ast_cursor != NULL){
 		//Using switch/case for the efficiency gain
 		switch(ast_cursor->ast_node_type){
+			/**
+			 * A raise statement is what allows a function to effectively
+			 * throw errors. Raise statements are final and unrecoverable,
+			 * the function must and will exit when one of these is hit
+			 */
+			case AST_NODE_TYPE_RAISE_STMT:
+				//Allocate if we don't have
+				if(starting_block == NULL){
+					starting_block = basic_block_alloc_and_estimate();
+					current_block = starting_block;
+				}
+
+
+
+				break;
+
 			case AST_NODE_TYPE_RET_STMT:
 				//If for whatever reason the block is null, we'll create it
 				if(starting_block == NULL){
