@@ -283,6 +283,8 @@ static inline u_int8_t does_block_end_in_terminal_statement(basic_block_t* basic
 	switch(basic_block->exit_statement->statement_type){
 		case THREE_ADDR_CODE_JUMP_STMT:
 		case THREE_ADDR_CODE_RET_STMT:
+		//Raise statements are functionally equivalent to ret statements
+		case THREE_ADDR_CODE_RAISE_STMT:
 		case THREE_ADDR_CODE_BRANCH_STMT:
 			return TRUE;
 		default:
@@ -6695,6 +6697,8 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
 
 	//If we get this, we can't go forward. Just give it back
+	//
+	//TODO RAISE STATEMENT HANDLING?
 	if(compound_stmt_end->exit_statement != NULL
 		&& compound_stmt_end->exit_statement->statement_type == THREE_ADDR_CODE_RET_STMT){
 		//Since we have a return block here, we know that everything else is unreachable
@@ -7345,6 +7349,8 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 				//Switch based on what is in here
 				switch(previous_block->exit_statement->statement_type){
 					//And of course a return/branch statement means we can't add anything afterwards
+					//
+					//TODO RAISE STATMENT HANDLING?
 					case THREE_ADDR_CODE_BRANCH_STMT:
 					case THREE_ADDR_CODE_JUMP_STMT:
 					case THREE_ADDR_CODE_RET_STMT:
@@ -7387,6 +7393,8 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 		//Switch based on what the end of the current block is
 		switch(current_block->exit_statement->statement_type){
 			//If it's a jump or ret statement, we don't need to add one
+			//
+			//TODO RAISE STATEMENT HANDLING?
 			case THREE_ADDR_CODE_RET_STMT:
 			case THREE_ADDR_CODE_JUMP_STMT:
 				break;
@@ -7746,6 +7754,15 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	//Give back the starting block
 	return result_package;
 }
+
+
+/**
+ * Emit the appropriate handling for a raise statement
+ */
+static inline void handle_raise_statement(){
+	//TODO
+}
+
 
 
 /**
@@ -8296,6 +8313,8 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					current_block = starting_block;
 				}
 
+				//We will first emit the constant 
+
 
 
 				break;
@@ -8788,6 +8807,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
  *
  * In the event that a given function does not return where it should, a "ret 0" will be used.
  * This is technically undefined behavior, so users will get what they get here
+ *
+ *
+ * TODO - we need to also check for raise statements here
  */
 static void determine_and_insert_return_statements(basic_block_t* function_exit_block){
 	//For convenience
@@ -8802,6 +8824,9 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 		basic_block_t* block = dynamic_array_get_at(&(function_exit_block->predecessors), i);
 
 		//If the exit statement is not a return statement or is null, we need to know what's happening here
+		//
+		//
+		//TODO RAISE STATMENT HANDLING?
 		if(block->exit_statement == NULL || block->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT){
 			//If this isn't void, then we need to throw a warning
 			if((function_defined_in->return_type->type_class != TYPE_CLASS_BASIC
