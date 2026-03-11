@@ -8058,6 +8058,9 @@ static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream){
 	//We are seeing a non-generic error, we will handle using the
 	//type specifier
 	if(lookahead.tok != ERROR){
+		//Push it back for processing
+		push_back_token(token_stream, &parser_line_num);
+
 		//Let the helper deal with it
 		generic_type_t* error_type = type_specifier(token_stream);
 
