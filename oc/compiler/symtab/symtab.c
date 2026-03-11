@@ -57,6 +57,8 @@ static const u_int64_t mutability_salts[] = {
  * Increment and return the current error id for the type symtab. This is done
  * so we're always able to differentiate errors when it comes time to handle
  * them at a function call site
+ *
+ * NOTE: error_id of 0 means no error, error_id of 1 means "error" so the generic error
  */
 static inline u_int32_t increment_and_get_error_id(type_symtab_t* symtab){
 	//Extract
@@ -110,8 +112,9 @@ type_symtab_t* type_symtab_alloc(){
 	//Nothing has been initialized yet
 	symtab->current = NULL;
 
-	//The initial error id starts at 1. This is because 0 is reserved for NO_ERRORS
-	symtab->error_id = 1;
+	//The initial error id starts at 2. This is because 0 is reserved for NO_ERRORS,
+	//and 1 is reserved for generic_error
+	symtab->error_id = 2;
 
 	return symtab;
 }

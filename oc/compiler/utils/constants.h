@@ -15,6 +15,10 @@
 #define SUCCESS 1
 #define FAILURE 0
 
+//We need handlers for the no_error and generic error case
+#define NO_ERROR 0
+#define GENERIC_ERROR 1
+
 //For loops, we estimate that they'll execute 10 times each
 #define LOOP_ESTIMATED_COST 10
 

@@ -8017,7 +8017,9 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
  * you can *only* raise errors, anything else will cause a compilation error. Errors may also only
  * be raised in functions that are explicitly marked using the fn! keyword as raisable
  *
- * BNF Rule: <raise-statement> ::= raise <error-type>
+ * NOTE: by the time we get here, we have already seen and consumed the "raise" keyword
+ *
+ * BNF Rule: <raise-statement> ::= raise {<error-type> | error}
  */
 static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream){
 	//Extract the function type for later use
@@ -8043,6 +8045,22 @@ static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream){
 		print_function_name(current_function);
 		num_errors++;
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	/**
+	 * We are required to now see either the "error" keyword for a generic error or a
+	 * specific error type. We may not raise non-error types
+	 */
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//We are seeing a non-generic error, we will handle using the
+	//type specifier
+	if(lookahead.tok != ERROR){
+		//Let the helper deal with it
+		generic_type_t* error_type = type_specifier(token_stream);
+
+	} else {
+
 	}
 
 
