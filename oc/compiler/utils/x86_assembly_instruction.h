@@ -232,6 +232,7 @@ typedef enum{
 	//End conditional moves
 	PXOR, //Packed logical exclusive or
 	PXOR_CLEAR, //Packed logical exclusive or just for clearing
+	XORQ_CLEAR, //XORQ used just for clearing the error register
 	PAND, //Packed logical and
 	PANDN, //Packed logical and not
 	POR, //Packed logical or

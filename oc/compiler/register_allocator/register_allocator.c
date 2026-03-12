@@ -1030,9 +1030,10 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 
 				break;
 
-			//This is a unique case. PXOR clear is often used to define a register. As such, we'll put the
+			//This is a unique case. PXOR/XORQ clear is often used to define a register. As such, we'll put the
 			//destination before the use in this one case
 			case PXOR_CLEAR:
+			case XORQ_CLEAR:
 				//First the def
 				add_live_range_to_def_set(current->destination_register->associated_live_range, basic_block);
 
@@ -2279,10 +2280,11 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 				break;
 
 			/**
-			 * PXOR clear is a very unique case because it is used to define a register. In this
+			 * PXOR/XORQ clear is a very unique case because it is used to define a register. In this
 			 * one case, the destination will come first, and then the use
 			 */
 			case PXOR_CLEAR:
+			case XORQ_CLEAR:
 				//Do the def first(very unique)
 				add_live_range_to_def_set(cursor->destination_register->associated_live_range, block);
 

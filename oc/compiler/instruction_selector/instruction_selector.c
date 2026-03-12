@@ -3902,6 +3902,23 @@ static inline instruction_t* emit_sse_register_clear_instruction(three_addr_var_
 
 
 /**
+ * Emit an XORQ instruction that's already been instruciton selected. This instruction exists specifically
+ * to wipe out a given register(usually the error register when a function returns). This warrants
+ * special treatment in the register allocator because we are not counting any sourced
+ */
+static inline instruction_t* emit_gp_register_clear_instruction(three_addr_var_t* target){
+	//First allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+	
+	//Set the type
+	instruction->instruction_type = XORQ_CLEAR;
+	instruction->destination_register = target;
+
+	return instruction;
+}
+
+
+/**
  * Handle a simple movement instruction. In this context, simple just means that
  * we have a source and a destination, and now address calculation moves in between
  *
@@ -6103,6 +6120,14 @@ static void handle_lea_statement(instruction_t* instruction){
 			printf("Fatal internal compiler error: Unreachable path detected in lea statement translator\n");
 			exit(1);
 	}
+}
+
+/**
+ * Handle a ret instruction. This will also dynamically
+ * insert XOR/PXOR to clear out the error register for us
+ */
+static inline void handle_ret_instruction(instruction_window_t* window){
+
 }
 
 

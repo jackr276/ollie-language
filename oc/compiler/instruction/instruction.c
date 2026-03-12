@@ -4799,6 +4799,17 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 			break;
 
+		//XORQ is similar to PXOR_CLEAR in that we exclusively use it to
+		//wipe out register values
+		case XORQ_CLEAR:
+			fprintf(fl, "xorq ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, "\n");
+
+			break;
+
 		//Show a default error message. This is for the Dev's use only
 		default:
 			fprintf(fl, "Not yet selected. Statement code is: %d\n", instruction->statement_type);
