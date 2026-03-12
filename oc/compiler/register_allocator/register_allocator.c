@@ -1060,6 +1060,11 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 					add_live_range_to_def_set(current->destination_register->associated_live_range, basic_block);
 				}
 
+				//Now the error destination as well if one exists
+				if(current->destination_register2 != NULL){
+					add_live_range_to_def_set(current->destination_register2->associated_live_range, basic_block);
+				}
+
 				break;
 
 			/**
@@ -1082,6 +1087,11 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 				//Now the destination if one exists
 				if(current->destination_register != NULL){
 					add_live_range_to_def_set(current->destination_register->associated_live_range, basic_block);
+				}
+
+				//Now the error destination as well if one exists
+				if(current->destination_register2 != NULL){
+					add_live_range_to_def_set(current->destination_register2->associated_live_range, basic_block);
 				}
 
 				break;
@@ -2157,6 +2167,11 @@ static void precolor_instruction(instruction_t* instruction){
 				}
 			}
 
+			//If we have a second destination register(Error register), it's always GP and it's always %RDX
+			if(instruction->destination_register2 != NULL){
+				instruction->destination_register->associated_live_range->reg.gen_purpose = RDX;
+			}
+
 			/**
 			 * We also need to allocate the parameters for this function. Conviently,
 			 * they are already stored for us so we don't need to do anything like
@@ -2320,6 +2335,11 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 					add_live_range_to_def_set(cursor->destination_register->associated_live_range, block);
 				}
 
+				//Add the error destination too if one exists
+				if(cursor->destination_register2 != NULL){
+					add_live_range_to_def_set(cursor->destination_register2->associated_live_range, block);
+				}
+
 				break;
 
 			/**
@@ -2342,6 +2362,11 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 				//Now the destination if one exists
 				if(cursor->destination_register != NULL){
 					add_live_range_to_def_set(cursor->destination_register->associated_live_range, block);
+				}
+
+				//Add the error destination too if one exists
+				if(cursor->destination_register2 != NULL){
+					add_live_range_to_def_set(cursor->destination_register2->associated_live_range, block);
 				}
 
 				break;
@@ -3617,6 +3642,8 @@ static u_int8_t graph_color_and_allocate_sse(basic_block_t* function_entry, dyna
  *
  * NOTE: All SSE(xmm) registers are caller saved. The callee is free to clobber these however it
  * sees fit. As such, the burden for saving all of these falls onto the caller here
+ *
+ * TODO we need to account for the error register %RDX
  */
 static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_record_t* caller, instruction_t* function_call){
 	//If we get here we know that we have a call instruction. Let's
@@ -3873,6 +3900,8 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
  *
  * NOTE: All SSE(xmm) registers are caller saved. The callee is free to clobber these however it
  * sees fit. As such, the burden for saving all of these falls onto the caller here
+ *
+ * TODO we need to account for error registers
  */
 static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_function_record_t* caller, instruction_t* function_call){
 	//Get the destination LR. Remember that this is nullable
