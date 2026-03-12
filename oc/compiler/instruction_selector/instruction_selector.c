@@ -6107,6 +6107,20 @@ static void handle_lea_statement(instruction_t* instruction){
 
 
 /**
+ * Handle a raise instruction. Raise instructions really
+ * under the hood are return instructions by a different
+ * name. We will convert to a return here 
+ */
+static inline void handle_raise_instruction(instruction_t* instruction){
+	//This is a RET instruction
+	instruction->instruction_type = RET;
+	
+	//We are returning the value in %rdx(the error register)
+	instruction->source_register = instruction->op1;
+}
+
+
+/**
  * A branch statement always selects 2 instructions, the conditional
  * jump-to-if and the unconditional else jump
  *
@@ -9625,6 +9639,9 @@ static void select_instruction_patterns(instruction_window_t* window){
 			instruction->instruction_type = RET;
 			//We'll still store this, just in a hidden way
 			instruction->source_register = instruction->op1;
+			break;
+		case THREE_ADDR_CODE_RAISE_STMT:
+			handle_raise_instruction(instruction);
 			break;
 		//These will always just be a JMP - the branch will have
 		//more complex rules
