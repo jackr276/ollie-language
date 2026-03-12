@@ -6112,8 +6112,9 @@ static void handle_lea_statement(instruction_t* instruction){
  * name. We will convert to a return here 
  */
 static inline void handle_raise_instruction(instruction_t* instruction){
-	//This is a RET instruction
-	instruction->instruction_type = RET;
+	//This is a RET instruction under the hood, but for reasons of differentiating we'll
+	//call it a "RAISE" instruction here
+	instruction->instruction_type = RAISE_INSTRUCTION;
 	
 	//We are returning the value in %rdx(the error register)
 	instruction->source_register = instruction->op1;
