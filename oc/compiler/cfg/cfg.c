@@ -5162,10 +5162,31 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 		case L_THAN_OR_EQ:
 		case NOT_EQUALS:
 		case DOUBLE_EQUALS:
-		case F_SLASH:
-		case MOD:
 			//Emit an assignee based on the inferred type
 			assignee = emit_temp_var(logical_or_expr->inferred_type);
+			break;
+
+		case F_SLASH:
+		case MOD:
+			/**
+			 * If op1/op2 are *not* floating point values, and one of them is going to 
+			 * be signed(meaning that we're forced to use idivX), we really should have a separate assignee
+			 * here because we are going to need to go through a long and complex process in the instruction
+			 * selector that will result in us assiging to a destination anyways. It is for this reason
+			 * that we do not need to share op1/assignee, and can instead make the assignee a temp var
+			 */
+			if(IS_FLOATING_POINT(op1->type) == FALSE 
+				&& IS_FLOATING_POINT(op2->type) == FALSE
+				&& (is_type_signed(op1->type) == TRUE || is_type_signed(op2->type) == TRUE)){
+
+				//Emit the temp var for this case
+				assignee = emit_temp_var(logical_or_expr->inferred_type);
+
+			//Otherwise we're like everything else
+			} else {
+				assignee = op1;
+			}
+
 			break;
 
 		//We use the default strategy - op1 is also the assignee
