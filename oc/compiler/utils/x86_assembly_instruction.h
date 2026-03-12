@@ -46,6 +46,7 @@ typedef enum{
 	NO_INSTRUCTION_SELECTED = 0, //The NONE instruction, this is our default and we'll get this when we calloc
 	PHI_FUNCTION, //Not really an instruction, but we still need to account for these
 	RET,
+	RAISE_INSTRUCTION, //Not really an instruction - we use it to represent error raising. When printed, these become "ret"
 	CALL,
 	INDIRECT_CALL, //For function pointers
 	MOVB,
@@ -231,6 +232,7 @@ typedef enum{
 	//End conditional moves
 	PXOR, //Packed logical exclusive or
 	PXOR_CLEAR, //Packed logical exclusive or just for clearing
+	XORQ_CLEAR, //XORQ used just for clearing the error register
 	PAND, //Packed logical and
 	PANDN, //Packed logical and not
 	POR, //Packed logical or

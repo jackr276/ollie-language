@@ -3902,6 +3902,23 @@ static inline instruction_t* emit_sse_register_clear_instruction(three_addr_var_
 
 
 /**
+ * Emit an XORQ instruction that's already been instruciton selected. This instruction exists specifically
+ * to wipe out a given register(usually the error register when a function returns). This warrants
+ * special treatment in the register allocator because we are not counting any sourced
+ */
+static inline instruction_t* emit_gp_register_clear_instruction(three_addr_var_t* target){
+	//First allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+	
+	//Set the type
+	instruction->instruction_type = XORQ_CLEAR;
+	instruction->destination_register = target;
+
+	return instruction;
+}
+
+
+/**
  * Handle a simple movement instruction. In this context, simple just means that
  * we have a source and a destination, and now address calculation moves in between
  *
@@ -6103,6 +6120,53 @@ static void handle_lea_statement(instruction_t* instruction){
 			printf("Fatal internal compiler error: Unreachable path detected in lea statement translator\n");
 			exit(1);
 	}
+}
+
+/**
+ * Handle a ret instruction. This will also dynamically
+ * insert XOR/PXOR to clear out the error register for us
+ */
+static inline void handle_ret_instruction(instruction_t* ret_instruction, symtab_function_record_t* function){
+	//First let's determine if we need to insert any error clearing or not
+	function_type_t* function_type = function->signature->internal_types.function_type;
+
+	//Assign the type and the source register
+	ret_instruction->instruction_type = RET;
+	ret_instruction->source_register = ret_instruction->op1;
+
+	/**
+	 * If this function could raise errors, we need to clear out the
+	 * %rdx register before returning. We will tag this
+	 * as our second source register inside of the ret statement
+	 */
+	if(function_type->raises_errors == TRUE){
+		//Error register(%RDX)
+		three_addr_var_t* error_register = emit_temp_var(i64);
+
+		//We'll need a clear instruction
+		instruction_t* clear_instruction = emit_gp_register_clear_instruction(error_register);
+
+		//This goes before the return
+		insert_instruction_before_given(clear_instruction, ret_instruction);
+
+		//We're going to flag this as the second source register so we can allocate it properly
+		ret_instruction->source_register2 = error_register;
+	}
+}
+
+
+/**
+ * Handle a raise instruction. Raise instructions really
+ * under the hood are return instructions by a different
+ * name. We will convert to a return here 
+ */
+static inline void handle_raise_instruction(instruction_t* instruction){
+	//This is a RET instruction under the hood, but for reasons of differentiating we'll
+	//call it a "RAISE" instruction here
+	instruction->instruction_type = RAISE_INSTRUCTION;
+	
+	//We are returning the value in %rdx(the error register)
+	instruction->source_register = instruction->op1;
 }
 
 
@@ -9416,7 +9480,7 @@ static inline void handle_stack_deallocation_statement(instruction_t* instructio
  * Select instructions that follow a singular pattern. This one single pass will run after
  * the pattern selector ran and perform one-to-one mappings on whatever is left.
  */
-static void select_instruction_patterns(instruction_window_t* window){
+static void select_instruction_patterns(instruction_window_t* window, symtab_function_record_t* function){
 	//============================= Address Calculation Optimization  ==============================
 	//These are patterns that span multiple instructions. Often we're able to
 	//condense these multiple instructions into one singular x86 instruction
@@ -9622,9 +9686,11 @@ static void select_instruction_patterns(instruction_window_t* window){
 			break;
 		//One to one mapping here as well
 		case THREE_ADDR_CODE_RET_STMT:
-			instruction->instruction_type = RET;
-			//We'll still store this, just in a hidden way
-			instruction->source_register = instruction->op1;
+			//Let the helper do this
+			handle_ret_instruction(instruction, function);
+			break;
+		case THREE_ADDR_CODE_RAISE_STMT:
+			handle_raise_instruction(instruction);
 			break;
 		//These will always just be a JMP - the branch will have
 		//more complex rules
@@ -9717,6 +9783,9 @@ static void select_instructions(cfg_t* cfg){
 		//Extract the entry
 		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
+		//Extract the function record too
+		symtab_function_record_t* function_record = function_entry->function_defined_in;
+
 		//Save the current block here
 		basic_block_t* current = function_entry;
 
@@ -9727,7 +9796,7 @@ static void select_instructions(cfg_t* cfg){
 			//Run through the window so long as we are not at the end
 			do{
 				//Select the instructions
-				select_instruction_patterns(&window);
+				select_instruction_patterns(&window, function_record);
 
 				//Slide the window
 				slide_window(&window);

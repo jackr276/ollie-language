@@ -13,6 +13,7 @@
 */
 
 #include "cfg.h"
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -282,7 +283,30 @@ static inline u_int8_t does_block_end_in_terminal_statement(basic_block_t* basic
 	switch(basic_block->exit_statement->statement_type){
 		case THREE_ADDR_CODE_JUMP_STMT:
 		case THREE_ADDR_CODE_RET_STMT:
+		//Raise statements are functionally equivalent to ret statements
+		case THREE_ADDR_CODE_RAISE_STMT:
 		case THREE_ADDR_CODE_BRANCH_STMT:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Does a block end in a function terminating statement? The only 2 such statements
+ * are "raise" and "ret" statements
+ */
+static inline u_int8_t does_block_end_in_function_termination_statement(basic_block_t* basic_block){
+	//Just a catch here if it's null
+	if(basic_block->exit_statement == NULL){
+		return FALSE;
+	}
+
+	//Checking for raise or ret
+	switch(basic_block->exit_statement->statement_type){
+		case THREE_ADDR_CODE_RET_STMT:
+		case THREE_ADDR_CODE_RAISE_STMT:
 			return TRUE;
 		default:
 			return FALSE;
@@ -2846,14 +2870,12 @@ static three_addr_var_t* emit_indirect_jump_address_calculation(basic_block_t* b
 /**
  * Directly emit the assembly nop instruction
  */
-static void emit_idle(basic_block_t* basic_block){
+static inline void emit_idle(basic_block_t* basic_block){
 	//Use the helper
 	instruction_t* idle_stmt = emit_idle_instruction();
 	
 	//Add it into the block
 	add_statement(basic_block, idle_stmt);
-
-	//And that's all
 }
 
 
@@ -2861,14 +2883,12 @@ static void emit_idle(basic_block_t* basic_block){
  * Directly emit the assembly code for an inlined statement. Users who write assembly inline
  * want it directly inserted in order, nothing more, nothing less
  */
-static void emit_assembly_inline(basic_block_t* basic_block, generic_ast_node_t* asm_inline_node){
+static inline void emit_assembly_inline(basic_block_t* basic_block, generic_ast_node_t* asm_inline_node){
 	//First we allocate the whole thing
 	instruction_t* asm_inline_stmt = emit_asm_inline_instruction(asm_inline_node); 
 	
 	//Once done we add it into the block
 	add_statement(basic_block, asm_inline_stmt);
-	
-	//And that's all
 }
 
 
@@ -2885,10 +2905,12 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 	//This is what we'll be using to return
 	three_addr_var_t* return_variable = NULL;
 
-	//If the ret node's first child is not null, we'll let the expression rule
-	//handle it. We'll always do an assignment here because return statements present
-	//a special case. We always need our return variable to be in %rax, and that may
-	//not happen all the time naturally. As such, we need this assignment here
+	/**
+	 * If the ret node's first child is not null, we'll let the expression rule
+	 * handle it. We'll always do an assignment here because return statements present
+	 * a special case. We always need our return variable to be in %rax, and that may
+	 * not happen all the time naturally. As such, we need this assignment here
+	 */
 	if(ret_node->first_child != NULL){
 		//Perform the binary operation here
 		cfg_result_package_t expression_package = emit_expression(current, ret_node->first_child, FALSE);
@@ -4732,7 +4754,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			return unary_package;
 
 		//Logical not operator
-		case L_NOT:
+		case EXCLAMATION:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
 			//The assignee comes from the package
@@ -4753,7 +4775,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			unary_package.assignee = logical_not_statement->assignee;
 
 			//The operator here is logical not
-			unary_package.operator = L_NOT;
+			unary_package.operator = EXCLAMATION;
 
 			//Give the package back
 			return unary_package;
@@ -6696,8 +6718,7 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
 
 	//If we get this, we can't go forward. Just give it back
-	if(compound_stmt_end->exit_statement != NULL
-		&& compound_stmt_end->exit_statement->statement_type == THREE_ADDR_CODE_RET_STMT){
+	if(does_block_end_in_function_termination_statement(compound_stmt_end) == TRUE){
 		//Since we have a return block here, we know that everything else is unreachable
 		result_package.final_block = compound_stmt_end;
 		//And give it back
@@ -7347,6 +7368,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 				switch(previous_block->exit_statement->statement_type){
 					//And of course a return/branch statement means we can't add anything afterwards
 					case THREE_ADDR_CODE_BRANCH_STMT:
+					case THREE_ADDR_CODE_RAISE_STMT:
 					case THREE_ADDR_CODE_JUMP_STMT:
 					case THREE_ADDR_CODE_RET_STMT:
 						break;
@@ -7389,6 +7411,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 		switch(current_block->exit_statement->statement_type){
 			//If it's a jump or ret statement, we don't need to add one
 			case THREE_ADDR_CODE_RET_STMT:
+			case THREE_ADDR_CODE_RAISE_STMT:
 			case THREE_ADDR_CODE_JUMP_STMT:
 				break;
 
@@ -7750,6 +7773,34 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 
 /**
+ * Handle everything needed to emit a raise statement successfully. This includes updating the successor
+ * of this current block to be the function's exit block
+ */
+static inline void handle_raise_statement(basic_block_t* basic_block, generic_ast_node_t* node){
+	//Let's first extract the error value from this
+	u_int64_t error_value = node->optional_storage.error_id;
+
+	//Now we'll emit the error constant
+	three_addr_const_t* error_constant = emit_direct_integer_or_char_constant(error_value, i64);
+
+	//Following that we'll need a temporary assignment for this
+	instruction_t* temp_assignment = emit_assignment_with_const_instruction(emit_temp_var(i64), error_constant);
+
+	//Add this into the block
+	add_statement(basic_block, temp_assignment);
+
+	//Now we can emit the raises statement itself
+	instruction_t* raise_statement = emit_raise_instruction(temp_assignment->assignee);
+
+	//Add this into the block
+	add_statement(basic_block, raise_statement);
+
+	//The successor of this block is now the function end block(remember that raise = ret)
+	add_successor(basic_block, function_exit_block);
+}
+
+
+/**
  * Visit a sequence of statements one after the other. This is used for C-style case and default
  * statement processing. Note that unlike a compound statement, there is no new lexical scope
  * initialized, and we never descend the tree. We only go from sibling to sibling
@@ -7774,6 +7825,31 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 	while(ast_cursor != NULL){
 		//Using switch/case for the efficiency gain
 		switch(ast_cursor->ast_node_type){
+			case AST_NODE_TYPE_RAISE_STMT:
+				//Allocate if we don't have
+				if(starting_block == NULL){
+					starting_block = basic_block_alloc_and_estimate();
+					current_block = starting_block;
+				}
+
+				//Let the helper do the work
+				handle_raise_statement(current_block, ast_cursor); 
+
+				//If there is anything after this statement, it is UNREACHABLE
+				if(ast_cursor->next_sibling != NULL){
+					print_cfg_message(MESSAGE_TYPE_WARNING, "Unreachable code detected after raise statement", ast_cursor->next_sibling->line_number);
+					(*num_warnings_ref)++;
+				}
+
+				//Package up the results package
+				generic_results.starting_block = current_block;
+				generic_results.final_block = current_block;
+				generic_results.operator = BLANK;
+				generic_results.assignee = NULL;
+
+				//We're done here - get out
+				return generic_results;
+
 			case AST_NODE_TYPE_RET_STMT:
 				//If for whatever reason the block is null, we'll create it
 				if(starting_block == NULL){
@@ -8285,6 +8361,36 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 	while(ast_cursor != NULL){
 		//Using switch/case for the efficiency gain
 		switch(ast_cursor->ast_node_type){
+			/**
+			 * A raise statement is what allows a function to effectively
+			 * throw errors. Raise statements are final and unrecoverable,
+			 * the function must and will exit when one of these is hit
+			 */
+			case AST_NODE_TYPE_RAISE_STMT:
+				//Allocate if we don't have
+				if(starting_block == NULL){
+					starting_block = basic_block_alloc_and_estimate();
+					current_block = starting_block;
+				}
+
+				//Let the helper do the work
+				handle_raise_statement(current_block, ast_cursor); 
+
+				//If there is anything after this statement, it is UNREACHABLE
+				if(ast_cursor->next_sibling != NULL){
+					print_cfg_message(MESSAGE_TYPE_WARNING, "Unreachable code detected after raise statement", ast_cursor->next_sibling->line_number);
+					(*num_warnings_ref)++;
+				}
+
+				//Package up the results package
+				results.starting_block = current_block;
+				results.final_block = current_block;
+				results.operator = BLANK;
+				results.assignee = NULL;
+
+				//We're done here - get out
+				return results;
+
 			case AST_NODE_TYPE_RET_STMT:
 				//If for whatever reason the block is null, we'll create it
 				if(starting_block == NULL){
@@ -8787,7 +8893,7 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 		basic_block_t* block = dynamic_array_get_at(&(function_exit_block->predecessors), i);
 
 		//If the exit statement is not a return statement or is null, we need to know what's happening here
-		if(block->exit_statement == NULL || block->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT){
+		if(does_block_end_in_function_termination_statement(block) == FALSE){
 			//If this isn't void, then we need to throw a warning
 			if((function_defined_in->return_type->type_class != TYPE_CLASS_BASIC
 				|| function_defined_in->return_type->basic_type_token != VOID)

@@ -83,7 +83,7 @@ typedef enum {
 	STAR,
 	F_SLASH,
 	MOD,
-	L_NOT,
+	EXCLAMATION,
 	B_NOT,
 	IDENT,
 	POUND, /* # */
@@ -125,6 +125,7 @@ typedef enum {
 	DOLLAR, /* $ */
 	ARROW, /* -> */
 	FAT_ARROW, /* => */
+	LEXER_ERROR, // A special token that denotes a lexer error
 	ERROR,
 	DONE,
 	VOID,
@@ -140,6 +141,8 @@ typedef enum {
 	F64,
 	CHAR,
 	PUB,
+	RAISE, //Error raising
+	RAISES, //For function definition
 	TRUE_CONST,
 	FALSE_CONST,
 	INLINE,

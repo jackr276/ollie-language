@@ -54,6 +54,25 @@ static const u_int64_t mutability_salts[] = {
 
 
 /**
+ * Increment and return the current error id for the type symtab. This is done
+ * so we're always able to differentiate errors when it comes time to handle
+ * them at a function call site
+ *
+ * NOTE: error_id of 0 means no error, error_id of 1 means "error" so the generic error
+ */
+static inline u_int32_t increment_and_get_error_id(type_symtab_t* symtab){
+	//Extract
+	u_int32_t error_id = symtab->error_id;
+
+	//Increment
+	symtab->error_id++;
+
+	//Return
+	return error_id;
+}
+
+
+/**
  * Dynamically allocate a function symtab
  */
 function_symtab_t* function_symtab_alloc(){
@@ -92,6 +111,10 @@ type_symtab_t* type_symtab_alloc(){
 	symtab->current_lexical_scope = 0;
 	//Nothing has been initialized yet
 	symtab->current = NULL;
+
+	//The initial error id starts at 2. This is because 0 is reserved for NO_ERRORS,
+	//and 1 is reserved for generic_error
+	symtab->error_id = 2;
 
 	return symtab;
 }
@@ -676,7 +699,7 @@ void add_function_parameter(type_symtab_t* type_symtab, symtab_function_record_t
 /**
  * Dynamically allocate a function record
 */
-symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t is_public, u_int8_t is_inlined, u_int32_t line_number){
+symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t is_public, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number){
 	//Allocate it
 	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
 
@@ -707,7 +730,7 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t
 	record->inlined = is_inlined;
 
 	//We know that we need to create this immediately
-	record->signature = create_function_pointer_type(is_public, is_inlined, line_number, NOT_MUTABLE);
+	record->signature = create_function_pointer_type(is_public, is_inlined, line_number, raises_errors, NOT_MUTABLE);
 
 	//And give it back
 	return record;
@@ -870,6 +893,16 @@ u_int8_t insert_variable(variable_symtab_t* symtab, symtab_variable_record_t* re
  * this record exists in the table
  */
 u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record){
+	/**
+	 * If we have an error type, we need to keep track of what the error id for this
+	 * type is. This is done so we can uniquely identify errors down the road
+	 * via number
+	 */
+	if(record->type->type_class == TYPE_CLASS_ERROR){
+		//Update it internally here
+		record->type->internal_types.error_type_id = increment_and_get_error_id(symtab);
+	}
+
 	//While we're at it store this
 	record->lexical_level = symtab->current_lexical_scope;
 
@@ -1564,6 +1597,12 @@ void print_type_record(symtab_type_record_t* record){
 	printf("Name: %s,\n", record->type->type_name.string);
 	printf("Hash: %ld,\n", record->hash);
 	printf("Lexical Level: %d,\n", record->lexical_level);
+
+	//If we have an error type print the error type ID
+	if(record->type->type_class == TYPE_CLASS_ERROR){
+		printf("Error ID: %d\n", record->type->internal_types.error_type_id);
+	}
+
 	printf("}\n");
 }
 

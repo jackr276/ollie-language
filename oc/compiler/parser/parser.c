@@ -11,7 +11,6 @@
  *
  * NEXT IN LINE: Control Flow Graph, OIR constructor, SSA form implementation
 */
-#include <stdint.h>
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -105,8 +104,9 @@ static generic_ast_node_t* idle_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream);
+static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* function_type, u_int8_t defining_predeclared_function);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
-static u_int8_t definition(ollie_token_stream_t* token_stream);
+static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_global_scope);
 static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, u_int8_t is_global);
 
 
@@ -2539,7 +2539,7 @@ static u_int8_t is_unary_operator(ollie_token_t tok){
 		case MINUS:
 		case MINUSMINUS:
 		case PLUSPLUS:
-		case L_NOT:
+		case EXCLAMATION:
 		case B_NOT:
 			return TRUE;
 		//By default no
@@ -2712,7 +2712,7 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 			break;
 
 		//Logical not case
-		case L_NOT:
+		case EXCLAMATION:
 			//Check to see if it's valid
 			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, unary_op_tok);
 
@@ -2835,7 +2835,7 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 				increment_constant_value(cast_expr);
 				return cast_expr;
 
-			case L_NOT:
+			case EXCLAMATION:
 				logical_not_constant_value(cast_expr);
 				return cast_expr;
 
@@ -4973,7 +4973,7 @@ static u_int8_t struct_member_list(ollie_token_stream_t* token_stream, generic_t
  * A function pointer definer defines a function signature that can be used to dynamically call functions 
  * of the same signature
  *
- * define fn(<parameter_list>) -> {mut}? <type> as <identifier>;
+ * define fn{!}?(<parameter_list>) -> <type> {raises <error-list>}? as <identifier>;
  *
  * Unlike constructs & enums, we'll force the user to use an as keyword here for their type definition to
  * enforce readability
@@ -4984,12 +4984,23 @@ static u_int8_t struct_member_list(ollie_token_stream_t* token_stream, generic_t
  * a different function for live-parsing types inside of the type name itself
  */
 static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
+	//Do we raise errors or not? Will be determined soon
+	u_int8_t raises_errors = FALSE;
+
 	//Declare a token for search-ahead
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
+	//Let's see if we have a !, meaning that this function can raise an error
+	if(lookahead.tok == EXCLAMATION){
+		raises_errors = TRUE;
+
+		//Refresh the token
+		lookahead = get_next_token(token_stream, &parser_line_num);
+	}	 
+	
 	//Now we need to see an L_PAREN
 	if(lookahead.tok != L_PAREN){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Left parenthesis required after fn keyword", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Left parenthesis expected", parser_line_num);
 		num_errors++;
 		return FAILURE;
 	}
@@ -4997,10 +5008,12 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	//Otherwise push this onto the grouping stack for later
 	push_token(&grouping_stack, lookahead);
 
-	//Once we've gotten past this point, we're safe to allocate this type. Function
-	//pointers are always private and never inlined
-	generic_type_t* mutable_function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, MUTABLE);
-	generic_type_t* immutable_function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, NOT_MUTABLE);
+	/**
+	 * Once we've gotten past this point, we're safe to allocate this type. Function
+	 * pointers are always private and never inlined
+	 */
+	generic_type_t* mutable_function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, raises_errors, MUTABLE);
+	generic_type_t* immutable_function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, raises_errors, NOT_MUTABLE);
 
 	//Let's see if we have nothing in here. This is possible. We can also just see a "void"
 	//as an alternative way of saying this function takes no parameters
@@ -5016,32 +5029,55 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 			lookahead = get_next_token(token_stream, &parser_line_num);
 			break;
 
+		//We have an empty parameter list - also totally fine
+		case R_PAREN:
+			break;
+
+		//Otherwise we'll need to actually process this
 		default:
-			//If we hit the default, then we need to push the token back
+			//Push it back
 			push_back_token(token_stream, &parser_line_num);
+
+			//We need to at least one type in here
+			do {
+				//Now we need to see a valid type
+				generic_type_t* type = type_specifier(token_stream);
+
+				//If this is NULL, we'll error out
+				if(type == NULL){
+					return FALSE;
+				}
+
+				//Add it to the mutable version
+				add_parameter_to_function_type(mutable_function_type, type);
+
+				//Let's also add it to the immutable version
+				add_parameter_to_function_type(immutable_function_type, type);
+
+				//Refresh the lookahead token
+				lookahead = get_next_token(token_stream, &parser_line_num);
+
+				//If it's a comma keep going
+				if(lookahead.tok == COMMA){
+					continue;
+
+				//This is our exit criteria
+				} else if(lookahead.tok == R_PAREN){
+					break;
+
+				//Anything else it's an error
+				} else {
+					sprintf(info, "Expected , or ) but got \"%s\"", lexitem_to_string(&lookahead));
+					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+					num_errors++;
+					return FALSE;
+				}
+
+			//Keep going until we hit the exit condition
+			} while(TRUE);
+
 			break;
 	}
-
-	//Keep processing so long as we keep seeing commas
-	do {
-		//Now we need to see a valid type
-		generic_type_t* type = type_specifier(token_stream);
-
-		//If this is NULL, we'll error out
-		if(type == NULL){
-			return FALSE;
-		}
-
-		//Add it to the mutable version
-		add_parameter_to_function_type(mutable_function_type, type);
-
-		//Let's also add it to the immutable version
-		add_parameter_to_function_type(immutable_function_type, type);
-
-		//Refresh the lookahead token
-		lookahead = get_next_token(token_stream, &parser_line_num);
-
-	} while(lookahead.tok == COMMA);
 
 	//Now that we're done processing the list, we need to ensure that we have a right paren
 	if(lookahead.tok != R_PAREN){
@@ -5088,11 +5124,34 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	mutable_function_type->internal_types.function_type->returns_void = IS_VOID_TYPE(return_type);
 	immutable_function_type->internal_types.function_type->returns_void = IS_VOID_TYPE(return_type);
 
-	//Otherwise this did work, so now we need to see the AS keyword. Ollie forces the user to use AS to avoid the
-	//confusing syntactical mess that C function pointer declarations have
-	
 	//Refresh the token
 	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//We can now optionally see the "raises" keyword if we raise errors
+	if(lookahead.tok == RAISES){
+		//If this was not flagged as a function that could raise errors, then this is invalid
+		if(raises_errors == FALSE){
+			print_parse_message(MESSAGE_TYPE_ERROR, "The function type was not declared as able to raise errors. Use fn! if you wish to have a function type that can raise errors", parser_line_num);
+			num_errors++;
+			return FALSE;
+		}
+
+		//Otherwise, we will need to parse the error list
+		u_int8_t success = error_list(token_stream, mutable_function_type, FALSE);
+
+		//If this failed out then we're done
+		if(success == FAILURE){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid error list given to function pointer type", parser_line_num);
+			num_errors++;
+			return FALSE;
+		}
+
+		//We're going to need to copy this over from the mutable function type to the immutable one
+		immutable_function_type->internal_types.function_type->potential_errors = clone_dynamic_array(&(mutable_function_type->internal_types.function_type->potential_errors));
+
+		//Refresh the token
+		lookahead = get_next_token(token_stream, &parser_line_num);
+	}
 
 	//If it isn't an AS keyword, we're done
 	if(lookahead.tok != AS){
@@ -5100,7 +5159,6 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 		num_errors++;
 		return FALSE;
 	}
-
 
 	//If we make it here then we know we're good to look for an identifier
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -6224,22 +6282,102 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 
 
 /**
+ * Handle an Ollie error type definition. Ollie allows the user to define custom errors
+ * for their convenience. We also mandate that all errors be defined inside of
+ * the global scope. It would make no sense to define an error inside of a function, because
+ * any function that calls said function would need to know about the error
+ *
+ * NOTE: by the time we come here, we've already seen "define" and "error"
+ *
+ * BNF From:: define error <ident>;
+ */
+static u_int8_t error_definer(ollie_token_stream_t* token_stream, u_int8_t in_global_scope) {
+	//If we're not in the global scope, we leave
+	if(in_global_scope == FALSE){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Errors may not be declared in any scope other than the global scope", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Get the next token in the stream
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//If this isn't an identifier, we fail out
+	if(lookahead.tok != IDENT){
+		sprintf(info, "Expected identifier but got \"%s\" instead", lexitem_to_string(&lookahead));
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Now we've gotten an identifier, we need to make sure that there are not duplicates inside of 
+	char* error_name = lookahead.lexeme.string;
+	
+	//Check for duplicate functions, get out if this fails
+	if(do_duplicate_functions_exist(error_name) == TRUE){
+		return FAILURE;
+	}
+
+	//Check for duplicate variables
+	if(do_duplicate_variables_exist(error_name) == TRUE){
+		return FAILURE;
+	}
+
+	//Check for duplicate types
+	if(do_duplicate_types_exist(error_name) == TRUE){
+		return FAILURE;
+	}
+
+	//We should see a semicolon(remember this is the global scope)
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//If it's not a semicolon we fail out
+	if(lookahead.tok != SEMICOLON){
+		sprintf(info, "Expected \";\" but got \"%s\" instead", lexitem_to_string(&lookahead));
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//If we made it all of the way down here, then we know that we're not duplicating anything and we're safe to allocate
+	generic_type_t* error_type = create_error_type(error_name, parser_line_num);
+
+	//Create the associated record with it
+	symtab_type_record_t* record = create_type_record(error_type);
+
+	//Add it into the symtab
+	insert_type(type_symtab, record);
+
+	//If we made it all the way down here then return success
+	return SUCCESS;
+}
+
+
+/**
  * Handle all of the parsing for a function pointer type. Note that this rule will create the function pointer
  * type if we cannot find it. It is unique in this way
  *
- * fn (<type-specifier>*) -> <type-specifier>
+ * fn{!}? (<type-specifier>*) -> <type-specifier> {raises <error-list>}
  * NOTE: by the time we get here, we have already seen and consumed the "fn" token
  */
 static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_stream_t* stream, mutability_type_t mutability){
-	//Lookahead token for our use
-	lexitem_t lookahead;
+	//Does this raise errors or not? This will be important later
+	u_int8_t raises_errors = FALSE;
 
-	//We need to first see an open paren
-	lookahead = get_next_token(stream, &parser_line_num);
+	//Grab onto the first token
+	lexitem_t lookahead = get_next_token(stream, &parser_line_num);;
+
+	//Does this raise errors or not?
+	if(lookahead.tok == EXCLAMATION){
+		raises_errors = TRUE;
+
+		//Refresh the token
+		lookahead = get_next_token(stream, &parser_line_num);
+	}
 
 	//Fail if we don't see it
 	if(lookahead.tok != L_PAREN){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Opening parenthesis expected after fn keyword", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Opening parenthesis expected", parser_line_num);
 		num_errors++;
 		return NULL;
 	}
@@ -6249,7 +6387,7 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 
 	//Once we've gotten past this point, we're safe to allocate this type. We need it to be allocated for use
 	//down the road
-	generic_type_t* function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, mutability);
+	generic_type_t* function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, raises_errors, mutability);
 
 	//Let's see if we have nothing in here. This is possible. We can also just see a "void"
 	//as an alternative way of saying this function takes no parameters
@@ -6265,31 +6403,52 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 			lookahead = get_next_token(stream, &parser_line_num);
 			break;
 
+		//We have an empty parameter list - also totally fine
+		case R_PAREN:
+			break;
+
+		//Otherwise we'll need to actually process this
 		default:
-			//If we hit the default, then we need to push the token back
+			//Push it back
 			push_back_token(stream, &parser_line_num);
+
+			//We need to at least one type in here
+			do {
+				//Now we need to see a valid type
+				generic_type_t* type = type_specifier(stream);
+
+				//If this is NULL, we'll error out
+				if(type == NULL){
+					return FALSE;
+				}
+
+				//Add it to the mutable version
+				add_parameter_to_function_type(function_type, type);
+
+				//Refresh the lookahead token
+				lookahead = get_next_token(stream, &parser_line_num);
+
+				//If it's a comma keep going
+				if(lookahead.tok == COMMA){
+					continue;
+
+				//This is our exit criteria
+				} else if(lookahead.tok == R_PAREN){
+					break;
+
+				//Anything else it's an error
+				} else {
+					sprintf(info, "Expected , or ) but got \"%s\"", lexitem_to_string(&lookahead));
+					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+					num_errors++;
+					return FALSE;
+				}
+
+			//Keep going until we hit the exit condition
+			} while(TRUE);
+
 			break;
 	}
-
-	//Keep processing so long as we keep seeing commas
-	do {
-		//Now we need to see a valid type
-		generic_type_t* type = type_specifier(stream);
-
-		//If this is NULL, we'll error out
-		if(type == NULL){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid type specifier given in parameter list", parser_line_num);
-			num_errors++;
-			return NULL;
-		}
-
-		//Add it to the mutable version
-		add_parameter_to_function_type(function_type, type);
-
-		//Refresh the lookahead token
-		lookahead = get_next_token(stream, &parser_line_num);
-
-	} while(lookahead.tok == COMMA);
 
 	//Now that we're done processing the list, we need to ensure that we have a right paren
 	if(lookahead.tok != R_PAREN){
@@ -6309,7 +6468,7 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 	lookahead = get_next_token(stream, &parser_line_num);
 
 	if(lookahead.tok != ARROW){
-		print_parse_message(MESSAGE_TYPE_ERROR, "\"->\" required after parameter list in function declaration", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "\"->\" required before return type in function declaration", parser_line_num);
 		num_errors++;
 		return NULL;
 	}
@@ -6328,6 +6487,32 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 	function_type->internal_types.function_type->return_type = return_type;
 	//Also add the void flag in here just in case
 	function_type->internal_types.function_type->returns_void = IS_VOID_TYPE(return_type);
+
+	//We can now optionally see the RAISES keyword
+	lookahead = get_next_token(stream, &parser_line_num);
+
+	//If we see the raises keyword, we have to see an error list afterwards
+	if(lookahead.tok == RAISES){
+		//If we aren't raising errors, then we can't put this in
+		if(raises_errors == FALSE){
+			print_parse_message(MESSAGE_TYPE_ERROR, "The function pointer type was not declared as a function that may return errors. Declare using \"fn!\" to do this", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		u_int8_t success = error_list(stream, function_type, FALSE);
+
+		//If this fails we're out
+		if(success == FAILURE){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid error list given in function pointer type", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+	} else {
+		//Otherwise put it back
+		push_back_token(stream, &parser_line_num);
+	}
 
 	//Now we can generate the type name itself
 	generate_function_pointer_type_name(function_type);
@@ -7827,6 +8012,94 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 
 
 /**
+ * A raise statement allows a function to return in an error state. It is important to note that
+ * you can *only* raise errors, anything else will cause a compilation error. Errors may also only
+ * be raised in functions that are explicitly marked using the fn! keyword as raisable
+ *
+ * NOTE: by the time we get here, we have already seen and consumed the "raise" keyword
+ *
+ * BNF Rule: <raise-statement> ::= raise {<error-type> | error}
+ */
+static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream){
+	//Extract the function type for later use
+	function_type_t* function_type = current_function->signature->internal_types.function_type;
+
+	/**
+	 * Are we trying to raise an error inside of a defer statement? This is a big
+	 * issue, so we block it. Realistically I can't see any good reason why
+	 * someone would try
+	 */
+	if(nesting_stack_contains_level(&nesting_stack, NESTING_DEFER_STATEMENT) == TRUE){
+		return print_and_return_error("Invalid attempt to raise an error inside of a defer statement", parser_line_num);
+	}
+
+	/**
+	 * One additional thing to check - are we trying to to raise an error inside of a function
+	 * that cannot do so? If so then we fail out, it must be explicitly marked that it can
+	 * raise an error
+	 */
+	if(function_type->raises_errors == FALSE){
+		sprintf(info, "Function \"%s\" does not raise errors. Redeclare using \"fn!\" in order to make the function errorable. Currently declared as:", current_function->func_name.string);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		print_function_name(current_function);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	/**
+	 * We are required to now see either the "error" keyword for a generic error or a
+	 * specific error type. We may not raise non-error types
+	 */
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//The error id value is what really matters under the hood
+	u_int32_t error_id_value = 0;
+
+	//We are seeing a non-generic error, we will handle using the
+	//type specifier
+	if(lookahead.tok != ERROR){
+		//Push it back for processing
+		push_back_token(token_stream, &parser_line_num);
+
+		//Let the helper deal with it
+		generic_type_t* error_type = type_specifier(token_stream);
+
+		//Fail out if this ends up being null
+		if(error_type == NULL){
+			return print_and_return_error("Invalid error type given to raises statement", parser_line_num);
+		}
+
+		//Fully dealias this now that we know it's good
+		error_type = dealias_type(error_type);
+
+		//If this is not an error, we fail out
+		if(error_type->type_class != TYPE_CLASS_ERROR){
+			sprintf(info, "Type \"%s\" was not defined as an error type and therefore may not be raised", error_type->type_name.string); 
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//Otherwise we are good
+		error_id_value = error_type->internal_types.error_type_id;
+
+	} else {
+		//Since we're just raising a generic error, we use the generic error id
+		error_id_value = GENERIC_ERROR;
+	}
+
+	//Since we've made it all of the way down here, now is our time to create the ast node
+	//and give it back
+	generic_ast_node_t* raises_node = ast_node_alloc(AST_NODE_TYPE_RAISE_STMT, SIDE_TYPE_LEFT);
+
+	//Store the line number and the error id value
+	raises_node->line_number = parser_line_num;
+	raises_node->optional_storage.error_id = error_id_value;
+
+	//And give it back
+	return raises_node;
+}
+
+
+/**
  * A switch statement allows us to to see one or more labels defined by a certain expression. It allows
  * for the use of labeled statements followed by statements in general. We will do more static analysis
  * on this later. Like all rules in the system, this function returns the root node that it creates
@@ -7836,8 +8109,6 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
  * BNF Rule: <switch-statement> ::= switch on( <logical-or-expression> ) from(<constant>, <constant>) { {<case-statement | default-statement>}+ }
  */
 static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
-	//Freeze the line number
-	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 	//By default we have not found one of these
@@ -7862,7 +8133,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 
 	//Fail case
 	if(lookahead.tok != L_PAREN){
-		return print_and_return_error("Left parenthesis expected after on keyword", current_line);
+		return print_and_return_error("Left parenthesis expected after on keyword", parser_line_num);
 	}
 
 	//Push to stack for later matching
@@ -7873,7 +8144,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 
 	//If we see an invalid one we fail right out
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		return print_and_return_error("Invalid conditional expression provided to switch on", current_line);
+		return print_and_return_error("Invalid conditional expression provided to switch on", parser_line_num);
 	}
 	
 	//For a switch statement, we need an enum or some other kind of numeric type to switch based on. We cannot switch on
@@ -7912,12 +8183,12 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 
 	//Fail case
 	if(lookahead.tok != R_PAREN){
-		return print_and_return_error("Right parenthesis expected after expression in switch statement", current_line);
+		return print_and_return_error("Right parenthesis expected after expression in switch statement", parser_line_num);
 	}
 
 	//Check to make sure that the parenthesis match up
 	if(pop_token(&grouping_stack).tok != L_PAREN){
-		return print_and_return_error("Unmatched parenthesis detected", current_line);
+		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
 	}
 
 	//Now we must see an lcurly to begin the actual block
@@ -7925,7 +8196,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 
 	//Fail case
 	if(lookahead.tok != L_CURLY){
-		return print_and_return_error("Left curly brace expected after expression", current_line);
+		return print_and_return_error("Left curly brace expected after expression", parser_line_num);
 	}
 
 	//We will declare a new lexical scope here
@@ -8101,7 +8372,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 
 	//If we have an entirely empty switch statement, it's a failure
 	if(is_empty == TRUE){
-		return print_and_return_error("Switch statements with no cases are not allowed", current_line);
+		return print_and_return_error("Switch statements with no cases are not allowed", parser_line_num);
 	}
 
 	//Do we have a type that is eligible for a "exhaustive switch"? If so, this would
@@ -8166,14 +8437,14 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 					if(gap_found == FALSE){
 						//If we haven't found a default clause, it's a failure
 						if(found_default_clause == TRUE){
-							return print_and_return_error("\"default\" clause in exhaustive switch is unreachable", current_line);
+							return print_and_return_error("\"default\" clause in exhaustive switch is unreachable", parser_line_num);
 						}	
 
 					//Otherwise it's not exhaustive, so we do
 					} else {
 						//If we haven't found a default clause, it's a failure
 						if(found_default_clause == FALSE){
-							return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", current_line);
+							return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
 						}	
 					}
 
@@ -8181,7 +8452,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 				} else {
 					//If we haven't found a default clause, it's a failure
 					if(found_default_clause == FALSE){
-						return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", current_line);
+						return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
 					}	
 				}
 
@@ -8214,14 +8485,14 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 					if(gap_found == FALSE){
 						//If we haven't found a default clause, it's a failure
 						if(found_default_clause == TRUE){
-							return print_and_return_error("\"default\" clause in exhaustive switch is unreachable", current_line);
+							return print_and_return_error("\"default\" clause in exhaustive switch is unreachable", parser_line_num);
 						}	
 
 					//Otherwise it's not exhaustive, so we do
 					} else {
 						//If we haven't found a default clause, it's a failure
 						if(found_default_clause == FALSE){
-							return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", current_line);
+							return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
 						}	
 					}
 
@@ -8229,7 +8500,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 				} else {
 					//If we haven't found a default clause, it's a failure
 					if(found_default_clause == FALSE){
-						return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", current_line);
+						return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
 					}	
 				}
 
@@ -8245,7 +8516,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	} else {
 		//If we haven't found a default clause, it's a failure
 		if(found_default_clause == FALSE){
-			return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", current_line);
+			return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
 		}	
 	}
 
@@ -8258,11 +8529,11 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	//By the time we reach this, we should have seen a right curly
 	//However, we could still have matching issues, so we'll check for that here
 	if(pop_token(&grouping_stack).tok != L_CURLY){
-		return print_and_return_error("Unmatched curly braces detected", current_line);
+		return print_and_return_error("Unmatched curly braces detected", parser_line_num);
 	}
 
 	//Return the line number
-	switch_stmt_node->line_number = current_line;
+	switch_stmt_node->line_number = parser_line_num;
 
 	//Now that we're done, we will remove this variable scope
 	finalize_variable_scope(variable_symtab);
@@ -8620,7 +8891,8 @@ static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream
 	
 	//If we don't see one, we fail out
 	if(lookahead.tok != L_CURLY){
-		return print_and_return_error("Left curly brace required at beginning of compound statement", parser_line_num);
+		sprintf(info, "Expected \"{\" at the beginning of a compound statement, but got \"%s\" instead", lexitem_to_string(&lookahead));
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Push onto the grouping stack so we can check matching
@@ -8946,7 +9218,7 @@ static generic_ast_node_t* statement(ollie_token_stream_t* token_stream){
 		//Type definition
 		case DEFINE:
 			//Call the helper
-			status = definition(token_stream);
+			status = definition(token_stream, FALSE);
 
 			//If it's bad, we'll return an error node
 			if(status == FAILURE){
@@ -9024,6 +9296,10 @@ static generic_ast_node_t* statement(ollie_token_stream_t* token_stream){
 		//Handle a return statement
 		case RETURN:
 			return return_statement(token_stream);
+
+		//Handle a raise statement
+		case RAISE:
+			return raise_statement(token_stream);
 
 		//Handle a break statement
 		case BREAK:
@@ -10084,7 +10360,7 @@ static u_int8_t alias_statement(ollie_token_stream_t* token_stream){
  *
  * NOTE: We assume that there is a define or alias token for us to use to switch based on
  */
-static u_int8_t definition(ollie_token_stream_t* token_stream){
+static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_global_scope){
 	//We can now see construct or enum
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
@@ -10096,12 +10372,15 @@ static u_int8_t definition(ollie_token_stream_t* token_stream){
 			return union_definer(token_stream);
 		case ENUM:
 			return enum_definer(token_stream);
+		case ERROR:
+			return error_definer(token_stream, in_global_scope);
 		case FN:
 			return function_pointer_definer(token_stream);
 
 		//Some failure here
 		default:
-			print_parse_message(MESSAGE_TYPE_ERROR, "Expected \"union\", \"struct\", \"fn\" or \"enum\" definer keywords", parser_line_num);
+			sprintf(info, "Expected \"union\", \"struct\", \"fn\", \"error\", or \"enum\" definer keywords but got \"%s\"", lexitem_to_string(&lookahead));
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			num_errors++;
 			return FAILURE;
 	}
@@ -10350,6 +10629,167 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 
 
 /**
+ * An error list will handle all of the errors in a function definition if a function has a "raises" statement. It is
+ * important to note that this may not be empty. If we see the raises keyword, we need to raise at least one specific
+ * error
+ *
+ * <error-list> = (<error>+)
+ */
+static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* function_type, u_int8_t defining_predeclared_function){
+	//Extract the internal function type
+	function_type_t* internal_function_type = function_type->internal_types.function_type;
+
+	//Only do this if we're not defining from scratch
+	if(defining_predeclared_function == FALSE){
+		internal_function_type->potential_errors = dynamic_array_alloc();
+	}
+
+	//The lookahead token
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//If we do not see an open paren, we fail
+	if(lookahead.tok != L_PAREN){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Opening parenthesis required after raises keyword", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Push onto the grouping stack
+	push_token(&grouping_stack, lookahead);
+
+	//Start the error count off at 0
+	u_int32_t error_count = 0;
+
+	//Now we need to see at least one, but possibly many, error types in here
+	do {
+		//Get the next token
+		lookahead = get_next_token(token_stream, &parser_line_num);
+
+		//If we don't see an ident then this is a failure
+		if(lookahead.tok != IDENT){
+			sprintf(info, "Expected to see a custom error type, but instead say \"%s\"", lexitem_to_string(&lookahead));
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			num_errors++;
+			return FAILURE;
+		}
+
+		//If we make it here we're on the right track, let's see what we can find. Remember that all
+		//types are defacto immutalbe
+		symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, lookahead.lexeme.string, NOT_MUTABLE);
+
+		//We can't find it - big problem
+		if(found_type == NULL){
+			sprintf(info, "There exists no error type with the name \"%s\"", lookahead.lexeme.string);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			num_errors++;
+			return FAILURE;
+		}
+
+		//Get the inner type out
+		generic_type_t* error_type = found_type->type;
+
+		//Make sure that we dealias this - it is possible to alias any type
+		error_type = dealias_type(error_type);
+
+		//Otherwise we did find it - but is it an ERROR? Remember we are only allowed to raise error types, not just any
+		//old type
+		if(error_type->type_class != TYPE_CLASS_ERROR){
+			sprintf(info, "Type \"%s\" is not an error type and cannot be raised by a function as one", lookahead.lexeme.string);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			num_errors++;
+			return FAILURE;
+		}
+
+		/**
+		 * If we're not defining something that was predeclared, then all we need to do
+		 * is add this in
+		 */
+		if(defining_predeclared_function == FALSE){
+			//Let's first check for duplicated errors
+			for(u_int32_t i = 0; i < internal_function_type->potential_errors.current_index; i++){
+				//Extrace it
+				generic_type_t* candidate = dynamic_array_get_at(&(internal_function_type->potential_errors), i);
+
+				//If they're equal at all, we fail out
+				if(types_identical(candidate, error_type) == TRUE){
+					sprintf(info, "Function is already declared as raising an error of \"%s\"" , error_type->type_name.string);
+					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+					num_errors++;
+					return FAILURE;
+				}
+			}
+
+			//Add it in
+			dynamic_array_add(&(internal_function_type->potential_errors), error_type);
+
+		} else {
+			//We have too many - we need to bail out
+			if(error_count >= internal_function_type->potential_errors.current_index){
+				sprintf(info, "Function was predeclared as only having %d errors", internal_function_type->potential_errors.current_index); 
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				num_errors++;
+				return FAILURE;
+			}
+
+			//Extract the predeclared version
+			generic_type_t* predeclared_error = dynamic_array_get_at(&(internal_function_type->potential_errors), error_count);
+
+			//If this isn't an exact match, we fail out
+			if(predeclared_error != error_type){
+				sprintf(info, "Function was predeclared with error number %d as \"%s\", but declared with \"%s\" as error number %d", error_count + 1, predeclared_error->type_name.string, error_type->type_name.string, error_count + 1);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				num_errors++;
+				return FAILURE;
+			}
+		}
+
+		//Bump the error count up
+		error_count++;
+
+		//Now we can either see a comma or the closing paren
+		lookahead = get_next_token(token_stream, &parser_line_num);
+
+		//If we have a comma then continue
+		if(lookahead.tok == COMMA){
+			continue;
+
+		//If we have an R_PAREN then get out
+		} else if(lookahead.tok == R_PAREN){
+			break;
+
+		//Otherwise this is an error
+		} else {
+			sprintf(info, "Expected , or ) but got \"%s\"", lexitem_to_string(&lookahead));
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			num_errors++;
+			return FAILURE;
+		}
+
+	//Loop forever until one of our exit cases is hit
+	} while(TRUE);
+
+	//Final check if we have a mismatch
+	if(defining_predeclared_function == TRUE && error_count != internal_function_type->potential_errors.current_index){
+		sprintf(info, "Mismatched error list lengths: predeclared wtih %d errors and declared with %d instead", internal_function_type->potential_errors.current_index, error_count);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//We can only ever get here if we saw the R_PAREN. Make sure we can match it
+	if(pop_token(&grouping_stack).tok != L_PAREN){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//With that we are done, we can return success
+	return SUCCESS;
+}
+
+
+
+/**
  * A paramater list will handle all of the parameters in a function definition. It is important
  * to note that a parameter list may very well be empty, and that this rule will handle that case.
  * Regardless of the number of parameters(maximum of 6), a paramter list node will always be returned
@@ -10578,7 +11018,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
  * promise that a function of this signature will exist at 
  * some point
  *
- * <function_predeclaration> ::= declare {pub}? fn <identifier>({param_declaration | void} {, <param_declaration}*) -> <type-specifier>
+ * <function_predeclaration> ::= declare {pub}? fn{!}? <identifier>({param_declaration | void} {, <param_declaration}*) {raises <error-list>}? -> <type-specifier>
  *
  * NOTE: by the time we get here, we've already seen the declare keyword
  */
@@ -10587,6 +11027,8 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	u_int8_t is_public = FALSE;
 	//Is this an inline function? Also assume no by default
 	u_int8_t is_inlined = FALSE;
+	//Does this funtion raise errors? We know based on the ! after the fn keyword
+	u_int8_t raises_errors = FALSE;
 
 	//Lookahead token
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
@@ -10654,6 +11096,14 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	//Following this, we need to see an identifier
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
+	//If we see an exclaimation point, then this function raises errors
+	if(lookahead.tok == EXCLAMATION){
+		raises_errors = TRUE;
+
+		//Refresh the token
+		lookahead = get_next_token(token_stream, &parser_line_num);
+	}
+
 	//If it's not an ident, we leave
 	if(lookahead.tok != IDENT){
 		return print_and_return_error("Identifier required after fn keyword in function predeclaration", parser_line_num);
@@ -10684,7 +11134,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	}
 
 	//Now that we've survived up to here, we can make the actual record
-	symtab_function_record_t* function_record = create_function_record(function_name, is_public, is_inlined, parser_line_num);
+	symtab_function_record_t* function_record = create_function_record(function_name, is_public, is_inlined, raises_errors, parser_line_num);
 
 	//Now we need to see an lparen to begin the parameters
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -10732,7 +11182,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 
 		//If this is NULL, we'll error out
 		if(type == NULL){
-			print_and_return_error("Invalid parameter type given", parser_line_num);
+			return print_and_return_error("Invalid parameter type given", parser_line_num);
 		}
 
 		//Let the helper add the type in
@@ -10774,6 +11224,32 @@ after_rparen:
 	function_record->return_type = return_type;
 	function_record->signature->internal_types.function_type->return_type = return_type;
 
+	//We can now optionally see the RAISES keyword
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//If we see the raises keyword, we have to see an error list afterwards
+	if(lookahead.tok == RAISES){
+		if(raises_errors == FALSE){
+			sprintf(info, "Function \"%s\" was not declared as a function that may return errors. Declare using \"fn!\" to do this", function_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//Let the helper do it
+		u_int8_t success = error_list(token_stream, function_record->signature, FALSE);
+
+		//If this fails we're out
+		if(success == FAILURE){
+			return print_and_return_error("Invalid error list given in function pointer type", parser_line_num);
+		}
+
+	} else {
+		//Otherwise put it back
+		push_back_token(token_stream, &parser_line_num);
+	}
+
+	//Generate the name for the function pointer type here
+	generate_function_pointer_type_name(function_record->signature);
+
 	//Otherwise this all worked. We can add this function to the symtab
 	insert_function(function_symtab, function_record);
 	
@@ -10789,7 +11265,7 @@ after_rparen:
  *
  * NOTE: We have already consumed the FUNC keyword by the time we arrive here, so we will not look for it in this function
  *
- * BNF Rule: <function-definition> ::= {pub | inline}? fn <identifer> {<parameter-list> -> <type-specifier> <compound-statement>
+ * BNF Rule: <function-definition> ::= {pub | inline}? fn{!}? <identifer> {<parameter-list> -> <type-specifier> {raises <error-list>} <compound-statement>
  */
 static generic_ast_node_t* function_definition(ollie_token_stream_t* token_stream){
 	//Freeze the line number
@@ -10797,13 +11273,15 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	//Lookahead token
 	lexitem_t lookahead;
 	//Have we predeclared this function
-	u_int8_t definining_predeclared_function = FALSE;
+	u_int8_t defining_predeclared_function = FALSE;
 	//Is it the main function?
 	u_int8_t is_main_function = FALSE;
 	//Is this function public or private? Unless explicitly stated, all functions are private
 	u_int8_t is_public = FALSE;
 	//Is this function inlined? By default no
 	u_int8_t is_inlined = FALSE;
+	//Does this funtion raise errors? We know based on the ! after the fn keyword
+	u_int8_t raises_errors = FALSE;
 
 	//Grab the token
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -10868,6 +11346,21 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			return print_and_return_error(info, parser_line_num);
 	}
 
+	/**
+	 * It is possible for us to see the "!" for this function, in which case that means that this function
+	 * may raise errors of any kind. If we see this, we need to consume it and flag it here
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	
+	//If we see this it means that we can raise errors
+	if(lookahead.tok == EXCLAMATION){
+		raises_errors = TRUE;
+
+	//Otherwise put it back
+	} else {
+		push_back_token(token_stream, &parser_line_num);
+	}
+
 	//We also need to mark that we're in a function using the nesting stack
 	push_nesting_level(&nesting_stack, NESTING_FUNCTION);
 
@@ -10920,7 +11413,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-		function_record = create_function_record(function_name, is_public, is_inlined, parser_line_num);
+		function_record = create_function_record(function_name, is_public, is_inlined, raises_errors, parser_line_num);
 
 		//We'll put the function into the symbol table
 		//since we now know that everything worked
@@ -10941,7 +11434,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	//If we get here, we know that we're defining a predeclared function
 	} else {
 		//Flag this
-		definining_predeclared_function = TRUE;
+		defining_predeclared_function = TRUE;
 		//Set this as well
 		current_function = function_record;
 
@@ -10951,7 +11444,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			return print_and_return_error(info, parser_line_num);
 
 		//Other case, still a failure
-		} else if(function_record->signature->internal_types.function_type->is_public == TRUE && is_public == TRUE){
+		} else if(function_record->signature->internal_types.function_type->is_public == FALSE && is_public == TRUE){
 			sprintf(info, "Function \"%s\" was predeclared as private, but defined as public", function_record->func_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
@@ -10962,6 +11455,16 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 
 		} else if(function_record->inlined == FALSE && is_inlined == TRUE){
 			sprintf(info, "Function \"%s\" was not predeclared as inline. Please add the inline keyword to the forward declaration", function_record->func_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//Check the matching case for raises errors
+		if(function_record->signature->internal_types.function_type->raises_errors == TRUE && raises_errors == FALSE){
+			sprintf(info, "Function \"%s\" was predeclared as raising errors. Please add the ! signifier to the declaration", function_record->func_name.string);
+			return print_and_return_error(info, parser_line_num);
+
+		} else if(function_record->signature->internal_types.function_type->raises_errors == FALSE && raises_errors == TRUE){
+			sprintf(info, "Function \"%s\" was not predeclared as not raising errors. Please add the ! signifier to the forward declaration", function_record->func_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 	}
@@ -10977,14 +11480,17 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	//Now we must ensure that we see a valid parameter list. It is important to note that
 	//parameter lists can be empty, but whatever we have here we'll have to add in
 	//Parameter list parent is the function node
-	u_int8_t status = parameter_list(token_stream, function_record, definining_predeclared_function);
+	u_int8_t status = parameter_list(token_stream, function_record, defining_predeclared_function);
 
 	//We have a bad parameter list, we just fail out
 	if(status == FAILURE){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
-	//Semantics here, we now must see a valid arrow symbol
+	/**
+	 * At this point, we can either see an error symbol or we can see the
+	 * "raises" keyword denoting that we want to see an error list
+	 */
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
 	//If it isn't an arrow, we're out of here
@@ -11006,7 +11512,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	generic_type_t* type = dealias_type(return_type);
 
 	//If we're defining a function that was previously implicit, the types have to match exactly
-	if(definining_predeclared_function == TRUE){
+	if(defining_predeclared_function == TRUE){
 		if(strcmp(type->type_name.string, function_record->return_type->type_name.string) != 0){
 			sprintf(info, "Function \"%s\" was predeclared with a return type of \"%s\", this may not be altered. First defined here:", function_name.string, function_record->return_type->type_name.string);
 			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
@@ -11024,6 +11530,49 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 
 	//Store the return type as well
 	function_record->signature->internal_types.function_type->return_type = type;
+
+	//We can optionally see the raises keyword here
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Process error raising
+	if(lookahead.tok == RAISES){
+		//If we didn't denote that this could raise errors with the ! after fn, we
+		//need to fail out here
+		if(raises_errors == FALSE){
+			sprintf(info, "Function \"%s\" was not declared as a function that may return errors. Declare using \"fn!\" to do this", function_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		/**
+		 * What if we're defining a predeclared function that did not have the "raises" keyword on it? If so then this is wrong
+		 */
+		if(defining_predeclared_function == TRUE && function_record->signature->internal_types.function_type->potential_errors.current_index == 0){
+			sprintf(info, "Function \"%s\" was not declared as raising specific errors. \"raises\" is invalid in this context. Predeclared as type: %s",
+		   					function_record->func_name.string, function_record->signature->type_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//Now that we've made it past that, we can let the helper do the parsing for us
+		u_int8_t success = error_list(token_stream, function_record->signature, defining_predeclared_function);
+
+		//Fail out if bad
+		if(success == FAILURE){
+			return print_and_return_error("Invalid error list detected in function declaration", parser_line_num);
+		}
+
+	} else {
+		/**
+		 * What if we're defining a predeclared function that *did* ave the "raises" keyword on it? If so then this is wrong
+		 */
+		if(defining_predeclared_function == TRUE && function_record->signature->internal_types.function_type->potential_errors.current_index != 0){
+			sprintf(info, "Function \"%s\" was declared as raising specific errors. \"raises\" is required in this context. Predeclared as type: %s",
+		   					function_record->func_name.string, function_record->signature->type_name.string);
+		 	return print_and_return_error(info, parser_line_num);
+		}
+
+		//Otherwise put it back
+		push_back_token(token_stream, &parser_line_num);
+	}
 
 	//Now that the function record has been finalized, we'll need to produce the type name
 	generate_function_pointer_type_name(function_record->signature);
@@ -11186,12 +11735,6 @@ static generic_ast_node_t* declaration_partition(ollie_token_stream_t* token_str
 	//Grab the next token
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
-	if(lookahead.tok == ERROR){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Fatal error. Found error token\n", lookahead.line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-	}
-
 	//Switch based on the token
 	switch(lookahead.tok){
 		//We can either see the "pub"(public) keyword, "inline keyword" or we can see a straight fn keyword
@@ -11208,7 +11751,7 @@ static generic_ast_node_t* declaration_partition(ollie_token_stream_t* token_str
 		//Type definition
 		case DEFINE:
 			//Call the helper
-			status = definition(token_stream);
+			status = definition(token_stream, TRUE);
 
 			//If it's bad, we'll return an error node
 			if(status == FAILURE){

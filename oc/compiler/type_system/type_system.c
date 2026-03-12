@@ -783,13 +783,39 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 
 /**
+ * Are two types *exactly* equal or not? This will account for type aliasing as well
+ */
+u_int8_t types_identical(generic_type_t* a, generic_type_t* b){
+	//Let's first dealias both types
+	generic_type_t* true_type_a = dealias_type(a);
+	generic_type_t* true_type_b = dealias_type(b);
+
+	//Unequal type classes is an automatic false
+	if(true_type_a->type_class != true_type_b->type_class){
+		return FALSE;
+	}
+
+	/**
+	 * We may eventually elaborate more on this, but for right now, it is
+	 * sufficient to just compare the raw pointers to see if they're
+	 * equal or not
+	 */
+	if(true_type_a == true_type_b){
+		return TRUE;
+	} else {
+		return FALSE;
+	}
+}
+
+
+/**
  * Convert a given basic type to the unsigned version of itself. We will *not*
  * perform any size manipulation here
  *
  * We'll need this because we always coerce to unsigned, *not* to signed,
  * if one operand in a certain equation is unsigned
  */
-static generic_type_t* convert_to_unsigned_version(type_symtab_t* symtab, generic_type_t* type){
+static inline generic_type_t* convert_to_unsigned_version(type_symtab_t* symtab, generic_type_t* type){
 	//Switch based on what we have
 	switch(type->basic_type_token){
 		//Char is already unsigned
@@ -1483,7 +1509,7 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, ollie_token_t u
 			return TRUE;
 
 		//We can negate pointers, enums and basic types that are not void
-		case L_NOT:
+		case EXCLAMATION:
 			//Basic sanitation here, you can't negate these types
 			switch(type->type_class){
 				case TYPE_CLASS_ARRAY:
@@ -1781,6 +1807,29 @@ generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type, mut
 	type->memory_layout_type = MEMORY_LAYOUT_TYPE_CONTIGUOUS;
 
 	//Give back the pointer, it will need to be freed eventually
+	return type;
+}
+
+
+/**
+ * Dynamically allocate and create an error type
+ *
+ * Error types are always immutable, so we do not need a mutability passed along here
+ */
+generic_type_t* create_error_type(char* type_name, u_int32_t line_number){
+	//Allocate it first
+	generic_type_t* type = calloc(1, sizeof(generic_type_t));
+
+	//Make room for the name
+	type->type_name = dynamic_string_alloc();
+	dynamic_string_set(&(type->type_name), type_name);
+
+	//Update the type, line number and mutability
+	type->line_number = line_number;
+	type->type_class = TYPE_CLASS_ERROR;
+	type->mutability = NOT_MUTABLE;
+
+	//Give it back
 	return type;
 }
 
@@ -2277,7 +2326,7 @@ generic_type_t* create_aliased_type(char* name, generic_type_t* aliased_type, u_
 /**
  * Dynamically allocate and create a function pointer type
  */
-generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int8_t is_inlined, u_int32_t line_number, mutability_type_t mutability){
+generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int8_t is_inlined, u_int32_t line_number, u_int8_t raises_errors, mutability_type_t mutability){
 	//First allocate the parent
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
@@ -2290,6 +2339,9 @@ generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int8_t is_inl
 
 	//Now we need to create the internal function pointer type
 	type->internal_types.function_type = calloc(1, sizeof(function_type_t));
+
+	//Does this raise any errors?
+	type->internal_types.function_type->raises_errors = raises_errors;
 
 	//Allocate space for the parameters
 	type->internal_types.function_type->function_parameters = dynamic_array_alloc();
@@ -2500,8 +2552,12 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
 	//Extract this out
 	function_type_t* function_type = function_pointer_type->internal_types.function_type;
 
-	//Set the type name initially
-	dynamic_string_set(&(function_pointer_type->type_name), "fn(");
+	//Initially add the appropriate fn or fn! name
+	if(function_type->raises_errors == FALSE){
+		dynamic_string_set(&(function_pointer_type->type_name), "fn(");
+	} else {
+		dynamic_string_set(&(function_pointer_type->type_name), "fn!(");
+	}
 
 	//Store this for our uses
 	u_int32_t num_params = function_type->function_parameters.current_index;
@@ -2538,8 +2594,36 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
 		sprintf(var_string, ") -> %s", function_type->return_type->type_name.string);
 	}
 
-	//Add the closing sequence
+	//Concatenate the var string in
 	dynamic_string_concatenate(&(function_pointer_type->type_name), var_string);
+
+	//Get the count
+	u_int32_t num_errors_to_raise = function_type->potential_errors.current_index;
+
+	//If we have potential errors that we raise, we'll add that now
+	if(num_errors_to_raise != 0){
+		dynamic_string_concatenate(&(function_pointer_type->type_name), " raises (");
+
+		//Run through them all
+		for(u_int32_t i = 0; i < num_errors_to_raise; i++){
+			//Get it out
+			generic_type_t* error_type = dynamic_array_get_at(&function_type->potential_errors, i);
+
+			//Add it in
+			sprintf(var_string, "%s", error_type->type_name.string);
+
+			//Concatenate this in
+			dynamic_string_concatenate(&(function_pointer_type->type_name), var_string);
+
+			//Add comma where needed
+			if(i != num_errors_to_raise - 1){
+				dynamic_string_concatenate(&(function_pointer_type->type_name), ", ");
+			}
+		}
+
+		//Concatenate the var string in
+		dynamic_string_concatenate(&(function_pointer_type->type_name), ")");
+	}
 }
 
 

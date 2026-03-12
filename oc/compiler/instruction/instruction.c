@@ -2215,6 +2215,17 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "\n");
 			break;
 
+		case THREE_ADDR_CODE_RAISE_STMT:
+			fprintf(fl, "raise ");
+
+			//This will always have a raised variable that comes
+			//from a constant assignment
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			
+			//No matter what, print a newline
+			fprintf(fl, "\n");
+			break;
+
 		/**
 		 * These print out as
 		 *
@@ -4217,6 +4228,14 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			}
 			fprintf(fl, "\n");
 			break;
+
+		//Raise instructions are ret instructions. They are guaranteed to have a return value
+		case RAISE_INSTRUCTION:
+			fprintf(fl, "ret /* --> raises error ");
+			print_variable(fl, instruction->source_register, mode);
+			fprintf(fl, " */\n");
+			break;
+
 		case NOP:
 			fprintf(fl, "nop\n");
 			break;
@@ -4780,6 +4799,17 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 			break;
 
+		//XORQ is similar to PXOR_CLEAR in that we exclusively use it to
+		//wipe out register values
+		case XORQ_CLEAR:
+			fprintf(fl, "xorq ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, "\n");
+
+			break;
+
 		//Show a default error message. This is for the Dev's use only
 		default:
 			fprintf(fl, "Not yet selected. Statement code is: %d\n", instruction->statement_type);
@@ -4944,6 +4974,22 @@ instruction_t* emit_ret_instruction(three_addr_var_t* returnee){
 	stmt->op1 = returnee;
 
 	//And that's all, so we'll hop out
+	return stmt;
+}
+
+
+/**
+ * Emit a raise statement. Unlike a ret statement we are guaranteed to have an op1 here
+ * because we must always be raising an error
+ */
+instruction_t* emit_raise_instruction(three_addr_var_t* raised_error){
+	//First we allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Now we populate
+	stmt->statement_type = THREE_ADDR_CODE_RAISE_STMT;
+	stmt->op1 = raised_error;
+
 	return stmt;
 }
 
@@ -5572,7 +5618,7 @@ instruction_t* emit_logical_not_instruction(three_addr_var_t* assignee, three_ad
 	stmt->op1 = op1;
 
 	//Flag that this does have an operator, even though we aren't strictly using it
-	stmt->op = L_NOT;
+	stmt->op = EXCLAMATION;
 
 	//Give the stmt back
 	return stmt;
@@ -7210,7 +7256,7 @@ branch_type_t select_appropriate_branch_statement(ollie_token_t op, branch_categ
 
 		//Logical not is *TRUE* when the value is zero, and not
 		//true when the value isn't zero
-		case L_NOT:
+		case EXCLAMATION:
 			if(branch_type == BRANCH_CATEGORY_INVERSE){
 				return BRANCH_NZ;
 			} else {

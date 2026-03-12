@@ -69,7 +69,8 @@ typedef enum type_class_t {
 	TYPE_CLASS_POINTER,
 	TYPE_CLASS_FUNCTION_SIGNATURE, /* Function pointer type */
 	TYPE_CLASS_UNION, /* For discriminating union types */
-	TYPE_CLASS_ALIAS /* Alias types */
+	TYPE_CLASS_ALIAS, /* Alias types */
+	TYPE_CLASS_ERROR, /* Specialized error types */
 } type_class_t;
 
 //========================= Utility Macros ============================
@@ -104,6 +105,8 @@ struct generic_type_t{
 	 * class
 	 */
 	union {
+		//The id for an error type. This is guaranteed to be unique per-error
+		u_int32_t error_type_id;
 		//What is the member type of an array
 		generic_type_t* member_type;
 		//What does a pointer type point to?
@@ -175,6 +178,8 @@ struct function_type_t{
 	//A list of parameters which are just types - since we encode everything
 	//that we need to into the type system
 	dynamic_array_t function_parameters;
+	//What errors does this function raise potentially?
+	dynamic_array_t potential_errors;
 	//The return type
 	generic_type_t* return_type;
 	//General purpose count
@@ -189,6 +194,8 @@ struct function_type_t{
 	u_int8_t is_inlined;
 	//Does this contain stack params?
 	u_int8_t contains_stack_params;
+	//Is it possible for this function to raise an error?
+	u_int8_t raises_errors;
 };
 
 
@@ -250,9 +257,19 @@ generic_type_t* determine_compatibility_and_coerce(void* type_symtab, generic_ty
 generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_t* source_type);
 
 /**
+ * Are two types *exactly* equal or not? This will account for type aliasing as well
+ */
+u_int8_t types_identical(generic_type_t* a, generic_type_t* b);
+
+/**
  * Dynamically allocate and create a basic type
 */
 generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type, mutability_type_t mutability);
+
+/**
+ * Dynamically allocate and create an error type
+ */
+generic_type_t* create_error_type(char* type_name, u_int32_t line_number);
 
 /**
  * Strip any aliasing away from a type that we have
@@ -351,7 +368,7 @@ generic_type_t* create_aliased_type(char* type_name, generic_type_t* aliased_typ
 /**
  * Dynamically allocate and create a function pointer type
  */
-generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int8_t is_inlined, u_int32_t line_number, mutability_type_t mutability);
+generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int8_t is_inlined, u_int32_t line_number, u_int8_t raises_errors, mutability_type_t mutability);
 
 /**
  * Add a function's parameter in

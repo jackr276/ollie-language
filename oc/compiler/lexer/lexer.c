@@ -22,7 +22,7 @@
 #include "../utils/constants.h"
 
 //Total number of keywords
-#define KEYWORD_COUNT 54
+#define KEYWORD_COUNT 57
 
 //We will use this to keep track of what the current lexer state is
 typedef enum {
@@ -44,18 +44,16 @@ static char* file_name;
 static char info[2000];
 
 //Token array, we will index using their enum values
-static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, 
+static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, ERROR, RAISE, RAISES, RETURN, JUMP, REQUIRE, 
 					U8, I8, U16, I16, U32, I32, U64, I64, F32, F64, CHAR, DEFINE, ENUM,
 					REGISTER, CONSTANT, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
 					STRUCT, AS, ALIAS, SIZEOF, DEFER, MUT, DEPENDENCIES, ASM, WITH, LIB, IDLE, PUB, UNION, BOOL,
 				    EXTERNAL, TRUE_CONST, FALSE_CONST, INLINE, MACRO, ENDMACRO};
 
 //Direct one to one mapping
-static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", "ret", "jump",
-						 "require", "u8", "i8", "u16",
-						 "i16", "u32", "i32", "u64", "i64", "f32", "f64", 
-						  "char", "define", "enum", "register", "constant",
-						  "void", "typesize", "let", "declare", "when", "case", "default", "switch",
+static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", "error", "raise", "raises", "ret", "jump",
+						 "require", "u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "f32", "f64", 
+						  "char", "define", "enum", "register", "constant", "void", "typesize", "let", "declare", "when", "case", "default", "switch",
 						  "break", "continue", "struct", "as", "alias", "sizeof", "defer", "mut", "dependencies", "asm",
 						  "with", "lib", "idle", "pub", "union", "bool", "external", "true", "false", "inline", "$macro", "$endmacro"};
 
@@ -133,8 +131,8 @@ char* lexitem_to_string(lexitem_t* lexitem){
 			return "->";
 		case FAT_ARROW:
 			return "=>";
-		case ERROR:
-			return "ERROR";
+		case LEXER_ERROR:
+			return "LEXER ERROR";
 		case DONE:
 			return "DONE";
 		case IDENT:
@@ -346,8 +344,14 @@ char* lexitem_to_string(lexitem_t* lexitem){
 			return "!=";
 		case B_NOT:
 			return "~";
-		case L_NOT:
+		case EXCLAMATION:
 			return "!";
+		case ERROR:
+			return "error";
+		case RAISE:
+			return "raise";
+		case RAISES:
+			return "raises";
 		case MACRO_PARAM:
 			sprintf(info, "%s", lexitem->lexeme.string);
 			return info;
@@ -428,7 +432,7 @@ char* operator_token_to_string(ollie_token_t token){
 			return "!=";
 		case B_NOT:
 			return "~";
-		case L_NOT:
+		case EXCLAMATION:
 			return "!";
 		case BLANK:
 			return "BLANK OPERATOR";
@@ -625,7 +629,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 	//Initialize the lexitem to be nothing at first
 	lexitem_t lex_item;
 	lex_item.constant_values.signed_long_value = 0;
-	lex_item.tok = ERROR;
+	lex_item.tok = LEXER_ERROR;
 	//By default we do not ignore
 	lex_item.ignore = FALSE;
 	lex_item.line_num = 0;
@@ -653,7 +657,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 				//Wipe out the stack lexitem again
 				lex_item.constant_values.signed_long_value = 0;
-				lex_item.tok = ERROR;
+				lex_item.tok = LEXER_ERROR;
 				lex_item.line_num = 0;
 				INITIALIZE_NULL_DYNAMIC_STRING(lex_item.lexeme);
 
@@ -1035,7 +1039,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 							default:
 								PUT_BACK_CHAR(fl);
-								lex_item.tok = L_NOT;
+								lex_item.tok = EXCLAMATION;
 								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
@@ -1152,7 +1156,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 								//Hard fail in this case
 								default:
 									print_lexer_error("Invalid escape sequence character found. Please consult the ASCII manual(man ascii) for the list of escape characters", line_number);
-									lex_item.tok = ERROR;
+									lex_item.tok = LEXER_ERROR;
 									lex_item.line_num = line_number;
 									return FAILURE;
 							}

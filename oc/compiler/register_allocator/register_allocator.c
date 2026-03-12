@@ -1030,9 +1030,10 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 
 				break;
 
-			//This is a unique case. PXOR clear is often used to define a register. As such, we'll put the
+			//This is a unique case. PXOR/XORQ clear is often used to define a register. As such, we'll put the
 			//destination before the use in this one case
 			case PXOR_CLEAR:
+			case XORQ_CLEAR:
 				//First the def
 				add_live_range_to_def_set(current->destination_register->associated_live_range, basic_block);
 
@@ -1059,6 +1060,11 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 					add_live_range_to_def_set(current->destination_register->associated_live_range, basic_block);
 				}
 
+				//Now the error destination as well if one exists
+				if(current->destination_register2 != NULL){
+					add_live_range_to_def_set(current->destination_register2->associated_live_range, basic_block);
+				}
+
 				break;
 
 			/**
@@ -1081,6 +1087,11 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 				//Now the destination if one exists
 				if(current->destination_register != NULL){
 					add_live_range_to_def_set(current->destination_register->associated_live_range, basic_block);
+				}
+
+				//Now the error destination as well if one exists
+				if(current->destination_register2 != NULL){
+					add_live_range_to_def_set(current->destination_register2->associated_live_range, basic_block);
 				}
 
 				break;
@@ -2035,6 +2046,26 @@ static void precolor_instruction(instruction_t* instruction){
 				}
 			}
 
+			/**
+			 * If a function can raise an error, we still need to return that zeroed out error register
+			 * upon a regular return. That error register will be inside of source_register2 if it exists
+			 * at all for this function
+			 */
+			if(instruction->source_register2 != NULL){
+				instruction->source_register2->associated_live_range->reg.gen_purpose = RDX;
+			}
+
+			break;
+
+		/**
+		 * Raise instructions raise errors using %RDX as their return value. This is the traditional
+		 * second return value in the ABI convention but since we don't have second return values
+		 * in ollie, this works as our error value. Errors are guaranteed to only ever be integers
+		 */
+		case RAISE_INSTRUCTION:
+			//This is always %rdx
+			instruction->source_register->associated_live_range->reg.gen_purpose = RDX;
+
 			break;
 
 		/**
@@ -2134,6 +2165,11 @@ static void precolor_instruction(instruction_t* instruction){
 				} else {
 					instruction->destination_register->associated_live_range->reg.sse_reg = XMM0;
 				}
+			}
+
+			//If we have a second destination register(Error register), it's always GP and it's always %RDX
+			if(instruction->destination_register2 != NULL){
+				instruction->destination_register->associated_live_range->reg.gen_purpose = RDX;
 			}
 
 			/**
@@ -2268,10 +2304,11 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 				break;
 
 			/**
-			 * PXOR clear is a very unique case because it is used to define a register. In this
+			 * PXOR/XORQ clear is a very unique case because it is used to define a register. In this
 			 * one case, the destination will come first, and then the use
 			 */
 			case PXOR_CLEAR:
+			case XORQ_CLEAR:
 				//Do the def first(very unique)
 				add_live_range_to_def_set(cursor->destination_register->associated_live_range, block);
 
@@ -2298,6 +2335,11 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 					add_live_range_to_def_set(cursor->destination_register->associated_live_range, block);
 				}
 
+				//Add the error destination too if one exists
+				if(cursor->destination_register2 != NULL){
+					add_live_range_to_def_set(cursor->destination_register2->associated_live_range, block);
+				}
+
 				break;
 
 			/**
@@ -2320,6 +2362,11 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 				//Now the destination if one exists
 				if(cursor->destination_register != NULL){
 					add_live_range_to_def_set(cursor->destination_register->associated_live_range, block);
+				}
+
+				//Add the error destination too if one exists
+				if(cursor->destination_register2 != NULL){
+					add_live_range_to_def_set(cursor->destination_register2->associated_live_range, block);
 				}
 
 				break;
@@ -3595,6 +3642,8 @@ static u_int8_t graph_color_and_allocate_sse(basic_block_t* function_entry, dyna
  *
  * NOTE: All SSE(xmm) registers are caller saved. The callee is free to clobber these however it
  * sees fit. As such, the burden for saving all of these falls onto the caller here
+ *
+ * TODO we need to account for the error register %RDX
  */
 static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_record_t* caller, instruction_t* function_call){
 	//If we get here we know that we have a call instruction. Let's
@@ -3851,6 +3900,8 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
  *
  * NOTE: All SSE(xmm) registers are caller saved. The callee is free to clobber these however it
  * sees fit. As such, the burden for saving all of these falls onto the caller here
+ *
+ * TODO we need to account for error registers
  */
 static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_function_record_t* caller, instruction_t* function_call){
 	//Get the destination LR. Remember that this is nullable

@@ -497,6 +497,19 @@ static void mark(dynamic_array_t* function_blocks){
 					break;
 
 				/**
+				 * Raise statements are equivalent to ret statements
+				 * and are thus also always considered important
+				 */
+				case THREE_ADDR_CODE_RAISE_STMT:
+					//Mark as useful
+					current_stmt->mark = TRUE;
+					//Add it to the list
+					dynamic_array_add(&worklist, current_stmt);
+					//This block does contain a mark
+					current->contains_mark = TRUE;
+					break;
+
+				/**
 				 * Asm inline statements are also
 				 * always important because we don't 
 				 * analyze them, so the user assumes that
