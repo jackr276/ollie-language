@@ -2038,6 +2038,17 @@ static void precolor_instruction(instruction_t* instruction){
 			break;
 
 		/**
+		 * Raise instructions raise errors using %RDX as their return value. This is the traditional
+		 * second return value in the ABI convention but since we don't have second return values
+		 * in ollie, this works as our error value. Errors are guaranteed to only ever be integers
+		 */
+		case RAISE_INSTRUCTION:
+			//This is always %rdx
+			instruction->source_register->associated_live_range->reg.gen_purpose = RDX;
+
+			break;
+
+		/**
 		 * These are exclusively general purpose so we do not need
 		 * to handle any kind of floating point coloring here
 		 */
