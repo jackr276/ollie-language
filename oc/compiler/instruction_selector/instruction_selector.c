@@ -1168,6 +1168,64 @@ static inline instruction_t* emit_setne_code(three_addr_var_t* assignee, three_a
 
 
 /**
+ * Replace all of the "target" variables with the replacement in the entire block
+ */
+static inline void replace_all_variables_in_block(three_addr_var_t* target, three_addr_var_t* replacement, basic_block_t* block){
+	//Grab an instruction cursor
+	instruction_t* cursor = block->leader_statement;
+
+	//Run through everything
+	while(cursor != NULL){
+		if(cursor->assignee != NULL
+			&& variables_equal(cursor->assignee, target, FALSE) == TRUE){
+
+			//This is the replacement
+			cursor->assignee = emit_var_copy(replacement);
+		}
+
+		if(cursor->op1 != NULL
+			&& variables_equal(cursor->op1, target, FALSE) == TRUE){
+
+			//This is the replacement
+			cursor->op1 = emit_var_copy(replacement);
+		}
+
+		if(cursor->op2 != NULL
+			&& variables_equal(cursor->op2, target, FALSE) == TRUE){
+
+			//This is the replacement
+			cursor->op2 = emit_var_copy(replacement);
+		}
+
+		//Bump it up
+		cursor = cursor->next_statement;
+	}
+}
+
+
+
+/**
+ * Are variables valid for the multiplication/division shift operation? They are if
+ * they're both non-temp and equal *or* they're both temporary. If they're both temporary
+ * we can fold one into the other
+ */
+static inline u_int8_t variables_valid_for_shift_optimization(three_addr_var_t* source, three_addr_var_t* destination){
+	//If this is the case then we go
+	if(destination->variable_type == VARIABLE_TYPE_NON_TEMP){
+		return variables_equal_no_ssa(destination, source, FALSE);
+
+	//If they're the same type then this works
+	} else {
+		if(destination->type == source->type){
+			return TRUE;
+		} else {
+			return FALSE;
+		}
+	}
+}
+
+
+/**
  * The pattern optimizer takes in a window and performs hyperlocal optimzations
  * on passing instructions. If we do end up deleting instructions, we'll need
  * to take care with how that affects the window that we take in
@@ -3079,23 +3137,39 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			//be optimized into a left or right shift if we have a compatible type(not a float) *and*
 			//the assignee is equal to the variable being multiplied
 			} else if(is_constant_power_of_2(constant) == TRUE
-						&& variables_equal_no_ssa(current_instruction->assignee, current_instruction->op1, FALSE) == TRUE){
-				//If we have a star that's a left shift
-				if(current_instruction->op == STAR){
-					//Multiplication is a left shift
-					current_instruction->op = L_SHIFT;
-					//Update the constant with its log2 value
-					update_constant_with_log2_value(current_instruction->op1_const);
-					//We changed something
-					changed = TRUE;
+						&& variables_valid_for_shift_optimization(current_instruction->assignee, current_instruction->op1) == TRUE){
+				switch(current_instruction->op){
+					case STAR:
+						//Multiplication is a left shift
+						current_instruction->op = L_SHIFT;
+						//Update the constant with its log2 value
+						update_constant_with_log2_value(current_instruction->op1_const);
+						//We changed something
+						changed = TRUE;
+						break;
 
-				} else if(current_instruction->op == F_SLASH){
-					//Division is a right shift
-					current_instruction->op = R_SHIFT;
-					//Update the constant with its log2 value
-					update_constant_with_log2_value(current_instruction->op1_const);
-					//We changed something
-					changed = TRUE;
+					case F_SLASH:
+						//Division is a right shift
+						current_instruction->op = R_SHIFT;
+						//Update the constant with its log2 value
+						update_constant_with_log2_value(current_instruction->op1_const);
+
+						/**
+						 * IMPORTANT - if we have a temp variable here, since we're now using
+						 * a shift, we'll need to wipe this temp var away and instead use the op1
+						 * temp var for everything
+						 */
+						if(current_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
+							replace_all_variables_in_block(current_instruction->assignee, current_instruction->op1, current_instruction->block_contained_in);
+						}
+
+						//We changed something
+						changed = TRUE;
+						break;
+
+					//Do nothing
+					default:
+						break;
 				}
 			}
 		}
