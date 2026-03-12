@@ -2036,6 +2036,15 @@ static void precolor_instruction(instruction_t* instruction){
 				}
 			}
 
+			/**
+			 * If a function can raise an error, we still need to return that zeroed out error register
+			 * upon a regular return. That error register will be inside of source_register2 if it exists
+			 * at all for this function
+			 */
+			if(instruction->source_register2 != NULL){
+				instruction->source_register2->associated_live_range->reg.gen_purpose = RDX;
+			}
+
 			break;
 
 		/**
