@@ -5162,9 +5162,12 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 		case L_THAN_OR_EQ:
 		case NOT_EQUALS:
 		case DOUBLE_EQUALS:
+		case F_SLASH:
+		case MOD:
 			//Emit an assignee based on the inferred type
 			assignee = emit_temp_var(logical_or_expr->inferred_type);
 			break;
+
 		//We use the default strategy - op1 is also the assignee
 		default:
 			assignee = op1;
