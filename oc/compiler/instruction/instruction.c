@@ -4233,7 +4233,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case RAISE_INSTRUCTION:
 			fprintf(fl, "ret /* --> raises error ");
 			print_variable(fl, instruction->source_register, mode);
-			fprintf(fl, " */");
+			fprintf(fl, " */\n");
 			break;
 
 		case NOP:
