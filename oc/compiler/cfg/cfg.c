@@ -6718,7 +6718,7 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
 
 	//If we get this, we can't go forward. Just give it back
-	if(does_block_end_in_function_termination_statement(compound_stmt_end) == FALSE){
+	if(does_block_end_in_function_termination_statement(compound_stmt_end) == TRUE){
 		//Since we have a return block here, we know that everything else is unreachable
 		result_package.final_block = compound_stmt_end;
 		//And give it back
