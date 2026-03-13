@@ -677,6 +677,8 @@ static inline u_int8_t binary_operator_valid_for_inplace_constant_match(ollie_to
 		case PLUS:
 		case MINUS:
 		case STAR:
+		case R_SHIFT:
+		case L_SHIFT:
 			return TRUE;
 		default:
 			return FALSE;
@@ -1431,6 +1433,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * t27 <- t27 (+/-/star(*)) 68
 	 *
 	 * Can become: t27 <- 340
+	 *
+	 *
+	 * TODO - we need to make this valid for right/left shift in light of our previous optimizations
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT 
 		&& window->instruction2 != NULL
@@ -1438,6 +1443,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& binary_operator_valid_for_inplace_constant_match(window->instruction2->op) == TRUE
 		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& variables_equal(window->instruction2->op1, window->instruction1->assignee, FALSE) == TRUE){
+
+		printf("HERE\n\n");
+		print_instruction_window_three_address_code(window);
 
 		//Go based on the op. We already know that we can do this by the time 
 		//we get here
