@@ -5769,8 +5769,8 @@ static void handle_modulus_instruction(instruction_window_t* window){
 		//This goes right in before the mod
 		insert_instruction_before_given(constant_assignment, modulus_instruction);
 
-		//And this now is our op2
-		modulus_instruction->op2 = constant_assignment->destination_register;
+		//And this now is our divisor
+		divisor = constant_assignment->destination_register;
 	}
 
 	//Now we should have what we need, so we can emit the division instruction

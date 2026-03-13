@@ -444,7 +444,7 @@ static inline live_range_class_t get_live_range_class_for_variable(three_addr_va
 			return LIVE_RANGE_CLASS_SSE;
 
 		default:
-			printf("Fatal internal compiler error: undefined variable size given for live range class determination\n");
+			printf("Fatal internal compiler error: undefined variable size of %d given for live range class determination\n", variable->variable_size);
 			exit(1);
 	}
 }
