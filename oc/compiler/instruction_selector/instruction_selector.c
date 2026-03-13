@@ -1136,24 +1136,18 @@ static inline void replace_all_variables_in_block(three_addr_var_t* target, thre
 
 
 /**
- * Are variables valid for the multiplication/division shift operation? They are if
+ * Are variables valid for the division shift operation? They are if
  * they're both non-temp and equal *or* they're both temporary. If they're both temporary
  * we can fold one into the other
  */
-static inline u_int8_t variables_valid_for_shift_optimization(three_addr_var_t* source, three_addr_var_t* destination, ollie_token_t op){
+static inline u_int8_t variables_valid_for_div_shift_optimization(three_addr_var_t* destination, three_addr_var_t* source){
 	//If this is the case then we go
 	if(destination->variable_type == VARIABLE_TYPE_NON_TEMP){
 		return variables_equal_no_ssa(destination, source, FALSE);
 
 	//If they're the same type then this works
 	} else {
-		//If it's multiplication we bail out here - nothing we can do
-		if(op == STAR){
-			return variables_equal_no_ssa(destination, source, FALSE);
-		} else {
-			return destination->type == source->type ? TRUE : FALSE;
-
-		}
+		return destination->type == source->type ? TRUE : FALSE;
 	}
 }
 
@@ -3071,8 +3065,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * be optimized into a left or right shift if we have a compatible type(not a float) *and*
 			 * the assignee is equal to the variable being multiplied
 			 */
-			} else if(is_constant_power_of_2(constant) == TRUE
-						&& variables_valid_for_shift_optimization(current_instruction->assignee, current_instruction->op1, current_instruction->op) == TRUE){
+			} else if(is_constant_power_of_2(constant) == TRUE){
 				/**
 				 * Multiplication and/or division are the only things that could benefit from this
 				 */
@@ -3082,7 +3075,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						 * If the assignee and op1 are equal(which they almost always should be) - then we are set to go here. If not then
 						 * we'll just leave this for the eventual helper rule to handle
 						 */
-						if(variables_equal_no_ssa(current_instruction->assignee, current_instruction->destination_register, FALSE) == TRUE){
+						if(variables_equal_no_ssa(current_instruction->assignee, current_instruction->op1, FALSE) == TRUE){
 							//Multiplication is a left shift
 							current_instruction->op = L_SHIFT;
 							//Update the constant with its log2 value
@@ -3094,22 +3087,29 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						break;
 
 					case F_SLASH:
-						//Division is a right shift
-						current_instruction->op = R_SHIFT;
-						//Update the constant with its log2 value
-						update_constant_with_log2_value(current_instruction->op1_const);
-
 						/**
-						 * IMPORTANT - if we have a temp variable here, since we're now using
-						 * a shift, we'll need to wipe this temp var away and instead use the op1
-						 * temp var for everything
+						 * If we are able to perform this optimization, now is when we will do so. If we are not, then we will just leave
+						 * everything as is for the eventual selector rule to take care of it
 						 */
-						if(current_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
-							replace_all_variables_in_block(current_instruction->assignee, current_instruction->op1, current_instruction->block_contained_in);
+						if(variables_valid_for_div_shift_optimization(current_instruction->assignee, current_instruction->op1) == TRUE){
+							//Division is a right shift
+							current_instruction->op = R_SHIFT;
+							//Update the constant with its log2 value
+							update_constant_with_log2_value(current_instruction->op1_const);
+
+							/**
+							 * IMPORTANT - if we have a temp variable here, since we're now using
+							 * a shift, we'll need to wipe this temp var away and instead use the op1
+							 * temp var for everything
+							 */
+							if(current_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
+								replace_all_variables_in_block(current_instruction->assignee, current_instruction->op1, current_instruction->block_contained_in);
+							}
+
+							//We changed something
+							changed = TRUE;
 						}
 
-						//We changed something
-						changed = TRUE;
 						break;
 
 					//Do nothing
