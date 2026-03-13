@@ -5573,13 +5573,30 @@ static void handle_division_instruction(instruction_window_t* window){
 		insert_instruction_before_given(cl_instruction, division_instruction);
 	}
 
-	//Do we need to do a type conversion? If so, we'll do a converting move here
-	if(is_converting_move_required(division_instruction->assignee->type, division_instruction->op2->type) == TRUE){
-		divisor = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op2, division_instruction->assignee->type);
+	/**
+	 * If we have an op2(dividing two variables), we'll handle all of our converting moves here. We'll
+	 * also account for the case that we have a constant to take care of
+	 */
+	if(division_instruction->op2 != NULL){
+		//Do we need to do a type conversion? If so, we'll do a converting move here
+		if(is_converting_move_required(division_instruction->assignee->type, division_instruction->op2->type) == TRUE){
+			divisor = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op2, division_instruction->assignee->type);
 
-	//Otherwise divisor is just the op2
+		//Otherwise divisor is just the op2
+		} else {
+			divisor = division_instruction->op2;
+		}
+
+	//Otherwise we have a constant - x86 division doesn't support having these as operands so we'll need a move
 	} else {
-		divisor = division_instruction->op2;
+		//Emit the constant move
+		instruction_t* constant_move = emit_constant_move_instruction(emit_temp_var(division_instruction->assignee->type), division_instruction->op1_const);
+
+		//Now we'll insert this before the division instruction
+		insert_instruction_before_given(constant_move, division_instruction);
+
+		//This is the divisor now
+		divisor = constant_move->destination_register;
 	}
 
 	//Now we should have what we need, so we can emit the division instruction
@@ -5682,8 +5699,6 @@ static inline void handle_sse_multiplication_instruction(instruction_t* instruct
  *
  * NOTE: We guarantee that the instruction we're after is always the first
  * instruction in the window
- *
- * TODO handle constants
  */
 static void handle_modulus_instruction(instruction_window_t* window){
 	//Firstly, the instruction that we're looking for is the very first one
@@ -5755,7 +5770,7 @@ static void handle_modulus_instruction(instruction_window_t* window){
 		insert_instruction_before_given(constant_assignment, modulus_instruction);
 
 		//And this now is our op2
-		modulus_instruction->op2 = constant_assignment->assignee;
+		modulus_instruction->op2 = constant_assignment->destination_register;
 	}
 
 	//Now we should have what we need, so we can emit the division instruction
