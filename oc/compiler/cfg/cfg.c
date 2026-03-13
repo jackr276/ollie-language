@@ -5183,6 +5183,8 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 				assignee = op1;
 			}
 
+			break;
+
 		case STAR:
 			/**
 			 * If op1/op2 are *not* floating point values and one of them is going to be *unsigned*
