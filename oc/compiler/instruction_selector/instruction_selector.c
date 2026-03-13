@@ -1134,6 +1134,42 @@ static inline void replace_all_variables_in_block(three_addr_var_t* target, thre
 }
 
 
+/**
+ * Replace all of the "target" variables with the replacement starting at and including the given starting instruction. This
+ * is designed for use with the div -> right shift optimization but I could potentially see it having other uses down the line
+ */
+static inline void replace_all_variables_after_instruction(three_addr_var_t* target, three_addr_var_t* replacement, instruction_t* starting_point){
+	//Grab an instruction cursor
+	instruction_t* cursor = starting_point;
+
+	//Run through everything
+	while(cursor != NULL){
+		if(cursor->assignee != NULL
+			&& variables_equal(cursor->assignee, target, FALSE) == TRUE){
+
+			//This is the replacement
+			cursor->assignee = emit_var_copy(replacement);
+		}
+
+		if(cursor->op1 != NULL
+			&& variables_equal(cursor->op1, target, FALSE) == TRUE){
+
+			//This is the replacement
+			cursor->op1 = emit_var_copy(replacement);
+		}
+
+		if(cursor->op2 != NULL
+			&& variables_equal(cursor->op2, target, FALSE) == TRUE){
+
+			//This is the replacement
+			cursor->op2 = emit_var_copy(replacement);
+		}
+
+		//Bump it up
+		cursor = cursor->next_statement;
+	}
+}
+
 
 /**
  * Are variables valid for the division shift operation? They are if
@@ -3103,7 +3139,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							 * temp var for everything
 							 */
 							if(current_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
-								replace_all_variables_in_block(current_instruction->assignee, current_instruction->op1, current_instruction->block_contained_in);
+								replace_all_variables_after_instruction(current_instruction->assignee, current_instruction->op1, current_instruction);
 							}
 
 							//We changed something
