@@ -13,7 +13,6 @@
 */
 
 #include "cfg.h"
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -5180,6 +5179,27 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 				assignee = emit_temp_var(logical_or_expr->inferred_type);
 
 			//Otherwise we're like everything else
+			} else {
+				assignee = op1;
+			}
+
+		case STAR:
+			/**
+			 * If op1/op2 are *not* floating point values and one of them is going to be *unsigned*
+			 * meaning we have to use mulX, then we can se the assignee to be a temporary variable
+			 * instead of being the same as op1. In the instruction selector, we will need to do
+			 * a serious rewrite using this assignee anyways, so there's no point in having it be the 
+			 * same as op1
+			 */
+			if(IS_FLOATING_POINT(op1->type) == FALSE
+				&& IS_FLOATING_POINT(op2->type) == FALSE
+				//Specifially needs to be unsigned
+				&& is_type_signed(logical_or_expr->inferred_type) == FALSE){
+
+				//This is a temp var assignee
+				assignee = emit_temp_var(logical_or_expr->inferred_type);
+
+			//Otherwise just like everywhere else this is op1
 			} else {
 				assignee = op1;
 			}
