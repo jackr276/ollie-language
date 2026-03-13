@@ -1176,7 +1176,7 @@ static inline void replace_all_variables_after_instruction(three_addr_var_t* tar
  * they're both non-temp and equal *or* they're both temporary. If they're both temporary
  * we can fold one into the other
  */
-static inline u_int8_t variables_valid_for_div_shift_optimization(three_addr_var_t* destination, three_addr_var_t* source){
+static inline u_int8_t variables_valid_shift_optimization(three_addr_var_t* destination, three_addr_var_t* source){
 	//If this is the case then we go
 	if(destination->variable_type == VARIABLE_TYPE_NON_TEMP){
 		return variables_equal_no_ssa(destination, source, FALSE);
@@ -3111,11 +3111,20 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						 * If the assignee and op1 are equal(which they almost always should be) - then we are set to go here. If not then
 						 * we'll just leave this for the eventual helper rule to handle
 						 */
-						if(variables_equal_no_ssa(current_instruction->assignee, current_instruction->op1, FALSE) == TRUE){
+						if(variables_valid_shift_optimization(current_instruction->assignee, current_instruction->op1) == TRUE){
 							//Multiplication is a left shift
 							current_instruction->op = L_SHIFT;
 							//Update the constant with its log2 value
 							update_constant_with_log2_value(current_instruction->op1_const);
+
+							/**
+							 * IMPORTANT - if we a have a temp variable here, since we're now using a shift,
+							 * we'll need to wipe this temp var away and instead use the op1 temp var for everything
+							 */
+							if(current_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
+								replace_all_variables_after_instruction(current_instruction->assignee, current_instruction->op1, current_instruction);
+							}
+
 							//We changed something
 							changed = TRUE;
 						}
@@ -3127,7 +3136,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						 * If we are able to perform this optimization, now is when we will do so. If we are not, then we will just leave
 						 * everything as is for the eventual selector rule to take care of it
 						 */
-						if(variables_valid_for_div_shift_optimization(current_instruction->assignee, current_instruction->op1) == TRUE){
+						if(variables_valid_shift_optimization(current_instruction->assignee, current_instruction->op1) == TRUE){
 							//Division is a right shift
 							current_instruction->op = R_SHIFT;
 							//Update the constant with its log2 value
