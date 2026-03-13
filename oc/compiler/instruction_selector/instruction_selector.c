@@ -166,9 +166,11 @@ static inline u_int8_t is_operation_valid_for_op1_assignment_folding(ollie_token
 		case L_THAN_OR_EQ:
 		case DOUBLE_EQUALS:
 		case NOT_EQUALS:
-		//Note that this is valid only for logical and. Logical or
-		//requires the use of the "orX" instruction, which does modify
-		//its assignee unlike logical and
+		/**
+		 * Note that this is valid only for logical and. Logical or
+		 * requires the use of the "orX" instruction, which does modify
+		 * its assignee unlike logical and
+		 */
 		case DOUBLE_AND:
 			return TRUE;
 		default:
@@ -1154,6 +1156,8 @@ static inline u_int8_t variables_valid_for_shift_optimization(three_addr_var_t* 
 		}
 	}
 }
+
+
 
 
 /**
@@ -3062,23 +3066,31 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						break;
 				}
 
-			//What if we have a power of 2 here? For any kind of multiplication or division, this can
-			//be optimized into a left or right shift if we have a compatible type(not a float) *and*
-			//the assignee is equal to the variable being multiplied
+			/**
+			 * What if we have a power of 2 here? For any kind of multiplication or division, this can
+			 * be optimized into a left or right shift if we have a compatible type(not a float) *and*
+			 * the assignee is equal to the variable being multiplied
+			 */
 			} else if(is_constant_power_of_2(constant) == TRUE
 						&& variables_valid_for_shift_optimization(current_instruction->assignee, current_instruction->op1, current_instruction->op) == TRUE){
-
-				//TODO TOTALLY BROKEN WE NEED TO HANDLE IF THIS STUFF DOESN't WORK
-
-
+				/**
+				 * Multiplication and/or division are the only things that could benefit from this
+				 */
 				switch(current_instruction->op){
 					case STAR:
-						//Multiplication is a left shift
-						current_instruction->op = L_SHIFT;
-						//Update the constant with its log2 value
-						update_constant_with_log2_value(current_instruction->op1_const);
-						//We changed something
-						changed = TRUE;
+						/**
+						 * If the assignee and op1 are equal(which they almost always should be) - then we are set to go here. If not then
+						 * we'll just leave this for the eventual helper rule to handle
+						 */
+						if(variables_equal_no_ssa(current_instruction->assignee, current_instruction->destination_register, FALSE) == TRUE){
+							//Multiplication is a left shift
+							current_instruction->op = L_SHIFT;
+							//Update the constant with its log2 value
+							update_constant_with_log2_value(current_instruction->op1_const);
+							//We changed something
+							changed = TRUE;
+						}
+
 						break;
 
 					case F_SLASH:
@@ -5512,6 +5524,8 @@ static void handle_signed_multiplication_instruction(instruction_t* instruction)
  *
  * NOTE: We guarantee that the instruction we're after is always the first
  * instruction in the window
+ *
+ * TODO HANDLE CONSTANTS
  */
 static void handle_division_instruction(instruction_window_t* window){
 	//Firstly, the instruction that we're looking for is the very first one
@@ -5670,6 +5684,8 @@ static inline void handle_sse_multiplication_instruction(instruction_t* instruct
  *
  * NOTE: We guarantee that the instruction we're after is always the first
  * instruction in the window
+ *
+ * TODO handle constants
  */
 static void handle_modulus_instruction(instruction_window_t* window){
 	//Firstly, the instruction that we're looking for is the very first one
