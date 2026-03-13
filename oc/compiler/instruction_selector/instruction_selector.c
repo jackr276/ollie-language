@@ -5524,8 +5524,6 @@ static void handle_signed_multiplication_instruction(instruction_t* instruction)
  *
  * NOTE: We guarantee that the instruction we're after is always the first
  * instruction in the window
- *
- * TODO HANDLE CONSTANTS
  */
 static void handle_division_instruction(instruction_window_t* window){
 	//Firstly, the instruction that we're looking for is the very first one
@@ -5735,13 +5733,29 @@ static void handle_modulus_instruction(instruction_window_t* window){
 		insert_instruction_before_given(cl_instruction, modulus_instruction);
 	}
 
-	//Do we need to do a type conversion? If so, we'll do a converting move here
-	if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op2->type) == TRUE){
-		divisor = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op2, modulus_instruction->assignee->type);
+	/**
+	 * Handle all converting moves/constant assignment moves that we need to here
+	 */
+	if(modulus_instruction->op2 != NULL){
+		//Do we need to do a type conversion? If so, we'll do a converting move here
+		if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op2->type) == TRUE){
+			divisor = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op2, modulus_instruction->assignee->type);
 
-	//Otherwise source 2 is just the op2
+		//Otherwise source 2 is just the op2
+		} else {
+			divisor = modulus_instruction->op2;
+		}
+	
+	//Otherwise we'll need a const assignment
 	} else {
-		divisor = modulus_instruction->op2;
+		//Emit the move
+		instruction_t* constant_assignment = emit_constant_move_instruction(emit_temp_var(modulus_instruction->assignee->type), modulus_instruction->op1_const);
+
+		//This goes right in before the mod
+		insert_instruction_before_given(constant_assignment, modulus_instruction);
+
+		//And this now is our op2
+		modulus_instruction->op2 = constant_assignment->assignee;
 	}
 
 	//Now we should have what we need, so we can emit the division instruction
