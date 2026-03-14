@@ -680,17 +680,8 @@ static inline u_int8_t binary_operator_valid_for_inplace_constant_match(ollie_to
 		case PLUS:
 		case MINUS:
 		case STAR:
-
-		//
-			//
-			//
-			//
-			// TODO UNCOMMENT ME WHEN READY
-			//
-			//
-			//
-		//case R_SHIFT:
-		//case L_SHIFT:
+		case R_SHIFT:
+		case L_SHIFT:
 			return TRUE;
 		default:
 			return FALSE;
@@ -1472,10 +1463,29 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			case MINUS:
 				//Important caveat here. The constant above is the first one that 
 				subtract_constants(window->instruction1->op1_const, window->instruction2->op1_const);
-				break;
 
 				//Overwrite with op1
 				window->instruction2->op1_const = window->instruction1->op1_const;
+
+				break;
+
+			case L_SHIFT:
+				//Important caveat here. The constant above is the first one that 
+				left_shift_constants(window->instruction1->op1_const, window->instruction2->op1_const);
+
+				//Overwrite with op1
+				window->instruction2->op1_const = window->instruction1->op1_const;
+
+				break;
+
+			case R_SHIFT:
+				//Important caveat here. The constant above is the first one that 
+				right_shift_constants(window->instruction1->op1_const, window->instruction2->op1_const);
+
+				//Overwrite with op1
+				window->instruction2->op1_const = window->instruction1->op1_const;
+
+				break;
 
 			//Unreachable - just so the compiler won't complain
 			default:
@@ -1535,10 +1545,26 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			case MINUS:
 				//Important caveat here. The constant above is the first one that 
 				subtract_constants(window->instruction2->op1_const, window->instruction3->op1_const);
-				break;
 
 				//Overwrite with op1
 				window->instruction3->op1_const = window->instruction2->op1_const;
+				break;
+
+			case L_SHIFT:
+				//Important caveat here. The constant above is the first one that 
+				left_shift_constants(window->instruction2->op1_const, window->instruction3->op1_const);
+
+				//Overwrite with op1
+				window->instruction3->op1_const = window->instruction2->op1_const;
+				break;
+
+			case R_SHIFT:
+				//Important caveat here. The constant above is the first one that 
+				right_shift_constants(window->instruction2->op1_const, window->instruction3->op1_const);
+
+				//Overwrite with op1
+				window->instruction3->op1_const = window->instruction2->op1_const;
+				break;
 
 			//Unreachable - just so the compiler won't complain
 			default:
