@@ -2542,7 +2542,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	}
 
 
-
 	/**
 	 * =================== Adjacent assignment statement folding ====================
 	 * If we have a binary operation or a bin op with const statement followed by an
@@ -2771,7 +2770,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	}
 
 
-
 	/**
 	 * ================== Arithmetic Operation Simplifying ==========================
 	 * After we do all of this folding, we can stand to ask the question of if we 
@@ -2877,20 +2875,22 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						break;
 				}
 
-
-			//Notice how we do NOT mark any change as true here. This is because, even though yes we
-			//did change the instructions, the sliding window itself did not change at all. This is
-			//an important note as if we did mark a change, there are cases where this could
-			//cause an infinite loop
-			
-			//What if this is a 1? Well if it is, we can transform this statement into an inc or dec statement
-			//if it's addition or subtraction, or we can turn it into a simple assignment statement if it's multiplication
-			//or division
+			/**
+			 * Notice how we do NOT mark any change as true here. This is because, even though yes we
+			 * did change the instructions, the sliding window itself did not change at all. This is
+			 * an important note as if we did mark a change, there are cases where this could
+			 * cause an infinite loop
+			 *
+			 * What if this is a 1? Well if it is, we can transform this statement into an inc or dec statement
+			 * if it's addition or subtraction, or we can turn it into a simple assignment statement if it's multiplication
+			 * or division
+			 */
 			} else if(is_constant_value_one(constant) == TRUE){
 				//Switch based on the op in the current instruction
 				switch(current_instruction->op){
-					//If it's an addition statement, turn it into an inc statement
 					/**
+					* If it's an addition statement, turn it into an inc statement
+					*
 				 	* NOTE: for addition and subtraction, since we'll be turning this into inc/dec statements, we'll
 				 	* want to first make sure that the assignees are not temporary variables. If they are temporary variables,
 				 	* then doing this would mess the whole operation up
@@ -3157,28 +3157,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			//This counts as a change because we deleted
 			changed = TRUE;
 		}
-	}
-
-	/**
-	 * There is a chance that we could be left with statements that assign to themselves
-	 * like this:
-	 *  t11 <- t11
-	 *
-	 *  These are guaranteed to be useless, so we can eliminate them
-	 */
-	if(window->instruction1 != NULL && window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		//If we get here, we have a temp assignment who is completely useless, so we delete
-		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& variables_equal(window->instruction1->assignee, window->instruction1->op1, FALSE) == TRUE){
-
-		//Delete it
-		delete_statement(window->instruction1);
-
-		//Rebuild now based on instruction2
-		reconstruct_window(window, window->instruction2);
-
-		//Counts as a change
-		changed = TRUE;
 	}
 
 
