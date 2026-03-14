@@ -55,6 +55,9 @@ typedef enum {
 	INSERTION_ORDER_AFTER
 } insertion_order_t ;
 
+//Define the instructions per window
+#define INSTRUCTIONS_PER_WINDOW 3
+
 
 /**
  * The widow that we have here will store three instructions at once. This allows
@@ -677,8 +680,17 @@ static inline u_int8_t binary_operator_valid_for_inplace_constant_match(ollie_to
 		case PLUS:
 		case MINUS:
 		case STAR:
-		case R_SHIFT:
-		case L_SHIFT:
+
+		//
+			//
+			//
+			//
+			// TODO UNCOMMENT ME WHEN READY
+			//
+			//
+			//
+		//case R_SHIFT:
+		//case L_SHIFT:
 			return TRUE;
 		default:
 			return FALSE;
@@ -1444,9 +1456,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& variables_equal(window->instruction2->op1, window->instruction1->assignee, FALSE) == TRUE){
 
-		printf("HERE\n\n");
-		print_instruction_window_three_address_code(window);
-
 		//Go based on the op. We already know that we can do this by the time 
 		//we get here
 		switch(window->instruction2->op){
@@ -1737,135 +1746,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			//update this
 			changed = TRUE;
 		}
-	}
-
-
-	/**
-	 * ====================== Translating multiplications into leas if compatible ================
-	 * If we have something like:
-	 * 	t27 <- t26 * 8
-	 *
-	 * Since 8 is a power of 2, we are actually able to translate this into a lea. We want to
-	 * do this because lea instructions, when multiplying, generate fewer instructions than
-	 * actually doing multiplication. This is reserved for cases where the assignee and op1
-	 * are not equal. These usually arise in address calculation scenarios
-	 *
-	 * We will check both instructions 1 and 2 for this to get as much as we can on one go
-	 */
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& window->instruction1->op == STAR
-		&& is_constant_lea_compatible_power_of_2(window->instruction1->op1_const) == TRUE //Must be: 1, 2, 4, 8 for lea
-		&& variables_equal(window->instruction1->assignee, window->instruction1->op1, FALSE) == FALSE){
-		
-		//Extract the instruction for convenience
-		instruction_t* instruction = window->instruction1;
-
-		//Go based on the lea multiplier here
-		switch(instruction->op1_const->constant_value.signed_long_constant){
-			//Special case, we can knock out the whole expression. This will just become
-			//an assign const with 0
-			case 0:
-				//This is now an assign const(<value> * 0 = 0)
-				instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-
-				//Wipe out anything that isn't the 0
-				instruction->op1 = NULL;
-				instruction->op = BLANK;
-
-				break;
-
-			//Similar special case here, but now we have something that's an assignment statement itself
-			case 1:
-				//This is now a regular assignment (<value> * 1 = <value>)
-				instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
-
-				//Wipe out the op and constant
-				instruction->op1_const = NULL;
-				instruction->op = BLANK;
-
-				break;
-
-			//Otherwise for any other cases, we're just turning this into a lea statement
-			default:
-				//This is now a lea statement
-				instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-
-				//The lea type will be scale and index
-				instruction->lea_statement_type = OIR_LEA_TYPE_INDEX_AND_SCALE;
-				
-				//Knock out the op
-				instruction->op = BLANK;
-
-				//Copy over from the constant to the lea multiplier
-				instruction->lea_multiplier = instruction->op1_const->constant_value.signed_long_constant;
-
-				//We can now null out the constant
-				instruction->op1_const = NULL;
-				
-				break;
-		}
-
-		//This counts as a change
-		changed = TRUE;
-	}
-
-	//This is the same exact procedure with the same exact rules as above
-	if(window->instruction2 != NULL
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& window->instruction2->op == STAR
-		&& is_constant_lea_compatible_power_of_2(window->instruction2->op1_const) == TRUE //Must be: 1, 2, 4, 8 for lea
-		&& variables_equal_no_ssa(window->instruction2->assignee, window->instruction2->op1, FALSE) == FALSE){
-
-		//Extract the instruction for convenience
-		instruction_t* instruction = window->instruction2;
-
-		//Go based on the lea multiplier here
-		switch(instruction->op1_const->constant_value.signed_long_constant){
-			//Special case, we can knock out the whole expression. This will just become
-			//an assign const with 0
-			case 0:
-				//This is now an assign const(<value> * 0 = 0)
-				instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-
-				//Wipe out anything that isn't the 0
-				instruction->op1 = NULL;
-				instruction->op = BLANK;
-
-				break;
-
-			//Similar special case here, but now we have something that's an assignment statement itself
-			case 1:
-				//This is now a regular assignment (<value> * 1 = <value>)
-				instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
-
-				//Wipe out the op and constant
-				instruction->op1_const = NULL;
-				instruction->op = BLANK;
-
-				break;
-
-			//Otherwise for any other cases, we're just turning this into a lea statement
-			default:
-				//This is now a lea statement
-				instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-
-				//The lea type will be scale and index
-				instruction->lea_statement_type = OIR_LEA_TYPE_INDEX_AND_SCALE;
-				
-				//Knock out the op
-				instruction->op = BLANK;
-
-				//Copy over from the constant to the lea multiplier
-				instruction->lea_multiplier = instruction->op1_const->constant_value.signed_long_constant;
-
-				//We can now null out the constant
-				instruction->op1_const = NULL;
-				
-				break;
-		}
-
-		//This counts as a change
-		changed = TRUE;
 	}
 
 
@@ -3172,6 +3052,82 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			}
 		}
 	}
+
+
+	/**
+	 * ====================== Translating multiplications into leas if compatible ================
+	 * NOTE: we only want to be doing stuff like this after we've turned eligible multiplication statements
+	 * into left/right shift operations. Otherwise we're just wasting our time doing this when there is a
+	 * slightly superior optimization
+	 *
+	 * If we have something like:
+	 * 	t27 <- t26 * 8
+	 *
+	 * Since 8 is a power of 2, we are actually able to translate this into a lea. We want to
+	 * do this because lea instructions, when multiplying, generate fewer instructions than
+	 * actually doing multiplication. This is reserved for cases where the assignee and op1
+	 * are not equal. These usually arise in address calculation scenarios
+	 *
+	 * We will check all three instructions to see how far we can go
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction1->op == STAR
+ 		//Must be: 1, 2, 4, 8 for lea
+		&& is_constant_lea_compatible_power_of_2(window->instruction1->op1_const) == TRUE
+		&& variables_equal(window->instruction1->assignee, window->instruction1->op1, FALSE) == FALSE){
+		
+		//Extract the instruction for convenience
+		instruction_t* instruction = window->instruction1;
+
+		//Go based on the lea multiplier here
+		switch(instruction->op1_const->constant_value.signed_long_constant){
+			//Special case, we can knock out the whole expression. This will just become
+			//an assign const with 0
+			case 0:
+				//This is now an assign const(<value> * 0 = 0)
+				instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+				//Wipe out anything that isn't the 0
+				instruction->op1 = NULL;
+				instruction->op = BLANK;
+
+				break;
+
+			//Similar special case here, but now we have something that's an assignment statement itself
+			case 1:
+				//This is now a regular assignment (<value> * 1 = <value>)
+				instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+
+				//Wipe out the op and constant
+				instruction->op1_const = NULL;
+				instruction->op = BLANK;
+
+				break;
+
+			//Otherwise for any other cases, we're just turning this into a lea statement
+			default:
+				//This is now a lea statement
+				instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
+
+				//The lea type will be scale and index
+				instruction->lea_statement_type = OIR_LEA_TYPE_INDEX_AND_SCALE;
+				
+				//Knock out the op
+				instruction->op = BLANK;
+
+				//Copy over from the constant to the lea multiplier
+				instruction->lea_multiplier = instruction->op1_const->constant_value.signed_long_constant;
+
+				//We can now null out the constant
+				instruction->op1_const = NULL;
+				
+				break;
+		}
+
+		//This counts as a change
+		changed = TRUE;
+	}
+
 
 	/**
 	 * ================== Simplifying Consecutive Binary Operation with Constant statements ==============
