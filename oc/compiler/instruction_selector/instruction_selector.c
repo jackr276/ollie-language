@@ -1436,9 +1436,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * t27 <- t27 (+/-/star(*)) 68
 	 *
 	 * Can become: t27 <- 340
-	 *
-	 *
-	 * TODO - we need to make this valid for right/left shift in light of our previous optimizations
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT 
 		&& window->instruction2 != NULL
@@ -1590,47 +1587,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		changed = TRUE;
 	}
 
-
-	/**
-	 * --------------------- Redundnant copying elimination ------------------------------------
-	 *  Let's now fold redundant copies. Here is an example of a redundant copy
-	 * 	t10 <- x_2
-	 * 	t11 <- t10
-	 *
-	 * This can be folded into simply:
-	 * 	t11 <- x_2
-	 */
-	//If we have two consecutive assignment statements
-	if(window->instruction2 != NULL 
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT 
-		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		&& can_assignment_instruction_be_removed(window->instruction1) == TRUE
-		&& can_assignment_instruction_be_removed(window->instruction2) == TRUE){
-		//Grab these out for convenience
-		instruction_t* first = window->instruction1;
-		instruction_t* second = window->instruction2;
-		
-		//If the variables are temp and the first one's assignee is the same as the second's op1, we can fold
-		if(first->assignee->variable_type == VARIABLE_TYPE_TEMP && variables_equal(first->assignee, second->op1, TRUE) == TRUE
-			//And the assignee of the first statement is only ever used once
-			&& first->assignee->use_count <= 1){
-
-			//Manage our use state here
-			replace_variable(second->op1, first->op1);
-
-			//Reorder the op1's
-			second->op1 = first->op1;
-
-			//We can now delete the first statement
-			delete_statement(first);
-
-			//Reconstruct the window with second as the start
-			reconstruct_window(window, second);
-				
-			//Regardless of what happened, we did see a change here
-			changed = TRUE;
-		}
-	}
 
 	/**
 	 * --------------------- Redundnant copying elimination with loads ------------------------------------
