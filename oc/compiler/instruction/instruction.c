@@ -7119,12 +7119,382 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
  * The result will be: constant1 = constant1 >> constant2
  */
 void right_shift_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
+	switch(constant1->const_type){
+		case INT_CONST_FORCE_U:
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_value.unsigned_integer_constant >>= constant2->constant_value.unsigned_long_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_value.unsigned_integer_constant >>= constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_integer_constant >>= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_value.unsigned_integer_constant >>= constant2->constant_value.signed_integer_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.unsigned_integer_constant >>= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_integer_constant >>= constant2->constant_value.unsigned_short_constant;
+					break;
+				case BYTE_CONST:
+					constant1->constant_value.unsigned_integer_constant >>= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.unsigned_integer_constant >>= constant2->constant_value.unsigned_byte_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_value.unsigned_integer_constant >>= constant2->constant_value.char_constant;
+					break;
+				default:
+					printf("Fatal internal compiler error: Unsupported constant right shift operation\n");
+					exit(1);
+			}
 
+			break;
+
+		case INT_CONST:
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_value.signed_integer_constant >>= constant2->constant_value.unsigned_long_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_value.signed_integer_constant >>= constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_value.signed_integer_constant >>= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_value.signed_integer_constant >>= constant2->constant_value.signed_integer_constant;
+					break;
+				case BYTE_CONST:
+					constant1->constant_value.signed_integer_constant >>= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.signed_integer_constant >>= constant2->constant_value.unsigned_byte_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.signed_integer_constant >>= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.signed_integer_constant >>= constant2->constant_value.unsigned_short_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_value.signed_integer_constant >>= constant2->constant_value.char_constant;
+					break;
+				default:
+					printf("Fatal internal compiler error: Unsupported constant right shift operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case BYTE_CONST:
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_value.signed_byte_constant >>= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_value.signed_byte_constant >>= constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_value.signed_byte_constant >>= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_value.signed_byte_constant >>= constant2->constant_value.signed_integer_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.signed_byte_constant >>= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.signed_byte_constant >>= constant2->constant_value.unsigned_short_constant;
+					break;
+				case BYTE_CONST:
+					constant1->constant_value.signed_byte_constant >>= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.signed_byte_constant >>= constant2->constant_value.unsigned_byte_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_value.signed_byte_constant >>= constant2->constant_value.char_constant;
+					break;
+				default:
+					printf("Fatal internal compiler error: Unsupported constant right shift operation\n");
+					exit(1);
+			}
+			
+			break;
+
+		case BYTE_CONST_FORCE_U:
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_value.unsigned_byte_constant >>= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_value.unsigned_byte_constant >>= constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_byte_constant >>= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_value.unsigned_byte_constant >>= constant2->constant_value.signed_integer_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.unsigned_byte_constant >>= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_byte_constant >>= constant2->constant_value.unsigned_short_constant;
+					break;
+				case BYTE_CONST:
+					constant1->constant_value.unsigned_byte_constant >>= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.unsigned_byte_constant >>= constant2->constant_value.unsigned_byte_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_value.unsigned_byte_constant >>= constant2->constant_value.char_constant;
+					break;
+				default:
+					printf("Fatal internal compiler error: Unsupported constant right shift operation\n");
+					exit(1);
+			}
+			
+			break;
+
+		case LONG_CONST_FORCE_U:
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_value.unsigned_long_constant >>= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_value.unsigned_long_constant >>= constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_long_constant >>= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_value.unsigned_long_constant >>= constant2->constant_value.signed_integer_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.unsigned_long_constant >>= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_long_constant >>= constant2->constant_value.unsigned_short_constant;
+					break;
+				case BYTE_CONST:
+					constant1->constant_value.unsigned_long_constant >>= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.unsigned_long_constant >>= constant2->constant_value.unsigned_byte_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_value.unsigned_long_constant >>= constant2->constant_value.char_constant;
+					break;
+				default:
+					printf("Fatal internal compiler error: Unsupported constant right shift operation\n");
+					exit(1);
+			}
+			
+			break;
+
+		case LONG_CONST:
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_value.signed_long_constant >>= constant2->constant_value.unsigned_long_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_value.signed_long_constant >>= constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_value.signed_long_constant >>= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_value.signed_long_constant >>= constant2->constant_value.signed_integer_constant;
+					break;
+				case BYTE_CONST:
+					constant1->constant_value.signed_long_constant >>= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.signed_long_constant >>= constant2->constant_value.unsigned_byte_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.signed_long_constant >>= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.signed_long_constant >>= constant2->constant_value.unsigned_short_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_value.signed_long_constant >>= constant2->constant_value.char_constant;
+					break;
+				default:
+					printf("Fatal internal compiler error: Unsupported constant right shift operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case SHORT_CONST:
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_value.signed_short_constant >>= constant2->constant_value.unsigned_long_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_value.signed_short_constant >>= constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_value.signed_short_constant >>= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_value.signed_short_constant >>= constant2->constant_value.signed_integer_constant;
+					break;
+				case BYTE_CONST:
+					constant1->constant_value.signed_short_constant >>= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.signed_short_constant >>= constant2->constant_value.unsigned_byte_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.signed_short_constant >>= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.signed_short_constant >>= constant2->constant_value.unsigned_short_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_value.signed_short_constant >>= constant2->constant_value.char_constant;
+					break;
+				default:
+					printf("Fatal internal compiler error: Unsupported constant right shift operation\n");
+					exit(1);
+			}
+
+			break;
+			
+
+		case SHORT_CONST_FORCE_U:
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_value.unsigned_short_constant >>= constant2->constant_value.unsigned_long_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_value.unsigned_short_constant >>= constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_short_constant >>= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_value.unsigned_short_constant >>= constant2->constant_value.signed_integer_constant;
+					break;
+				case BYTE_CONST:
+					constant1->constant_value.unsigned_short_constant >>= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.unsigned_short_constant >>= constant2->constant_value.unsigned_byte_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.unsigned_short_constant >>= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_short_constant >>= constant2->constant_value.unsigned_short_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_value.unsigned_short_constant >>= constant2->constant_value.char_constant;
+					break;
+				default:
+					printf("Fatal internal compiler error: Unsupported constant right shift operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case CHAR_CONST:
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_value.char_constant >>= constant2->constant_value.unsigned_long_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_value.char_constant >>= constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_value.char_constant >>= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_value.char_constant >>= constant2->constant_value.signed_integer_constant;
+					break;
+				case BYTE_CONST:
+					constant1->constant_value.char_constant >>= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.char_constant >>= constant2->constant_value.unsigned_byte_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.char_constant >>= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.char_constant >>= constant2->constant_value.unsigned_short_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_value.char_constant >>= constant2->constant_value.char_constant;
+					break;
+				default:
+					printf("Fatal internal compiler error: Unsupported constant right shift operation\n");
+					exit(1);
+			}
+
+			break;
+
+		/**
+		 * Special case with our stack passed parameter offset. We can only use the constant adjustment,
+		 * not the actual constant itself because we don't know what it is yet. We guarantee that this
+		 * will always be constant1
+		 */
+		case STACK_PASSED_PARAM_OFFSET:
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_adjustment >>= constant2->constant_value.unsigned_long_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_adjustment >>= constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_adjustment >>= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_adjustment >>= constant2->constant_value.signed_integer_constant;
+					break;
+				case BYTE_CONST:
+					constant1->constant_adjustment >>= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_adjustment >>= constant2->constant_value.unsigned_byte_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_adjustment >>= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_adjustment >>= constant2->constant_value.unsigned_short_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_adjustment >>= constant2->constant_value.char_constant;
+					break;
+				default:
+					printf("Fatal internal compiler error: Unsupported constant addition operation\n");
+					exit(1);
+			}
+
+			break;
+
+		default:
+			printf("Fatal internal compiler error: Unsupported constant right shift operation\n");
+			exit(1);
+	}
 }
 
 
 /**
- * Emit the right shift of two given constants. The result will overwrite the first constant given
+ * Emit the left shift of two given constants. The result will overwrite the first constant given
  *
  * The result will be: constant1 = constant1 << constant2
  */
