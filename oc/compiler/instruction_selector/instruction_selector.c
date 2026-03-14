@@ -3161,33 +3161,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 
 	/**
-	 * There is a chance that we could be left with statements that assign to themselves
-	 * like this:
-	 *  t11 <- 2
-	 *
-	 *  Where t11 has no real usage at all. Since this is the case, we can eliminate the whole
-	 *  operation
-	 *
-	 *  These are guaranteed to be useless, so we can eliminate them
-	 */
-	if(window->instruction1 != NULL && window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-		//If we get here, we have a temp assignment who is completely useless, so we delete
-		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
-		//Ensure that it's not being used at all
-		&& window->instruction1->assignee->use_count == 0){
-
-		//Delete it
-		delete_statement(window->instruction1);
-
-		//Rebuild now based on instruction2
-		reconstruct_window(window, window->instruction2);
-
-		//Counts as a change
-		changed = TRUE;
-	}
-
-
-	/**
 	 * Optimize loads with variable offsets into one's that have constant offsets. Also
 	 * reduce redundant copy operations if need be
 	 *
