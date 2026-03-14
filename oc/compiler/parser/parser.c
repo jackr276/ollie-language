@@ -604,13 +604,16 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
 	//Store the size in here
 	constant_multiplicand->constant_value.signed_long_value = multiplicand;
 	//This one's type is always an immutable i64
-	constant_multiplicand->inferred_type = immut_i64; 
+	constant_multiplicand->inferred_type = immut_i64;
 
 	//Allocate an adjustment node
 	generic_ast_node_t* adjustment = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 
 	//This is a multiplication node
 	adjustment->binary_operator = STAR;
+
+	//This is an immut i64 type
+	adjustment->inferred_type = immut_i64;
 
 	//The first child is the actual operand
 	add_child_node(adjustment, operand);

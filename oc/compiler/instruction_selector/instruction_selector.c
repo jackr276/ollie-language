@@ -55,6 +55,9 @@ typedef enum {
 	INSERTION_ORDER_AFTER
 } insertion_order_t ;
 
+//Define the instructions per window
+#define INSTRUCTIONS_PER_WINDOW 3
+
 
 /**
  * The widow that we have here will store three instructions at once. This allows
@@ -166,9 +169,11 @@ static inline u_int8_t is_operation_valid_for_op1_assignment_folding(ollie_token
 		case L_THAN_OR_EQ:
 		case DOUBLE_EQUALS:
 		case NOT_EQUALS:
-		//Note that this is valid only for logical and. Logical or
-		//requires the use of the "orX" instruction, which does modify
-		//its assignee unlike logical and
+		/**
+		 * Note that this is valid only for logical and. Logical or
+		 * requires the use of the "orX" instruction, which does modify
+		 * its assignee unlike logical and
+		 */
 		case DOUBLE_AND:
 			return TRUE;
 		default:
@@ -645,77 +650,6 @@ static inline instruction_window_t* slide_window(instruction_window_t* window){
 
 
 /**
- * Is an operation valid for token folding? If it is, we'll return true
- * The invalid operations are &&, ||, / and %, and * *when* it is unsigned
- */
-static u_int8_t is_operation_valid_for_constant_folding(instruction_t* instruction, three_addr_const_t* constant){
-	switch(instruction->op){
-		//Division will work for one and a power of 2
-		case F_SLASH:
-			//If it's 1, then yes we can do this
-			if(is_constant_value_one(constant) == TRUE){
-				return TRUE;
-			}
-
-			//If this is the case, then we are also able to constant fold
-			if(is_constant_power_of_2(constant) == TRUE){
-				return TRUE;
-			}
-			
-			//Otherwise it won't work
-			return FALSE;
-
-		//For modulus, we can only do this when the constant is one. Anything
-		//modulo'd by 1 is just 0
-		case MOD:
-			//If it's 1, then yes we can do this
-			if(is_constant_value_one(constant) == TRUE){
-				return TRUE;
-			}
-
-			//Otherwise it won't work
-			return FALSE;
-
-		case STAR:
-			//If it's 0, then yes we can do this
-			if(is_constant_value_zero(constant) == TRUE){
-				return TRUE;
-			}
-
-			//If it's 1, then yes we can do this
-			if(is_constant_value_one(constant) == TRUE){
-				return TRUE;
-			}
-
-			//If this is the case, then we are also able to constant fold
-			if(is_constant_power_of_2(constant) == TRUE){
-				return TRUE;
-			}
-
-			/**
-			 * Once we make it all the way down here, we no longer have
-			 * the chance to do any clever optimizations or use shifting.
-			 * If this is an unsigned operation, we'll have to use the
-			 * MULL opcode, which only takes one operand. As such, we'll
-			 * reject anything that is unsigned for folding
-			 */
-
-			//If this is unsigned, we cannot do this
-			if(is_type_signed(instruction->assignee->type) == FALSE){
-				return FALSE;
-			}
-
-			//But if it is signed, we can
-			return TRUE;
-
-		default:
-			return TRUE;
-	}
-
-}
-
-
-/**
  * Can an assignment statement be optimized away? If the assignment statement
  * involves converting between types, or it involves memory indirection, then
  * we cannot simply remove it
@@ -746,6 +680,8 @@ static inline u_int8_t binary_operator_valid_for_inplace_constant_match(ollie_to
 		case PLUS:
 		case MINUS:
 		case STAR:
+		case R_SHIFT:
+		case L_SHIFT:
 			return TRUE;
 		default:
 			return FALSE;
@@ -1168,6 +1104,98 @@ static inline instruction_t* emit_setne_code(three_addr_var_t* assignee, three_a
 
 
 /**
+ * Replace all of the "target" variables with the replacement in the entire block
+ */
+static inline void replace_all_variables_in_block(three_addr_var_t* target, three_addr_var_t* replacement, basic_block_t* block){
+	//Grab an instruction cursor
+	instruction_t* cursor = block->leader_statement;
+
+	//Run through everything
+	while(cursor != NULL){
+		if(cursor->assignee != NULL
+			&& variables_equal(cursor->assignee, target, FALSE) == TRUE){
+
+			//This is the replacement
+			cursor->assignee = emit_var_copy(replacement);
+		}
+
+		if(cursor->op1 != NULL
+			&& variables_equal(cursor->op1, target, FALSE) == TRUE){
+
+			//This is the replacement
+			cursor->op1 = emit_var_copy(replacement);
+		}
+
+		if(cursor->op2 != NULL
+			&& variables_equal(cursor->op2, target, FALSE) == TRUE){
+
+			//This is the replacement
+			cursor->op2 = emit_var_copy(replacement);
+		}
+
+		//Bump it up
+		cursor = cursor->next_statement;
+	}
+}
+
+
+/**
+ * Replace all of the "target" variables with the replacement starting at and including the given starting instruction. This
+ * is designed for use with the div -> right shift optimization but I could potentially see it having other uses down the line
+ */
+static inline void replace_all_variables_after_instruction(three_addr_var_t* target, three_addr_var_t* replacement, instruction_t* starting_point){
+	//Grab an instruction cursor
+	instruction_t* cursor = starting_point;
+
+	//Run through everything
+	while(cursor != NULL){
+		if(cursor->assignee != NULL
+			&& variables_equal(cursor->assignee, target, FALSE) == TRUE){
+
+			//This is the replacement
+			cursor->assignee = emit_var_copy(replacement);
+		}
+
+		if(cursor->op1 != NULL
+			&& variables_equal(cursor->op1, target, FALSE) == TRUE){
+
+			//This is the replacement
+			cursor->op1 = emit_var_copy(replacement);
+		}
+
+		if(cursor->op2 != NULL
+			&& variables_equal(cursor->op2, target, FALSE) == TRUE){
+
+			//This is the replacement
+			cursor->op2 = emit_var_copy(replacement);
+		}
+
+		//Bump it up
+		cursor = cursor->next_statement;
+	}
+}
+
+
+/**
+ * Are variables valid for the division shift operation? They are if
+ * they're both non-temp and equal *or* they're both temporary. If they're both temporary
+ * we can fold one into the other
+ */
+static inline u_int8_t variables_valid_shift_optimization(three_addr_var_t* destination, three_addr_var_t* source){
+	//If this is the case then we go
+	if(destination->variable_type == VARIABLE_TYPE_NON_TEMP){
+		return variables_equal_no_ssa(destination, source, FALSE);
+
+	//If they're the same type then this works
+	} else {
+		return destination->type == source->type ? TRUE : FALSE;
+	}
+}
+
+
+
+
+/**
  * The pattern optimizer takes in a window and performs hyperlocal optimzations
  * on passing instructions. If we do end up deleting instructions, we'll need
  * to take care with how that affects the window that we take in
@@ -1332,7 +1360,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		if(window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 			//Validate that the use count is less than 1
 			&& window->instruction1->assignee->use_count <= 1
-			&& is_operation_valid_for_constant_folding(window->instruction2, window->instruction1->op1_const) == TRUE //And it's valid for constant folding
 			&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
 			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
 			//Grab this out for convenience
@@ -1373,7 +1400,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		if(window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 			//Validate that this is not being used more than once
 			&& window->instruction1->assignee->use_count <= 1
-			&& is_operation_valid_for_constant_folding(window->instruction3, window->instruction1->op1_const) == TRUE //And it's valid for constant folding
 			&& variables_equal(window->instruction2->assignee, window->instruction3->op2, FALSE) == FALSE
 			&& variables_equal(window->instruction1->assignee, window->instruction3->op2, FALSE) == TRUE){
 			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
@@ -1434,10 +1460,29 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			case MINUS:
 				//Important caveat here. The constant above is the first one that 
 				subtract_constants(window->instruction1->op1_const, window->instruction2->op1_const);
-				break;
 
 				//Overwrite with op1
 				window->instruction2->op1_const = window->instruction1->op1_const;
+
+				break;
+
+			case L_SHIFT:
+				//Important caveat here. The constant above is the first one that 
+				left_shift_constants(window->instruction1->op1_const, window->instruction2->op1_const);
+
+				//Overwrite with op1
+				window->instruction2->op1_const = window->instruction1->op1_const;
+
+				break;
+
+			case R_SHIFT:
+				//Important caveat here. The constant above is the first one that 
+				right_shift_constants(window->instruction1->op1_const, window->instruction2->op1_const);
+
+				//Overwrite with op1
+				window->instruction2->op1_const = window->instruction1->op1_const;
+
+				break;
 
 			//Unreachable - just so the compiler won't complain
 			default:
@@ -1497,10 +1542,26 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			case MINUS:
 				//Important caveat here. The constant above is the first one that 
 				subtract_constants(window->instruction2->op1_const, window->instruction3->op1_const);
-				break;
 
 				//Overwrite with op1
 				window->instruction3->op1_const = window->instruction2->op1_const;
+				break;
+
+			case L_SHIFT:
+				//Important caveat here. The constant above is the first one that 
+				left_shift_constants(window->instruction2->op1_const, window->instruction3->op1_const);
+
+				//Overwrite with op1
+				window->instruction3->op1_const = window->instruction2->op1_const;
+				break;
+
+			case R_SHIFT:
+				//Important caveat here. The constant above is the first one that 
+				right_shift_constants(window->instruction2->op1_const, window->instruction3->op1_const);
+
+				//Overwrite with op1
+				window->instruction3->op1_const = window->instruction2->op1_const;
+				break;
 
 			//Unreachable - just so the compiler won't complain
 			default:
@@ -1526,47 +1587,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		changed = TRUE;
 	}
 
-
-	/**
-	 * --------------------- Redundnant copying elimination ------------------------------------
-	 *  Let's now fold redundant copies. Here is an example of a redundant copy
-	 * 	t10 <- x_2
-	 * 	t11 <- t10
-	 *
-	 * This can be folded into simply:
-	 * 	t11 <- x_2
-	 */
-	//If we have two consecutive assignment statements
-	if(window->instruction2 != NULL 
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT 
-		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		&& can_assignment_instruction_be_removed(window->instruction1) == TRUE
-		&& can_assignment_instruction_be_removed(window->instruction2) == TRUE){
-		//Grab these out for convenience
-		instruction_t* first = window->instruction1;
-		instruction_t* second = window->instruction2;
-		
-		//If the variables are temp and the first one's assignee is the same as the second's op1, we can fold
-		if(first->assignee->variable_type == VARIABLE_TYPE_TEMP && variables_equal(first->assignee, second->op1, TRUE) == TRUE
-			//And the assignee of the first statement is only ever used once
-			&& first->assignee->use_count <= 1){
-
-			//Manage our use state here
-			replace_variable(second->op1, first->op1);
-
-			//Reorder the op1's
-			second->op1 = first->op1;
-
-			//We can now delete the first statement
-			delete_statement(first);
-
-			//Reconstruct the window with second as the start
-			reconstruct_window(window, second);
-				
-			//Regardless of what happened, we did see a change here
-			changed = TRUE;
-		}
-	}
 
 	/**
 	 * --------------------- Redundnant copying elimination with loads ------------------------------------
@@ -1708,135 +1728,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			//update this
 			changed = TRUE;
 		}
-	}
-
-
-	/**
-	 * ====================== Translating multiplications into leas if compatible ================
-	 * If we have something like:
-	 * 	t27 <- t26 * 8
-	 *
-	 * Since 8 is a power of 2, we are actually able to translate this into a lea. We want to
-	 * do this because lea instructions, when multiplying, generate fewer instructions than
-	 * actually doing multiplication. This is reserved for cases where the assignee and op1
-	 * are not equal. These usually arise in address calculation scenarios
-	 *
-	 * We will check both instructions 1 and 2 for this to get as much as we can on one go
-	 */
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& window->instruction1->op == STAR
-		&& is_constant_lea_compatible_power_of_2(window->instruction1->op1_const) == TRUE //Must be: 1, 2, 4, 8 for lea
-		&& variables_equal(window->instruction1->assignee, window->instruction1->op1, FALSE) == FALSE){
-		
-		//Extract the instruction for convenience
-		instruction_t* instruction = window->instruction1;
-
-		//Go based on the lea multiplier here
-		switch(instruction->op1_const->constant_value.signed_long_constant){
-			//Special case, we can knock out the whole expression. This will just become
-			//an assign const with 0
-			case 0:
-				//This is now an assign const(<value> * 0 = 0)
-				instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-
-				//Wipe out anything that isn't the 0
-				instruction->op1 = NULL;
-				instruction->op = BLANK;
-
-				break;
-
-			//Similar special case here, but now we have something that's an assignment statement itself
-			case 1:
-				//This is now a regular assignment (<value> * 1 = <value>)
-				instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
-
-				//Wipe out the op and constant
-				instruction->op1_const = NULL;
-				instruction->op = BLANK;
-
-				break;
-
-			//Otherwise for any other cases, we're just turning this into a lea statement
-			default:
-				//This is now a lea statement
-				instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-
-				//The lea type will be scale and index
-				instruction->lea_statement_type = OIR_LEA_TYPE_INDEX_AND_SCALE;
-				
-				//Knock out the op
-				instruction->op = BLANK;
-
-				//Copy over from the constant to the lea multiplier
-				instruction->lea_multiplier = instruction->op1_const->constant_value.signed_long_constant;
-
-				//We can now null out the constant
-				instruction->op1_const = NULL;
-				
-				break;
-		}
-
-		//This counts as a change
-		changed = TRUE;
-	}
-
-	//This is the same exact procedure with the same exact rules as above
-	if(window->instruction2 != NULL
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& window->instruction2->op == STAR
-		&& is_constant_lea_compatible_power_of_2(window->instruction2->op1_const) == TRUE //Must be: 1, 2, 4, 8 for lea
-		&& variables_equal_no_ssa(window->instruction2->assignee, window->instruction2->op1, FALSE) == FALSE){
-
-		//Extract the instruction for convenience
-		instruction_t* instruction = window->instruction2;
-
-		//Go based on the lea multiplier here
-		switch(instruction->op1_const->constant_value.signed_long_constant){
-			//Special case, we can knock out the whole expression. This will just become
-			//an assign const with 0
-			case 0:
-				//This is now an assign const(<value> * 0 = 0)
-				instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-
-				//Wipe out anything that isn't the 0
-				instruction->op1 = NULL;
-				instruction->op = BLANK;
-
-				break;
-
-			//Similar special case here, but now we have something that's an assignment statement itself
-			case 1:
-				//This is now a regular assignment (<value> * 1 = <value>)
-				instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
-
-				//Wipe out the op and constant
-				instruction->op1_const = NULL;
-				instruction->op = BLANK;
-
-				break;
-
-			//Otherwise for any other cases, we're just turning this into a lea statement
-			default:
-				//This is now a lea statement
-				instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-
-				//The lea type will be scale and index
-				instruction->lea_statement_type = OIR_LEA_TYPE_INDEX_AND_SCALE;
-				
-				//Knock out the op
-				instruction->op = BLANK;
-
-				//Copy over from the constant to the lea multiplier
-				instruction->lea_multiplier = instruction->op1_const->constant_value.signed_long_constant;
-
-				//We can now null out the constant
-				instruction->op1_const = NULL;
-				
-				break;
-		}
-
-		//This counts as a change
-		changed = TRUE;
 	}
 
 
@@ -2651,7 +2542,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	}
 
 
-
 	/**
 	 * =================== Adjacent assignment statement folding ====================
 	 * If we have a binary operation or a bin op with const statement followed by an
@@ -2880,7 +2770,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	}
 
 
-
 	/**
 	 * ================== Arithmetic Operation Simplifying ==========================
 	 * After we do all of this folding, we can stand to ask the question of if we 
@@ -2986,20 +2875,22 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						break;
 				}
 
-
-			//Notice how we do NOT mark any change as true here. This is because, even though yes we
-			//did change the instructions, the sliding window itself did not change at all. This is
-			//an important note as if we did mark a change, there are cases where this could
-			//cause an infinite loop
-			
-			//What if this is a 1? Well if it is, we can transform this statement into an inc or dec statement
-			//if it's addition or subtraction, or we can turn it into a simple assignment statement if it's multiplication
-			//or division
+			/**
+			 * Notice how we do NOT mark any change as true here. This is because, even though yes we
+			 * did change the instructions, the sliding window itself did not change at all. This is
+			 * an important note as if we did mark a change, there are cases where this could
+			 * cause an infinite loop
+			 *
+			 * What if this is a 1? Well if it is, we can transform this statement into an inc or dec statement
+			 * if it's addition or subtraction, or we can turn it into a simple assignment statement if it's multiplication
+			 * or division
+			 */
 			} else if(is_constant_value_one(constant) == TRUE){
 				//Switch based on the op in the current instruction
 				switch(current_instruction->op){
-					//If it's an addition statement, turn it into an inc statement
 					/**
+					* If it's an addition statement, turn it into an inc statement
+					*
 				 	* NOTE: for addition and subtraction, since we'll be turning this into inc/dec statements, we'll
 				 	* want to first make sure that the assignees are not temporary variables. If they are temporary variables,
 				 	* then doing this would mess the whole operation up
@@ -3075,31 +2966,150 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						break;
 				}
 
-			//What if we have a power of 2 here? For any kind of multiplication or division, this can
-			//be optimized into a left or right shift if we have a compatible type(not a float) *and*
-			//the assignee is equal to the variable being multiplied
-			} else if(is_constant_power_of_2(constant) == TRUE
-						&& variables_equal_no_ssa(current_instruction->assignee, current_instruction->op1, FALSE) == TRUE){
-				//If we have a star that's a left shift
-				if(current_instruction->op == STAR){
-					//Multiplication is a left shift
-					current_instruction->op = L_SHIFT;
-					//Update the constant with its log2 value
-					update_constant_with_log2_value(current_instruction->op1_const);
-					//We changed something
-					changed = TRUE;
+			/**
+			 * What if we have a power of 2 here? For any kind of multiplication or division, this can
+			 * be optimized into a left or right shift if we have a compatible type(not a float) *and*
+			 * the assignee is equal to the variable being multiplied
+			 */
+			} else if(is_constant_power_of_2(constant) == TRUE){
+				/**
+				 * Multiplication and/or division are the only things that could benefit from this
+				 */
+				switch(current_instruction->op){
+					case STAR:
+						/**
+						 * If the assignee and op1 are equal(which they almost always should be) - then we are set to go here. If not then
+						 * we'll just leave this for the eventual helper rule to handle
+						 */
+						if(variables_valid_shift_optimization(current_instruction->assignee, current_instruction->op1) == TRUE){
+							//Multiplication is a left shift
+							current_instruction->op = L_SHIFT;
+							//Update the constant with its log2 value
+							update_constant_with_log2_value(current_instruction->op1_const);
 
-				} else if(current_instruction->op == F_SLASH){
-					//Division is a right shift
-					current_instruction->op = R_SHIFT;
-					//Update the constant with its log2 value
-					update_constant_with_log2_value(current_instruction->op1_const);
-					//We changed something
-					changed = TRUE;
+							/**
+							 * IMPORTANT - if we a have a temp variable here, since we're now using a shift,
+							 * we'll need to wipe this temp var away and instead use the op1 temp var for everything
+							 */
+							if(current_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
+								replace_all_variables_after_instruction(current_instruction->assignee, current_instruction->op1, current_instruction);
+							}
+
+							//We changed something
+							changed = TRUE;
+						}
+
+						break;
+
+					case F_SLASH:
+						/**
+						 * If we are able to perform this optimization, now is when we will do so. If we are not, then we will just leave
+						 * everything as is for the eventual selector rule to take care of it
+						 */
+						if(variables_valid_shift_optimization(current_instruction->assignee, current_instruction->op1) == TRUE){
+							//Division is a right shift
+							current_instruction->op = R_SHIFT;
+							//Update the constant with its log2 value
+							update_constant_with_log2_value(current_instruction->op1_const);
+
+							/**
+							 * IMPORTANT - if we have a temp variable here, since we're now using
+							 * a shift, we'll need to wipe this temp var away and instead use the op1
+							 * temp var for everything
+							 */
+							if(current_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
+								replace_all_variables_after_instruction(current_instruction->assignee, current_instruction->op1, current_instruction);
+							}
+
+							//We changed something
+							changed = TRUE;
+						}
+
+						break;
+
+					//Do nothing
+					default:
+						break;
 				}
 			}
 		}
 	}
+
+
+	/**
+	 * ====================== Translating multiplications into leas if compatible ================
+	 * NOTE: we only want to be doing stuff like this after we've turned eligible multiplication statements
+	 * into left/right shift operations. Otherwise we're just wasting our time doing this when there is a
+	 * slightly superior optimization
+	 *
+	 * If we have something like:
+	 * 	t27 <- t26 * 8
+	 *
+	 * Since 8 is a power of 2, we are actually able to translate this into a lea. We want to
+	 * do this because lea instructions, when multiplying, generate fewer instructions than
+	 * actually doing multiplication. This is reserved for cases where the assignee and op1
+	 * are not equal. These usually arise in address calculation scenarios
+	 *
+	 * We will check all three instructions to see how far we can go
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction1->op == STAR
+ 		//Must be: 1, 2, 4, 8 for lea
+		&& is_constant_lea_compatible_power_of_2(window->instruction1->op1_const) == TRUE
+		&& variables_equal(window->instruction1->assignee, window->instruction1->op1, FALSE) == FALSE){
+		
+		//Extract the instruction for convenience
+		instruction_t* instruction = window->instruction1;
+
+		//Go based on the lea multiplier here
+		switch(instruction->op1_const->constant_value.signed_long_constant){
+			//Special case, we can knock out the whole expression. This will just become
+			//an assign const with 0
+			case 0:
+				//This is now an assign const(<value> * 0 = 0)
+				instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+				//Wipe out anything that isn't the 0
+				instruction->op1 = NULL;
+				instruction->op = BLANK;
+
+				break;
+
+			//Similar special case here, but now we have something that's an assignment statement itself
+			case 1:
+				//This is now a regular assignment (<value> * 1 = <value>)
+				instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+
+				//Wipe out the op and constant
+				instruction->op1_const = NULL;
+				instruction->op = BLANK;
+
+				break;
+
+			//Otherwise for any other cases, we're just turning this into a lea statement
+			default:
+				//This is now a lea statement
+				instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
+
+				//The lea type will be scale and index
+				instruction->lea_statement_type = OIR_LEA_TYPE_INDEX_AND_SCALE;
+				
+				//Knock out the op
+				instruction->op = BLANK;
+
+				//Copy over from the constant to the lea multiplier
+				instruction->lea_multiplier = instruction->op1_const->constant_value.signed_long_constant;
+
+				//We can now null out the constant
+				instruction->op1_const = NULL;
+				
+				break;
+		}
+
+		//This counts as a change
+		changed = TRUE;
+	}
+
 
 	/**
 	 * ================== Simplifying Consecutive Binary Operation with Constant statements ==============
@@ -3147,55 +3157,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			//This counts as a change because we deleted
 			changed = TRUE;
 		}
-	}
-
-	/**
-	 * There is a chance that we could be left with statements that assign to themselves
-	 * like this:
-	 *  t11 <- t11
-	 *
-	 *  These are guaranteed to be useless, so we can eliminate them
-	 */
-	if(window->instruction1 != NULL && window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		//If we get here, we have a temp assignment who is completely useless, so we delete
-		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& variables_equal(window->instruction1->assignee, window->instruction1->op1, FALSE) == TRUE){
-
-		//Delete it
-		delete_statement(window->instruction1);
-
-		//Rebuild now based on instruction2
-		reconstruct_window(window, window->instruction2);
-
-		//Counts as a change
-		changed = TRUE;
-	}
-
-
-	/**
-	 * There is a chance that we could be left with statements that assign to themselves
-	 * like this:
-	 *  t11 <- 2
-	 *
-	 *  Where t11 has no real usage at all. Since this is the case, we can eliminate the whole
-	 *  operation
-	 *
-	 *  These are guaranteed to be useless, so we can eliminate them
-	 */
-	if(window->instruction1 != NULL && window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-		//If we get here, we have a temp assignment who is completely useless, so we delete
-		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
-		//Ensure that it's not being used at all
-		&& window->instruction1->assignee->use_count == 0){
-
-		//Delete it
-		delete_statement(window->instruction1);
-
-		//Rebuild now based on instruction2
-		reconstruct_window(window, window->instruction2);
-
-		//Counts as a change
-		changed = TRUE;
 	}
 
 
@@ -5554,13 +5515,30 @@ static void handle_division_instruction(instruction_window_t* window){
 		insert_instruction_before_given(cl_instruction, division_instruction);
 	}
 
-	//Do we need to do a type conversion? If so, we'll do a converting move here
-	if(is_converting_move_required(division_instruction->assignee->type, division_instruction->op2->type) == TRUE){
-		divisor = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op2, division_instruction->assignee->type);
+	/**
+	 * If we have an op2(dividing two variables), we'll handle all of our converting moves here. We'll
+	 * also account for the case that we have a constant to take care of
+	 */
+	if(division_instruction->op2 != NULL){
+		//Do we need to do a type conversion? If so, we'll do a converting move here
+		if(is_converting_move_required(division_instruction->assignee->type, division_instruction->op2->type) == TRUE){
+			divisor = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op2, division_instruction->assignee->type);
 
-	//Otherwise divisor is just the op2
+		//Otherwise divisor is just the op2
+		} else {
+			divisor = division_instruction->op2;
+		}
+
+	//Otherwise we have a constant - x86 division doesn't support having these as operands so we'll need a move
 	} else {
-		divisor = division_instruction->op2;
+		//Emit the constant move
+		instruction_t* constant_move = emit_constant_move_instruction(emit_temp_var(division_instruction->assignee->type), division_instruction->op1_const);
+
+		//Now we'll insert this before the division instruction
+		insert_instruction_before_given(constant_move, division_instruction);
+
+		//This is the divisor now
+		divisor = constant_move->destination_register;
 	}
 
 	//Now we should have what we need, so we can emit the division instruction
@@ -5712,13 +5690,29 @@ static void handle_modulus_instruction(instruction_window_t* window){
 		insert_instruction_before_given(cl_instruction, modulus_instruction);
 	}
 
-	//Do we need to do a type conversion? If so, we'll do a converting move here
-	if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op2->type) == TRUE){
-		divisor = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op2, modulus_instruction->assignee->type);
+	/**
+	 * Handle all converting moves/constant assignment moves that we need to here
+	 */
+	if(modulus_instruction->op2 != NULL){
+		//Do we need to do a type conversion? If so, we'll do a converting move here
+		if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op2->type) == TRUE){
+			divisor = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op2, modulus_instruction->assignee->type);
 
-	//Otherwise source 2 is just the op2
+		//Otherwise source 2 is just the op2
+		} else {
+			divisor = modulus_instruction->op2;
+		}
+	
+	//Otherwise we'll need a const assignment
 	} else {
-		divisor = modulus_instruction->op2;
+		//Emit the move
+		instruction_t* constant_assignment = emit_constant_move_instruction(emit_temp_var(modulus_instruction->assignee->type), modulus_instruction->op1_const);
+
+		//This goes right in before the mod
+		insert_instruction_before_given(constant_assignment, modulus_instruction);
+
+		//And this now is our divisor
+		divisor = constant_assignment->destination_register;
 	}
 
 	//Now we should have what we need, so we can emit the division instruction

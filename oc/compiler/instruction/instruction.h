@@ -863,6 +863,20 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* constant2);
 
 /**
+ * Emit the right shift of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 >> constant2
+ */
+void right_shift_constants(three_addr_const_t* constant1, three_addr_const_t* constant2);
+
+/**
+ * Emit the right shift of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 << constant2
+ */
+void left_shift_constants(three_addr_const_t* constant1, three_addr_const_t* constant2);
+
+/**
  * Logical or two constants. The result is always stored in constant1
  */
 void logical_or_constants(three_addr_const_t* constant1, three_addr_const_t* constant2);
