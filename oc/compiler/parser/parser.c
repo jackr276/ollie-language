@@ -24,11 +24,7 @@
 #include "../utils/constants.h"
 
 //Define a generic error array global variable
-char info[ERROR_SIZE];
-
-//For printing all of our type names
-char type_name_buf[MAX_IDENT_LENGTH];
-char type_name_buf2[MAX_IDENT_LENGTH];
+char info[ERROR_SIZE * 2];
 
 //The function is reentrant
 //Variable and function symbol tables
@@ -1169,6 +1165,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	 * Deal with the cases where we see the handle keyword
 	 */
 	if(lookahead.tok == HANDLE){
+		//TODO
 
 	/**
 	 * Otherwise we didn't see it, but we need to validate that we didn't need to see it
@@ -1185,15 +1182,17 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 			//Remember we could have a regular function or function pointer
 			if(function_record != NULL){
 				sprintf(info, "Function \"%s\" is defined as raising errors. A \"handle\" statement is required upon every call of this function. First defined here: \n", function_record->func_name.string);
-
-				//TODO
-
+				print_function_name_to_buffer(info, function_record);
+				return print_and_return_error(info, parser_line_num);
 
 			//Function pointer
 			} else {
-
-				//TODO
+				sprintf(info, "Function signature \"%s\" is defined as raising errors. A \"handle\" statement is required upon every call of this function", function_type->type_name.string);
+				print_function_name_to_buffer(info, function_record);
+				return print_and_return_error(info, parser_line_num);
 			}
+
+			//TODO
 		}
 	}
 
