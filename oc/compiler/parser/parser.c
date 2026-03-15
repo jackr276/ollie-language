@@ -1181,14 +1181,12 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		if(function_signature->raises_errors == TRUE){
 			//Remember we could have a regular function or function pointer
 			if(function_record != NULL){
-				sprintf(info, "Function \"%s\" is defined as raising errors. A \"handle\" statement is required upon every call of this function. First defined here: \n", function_record->func_name.string);
-				print_function_name_to_buffer(info, function_record);
+				sprintf(info, "Function \"%s\" has signature \"%s\" and is defined as raising errors. A \"handle\" statement is required upon every call of this function", function_record->func_name.string, function_type->type_name.string);
 				return print_and_return_error(info, parser_line_num);
 
 			//Function pointer
 			} else {
 				sprintf(info, "Function signature \"%s\" is defined as raising errors. A \"handle\" statement is required upon every call of this function", function_type->type_name.string);
-				print_function_name_to_buffer(info, function_record);
 				return print_and_return_error(info, parser_line_num);
 			}
 
