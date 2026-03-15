@@ -899,11 +899,23 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 
 
 /**
+ * Handle an error statement. Error statements allow us to take action based on an error. That action
+ * could be calling another function, giving back a value, or even raising another error. In it's current
+ * form, we only allow expression statements here though this may eventually be expanded
+ * 
+ * <error-handle> ::= <error> => <expression-statement>
+ */
+static inline generic_ast_node_t* error_handle(ollie_token_stream_t* token_stream, symtab_function_record_t* called_function, side_type_t side){
+	return NULL;
+}
+
+
+/**
  * A handles statement is required if we have a function that may raise errors. Down the line it will
  * eventually be reliant on the %rdx register to determine what the error is(if any) and how we should
  * handle it
  *
- * <handle-statement> ::= handle ({<error> => <expression-statement>}+)
+ * <handle-statement> ::= handle (<error-handle>{, <error-handle>}+)
  */
 static inline generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, symtab_function_record_t* called_function, side_type_t side){
 	return NULL;
