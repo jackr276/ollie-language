@@ -1079,13 +1079,13 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 	 * the generic error type. If we see that, then we're good. If we don't, then we
 	 * need to see a valid type specifer that translates to an error
 	 */
-	generic_type_t* error_type;
+	generic_type_t* error_type = NULL;
 	if(lookahead.tok != ERROR){
 		//Push it back
 		push_back_token(token_stream, &parser_line_num);
 
 		//The first thing that we need to see is a valid error type
-		generic_type_t* error_type = type_specifier(token_stream);
+		error_type = type_specifier(token_stream);
 
 		//Fail out here
 		if(error_type == NULL){
@@ -1236,16 +1236,16 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 	push_token(&grouping_stack, lookahead);
 
 	//We're valid now so let's allocate(side type is irrelevant)
-	generic_ast_node_t* handle_node = ast_node_alloc(AST_NODE_TYPE_HANDLE_STMT, SIDE_TYPE_RIGHT);
-	handle_node->line_number = parser_line_num;
+	generic_ast_node_t* parent_handle_clause = ast_node_alloc(AST_NODE_TYPE_HANDLE_STMT, SIDE_TYPE_RIGHT);
+	parent_handle_clause->line_number = parser_line_num;
 
 	//Loop until we're done seeing these all
 	do {
 		//We now need to see a valid error handling statement
-		generic_ast_node_t* handle_node = error_handle_statement(token_stream, called_function_type); 
+		generic_ast_node_t* error_handle_node = error_handle_statement(token_stream, called_function_type); 
 
 		//Fail out here if we get a bad one
-		if(handle_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		if(error_handle_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			return print_and_return_error("Invalid error handling node in handle statement", parser_line_num);
 		}
 
@@ -1258,14 +1258,17 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 			generic_type_t* error_type = dynamic_array_get_at(&errors_seen, i);
 
 			//If these are the same then we fail
-			if(types_identical(error_type, handle_node->optional_storage.error_type) == TRUE){
+			if(types_identical(error_type, error_handle_node->optional_storage.error_type) == TRUE){
 				sprintf(info, "Invalid attempt to handle error type \"%s\" more than once", error_type->type_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
 		}
 
 		//If we make it down here we are good, let's add it into the array of seen errors
-		dynamic_array_add(&errors_seen, handle_node->optional_storage.error_type);
+		dynamic_array_add(&errors_seen, error_handle_node->optional_storage.error_type);
+
+		//This is a child of the overall node itself
+		add_child_node(parent_handle_clause, error_handle_node);
 
 		//Refresh the lookahead
 		lookahead = get_next_token(token_stream, &parser_line_num);
@@ -1304,7 +1307,7 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 		generic_type_t* error_type = dynamic_array_get_at(&errors_seen, i);
 	
 		//We've found it, flag it and get out
-		if(error_type == generic_error){
+		if(types_identical(error_type, generic_error) == TRUE){
 			found_generic_error = TRUE;
 			break;
 		}
@@ -1332,7 +1335,7 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 			generic_type_t* error_handled = dynamic_array_get_at(&errors_seen, j);
 
 			//If they match
-			if(error_handled == mandatory_checked_error){
+			if(types_identical(error_handled, mandatory_checked_error) == TRUE){
 				seen_error = TRUE;
 				break;
 			}
@@ -1352,7 +1355,7 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 	dynamic_array_dealloc(&errors_seen);
 
 	//Give back the parent handle node
-	return handle_node;
+	return parent_handle_clause;
 }
 
 
@@ -12489,9 +12492,8 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	immut_f64 = lookup_type_name_only(type_symtab, "f64", NOT_MUTABLE)->type;
 	immut_void = lookup_type_name_only(type_symtab, "void", NOT_MUTABLE)->type;
 	mut_void = lookup_type_name_only(type_symtab, "void", MUTABLE)->type;
-	generic_error = lookup_type_name_only(type_symtab, "error", NOT_MUTABLE)->type;
-
 	immut_char_ptr = lookup_type_name_only(type_symtab, "char*", NOT_MUTABLE)->type;
+	generic_error = lookup_type_name_only(type_symtab, "error", NOT_MUTABLE)->type;
 
 	//Also create a stack for our matching uses(curlies, parens, etc.)
 	grouping_stack = lex_stack_alloc();
