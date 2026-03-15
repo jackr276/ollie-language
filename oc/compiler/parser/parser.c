@@ -910,7 +910,7 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
  * 
  * <error-handle> ::= <error> => <return-statement> | <raise-statement> | <ternary-expression>
  */
-static inline generic_ast_node_t* error_handle(ollie_token_stream_t* token_stream, generic_type_t* function_signature, side_type_t side){
+static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_stream, generic_type_t* function_signature){
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -1061,7 +1061,7 @@ static inline generic_ast_node_t* error_handle(ollie_token_stream_t* token_strea
  *
  * <handle-statement> ::= handle ({<error-handle>{, <error-handle>}+,}? <error>)
  */
-static inline generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, generic_type_t* called_function_type, side_type_t side){
+static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, generic_type_t* called_function_type){
 	//Lookahead token
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 	
@@ -1087,7 +1087,7 @@ static inline generic_ast_node_t* handle_statement(ollie_token_stream_t* token_s
 	//Loop until we're done seeing these all
 	do {
 		//We now need to see a valid error handling statement
-		generic_ast_node_t* handle_node = handle_statement(token_stream, called_function_type, side); 
+		generic_ast_node_t* handle_node = error_handle_statement(token_stream, called_function_type); 
 
 		//Fail out here if we get a bad one
 		if(handle_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -1469,7 +1469,16 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 			}
 		}
 
-		//TODO
+		//Now let's process the handle statement
+		generic_ast_node_t* handle_node = handle_statement(token_stream, function_type);
+
+		//If this fails then we fail out
+ 		if(handle_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			return print_and_return_error("Invalid handle statement given to function call", parser_line_num);
+		}
+
+		//Otherwise let's add this to the function call
+		add_child_node(function_call_node, handle_node);
 
 	/**
 	 * Otherwise we didn't see it, but we need to validate that we didn't need to see it
@@ -1496,8 +1505,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 								function_type->type_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
-
-			//TODO
 		}
 	}
 
