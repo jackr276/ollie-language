@@ -11050,6 +11050,13 @@ static int8_t check_jump_labels(){
 }
 
 
+static u_int8_t validate_error_list_against_raised_errors(symtab_function_record_t* function){
+	//TODO
+	return SUCCESS;
+
+}
+
+
 /**
  * Perform validation on the parameter & return type & order
  * for the main function
@@ -11891,6 +11898,8 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	u_int8_t is_inlined = FALSE;
 	//Does this funtion raise errors? We know based on the ! after the fn keyword
 	u_int8_t raises_errors = FALSE;
+	//Does this function maintain a specific error list with the "raise" keyword
+	u_int8_t specific_error_list = FALSE;
 
 	//Grab the token
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -12152,6 +12161,9 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			return print_and_return_error(info, parser_line_num);
 		}
 
+		//Set this flag as true for down the road
+		specific_error_list = TRUE;
+
 		/**
 		 * What if we're defining a predeclared function that did not have the "raises" keyword on it? If so then this is wrong
 		 */
@@ -12238,6 +12250,21 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		if(check_jump_labels() == FAILURE){
 			//If this fails, we fail out here too
 			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		}
+
+		/**
+		 * If a function raises a specific error list, then we can check
+		 * and see what errors actually were raised(we maintain this in a list)
+		 * and validate that every error in that error clause was raised at least 
+		 * once. Remember that the raises list mandates that all callers check those
+		 * errors, so something being in there and not being raised is an issue
+		 */
+		if(specific_error_list == TRUE){
+			//If this fails then we are done
+			if(validate_error_list_against_raised_errors(function_record) == FAILURE){
+				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+
+			}
 		}
 
 	} else {
