@@ -1124,6 +1124,36 @@ static inline generic_ast_node_t* handle_statement(ollie_token_stream_t* token_s
 
 	} while(TRUE);
 
+	/**
+	 * Once we end up down here, we need to check for 2 things:
+	 * 	1.) Every errorable function must have a catch-all case for the generic error(error). If we don't have
+	 * 	that then this is wrong
+	 * 	2.) If the function has a raises statement, then it is mandatory that every error inside of that raises statement be
+	 * 	covered specfically in here. 
+	 *
+	 * 	Failure to meet either of these cases is an immediate fail for the handle statement
+	 */
+	
+	//First search for the generic error
+	u_int8_t found_generic_error = FALSE;
+	for(u_int32_t i = 0; i < errors_seen.current_index; i++){
+		//Extract the type
+		generic_type_t* error_type = dynamic_array_get_at(&errors_seen, i);
+	
+		//We've found it, flag it and get out
+		if(error_type == generic_error){
+			found_generic_error = TRUE;
+			break;
+		}
+	}
+
+	//We didn't find it, so we fail out
+	if(found_generic_error == FALSE){
+		return print_and_return_error("Every \"handle\" clause is required to have handling for the generic error \"error\". Please add handling for this.", parser_line_num);
+	}
+
+	//TODO handling for raises
+
 	//We're done here, deallocate
 	dynamic_array_dealloc(&errors_seen);
 
