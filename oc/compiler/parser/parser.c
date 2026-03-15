@@ -916,29 +916,41 @@ static inline generic_ast_node_t* error_handle(ollie_token_stream_t* token_strea
 	//Extract the function type for use
 	function_type_t* called_function_signature = function_signature->internal_types.function_type;
 
-	//The first thing that we need to see is a valid error type
-	generic_type_t* error_type = type_specifier(token_stream);
+	//Get the lookahead
+	lookahead = get_next_token(token_stream, &parser_line_num);
 
-	//Fail out here
-	if(error_type == NULL){
-		return print_and_return_error("Invalid error type given to handles statement", parser_line_num);
-	}
+	/**
+	 * Remember that we are able to see the "error" keyword here to represent
+	 * the generic error type. If we see that, then we're good. If we don't, then we
+	 * need to see a valid type specifer that translates to an error
+	 */
+	if(lookahead.tok != ERROR){
+		//Push it back
+		push_back_token(token_stream, &parser_line_num);
 
-	//Fully dealias this just in case
-	error_type = dealias_type(error_type);
+		//The first thing that we need to see is a valid error type
+		generic_type_t* error_type = type_specifier(token_stream);
 
-	//
-	//
-	//
-	//TODO GENERIC ERROR TYPE
-	//
-	//
-	//
+		//Fail out here
+		if(error_type == NULL){
+			return print_and_return_error("Invalid error type given to handles statement", parser_line_num);
+		}
 
-	//Also if this is not an error we go
-	if(error_type->type_class != TYPE_CLASS_ERROR){
-		sprintf(info, "Type \"%s\" is not defined as an error type", error_type->type_name.string);
-		return print_and_return_error(info, parser_line_num);
+		//Fully dealias this just in case
+		error_type = dealias_type(error_type);
+
+		//Also if this is not an error we go
+		if(error_type->type_class != TYPE_CLASS_ERROR){
+			sprintf(info, "Type \"%s\" is not defined as an error type", error_type->type_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+	/**
+	 * Otherwise we need to keep going through here
+	 */
+	} else {
+
+
 	}
 
 	//Now we know that we've got a valid one so we can allocate here
