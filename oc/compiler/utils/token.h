@@ -143,6 +143,7 @@ typedef enum {
 	PUB,
 	RAISE, //Error raising
 	RAISES, //For function definition
+	HANDLE, //Error handling
 	TRUE_CONST,
 	FALSE_CONST,
 	INLINE,
