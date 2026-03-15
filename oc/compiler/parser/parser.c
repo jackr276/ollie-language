@@ -1064,6 +1064,9 @@ static inline generic_ast_node_t* error_handle(ollie_token_stream_t* token_strea
 static inline generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, generic_type_t* called_function_type, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+	
+	//Extract the function type for later use
+	function_type_t* function_type = called_function_type->internal_types.function_type;
 
 	//A dynamic array to hold all of our handle nodes
 	dynamic_array_t errors_seen = dynamic_array_alloc();
@@ -1152,7 +1155,38 @@ static inline generic_ast_node_t* handle_statement(ollie_token_stream_t* token_s
 		return print_and_return_error("Every \"handle\" clause is required to have handling for the generic error \"error\". Please add handling for this.", parser_line_num);
 	}
 
-	//TODO handling for raises
+	/**
+	 * Now let's validate that *if* the function has a specific raises statement, we validate
+	 * all of those as well
+	 */
+	for(u_int32_t i = 0; i < function_type->potential_errors.current_index; i++){
+		//Extract the error
+		generic_type_t* mandatory_checked_error = dynamic_array_get_at(&(function_type->potential_errors), i);
+
+		//By default assume that we have not seen it
+		u_int32_t seen_error = FALSE;
+
+		//Now we need to see if this error is inside of the errors that we've handled before
+		for(u_int32_t j = 0; j < errors_seen.current_index; j++){
+			//Extract it
+			generic_type_t* error_handled = dynamic_array_get_at(&errors_seen, j);
+
+			//If they match
+			if(error_handled == mandatory_checked_error){
+				seen_error = TRUE;
+				break;
+			}
+		}
+
+		//Now if we made it down here and we got what we need, we're good. If we didn't, we fail out
+		if(seen_error == FALSE){
+			sprintf(info, "Error \"%s\" is mandated to have a specific check due to being in the function's raises clause. Please add a case inside of the handle for this error",
+		   					mandatory_checked_error->type_name.string);
+
+			//Send this error up the chain
+			return print_and_return_error(info, parser_line_num);
+		}
+	}
 
 	//We're done here, deallocate
 	dynamic_array_dealloc(&errors_seen);
