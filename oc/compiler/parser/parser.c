@@ -903,13 +903,25 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 
 
 /**
+ * A handles statement is required if we have a function that may raise errors. Down the line it will
+ * eventually be reliant on the %rdx register to determine what the error is(if any) and how we should
+ * handle it
+ *
+ * <handle-statement> ::= handle ({<error> => <expression-statement>}+)
+ */
+static inline generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, symtab_function_record_t* called_function, side_type_t side){
+
+}
+
+
+/**
  * A function call looks for a very specific kind of identifer followed by
  * parenthesis and the appropriate number of parameters for the function, each of
  * the appropriate type
  * 
  * By the time we get here, we will have already consumed the "@" token
  *
- * BNF Rule: <function-call> ::= @<identifier>({<ternary_expression>}?{, <ternary_expression>}*)
+ * BNF Rule: <function-call> ::= @<identifier>({<ternary_expression>}?{, <ternary_expression>}*){<handle-statement>}?
  */
 static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, side_type_t side){
 	//For any error printing if need be
