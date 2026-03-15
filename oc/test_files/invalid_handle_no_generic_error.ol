@@ -22,9 +22,8 @@ pub fn main() -> i32 {
 
 	//Missing the generic error - this is wrong
 	let result:i32 = @divide_values(x, y) handle(
-												divide_by_zero_error_t => ret -1,
+												divide_by_zero_error_t => ret -1
 												);
 
 	ret result;
 }
-
