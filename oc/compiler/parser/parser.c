@@ -917,10 +917,40 @@ static inline generic_ast_node_t* error_handle(ollie_token_stream_t* token_strea
  * eventually be reliant on the %rdx register to determine what the error is(if any) and how we should
  * handle it
  *
- * <handle-statement> ::= handle (<error-handle>{, <error-handle>}+)
+ * We mandate that there be a "swallow" case where the user just has a generic error to handle anything. This
+ * is done by our generic error "error" keyword and it's the default case in the eventual switch statement that
+ * comes out of this entire thing
+ *
+ * NOTE: By the time we get here, we've already seen the handle statement and we know that our use of the handle
+ * statement is valid
+ *
+ * <handle-statement> ::= handle ({<error-handle>{, <error-handle>}+,}? <error>)
  */
 static inline generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, symtab_function_record_t* called_function, side_type_t side){
-	return NULL;
+	//Lookahead token
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+	//How many error handles we've seen
+	u_int32_t handles_seen = 0;
+
+	//We need to see one of these first
+	if(lookahead.tok != L_PAREN){
+		sprintf(info, "Expected ( but go \"%s\" instead", lexitem_to_string(&lookahead));
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Push this onto the grouping stack for later
+	push_token(&grouping_stack, lookahead);
+
+	//We're valid now so let's allocate(side type is irrelevant)
+	generic_ast_node_t* handle_node = ast_node_alloc(AST_NODE_TYPE_HANDLE_STMT, SIDE_TYPE_RIGHT);
+	handle_node->line_number = parser_line_num;
+
+	
+
+
+
+	//Give back the parent handle node
+	return handle_node;
 }
 
 
