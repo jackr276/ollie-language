@@ -5629,7 +5629,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	dynamic_array_t function_parameter_results = dynamic_array_alloc();
 
 	//So long as this isn't NULL
-	while(param_cursor != NULL){
+	while(param_cursor != NULL && param_cursor->ast_node_type != AST_NODE_TYPE_HANDLE_STMT){
 		//Emit whatever we have here into the basic block
 		cfg_result_package_t package = emit_expression(current_block, param_cursor, FALSE);
 
@@ -5839,6 +5839,11 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		add_statement(current_block, assignment);
 	}
 
+	if(param_cursor != NULL && param_cursor->ast_node_type == AST_NODE_TYPE_HANDLE_STMT){
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(0);
+	}
+
 	//This is always the assignee we gave above. Note that this is nullable,
 	//we do 
 	result_package.assignee = assignee;
@@ -5920,7 +5925,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	dynamic_array_t function_parameter_results = dynamic_array_alloc();
 
 	//So long as this isn't NULL
-	while(param_cursor != NULL){
+	while(param_cursor != NULL && param_cursor->ast_node_type != AST_NODE_TYPE_HANDLE_STMT){
 		//Emit whatever we have here into the basic block
 		cfg_result_package_t package = emit_expression(current_block, param_cursor, FALSE);
 
@@ -6058,6 +6063,11 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 		//Add it in
 		add_statement(current_block, assignment);
+	}
+
+	if(param_cursor != NULL && param_cursor->ast_node_type == AST_NODE_TYPE_HANDLE_STMT){
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(0);
 	}
 
 	//This is always the assignee we gave above. It is important to note
