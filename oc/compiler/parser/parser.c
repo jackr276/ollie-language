@@ -910,7 +910,7 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
  * <handle-statement> ::= handle ({<error> => <expression-statement>}+)
  */
 static inline generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, symtab_function_record_t* called_function, side_type_t side){
-
+	return NULL;
 }
 
 
@@ -924,8 +924,6 @@ static inline generic_ast_node_t* handle_statement(ollie_token_stream_t* token_s
  * BNF Rule: <function-call> ::= @<identifier>({<ternary_expression>}?{, <ternary_expression>}*){<handle-statement>}?
  */
 static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, side_type_t side){
-	//For any error printing if need be
-	char error[ERROR_SIZE];
 	//The current line num
 	u_int32_t current_line = parser_line_num;
 	//The lookahead token
@@ -934,27 +932,23 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	dynamic_string_t function_name;
 	//The number of parameters that we've seen
 	u_int8_t num_params = 0;
+	//A pointer that holds our function call node
+	generic_ast_node_t* function_call_node;
+	//Hold the overall type for error printing
+	generic_type_t* function_type;
+	//The generic type that holds our function signature
+	function_type_t* function_signature;
 	
 	//Grab the next token using the lookahead
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
 	//We have a general error-probably will be quite uncommon
 	if(lookahead.tok != IDENT){
-		//We'll let the node propogate up
 		return print_and_return_error("Non-identifier provided as funciton call", parser_line_num);
 	}
 
 	//Grab the function name out for convenience
 	function_name = lookahead.lexeme;
-
-	//A pointer that holds our function call node
-	generic_ast_node_t* function_call_node;
-
-	//Hold the overall type for error printing
-	generic_type_t* function_type;
-
-	//The generic type that holds our function signature
-	function_type_t* function_signature;
 
 	/**
 	 * This identifier has the possibility of being a direct function call or a function pointer
@@ -996,7 +990,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		//If this is not a function signature, then we can't call it as one
 		if(function_type->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
 			//Print and fail out here
-			sprintf(error, "\"%s\" is defined as type %s, and cannot be called as a function. Only function types may be called", function_name.string, function_type->type_name.string);
+			sprintf(info, "\"%s\" is defined as type %s, and cannot be called as a function. Only function types may be called", function_name.string, function_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -1031,9 +1025,121 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	//Push onto the grouping stack once we see this
 	push_token(&grouping_stack, lookahead);
 
-	//Let's check for this easy case first. If we have no parameters, then 
-	//we'll expect to immediately see an R_PAREN
-	if(function_signature->function_parameters.current_index == 0){
+	/**
+	 * For parameter handling - if the function signature expects
+	 * parameters, then we can do our parameter processing. Meanwhile
+	 * if it does not, we can save some work here and just look for
+	 * the R_PAREN
+	 */
+	if(function_signature->function_parameters.current_index > 0){
+		//A node to hold our current parameter
+		generic_ast_node_t* current_param;
+
+		//So long as we don't see the R_PAREN we aren't done
+		do {
+			//Record that we saw one more parameter
+			num_params++;
+
+			//If we've already seen more than one parameter, we'll need a comma here
+			if(num_params > 1){
+				//Otherwise it must be a comma. If it isn't we have a failure
+				if(lookahead.tok != COMMA){
+					//Create and return an error node
+					return print_and_return_error("Commas must be used to separate parameters in function call", parser_line_num);
+				}
+			}
+
+			//We'll let the error below handle this, we just don't
+			//want to segfault
+			if(num_params > function_signature->function_parameters.current_index){
+				break;
+			}
+
+			//Grab the current function param
+			generic_type_t* param_type = dynamic_array_get_at(&(function_signature->function_parameters), num_params - 1);
+
+			//Parameters are in the form of a ternary expression
+			current_param = ternary_expression(token_stream, side);
+
+			//We now have an error of some kind
+			if(current_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+				return print_and_return_error("Bad parameter passed to function call", current_line);
+			}
+
+			//Let's see if we're even able to assign this here
+			generic_type_t* final_type = types_assignable(param_type, current_param->inferred_type);
+
+			//If this is null, it means that our check failed
+			if(final_type == NULL){
+				//Let's first generate the types_assignable failure message
+				generate_types_assignable_failure_message(info, current_param->inferred_type, param_type);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+
+				//Following that we'll generate another error message to make it more clear
+				sprintf(info, "Function \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
+						function_name.string, 
+						(param_type->mutability == MUTABLE ? "mut ": ""),
+						param_type->type_name.string, num_params,
+						//Print the mut keyword if we need it
+						(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
+						current_param->inferred_type->type_name.string, function_type->type_name.string);
+
+				//Use the helper to return this
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			//If this is a constant node, we'll force it to be whatever we expect from the type assignability
+			if(current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
+				current_param->inferred_type = final_type;
+
+				//Do coercion
+				perform_constant_assignment_coercion(current_param, final_type);
+			}
+
+			//Special checking here - if we have an enum type that is being assigned to, we need
+			//to make sure that it's being assigned to a valid value in it's range
+			if(is_enum_type(param_type) == TRUE && current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
+				if(does_enum_contain_integer_member(param_type, current_param->constant_value.signed_int_value) == FALSE){
+					sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
+								param_type->type_name.string, current_param->constant_value.signed_int_value);
+
+					//Hard fail here
+					return print_and_return_error(info, parser_line_num);
+				}
+			} 
+
+			//We can now safely add this into the function call node as a child. In the function call node, 
+			//the parameters will appear in order from left to right
+			add_child_node(function_call_node, current_param);
+
+			//Refresh the token
+			lookahead = get_next_token(token_stream, &parser_line_num);
+
+		//Keep going so long as we don't see a right paren
+		} while (lookahead.tok != R_PAREN);
+
+		//If we have a mismatch between what the function takes and what we want, throw an
+		//error
+		if(num_params != function_signature->function_parameters.current_index){
+			sprintf(info, "Function %s expects %d parameters, but was given %d. Defined as: %s", 
+			  function_name.string, function_signature->function_parameters.current_index, num_params, function_type->type_name.string);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			num_errors++;
+			//Error out
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
+		}
+
+		//Once we get here, we do need to finally verify that the closing R_PAREN matched the opening one
+		if(pop_token(&grouping_stack).tok != L_PAREN){
+			//Return the error node
+			return print_and_return_error("Unmatched parenthesis detected in function call", parser_line_num);
+		}
+
+	/**
+	 * If we hit this case that means that we expect 0 parameters, so we will check to see if the call obeys
+	 * that and if not we leave
+	 */
+	} else {
 		//Refresh the lookahead
 		lookahead = get_next_token(token_stream, &parser_line_num);
 		
@@ -1049,123 +1155,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 
 		//Otherwise if it was fine, we'll now pop the grouping stack
 		pop_token(&grouping_stack);
-
-		//And package up and return here
-		//Add the line number in
-		function_call_node->line_number = current_line;
-
-		//Otherwise, if we make it here, we're all good to return the function call node
-		return function_call_node;
-	}
-
-	/**
-	 * Otherwise, if we get all the way down here, we know that we expect to see at least one
-	 * value passed in as a parameter. We'll use do-while logic to process this in here
-	 */
-
-	//A node to hold our current parameter
-	generic_ast_node_t* current_param;
-
-
-	//So long as we don't see the R_PAREN we aren't done
-	do {
-		//Record that we saw one more parameter
-		num_params++;
-
-		//If we've already seen more than one parameter, we'll need a comma here
-		if(num_params > 1){
-			//Otherwise it must be a comma. If it isn't we have a failure
-			if(lookahead.tok != COMMA){
-				//Create and return an error node
-				return print_and_return_error("Commas must be used to separate parameters in function call", parser_line_num);
-			}
-		}
-
-		//We'll let the error below handle this, we just don't
-		//want to segfault
-		if(num_params > function_signature->function_parameters.current_index){
-			break;
-		}
-
-		//Grab the current function param
-		generic_type_t* param_type = dynamic_array_get_at(&(function_signature->function_parameters), num_params - 1);
-
-		//Parameters are in the form of a ternary expression
-		current_param = ternary_expression(token_stream, side);
-
-		//We now have an error of some kind
-		if(current_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return print_and_return_error("Bad parameter passed to function call", current_line);
-		}
-
-		//Let's see if we're even able to assign this here
-		generic_type_t* final_type = types_assignable(param_type, current_param->inferred_type);
-
-		//If this is null, it means that our check failed
-		if(final_type == NULL){
-			//Let's first generate the types_assignable failure message
-			generate_types_assignable_failure_message(info, current_param->inferred_type, param_type);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-
-			//Following that we'll generate another error message to make it more clear
-			sprintf(info, "Function \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
-					function_name.string, 
-					(param_type->mutability == MUTABLE ? "mut ": ""),
-					param_type->type_name.string, num_params,
-					//Print the mut keyword if we need it
-					(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
-					current_param->inferred_type->type_name.string, function_type->type_name.string);
-
-			//Use the helper to return this
-			return print_and_return_error(info, parser_line_num);
-		}
-
-		//If this is a constant node, we'll force it to be whatever we expect from the type assignability
-		if(current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
-			current_param->inferred_type = final_type;
-
-			//Do coercion
-			perform_constant_assignment_coercion(current_param, final_type);
-		}
-
-		//Special checking here - if we have an enum type that is being assigned to, we need
-		//to make sure that it's being assigned to a valid value in it's range
-		if(is_enum_type(param_type) == TRUE && current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
-			if(does_enum_contain_integer_member(param_type, current_param->constant_value.signed_int_value) == FALSE){
-				sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-							param_type->type_name.string, current_param->constant_value.signed_int_value);
-
-				//Hard fail here
-				return print_and_return_error(info, parser_line_num);
-			}
-		} 
-
-		//We can now safely add this into the function call node as a child. In the function call node, 
-		//the parameters will appear in order from left to right
-		add_child_node(function_call_node, current_param);
-
-		//Refresh the token
-		lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//Keep going so long as we don't see a right paren
-	} while (lookahead.tok != R_PAREN);
-
-
-	//If we have a mismatch between what the function takes and what we want, throw an
-	//error
-	if(num_params != function_signature->function_parameters.current_index){
-		sprintf(info, "Function %s expects %d parameters, but was given %d. Defined as: %s", 
-		  function_name.string, function_signature->function_parameters.current_index, num_params, function_type->type_name.string);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		num_errors++;
-		//Error out
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
-	}
-
-	//Once we get here, we do need to finally verify that the closing R_PAREN matched the opening one
-	if(pop_token(&grouping_stack).tok != L_PAREN){
-		//Return the error node
-		return print_and_return_error("Unmatched parenthesis detected in function call", parser_line_num);
 	}
 
 	//Add the line number in
