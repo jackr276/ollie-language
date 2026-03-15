@@ -925,6 +925,7 @@ static inline generic_ast_node_t* error_handle(ollie_token_stream_t* token_strea
 	 * the generic error type. If we see that, then we're good. If we don't, then we
 	 * need to see a valid type specifer that translates to an error
 	 */
+	generic_type_t* error_type;
 	if(lookahead.tok != ERROR){
 		//Push it back
 		push_back_token(token_stream, &parser_line_num);
@@ -947,11 +948,10 @@ static inline generic_ast_node_t* error_handle(ollie_token_stream_t* token_strea
 		}
 
 	/**
-	 * Otherwise we need to keep going through here
+	 * If it is the error keyword then we will use a special compiler only generic error type to represent this
 	 */
 	} else {
-
-
+		error_type = generic_error;
 	}
 
 	//Now we know that we've got a valid one so we can allocate here
@@ -1066,7 +1066,7 @@ static inline generic_ast_node_t* handle_statement(ollie_token_stream_t* token_s
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
 	//A dynamic array to hold all of our handle nodes
-	dynamic_array_t handle_nodes = dynamic_array_alloc();
+	dynamic_array_t errors_seen = dynamic_array_alloc();
 
 	//We need to see one of these first
 	if(lookahead.tok != L_PAREN){
@@ -1091,8 +1091,23 @@ static inline generic_ast_node_t* handle_statement(ollie_token_stream_t* token_s
 			return print_and_return_error("Invalid error handling node in handle statement", parser_line_num);
 		}
 
-		//Let's run through and make sure that we don't have any duplicate types in here
-		//TODO
+		/**
+		 * We need to make sure that we do not have any duplicates here. Since this is a switch statement internally,
+		 * it's very important that every error is unique
+		 */
+		for(u_int32_t i = 0; i < errors_seen.current_index; i++){
+			//Extract it
+			generic_type_t* error_type = dynamic_array_get_at(&errors_seen, i);
+
+			//If these are the same then we fail
+			if(types_identical(error_type, handle_node->optional_storage.error_type) == TRUE){
+				sprintf(info, "Invalid attempt to handle error type \"%s\" more than once", error_type->type_name.string);
+				return print_and_return_error(info, parser_line_num);
+			}
+		}
+
+		//If we make it down here we are good, let's add it into the array of seen errors
+		dynamic_array_add(&errors_seen, handle_node->optional_storage.error_type);
 
 		//Refresh the lookahead
 		lookahead = get_next_token(token_stream, &parser_line_num);
@@ -1110,7 +1125,7 @@ static inline generic_ast_node_t* handle_statement(ollie_token_stream_t* token_s
 	} while(TRUE);
 
 	//We're done here, deallocate
-	dynamic_array_dealloc(&handle_nodes);
+	dynamic_array_dealloc(&errors_seen);
 
 	//Give back the parent handle node
 	return handle_node;
