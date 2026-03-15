@@ -1621,8 +1621,11 @@ void print_function_name_to_buffer(char* buffer, symtab_function_record_t* recor
 		sprintf(internal_buffer, "\t---> %d | fn%s %s(", record->line_number, record->signature->internal_types.function_type->raises_errors == TRUE ? "!" : "", record->func_name.string);
 	}
 
+	//Extract the number of params
+	u_int32_t num_params = record->function_parameters.current_index;
+
 	//Print out the params
-	for(u_int32_t i = 0; i < record->function_parameters.current_index; i++){
+	for(u_int32_t i = 0; i < num_params; i++){
 		symtab_variable_record_t* current_parameter = dynamic_array_get_at(&(record->function_parameters), i);
 
 		//Print if it's mutable
@@ -1635,7 +1638,7 @@ void print_function_name_to_buffer(char* buffer, symtab_function_record_t* recor
 		strcat(internal_buffer, temp_buffer);
 
 		//Comma if needed
-		if(i < record->function_parameters.current_index - 1){
+		if(i < num_params - 1){
 			strcat(internal_buffer, ", ");
 		}
 	}
