@@ -927,6 +927,14 @@ static inline generic_ast_node_t* error_handle(ollie_token_stream_t* token_strea
 	//Fully dealias this just in case
 	error_type = dealias_type(error_type);
 
+	//
+	//
+	//
+	//TODO GENERIC ERROR TYPE
+	//
+	//
+	//
+
 	//Also if this is not an error we go
 	if(error_type->type_class != TYPE_CLASS_ERROR){
 		sprintf(info, "Type \"%s\" is not defined as an error type", error_type->type_name.string);
@@ -1040,11 +1048,12 @@ static inline generic_ast_node_t* error_handle(ollie_token_stream_t* token_strea
  *
  * <handle-statement> ::= handle ({<error-handle>{, <error-handle>}+,}? <error>)
  */
-static inline generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, symtab_function_record_t* called_function, side_type_t side){
+static inline generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, generic_type_t* called_function_type, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
-	//How many error handles we've seen
-	u_int32_t handles_seen = 0;
+
+	//A dynamic array to hold all of our handle nodes
+	dynamic_array_t handle_nodes = dynamic_array_alloc();
 
 	//We need to see one of these first
 	if(lookahead.tok != L_PAREN){
@@ -1059,9 +1068,36 @@ static inline generic_ast_node_t* handle_statement(ollie_token_stream_t* token_s
 	generic_ast_node_t* handle_node = ast_node_alloc(AST_NODE_TYPE_HANDLE_STMT, SIDE_TYPE_RIGHT);
 	handle_node->line_number = parser_line_num;
 
-	//TODO Types-assignable once we're done here with the node
+	//Loop until we're done seeing these all
+	do {
+		//We now need to see a valid error handling statement
+		generic_ast_node_t* handle_node = handle_statement(token_stream, called_function_type, side); 
 
+		//Fail out here if we get a bad one
+		if(handle_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			return print_and_return_error("Invalid error handling node in handle statement", parser_line_num);
+		}
 
+		//Let's run through and make sure that we don't have any duplicate types in here
+		//TODO
+
+		//Refresh the lookahead
+		lookahead = get_next_token(token_stream, &parser_line_num);
+
+		//If we see a comma, we keep going. If we see an R_PAREN, we're done
+		if(lookahead.tok == COMMA){
+			continue;
+		} else if(lookahead.tok == R_PAREN){
+			break;
+		} else {
+			sprintf(info, "Expected , or ) but got \"%s\" instead", lexitem_to_string(&lookahead));
+			return print_and_return_error(info, parser_line_num);
+		}
+
+	} while(TRUE);
+
+	//We're done here, deallocate
+	dynamic_array_dealloc(&handle_nodes);
 
 	//Give back the parent handle node
 	return handle_node;
