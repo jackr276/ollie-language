@@ -112,9 +112,8 @@ type_symtab_t* type_symtab_alloc(){
 	//Nothing has been initialized yet
 	symtab->current = NULL;
 
-	//The initial error id starts at 2. This is because 0 is reserved for NO_ERRORS,
-	//and 1 is reserved for generic_error
-	symtab->error_id = 2;
+	//The initial error id starts at 1. This is because 0 is reserved for NO_ERRORS,
+	symtab->error_id = 1;
 
 	return symtab;
 }
@@ -1091,11 +1090,10 @@ u_int16_t add_all_basic_types(type_symtab_t* symtab){
 	/**
 	 * For any/all generic error handling, we need the ability to have a generic error type. In practice
 	 * this is represented by the "error" lexitem, but we need a type anyway. As such we'll have a purely internal
-	 * type here that has that name
+	 * type here that has that name. Since the error id starts counting at one and this is the first thing that will
+	 * hit it, we will be good here
 	 */
 	type = create_error_type("error", 0);
-	//Generic error has an id of 1
-	type->internal_types.error_type_id = 1;
 	num_collisions += insert_type(symtab, create_type_record(type));
 
 	/**
