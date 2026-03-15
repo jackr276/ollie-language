@@ -909,9 +909,13 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
  * 
  * <error-handle> ::= <error> => <return-statement> | <raise-statement> | <ternary-expression>
  */
-static inline generic_ast_node_t* error_handle(ollie_token_stream_t* token_stream, symtab_function_record_t* called_function, side_type_t side){
+static inline generic_ast_node_t* error_handle(ollie_token_stream_t* token_stream, generic_type_t* function_signature, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead;
+
+	//Extract the function type for use
+	function_type_t* called_function_signature = function_signature->internal_types.function_type;
+
 	//The first thing that we need to see is a valid error type
 	generic_type_t* error_type = type_specifier(token_stream);
 
@@ -954,27 +958,63 @@ static inline generic_ast_node_t* error_handle(ollie_token_stream_t* token_strea
 	switch(lookahead.tok){
 		case RETURN:
 			result_node = return_statement(token_stream);
+
+			//If this fails then we're done
+			if(result_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+				return print_and_return_error("Invalid expression given to handle statement", parser_line_num);
+			}
+
 			break;
 			
 		case RAISE:
 			result_node = raise_statement(token_stream);
+
+			//If this fails then we're done
+			if(result_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+				return print_and_return_error("Invalid expression given to handle statement", parser_line_num);
+			}
+
 			break;
 
 		default:
+			/**
+			 * If we have a void return type, it's not possible to assign anything
+			 * out of this function. As such, the only valid options are raise or return
+			 * and this is invalid
+			 */
+			if(IS_VOID_TYPE(called_function_signature->return_type) == TRUE){	
+				sprintf(info, "Function signature \"%s\" has a return type of void, all errors must be handled using \"ret\" or \"raise\"", function_signature->type_name.string);
+				return print_and_return_error(info, parser_line_num);
+			}
+
 			//Push the token back
 			push_back_token(token_stream, &parser_line_num);
 
 			//Now we can invoke the helper
 			result_node = ternary_expression(token_stream, SIDE_TYPE_RIGHT);
+
+			//If this fails then we're done
+			if(result_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+				return print_and_return_error("Invalid expression given to handle statement", parser_line_num);
+			}
+
+			/**
+			 * Once we get a variable result here, we need to ensure that the type is actually
+			 * assignable with the return type of the function. If it isn't then this isn't going
+			 * to work
+			 */
+			if(types_assignable(called_function_signature->return_type, result_node->inferred_type) == FALSE){
+				sprintf(info, "Function signature \"%s\" has a return type of %s, but error handling returned an incompatible type %s",
+							function_signature->type_name.string,
+							called_function_signature->return_type->type_name.string,
+							result_node->inferred_type->type_name.string); 
+				return print_and_return_error(info, parser_line_num);
+			}
+
 			break;
 	}
 
-	//If this fails then we're done
-	if(result_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		return print_and_return_error("Invalid expression given to handle statement", parser_line_num);
-	}
-
-	//Otherwise add this in
+	//If we make it down here we're good
 	add_child_node(error_handle_node, result_node);
 
 	//One more thing - we'll populate the variable up the chain here. This will be NULL a lot so this
