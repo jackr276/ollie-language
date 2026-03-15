@@ -908,7 +908,138 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
  * this into two separate rules instead of trying to do some boolean flag in the existing rule
  */
 static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_t* token_stream){
+	//Lookahead token
+	lexitem_t lookahead;
 
+	/**
+	 * Do we contain a defer at any point in here? If so, that is invalid because we already
+	 * have a return. If this happens, we'll need to reject it
+	 */
+	if(nesting_stack_contains_level(&nesting_stack, NESTING_DEFER_STATEMENT) == TRUE){
+		return print_and_return_error("Ret statements cannot be placed inside of defer blocks", parser_line_num);
+	}
+
+	//We can create the node now
+	generic_ast_node_t* return_stmt = ast_node_alloc(AST_NODE_TYPE_RET_STMT, SIDE_TYPE_LEFT);
+
+	//Now we can optionally see the semicolon immediately. Let's check if we have that
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	/**
+	 * Are we seeing the end of the return here? Remember that this is taking place within
+	 * a handle statement, so we wouldn't see a semicolon here. We'd either see an R_PAREN
+	 * or a comma, and on top of that we are going to have to push it back for the helper rule
+	 * to handle
+	 */
+	switch(lookahead.tok){
+		case R_PAREN:
+		case COMMA:
+			//If this is the case, the return type had better be void
+			if(current_function->signature->internal_types.function_type->returns_void == FALSE){
+				sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name.string, current_function->return_type->type_name.string);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				//Also print the function name
+				print_function_name(current_function);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+			}
+
+			//The handle statement rule is going to need to reprocess this so we will push it back
+			push_back_token(token_stream, &parser_line_num);
+
+			//If we get out then we're fine
+			return return_stmt;
+
+		/**
+		 * Otherwise we haven't seen one, but should we? If we have a void return type then we should have seen
+		 * it so we will fail out. Otherwise we will be fine here and keep going
+		 */
+		default:
+			//If we get here, but we do expect a void return, then this is an issue
+			if(current_function->signature->internal_types.function_type->returns_void == TRUE){
+				sprintf(info, "Function \"%s\" expects a return type of \"void\". Use \"ret;\" for return statements in this function", current_function->func_name.string);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				//Also print the function name
+				print_function_name(current_function);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+			}
+			//Put it back if no
+			push_back_token(token_stream, &parser_line_num);
+			
+			break;
+	}
+
+	//Otherwise if we get here, we need to see a valid conditional expression
+	generic_ast_node_t* expr_node = ternary_expression(token_stream, SIDE_TYPE_RIGHT);
+
+	//If this is bad, we fail out
+	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return print_and_return_error("Invalid expression given to return statement", parser_line_num);
+	}
+
+	//Let's do some type checking here
+	if(current_function == NULL){
+		return print_and_return_error("Fatal internal compiler error. Saw a return statement while current function is null", parser_line_num);
+	}
+
+	//Figure out what the final type is here
+	generic_type_t* final_type = types_assignable(current_function->return_type, expr_node->inferred_type);
+
+	//If the current function's return type is not compatible with the return type here, we'll bail out
+	if(final_type == NULL){
+		sprintf(info, "Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"", current_function->func_name.string, current_function->return_type->type_name.string,
+		  		expr_node->inferred_type->type_name.string);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		//Also print out the function
+		print_function_name(current_function);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	//If this is a constant, we'll force it to be whatever the new type is
+	if(expr_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
+		//Set the type
+		expr_node->inferred_type = final_type;
+
+		//Coerce the constant
+		perform_constant_assignment_coercion(expr_node, final_type);
+	}
+
+	//Special checking here - if we have an enum type that is being assigned to, we need
+	//to make sure that it's being assigned to a valid value in it's range
+	if(is_enum_type(current_function->return_type) == TRUE && expr_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
+		if(does_enum_contain_integer_member(current_function->return_type, expr_node->constant_value.signed_int_value) == FALSE){
+			sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
+						current_function->return_type->type_name.string, expr_node->constant_value.signed_int_value);
+			//Hard fail here
+			return print_and_return_error(info, parser_line_num);
+		}
+	} 
+
+	//Otherwise it worked, so we'll add it as a child of the other node
+	add_child_node(return_stmt, expr_node);
+
+	//Add in the line number
+	return_stmt->line_number = parser_line_num;
+
+	//This is *always* the function's return type
+	return_stmt->inferred_type = final_type;
+	
+	//If we have deferred statements
+	if(deferred_stmts_node != NULL){
+		//Then we'll duplicate
+		generic_ast_node_t* deferred_stmts = duplicate_subtree(deferred_stmts_node, deferred_stmts_node->side);
+
+		//This node will now come before the ret statement
+		deferred_stmts->next_sibling = return_stmt;
+
+		//We'll give this back instead
+		return deferred_stmts;
+	} else {
+		//If we get here we're all good, just return the parent
+		return return_stmt;
+	}
 }
 
 
@@ -1001,7 +1132,8 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 	//Few options here
 	switch(lookahead.tok){
 		case RETURN:
-			result_node = return_statement(token_stream);
+			//Use the specialized return rule for this
+			result_node = return_statement_in_handle_clause(token_stream);
 
 			//If this fails then we're done
 			if(result_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
