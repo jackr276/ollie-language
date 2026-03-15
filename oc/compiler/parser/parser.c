@@ -1050,7 +1050,81 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
  * this into two separate rules instead of trying to do some boolean flag in the existing rule
  */
 static generic_ast_node_t* raise_statement_in_handle_clause(ollie_token_stream_t* token_stream){
+	//Extract the function type for later use
+	function_type_t* function_type = current_function->signature->internal_types.function_type;
 
+	/**
+	 * Are we trying to raise an error inside of a defer statement? This is a big
+	 * issue, so we block it. Realistically I can't see any good reason why
+	 * someone would try
+	 */
+	if(nesting_stack_contains_level(&nesting_stack, NESTING_DEFER_STATEMENT) == TRUE){
+		return print_and_return_error("Invalid attempt to raise an error inside of a defer statement", parser_line_num);
+	}
+
+	/**
+	 * One additional thing to check - are we trying to to raise an error inside of a function
+	 * that cannot do so? If so then we fail out, it must be explicitly marked that it can
+	 * raise an error
+	 */
+	if(function_type->raises_errors == FALSE){
+		sprintf(info, "Function \"%s\" does not raise errors. Redeclare using \"fn!\" in order to make the function errorable. Currently declared as:", current_function->func_name.string);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		print_function_name(current_function);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	/**
+	 * We are required to now see either the "error" keyword for a generic error or a
+	 * specific error type. We may not raise non-error types
+	 */
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//The error id value is what really matters under the hood
+	u_int32_t error_id_value = 0;
+
+	//We are seeing a non-generic error, we will handle using the
+	//type specifier
+	if(lookahead.tok != ERROR){
+		//Push it back for processing
+		push_back_token(token_stream, &parser_line_num);
+
+		//Let the helper deal with it
+		generic_type_t* error_type = type_specifier(token_stream);
+
+		//Fail out if this ends up being null
+		if(error_type == NULL){
+			return print_and_return_error("Invalid error type given to raises statement", parser_line_num);
+		}
+
+		//Fully dealias this now that we know it's good
+		error_type = dealias_type(error_type);
+
+		//If this is not an error, we fail out
+		if(error_type->type_class != TYPE_CLASS_ERROR){
+			sprintf(info, "Type \"%s\" was not defined as an error type and therefore may not be raised", error_type->type_name.string); 
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//Otherwise we are good
+		error_id_value = error_type->internal_types.error_type_id;
+
+	} else {
+		//Since we're just raising a generic error, we use the generic error id
+		error_id_value = GENERIC_ERROR;
+	}
+
+	//Since we've made it all of the way down here, now is our time to create the ast node
+	//and give it back
+	generic_ast_node_t* raises_node = ast_node_alloc(AST_NODE_TYPE_RAISE_STMT, SIDE_TYPE_LEFT);
+
+	//Store the line number and the error id value
+	raises_node->line_number = parser_line_num;
+	raises_node->optional_storage.error_id = error_id_value;
+
+	//And give it back
+	return raises_node;
 }
 
 
@@ -1143,7 +1217,8 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 			break;
 			
 		case RAISE:
-			result_node = raise_statement(token_stream);
+			//Let the specialized rule deal with this
+			result_node = raise_statement_in_handle_clause(token_stream);
 
 			//If this fails then we're done
 			if(result_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
