@@ -31,7 +31,8 @@ pub fn main() -> i32 {
 	let result:i32 = @ollie_error(3, 2) handle( 
 												arithmetic_error_t => ret -1,
 												divide_by_zero_error_t => ret -1,
-												error => ret -1
+												//Assigns the return result value of the entire thing to -1
+												error => -1
 											   );
 
 
