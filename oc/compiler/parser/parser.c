@@ -902,6 +902,29 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 
 
 /**
+ * Handle a return statement that is found inside of a "handle" clause. This is different
+ * than a regular return statement because we are not going to have a semicolon to anchor us,
+ * so some of our validations will be entirely different. The decision was made to split
+ * this into two separate rules instead of trying to do some boolean flag in the existing rule
+ */
+static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_t* token_stream){
+
+}
+
+
+/**
+ * Handle a raise statement that is found inside of a "handle" clause. This is different
+ * than a regular raise statement because we are not going to have a semicolon to anchor us,
+ * so some of our validations will be entirely different. The decision was made to split
+ * this into two separate rules instead of trying to do some boolean flag in the existing rule
+ */
+static generic_ast_node_t* raise_statement_in_handle_clause(ollie_token_stream_t* token_stream){
+
+}
+
+
+
+/**
  * Handle an error statement. Error statements allow us to take action based on an error. That action
  * could be calling another function, giving back a value, or even raising another error. In it's current
  * form, we only allow expression statements here though this may eventually be expanded. We only
@@ -1126,6 +1149,11 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 		}
 
 	} while(TRUE);
+
+	//Validate grouping
+	if(pop_token(&grouping_stack).tok != L_PAREN){
+		return print_and_return_error("Mismatched parenthesis detected", parser_line_num);
+	}
 
 	/**
 	 * Once we end up down here, we need to check for 2 things:
@@ -8373,7 +8401,7 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
  *
  * NOTE: by the time we get here, we have already seen and consumed the "raise" keyword
  *
- * BNF Rule: <raise-statement> ::= raise {<error-type> | error}
+ * BNF Rule: <raise-statement> ::= raise {<error-type> | error};
  */
 static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream){
 	//Extract the function type for later use
@@ -8439,6 +8467,14 @@ static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream){
 	} else {
 		//Since we're just raising a generic error, we use the generic error id
 		error_id_value = GENERIC_ERROR;
+	}
+
+	//We now need to see a semicolon
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//If it's not here we fail out
+	if(lookahead.tok != SEMICOLON){
+		return print_and_return_error("Semicolon expected after raise statement", parser_line_num);
 	}
 
 	//Since we've made it all of the way down here, now is our time to create the ast node
