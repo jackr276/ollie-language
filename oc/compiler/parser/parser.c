@@ -100,6 +100,8 @@ static generic_ast_node_t* idle_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream);
+static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream);
+static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream);
 static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* function_type, u_int8_t defining_predeclared_function);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_global_scope);
@@ -943,8 +945,41 @@ static inline generic_ast_node_t* error_handle(ollie_token_stream_t* token_strea
 	}
 
 	//Now that we've seen the fat arrow we can either see a ret, a raise, or an expression that returns a value
-	//TODO
+	lookahead = get_next_token(token_stream, &parser_line_num);
 
+	//What is the result from this? We will determine here
+	generic_ast_node_t* result_node;
+
+	//Few options here
+	switch(lookahead.tok){
+		case RETURN:
+			result_node = return_statement(token_stream);
+			break;
+			
+		case RAISE:
+			result_node = raise_statement(token_stream);
+			break;
+
+		default:
+			//Push the token back
+			push_back_token(token_stream, &parser_line_num);
+
+			//Now we can invoke the helper
+			result_node = ternary_expression(token_stream, SIDE_TYPE_RIGHT);
+			break;
+	}
+
+	//If this fails then we're done
+	if(result_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return print_and_return_error("Invalid expression given to handle statement", parser_line_num);
+	}
+
+	//Otherwise add this in
+	add_child_node(error_handle_node, result_node);
+
+	//One more thing - we'll populate the variable up the chain here. This will be NULL a lot so this
+	//is just for when it isn't
+	error_handle_node->variable = result_node->variable;
 
 	//Give back the error handler
 	return error_handle_node;
@@ -983,6 +1018,8 @@ static inline generic_ast_node_t* handle_statement(ollie_token_stream_t* token_s
 	//We're valid now so let's allocate(side type is irrelevant)
 	generic_ast_node_t* handle_node = ast_node_alloc(AST_NODE_TYPE_HANDLE_STMT, SIDE_TYPE_RIGHT);
 	handle_node->line_number = parser_line_num;
+
+	//TODO Types-assignable once we're done here with the node
 
 
 
