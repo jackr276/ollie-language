@@ -1162,9 +1162,27 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
 	/**
-	 * Deal with the cases where we see the handle keyword
+	 * Deal with the cases where we see the handle keyword. Remember that we're
+	 * only allowed to see this if we have a function that does raise errors
 	 */
 	if(lookahead.tok == HANDLE){
+		//If we don't raise errors then fail out
+		if(function_signature->raises_errors == FALSE){
+			//Remember that we could have a regular function or a function pointer
+			if(function_record != NULL){
+				sprintf(info, "Function \"%s\" has signature \"%s\" and is defined as not raising errors. A \"handle\" statement is only allowed for functions that raise errors",
+							function_record->func_name.string,
+							function_type->type_name.string);
+				return print_and_return_error(info, parser_line_num);
+
+			//Function pointer
+			} else {
+				sprintf(info, "Function signature \"%s\" is defined as not raising errors. A \"handle\" statement is only allowed for functions that raise errors",
+							function_type->type_name.string);
+				return print_and_return_error(info, parser_line_num);
+			}
+		}
+
 		//TODO
 
 	/**
@@ -1181,12 +1199,15 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		if(function_signature->raises_errors == TRUE){
 			//Remember we could have a regular function or function pointer
 			if(function_record != NULL){
-				sprintf(info, "Function \"%s\" has signature \"%s\" and is defined as raising errors. A \"handle\" statement is required upon every call of this function", function_record->func_name.string, function_type->type_name.string);
+				sprintf(info, "Function \"%s\" has signature \"%s\" and is defined as raising errors. A \"handle\" statement is required upon every call of this function", 
+								function_record->func_name.string,
+								function_type->type_name.string);
 				return print_and_return_error(info, parser_line_num);
 
 			//Function pointer
 			} else {
-				sprintf(info, "Function signature \"%s\" is defined as raising errors. A \"handle\" statement is required upon every call of this function", function_type->type_name.string);
+				sprintf(info, "Function signature \"%s\" is defined as raising errors. A \"handle\" statement is required upon every call of this function",
+								function_type->type_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
 
