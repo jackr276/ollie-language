@@ -23,13 +23,17 @@ pub fn! ollie_error(x:i32, y:i32) -> i32 raises(arithmetic_error_t, divide_by_ze
 
 
 pub fn main() -> i32 {
-	//Is kind of a pseudo-switch statement in a way
-	//We make it so that you have no choice but to handle errors
-	//This is a hidden switch statement under the hood
+	/**
+	* Is kind of a pseudo-switch statement in a way
+	* We make it so that you have no choice but to handle errors
+	* This is a hidden switch statement under the hood
+	*/
+	let result:i32 = @ollie_error(3, 2) handle( 
+												arithmetic_error_t => ret -1,
+												divide_by_zero_error_t => ret -1,
+												error => ret -1
+											   );
 
-
-	//TODO ADD HANDLING
-	let result:i32 = @ollie_error(3, 2);
 
 	ret result;
 }

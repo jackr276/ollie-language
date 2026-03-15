@@ -19,8 +19,7 @@ pub fn main() -> i32 {
 	let x:i32 = 5;
 	let y:i32 = 0;
 
-	//TODO - still haven't figured out how to mandate error handling
-	let result:i32 = @divide_values(x, y);
+	let result:i32 = @divide_values(x, y) handle(divide_by_zero_error_t => ret -1, error => ret -1);
 
 	ret result;
 }
