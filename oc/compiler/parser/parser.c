@@ -1157,6 +1157,46 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		pop_token(&grouping_stack);
 	}
 
+	/**
+	 * If we have a function that may raise errors, we are absolutely required to see the
+	 * handles statement here. If we have a function that does not return errors, then it is
+	 * completely incorrect for us to see the handles statement here. We need to handle
+	 * both cases appropriately
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	/**
+	 * Deal with the cases where we see the handle keyword
+	 */
+	if(lookahead.tok == HANDLE){
+
+	/**
+	 * Otherwise we didn't see it, but we need to validate that we didn't need to see it
+	 */
+	} else {
+		//Push it back
+		push_back_token(token_stream, &parser_line_num);
+
+		/**
+		 * If this function raises errors, then we actually
+		 * had to see this, so this is an error
+		 */
+		if(function_signature->raises_errors == TRUE){
+			//Remember we could have a regular function or function pointer
+			if(function_record != NULL){
+				sprintf(info, "Function \"%s\" is defined as raising errors. A \"handle\" statement is required upon every call of this function. First defined here: \n", function_record->func_name.string);
+
+				//TODO
+
+
+			//Function pointer
+			} else {
+
+				//TODO
+			}
+		}
+	}
+
 	//Add the line number in
 	function_call_node->line_number = current_line;
 
