@@ -59,6 +59,7 @@ static generic_type_t* immut_f64 = NULL;
 static generic_type_t* mut_void = NULL;
 static generic_type_t* immut_void = NULL;
 static generic_type_t* immut_char_ptr = NULL;
+static generic_type_t* generic_error = NULL;
 
 //THe specialized nesting stack that we'll use to keep track of what kind of control structure we're in(loop, switch, defer, etc)
 static nesting_stack_t nesting_stack;
@@ -12234,6 +12235,8 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	immut_f64 = lookup_type_name_only(type_symtab, "f64", NOT_MUTABLE)->type;
 	immut_void = lookup_type_name_only(type_symtab, "void", NOT_MUTABLE)->type;
 	mut_void = lookup_type_name_only(type_symtab, "void", MUTABLE)->type;
+	generic_error = lookup_type_name_only(type_symtab, "error", NOT_MUTABLE)->type;
+
 	immut_char_ptr = lookup_type_name_only(type_symtab, "char*", NOT_MUTABLE)->type;
 
 	//Also create a stack for our matching uses(curlies, parens, etc.)

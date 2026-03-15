@@ -1087,9 +1087,21 @@ u_int16_t add_all_basic_types(type_symtab_t* symtab){
 	num_collisions += insert_type(symtab,  create_type_record(type));
 
 	// ================================ Mutable versions of our primitive types ==============================
-	
-	// This is for observability in the test suites - if we have 
-	// more than 1 or 2 collisions here, then we have a serious problem
+
+	/**
+	 * For any/all generic error handling, we need the ability to have a generic error type. In practice
+	 * this is represented by the "error" lexitem, but we need a type anyway. As such we'll have a purely internal
+	 * type here that has that name
+	 */
+	type = create_error_type("error", 0);
+	//Generic error has an id of 1
+	type->internal_types.error_type_id = 1;
+	num_collisions += insert_type(symtab, create_type_record(type));
+
+	/**
+	 * This is for observability in the test suites - if we have 
+	 * more than 1 or 2 collisions here, then we have a serious problem
+	 */
 	return num_collisions;
 }
 
