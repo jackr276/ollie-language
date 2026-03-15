@@ -37,6 +37,8 @@ static generic_ast_node_t* prog = NULL;
 
 //What is the current function that we are "in"
 static symtab_function_record_t* current_function = NULL;
+//Keep track of all of the errors that have been raised by the current function
+static dynamic_set_t errors_raised_by_current_function;
 //The queue that holds all of our jump statements for a given function
 static heap_queue_t current_function_jump_statements;
 
@@ -61,7 +63,7 @@ static generic_type_t* immut_void = NULL;
 static generic_type_t* immut_char_ptr = NULL;
 static generic_type_t* generic_error = NULL;
 
-//THe specialized nesting stack that we'll use to keep track of what kind of control structure we're in(loop, switch, defer, etc)
+//The specialized nesting stack that we'll use to keep track of what kind of control structure we're in(loop, switch, defer, etc)
 static nesting_stack_t nesting_stack;
 
 //The number of errors
@@ -1109,6 +1111,9 @@ static generic_ast_node_t* raise_statement_in_handle_clause(ollie_token_stream_t
 
 		//Otherwise we are good
 		error_id_value = error_type->internal_types.error_type_id;
+
+		//Add this into the set of all errors raised by the current function
+		dynamic_set_add(&errors_raised_by_current_function, error_type);
 
 	} else {
 		//Since we're just raising a generic error, we use the generic error id
@@ -8674,6 +8679,9 @@ static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream){
 		//Otherwise we are good
 		error_id_value = error_type->internal_types.error_type_id;
 
+		//Add this into the set of all errors raised by the current function
+		dynamic_set_add(&errors_raised_by_current_function, error_type);
+
 	} else {
 		//Since we're just raising a generic error, we use the generic error id
 		error_id_value = GENERIC_ERROR;
@@ -12153,6 +12161,9 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			return print_and_return_error(info, parser_line_num);
 		}
 
+		//Wipe the slate clean for this function - we'll start tracking again here
+		clear_dynamic_set(&errors_raised_by_current_function);
+
 		//Now that we've made it past that, we can let the helper do the parsing for us
 		u_int8_t success = error_list(token_stream, function_record->signature, defining_predeclared_function);
 
@@ -12576,6 +12587,14 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	//Create a stack for recording our depth/nesting levels
 	nesting_stack = nesting_stack_alloc();
 
+	/**
+	 * For any/all functions that raise errors, we want to provide helpful messages to the user. The most
+	 * important of these messages is extra errors in the raises clause that are never used. To support
+	 * this, we maintain a global list of all the errors that the function raises. To save on allocation
+	 * overhead, we'll just keep one of these for the lifetime of the parser
+	 */
+	errors_raised_by_current_function = dynamic_set_alloc();
+
 	//Global entry/run point, will give us a tree with
 	//the root being here
 	prog = program(token_stream);
@@ -12617,6 +12636,9 @@ front_end_results_package_t* parse(compiler_options_t* options){
 
 	//Once we're done, destroy the token stream
 	destroy_token_stream(token_stream);
+
+	//We're done with the errors too
+	dynamic_set_dealloc(&errors_raised_by_current_function);
 
 	//Give back the overall result
 	return results;
