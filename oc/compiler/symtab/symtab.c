@@ -1608,6 +1608,54 @@ void print_type_record(symtab_type_record_t* record){
 
 
 /**
+ * Print a function name into a string buffer
+ */
+void print_function_name_to_buffer(char* buffer, symtab_function_record_t* record){
+	//We'll first print to an internal one
+	char internal_buffer[ERROR_SIZE];
+
+	if(record->signature->internal_types.function_type->is_public == TRUE){
+		sprintf(internal_buffer, "\t---> %d | pub fn %s(", record->line_number, record->func_name.string);
+	} else {
+		sprintf(internal_buffer, "\t---> %d | fn %s(", record->line_number, record->func_name.string);
+	}
+
+	//Print out the params
+	for(u_int8_t i = 0; i < record->function_parameters.current_index; i++){
+		symtab_variable_record_t* current_parameter = dynamic_array_get_at(&(record->function_parameters), i);
+
+		//Print if it's mutable
+		if(current_parameter->type_defined_as->mutability == MUTABLE){
+			sprintf(internal_buffer, "mut ");
+		}
+
+		sprintf(internal_buffer, "%s : %s", current_parameter->var_name.string, current_parameter->type_defined_as->type_name.string);
+		//Comma if needed
+		if(i < record->function_parameters.current_index - 1){
+			sprintf(internal_buffer, ", ");
+		}
+	}
+
+	//Final closing paren and return type
+	if(record->return_type != NULL){
+		sprintf(internal_buffer, ") -> %s", record->return_type->type_name.string);
+	} else {
+		sprintf(internal_buffer, ") -> (null)");
+	}
+
+	//If it was defined implicitly, we'll print a semicol
+	if(record->defined == 0){
+		sprintf(internal_buffer, ";\n");
+	} else {
+		sprintf(internal_buffer, "{...\n");
+	}
+
+	//Now concatenate into the parameter buffer
+	strncat(buffer, internal_buffer, ERROR_SIZE);
+}
+
+
+/**
  * Print a function name out in a stylised way
  */
 void print_function_name(symtab_function_record_t* record){

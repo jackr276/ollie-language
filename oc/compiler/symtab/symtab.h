@@ -545,6 +545,12 @@ void print_variable_record(symtab_variable_record_t* record);
 void print_type_record(symtab_type_record_t* record);
 
 /**
+ * Print a function name into a string buffer. This will concatenate onto the existing
+ * buffer
+ */
+void print_function_name_to_buffer(char* buffer, symtab_function_record_t* record);
+
+/**
  * A helper method for function name printing
  */
 void print_function_name(symtab_function_record_t* record);
