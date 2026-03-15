@@ -908,7 +908,46 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
  * <error-handle> ::= <error> => <return-statement> | <raise-statement> | <ternary-expression>
  */
 static inline generic_ast_node_t* error_handle(ollie_token_stream_t* token_stream, symtab_function_record_t* called_function, side_type_t side){
-	return NULL;
+	//Lookahead token
+	lexitem_t lookahead;
+	//The first thing that we need to see is a valid error type
+	generic_type_t* error_type = type_specifier(token_stream);
+
+	//Fail out here
+	if(error_type == NULL){
+		return print_and_return_error("Invalid error type given to handles statement", parser_line_num);
+	}
+
+	//Fully dealias this just in case
+	error_type = dealias_type(error_type);
+
+	//Also if this is not an error we go
+	if(error_type->type_class != TYPE_CLASS_ERROR){
+		sprintf(info, "Type \"%s\" is not defined as an error type", error_type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Now we know that we've got a valid one so we can allocate here
+	generic_ast_node_t* error_handle_node = ast_node_alloc(AST_NODE_TYPE_ERROR_HANDLE_STMT, SIDE_TYPE_RIGHT);
+
+	//Stash away the error type in here
+	error_handle_node->optional_storage.error_type = error_type;
+
+	//We now need to see the fat arrow(=>)
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Fail out if we don't see it
+	if(lookahead.tok != FAT_ARROW){
+		sprintf(info, "Expected => but got \"%s\" instead", lexitem_to_string(&lookahead));
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Now that we've seen the fat arrow we can either see a ret, a raise, or an expression that returns a value
+	//TODO
+
+
+	//Give back the error handler
+	return error_handle_node;
 }
 
 
@@ -944,8 +983,6 @@ static inline generic_ast_node_t* handle_statement(ollie_token_stream_t* token_s
 	//We're valid now so let's allocate(side type is irrelevant)
 	generic_ast_node_t* handle_node = ast_node_alloc(AST_NODE_TYPE_HANDLE_STMT, SIDE_TYPE_RIGHT);
 	handle_node->line_number = parser_line_num;
-
-	
 
 
 

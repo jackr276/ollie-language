@@ -118,6 +118,8 @@ struct generic_ast_node_t{
 		//For enum constants - we'll hold onto the 
 		//enum type here too
 		generic_type_t* enum_type;
+		//For error types in a hanldes statement
+		generic_type_t* error_type;
 		//For any/all error types, we'll hold onto the actual
 		//value of the error here
 		u_int32_t error_id;
