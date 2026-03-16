@@ -5712,6 +5712,9 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 	//Add it to the jump table. NO_ERROR is equal to 0 in %rdx
 	add_jump_table_entry(jump_calculation_block->jump_table, NO_ERROR, no_error_block);
 
+	//This is also a successor of the jump calculation block
+	add_successor(jump_calculation_block, no_error_block);
+
 	/**
 	 * Run through every single error handle clause inside
 	 * of the param cursor itself. Each one will receive
