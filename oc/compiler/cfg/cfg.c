@@ -5564,6 +5564,19 @@ static inline u_int32_t get_number_of_sse_params(function_type_t* signature){
 
 
 /**
+ * A handle statement internally becomes a switch statement based on the returned error of the function(%rdx). We will switch
+ * based on %rdx and handle things accordingly. Remember that this is only a thing that exists for functions that error, non-errorable
+ * functions should never have handle statements
+ */
+static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block, generic_ast_node_t* handle_node, symtab_function_record_t* called_function, three_addr_var_t* final_assignee){
+	cfg_result_package_t result_package = {starting_block, starting_block, NULL, BLANK};
+
+	//Give back the final result package
+	return result_package;
+}
+
+
+/**
  * Emit an indirect function call like such
  *
  * call *<function_name>
@@ -5839,6 +5852,10 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		add_statement(current_block, assignment);
 	}
 
+	/**
+	 * If we get here and we have a handles statement, we will let our special rule
+	 * translate it into a switch statement
+	 */
 	if(param_cursor != NULL && param_cursor->ast_node_type == AST_NODE_TYPE_HANDLE_STMT){
 		printf("TODO NOT IMPLEMENTED\n");
 		exit(0);
@@ -6065,6 +6082,10 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		add_statement(current_block, assignment);
 	}
 
+	/**
+	 * If we get here and we have a handles statement, we will let our special rule
+	 * translate it into a switch statement
+	 */
 	if(param_cursor != NULL && param_cursor->ast_node_type == AST_NODE_TYPE_HANDLE_STMT){
 		printf("TODO NOT IMPLEMENTED\n");
 		exit(0);
