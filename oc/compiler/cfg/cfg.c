@@ -5562,8 +5562,41 @@ static inline u_int32_t get_number_of_sse_params(function_type_t* signature){
 	return number_of_sse_params;
 }
 
+
+/**
+ * Emit the no_error case for our handle statement. The no error case simply assigns the
+ * value of what's in %rax to the overall function return value which is passed in here
+ * as the function assignee
+ */
 static inline basic_block_t* emit_no_error_block_for_handle(three_addr_var_t* function_assignee){
 
+}
+
+
+/**
+ * Emit the handling for the error handle instruction itself. As a reminder, the only options
+ * here are: return, raise another error, or do an expression that will eventually get assigned 
+ * to the overall function result. All of these options will result in a new block being
+ * made and return from here
+ */
+static inline basic_block_t* emit_error_handle_instruction(generic_ast_node_t* error_handle_node){
+	//This is technically a case statement, so we will add the nesting as such
+	push_nesting_level(&nesting_stack, NESTING_CASE_CONDITION);
+
+	switch(error_handle_node->ast_node_type){
+		case AST_NODE_TYPE_RET_STMT:
+			break;
+
+		case AST_NODE_TYPE_RAISE_STMT:
+			break;
+
+		default:
+			break;
+	}
+
+
+	//Pop the nesting level out
+	pop_nesting_level(&nesting_stack);
 }
 
 
@@ -5593,10 +5626,19 @@ static inline basic_block_t* emit_no_error_block_for_handle(three_addr_var_t* fu
  * }
  *
  * final_result_var = final_assignee
+ *
+ * The overall result of the function call itself will be stored in the final result var
  */
 static cfg_result_package_t emit_handle_statement(generic_ast_node_t* handle_node, three_addr_var_t* function_assignee, three_addr_var_t* error_assignee){
 	//Allocate the results
 	cfg_result_package_t result_package;
+
+	/**
+	 * We are going to use a pseudo temp var for our final result here. We will do this because we'll
+	 * need to assign to it over multiple blocks potentially. This is a temp var on the surface but
+	 * under the hood it is SSA compatible so phi-functions will be inserted as needed
+	 */
+	symtab_variable_record_t* function_result = create_ssa_compatible_temp_var(function_assignee->type, variable_symtab, increment_and_get_temp_id());
 
 	//First emit all of the control blocks that we'll need. When we tie this in we'll
 	//jump from the call block to the error handling block
@@ -5612,23 +5654,22 @@ static cfg_result_package_t emit_handle_statement(generic_ast_node_t* handle_nod
 	 */
 	basic_block_t* no_error_block = basic_block_alloc_and_estimate();
 
+	/**
+	 * Run through every single error handle clause inside
+	 * of the param cursor itself. Each one will receive
+	 * its own block
+	 */
+	generic_ast_node_t* error_handle_cursor = handle_node->first_child;
 
-	//TODO
-	//
-	//We are going to use the ternary variable for our final result here. Let's rewrite that API to be more generic so
-	//that is stays something like "SSA compatible internal variable" and we will use that for all of our results here. That
-	//is going to allow us to have 
-	//
-	//
-	//Added below an example for context
-	//Create the ternary variable here
-	//symtab_variable_record_t* ternary_variable = create_ssa_compatible_temp_var(ternary_operation->inferred_type, variable_symtab, increment_and_get_temp_id());
+	while(error_handle_cursor != NULL){
 
-	//Let's first create the final result variable here
-	//three_addr_var_t* if_result = emit_var(ternary_variable);
-	//three_addr_var_t* else_result = emit_var(ternary_variable);
-	//three_addr_var_t* final_result = emit_var(ternary_variable);
 
+		//TODO HANDLE IT
+
+		//Advance the cursor up
+		error_handle_cursor = error_handle_cursor->next_sibling;
+
+	}
 
 	//TODO EMIT DEFAULT(generic_error) AND regular no error(0) clauses
 
