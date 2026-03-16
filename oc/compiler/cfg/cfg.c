@@ -5567,9 +5567,45 @@ static inline u_int32_t get_number_of_sse_params(function_type_t* signature){
  * A handle statement internally becomes a switch statement based on the returned error of the function(%rdx). We will switch
  * based on %rdx and handle things accordingly. Remember that this is only a thing that exists for functions that error, non-errorable
  * functions should never have handle statements
+ *
+ * call my_func() handle (divide_by_zero_error_t => -1, error => raise error)
+ *
+ * Should translate to something like
+ * switch(%rdx){
+ * 		case 0 -> {
+ * 			final_assignee = %rax
+ * 		}
+ *
+ * 		case 2 -> {
+ * 			%rax = -1
+ * 		}
+ *
+ * 		//The catch-all error is always our default
+ * 		default -> {
+ * 			%rdx = 1
+ * 			ret
+ * 		}
+ * }
+ *
+ * final_result_var = %rax
  */
 static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block, generic_ast_node_t* handle_node, three_addr_var_t* final_assignee, three_addr_var_t* error_assignee){
+	//Allocate the results
 	cfg_result_package_t result_package = {starting_block, starting_block, NULL, BLANK};
+
+	//Our upper bound check block for the switch-like statement - the lower bound is handled
+	basic_block_t* upper_bound_check_block = basic_block_alloc_and_estimate();
+	//This is the block where the actual jump calculation happens
+	basic_block_t* jump_calculation_block = basic_block_alloc_and_estimate();
+	//We also need to know the ending block here
+	basic_block_t* ending_block = basic_block_alloc_and_estimate();
+
+	//We can already fill in the result package
+	result_package.starting_block = starting_block;
+	result_package.final_block = ending_block;
+	result_package.assignee = final_assignee;
+
+
 
 		printf("TODO NOT IMPLEMENTED\n");
 		exit(0);
@@ -6117,7 +6153,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(error_assignee->type), error_assignee);
 
 		//Add it into the block
-		add_statement(basic_block, assignment);
+		add_statement(current_block, assignment);
 
 		//This now is our error assignee that will be used in the CFG
 		error_assignee = assignment->assignee;
