@@ -5567,9 +5567,26 @@ static inline u_int32_t get_number_of_sse_params(function_type_t* signature){
  * Emit the no_error case for our handle statement. The no error case simply assigns the
  * value of what's in %rax to the overall function return value which is passed in here
  * as the function assignee
+ *
+ * The only thing that will be in this block is an assignment from the function's result(in %rax)
+ * to the pseudo-non-temp-var that we are using for the assignee
  */
-static inline basic_block_t* emit_no_error_block_for_handle(three_addr_var_t* function_assignee){
+static inline basic_block_t* emit_no_error_block_for_handle(symtab_variable_record_t* result_assignee, three_addr_var_t* function_assignee){
+	//This is technically a case statement, so we will add the nesting as such
+	push_nesting_level(&nesting_stack, NESTING_CASE_CONDITION);
 
+	//Allocate and estimate the block
+	basic_block_t* no_error_block = basic_block_alloc_and_estimate();
+
+	//Emit the assignment
+	instruction_t* final_assignment = emit_assignment_instruction(emit_var(result_assignee), function_assignee);
+	add_statement(no_error_block, final_assignment);
+
+	//Pop the nesting level out
+	pop_nesting_level(&nesting_stack);
+
+	//And give the block back
+	return no_error_block;
 }
 
 
@@ -5606,6 +5623,9 @@ static inline basic_block_t* emit_error_handle_instruction(generic_ast_node_t* e
  * functions should never have handle statements. The function itself is going to pass us its result in %rax, but that doesn't mean
  * that the final result here needs to be from %rax
  *
+ * Let's also remember that every value here is unsigned. There is no such thing as a "negative" error value. Since the lowest value is
+ * always 0, we only need to bother checking the upper bound here
+ *
  * call my_func() handle (divide_by_zero_error_t => -1, error => raise error)
  *
  * Should translate to something like
@@ -5638,21 +5658,35 @@ static cfg_result_package_t emit_handle_statement(generic_ast_node_t* handle_nod
 	 * need to assign to it over multiple blocks potentially. This is a temp var on the surface but
 	 * under the hood it is SSA compatible so phi-functions will be inserted as needed
 	 */
-	symtab_variable_record_t* function_result = create_ssa_compatible_temp_var(function_assignee->type, variable_symtab, increment_and_get_temp_id());
+	symtab_variable_record_t* function_result_var = create_ssa_compatible_temp_var(function_assignee->type, variable_symtab, increment_and_get_temp_id());
 
-	//First emit all of the control blocks that we'll need. When we tie this in we'll
-	//jump from the call block to the error handling block
+	/**
+	 * Emit all of the control blocks that we'll need. When we tie this in we'll
+	 * jump from the call block to the error handling block
+	 */
 	basic_block_t* error_handling_starting_block = basic_block_alloc_and_estimate();
-	basic_block_t* upper_bound_check_block = basic_block_alloc_and_estimate();
 	basic_block_t* jump_calculation_block = basic_block_alloc_and_estimate();
-	basic_block_t* ending_block = basic_block_alloc_and_estimate();
+	basic_block_t* error_handling_ending_block = basic_block_alloc_and_estimate();
 
-	//The regular no error block(we're going to have to emit this ourselves - it won't be in the handle)
+	//The lower bound is always 0, and the upper bound is determined by the parser
+	u_int32_t lower_bound = handle_node->lower_bound;
+	u_int32_t upper_bound = handle_node->upper_bound;
+
+	/**
+	 * Let's mark this block as a switch block and at the same time create our jump table. We'll
+	 * need this to be allocated before we start entering in destination blocks
+	 */
+	jump_calculation_block->block_type = BLOCK_TYPE_SWITCH;
+	jump_calculation_block->jump_table = jump_table_alloc(upper_bound - lower_bound + 1);
+
+
 	/**
 	 * Let's first emit the no_error block as it is the only one that will not
 	 * be inside of the handle statement
 	 */
-	basic_block_t* no_error_block = basic_block_alloc_and_estimate();
+	basic_block_t* no_error_block = emit_no_error_block_for_handle(function_result_var, function_assignee);
+
+
 
 	/**
 	 * Run through every single error handle clause inside
@@ -5668,14 +5702,33 @@ static cfg_result_package_t emit_handle_statement(generic_ast_node_t* handle_nod
 
 		//Advance the cursor up
 		error_handle_cursor = error_handle_cursor->next_sibling;
-
 	}
+
+
+
+
+
+
+
+
+
+	//Emit the upper bound constant - this like everything is a u64
+	three_addr_const_t* upper_bound_constant = emit_direct_integer_or_char_constant(upper_bound, u64);
+
+	/**
+	 * We will jump to the default error block if we are above this value
+	 *
+	 * TODO
+	 */
+	instruction_t* comparison = emit_binary_operation_with_const_instruction(emit_temp_var(u64), error_assignee, G_THAN, upper_bound_constant);
+
+
 
 	//TODO EMIT DEFAULT(generic_error) AND regular no error(0) clauses
 
 	//We can already fill in the result package
 	result_package.starting_block = error_handling_starting_block;
-	result_package.final_block = ending_block;
+	result_package.final_block = error_handling_ending_block;
 
 
 		printf("TODO NOT IMPLEMENTED\n");
