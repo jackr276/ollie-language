@@ -299,8 +299,14 @@ struct instruction_t{
 	//The address calculation registers
 	three_addr_var_t* address_calc_reg1;
 	three_addr_var_t* address_calc_reg2;
-	//Store inlined assembly in a string
-	dynamic_string_t inlined_assembly;
+	//Optional storage for values that aren't often used
+	union {
+		//Store inlined assembly in a string
+		dynamic_string_t inlined_assembly;
+		//The second error assignee for an errorable
+		//function
+		three_addr_var_t* error_assignee;
+	} optional_storage;
 	//Generic parameter list - could be used for phi functions or function calls
 	dynamic_array_t parameters;
 	//What block holds this?

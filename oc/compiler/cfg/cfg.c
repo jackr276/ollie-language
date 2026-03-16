@@ -5839,19 +5839,6 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		stack_data_area_dealloc(&stack_passed_parameters);
 	}
 
-	//If this is not a void return type, we'll need to emit this temp assignment
-	if(signature->returns_void == FALSE){
-		//Emit an assignment instruction. This will become very important way down the line in register
-		//allocation to avoid interference
-		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
-
-		//Reassign this value
-		assignee = assignment->assignee;
-
-		//Add it in
-		add_statement(current_block, assignment);
-	}
-
 	/**
 	 * If we get here and we have a handles statement, we will let our special rule
 	 * translate it into a switch statement
@@ -5859,6 +5846,21 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	if(param_cursor != NULL && param_cursor->ast_node_type == AST_NODE_TYPE_HANDLE_STMT){
 		printf("TODO NOT IMPLEMENTED\n");
 		exit(0);
+
+	//If there's no error handling then we just do a regular assignment
+	} else {
+		//If this is not a void return type, we'll need to emit this temp assignment
+		if(signature->returns_void == FALSE){
+			//Emit an assignment instruction. This will become very important way down the line in register
+			//allocation to avoid interference
+			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+
+			//Reassign this value
+			assignee = assignment->assignee;
+
+			//Add it in
+			add_statement(current_block, assignment);
+		}
 	}
 
 	//This is always the assignee we gave above. Note that this is nullable,
@@ -6069,19 +6071,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		add_statement(current_block, stack_deallocation);
 	}
 
-	//If this is not a void return type, we'll need to emit this temp assignment
-	if(signature->returns_void == FALSE){
-		//Emit an assignment instruction. This will become very important way down the line in register
-		//allocation to avoid interference
-		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
-				
-		//Reassign this value
-		assignee = assignment->assignee;
-
-		//Add it in
-		add_statement(current_block, assignment);
-	}
-
 	/**
 	 * If we get here and we have a handles statement, we will let our special rule
 	 * translate it into a switch statement
@@ -6089,6 +6078,21 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	if(param_cursor != NULL && param_cursor->ast_node_type == AST_NODE_TYPE_HANDLE_STMT){
 		printf("TODO NOT IMPLEMENTED\n");
 		exit(0);
+
+	//If there's no error handling then we just do a regular result assignment
+	} else {
+		//If this is not a void return type, we'll need to emit this temp assignment
+		if(signature->returns_void == FALSE){
+			//Emit an assignment instruction. This will become very important way down the line in register
+			//allocation to avoid interference
+			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+					
+			//Reassign this value
+			assignee = assignment->assignee;
+
+			//Add it in
+			add_statement(current_block, assignment);
+		}
 	}
 
 	//This is always the assignee we gave above. It is important to note

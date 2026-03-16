@@ -2370,6 +2370,17 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			if(stmt->assignee != NULL){
 				//Print the variable and assop out
 				print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+
+				if(stmt->optional_storage.error_assignee != NULL){
+					fprintf(fl, ", ");
+					print_variable(fl, stmt->optional_storage.error_assignee, PRINTING_VAR_INLINE);
+				}
+
+				fprintf(fl, " <- ");
+
+			} else if(stmt->optional_storage.error_assignee != NULL){
+				fprintf(fl, "void, ");
+				print_variable(fl, stmt->optional_storage.error_assignee, PRINTING_VAR_INLINE);
 				fprintf(fl, " <- ");
 			}
 
@@ -2406,6 +2417,17 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			if(stmt->assignee != NULL){
 				//Print the variable and assop out
 				print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+
+				if(stmt->optional_storage.error_assignee != NULL){
+					fprintf(fl, ", ");
+					print_variable(fl, stmt->optional_storage.error_assignee, PRINTING_VAR_INLINE);
+				}
+
+				fprintf(fl, " <- ");
+
+			} else if(stmt->optional_storage.error_assignee != NULL){
+				fprintf(fl, "void, ");
+				print_variable(fl, stmt->optional_storage.error_assignee, PRINTING_VAR_INLINE);
 				fprintf(fl, " <- ");
 			}
 
@@ -2478,7 +2500,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 		case THREE_ADDR_CODE_ASM_INLINE_STMT:
 			//Should already have a trailing newline
-			fprintf(fl, "%s\n", stmt->inlined_assembly.string);
+			fprintf(fl, "%s\n", stmt->optional_storage.inlined_assembly.string);
 			break;
 
 		case THREE_ADDR_CODE_IDLE_STMT:
@@ -4288,7 +4310,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "jp .L%d\n", jumping_to_block->block_id);
 			break;
 		case ASM_INLINE:
-			fprintf(fl, "%s\n", instruction->inlined_assembly.string);
+			fprintf(fl, "%s\n", instruction->optional_storage.inlined_assembly.string);
 			break;
 		case CALL:
 			fprintf(fl, "call %s", instruction->called_function->func_name.string);
@@ -5637,7 +5659,7 @@ instruction_t* emit_asm_inline_instruction(generic_ast_node_t* asm_inline_node){
 	stmt->statement_type = THREE_ADDR_CODE_ASM_INLINE_STMT;
 
 	//Copy this over
-	stmt->inlined_assembly = clone_dynamic_string(&(asm_inline_node->string_value));
+	stmt->optional_storage.inlined_assembly = clone_dynamic_string(&(asm_inline_node->string_value));
 
 	//And we're done, now we'll bail out
 	return stmt;
