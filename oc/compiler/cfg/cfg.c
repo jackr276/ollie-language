@@ -5844,6 +5844,39 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	 * translate it into a switch statement
 	 */
 	if(param_cursor != NULL && param_cursor->ast_node_type == AST_NODE_TYPE_HANDLE_STMT){
+		//If this is not a void return type, we'll need to emit this temp assignment
+		if(signature->returns_void == FALSE){
+			/**
+			 * Emit an assignment instruction. This will become very important way down the line in register
+			 * allocation to avoid interference
+			 */
+			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+
+			//Reassign this value
+			assignee = assignment->assignee;
+
+			//Add it in
+			add_statement(current_block, assignment);
+		}
+
+		/**
+		 * Since we have a handle statement, we have to have an error assignee. Let's also now emit that and
+		 * the result assignment that comes with it
+		 */
+		three_addr_var_t* error_assignee = emit_temp_var(u64);
+
+		//This is stored in the optional second assignee slot
+		func_call_stmt->optional_storage.error_assignee = error_assignee;
+
+		//Now we'll have a move statement just for register allocation reasons
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(error_assignee->type), error_assignee);
+
+		//Add it into the block
+		add_statement(basic_block, assignment);
+
+		//This now is our error assignee that will be used in the CFG
+		error_assignee = assignment->assignee;
+
 		printf("TODO NOT IMPLEMENTED\n");
 		exit(0);
 
