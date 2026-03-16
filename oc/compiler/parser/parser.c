@@ -11050,8 +11050,47 @@ static int8_t check_jump_labels(){
 }
 
 
+/**
+ * If a user puts an error in a raises statement but then fails to raise that error inside of
+ * the actual function, then we are going to be mandating entirely useless checks down the
+ * road. We need to account for this by validating that every error inside of the
+ * raises statement is actually raised by the function
+ */
 static u_int8_t validate_error_list_against_raised_errors(symtab_function_record_t* function){
-	//TODO
+	//Extract what we require to be checked
+	dynamic_array_t* mandatory_checked_errors = &(function->signature->internal_types.function_type->potential_errors);
+
+	//Run through all of the mandatory checked errors
+	for(u_int32_t i = 0; i < mandatory_checked_errors->current_index; i++){
+		//Extract the error that we require
+		generic_type_t* mandatory_error = dynamic_array_get_at(mandatory_checked_errors, i);
+
+		//Assume by default that it's missing
+		u_int8_t raised_by_function = FALSE;
+
+		//Now let's go through all of the errors that are raised and check those
+		for(u_int32_t j = 0; j < errors_raised_by_current_function.current_index; j++){
+			//Extract the error that we raised
+			generic_type_t* raised_error = dynamic_set_get_at(&errors_raised_by_current_function, j);
+
+			//If these are identical, then we set the flag and get out
+			if(types_identical(raised_error, mandatory_error) == TRUE){
+				raised_by_function = TRUE;
+				break;
+			}
+		}
+
+		//Is it raised by the function? If not we've got an error
+		if(raised_by_function == FALSE){
+			sprintf(info, "Function \"%s\" raises error %s in its signature but the error itself is never raised. Remove the error from the signature if it won't ever be raised",
+		   					function->func_name.string, mandatory_error->type_name.string);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			num_errors++;
+			return FAILURE;
+		}
+	}
+
+	//If we made it all of the way down here then we are good
 	return SUCCESS;
 
 }
