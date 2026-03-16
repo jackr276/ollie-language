@@ -5597,18 +5597,12 @@ static inline basic_block_t* emit_no_error_block_for_handle(symtab_variable_reco
  * to the overall function result. All of these options will result in a new block being
  * made and return from here
  */
-static cfg_result_package_t emit_error_handle_statement(generic_ast_node_t* error_handle_node, jump_table_t* jump_table){
+static cfg_result_package_t emit_error_handle_statement(generic_ast_node_t* error_handle_node){
 	//This is technically a case statement, so we will add the nesting as such
 	push_nesting_level(&nesting_stack, NESTING_CASE_CONDITION);
 
-	//Grab the error id out of here
-	u_int32_t error_handle_value = error_handle_node->optional_storage.error_type->internal_types.error_type_id;
-
 	//We always have a fresh block here
 	basic_block_t* handler_block = basic_block_alloc_and_estimate();
-
-	//Add this into the jump table
-	add_jump_table_entry(jump_table, error_handle_value, handler_block);
 
 	//Our overall result package
 	cfg_result_package_t results = {handler_block, handler_block, NULL, BLANK};
@@ -5673,7 +5667,7 @@ static cfg_result_package_t emit_error_handle_statement(generic_ast_node_t* erro
  * The overall result of the function call itself will be stored in the final result var
  *
  *
- * TODO HANDLE NULL
+ * TODO HANDLE VOID RETURN 
  */
 static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block, generic_ast_node_t* handle_node, three_addr_var_t* function_assignee, three_addr_var_t* error_assignee){
 	//Allocate the results
@@ -5727,7 +5721,16 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 
 	while(error_handle_cursor != NULL){
 		//Let the helper do all of the emitting
-		cfg_result_package_t handle_results = emit_error_handle_statement(error_handle_cursor, jump_calculation_block->jump_table);
+		cfg_result_package_t handle_results = emit_error_handle_statement(error_handle_cursor);
+
+		//Grab the error id out of here
+		u_int32_t error_handle_value = error_handle_cursor->optional_storage.error_type->internal_types.error_type_id;
+
+		//Add this into the jump table
+		add_jump_table_entry(jump_calculation_block->jump_table, error_handle_value, handle_results.starting_block);
+
+		//Add it in as a successor to the start block as well
+		add_successor(jump_calculation_block, handle_results.starting_block);
 
 		//Grab a pointer to the last instruction here
 		instruction_t* last_instruction = handle_results.final_block->exit_statement;
@@ -5787,6 +5790,8 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 	 * all into account
 	 */
 	instruction_t* comparison = emit_binary_operation_with_const_instruction(emit_temp_var(u64), error_assignee, G_THAN, upper_bound_constant);
+	//Add the comparsion
+	add_statement(starting_block, comparison);
 	//Get the branch out - this handles everything for us
 	emit_branch(starting_block, default_block, jump_calculation_block, BRANCH_A, comparison->assignee, BRANCH_CATEGORY_NORMAL, FALSE);
 
