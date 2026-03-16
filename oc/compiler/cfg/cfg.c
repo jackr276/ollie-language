@@ -5597,12 +5597,18 @@ static inline basic_block_t* emit_no_error_block_for_handle(symtab_variable_reco
  * to the overall function result. All of these options will result in a new block being
  * made and return from here
  */
-static cfg_result_package_t emit_error_handle_statement(generic_ast_node_t* error_handle_node){
+static cfg_result_package_t emit_error_handle_statement(generic_ast_node_t* error_handle_node, jump_table_t* jump_table){
 	//This is technically a case statement, so we will add the nesting as such
 	push_nesting_level(&nesting_stack, NESTING_CASE_CONDITION);
 
+	//Grab the error id out of here
+	u_int32_t error_handle_value = error_handle_node->optional_storage.error_type->internal_types.error_type_id;
+
 	//We always have a fresh block here
 	basic_block_t* handler_block = basic_block_alloc_and_estimate();
+
+	//Add this into the jump table
+	add_jump_table_entry(jump_table, error_handle_value, handler_block);
 
 	//Our overall result package
 	cfg_result_package_t results = {handler_block, handler_block, NULL, BLANK};
@@ -5684,6 +5690,8 @@ static cfg_result_package_t emit_handle_statement(generic_ast_node_t* handle_nod
 	basic_block_t* error_handling_starting_block = basic_block_alloc_and_estimate();
 	basic_block_t* jump_calculation_block = basic_block_alloc_and_estimate();
 	basic_block_t* error_handling_ending_block = basic_block_alloc_and_estimate();
+	//Holder for the default block
+	basic_block_t* default_block = NULL;
 
 	//The lower bound is always 0, and the upper bound is determined by the parser
 	u_int32_t lower_bound = handle_node->lower_bound;
@@ -5717,7 +5725,7 @@ static cfg_result_package_t emit_handle_statement(generic_ast_node_t* handle_nod
 
 	while(error_handle_cursor != NULL){
 		//Let the helper do all of the emitting
-		cfg_result_package_t handle_results = emit_error_handle_statement(error_handle_cursor);
+		cfg_result_package_t handle_results = emit_error_handle_statement(error_handle_cursor, jump_calculation_block->jump_table);
 
 		//Grab a pointer to the last instruction here
 		instruction_t* last_instruction = handle_results.final_block->exit_statement;
@@ -5746,25 +5754,46 @@ static cfg_result_package_t emit_handle_statement(generic_ast_node_t* handle_nod
 				break;
 		}
 
+		/**
+		 * Is this our default block? If so we need to hang onto it for later so that
+		 * we can go through and populate the jump table
+		 */
+		if(error_handle_cursor->optional_storage.error_type->internal_types.error_type_id == GENERIC_ERROR){
+			default_block = handle_results.starting_block;
+		}
+
 		//Advance the cursor up
 		error_handle_cursor = error_handle_cursor->next_sibling;
 	}
 
-
+	/**
+	 * Run through the jump table here - anything that isn't handled goes to the default
+	 * generic error clause
+	 */
+	for(u_int32_t i = 0; i < jump_calculation_block->jump_table->nodes.current_index; i++){
+		//If it's null, it's going to the default
+		if(dynamic_array_get_at(&(jump_calculation_block->jump_table->nodes), i) == NULL){
+			dynamic_array_set_at(&(jump_calculation_block->jump_table->nodes), default_block, i);
+		}
+	}
 
 	//Emit the upper bound constant - this like everything is a u64
 	three_addr_const_t* upper_bound_constant = emit_direct_integer_or_char_constant(upper_bound, u64);
 
 	/**
-	 * We will jump to the default error block if we are above this value
-	 *
-	 * TODO
+	 * We will jump to the default error block if we are above this value. The branch will take this
+	 * all into account
 	 */
 	instruction_t* comparison = emit_binary_operation_with_const_instruction(emit_temp_var(u64), error_assignee, G_THAN, upper_bound_constant);
+	//Get the branch out - this handles everything for us
+	emit_branch(error_handling_starting_block, default_block, jump_calculation_block, BRANCH_A, comparison->assignee, BRANCH_CATEGORY_NORMAL, FALSE);
 
-
-
-	//TODO EMIT DEFAULT(generic_error) AND regular no error(0) clauses
+	/**
+	 * Now we can do the indirect jump calculation and emit the indirect jump. Remember that we're already starting at 0, so we don't
+	 * need to do any subtraction here
+	 */
+	three_addr_var_t* address = emit_indirect_jump_address_calculation(jump_calculation_block, jump_calculation_block->jump_table, error_assignee);
+	emit_indirect_jump(jump_calculation_block, address);
 
 	//We can already fill in the result package
 	result_package.starting_block = error_handling_starting_block;
