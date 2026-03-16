@@ -1319,6 +1319,10 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 	generic_ast_node_t* parent_handle_clause = ast_node_alloc(AST_NODE_TYPE_HANDLE_STMT, SIDE_TYPE_RIGHT);
 	parent_handle_clause->line_number = parser_line_num;
 
+	//What is the upper bound of the error that we need to handle? We know that the lower
+	//bound is going to be 0, so we'll just need to find out what the highest error here is
+	u_int32_t upper_bound = 0;
+
 	//Loop until we're done seeing these all
 	do {
 		//We now need to see a valid error handling statement
@@ -1346,6 +1350,11 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 
 		//If we make it down here we are good, let's add it into the array of seen errors
 		dynamic_array_add(&errors_seen, error_handle_node->optional_storage.error_type);
+
+		//Keep track of the largest error type that we have
+		if(error_handle_node->optional_storage.error_type->internal_types.error_type_id > upper_bound){
+			upper_bound = error_handle_node->optional_storage.error_type->internal_types.error_type_id;
+		}
 
 		//This is a child of the overall node itself
 		add_child_node(parent_handle_clause, error_handle_node);
@@ -1430,6 +1439,14 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 			return print_and_return_error(info, parser_line_num);
 		}
 	}
+
+	/**
+	 * Now that we've gotten down here, we'll store our lower and upper bound for the eventual switch
+	 * statement that this is going to generate. The lower bound is always zero(NO_ERROR) and the
+	 * upper bound is whatever we found it to be
+	 */
+	parent_handle_clause->lower_bound = 0;
+	parent_handle_clause->upper_bound = upper_bound;
 
 	//We're done here, deallocate
 	dynamic_array_dealloc(&errors_seen);

@@ -5566,7 +5566,8 @@ static inline u_int32_t get_number_of_sse_params(function_type_t* signature){
 /**
  * A handle statement internally becomes a switch statement based on the returned error of the function(%rdx). We will switch
  * based on %rdx and handle things accordingly. Remember that this is only a thing that exists for functions that error, non-errorable
- * functions should never have handle statements
+ * functions should never have handle statements. The function itself is going to pass us its result in %rax, but that doesn't mean
+ * that the final result here needs to be from %rax
  *
  * call my_func() handle (divide_by_zero_error_t => -1, error => raise error)
  *
@@ -5577,7 +5578,7 @@ static inline u_int32_t get_number_of_sse_params(function_type_t* signature){
  * 		}
  *
  * 		case 2 -> {
- * 			%rax = -1
+ * 			final_assignee = -1
  * 		}
  *
  * 		//The catch-all error is always our default
@@ -5587,24 +5588,29 @@ static inline u_int32_t get_number_of_sse_params(function_type_t* signature){
  * 		}
  * }
  *
- * final_result_var = %rax
+ * final_result_var = final_assignee
  */
-static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block, generic_ast_node_t* handle_node, three_addr_var_t* final_assignee, three_addr_var_t* error_assignee){
+static cfg_result_package_t emit_handle_statement(generic_ast_node_t* handle_node, three_addr_var_t* function_assignee, three_addr_var_t* error_assignee){
 	//Allocate the results
-	cfg_result_package_t result_package = {starting_block, starting_block, NULL, BLANK};
+	cfg_result_package_t result_package;
 
-	//Our upper bound check block for the switch-like statement - the lower bound is handled
+	//First emit all of the control blocks that we'll need. When we tie this in we'll
+	//jump from the call block to the error handling block
+	basic_block_t* error_handling_starting_block = basic_block_alloc_and_estimate();
 	basic_block_t* upper_bound_check_block = basic_block_alloc_and_estimate();
-	//This is the block where the actual jump calculation happens
 	basic_block_t* jump_calculation_block = basic_block_alloc_and_estimate();
-	//We also need to know the ending block here
 	basic_block_t* ending_block = basic_block_alloc_and_estimate();
 
-	//We can already fill in the result package
-	result_package.starting_block = starting_block;
-	result_package.final_block = ending_block;
-	result_package.assignee = final_assignee;
+	//The regular no error block(we're going to have to emit this ourselves - it won't be in the handle)
+	basic_block_t* no_error_block;
+	//And the generic error(default clause) block
+	basic_block_t* default_error_block;
 
+	//TODO EMIT DEFAULT(generic_error) AND regular no error(0) clauses
+
+	//We can already fill in the result package
+	result_package.starting_block = error_handling_starting_block;
+	result_package.final_block = ending_block;
 
 
 		printf("TODO NOT IMPLEMENTED\n");
@@ -5903,7 +5909,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		error_assignee = assignment->assignee;
 
 		//Let the helper do the rest. It will spit back the results of the final assignment for us
-		cfg_result_package_t handle_results = emit_handle_statement(current_block, param_cursor, assignee, error_assignee);
+		cfg_result_package_t handle_results = emit_handle_statement(param_cursor, assignee, error_assignee);
 
 		//TODO
 		//
@@ -6159,7 +6165,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		error_assignee = assignment->assignee;
 
 		//Let the helper do the rest. It will spit back the results of the final assignment for us
-		cfg_result_package_t handle_results = emit_handle_statement(current_block, param_cursor, assignee, error_assignee);
+		cfg_result_package_t handle_results = emit_handle_statement(param_cursor, assignee, error_assignee);
 
 
 	//If there's no error handling then we just do a regular result assignment
