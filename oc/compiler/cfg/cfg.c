@@ -5568,8 +5568,11 @@ static inline u_int32_t get_number_of_sse_params(function_type_t* signature){
  * based on %rdx and handle things accordingly. Remember that this is only a thing that exists for functions that error, non-errorable
  * functions should never have handle statements
  */
-static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block, generic_ast_node_t* handle_node, symtab_function_record_t* called_function, three_addr_var_t* final_assignee){
+static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block, generic_ast_node_t* handle_node, three_addr_var_t* final_assignee, three_addr_var_t* error_assignee){
 	cfg_result_package_t result_package = {starting_block, starting_block, NULL, BLANK};
+
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(0);
 
 	//Give back the final result package
 	return result_package;
@@ -5841,24 +5844,10 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 
 	/**
 	 * If we get here and we have a handles statement, we will let our special rule
-	 * translate it into a switch statement
+	 * translate it into a switch statement. Our strategy here is to only emit
+	 * the final result assignment once we're inside of the handle statement itself
 	 */
 	if(param_cursor != NULL && param_cursor->ast_node_type == AST_NODE_TYPE_HANDLE_STMT){
-		//If this is not a void return type, we'll need to emit this temp assignment
-		if(signature->returns_void == FALSE){
-			/**
-			 * Emit an assignment instruction. This will become very important way down the line in register
-			 * allocation to avoid interference
-			 */
-			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
-
-			//Reassign this value
-			assignee = assignment->assignee;
-
-			//Add it in
-			add_statement(current_block, assignment);
-		}
-
 		/**
 		 * Since we have a handle statement, we have to have an error assignee. Let's also now emit that and
 		 * the result assignment that comes with it
@@ -5872,13 +5861,18 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(error_assignee->type), error_assignee);
 
 		//Add it into the block
-		add_statement(basic_block, assignment);
+		add_statement(current_block, assignment);
 
 		//This now is our error assignee that will be used in the CFG
 		error_assignee = assignment->assignee;
 
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(0);
+		//Let the helper do the rest. It will spit back the results of the final assignment for us
+		cfg_result_package_t handle_results = emit_handle_statement(current_block, param_cursor, assignee, error_assignee);
+
+		//TODO
+		//
+		//
+		//
 
 	//If there's no error handling then we just do a regular assignment
 	} else {
@@ -6106,11 +6100,31 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 	/**
 	 * If we get here and we have a handles statement, we will let our special rule
-	 * translate it into a switch statement
+	 * translate it into a switch statement. Our strategy is this - handle the error
+	 * and emit the final result assignment inside of the handle statement itself
 	 */
 	if(param_cursor != NULL && param_cursor->ast_node_type == AST_NODE_TYPE_HANDLE_STMT){
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(0);
+		/**
+		 * Since we have a handle statement, we have to have an error assignee. Let's also now emit that and
+		 * the result assignment that comes with it
+		 */
+		three_addr_var_t* error_assignee = emit_temp_var(u64);
+
+		//This is stored in the optional second assignee slot
+		func_call_stmt->optional_storage.error_assignee = error_assignee;
+
+		//Now we'll have a move statement just for register allocation reasons
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(error_assignee->type), error_assignee);
+
+		//Add it into the block
+		add_statement(basic_block, assignment);
+
+		//This now is our error assignee that will be used in the CFG
+		error_assignee = assignment->assignee;
+
+		//Let the helper do the rest. It will spit back the results of the final assignment for us
+		cfg_result_package_t handle_results = emit_handle_statement(current_block, param_cursor, assignee, error_assignee);
+
 
 	//If there's no error handling then we just do a regular result assignment
 	} else {
