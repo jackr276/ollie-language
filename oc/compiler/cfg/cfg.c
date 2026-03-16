@@ -124,6 +124,7 @@ static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, ge
 static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_condition);
 static cfg_result_package_t emit_string_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* string_initializer);
 static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* struct_initializer);
+static inline void handle_raise_statement(basic_block_t* basic_block, generic_ast_node_t* node);
 
 /**
  * Lea statements may only have: 1, 2, 4, or 8 as their scales
@@ -5596,24 +5597,40 @@ static inline basic_block_t* emit_no_error_block_for_handle(symtab_variable_reco
  * to the overall function result. All of these options will result in a new block being
  * made and return from here
  */
-static inline basic_block_t* emit_error_handle_instruction(generic_ast_node_t* error_handle_node){
+static cfg_result_package_t emit_error_handle_statement(generic_ast_node_t* error_handle_node){
 	//This is technically a case statement, so we will add the nesting as such
 	push_nesting_level(&nesting_stack, NESTING_CASE_CONDITION);
 
-	switch(error_handle_node->ast_node_type){
+	//We always have a fresh block here
+	basic_block_t* handler_block = basic_block_alloc_and_estimate();
+
+	//Our overall result package
+	cfg_result_package_t results = {handler_block, handler_block, NULL, BLANK};
+
+	/**
+	 * There are only 3 types that we could have - ret, raise or some expression. We will
+	 * handle each accordingly
+	 */
+	switch(error_handle_node->first_child->ast_node_type){
 		case AST_NODE_TYPE_RET_STMT:
+			results = emit_return(handler_block, error_handle_node);
 			break;
 
 		case AST_NODE_TYPE_RAISE_STMT:
+			//No results to capture here as this is very simple
+			handle_raise_statement(handler_block, error_handle_node);
 			break;
 
 		default:
+			results = emit_expression(handler_block, error_handle_node, FALSE);
 			break;
 	}
 
-
 	//Pop the nesting level out
 	pop_nesting_level(&nesting_stack);
+
+	//Give back the block in the end
+	return results;
 }
 
 
@@ -5679,14 +5696,17 @@ static cfg_result_package_t emit_handle_statement(generic_ast_node_t* handle_nod
 	jump_calculation_block->block_type = BLOCK_TYPE_SWITCH;
 	jump_calculation_block->jump_table = jump_table_alloc(upper_bound - lower_bound + 1);
 
-
 	/**
 	 * Let's first emit the no_error block as it is the only one that will not
-	 * be inside of the handle statement
+	 * be inside of the handle statement.
 	 */
 	basic_block_t* no_error_block = emit_no_error_block_for_handle(function_result_var, function_assignee);
 
+	//This one will always jump to the end block
+	emit_jump(no_error_block, error_handling_ending_block);
 
+	//Add it to the jump table. NO_ERROR is equal to 0 in %rdx
+	add_jump_table_entry(jump_calculation_block->jump_table, NO_ERROR, no_error_block);
 
 	/**
 	 * Run through every single error handle clause inside
@@ -5696,19 +5716,39 @@ static cfg_result_package_t emit_handle_statement(generic_ast_node_t* handle_nod
 	generic_ast_node_t* error_handle_cursor = handle_node->first_child;
 
 	while(error_handle_cursor != NULL){
+		//Let the helper do all of the emitting
+		cfg_result_package_t handle_results = emit_error_handle_statement(error_handle_cursor);
 
+		//Grab a pointer to the last instruction here
+		instruction_t* last_instruction = handle_results.final_block->exit_statement;
 
-		//TODO HANDLE IT
+		/**
+		 * If we have a ret or raise statement, we don't need to do any
+		 * bookkeeping. However, if we have something else, we'll
+		 * need to do 2 things:
+		 * 	1.) Emit a final assignment from the result to the function_result_var
+		 * 	2.) Emit a jump to the end block
+		 */
+		switch(last_instruction->statement_type){
+			case THREE_ADDR_CODE_RET_STMT:
+			case THREE_ADDR_CODE_RAISE_STMT:
+				break;
+
+			default:
+				//Jump from the final block to the end block
+				emit_jump(handle_results.final_block, error_handling_ending_block);
+
+				//Now we'll assign the result to the result_var
+				instruction_t* assignment_instruction = emit_assignment_instruction(emit_var(function_result_var), handle_results.assignee);
+
+				//Add this into the final block. It will go right before the exit
+				insert_instruction_before_given(assignment_instruction, handle_results.final_block->exit_statement);
+				break;
+		}
 
 		//Advance the cursor up
 		error_handle_cursor = error_handle_cursor->next_sibling;
 	}
-
-
-
-
-
-
 
 
 
