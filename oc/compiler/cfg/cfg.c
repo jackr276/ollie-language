@@ -5619,16 +5619,16 @@ static cfg_result_package_t emit_error_handle_statement(generic_ast_node_t* erro
 	 */
 	switch(error_handle_node->first_child->ast_node_type){
 		case AST_NODE_TYPE_RET_STMT:
-			results = emit_return(handler_block, error_handle_node);
+			results = emit_return(handler_block, error_handle_node->first_child);
 			break;
 
 		case AST_NODE_TYPE_RAISE_STMT:
 			//No results to capture here as this is very simple
-			handle_raise_statement(handler_block, error_handle_node);
+			handle_raise_statement(handler_block, error_handle_node->first_child);
 			break;
 
 		default:
-			results = emit_expression(handler_block, error_handle_node, FALSE);
+			results = emit_expression(handler_block, error_handle_node->first_child, FALSE);
 			break;
 	}
 
@@ -5671,8 +5671,11 @@ static cfg_result_package_t emit_error_handle_statement(generic_ast_node_t* erro
  * final_result_var = final_assignee
  *
  * The overall result of the function call itself will be stored in the final result var
+ *
+ *
+ * TODO HANDLE NULL
  */
-static cfg_result_package_t emit_handle_statement(generic_ast_node_t* handle_node, three_addr_var_t* function_assignee, three_addr_var_t* error_assignee){
+static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block, generic_ast_node_t* handle_node, three_addr_var_t* function_assignee, three_addr_var_t* error_assignee){
 	//Allocate the results
 	cfg_result_package_t result_package;
 
@@ -5687,7 +5690,6 @@ static cfg_result_package_t emit_handle_statement(generic_ast_node_t* handle_nod
 	 * Emit all of the control blocks that we'll need. When we tie this in we'll
 	 * jump from the call block to the error handling block
 	 */
-	basic_block_t* error_handling_starting_block = basic_block_alloc_and_estimate();
 	basic_block_t* jump_calculation_block = basic_block_alloc_and_estimate();
 	basic_block_t* error_handling_ending_block = basic_block_alloc_and_estimate();
 	//Holder for the default block
@@ -5786,7 +5788,7 @@ static cfg_result_package_t emit_handle_statement(generic_ast_node_t* handle_nod
 	 */
 	instruction_t* comparison = emit_binary_operation_with_const_instruction(emit_temp_var(u64), error_assignee, G_THAN, upper_bound_constant);
 	//Get the branch out - this handles everything for us
-	emit_branch(error_handling_starting_block, default_block, jump_calculation_block, BRANCH_A, comparison->assignee, BRANCH_CATEGORY_NORMAL, FALSE);
+	emit_branch(starting_block, default_block, jump_calculation_block, BRANCH_A, comparison->assignee, BRANCH_CATEGORY_NORMAL, FALSE);
 
 	/**
 	 * Now we can do the indirect jump calculation and emit the indirect jump. Remember that we're already starting at 0, so we don't
@@ -5795,13 +5797,18 @@ static cfg_result_package_t emit_handle_statement(generic_ast_node_t* handle_nod
 	three_addr_var_t* address = emit_indirect_jump_address_calculation(jump_calculation_block, jump_calculation_block->jump_table, error_assignee);
 	emit_indirect_jump(jump_calculation_block, address);
 
+	/**
+	 * The final thing that we need to do is emit one final assignment for the error result var
+	 * into some generic temporary holder. This is what we will give back to the
+	 * caller as the assignee
+	 */
+	instruction_t* final_result_assingnment = emit_assignment_instruction(emit_temp_var(function_result_var->type_defined_as), emit_var(function_result_var));
+	add_statement(error_handling_ending_block, final_result_assingnment);
+
 	//We can already fill in the result package
-	result_package.starting_block = error_handling_starting_block;
+	result_package.starting_block = starting_block;
 	result_package.final_block = error_handling_ending_block;
-
-
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(0);
+	result_package.assignee = final_result_assingnment->assignee;
 
 	//Give back the final result package
 	return result_package;
@@ -6071,6 +6078,9 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		stack_data_area_dealloc(&stack_passed_parameters);
 	}
 
+	//Destroy the function parameter results here
+	dynamic_array_dealloc(&function_parameter_results);
+
 	/**
 	 * If we get here and we have a handles statement, we will let our special rule
 	 * translate it into a switch statement. Our strategy here is to only emit
@@ -6096,12 +6106,10 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		error_assignee = assignment->assignee;
 
 		//Let the helper do the rest. It will spit back the results of the final assignment for us
-		cfg_result_package_t handle_results = emit_handle_statement(param_cursor, assignee, error_assignee);
+		cfg_result_package_t handle_results = emit_handle_statement(current_block, param_cursor, assignee, error_assignee);
 
-		//TODO
-		//
-		//
-		//
+		//Just give back these overall results
+		return handle_results;
 
 	//If there's no error handling then we just do a regular assignment
 	} else {
@@ -6117,17 +6125,14 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 			//Add it in
 			add_statement(current_block, assignment);
 		}
+
+		//This is always the assignee we gave above. Note that this is nullable,
+		//we do 
+		result_package.assignee = assignee;
+
+		//Give back what we assigned to
+		return result_package;
 	}
-
-	//This is always the assignee we gave above. Note that this is nullable,
-	//we do 
-	result_package.assignee = assignee;
-
-	//Destroy the function parameter results here
-	dynamic_array_dealloc(&function_parameter_results);
-
-	//Give back what we assigned to
-	return result_package;
 }
 
 
@@ -6327,6 +6332,9 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		add_statement(current_block, stack_deallocation);
 	}
 
+	//Destroy the dynamic array now that we're done
+	dynamic_array_dealloc(&function_parameter_results);
+
 	/**
 	 * If we get here and we have a handles statement, we will let our special rule
 	 * translate it into a switch statement. Our strategy is this - handle the error
@@ -6352,7 +6360,10 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		error_assignee = assignment->assignee;
 
 		//Let the helper do the rest. It will spit back the results of the final assignment for us
-		cfg_result_package_t handle_results = emit_handle_statement(param_cursor, assignee, error_assignee);
+		cfg_result_package_t handle_results = emit_handle_statement(current_block, param_cursor, assignee, error_assignee);
+		
+		//Just give back what we got
+		return handle_results;
 
 
 	//If there's no error handling then we just do a regular result assignment
@@ -6369,17 +6380,14 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			//Add it in
 			add_statement(current_block, assignment);
 		}
+
+		//This is always the assignee we gave above. It is important to note
+		//that this is nullable, not all functions return something
+		result_package.assignee = assignee;
+
+		//Give back what we assigned to
+		return result_package;
 	}
-
-	//This is always the assignee we gave above. It is important to note
-	//that this is nullable, not all functions return something
-	result_package.assignee = assignee;
-
-	//Destroy the dynamic array now that we're done
-	dynamic_array_dealloc(&function_parameter_results);
-
-	//Give back what we assigned to
-	return result_package;
 }
 
 
