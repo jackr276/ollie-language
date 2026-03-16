@@ -558,12 +558,13 @@ symtab_variable_record_t* create_temp_memory_address_variable(generic_type_t* ty
 
 
 /**
- * Create and return a ternary variable. A ternary variable is halfway
+ * Create and return a ternary variable(we also say
+ * these are SSA compatible temp vars to be generic). A ternary variable is halfway
  * between a temp and a full fledged non-temp variable. It will have a 
  * symtab record, and as such will be picked up by the phi function
  * inserted. It will also not be declared as temp
  */
-symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable_symtab_t* variable_symtab, u_int32_t temp_id){
+symtab_variable_record_t* create_ssa_compatible_temp_var(generic_type_t* type, variable_symtab_t* variable_symtab, u_int32_t temp_id){
 	//And here is the special part - we'll need to make a symtab record
 	//for this variable and add it in
 	char variable_name[100];

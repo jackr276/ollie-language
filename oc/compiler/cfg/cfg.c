@@ -4955,7 +4955,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	basic_block_t* current_block = starting_block;
 
 	//Create the ternary variable here
-	symtab_variable_record_t* ternary_variable = create_ternary_variable(ternary_operation->inferred_type, variable_symtab, increment_and_get_temp_id());
+	symtab_variable_record_t* ternary_variable = create_ssa_compatible_temp_var(ternary_operation->inferred_type, variable_symtab, increment_and_get_temp_id());
 
 	//Let's first create the final result variable here
 	three_addr_var_t* if_result = emit_var(ternary_variable);
@@ -5562,6 +5562,10 @@ static inline u_int32_t get_number_of_sse_params(function_type_t* signature){
 	return number_of_sse_params;
 }
 
+static inline basic_block_t* emit_no_error_block_for_handle(three_addr_var_t* function_assignee){
+
+}
+
 
 /**
  * A handle statement internally becomes a switch statement based on the returned error of the function(%rdx). We will switch
@@ -5602,9 +5606,29 @@ static cfg_result_package_t emit_handle_statement(generic_ast_node_t* handle_nod
 	basic_block_t* ending_block = basic_block_alloc_and_estimate();
 
 	//The regular no error block(we're going to have to emit this ourselves - it won't be in the handle)
-	basic_block_t* no_error_block;
-	//And the generic error(default clause) block
-	basic_block_t* default_error_block;
+	/**
+	 * Let's first emit the no_error block as it is the only one that will not
+	 * be inside of the handle statement
+	 */
+	basic_block_t* no_error_block = basic_block_alloc_and_estimate();
+
+
+	//TODO
+	//
+	//We are going to use the ternary variable for our final result here. Let's rewrite that API to be more generic so
+	//that is stays something like "SSA compatible internal variable" and we will use that for all of our results here. That
+	//is going to allow us to have 
+	//
+	//
+	//Added below an example for context
+	//Create the ternary variable here
+	//symtab_variable_record_t* ternary_variable = create_ssa_compatible_temp_var(ternary_operation->inferred_type, variable_symtab, increment_and_get_temp_id());
+
+	//Let's first create the final result variable here
+	//three_addr_var_t* if_result = emit_var(ternary_variable);
+	//three_addr_var_t* else_result = emit_var(ternary_variable);
+	//three_addr_var_t* final_result = emit_var(ternary_variable);
+
 
 	//TODO EMIT DEFAULT(generic_error) AND regular no error(0) clauses
 
