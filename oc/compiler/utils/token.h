@@ -144,6 +144,7 @@ typedef enum {
 	RAISE, //Error raising
 	RAISES, //For function definition
 	HANDLE, //Error handling
+	IGNORE, //For swallowing errors
 	TRUE_CONST,
 	FALSE_CONST,
 	INLINE,
