@@ -4329,7 +4329,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 				fprintf(fl, " */");
 
 			} else {
-				fprintf(fl, " /* --> void ");
+				fprintf(fl, " /* --> void");
 
 				//Print out the error destination
 				if(instruction->destination_register2 != NULL){
@@ -4362,7 +4362,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 				fprintf(fl, " */");
 
 			} else {
-				fprintf(fl, " /* --> void ");
+				fprintf(fl, " /* --> void");
 
 				//Print out the error destination
 				if(instruction->destination_register2 != NULL){
