@@ -5743,27 +5743,38 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 		instruction_t* last_instruction = handle_results.final_block->exit_statement;
 
 		/**
-		 * If we have a ret or raise statement, we don't need to do any
-		 * bookkeeping. However, if we have something else, we'll
-		 * need to do 2 things:
-		 * 	1.) Emit a final assignment from the result to the function_result_var
-		 * 	2.) Emit a jump to the end block
+		 * If we have a "raise" statement, then we may have a NULL last instruction. We'll
+		 * need to couch for this case here
 		 */
-		switch(last_instruction->statement_type){
-			case THREE_ADDR_CODE_RET_STMT:
-			case THREE_ADDR_CODE_RAISE_STMT:
-				break;
+		if(last_instruction != NULL){
+			/**
+			 * If we have a ret or raise statement, we don't need to do any
+			 * bookkeeping. However, if we have something else, we'll
+			 * need to do 2 things:
+			 * 	1.) Emit a final assignment from the result to the function_result_var
+			 * 	2.) Emit a jump to the end block
+			 */
+			switch(last_instruction->statement_type){
+				case THREE_ADDR_CODE_RET_STMT:
+				case THREE_ADDR_CODE_RAISE_STMT:
+					break;
 
-			default:
-				//Jump from the final block to the end block
-				emit_jump(handle_results.final_block, error_handling_ending_block);
+				default:
+					//Jump from the final block to the end block
+					emit_jump(handle_results.final_block, error_handling_ending_block);
 
-				//Now we'll assign the result to the result_var
-				instruction_t* assignment_instruction = emit_assignment_instruction(emit_var(function_result_var), handle_results.assignee);
+					//Now we'll assign the result to the result_var
+					instruction_t* assignment_instruction = emit_assignment_instruction(emit_var(function_result_var), handle_results.assignee);
 
-				//Add this into the final block. It will go right before the exit
-				insert_instruction_before_given(assignment_instruction, handle_results.final_block->exit_statement);
-				break;
+					//Add this into the final block. It will go right before the exit
+					insert_instruction_before_given(assignment_instruction, handle_results.final_block->exit_statement);
+					break;
+			}
+
+		//It's NULL, all we need to do is emit the jump
+		} else {
+			//Jump from the final block to the end block
+			emit_jump(handle_results.final_block, error_handling_ending_block);
 		}
 
 		/**
