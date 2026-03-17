@@ -1206,7 +1206,7 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
 	//What is the result from this? We will determine here
-	generic_ast_node_t* result_node;
+	generic_ast_node_t* result_node = NULL;
 
 	//Few options here
 	switch(lookahead.tok){
