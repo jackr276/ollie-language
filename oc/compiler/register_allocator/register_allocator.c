@@ -2169,7 +2169,7 @@ static void precolor_instruction(instruction_t* instruction){
 
 			//If we have a second destination register(Error register), it's always GP and it's always %RDX
 			if(instruction->destination_register2 != NULL){
-				instruction->destination_register->associated_live_range->reg.gen_purpose = RDX;
+				instruction->destination_register2->associated_live_range->reg.gen_purpose = RDX;
 			}
 
 			/**
