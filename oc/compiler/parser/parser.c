@@ -1232,6 +1232,14 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 
 			break;
 
+		/**
+		 * Ollie allows you to simply ignore the result of an error. This is how you effectively
+		 * swallow an error. It will get it's own special kind of error
+		 */
+		case IGNORE:
+			result_node = ast_node_alloc(AST_NODE_TYPE_IGNORE_STMT, SIDE_TYPE_RIGHT);
+			break;
+
 		default:
 			/**
 			 * If we have a void return type, it's not possible to assign anything
@@ -1239,7 +1247,7 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 			 * and this is invalid
 			 */
 			if(IS_VOID_TYPE(called_function_signature->return_type) == TRUE){	
-				sprintf(info, "Function signature \"%s\" has a return type of void, all errors must be handled using \"ret\" or \"raise\"", function_signature->type_name.string);
+				sprintf(info, "Function signature \"%s\" has a return type of void, all errors must be handled using \"ignore\", \"ret\" or \"raise\"", function_signature->type_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
 

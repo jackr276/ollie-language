@@ -5621,6 +5621,10 @@ static cfg_result_package_t emit_error_handle_statement(generic_ast_node_t* erro
 			handle_raise_statement(handler_block, error_handle_node->first_child);
 			break;
 
+		//Nothing to do here at all, we just consume it and keep going
+		case AST_NODE_TYPE_IGNORE_STMT:
+			break;
+
 		default:
 			results = emit_expression(handler_block, error_handle_node->first_child, FALSE);
 			break;
