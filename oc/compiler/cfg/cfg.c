@@ -5669,9 +5669,6 @@ static cfg_result_package_t emit_error_handle_statement(generic_ast_node_t* erro
  * final_result_var = final_assignee
  *
  * The overall result of the function call itself will be stored in the final result var
- *
- *
- * TODO HANDLE VOID RETURN 
  */
 static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block, generic_ast_node_t* handle_node, three_addr_var_t* function_assignee, three_addr_var_t* error_assignee){
 	//Allocate the results
@@ -5682,7 +5679,10 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 	 * need to assign to it over multiple blocks potentially. This is a temp var on the surface but
 	 * under the hood it is SSA compatible so phi-functions will be inserted as needed
 	 */
-	symtab_variable_record_t* function_result_var = create_ssa_compatible_temp_var(function_assignee->type, variable_symtab, increment_and_get_temp_id());
+	symtab_variable_record_t* function_result_var = NULL;
+	if(function_assignee != NULL){
+		function_result_var = create_ssa_compatible_temp_var(function_assignee->type, variable_symtab, increment_and_get_temp_id());
+	}
 
 	/**
 	 * Emit all of the control blocks that we'll need. When we tie this in we'll
@@ -5707,6 +5707,8 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 	/**
 	 * Let's first emit the no_error block as it is the only one that will not
 	 * be inside of the handle statement.
+	 *
+	 * TODO HERE
 	 */
 	basic_block_t* no_error_block = emit_no_error_block_for_handle(function_result_var, function_assignee);
 
@@ -5759,6 +5761,10 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 				case THREE_ADDR_CODE_RAISE_STMT:
 					break;
 
+				/**
+				 * Note that if the function result var is in fact NULL we will never hit this - the parser doesn't
+				 * allow anything besides ret, raise or ignore through for void returning functions
+				 */
 				default:
 					//Jump from the final block to the end block
 					emit_jump(handle_results.final_block, error_handling_ending_block);
@@ -5825,13 +5831,17 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 	 * into some generic temporary holder. This is what we will give back to the
 	 * caller as the assignee
 	 */
-	instruction_t* final_result_assingnment = emit_assignment_instruction(emit_temp_var(function_result_var->type_defined_as), emit_var(function_result_var));
-	add_statement(error_handling_ending_block, final_result_assingnment);
+	if(function_result_var != NULL){
+		instruction_t* final_result_assingnment = emit_assignment_instruction(emit_temp_var(function_result_var->type_defined_as), emit_var(function_result_var));
+		add_statement(error_handling_ending_block, final_result_assingnment);
+
+		//This is the final assignee for the result package
+		result_package.assignee = final_result_assingnment->assignee;
+	}
 
 	//We can already fill in the result package
 	result_package.starting_block = starting_block;
 	result_package.final_block = error_handling_ending_block;
-	result_package.assignee = final_result_assingnment->assignee;
 
 	//Give back the final result package
 	return result_package;
