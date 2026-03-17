@@ -5574,7 +5574,7 @@ static inline u_int32_t get_number_of_sse_params(function_type_t* signature){
  */
 static inline basic_block_t* emit_no_error_block_for_handle(symtab_variable_record_t* result_assignee, three_addr_var_t* function_assignee){
 	//This is technically a case statement, so we will add the nesting as such
-	push_nesting_level(&nesting_stack, NESTING_CASE_CONDITION);
+	push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
 
 	//Allocate and estimate the block
 	basic_block_t* no_error_block = basic_block_alloc_and_estimate();
@@ -5592,6 +5592,25 @@ static inline basic_block_t* emit_no_error_block_for_handle(symtab_variable_reco
 
 
 /**
+ * Emit a basic block for the case where we have a void returning function. If this
+ * is the case then the no_error block is simply going to be a basic block that
+ * does nothing but jump to the end. It will likely be optimized away by the optimizer
+ */
+static inline basic_block_t* emit_no_error_block_for_void_returning_handle(){
+	//This is a case statement
+	push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
+
+	//We just need to allocate it inside of this nesting level
+	basic_block_t* no_error_block = basic_block_alloc_and_estimate();
+
+	//Remove it
+	pop_nesting_level(&nesting_stack);
+
+	return no_error_block;
+}
+
+
+/**
  * Emit the handling for the error handle instruction itself. As a reminder, the only options
  * here are: return, raise another error, or do an expression that will eventually get assigned 
  * to the overall function result. All of these options will result in a new block being
@@ -5599,7 +5618,7 @@ static inline basic_block_t* emit_no_error_block_for_handle(symtab_variable_reco
  */
 static cfg_result_package_t emit_error_handle_statement(generic_ast_node_t* error_handle_node){
 	//This is technically a case statement, so we will add the nesting as such
-	push_nesting_level(&nesting_stack, NESTING_CASE_CONDITION);
+	push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
 
 	//We always have a fresh block here
 	basic_block_t* handler_block = basic_block_alloc_and_estimate();
@@ -5706,11 +5725,17 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 
 	/**
 	 * Let's first emit the no_error block as it is the only one that will not
-	 * be inside of the handle statement.
-	 *
-	 * TODO HERE
+	 * be inside of the handle statement. There are two separate functions
+	 * to call here based on whether or not we have a void returning call
+	 * or not
 	 */
-	basic_block_t* no_error_block = emit_no_error_block_for_handle(function_result_var, function_assignee);
+	basic_block_t* no_error_block;
+
+	if(function_assignee != NULL){
+		no_error_block = emit_no_error_block_for_handle(function_result_var, function_assignee);
+	} else {
+		no_error_block = emit_no_error_block_for_void_returning_handle();
+	}
 
 	//This one will always jump to the end block
 	emit_jump(no_error_block, error_handling_ending_block);
