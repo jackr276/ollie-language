@@ -4319,9 +4319,25 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			if(instruction->destination_register != NULL){
 				fprintf(fl, " /* --> ");
 				print_variable(fl, instruction->destination_register, mode);
+				
+				//Print out the error destination
+				if(instruction->destination_register2 != NULL){
+					fprintf(fl, ", ");
+					print_variable(fl, instruction->destination_register2, mode);
+				}
+
 				fprintf(fl, " */");
+
 			} else {
-				fprintf(fl, " /* --> void */");
+				fprintf(fl, " /* --> void ");
+
+				//Print out the error destination
+				if(instruction->destination_register2 != NULL){
+					fprintf(fl, ", ");
+					print_variable(fl, instruction->destination_register2, mode);
+				}
+
+				fprintf(fl, " */");
 			}
 
 			//Final newline
@@ -4332,12 +4348,29 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "call *");
 			print_variable(fl, instruction->source_register, mode);
 
+			//This could be NULL
 			if(instruction->destination_register != NULL){
 				fprintf(fl, " /* --> ");
 				print_variable(fl, instruction->destination_register, mode);
+				
+				//Print out the error destination
+				if(instruction->destination_register2 != NULL){
+					fprintf(fl, ", ");
+					print_variable(fl, instruction->destination_register2, mode);
+				}
+
 				fprintf(fl, " */");
+
 			} else {
-				fprintf(fl, " /* --> void */");
+				fprintf(fl, " /* --> void ");
+
+				//Print out the error destination
+				if(instruction->destination_register2 != NULL){
+					fprintf(fl, ", ");
+					print_variable(fl, instruction->destination_register2, mode);
+				}
+
+				fprintf(fl, " */");
 			}
 
 			//Final newline
