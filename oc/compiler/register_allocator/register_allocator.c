@@ -3654,6 +3654,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	//Grab out this LR for reference later on. Remember that this is nullable, so we 
 	//need to account for that
 	live_range_t* destination_lr = NULL;
+	live_range_t* error_lr = NULL;
 
 	//What type of LR is the destination register
 	live_range_class_t destination_lr_class;
@@ -3666,6 +3667,13 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 		//Cache the class as well
 		destination_lr_class = destination_lr->live_range_class;
 	}
+
+	//Assign the error LR if it's also non-null
+	if(function_call->destination_register2 != NULL){
+		//Extract this for later. We don't need to worry about the class - it's always gen purpose
+		error_lr = function_call->destination_register2->associated_live_range;
+	}
+
 
 	/**
 	 * Keep track of what is immediately before and after
@@ -3711,8 +3719,9 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 
 	//Use the helper to calculate LIVE_AFTER up to but not including the actual function call
 	dynamic_array_t live_after = calculate_live_after_for_block(function_call->block_contained_in, function_call);
-	//We can remove the destination LR from here, there's no point in keeping it in
+	//We can remove the destination/error LRs from here, there's no point in keeping it in
 	dynamic_array_delete(&live_after, destination_lr);
+	dynamic_array_delete(&live_after, error_lr);
 
 	/**
 	 * Run through everything that is alive after this function runs(live_after)
@@ -3742,6 +3751,14 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 				if(destination_lr != NULL && destination_lr_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
 					//Skip it
 					if(general_purpose_reg == destination_lr->reg.gen_purpose){
+						continue;
+					}
+				}
+
+				//There's also no point in saving the error LR if real. This could happen if we have precoloring
+				if(error_lr != NULL){
+					//Skip it
+					if(general_purpose_reg == error_lr->reg.gen_purpose){
 						continue;
 					}
 				}
@@ -3912,6 +3929,8 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 
 	//Extract the actual function type
 	generic_type_t* function_type = function_call->source_register->type;
+
+	//TODO ERROR LR
 
 	//Extract if not null
 	if(function_call->destination_register != NULL){
