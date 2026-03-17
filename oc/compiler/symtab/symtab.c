@@ -112,9 +112,8 @@ type_symtab_t* type_symtab_alloc(){
 	//Nothing has been initialized yet
 	symtab->current = NULL;
 
-	//The initial error id starts at 2. This is because 0 is reserved for NO_ERRORS,
-	//and 1 is reserved for generic_error
-	symtab->error_id = 2;
+	//The initial error id starts at 1. This is because 0 is reserved for NO_ERRORS,
+	symtab->error_id = 1;
 
 	return symtab;
 }
@@ -559,12 +558,13 @@ symtab_variable_record_t* create_temp_memory_address_variable(generic_type_t* ty
 
 
 /**
- * Create and return a ternary variable. A ternary variable is halfway
+ * Create and return a ternary variable(we also say
+ * these are SSA compatible temp vars to be generic). A ternary variable is halfway
  * between a temp and a full fledged non-temp variable. It will have a 
  * symtab record, and as such will be picked up by the phi function
  * inserted. It will also not be declared as temp
  */
-symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable_symtab_t* variable_symtab, u_int32_t temp_id){
+symtab_variable_record_t* create_ssa_compatible_temp_var(generic_type_t* type, variable_symtab_t* variable_symtab, u_int32_t temp_id){
 	//And here is the special part - we'll need to make a symtab record
 	//for this variable and add it in
 	char variable_name[100];
@@ -1087,9 +1087,20 @@ u_int16_t add_all_basic_types(type_symtab_t* symtab){
 	num_collisions += insert_type(symtab,  create_type_record(type));
 
 	// ================================ Mutable versions of our primitive types ==============================
-	
-	// This is for observability in the test suites - if we have 
-	// more than 1 or 2 collisions here, then we have a serious problem
+
+	/**
+	 * For any/all generic error handling, we need the ability to have a generic error type. In practice
+	 * this is represented by the "error" lexitem, but we need a type anyway. As such we'll have a purely internal
+	 * type here that has that name. Since the error id starts counting at one and this is the first thing that will
+	 * hit it, we will be good here
+	 */
+	type = create_error_type("error", 0);
+	num_collisions += insert_type(symtab, create_type_record(type));
+
+	/**
+	 * This is for observability in the test suites - if we have 
+	 * more than 1 or 2 collisions here, then we have a serious problem
+	 */
 	return num_collisions;
 }
 
@@ -1604,6 +1615,61 @@ void print_type_record(symtab_type_record_t* record){
 	}
 
 	printf("}\n");
+}
+
+
+/**
+ * Print a function name into a string buffer
+ */
+void print_function_name_to_buffer(char* buffer, symtab_function_record_t* record){
+	//We'll first print to an internal one
+	char internal_buffer[ERROR_SIZE];
+	char temp_buffer[ERROR_SIZE / 5];
+
+	if(record->signature->internal_types.function_type->is_public == TRUE){
+		sprintf(internal_buffer, "\t---> %d | pub fn%s %s(", record->line_number, record->signature->internal_types.function_type->raises_errors == TRUE ? "!" : "", record->func_name.string);
+	} else {
+		sprintf(internal_buffer, "\t---> %d | fn%s %s(", record->line_number, record->signature->internal_types.function_type->raises_errors == TRUE ? "!" : "", record->func_name.string);
+	}
+
+	//Extract the number of params
+	u_int32_t num_params = record->function_parameters.current_index;
+
+	//Print out the params
+	for(u_int32_t i = 0; i < num_params; i++){
+		symtab_variable_record_t* current_parameter = dynamic_array_get_at(&(record->function_parameters), i);
+
+		//Print if it's mutable
+		if(current_parameter->type_defined_as->mutability == MUTABLE){
+			strcat(internal_buffer, "mut ");
+		}
+
+		//Get this into a temp buffer and then write it out
+		sprintf(temp_buffer, "%s : %s", current_parameter->var_name.string, current_parameter->type_defined_as->type_name.string);
+		strcat(internal_buffer, temp_buffer);
+
+		//Comma if needed
+		if(i < num_params - 1){
+			strcat(internal_buffer, ", ");
+		}
+	}
+
+	//Final closing paren and return type
+	if(record->return_type != NULL){
+		sprintf(internal_buffer, ") -> %s", record->return_type->type_name.string);
+	} else {
+		strcat(internal_buffer, ") -> (null)");
+	}
+
+	//If it was defined implicitly, we'll print a semicol
+	if(record->defined == 0){
+		strcat(internal_buffer, ";\n");
+	} else {
+		strcat(internal_buffer, "{...\n");
+	}
+
+	//Now concatenate into the parameter buffer
+	strncat(buffer, internal_buffer, ERROR_SIZE);
 }
 
 

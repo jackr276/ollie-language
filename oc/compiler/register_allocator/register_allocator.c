@@ -2169,7 +2169,7 @@ static void precolor_instruction(instruction_t* instruction){
 
 			//If we have a second destination register(Error register), it's always GP and it's always %RDX
 			if(instruction->destination_register2 != NULL){
-				instruction->destination_register->associated_live_range->reg.gen_purpose = RDX;
+				instruction->destination_register2->associated_live_range->reg.gen_purpose = RDX;
 			}
 
 			/**
@@ -3642,8 +3642,6 @@ static u_int8_t graph_color_and_allocate_sse(basic_block_t* function_entry, dyna
  *
  * NOTE: All SSE(xmm) registers are caller saved. The callee is free to clobber these however it
  * sees fit. As such, the burden for saving all of these falls onto the caller here
- *
- * TODO we need to account for the error register %RDX
  */
 static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_record_t* caller, instruction_t* function_call){
 	//If we get here we know that we have a call instruction. Let's
@@ -3654,6 +3652,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	//Grab out this LR for reference later on. Remember that this is nullable, so we 
 	//need to account for that
 	live_range_t* destination_lr = NULL;
+	live_range_t* error_lr = NULL;
 
 	//What type of LR is the destination register
 	live_range_class_t destination_lr_class;
@@ -3666,6 +3665,13 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 		//Cache the class as well
 		destination_lr_class = destination_lr->live_range_class;
 	}
+
+	//Assign the error LR if it's also non-null
+	if(function_call->destination_register2 != NULL){
+		//Extract this for later. We don't need to worry about the class - it's always gen purpose
+		error_lr = function_call->destination_register2->associated_live_range;
+	}
+
 
 	/**
 	 * Keep track of what is immediately before and after
@@ -3711,8 +3717,9 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 
 	//Use the helper to calculate LIVE_AFTER up to but not including the actual function call
 	dynamic_array_t live_after = calculate_live_after_for_block(function_call->block_contained_in, function_call);
-	//We can remove the destination LR from here, there's no point in keeping it in
+	//We can remove the destination/error LRs from here, there's no point in keeping it in
 	dynamic_array_delete(&live_after, destination_lr);
+	dynamic_array_delete(&live_after, error_lr);
 
 	/**
 	 * Run through everything that is alive after this function runs(live_after)
@@ -3742,6 +3749,14 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 				if(destination_lr != NULL && destination_lr_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
 					//Skip it
 					if(general_purpose_reg == destination_lr->reg.gen_purpose){
+						continue;
+					}
+				}
+
+				//There's also no point in saving the error LR if real. This could happen if we have precoloring
+				if(error_lr != NULL){
+					//Skip it
+					if(general_purpose_reg == error_lr->reg.gen_purpose){
 						continue;
 					}
 				}
@@ -3900,12 +3915,11 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
  *
  * NOTE: All SSE(xmm) registers are caller saved. The callee is free to clobber these however it
  * sees fit. As such, the burden for saving all of these falls onto the caller here
- *
- * TODO we need to account for error registers
  */
 static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_function_record_t* caller, instruction_t* function_call){
-	//Get the destination LR. Remember that this is nullable
+	//Get the destination/error LRs. Remember that these are nullable
 	live_range_t* destination_lr = NULL;
+	live_range_t* error_lr = NULL;
 
 	//Also cache what the class of the destination LR is
 	live_range_class_t destination_lr_class;
@@ -3919,6 +3933,12 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 
 		//What is the class
 		destination_lr_class = destination_lr->live_range_class;
+	}
+
+	//Extract the error LR if we have it as well
+	if(function_call->destination_register2 != NULL){
+		//Extract here. This is always general purpose(%rdx)
+		error_lr = function_call->destination_register2->associated_live_range;
 	}
 
 	/**
@@ -3960,8 +3980,9 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 
 	//Grab the live_after array for up to but not including the actual call
 	dynamic_array_t live_after = calculate_live_after_for_block(function_call->block_contained_in, function_call);
-	//Delete the destination LR from here as it will be assigned by the instruction anyway
+	//Delete the destination/errors LRs from here as it will be assigned by the instruction anyway
 	dynamic_array_delete(&live_after, destination_lr);
+	dynamic_array_delete(&live_after, error_lr);
 
 	/**
 	 * Now we will run through every live range in live_after and check if it is caller-saved or not
@@ -3983,6 +4004,13 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 				//does, we'll bail
 				if(destination_lr != NULL && destination_lr_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
 					if(destination_lr->reg.gen_purpose == lr->reg.gen_purpose){
+						continue;
+					}
+				}
+
+				//Skip over the error LR here as well
+				if(error_lr != NULL){
+					if(error_lr->reg.gen_purpose == lr->reg.gen_purpose){
 						continue;
 					}
 				}

@@ -124,6 +124,7 @@ static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, ge
 static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_condition);
 static cfg_result_package_t emit_string_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* string_initializer);
 static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* struct_initializer);
+static inline void handle_raise_statement(basic_block_t* basic_block, generic_ast_node_t* node);
 
 /**
  * Lea statements may only have: 1, 2, 4, or 8 as their scales
@@ -2948,6 +2949,9 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 	//Once it's been emitted, we'll add it in as a statement
 	add_statement(current, ret_stmt);
 
+	//This is always a predecessor of the function exit statement
+	add_successor(current, function_exit_block);
+
 	//Give back the results
 	return return_package;
 }
@@ -4955,7 +4959,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	basic_block_t* current_block = starting_block;
 
 	//Create the ternary variable here
-	symtab_variable_record_t* ternary_variable = create_ternary_variable(ternary_operation->inferred_type, variable_symtab, increment_and_get_temp_id());
+	symtab_variable_record_t* ternary_variable = create_ssa_compatible_temp_var(ternary_operation->inferred_type, variable_symtab, increment_and_get_temp_id());
 
 	//Let's first create the final result variable here
 	three_addr_var_t* if_result = emit_var(ternary_variable);
@@ -5564,6 +5568,315 @@ static inline u_int32_t get_number_of_sse_params(function_type_t* signature){
 
 
 /**
+ * Emit the no_error case for our handle statement. The no error case simply assigns the
+ * value of what's in %rax to the overall function return value which is passed in here
+ * as the function assignee
+ *
+ * The only thing that will be in this block is an assignment from the function's result(in %rax)
+ * to the pseudo-non-temp-var that we are using for the assignee
+ */
+static inline basic_block_t* emit_no_error_block_for_handle(symtab_variable_record_t* result_assignee, three_addr_var_t* function_assignee){
+	//This is technically a case statement, so we will add the nesting as such
+	push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
+
+	//Allocate and estimate the block
+	basic_block_t* no_error_block = basic_block_alloc_and_estimate();
+
+	//Emit the assignment
+	instruction_t* final_assignment = emit_assignment_instruction(emit_var(result_assignee), function_assignee);
+	add_statement(no_error_block, final_assignment);
+
+	//Pop the nesting level out
+	pop_nesting_level(&nesting_stack);
+
+	//And give the block back
+	return no_error_block;
+}
+
+
+/**
+ * Emit a basic block for the case where we have a void returning function. If this
+ * is the case then the no_error block is simply going to be a basic block that
+ * does nothing but jump to the end. It will likely be optimized away by the optimizer
+ */
+static inline basic_block_t* emit_no_error_block_for_void_returning_handle(){
+	//This is a case statement
+	push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
+
+	//We just need to allocate it inside of this nesting level
+	basic_block_t* no_error_block = basic_block_alloc_and_estimate();
+
+	//Remove it
+	pop_nesting_level(&nesting_stack);
+
+	return no_error_block;
+}
+
+
+/**
+ * Emit the handling for the error handle instruction itself. As a reminder, the only options
+ * here are: return, raise another error, or do an expression that will eventually get assigned 
+ * to the overall function result. All of these options will result in a new block being
+ * made and return from here
+ */
+static cfg_result_package_t emit_error_handle_statement(generic_ast_node_t* error_handle_node){
+	//This is technically a case statement, so we will add the nesting as such
+	push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
+
+	//We always have a fresh block here
+	basic_block_t* handler_block = basic_block_alloc_and_estimate();
+
+	//Our overall result package
+	cfg_result_package_t results = {handler_block, handler_block, NULL, BLANK};
+
+	/**
+	 * There are only 3 types that we could have - ret, raise or some expression. We will
+	 * handle each accordingly
+	 */
+	switch(error_handle_node->first_child->ast_node_type){
+		case AST_NODE_TYPE_RET_STMT:
+			results = emit_return(handler_block, error_handle_node->first_child);
+			break;
+
+		case AST_NODE_TYPE_RAISE_STMT:
+			//No results to capture here as this is very simple
+			handle_raise_statement(handler_block, error_handle_node->first_child);
+			break;
+
+		//Nothing to do here at all, we just consume it and keep going
+		case AST_NODE_TYPE_IGNORE_STMT:
+			break;
+
+		default:
+			results = emit_expression(handler_block, error_handle_node->first_child, FALSE);
+			break;
+	}
+
+	//Pop the nesting level out
+	pop_nesting_level(&nesting_stack);
+
+	//Give back the block in the end
+	return results;
+}
+
+
+/**
+ * A handle statement internally becomes a switch statement based on the returned error of the function(%rdx). We will switch
+ * based on %rdx and handle things accordingly. Remember that this is only a thing that exists for functions that error, non-errorable
+ * functions should never have handle statements. The function itself is going to pass us its result in %rax, but that doesn't mean
+ * that the final result here needs to be from %rax
+ *
+ * Let's also remember that every value here is unsigned. There is no such thing as a "negative" error value. Since the lowest value is
+ * always 0, we only need to bother checking the upper bound here
+ *
+ * call my_func() handle (divide_by_zero_error_t => -1, error => raise error)
+ *
+ * Should translate to something like
+ * switch(%rdx){
+ * 		case 0 -> {
+ * 			final_assignee = %rax
+ * 		}
+ *
+ * 		case 2 -> {
+ * 			final_assignee = -1
+ * 		}
+ *
+ * 		//The catch-all error is always our default
+ * 		default -> {
+ * 			%rdx = 1
+ * 			ret
+ * 		}
+ * }
+ *
+ * final_result_var = final_assignee
+ *
+ * The overall result of the function call itself will be stored in the final result var
+ */
+static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block, generic_ast_node_t* handle_node, three_addr_var_t* function_assignee, three_addr_var_t* error_assignee){
+	//Allocate the results
+	cfg_result_package_t result_package;
+
+	/**
+	 * We are going to use a pseudo temp var for our final result here. We will do this because we'll
+	 * need to assign to it over multiple blocks potentially. This is a temp var on the surface but
+	 * under the hood it is SSA compatible so phi-functions will be inserted as needed
+	 */
+	symtab_variable_record_t* function_result_var = NULL;
+	if(function_assignee != NULL){
+		function_result_var = create_ssa_compatible_temp_var(function_assignee->type, variable_symtab, increment_and_get_temp_id());
+	}
+
+	/**
+	 * Emit all of the control blocks that we'll need. When we tie this in we'll
+	 * jump from the call block to the error handling block
+	 */
+	basic_block_t* jump_calculation_block = basic_block_alloc_and_estimate();
+	basic_block_t* error_handling_ending_block = basic_block_alloc_and_estimate();
+	//Holder for the default block
+	basic_block_t* default_block = NULL;
+
+	//The lower bound is always 0, and the upper bound is determined by the parser
+	u_int32_t lower_bound = handle_node->lower_bound;
+	u_int32_t upper_bound = handle_node->upper_bound;
+
+	/**
+	 * Let's mark this block as a switch block and at the same time create our jump table. We'll
+	 * need this to be allocated before we start entering in destination blocks
+	 */
+	jump_calculation_block->block_type = BLOCK_TYPE_SWITCH;
+	jump_calculation_block->jump_table = jump_table_alloc(upper_bound - lower_bound + 1);
+
+	/**
+	 * Let's first emit the no_error block as it is the only one that will not
+	 * be inside of the handle statement. There are two separate functions
+	 * to call here based on whether or not we have a void returning call
+	 * or not
+	 */
+	basic_block_t* no_error_block;
+
+	if(function_assignee != NULL){
+		no_error_block = emit_no_error_block_for_handle(function_result_var, function_assignee);
+	} else {
+		no_error_block = emit_no_error_block_for_void_returning_handle();
+	}
+
+	//This one will always jump to the end block
+	emit_jump(no_error_block, error_handling_ending_block);
+
+	//Add it to the jump table. NO_ERROR is equal to 0 in %rdx
+	add_jump_table_entry(jump_calculation_block->jump_table, NO_ERROR, no_error_block);
+
+	//This is also a successor of the jump calculation block
+	add_successor(jump_calculation_block, no_error_block);
+
+	/**
+	 * Run through every single error handle clause inside
+	 * of the param cursor itself. Each one will receive
+	 * its own block
+	 */
+	generic_ast_node_t* error_handle_cursor = handle_node->first_child;
+
+	while(error_handle_cursor != NULL){
+		//Let the helper do all of the emitting
+		cfg_result_package_t handle_results = emit_error_handle_statement(error_handle_cursor);
+
+		//Grab the error id out of here
+		u_int32_t error_handle_value = error_handle_cursor->optional_storage.error_type->internal_types.error_type_id;
+
+		//Add this into the jump table
+		add_jump_table_entry(jump_calculation_block->jump_table, error_handle_value, handle_results.starting_block);
+
+		//Add it in as a successor to the start block as well
+		add_successor(jump_calculation_block, handle_results.starting_block);
+
+		//Grab a pointer to the last instruction here
+		instruction_t* last_instruction = handle_results.final_block->exit_statement;
+
+		/**
+		 * If we have a "raise" statement, then we may have a NULL last instruction. We'll
+		 * need to couch for this case here
+		 */
+		if(last_instruction != NULL){
+			/**
+			 * If we have a ret or raise statement, we don't need to do any
+			 * bookkeeping. However, if we have something else, we'll
+			 * need to do 2 things:
+			 * 	1.) Emit a final assignment from the result to the function_result_var
+			 * 	2.) Emit a jump to the end block
+			 */
+			switch(last_instruction->statement_type){
+				case THREE_ADDR_CODE_RET_STMT:
+				case THREE_ADDR_CODE_RAISE_STMT:
+					break;
+
+				/**
+				 * Note that if the function result var is in fact NULL we will never hit this - the parser doesn't
+				 * allow anything besides ret, raise or ignore through for void returning functions
+				 */
+				default:
+					//Jump from the final block to the end block
+					emit_jump(handle_results.final_block, error_handling_ending_block);
+
+					//Now we'll assign the result to the result_var
+					instruction_t* assignment_instruction = emit_assignment_instruction(emit_var(function_result_var), handle_results.assignee);
+
+					//Add this into the final block. It will go right before the exit
+					insert_instruction_before_given(assignment_instruction, handle_results.final_block->exit_statement);
+					break;
+			}
+
+		//It's NULL, all we need to do is emit the jump
+		} else {
+			//Jump from the final block to the end block
+			emit_jump(handle_results.final_block, error_handling_ending_block);
+		}
+
+		/**
+		 * Is this our default block? If so we need to hang onto it for later so that
+		 * we can go through and populate the jump table
+		 */
+		if(error_handle_cursor->optional_storage.error_type->internal_types.error_type_id == GENERIC_ERROR){
+			default_block = handle_results.starting_block;
+		}
+
+		//Advance the cursor up
+		error_handle_cursor = error_handle_cursor->next_sibling;
+	}
+
+	/**
+	 * Run through the jump table here - anything that isn't handled goes to the default
+	 * generic error clause
+	 */
+	for(u_int32_t i = 0; i < jump_calculation_block->jump_table->nodes.current_index; i++){
+		//If it's null, it's going to the default
+		if(dynamic_array_get_at(&(jump_calculation_block->jump_table->nodes), i) == NULL){
+			dynamic_array_set_at(&(jump_calculation_block->jump_table->nodes), default_block, i);
+		}
+	}
+
+	//Emit the upper bound constant - this like everything is a u64
+	three_addr_const_t* upper_bound_constant = emit_direct_integer_or_char_constant(upper_bound, u64);
+
+	/**
+	 * We will jump to the default error block if we are above this value. The branch will take this
+	 * all into account
+	 */
+	instruction_t* comparison = emit_binary_operation_with_const_instruction(emit_temp_var(u64), error_assignee, G_THAN, upper_bound_constant);
+	//Add the comparsion
+	add_statement(starting_block, comparison);
+	//Get the branch out - this handles everything for us
+	emit_branch(starting_block, default_block, jump_calculation_block, BRANCH_A, comparison->assignee, BRANCH_CATEGORY_NORMAL, FALSE);
+
+	/**
+	 * Now we can do the indirect jump calculation and emit the indirect jump. Remember that we're already starting at 0, so we don't
+	 * need to do any subtraction here
+	 */
+	three_addr_var_t* address = emit_indirect_jump_address_calculation(jump_calculation_block, jump_calculation_block->jump_table, error_assignee);
+	emit_indirect_jump(jump_calculation_block, address);
+
+	/**
+	 * The final thing that we need to do is emit one final assignment for the error result var
+	 * into some generic temporary holder. This is what we will give back to the
+	 * caller as the assignee
+	 */
+	if(function_result_var != NULL){
+		instruction_t* final_result_assingnment = emit_assignment_instruction(emit_temp_var(function_result_var->type_defined_as), emit_var(function_result_var));
+		add_statement(error_handling_ending_block, final_result_assingnment);
+
+		//This is the final assignee for the result package
+		result_package.assignee = final_result_assingnment->assignee;
+	}
+
+	//We can already fill in the result package
+	result_package.starting_block = starting_block;
+	result_package.final_block = error_handling_ending_block;
+
+	//Give back the final result package
+	return result_package;
+}
+
+
+/**
  * Emit an indirect function call like such
  *
  * call *<function_name>
@@ -5629,7 +5942,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	dynamic_array_t function_parameter_results = dynamic_array_alloc();
 
 	//So long as this isn't NULL
-	while(param_cursor != NULL){
+	while(param_cursor != NULL && param_cursor->ast_node_type != AST_NODE_TYPE_HANDLE_STMT){
 		//Emit whatever we have here into the basic block
 		cfg_result_package_t package = emit_expression(current_block, param_cursor, FALSE);
 
@@ -5826,28 +6139,61 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		stack_data_area_dealloc(&stack_passed_parameters);
 	}
 
-	//If this is not a void return type, we'll need to emit this temp assignment
-	if(signature->returns_void == FALSE){
-		//Emit an assignment instruction. This will become very important way down the line in register
-		//allocation to avoid interference
-		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
-
-		//Reassign this value
-		assignee = assignment->assignee;
-
-		//Add it in
-		add_statement(current_block, assignment);
-	}
-
-	//This is always the assignee we gave above. Note that this is nullable,
-	//we do 
-	result_package.assignee = assignee;
-
 	//Destroy the function parameter results here
 	dynamic_array_dealloc(&function_parameter_results);
 
-	//Give back what we assigned to
-	return result_package;
+	/**
+	 * If we get here and we have a handles statement, we will let our special rule
+	 * translate it into a switch statement. Our strategy here is to only emit
+	 * the final result assignment once we're inside of the handle statement itself
+	 */
+	if(param_cursor != NULL && param_cursor->ast_node_type == AST_NODE_TYPE_HANDLE_STMT){
+		/**
+		 * Since we have a handle statement, we have to have an error assignee. Let's also now emit that and
+		 * the result assignment that comes with it
+		 */
+		three_addr_var_t* error_assignee = emit_temp_var(u64);
+
+		//This is stored in the optional second assignee slot
+		func_call_stmt->optional_storage.error_assignee = error_assignee;
+
+		//Now we'll have a move statement just for register allocation reasons
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(error_assignee->type), error_assignee);
+
+		//Add it into the block
+		add_statement(current_block, assignment);
+
+		//This now is our error assignee that will be used in the CFG
+		error_assignee = assignment->assignee;
+
+		//Let the helper do the rest. It will spit back the results of the final assignment for us
+		cfg_result_package_t handle_results = emit_handle_statement(current_block, param_cursor, assignee, error_assignee);
+
+		//Just give back these overall results
+		return handle_results;
+
+	//If there's no error handling then we just do a regular assignment
+	} else {
+		//If this is not a void return type, we'll need to emit this temp assignment
+		if(signature->returns_void == FALSE){
+			//Emit an assignment instruction. This will become very important way down the line in register
+			//allocation to avoid interference
+			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+
+			//Reassign this value
+			assignee = assignment->assignee;
+
+			//Add it in
+			add_statement(current_block, assignment);
+		}
+
+		//This is always the assignee we gave above. Note that this is nullable,
+		//we do 
+		result_package.assignee = assignee;
+
+		//Give back what we assigned to
+		return result_package;
+	}
 }
 
 
@@ -5920,7 +6266,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	dynamic_array_t function_parameter_results = dynamic_array_alloc();
 
 	//So long as this isn't NULL
-	while(param_cursor != NULL){
+	while(param_cursor != NULL && param_cursor->ast_node_type != AST_NODE_TYPE_HANDLE_STMT){
 		//Emit whatever we have here into the basic block
 		cfg_result_package_t package = emit_expression(current_block, param_cursor, FALSE);
 
@@ -6047,28 +6393,62 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		add_statement(current_block, stack_deallocation);
 	}
 
-	//If this is not a void return type, we'll need to emit this temp assignment
-	if(signature->returns_void == FALSE){
-		//Emit an assignment instruction. This will become very important way down the line in register
-		//allocation to avoid interference
-		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
-				
-		//Reassign this value
-		assignee = assignment->assignee;
-
-		//Add it in
-		add_statement(current_block, assignment);
-	}
-
-	//This is always the assignee we gave above. It is important to note
-	//that this is nullable, not all functions return something
-	result_package.assignee = assignee;
-
 	//Destroy the dynamic array now that we're done
 	dynamic_array_dealloc(&function_parameter_results);
 
-	//Give back what we assigned to
-	return result_package;
+	/**
+	 * If we get here and we have a handles statement, we will let our special rule
+	 * translate it into a switch statement. Our strategy is this - handle the error
+	 * and emit the final result assignment inside of the handle statement itself
+	 */
+	if(param_cursor != NULL && param_cursor->ast_node_type == AST_NODE_TYPE_HANDLE_STMT){
+		/**
+		 * Since we have a handle statement, we have to have an error assignee. Let's also now emit that and
+		 * the result assignment that comes with it
+		 */
+		three_addr_var_t* error_assignee = emit_temp_var(u64);
+
+		//This is stored in the optional second assignee slot
+		func_call_stmt->optional_storage.error_assignee = error_assignee;
+
+		//Now we'll have a move statement just for register allocation reasons
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(error_assignee->type), error_assignee);
+
+		//Add it into the block
+		add_statement(current_block, assignment);
+
+		//This now is our error assignee that will be used in the CFG
+		error_assignee = assignment->assignee;
+
+		//Let the helper do the rest. It will spit back the results of the final assignment for us
+		cfg_result_package_t handle_results = emit_handle_statement(current_block, param_cursor, assignee, error_assignee);
+		
+		//Just give back what we got
+		return handle_results;
+
+
+	//If there's no error handling then we just do a regular result assignment
+	} else {
+		//If this is not a void return type, we'll need to emit this temp assignment
+		if(signature->returns_void == FALSE){
+			//Emit an assignment instruction. This will become very important way down the line in register
+			//allocation to avoid interference
+			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+					
+			//Reassign this value
+			assignee = assignment->assignee;
+
+			//Add it in
+			add_statement(current_block, assignment);
+		}
+
+		//This is always the assignee we gave above. It is important to note
+		//that this is nullable, not all functions return something
+		result_package.assignee = assignee;
+
+		//Give back what we assigned to
+		return result_package;
+	}
 }
 
 
@@ -7910,9 +8290,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					current_block = generic_results.final_block;
 				}
 
-				//A successor to this block is the exit block
-				add_successor(current_block, function_exit_block);
-
 				//If there is anything after this statement, it is UNREACHABLE
 				if(ast_cursor->next_sibling != NULL){
 					print_cfg_message(MESSAGE_TYPE_WARNING, "Unreachable code detected after return statement", ast_cursor->next_sibling->line_number);
@@ -8450,9 +8827,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				if(generic_results.final_block != current_block){
 					current_block = generic_results.final_block;
 				}
-
-				//A successor to this block is the exit block
-				add_successor(current_block, function_exit_block);
 
 				//If there is anything after this statement, it is UNREACHABLE
 				if(ast_cursor->next_sibling != NULL){

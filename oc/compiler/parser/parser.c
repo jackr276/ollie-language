@@ -24,11 +24,7 @@
 #include "../utils/constants.h"
 
 //Define a generic error array global variable
-char info[ERROR_SIZE];
-
-//For printing all of our type names
-char type_name_buf[MAX_IDENT_LENGTH];
-char type_name_buf2[MAX_IDENT_LENGTH];
+char info[ERROR_SIZE * 2];
 
 //The function is reentrant
 //Variable and function symbol tables
@@ -41,6 +37,8 @@ static generic_ast_node_t* prog = NULL;
 
 //What is the current function that we are "in"
 static symtab_function_record_t* current_function = NULL;
+//Keep track of all of the errors that have been raised by the current function
+static dynamic_set_t errors_raised_by_current_function;
 //The queue that holds all of our jump statements for a given function
 static heap_queue_t current_function_jump_statements;
 
@@ -63,8 +61,9 @@ static generic_type_t* immut_f64 = NULL;
 static generic_type_t* mut_void = NULL;
 static generic_type_t* immut_void = NULL;
 static generic_type_t* immut_char_ptr = NULL;
+static generic_type_t* generic_error = NULL;
 
-//THe specialized nesting stack that we'll use to keep track of what kind of control structure we're in(loop, switch, defer, etc)
+//The specialized nesting stack that we'll use to keep track of what kind of control structure we're in(loop, switch, defer, etc)
 static nesting_stack_t nesting_stack;
 
 //The number of errors
@@ -104,6 +103,8 @@ static generic_ast_node_t* idle_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream);
+static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream);
+static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream);
 static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* function_type, u_int8_t defining_predeclared_function);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_global_scope);
@@ -903,17 +904,586 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 
 
 /**
+ * Handle a return statement that is found inside of a "handle" clause. This is different
+ * than a regular return statement because we are not going to have a semicolon to anchor us,
+ * so some of our validations will be entirely different. The decision was made to split
+ * this into two separate rules instead of trying to do some boolean flag in the existing rule
+ */
+static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_t* token_stream){
+	//Lookahead token
+	lexitem_t lookahead;
+
+	/**
+	 * Do we contain a defer at any point in here? If so, that is invalid because we already
+	 * have a return. If this happens, we'll need to reject it
+	 */
+	if(nesting_stack_contains_level(&nesting_stack, NESTING_DEFER_STATEMENT) == TRUE){
+		return print_and_return_error("Ret statements cannot be placed inside of defer blocks", parser_line_num);
+	}
+
+	//We can create the node now
+	generic_ast_node_t* return_stmt = ast_node_alloc(AST_NODE_TYPE_RET_STMT, SIDE_TYPE_LEFT);
+
+	//Now we can optionally see the semicolon immediately. Let's check if we have that
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	/**
+	 * Are we seeing the end of the return here? Remember that this is taking place within
+	 * a handle statement, so we wouldn't see a semicolon here. We'd either see an R_PAREN
+	 * or a comma, and on top of that we are going to have to push it back for the helper rule
+	 * to handle
+	 */
+	switch(lookahead.tok){
+		case R_PAREN:
+		case COMMA:
+			//If this is the case, the return type had better be void
+			if(current_function->signature->internal_types.function_type->returns_void == FALSE){
+				sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name.string, current_function->return_type->type_name.string);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				//Also print the function name
+				print_function_name(current_function);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+			}
+
+			//The handle statement rule is going to need to reprocess this so we will push it back
+			push_back_token(token_stream, &parser_line_num);
+
+			//If we get out then we're fine
+			return return_stmt;
+
+		/**
+		 * Otherwise we haven't seen one, but should we? If we have a void return type then we should have seen
+		 * it so we will fail out. Otherwise we will be fine here and keep going
+		 */
+		default:
+			//If we get here, but we do expect a void return, then this is an issue
+			if(current_function->signature->internal_types.function_type->returns_void == TRUE){
+				sprintf(info, "Function \"%s\" expects a return type of \"void\". Use \"ret;\" for return statements in this function", current_function->func_name.string);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				//Also print the function name
+				print_function_name(current_function);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+			}
+			//Put it back if no
+			push_back_token(token_stream, &parser_line_num);
+			
+			break;
+	}
+
+	//Otherwise if we get here, we need to see a valid conditional expression
+	generic_ast_node_t* expr_node = ternary_expression(token_stream, SIDE_TYPE_RIGHT);
+
+	//If this is bad, we fail out
+	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return print_and_return_error("Invalid expression given to return statement", parser_line_num);
+	}
+
+	//Let's do some type checking here
+	if(current_function == NULL){
+		return print_and_return_error("Fatal internal compiler error. Saw a return statement while current function is null", parser_line_num);
+	}
+
+	//Figure out what the final type is here
+	generic_type_t* final_type = types_assignable(current_function->return_type, expr_node->inferred_type);
+
+	//If the current function's return type is not compatible with the return type here, we'll bail out
+	if(final_type == NULL){
+		sprintf(info, "Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"", current_function->func_name.string, current_function->return_type->type_name.string,
+		  		expr_node->inferred_type->type_name.string);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		//Also print out the function
+		print_function_name(current_function);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	//If this is a constant, we'll force it to be whatever the new type is
+	if(expr_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
+		//Set the type
+		expr_node->inferred_type = final_type;
+
+		//Coerce the constant
+		perform_constant_assignment_coercion(expr_node, final_type);
+	}
+
+	//Special checking here - if we have an enum type that is being assigned to, we need
+	//to make sure that it's being assigned to a valid value in it's range
+	if(is_enum_type(current_function->return_type) == TRUE && expr_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
+		if(does_enum_contain_integer_member(current_function->return_type, expr_node->constant_value.signed_int_value) == FALSE){
+			sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
+						current_function->return_type->type_name.string, expr_node->constant_value.signed_int_value);
+			//Hard fail here
+			return print_and_return_error(info, parser_line_num);
+		}
+	} 
+
+	//Otherwise it worked, so we'll add it as a child of the other node
+	add_child_node(return_stmt, expr_node);
+
+	//Add in the line number
+	return_stmt->line_number = parser_line_num;
+
+	//This is *always* the function's return type
+	return_stmt->inferred_type = final_type;
+	
+	//If we have deferred statements
+	if(deferred_stmts_node != NULL){
+		//Then we'll duplicate
+		generic_ast_node_t* deferred_stmts = duplicate_subtree(deferred_stmts_node, deferred_stmts_node->side);
+
+		//This node will now come before the ret statement
+		deferred_stmts->next_sibling = return_stmt;
+
+		//We'll give this back instead
+		return deferred_stmts;
+	} else {
+		//If we get here we're all good, just return the parent
+		return return_stmt;
+	}
+}
+
+
+/**
+ * Handle a raise statement that is found inside of a "handle" clause. This is different
+ * than a regular raise statement because we are not going to have a semicolon to anchor us,
+ * so some of our validations will be entirely different. The decision was made to split
+ * this into two separate rules instead of trying to do some boolean flag in the existing rule
+ */
+static generic_ast_node_t* raise_statement_in_handle_clause(ollie_token_stream_t* token_stream){
+	//Extract the function type for later use
+	function_type_t* function_type = current_function->signature->internal_types.function_type;
+
+	/**
+	 * Are we trying to raise an error inside of a defer statement? This is a big
+	 * issue, so we block it. Realistically I can't see any good reason why
+	 * someone would try
+	 */
+	if(nesting_stack_contains_level(&nesting_stack, NESTING_DEFER_STATEMENT) == TRUE){
+		return print_and_return_error("Invalid attempt to raise an error inside of a defer statement", parser_line_num);
+	}
+
+	/**
+	 * One additional thing to check - are we trying to to raise an error inside of a function
+	 * that cannot do so? If so then we fail out, it must be explicitly marked that it can
+	 * raise an error
+	 */
+	if(function_type->raises_errors == FALSE){
+		sprintf(info, "Function \"%s\" does not raise errors. Redeclare using \"fn!\" in order to make the function errorable. Currently declared as:", current_function->func_name.string);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		print_function_name(current_function);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	/**
+	 * We are required to now see either the "error" keyword for a generic error or a
+	 * specific error type. We may not raise non-error types
+	 */
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//The error id value is what really matters under the hood
+	u_int32_t error_id_value = 0;
+
+	//We are seeing a non-generic error, we will handle using the
+	//type specifier
+	if(lookahead.tok != ERROR){
+		//Push it back for processing
+		push_back_token(token_stream, &parser_line_num);
+
+		//Let the helper deal with it
+		generic_type_t* error_type = type_specifier(token_stream);
+
+		//Fail out if this ends up being null
+		if(error_type == NULL){
+			return print_and_return_error("Invalid error type given to raises statement", parser_line_num);
+		}
+
+		//Fully dealias this now that we know it's good
+		error_type = dealias_type(error_type);
+
+		//If this is not an error, we fail out
+		if(error_type->type_class != TYPE_CLASS_ERROR){
+			sprintf(info, "Type \"%s\" was not defined as an error type and therefore may not be raised", error_type->type_name.string); 
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//Otherwise we are good
+		error_id_value = error_type->internal_types.error_type_id;
+
+		//Add this into the set of all errors raised by the current function
+		dynamic_set_add(&errors_raised_by_current_function, error_type);
+
+	} else {
+		//Since we're just raising a generic error, we use the generic error id
+		error_id_value = GENERIC_ERROR;
+	}
+
+	//Since we've made it all of the way down here, now is our time to create the ast node
+	//and give it back
+	generic_ast_node_t* raises_node = ast_node_alloc(AST_NODE_TYPE_RAISE_STMT, SIDE_TYPE_LEFT);
+
+	//Store the line number and the error id value
+	raises_node->line_number = parser_line_num;
+	raises_node->optional_storage.error_id = error_id_value;
+
+	//And give it back
+	return raises_node;
+}
+
+
+
+/**
+ * Handle an error statement. Error statements allow us to take action based on an error. That action
+ * could be calling another function, giving back a value, or even raising another error. In it's current
+ * form, we only allow expression statements here though this may eventually be expanded. We only
+ * allow the user to return, raise or do a ternary expression here. If we aren't exiting, then it is imperative
+ * that we actually have some kind of value to move to %rax once the error itself is handled
+ * 
+ * <error-handle> ::= <error> => <return-statement> | <raise-statement> | <ternary-expression>
+ */
+static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_stream, generic_type_t* function_signature){
+	//Lookahead token
+	lexitem_t lookahead;
+
+	//Extract the function type for use
+	function_type_t* called_function_signature = function_signature->internal_types.function_type;
+
+	//Get the lookahead
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	/**
+	 * Remember that we are able to see the "error" keyword here to represent
+	 * the generic error type. If we see that, then we're good. If we don't, then we
+	 * need to see a valid type specifer that translates to an error
+	 */
+	generic_type_t* error_type = NULL;
+	if(lookahead.tok != ERROR){
+		//Push it back
+		push_back_token(token_stream, &parser_line_num);
+
+		//The first thing that we need to see is a valid error type
+		error_type = type_specifier(token_stream);
+
+		//Fail out here
+		if(error_type == NULL){
+			return print_and_return_error("Invalid error type given to handles statement", parser_line_num);
+		}
+
+		//Fully dealias this just in case
+		error_type = dealias_type(error_type);
+
+		//Also if this is not an error we go
+		if(error_type->type_class != TYPE_CLASS_ERROR){
+			sprintf(info, "Type \"%s\" is not defined as an error type", error_type->type_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+	/**
+	 * If it is the error keyword then we will use a special compiler only generic error type to represent this
+	 */
+	} else {
+		error_type = generic_error;
+	}
+
+	//Now we know that we've got a valid one so we can allocate here
+	generic_ast_node_t* error_handle_node = ast_node_alloc(AST_NODE_TYPE_ERROR_HANDLE_STMT, SIDE_TYPE_RIGHT);
+
+	//Stash away the error type in here
+	error_handle_node->optional_storage.error_type = error_type;
+
+	//We now need to see the fat arrow(=>)
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Fail out if we don't see it
+	if(lookahead.tok != FAT_ARROW){
+		sprintf(info, "Expected => but got \"%s\" instead", lexitem_to_string(&lookahead));
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Now that we've seen the fat arrow we can either see a ret, a raise, or an expression that returns a value
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//What is the result from this? We will determine here
+	generic_ast_node_t* result_node = NULL;
+
+	//Few options here
+	switch(lookahead.tok){
+		case RETURN:
+			//Use the specialized return rule for this
+			result_node = return_statement_in_handle_clause(token_stream);
+
+			//If this fails then we're done
+			if(result_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+				return print_and_return_error("Invalid expression given to handle statement", parser_line_num);
+			}
+
+			break;
+			
+		case RAISE:
+			//Let the specialized rule deal with this
+			result_node = raise_statement_in_handle_clause(token_stream);
+
+			//If this fails then we're done
+			if(result_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+				return print_and_return_error("Invalid expression given to handle statement", parser_line_num);
+			}
+
+			break;
+
+		/**
+		 * Ollie allows you to simply ignore the result of an error. This is how you effectively
+		 * swallow an error. It will get it's own special kind of error. Note that we're only allowed
+		 * to use ignore statements if the function itself returns void
+		 */
+		case IGNORE:
+			//If it's not void-returning it is invalid
+			if(IS_VOID_TYPE(called_function_signature->return_type) == FALSE){
+				sprintf(info, "Function signature \"%s\" returns a non-void type of %s. Ignore statements cannot be used here.",
+								function_signature->type_name.string,
+								called_function_signature->return_type->type_name.string);
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			//Otherwise we're fine so make it
+			result_node = ast_node_alloc(AST_NODE_TYPE_IGNORE_STMT, SIDE_TYPE_RIGHT);
+			break;
+
+		default:
+			/**
+			 * If we have a void return type, it's not possible to assign anything
+			 * out of this function. As such, the only valid options are raise or return
+			 * and this is invalid
+			 */
+			if(IS_VOID_TYPE(called_function_signature->return_type) == TRUE){	
+				sprintf(info, "Function signature \"%s\" has a return type of void, all errors must be handled using \"ignore\", \"ret\" or \"raise\"", function_signature->type_name.string);
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			//Push the token back
+			push_back_token(token_stream, &parser_line_num);
+
+			//Now we can invoke the helper
+			result_node = ternary_expression(token_stream, SIDE_TYPE_RIGHT);
+
+			//If this fails then we're done
+			if(result_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+				return print_and_return_error("Invalid expression given to handle statement", parser_line_num);
+			}
+
+			/**
+			 * Once we get a variable result here, we need to ensure that the type is actually
+			 * assignable with the return type of the function. If it isn't then this isn't going
+			 * to work
+			 */
+			if(types_assignable(called_function_signature->return_type, result_node->inferred_type) == FALSE){
+				sprintf(info, "Function signature \"%s\" has a return type of %s, but error handling returned an incompatible type %s",
+							function_signature->type_name.string,
+							called_function_signature->return_type->type_name.string,
+							result_node->inferred_type->type_name.string); 
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			break;
+	}
+
+	//If we make it down here we're good
+	add_child_node(error_handle_node, result_node);
+
+	//One more thing - we'll populate the variable up the chain here. This will be NULL a lot so this
+	//is just for when it isn't
+	error_handle_node->variable = result_node->variable;
+
+	//Give back the error handler
+	return error_handle_node;
+}
+
+
+/**
+ * A handles statement is required if we have a function that may raise errors. Down the line it will
+ * eventually be reliant on the %rdx register to determine what the error is(if any) and how we should
+ * handle it
+ *
+ * We mandate that there be a "swallow" case where the user just has a generic error to handle anything. This
+ * is done by our generic error "error" keyword and it's the default case in the eventual switch statement that
+ * comes out of this entire thing
+ *
+ * NOTE: By the time we get here, we've already seen the handle statement and we know that our use of the handle
+ * statement is valid
+ *
+ * <handle-statement> ::= handle ({<error-handle>{, <error-handle>}+,}? <error>)
+ */
+static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, generic_type_t* called_function_type){
+	//Lookahead token
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+	
+	//Extract the function type for later use
+	function_type_t* function_type = called_function_type->internal_types.function_type;
+
+	//A dynamic array to hold all of our handle nodes
+	dynamic_array_t errors_seen = dynamic_array_alloc();
+
+	//We need to see one of these first
+	if(lookahead.tok != L_PAREN){
+		sprintf(info, "Expected ( but go \"%s\" instead", lexitem_to_string(&lookahead));
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Push this onto the grouping stack for later
+	push_token(&grouping_stack, lookahead);
+
+	//We're valid now so let's allocate(side type is irrelevant)
+	generic_ast_node_t* parent_handle_clause = ast_node_alloc(AST_NODE_TYPE_HANDLE_STMT, SIDE_TYPE_RIGHT);
+	parent_handle_clause->line_number = parser_line_num;
+
+	//What is the upper bound of the error that we need to handle? We know that the lower
+	//bound is going to be 0, so we'll just need to find out what the highest error here is
+	u_int32_t upper_bound = 0;
+
+	//Loop until we're done seeing these all
+	do {
+		//We now need to see a valid error handling statement
+		generic_ast_node_t* error_handle_node = error_handle_statement(token_stream, called_function_type); 
+
+		//Fail out here if we get a bad one
+		if(error_handle_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			return print_and_return_error("Invalid error handling node in handle statement", parser_line_num);
+		}
+
+		/**
+		 * We need to make sure that we do not have any duplicates here. Since this is a switch statement internally,
+		 * it's very important that every error is unique
+		 */
+		for(u_int32_t i = 0; i < errors_seen.current_index; i++){
+			//Extract it
+			generic_type_t* error_type = dynamic_array_get_at(&errors_seen, i);
+
+			//If these are the same then we fail
+			if(types_identical(error_type, error_handle_node->optional_storage.error_type) == TRUE){
+				sprintf(info, "Invalid attempt to handle error type \"%s\" more than once", error_type->type_name.string);
+				return print_and_return_error(info, parser_line_num);
+			}
+		}
+
+		//If we make it down here we are good, let's add it into the array of seen errors
+		dynamic_array_add(&errors_seen, error_handle_node->optional_storage.error_type);
+
+		//Keep track of the largest error type that we have
+		if(error_handle_node->optional_storage.error_type->internal_types.error_type_id > upper_bound){
+			upper_bound = error_handle_node->optional_storage.error_type->internal_types.error_type_id;
+		}
+
+		//This is a child of the overall node itself
+		add_child_node(parent_handle_clause, error_handle_node);
+
+		//Refresh the lookahead
+		lookahead = get_next_token(token_stream, &parser_line_num);
+
+		//If we see a comma, we keep going. If we see an R_PAREN, we're done
+		if(lookahead.tok == COMMA){
+			continue;
+		} else if(lookahead.tok == R_PAREN){
+			break;
+		} else {
+			sprintf(info, "Expected , or ) but got \"%s\" instead", lexitem_to_string(&lookahead));
+			return print_and_return_error(info, parser_line_num);
+		}
+
+	} while(TRUE);
+
+	//Validate grouping
+	if(pop_token(&grouping_stack).tok != L_PAREN){
+		return print_and_return_error("Mismatched parenthesis detected", parser_line_num);
+	}
+
+	/**
+	 * Once we end up down here, we need to check for 2 things:
+	 * 	1.) Every errorable function must have a catch-all case for the generic error(error). If we don't have
+	 * 	that then this is wrong
+	 * 	2.) If the function has a raises statement, then it is mandatory that every error inside of that raises statement be
+	 * 	covered specfically in here. 
+	 *
+	 * 	Failure to meet either of these cases is an immediate fail for the handle statement
+	 */
+	
+	//First search for the generic error
+	u_int8_t found_generic_error = FALSE;
+	for(u_int32_t i = 0; i < errors_seen.current_index; i++){
+		//Extract the type
+		generic_type_t* error_type = dynamic_array_get_at(&errors_seen, i);
+	
+		//We've found it, flag it and get out
+		if(types_identical(error_type, generic_error) == TRUE){
+			found_generic_error = TRUE;
+			break;
+		}
+	}
+
+	//We didn't find it, so we fail out
+	if(found_generic_error == FALSE){
+		return print_and_return_error("Every \"handle\" clause is required to have handling for the generic error \"error\". Please add handling for this.", parser_line_num);
+	}
+
+	/**
+	 * Now let's validate that *if* the function has a specific raises statement, we validate
+	 * all of those as well
+	 */
+	for(u_int32_t i = 0; i < function_type->potential_errors.current_index; i++){
+		//Extract the error
+		generic_type_t* mandatory_checked_error = dynamic_array_get_at(&(function_type->potential_errors), i);
+
+		//By default assume that we have not seen it
+		u_int32_t seen_error = FALSE;
+
+		//Now we need to see if this error is inside of the errors that we've handled before
+		for(u_int32_t j = 0; j < errors_seen.current_index; j++){
+			//Extract it
+			generic_type_t* error_handled = dynamic_array_get_at(&errors_seen, j);
+
+			//If they match
+			if(types_identical(error_handled, mandatory_checked_error) == TRUE){
+				seen_error = TRUE;
+				break;
+			}
+		}
+
+		//Now if we made it down here and we got what we need, we're good. If we didn't, we fail out
+		if(seen_error == FALSE){
+			sprintf(info, "Error \"%s\" is mandated to have a specific check due to being in the function's raises clause. Please add a case inside of the handle for this error",
+		   					mandatory_checked_error->type_name.string);
+
+			//Send this error up the chain
+			return print_and_return_error(info, parser_line_num);
+		}
+	}
+
+	/**
+	 * Now that we've gotten down here, we'll store our lower and upper bound for the eventual switch
+	 * statement that this is going to generate. The lower bound is always zero(NO_ERROR) and the
+	 * upper bound is whatever we found it to be
+	 */
+	parent_handle_clause->lower_bound = 0;
+	parent_handle_clause->upper_bound = upper_bound;
+
+	//We're done here, deallocate
+	dynamic_array_dealloc(&errors_seen);
+
+	//Give back the parent handle node
+	return parent_handle_clause;
+}
+
+
+/**
  * A function call looks for a very specific kind of identifer followed by
  * parenthesis and the appropriate number of parameters for the function, each of
  * the appropriate type
  * 
  * By the time we get here, we will have already consumed the "@" token
  *
- * BNF Rule: <function-call> ::= @<identifier>({<ternary_expression>}?{, <ternary_expression>}*)
+ * BNF Rule: <function-call> ::= @<identifier>({<ternary_expression>}?{, <ternary_expression>}*){<handle-statement>}?
  */
 static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, side_type_t side){
-	//For any error printing if need be
-	char error[ERROR_SIZE];
 	//The current line num
 	u_int32_t current_line = parser_line_num;
 	//The lookahead token
@@ -922,27 +1492,23 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	dynamic_string_t function_name;
 	//The number of parameters that we've seen
 	u_int8_t num_params = 0;
+	//A pointer that holds our function call node
+	generic_ast_node_t* function_call_node;
+	//Hold the overall type for error printing
+	generic_type_t* function_type;
+	//The generic type that holds our function signature
+	function_type_t* function_signature;
 	
 	//Grab the next token using the lookahead
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
 	//We have a general error-probably will be quite uncommon
 	if(lookahead.tok != IDENT){
-		//We'll let the node propogate up
 		return print_and_return_error("Non-identifier provided as funciton call", parser_line_num);
 	}
 
 	//Grab the function name out for convenience
 	function_name = lookahead.lexeme;
-
-	//A pointer that holds our function call node
-	generic_ast_node_t* function_call_node;
-
-	//Hold the overall type for error printing
-	generic_type_t* function_type;
-
-	//The generic type that holds our function signature
-	function_type_t* function_signature;
 
 	/**
 	 * This identifier has the possibility of being a direct function call or a function pointer
@@ -984,7 +1550,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		//If this is not a function signature, then we can't call it as one
 		if(function_type->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
 			//Print and fail out here
-			sprintf(error, "\"%s\" is defined as type %s, and cannot be called as a function. Only function types may be called", function_name.string, function_type->type_name.string);
+			sprintf(info, "\"%s\" is defined as type %s, and cannot be called as a function. Only function types may be called", function_name.string, function_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -1019,9 +1585,121 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	//Push onto the grouping stack once we see this
 	push_token(&grouping_stack, lookahead);
 
-	//Let's check for this easy case first. If we have no parameters, then 
-	//we'll expect to immediately see an R_PAREN
-	if(function_signature->function_parameters.current_index == 0){
+	/**
+	 * For parameter handling - if the function signature expects
+	 * parameters, then we can do our parameter processing. Meanwhile
+	 * if it does not, we can save some work here and just look for
+	 * the R_PAREN
+	 */
+	if(function_signature->function_parameters.current_index > 0){
+		//A node to hold our current parameter
+		generic_ast_node_t* current_param;
+
+		//So long as we don't see the R_PAREN we aren't done
+		do {
+			//Record that we saw one more parameter
+			num_params++;
+
+			//If we've already seen more than one parameter, we'll need a comma here
+			if(num_params > 1){
+				//Otherwise it must be a comma. If it isn't we have a failure
+				if(lookahead.tok != COMMA){
+					//Create and return an error node
+					return print_and_return_error("Commas must be used to separate parameters in function call", parser_line_num);
+				}
+			}
+
+			//We'll let the error below handle this, we just don't
+			//want to segfault
+			if(num_params > function_signature->function_parameters.current_index){
+				break;
+			}
+
+			//Grab the current function param
+			generic_type_t* param_type = dynamic_array_get_at(&(function_signature->function_parameters), num_params - 1);
+
+			//Parameters are in the form of a ternary expression
+			current_param = ternary_expression(token_stream, side);
+
+			//We now have an error of some kind
+			if(current_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+				return print_and_return_error("Bad parameter passed to function call", current_line);
+			}
+
+			//Let's see if we're even able to assign this here
+			generic_type_t* final_type = types_assignable(param_type, current_param->inferred_type);
+
+			//If this is null, it means that our check failed
+			if(final_type == NULL){
+				//Let's first generate the types_assignable failure message
+				generate_types_assignable_failure_message(info, current_param->inferred_type, param_type);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+
+				//Following that we'll generate another error message to make it more clear
+				sprintf(info, "Function \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
+						function_name.string, 
+						(param_type->mutability == MUTABLE ? "mut ": ""),
+						param_type->type_name.string, num_params,
+						//Print the mut keyword if we need it
+						(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
+						current_param->inferred_type->type_name.string, function_type->type_name.string);
+
+				//Use the helper to return this
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			//If this is a constant node, we'll force it to be whatever we expect from the type assignability
+			if(current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
+				current_param->inferred_type = final_type;
+
+				//Do coercion
+				perform_constant_assignment_coercion(current_param, final_type);
+			}
+
+			//Special checking here - if we have an enum type that is being assigned to, we need
+			//to make sure that it's being assigned to a valid value in it's range
+			if(is_enum_type(param_type) == TRUE && current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
+				if(does_enum_contain_integer_member(param_type, current_param->constant_value.signed_int_value) == FALSE){
+					sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
+								param_type->type_name.string, current_param->constant_value.signed_int_value);
+
+					//Hard fail here
+					return print_and_return_error(info, parser_line_num);
+				}
+			} 
+
+			//We can now safely add this into the function call node as a child. In the function call node, 
+			//the parameters will appear in order from left to right
+			add_child_node(function_call_node, current_param);
+
+			//Refresh the token
+			lookahead = get_next_token(token_stream, &parser_line_num);
+
+		//Keep going so long as we don't see a right paren
+		} while (lookahead.tok != R_PAREN);
+
+		//If we have a mismatch between what the function takes and what we want, throw an
+		//error
+		if(num_params != function_signature->function_parameters.current_index){
+			sprintf(info, "Function %s expects %d parameters, but was given %d. Defined as: %s", 
+			  function_name.string, function_signature->function_parameters.current_index, num_params, function_type->type_name.string);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			num_errors++;
+			//Error out
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
+		}
+
+		//Once we get here, we do need to finally verify that the closing R_PAREN matched the opening one
+		if(pop_token(&grouping_stack).tok != L_PAREN){
+			//Return the error node
+			return print_and_return_error("Unmatched parenthesis detected in function call", parser_line_num);
+		}
+
+	/**
+	 * If we hit this case that means that we expect 0 parameters, so we will check to see if the call obeys
+	 * that and if not we leave
+	 */
+	} else {
 		//Refresh the lookahead
 		lookahead = get_next_token(token_stream, &parser_line_num);
 		
@@ -1037,123 +1715,75 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 
 		//Otherwise if it was fine, we'll now pop the grouping stack
 		pop_token(&grouping_stack);
-
-		//And package up and return here
-		//Add the line number in
-		function_call_node->line_number = current_line;
-
-		//Otherwise, if we make it here, we're all good to return the function call node
-		return function_call_node;
 	}
 
 	/**
-	 * Otherwise, if we get all the way down here, we know that we expect to see at least one
-	 * value passed in as a parameter. We'll use do-while logic to process this in here
+	 * If we have a function that may raise errors, we are absolutely required to see the
+	 * handles statement here. If we have a function that does not return errors, then it is
+	 * completely incorrect for us to see the handles statement here. We need to handle
+	 * both cases appropriately
 	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
 
-	//A node to hold our current parameter
-	generic_ast_node_t* current_param;
+	/**
+	 * Deal with the cases where we see the handle keyword. Remember that we're
+	 * only allowed to see this if we have a function that does raise errors
+	 */
+	if(lookahead.tok == HANDLE){
+		//If we don't raise errors then fail out
+		if(function_signature->raises_errors == FALSE){
+			//Remember that we could have a regular function or a function pointer
+			if(function_record != NULL){
+				sprintf(info, "Function \"%s\" has signature \"%s\" and is defined as not raising errors. A \"handle\" statement is only allowed for functions that raise errors",
+							function_record->func_name.string,
+							function_type->type_name.string);
+				return print_and_return_error(info, parser_line_num);
 
-
-	//So long as we don't see the R_PAREN we aren't done
-	do {
-		//Record that we saw one more parameter
-		num_params++;
-
-		//If we've already seen more than one parameter, we'll need a comma here
-		if(num_params > 1){
-			//Otherwise it must be a comma. If it isn't we have a failure
-			if(lookahead.tok != COMMA){
-				//Create and return an error node
-				return print_and_return_error("Commas must be used to separate parameters in function call", parser_line_num);
-			}
-		}
-
-		//We'll let the error below handle this, we just don't
-		//want to segfault
-		if(num_params > function_signature->function_parameters.current_index){
-			break;
-		}
-
-		//Grab the current function param
-		generic_type_t* param_type = dynamic_array_get_at(&(function_signature->function_parameters), num_params - 1);
-
-		//Parameters are in the form of a ternary expression
-		current_param = ternary_expression(token_stream, side);
-
-		//We now have an error of some kind
-		if(current_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return print_and_return_error("Bad parameter passed to function call", current_line);
-		}
-
-		//Let's see if we're even able to assign this here
-		generic_type_t* final_type = types_assignable(param_type, current_param->inferred_type);
-
-		//If this is null, it means that our check failed
-		if(final_type == NULL){
-			//Let's first generate the types_assignable failure message
-			generate_types_assignable_failure_message(info, current_param->inferred_type, param_type);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-
-			//Following that we'll generate another error message to make it more clear
-			sprintf(info, "Function \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
-					function_name.string, 
-					(param_type->mutability == MUTABLE ? "mut ": ""),
-					param_type->type_name.string, num_params,
-					//Print the mut keyword if we need it
-					(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
-					current_param->inferred_type->type_name.string, function_type->type_name.string);
-
-			//Use the helper to return this
-			return print_and_return_error(info, parser_line_num);
-		}
-
-		//If this is a constant node, we'll force it to be whatever we expect from the type assignability
-		if(current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
-			current_param->inferred_type = final_type;
-
-			//Do coercion
-			perform_constant_assignment_coercion(current_param, final_type);
-		}
-
-		//Special checking here - if we have an enum type that is being assigned to, we need
-		//to make sure that it's being assigned to a valid value in it's range
-		if(is_enum_type(param_type) == TRUE && current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
-			if(does_enum_contain_integer_member(param_type, current_param->constant_value.signed_int_value) == FALSE){
-				sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-							param_type->type_name.string, current_param->constant_value.signed_int_value);
-
-				//Hard fail here
+			//Function pointer
+			} else {
+				sprintf(info, "Function signature \"%s\" is defined as not raising errors. A \"handle\" statement is only allowed for functions that raise errors",
+							function_type->type_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
-		} 
+		}
 
-		//We can now safely add this into the function call node as a child. In the function call node, 
-		//the parameters will appear in order from left to right
-		add_child_node(function_call_node, current_param);
+		//Now let's process the handle statement
+		generic_ast_node_t* handle_node = handle_statement(token_stream, function_type);
 
-		//Refresh the token
-		lookahead = get_next_token(token_stream, &parser_line_num);
+		//If this fails then we fail out
+ 		if(handle_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			return print_and_return_error("Invalid handle statement given to function call", parser_line_num);
+		}
 
-	//Keep going so long as we don't see a right paren
-	} while (lookahead.tok != R_PAREN);
+		//Otherwise let's add this to the function call
+		add_child_node(function_call_node, handle_node);
 
+	/**
+	 * Otherwise we didn't see it, but we need to validate that we didn't need to see it
+	 */
+	} else {
+		//Push it back
+		push_back_token(token_stream, &parser_line_num);
 
-	//If we have a mismatch between what the function takes and what we want, throw an
-	//error
-	if(num_params != function_signature->function_parameters.current_index){
-		sprintf(info, "Function %s expects %d parameters, but was given %d. Defined as: %s", 
-		  function_name.string, function_signature->function_parameters.current_index, num_params, function_type->type_name.string);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		num_errors++;
-		//Error out
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
-	}
+		/**
+		 * If this function raises errors, then we actually
+		 * had to see this, so this is an error
+		 */
+		if(function_signature->raises_errors == TRUE){
+			//Remember we could have a regular function or function pointer
+			if(function_record != NULL){
+				sprintf(info, "Function \"%s\" has signature \"%s\" and is defined as raising errors. A \"handle\" statement is required upon every call of this function", 
+								function_record->func_name.string,
+								function_type->type_name.string);
+				return print_and_return_error(info, parser_line_num);
 
-	//Once we get here, we do need to finally verify that the closing R_PAREN matched the opening one
-	if(pop_token(&grouping_stack).tok != L_PAREN){
-		//Return the error node
-		return print_and_return_error("Unmatched parenthesis detected in function call", parser_line_num);
+			//Function pointer
+			} else {
+				sprintf(info, "Function signature \"%s\" is defined as raising errors. A \"handle\" statement is required upon every call of this function",
+								function_type->type_name.string);
+				return print_and_return_error(info, parser_line_num);
+			}
+		}
 	}
 
 	//Add the line number in
@@ -8021,7 +8651,7 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
  *
  * NOTE: by the time we get here, we have already seen and consumed the "raise" keyword
  *
- * BNF Rule: <raise-statement> ::= raise {<error-type> | error}
+ * BNF Rule: <raise-statement> ::= raise {<error-type> | error};
  */
 static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream){
 	//Extract the function type for later use
@@ -8084,9 +8714,20 @@ static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream){
 		//Otherwise we are good
 		error_id_value = error_type->internal_types.error_type_id;
 
+		//Add this into the set of all errors raised by the current function
+		dynamic_set_add(&errors_raised_by_current_function, error_type);
+
 	} else {
 		//Since we're just raising a generic error, we use the generic error id
 		error_id_value = GENERIC_ERROR;
+	}
+
+	//We now need to see a semicolon
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//If it's not here we fail out
+	if(lookahead.tok != SEMICOLON){
+		return print_and_return_error("Semicolon expected after raise statement", parser_line_num);
 	}
 
 	//Since we've made it all of the way down here, now is our time to create the ast node
@@ -10445,6 +11086,52 @@ static int8_t check_jump_labels(){
 
 
 /**
+ * If a user puts an error in a raises statement but then fails to raise that error inside of
+ * the actual function, then we are going to be mandating entirely useless checks down the
+ * road. We need to account for this by validating that every error inside of the
+ * raises statement is actually raised by the function
+ */
+static u_int8_t validate_error_list_against_raised_errors(symtab_function_record_t* function){
+	//Extract what we require to be checked
+	dynamic_array_t* mandatory_checked_errors = &(function->signature->internal_types.function_type->potential_errors);
+
+	//Run through all of the mandatory checked errors
+	for(u_int32_t i = 0; i < mandatory_checked_errors->current_index; i++){
+		//Extract the error that we require
+		generic_type_t* mandatory_error = dynamic_array_get_at(mandatory_checked_errors, i);
+
+		//Assume by default that it's missing
+		u_int8_t raised_by_function = FALSE;
+
+		//Now let's go through all of the errors that are raised and check those
+		for(u_int32_t j = 0; j < errors_raised_by_current_function.current_index; j++){
+			//Extract the error that we raised
+			generic_type_t* raised_error = dynamic_set_get_at(&errors_raised_by_current_function, j);
+
+			//If these are identical, then we set the flag and get out
+			if(types_identical(raised_error, mandatory_error) == TRUE){
+				raised_by_function = TRUE;
+				break;
+			}
+		}
+
+		//Is it raised by the function? If not we've got an error
+		if(raised_by_function == FALSE){
+			sprintf(info, "Function \"%s\" raises error %s in its signature but the error itself is never raised. Remove the error from the signature if it won't ever be raised",
+		   					function->func_name.string, mandatory_error->type_name.string);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			num_errors++;
+			return FAILURE;
+		}
+	}
+
+	//If we made it all of the way down here then we are good
+	return SUCCESS;
+
+}
+
+
+/**
  * Perform validation on the parameter & return type & order
  * for the main function
  */
@@ -11285,6 +11972,8 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	u_int8_t is_inlined = FALSE;
 	//Does this funtion raise errors? We know based on the ! after the fn keyword
 	u_int8_t raises_errors = FALSE;
+	//Does this function maintain a specific error list with the "raise" keyword
+	u_int8_t specific_error_list = FALSE;
 
 	//Grab the token
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -11546,6 +12235,9 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			return print_and_return_error(info, parser_line_num);
 		}
 
+		//Set this flag as true for down the road
+		specific_error_list = TRUE;
+
 		/**
 		 * What if we're defining a predeclared function that did not have the "raises" keyword on it? If so then this is wrong
 		 */
@@ -11554,6 +12246,9 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		   					function_record->func_name.string, function_record->signature->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
+
+		//Wipe the slate clean for this function - we'll start tracking again here
+		clear_dynamic_set(&errors_raised_by_current_function);
 
 		//Now that we've made it past that, we can let the helper do the parsing for us
 		u_int8_t success = error_list(token_stream, function_record->signature, defining_predeclared_function);
@@ -11629,6 +12324,21 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		if(check_jump_labels() == FAILURE){
 			//If this fails, we fail out here too
 			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		}
+
+		/**
+		 * If a function raises a specific error list, then we can check
+		 * and see what errors actually were raised(we maintain this in a list)
+		 * and validate that every error in that error clause was raised at least 
+		 * once. Remember that the raises list mandates that all callers check those
+		 * errors, so something being in there and not being raised is an issue
+		 */
+		if(specific_error_list == TRUE){
+			//If this fails then we are done
+			if(validate_error_list_against_raised_errors(function_record) == FAILURE){
+				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+
+			}
 		}
 
 	} else {
@@ -11970,12 +12680,21 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	immut_void = lookup_type_name_only(type_symtab, "void", NOT_MUTABLE)->type;
 	mut_void = lookup_type_name_only(type_symtab, "void", MUTABLE)->type;
 	immut_char_ptr = lookup_type_name_only(type_symtab, "char*", NOT_MUTABLE)->type;
+	generic_error = lookup_type_name_only(type_symtab, "error", NOT_MUTABLE)->type;
 
 	//Also create a stack for our matching uses(curlies, parens, etc.)
 	grouping_stack = lex_stack_alloc();
 	assignment_grouping_stack = lex_stack_alloc();
 	//Create a stack for recording our depth/nesting levels
 	nesting_stack = nesting_stack_alloc();
+
+	/**
+	 * For any/all functions that raise errors, we want to provide helpful messages to the user. The most
+	 * important of these messages is extra errors in the raises clause that are never used. To support
+	 * this, we maintain a global list of all the errors that the function raises. To save on allocation
+	 * overhead, we'll just keep one of these for the lifetime of the parser
+	 */
+	errors_raised_by_current_function = dynamic_set_alloc();
 
 	//Global entry/run point, will give us a tree with
 	//the root being here
@@ -12018,6 +12737,9 @@ front_end_results_package_t* parse(compiler_options_t* options){
 
 	//Once we're done, destroy the token stream
 	destroy_token_stream(token_stream);
+
+	//We're done with the errors too
+	dynamic_set_dealloc(&errors_raised_by_current_function);
 
 	//Give back the overall result
 	return results;

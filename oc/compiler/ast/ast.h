@@ -64,6 +64,9 @@ typedef enum ast_node_type_t{
 	AST_NODE_TYPE_CONTINUE_STMT,
 	AST_NODE_TYPE_RET_STMT,
 	AST_NODE_TYPE_RAISE_STMT,
+	AST_NODE_TYPE_IGNORE_STMT,
+	AST_NODE_TYPE_HANDLE_STMT,
+	AST_NODE_TYPE_ERROR_HANDLE_STMT,
 	AST_NODE_TYPE_SWITCH_STMT,
 	AST_NODE_TYPE_C_STYLE_SWITCH_STMT, //Special kind of switch that's C-style
 	AST_NODE_TYPE_WHILE_STMT,
@@ -116,6 +119,8 @@ struct generic_ast_node_t{
 		//For enum constants - we'll hold onto the 
 		//enum type here too
 		generic_type_t* enum_type;
+		//For error types in a hanldes statement
+		generic_type_t* error_type;
 		//For any/all error types, we'll hold onto the actual
 		//value of the error here
 		u_int32_t error_id;

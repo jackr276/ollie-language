@@ -19,8 +19,13 @@ pub fn main() -> i32 {
 	let x:i32 = 5;
 	let y:i32 = 0;
 
-	let result:i32 = @divide_values(x, y) handle(divide_by_zero_error_t => ret -1, error => ret -1);
+	//Function pointer
+	let func_to_call:fn!(i32, i32) -> i32 raises(divide_by_zero_error_t) = divide_values;
 
+	let result:i32 = @func_to_call(x, y) handle(
+												divide_by_zero_error_t => ret -1,
+												error => ret -1
+												);
 	ret result;
 }
 

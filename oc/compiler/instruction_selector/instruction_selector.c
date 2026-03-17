@@ -6396,6 +6396,9 @@ static inline void handle_function_call(instruction_t* instruction){
 
 	//The destination register is itself the assignee
 	instruction->destination_register = instruction->assignee;
+
+	//Grab the error assignee if we have one(or it could be null)
+	instruction->destination_register2 = instruction->optional_storage.error_assignee;
 }
 
 
@@ -6411,6 +6414,9 @@ static inline void handle_indirect_function_call(instruction_t* instruction){
 
 	//The destination register is itself the assignee
 	instruction->destination_register = instruction->assignee;
+
+	//Grab the error assignee if we have one(or it could be null)
+	instruction->destination_register2 = instruction->optional_storage.error_assignee;
 }
 
 

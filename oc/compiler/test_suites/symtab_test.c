@@ -147,6 +147,9 @@ static void test_types(){
 	symtab_type_record_t* mutable_i64 = lookup_type_name_only(type_symtab, "i64", MUTABLE);
 	assert(mutable_i64 != NULL);
 
+	symtab_type_record_t* generic_error_type = lookup_type_name_only(type_symtab, "error", NOT_MUTABLE);
+	assert(generic_error_type != NULL);
+
 	//These all need to be *distinct*, so assert that they are not equal
 	assert(mutable_i8 != immutable_i8);
 	assert(mutable_u8 != immutable_u8);

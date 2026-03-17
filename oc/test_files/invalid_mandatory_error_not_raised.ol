@@ -1,27 +1,20 @@
 /**
 * Author: Jack Robbins
-* A very basic test for Ollie errors with just one function
+* Test the case where a function has a mandatory error but said error is never raised. This is an error case for
+* us
 */
 
-//We are able to define our own custom errors in Ollie. In reality
-//these are just types that have special restrictions/a special purpose for us
 define error arithmetic_error_t;
 define error divide_by_zero_error_t;
 
 /**
-* To denote that a function can/may throw any error at all, 
-* we use the ! after the "fn" keyword. It is possible for
-* someone to use Ollie without using the error system at all
+* divide_by_zero_error_t is never actually thrown, this is a compiler error
 */
 pub fn! ollie_error(x:i32, y:i32) -> i32 raises(arithmetic_error_t, divide_by_zero_error_t) {
 	if(y == -1){
 		raise arithmetic_error_t;
 	} 
 	
-	if(y == 0){
-		raise divide_by_zero_error_t;
-	}
-
 	ret x / y;
 } 
 
@@ -38,7 +31,6 @@ pub fn main() -> i32 {
 												//Assigns the return result value of the entire thing to -1
 												error => -1
 											   );
-
 
 	ret result;
 }
