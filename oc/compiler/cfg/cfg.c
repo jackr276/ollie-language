@@ -2949,6 +2949,9 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 	//Once it's been emitted, we'll add it in as a statement
 	add_statement(current, ret_stmt);
 
+	//This is always a predecessor of the function exit statement
+	add_successor(current, function_exit_block);
+
 	//Give back the results
 	return return_package;
 }
@@ -8287,9 +8290,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					current_block = generic_results.final_block;
 				}
 
-				//A successor to this block is the exit block
-				add_successor(current_block, function_exit_block);
-
 				//If there is anything after this statement, it is UNREACHABLE
 				if(ast_cursor->next_sibling != NULL){
 					print_cfg_message(MESSAGE_TYPE_WARNING, "Unreachable code detected after return statement", ast_cursor->next_sibling->line_number);
@@ -8827,9 +8827,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				if(generic_results.final_block != current_block){
 					current_block = generic_results.final_block;
 				}
-
-				//A successor to this block is the exit block
-				add_successor(current_block, function_exit_block);
 
 				//If there is anything after this statement, it is UNREACHABLE
 				if(ast_cursor->next_sibling != NULL){
