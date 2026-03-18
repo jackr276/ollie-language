@@ -1277,12 +1277,24 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 			 * assignable with the return type of the function. If it isn't then this isn't going
 			 * to work
 			 */
-			if(types_assignable(called_function_signature->return_type, result_node->inferred_type) == FALSE){
+			generic_type_t* final_type = types_assignable(called_function_signature->return_type, result_node->inferred_type);
+
+			//Fail out here
+			if(final_type == NULL){
 				sprintf(info, "Function signature \"%s\" has a return type of %s, but error handling returned an incompatible type %s",
 							function_signature->type_name.string,
 							called_function_signature->return_type->type_name.string,
 							result_node->inferred_type->type_name.string); 
 				return print_and_return_error(info, parser_line_num);
+			}
+
+			//Did we get a constant? If so we'll need to coerce our types properly before going further
+			if(result_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
+				//Move the final type to be this
+				result_node->inferred_type = final_type;
+
+				//Coerce the constant internally to be this type
+				coerce_constant(result_node);
 			}
 
 			break;

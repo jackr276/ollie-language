@@ -5900,7 +5900,8 @@ static void handle_dec_instruction(instruction_t* instruction){
 
 
 /**
- * Handle the case where we have a constant to register move
+ * Handle the case where we have a constant to register move. Note that we should not
+ * be seeing anything regarding floating point instruction movement here
  */
 static void handle_constant_to_register_move_instruction(instruction_t* instruction){
 	//Get the size we need first
