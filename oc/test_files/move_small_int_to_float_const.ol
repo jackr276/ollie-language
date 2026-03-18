@@ -23,7 +23,7 @@ pub fn main() -> i32 {
 
 	let result:f32 = @divide_values(x, y) handle(
 												divide_by_zero_error_t => <i8>0,
-												error => <i8>0
+												error => <i8>5
 												);
 	ret result;
 }
