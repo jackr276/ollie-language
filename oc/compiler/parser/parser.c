@@ -2018,8 +2018,15 @@ static generic_ast_node_t* paramcount_statement(ollie_token_stream_t* token_stre
 		return print_and_return_error(info, parser_line_num);
 	}
 
-	//TODO FINISH
+	//Let's now allocate the final node and give it back
+	generic_ast_node_t* paramcount_node = ast_node_alloc(AST_NODE_TYPE_PARAMCOUNT_STMT, SIDE_TYPE_RIGHT);
 
+	//The type is always a u32
+	paramcount_node->inferred_type = immut_u32;
+	paramcount_node->line_number = parser_line_num;
+
+	//And give it back
+	return paramcount_node;
 }
 
 
