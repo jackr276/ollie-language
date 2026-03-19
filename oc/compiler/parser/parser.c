@@ -1807,12 +1807,12 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 
 
 /**
- * Handle a sizeof statement
+ * Handle a sizeof statement. Sizeof statements rely on compile-time knowledge 
+ * of a type size. This works great for everything *except* elaborative parameters
+ * because their size varies. The specialized "paramcount" keyword is used for that. If
+ * we attempt to use sizeof on an elaborative param variable, it will error
  *
  * NOTE: By the time we get here, we have already seen and consumed the sizeof token
- *
- *
- * TODO HANDLE ELABORATIVE PARAM
  */
 static generic_ast_node_t* sizeof_statement(ollie_token_stream_t* token_stream, side_type_t side){
 	//Lookahead token
@@ -1859,6 +1859,16 @@ static generic_ast_node_t* sizeof_statement(ollie_token_stream_t* token_stream, 
 	//Now we know that we have an entirely syntactically valid call to sizeof. Let's now extract the 
 	//type information for ourselves
 	generic_type_t* return_type = expr_node->inferred_type;
+
+	/**
+	 * If we have an elaborative type - that's an issue. We'll have to fail
+	 * out here
+	 */
+	if(return_type->type_class == TYPE_CLASS_ELABORATIVE){
+		sprintf(info, "Elaborative type \"%s\" does not have a compile-time known size. Use \"paramcount(...)\" to get the number of parameters",
+		  				return_type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
 
 	//Create a constant node
 	generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
