@@ -1957,6 +1957,26 @@ static generic_ast_node_t* typesize_statement(ollie_token_stream_t* token_stream
 
 
 /**
+ * Handle a paramcount expression
+ *
+ * NOTE: by the time we get here, we have already seen and consumed the typesize token
+ *
+ * paramcount_statement ::= paramcount(<logical-or-expression>)
+ */
+static generic_ast_node_t* paramcount_statement(ollie_token_stream_t* token_stream, side_type_t side){
+	//Lookahead token
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//First thing that we need to see is an L_PAREN
+	if(lookahead.tok != L_PAREN){
+		sprintf(info, "Expected ( but got \"%s\" instead", lexitem_to_string(&lookahead));
+		return print_and_return_error(info, parser_line_num);
+	}
+
+}
+
+
+/**
  * A primary expression is, in a way, the termination of our expression chain. However, it can be used 
  * to chain back up to an expression in general using () as an enclosure. Just like all rules, a primary expression
  * itself has a parent and will produce children. The reference to the primary expression itself is always returned
@@ -2131,7 +2151,6 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 		 * will error out if we try it
 		 */
 		case SIZEOF:
-			//Let the helper handle this
 			return sizeof_statement(token_stream, side);
 
 		/**
@@ -2141,12 +2160,15 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 		 * size here
 		 */
 		case TYPESIZE:
-			//Let the helper deal with this
 			return typesize_statement(token_stream, side);
 
+		/**
+		 * The paramcount is used specifically to determine the number of parameters inside
+		 * of an elaborative stack param. The count of the parameters of a given type will
+		 * be stored as a 4-byte integer at the base of the elaborative param on the stack
+		 */
 		case PARAMCOUNT:
-			printf("TODO\n\n");
-			exit(1);
+			return paramcount_statement(token_stream, side);
 
 		//We could see a case where we have a parenthesis in an expression
 		case L_PAREN:

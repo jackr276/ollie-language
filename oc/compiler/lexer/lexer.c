@@ -356,6 +356,10 @@ char* lexitem_to_string(lexitem_t* lexitem){
 			return "handle";
 		case IGNORE:
 			return "ignore";
+		case PARAMS:
+			return "params";
+		case PARAMCOUNT:
+			return "paramcount";
 		case MACRO_PARAM:
 			sprintf(info, "%s", lexitem->lexeme.string);
 			return info;
