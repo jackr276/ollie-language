@@ -11331,6 +11331,15 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 	 * to update the type to be an elaborative type
 	 */
 	if(params_seen == TRUE){
+		//If the type cannot be used for an elaborative param, we leave
+		if(is_type_valid_for_elaborative_param(type) == FALSE){
+			sprintf(info, "Type \"%s\" is invalid to be used as an elaborative param. Only pointers and primitive types may be elaborated", type->type_name.string);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//Otherwise we will create this
 		type = create_elaborative_type(type, parser_line_num);
 	}
 

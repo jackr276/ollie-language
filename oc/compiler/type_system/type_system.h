@@ -392,6 +392,12 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type);
 void generate_types_assignable_failure_message(char* info, generic_type_t* source_type, generic_type_t* destination_type);
 
 /**
+ * Is a given type valid to be an elaborative param? Only types smaller than 8 bytes(so think pointer, primitive) can be
+ * elaborative params. Arrays/structs/unions are banned
+ */
+u_int8_t is_type_valid_for_elaborative_param(generic_type_t* type);
+
+/**
  * Perform a symbolic dereference of a type
  */
 generic_type_t* dereference_type(generic_type_t* pointer_type);

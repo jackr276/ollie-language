@@ -2682,6 +2682,22 @@ void generate_types_assignable_failure_message(char* info, generic_type_t* sourc
 
 
 /**
+ * Is a given type valid to be an elaborative param? Only types smaller than 8 bytes(so think pointer, primitive) can be
+ * elaborative params. Arrays/structs/unions are banned
+ */
+u_int8_t is_type_valid_for_elaborative_param(generic_type_t* type){
+	//Go based on the type class here
+	switch(type->type_class){
+		case TYPE_CLASS_BASIC:
+		case TYPE_CLASS_POINTER:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Is this type equivalent to a char**? This is used
  * exclusively for main function validation
  */
