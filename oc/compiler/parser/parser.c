@@ -1810,6 +1810,9 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
  * Handle a sizeof statement
  *
  * NOTE: By the time we get here, we have already seen and consumed the sizeof token
+ *
+ *
+ * TODO HANDLE ELABORATIVE PARAM
  */
 static generic_ast_node_t* sizeof_statement(ollie_token_stream_t* token_stream, side_type_t side){
 	//Lookahead token
@@ -2112,18 +2115,28 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 			//Give back the constant node - if it's an error, the parent will handle
 			return constant_node;
 		
-		//We can see a sizeof call
+		/**
+		 * Sizeof is known at compile time with the exception of a variable
+		 * that is an elaborative parameter. This is variable and as such sizeof
+		 * will error out if we try it
+		 */
 		case SIZEOF:
 			//Let the helper handle this
 			return sizeof_statement(token_stream, side);
 
-		//If we see the typesize keyword, we are locked in to the typesize rule
-		//The typesize rule is a compiler only directive. Since we know the size of all
-		//valid types at compile-time, we will be able to return an INT-CONST node with the
-		//size here
+		/**
+		 * If we see the typesize keyword, we are locked in to the typesize rule
+		 * The typesize rule is a compiler only directive. Since we know the size of all
+		 * valid types at compile-time, we will be able to return an INT-CONST node with the
+		 * size here
+		 */
 		case TYPESIZE:
 			//Let the helper deal with this
 			return typesize_statement(token_stream, side);
+
+		case PARAMCOUNT:
+			printf("TODO\n\n");
+			exit(1);
 
 		//We could see a case where we have a parenthesis in an expression
 		case L_PAREN:

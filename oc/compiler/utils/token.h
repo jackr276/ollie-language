@@ -146,6 +146,7 @@ typedef enum {
 	HANDLE, //Error handling
 	IGNORE, //For swallowing errors
 	PARAMS, //Elaborative parameter keyword
+	PARAMCOUNT, //Get the elaborative param count
 	TRUE_CONST,
 	FALSE_CONST,
 	INLINE,
