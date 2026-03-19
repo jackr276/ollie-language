@@ -11666,6 +11666,26 @@ static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* f
 }
 
 
+/**
+ * Validate the parameter list for a given function type. There are a few fail
+ * cases that we currently watch out for. They are:
+ * 	1.) Inlined functions may not have elaborative parameters
+ * 	2.) Elaborative parameters must always be the very last function parameter
+ */
+static u_int8_t validate_function_parameter_list(generic_type_t* function_type){
+
+	//
+	//
+	//
+	//TODO
+	//
+	//
+	//
+
+
+	return TRUE;
+}
+
 
 /**
  * A paramater list will handle all of the parameters in a function definition. It is important
@@ -11886,6 +11906,13 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 	 */
 	if(sse_parameter_number > 6 || general_purpose_parameter_number > 6){
 		align_stack_data_area(&(function_record->stack_passed_parameters));
+	}
+
+	/**
+	 * Validate the function parameter list using our helper
+	 */
+	if(validate_function_parameter_list(function_type) == FALSE){
+		return FAILURE;
 	}
 
 	//If we make it down here then this all worked, so
