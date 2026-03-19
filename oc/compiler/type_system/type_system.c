@@ -774,6 +774,14 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 					}
 			}
 
+		//Error types are never assignable
+		case TYPE_CLASS_ERROR:
+			return NULL;
+
+		//Same for elaborative types
+		case TYPE_CLASS_ELABORATIVE:
+			return NULL;
+
 		//Should be impossible to hit this
 		default:
 			printf("Fatal internal compiler error. Unrecognized type detetected inside of types_assignable\n");

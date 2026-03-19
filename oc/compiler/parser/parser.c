@@ -11413,6 +11413,13 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 	}
 
 	/**
+	 * Once we get here, we have actually seen an entire valid parameter 
+	 * declaration. It is now incumbent on us to store it in the variable 
+	 * symbol table
+	 */
+	symtab_variable_record_t* param_record = create_variable_record(name);
+
+	/**
 	 * If we've seen the params keyword now is the time
 	 * to update the type to be an elaborative type
 	 */
@@ -11429,12 +11436,6 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 		type = create_elaborative_type(type, parser_line_num);
 	}
 
-	//Once we get here, we have actually seen an entire valid parameter 
-	//declaration. It is now incumbent on us to store it in the variable 
-	//symbol table
-	
-	//Let's first construct the variable record
-	symtab_variable_record_t* param_record = create_variable_record(name);
 	//It is a function parameter
 	param_record->membership = FUNCTION_PARAMETER;
 	//We assume that it was initialized
@@ -11805,6 +11806,8 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 
 			//Otherwise if we survive to here, then we're good
 		}
+
+		//TODO WE NEED TO DEAL WITH ELABORATIVE PARAMS
 
 		//Once we're here, we can add the function parameter in
 		add_function_parameter(type_symtab, function_record, parameter);
