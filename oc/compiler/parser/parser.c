@@ -11220,11 +11220,18 @@ static u_int8_t validate_main_function(generic_type_t* type){
  * This rule will return a symtab variable record that represents the parameter it made. If will return
  * NULL if an error occurs
  *
- * BNF Rule: <parameter-declaration> ::= <identifier> : <type-specifier>
+ * We can optionally see the "params" keyword here to denote that this is actually
+ * a variable length, specifically stack passed array of values of a given type. We know
+ * that the params parameter must also be the absolute last parameter given to us
+ * for a function
+ *
+ * BNF Rule: <parameter-declaration> ::= <identifier> : {params}? <type-specifier>
  */
 static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* token_stream, u_int16_t* current_gen_purpose_param, u_int16_t* current_sse_param){
 	//Lookahead token
 	lexitem_t lookahead;
+	//Did we see the params keyword or not
+	u_int8_t params_seen = FALSE;
 
 	//Now we can optionally see the constant keyword here
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -11270,6 +11277,22 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 		return NULL;
 	}
 
+	/**
+	 * There is a chance that we could be seeing the "params" keyword here
+	 * to denote that we have an elaborative stack param. This is only valid in 
+	 * the context of a function signature which is why we must see it here
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Flag this if we see it
+	if(lookahead.tok == PARAMS){
+		params_seen = TRUE;
+
+	//Otherwise put it back
+	} else {
+		push_back_token(token_stream, &parser_line_num);
+	}
+
 	//We are now required to see a valid type specifier node
 	generic_type_t* type = type_specifier(token_stream);
 	
@@ -11289,6 +11312,11 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 		//It's already an error, just propogate it up
 		return NULL;
 	}
+
+
+	//TODO PARAMS
+
+
 
 	//Once we get here, we have actually seen an entire valid parameter 
 	//declaration. It is now incumbent on us to store it in the variable 

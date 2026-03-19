@@ -12,7 +12,7 @@
 * The first 4 bytes are used to store the size(in bytes) of the params which can
 * be used later on to extract the parameters
 */
-pub fn elaborative_param(x:i32, y:i32, params elaborative_params:i32) -> i32 {
+pub fn elaborative_param(x:i32, y:i32, elaborative_params:params i32) -> i32 {
 	let result:mut i32 = x + y;
 
 	//Paramcount will get this for us
