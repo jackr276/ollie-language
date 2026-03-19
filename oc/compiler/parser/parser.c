@@ -14,7 +14,6 @@
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/types.h>
 #include "parser.h"
 #include "../utils/stack/lexstack.h"
@@ -1972,6 +1971,54 @@ static generic_ast_node_t* paramcount_statement(ollie_token_stream_t* token_stre
 		sprintf(info, "Expected ( but got \"%s\" instead", lexitem_to_string(&lookahead));
 		return print_and_return_error(info, parser_line_num);
 	}
+
+	//Get this onto the grouping stack
+	push_token(&grouping_stack, lookahead);
+
+	//Now we need to see a valid logical or expression
+	generic_ast_node_t* expr = logical_or_expression(token_stream, side);
+
+	//Guard in case we fail
+	if(expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return print_and_return_error("Invalid expression given to paramcount statement", parser_line_num);
+	}
+
+	//Now let's validate that we see the closing paren
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Fail out if we don't have it
+	if(lookahead.tok != R_PAREN){
+		sprintf(info, "Expected ) but got \"%s\"", lexitem_to_string(&lookahead));
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Also match the parens up
+	if(pop_token(&grouping_stack).tok != L_PAREN){
+		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
+	}
+
+	/**
+	 * Now that all of that is done, we need to validate that what we're taking the paramcount of
+	 * is actually valid. Remember that we can only take the paramcount of an elaborative param
+	 * variable, so we're going to have to check that: we have a variable, and it's type is
+	 * an elaborative param. Anything short of this is a failure
+	 */
+
+	//Grab this out
+	symtab_variable_record_t* returned_variable = expr->variable;
+
+	//Avoid any exceptions
+	if(returned_variable == NULL){
+		return print_and_return_error("Expression did not return a variable and is invalid for the paramcount operation", parser_line_num);
+	}
+
+	//Check the type
+	if(returned_variable->type_defined_as->type_class != TYPE_CLASS_ELABORATIVE){
+		sprintf(info, "Variable \"%s\" is not an elaborative param type. The paramcount operation is therefore invalid", returned_variable->var_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//TODO FINISH
 
 }
 
