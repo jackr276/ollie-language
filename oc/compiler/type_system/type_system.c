@@ -1835,6 +1835,32 @@ generic_type_t* create_error_type(char* type_name, u_int32_t line_number){
 
 
 /**
+ * Dynamically allocate and create an elaborative stack param type
+ */
+generic_type_t* create_elaborative_type(generic_type_t* elaborates, u_int32_t line_number){
+	//Allocate it first
+	generic_type_t* type = calloc(1, sizeof(generic_type_t));
+
+	//Make room for the name
+	type->type_name = dynamic_string_alloc();
+
+	//The name will always be "params <type>"
+	dynamic_string_set(&(type->type_name), "params ");
+	dynamic_string_concatenate(&(type->type_name), elaborates->type_name.string);
+
+	//Update the type, line number and mutability
+	type->line_number = line_number;
+	type->type_class = TYPE_CLASS_ELABORATIVE;
+
+	//Elaborative param types themselves are always immutable
+	type->mutability = NOT_MUTABLE;
+
+	//Give it back
+	return type;
+}
+
+
+/**
  * Create a pointer type dynamically. In order to have a pointer type, we must also
  * have what it points to.
  */

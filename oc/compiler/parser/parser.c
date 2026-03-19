@@ -11313,10 +11313,13 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 		return NULL;
 	}
 
-
-	//TODO PARAMS
-
-
+	/**
+	 * If we've seen the params keyword now is the time
+	 * to update the type to be an elaborative type
+	 */
+	if(params_seen == TRUE){
+		type = create_elaborative_type(type, parser_line_num);
+	}
 
 	//Once we get here, we have actually seen an entire valid parameter 
 	//declaration. It is now incumbent on us to store it in the variable 
