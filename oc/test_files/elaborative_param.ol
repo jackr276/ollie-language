@@ -6,15 +6,23 @@
 
 /**
 * We can use the elaborative params type to pass in the number of
-* parameters to a given function. This is effectively a "void*"
-* under the hood because any type may be used
+* parameters to a given function. 
+*
+* For our case here, params:i32 is a variable length stack array of i32 variables.
+* The first 4 bytes are used to store the size(in bytes) of the params which can
+* be used later on to extract the parameters
 */
-pub fn elaborative_param(x:i32, y:i32, params elaborative_params) -> i32 {
-	let result:i32 = x + y;
+pub fn elaborative_param(x:i32, y:i32, params elaborative_params:i32) -> i32 {
+	let result:mut i32 = x + y;
 
-	for(let i:i32 = 0; i < paramsize(elaborative_params, ))
+	//Paramcount will get this for us
+	let count:i32 = paramcount(elaborative_params);
 
-	
+	for(let i:i32 = 0; i < paramcount(elaborative_params); i++){
+		result += elaborative_params[i];
+	}
+
+	ret result;
 }
 
 
