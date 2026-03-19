@@ -11312,6 +11312,45 @@ static u_int8_t validate_main_function(generic_type_t* type){
 
 
 /**
+ * Handle an elaborative param type. This includes error checking
+ * to see if the type is valid, and checking to see if we've already created
+ * an elaborative param of the given type to avoid duplicates
+ */
+static inline generic_type_t* handle_elaborative_param_type(generic_type_t* elaborated_type){
+	//If the type cannot be used for an elaborative param, we leave
+	if(is_type_valid_for_elaborative_param(elaborated_type) == FALSE){
+		sprintf(info, "Type \"%s\" is invalid to be used as an elaborative param. Only pointers and primitive types may be elaborated. Remove the \"params\" keyword", elaborated_type->type_name.string);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		num_errors++;
+		return NULL;
+	}
+
+	//Let's construct the name that would exist if we had an identical elaborative param in the symtab
+	dynamic_string_t elaborative_param_name = dynamic_string_alloc();
+	dynamic_string_set(&elaborative_param_name, "params ");
+	dynamic_string_concatenate(&elaborative_param_name, elaborated_type->type_name.string);
+
+	//Let's see if we can find it first
+	symtab_type_record_t* param_type_record = lookup_type_name_only(type_symtab, elaborative_param_name.string, NOT_MUTABLE);
+
+	//If we didn't find it we'll need to create it
+	if(param_type_record == NULL){
+		//Create it
+		generic_type_t* param_type = create_elaborative_type(elaborated_type, parser_line_num);
+
+		//Now we'll insert this
+		insert_type(type_symtab, create_type_record(param_type));
+
+		//Give back the final param type
+		return param_type;
+
+	} else {
+		return param_type_record->type;
+	}
+}
+
+
+/**
  * A parameter declaration is a fancy kind of variable. It is stored in the symtable at the 
  * top lexical scope for the function itself. Like all rules, it returns a reference to the
  * root of the subtree that it creates
@@ -11424,16 +11463,13 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 	 * to update the type to be an elaborative type
 	 */
 	if(params_seen == TRUE){
-		//If the type cannot be used for an elaborative param, we leave
-		if(is_type_valid_for_elaborative_param(type) == FALSE){
-			sprintf(info, "Type \"%s\" is invalid to be used as an elaborative param. Only pointers and primitive types may be elaborated. Remove the \"params\" keyword", type->type_name.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			num_errors++;
+		//Let the handler deal with it
+		type = handle_elaborative_param_type(type);
+
+		//Null is an error, fail out
+		if(type == NULL){
 			return NULL;
 		}
-
-		//Otherwise we will create this
-		type = create_elaborative_type(type, parser_line_num);
 	}
 
 	//It is a function parameter
