@@ -12097,72 +12097,71 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 				return print_and_return_error("Right parenthesis required after void parameter declaration", parser_line_num);
 			}
 
-			//Otherwise just go to after r_paren
-			goto after_rparen;
+			break;
 
 		//We'll just hop out
 		case R_PAREN:
-			goto after_rparen;
+			break;
 
 		//By default we can just leave
 		default:
 			push_back_token(token_stream, &parser_line_num);
+
+			//Keep processing so long as we keep seeing commas
+			do {
+				//By default assume we have not seen this
+				u_int8_t seen_params = FALSE;
+
+				//Grab the next token - we could see a "params"
+				lookahead = get_next_token(token_stream, &parser_line_num);
+
+				//Flag that we've seen the params keyword, otherwise push it back
+				if(lookahead.tok == PARAMS){
+					seen_params = TRUE;
+
+				} else {
+					push_back_token(token_stream, &parser_line_num);
+				}
+
+				//Now we need to see a valid type
+				generic_type_t* type = type_specifier(token_stream);
+
+				//If this is NULL, we'll error out
+				if(type == NULL){
+					return print_and_return_error("Invalid parameter type given", parser_line_num);
+				}
+
+				//If we have seen the params type, then handle it here
+				if(seen_params == TRUE){
+					//Helper deals with it
+					type = handle_elaborative_param_type(type);
+
+					//If it's null it failed, so we fail out
+					if(type == NULL){
+						return print_and_return_error("Invlaid elaborative parameter declaration", parser_line_num);
+					}
+				}
+
+				//Let the helper add the type in
+				add_parameter_to_function_type(function_record->signature, type);
+
+				//Refresh the lookahead token
+				lookahead = get_next_token(token_stream, &parser_line_num);
+
+			} while(lookahead.tok == COMMA);
+
+			//Now that we're done processing the list, we need to ensure that we have a right paren
+			if(lookahead.tok != R_PAREN){
+				return print_and_return_error("Right parenthesis required after parameter list declaration", parser_line_num);
+			}
+
 			break;
 	}
 
-	//Have we seen the params keyword or not
-	u_int8_t seen_params;
-
-	//Keep processing so long as we keep seeing commas
-	do {
-		//By default assume we have not seen this
-		seen_params = FALSE;
-
-		//Grab the next token - we could see a "params"
-		lookahead = get_next_token(token_stream, &parser_line_num);
-
-		//Flag that we've seen the params keyword, otherwise push it back
-		if(lookahead.tok == PARAMS){
-			seen_params = TRUE;
-
-		} else {
-			push_back_token(token_stream, &parser_line_num);
-		}
-
-		//Now we need to see a valid type
-		generic_type_t* type = type_specifier(token_stream);
-
-		//If this is NULL, we'll error out
-		if(type == NULL){
-			return print_and_return_error("Invalid parameter type given", parser_line_num);
-		}
-
-		//If we have seen the params type, then handle it here
-		if(seen_params == TRUE){
-			//Helper deals with it
-			type = handle_elaborative_param_type(type);
-
-			//If it's null it failed, so we fail out
-			if(type == NULL){
-				return print_and_return_error("Invlaid elaborative parameter declaration", parser_line_num);
-			}
-		}
-
-		//Let the helper add the type in
-		add_parameter_to_function_type(function_record->signature, type);
-
-		//Refresh the lookahead token
-		lookahead = get_next_token(token_stream, &parser_line_num);
-
-	} while(lookahead.tok == COMMA);
-
-	//Now that we're done processing the list, we need to ensure that we have a right paren
-	if(lookahead.tok != R_PAREN){
-		return print_and_return_error("Right parenthesis required after parameter list declaration", parser_line_num);
-	}
-
-after_rparen:
-	//Make sure that we can pop the grouping stack and get a match
+	/**
+	 * By the time we get down here we have seen the right parenthesis in some way or form
+	 * so we don't need to worry about finding it again
+	 */
 	if(pop_token(&grouping_stack).tok != L_PAREN){
 		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
 	}

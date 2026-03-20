@@ -9,7 +9,7 @@ declare fn my_fn(i32, params i32) -> i32;
 
 //Should fail
 fn my_fn(x:i32, y:i32) -> i32 {
-	ret x + params[1] + params[2];
+	ret x + y;
 }
 
 

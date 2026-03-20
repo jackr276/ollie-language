@@ -8,7 +8,7 @@ declare fn my_fn(i32, params i32) -> i32;
 
 //Should work just fine
 fn my_fn(x:i32, y:params i32) -> i32 {
-	ret x + params[1] + params[2];
+	ret x + y[1] + y[2];
 }
 
 
