@@ -108,7 +108,8 @@ static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* f
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_global_scope);
 static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, u_int8_t is_global);
-
+static inline generic_type_t* handle_elaborative_param_type(generic_type_t* elaborated_type);
+static u_int8_t validate_function_parameter_list(generic_type_t* function_type);
 
 /**
  * Simply prints a parse message in a nice formatted way
@@ -5726,9 +5727,6 @@ static u_int8_t struct_member_list(ollie_token_stream_t* token_stream, generic_t
  *
  * This function will be used exclusively by the "declare" parent function. We will use
  * a different function for live-parsing types inside of the type name itself
- *
- *
- * TODO ELABORATIVE PARAM
  */
 static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	//Do we raise errors or not? Will be determined soon
@@ -5787,12 +5785,36 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 
 			//We need to at least one type in here
 			do {
+				//By default assume we haven't seen the params keyword
+				u_int8_t seen_params = FALSE;
+
+				//Refresh the lookahead
+				lookahead = get_next_token(token_stream, &parser_line_num);
+
+				//If we see it then flag it, else push this token back
+				if(lookahead.tok == PARAMS){
+					seen_params = TRUE;
+				} else {
+					push_back_token(token_stream, &parser_line_num);
+				}
+
 				//Now we need to see a valid type
 				generic_type_t* type = type_specifier(token_stream);
 
 				//If this is NULL, we'll error out
 				if(type == NULL){
 					return FALSE;
+				}
+
+				//If we've seen this keyword, we need to do our extra processing/validation
+				if(seen_params == TRUE){
+					//Let the helper do it
+					type = handle_elaborative_param_type(type);
+
+					//If we returned NULL that means we failed so we'll fail here too
+					if(type == NULL){
+						return FALSE;
+					}
 				}
 
 				//Add it to the mutable version
@@ -5839,6 +5861,17 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 		//Fail out
 		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected in parameter list declaration", parser_line_num);
 		num_errors++;
+		return FALSE;
+	}
+
+	/**
+	 * Now that the parameter list is parsed in, let's do some validation to 
+	 * make sure it's all in order. If either one of our types fail
+	 * then the whole thing is bad
+	 */
+	if(validate_function_parameter_list(mutable_function_type) == FALSE
+		|| validate_function_parameter_list(immutable_function_type) == FALSE){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid function type detected", parser_line_num);
 		return FALSE;
 	}
 
