@@ -11671,18 +11671,42 @@ static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* f
  * cases that we currently watch out for. They are:
  * 	1.) Inlined functions may not have elaborative parameters
  * 	2.) Elaborative parameters must always be the very last function parameter
+ * 	3.) There may not be more than one elaborative parameter per function
  */
 static u_int8_t validate_function_parameter_list(generic_type_t* function_type){
+	//Grab the internal function type out
+	function_type_t* internal_type = function_type->internal_types.function_type;
 
-	//
-	//
-	//
-	//TODO
-	//
-	//
-	//
+	//Case 1: inlined functions cannot have stack params
+	if(internal_type->is_inlined == TRUE && internal_type->contains_stack_params == TRUE){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Inlined functions may not contain stack passed parameters", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
 
+	//Extract the number of parameters
+	u_int32_t num_params = internal_type->function_parameters.current_index;
 
+	//Run through all of the parameters
+	for(u_int32_t i = 0; i < num_params; i++){
+		//Extract it
+		generic_type_t* parameter_type = dynamic_array_get_at(&(internal_type->function_parameters), i);
+
+		/**
+		 * If we have an elaborative param here, let's check to make
+		 * sure that it is the very last parameter in the function
+		 */
+		if(parameter_type->type_class == TYPE_CLASS_ELABORATIVE){
+			//Not the very last one
+			if(i != num_params - 1){
+				print_parse_message(MESSAGE_TYPE_ERROR, "Elaborative param types must always be the last type in a parameter list", parser_line_num);
+				num_errors++;
+				return FAILURE;
+			}
+		}
+	}
+
+	//If we survive to down here then we're good
 	return TRUE;
 }
 
