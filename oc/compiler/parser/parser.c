@@ -11884,7 +11884,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 
 			//If these 2 don't match, we fail
 			if(defined_type != declared_type){
-				sprintf(info, "Parameter %d was defined with type %s, but declared with type %s",  absolute_parameter_number, defined_type->type_name.string, declared_type->type_name.string);
+				sprintf(info, "Parameter %d was defined with type \"%s\", but declared with type \"%s\"",  absolute_parameter_number, defined_type->type_name.string, declared_type->type_name.string);
 				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				num_errors++;
 				return FAILURE;
