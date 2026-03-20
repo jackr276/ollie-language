@@ -11956,9 +11956,6 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
  * <function_predeclaration> ::= declare {pub}? fn{!}? <identifier>({param_declaration | void} {, <param_declaration}*) {raises <error-list>}? -> <type-specifier>
  *
  * NOTE: by the time we get here, we've already seen the declare keyword
- *
- *
- * TODO ELABORATIVE PARAM
  */
 static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream){
 	//Is this a public function?
@@ -12113,14 +12110,42 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 			break;
 	}
 
+	//Have we seen the params keyword or not
+	u_int8_t seen_params;
+
 	//Keep processing so long as we keep seeing commas
-	do{
+	do {
+		//By default assume we have not seen this
+		seen_params = FALSE;
+
+		//Grab the next token - we could see a "params"
+		lookahead = get_next_token(token_stream, &parser_line_num);
+
+		//Flag that we've seen the params keyword, otherwise push it back
+		if(lookahead.tok == PARAMS){
+			seen_params = TRUE;
+
+		} else {
+			push_back_token(token_stream, &parser_line_num);
+		}
+
 		//Now we need to see a valid type
 		generic_type_t* type = type_specifier(token_stream);
 
 		//If this is NULL, we'll error out
 		if(type == NULL){
 			return print_and_return_error("Invalid parameter type given", parser_line_num);
+		}
+
+		//If we have seen the params type, then handle it here
+		if(seen_params == TRUE){
+			//Helper deals with it
+			type = handle_elaborative_param_type(type);
+
+			//If it's null it failed, so we fail out
+			if(type == NULL){
+				return print_and_return_error("Invlaid elaborative parameter declaration", parser_line_num);
+			}
 		}
 
 		//Let the helper add the type in
@@ -12140,6 +12165,15 @@ after_rparen:
 	//Make sure that we can pop the grouping stack and get a match
 	if(pop_token(&grouping_stack).tok != L_PAREN){
 		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
+	}
+
+	/**
+	 * Once we're done with all of the parameters, let's validate the parameter
+	 * list to ensure that we aren't breaking any rules
+	 */
+	if(validate_function_parameter_list(function_record->signature) == FALSE){
+		sprintf(info, "Invalid parameter list for function \"%s\"", function_name.string);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Following this, we need to see the -> symbol
