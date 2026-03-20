@@ -2404,6 +2404,20 @@ void add_parameter_to_function_type(generic_type_t* function_type, generic_type_
 	//Extract this for convenience
 	function_type_t* internal_type = function_type->internal_types.function_type;
 
+	/**
+	 * Special case - handle adding if we have an elaborative param
+	 */
+	if(parameter->type_class == TYPE_CLASS_ELABORATIVE){
+		//Flag that we do have stack params
+		internal_type->contains_stack_params = TRUE;
+
+		//Add this into the dynamic array
+		dynamic_array_add(&(internal_type->function_parameters), parameter);
+
+		//Early return to skip all of this other processing
+		return;
+	}
+	
 	//Let's up our counts for parameter types before we add this in
 	if(IS_FLOATING_POINT(parameter) == FALSE){
 		internal_type->general_purpose_param_count++;

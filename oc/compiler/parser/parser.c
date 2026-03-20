@@ -5726,6 +5726,9 @@ static u_int8_t struct_member_list(ollie_token_stream_t* token_stream, generic_t
  *
  * This function will be used exclusively by the "declare" parent function. We will use
  * a different function for live-parsing types inside of the type name itself
+ *
+ *
+ * TODO ELABORATIVE PARAM
  */
 static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	//Do we raise errors or not? Will be determined soon
@@ -7103,6 +7106,9 @@ static u_int8_t error_definer(ollie_token_stream_t* token_stream, u_int8_t in_gl
  *
  * fn{!}? (<type-specifier>*) -> <type-specifier> {raises <error-list>}
  * NOTE: by the time we get here, we have already seen and consumed the "fn" token
+ *
+ *
+ * TODO ELABORATIVE PARAM
  */
 static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_stream_t* stream, mutability_type_t mutability){
 	//Does this raise errors or not? This will be important later
@@ -11887,8 +11893,6 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 			//Otherwise if we survive to here, then we're good
 		}
 
-		//TODO WE NEED TO DEAL WITH ELABORATIVE PARAMS
-
 		//Once we're here, we can add the function parameter in
 		add_function_parameter(type_symtab, function_record, parameter);
 
@@ -11952,6 +11956,9 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
  * <function_predeclaration> ::= declare {pub}? fn{!}? <identifier>({param_declaration | void} {, <param_declaration}*) {raises <error-list>}? -> <type-specifier>
  *
  * NOTE: by the time we get here, we've already seen the declare keyword
+ *
+ *
+ * TODO ELABORATIVE PARAM
  */
 static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream){
 	//Is this a public function?
