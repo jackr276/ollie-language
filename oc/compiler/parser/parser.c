@@ -2989,6 +2989,43 @@ static generic_ast_node_t* union_accessor(ollie_token_stream_t* token_stream, ge
 
 
 /**
+ * Is a given type subscriptable? There are only 3 cases where
+ * types are subscriptable:
+ * 	1: An array type(obvious)
+ * 	2: Pointer type(arrays are just pointers)
+ * 	3: An elaborative param type(this is just an array)
+ */
+static inline u_int8_t is_type_subscriptable(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_POINTER:
+		case TYPE_CLASS_ELABORATIVE:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Get the member type that we have after we perform an array access
+ */
+static inline generic_type_t* get_member_type_after_array_access(generic_type_t* parent_type){
+	switch(parent_type->type_class){
+		case TYPE_CLASS_POINTER:
+			return parent_type->internal_types.points_to;
+		case TYPE_CLASS_ARRAY:
+			return parent_type->internal_types.member_type;
+		case TYPE_CLASS_ELABORATIVE:
+			return parent_type->internal_types.elaborates;
+		default:
+			printf("Fatal internal compiler error: attempt to subscript non-subscriptable type\n");
+			exit(1);
+	}
+}
+
+
+/**
  * An array accessor represents a request to get something from an array memory region. Like all
  * nodes, an array accessor will return a reference to the subtree that it creates
  *
@@ -3002,8 +3039,8 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 	//Freeze the current line
 	u_int32_t current_line = parser_line_num;
 
-	//Before we go on, let's see what we have as the current type here. Both arrays and pointers are subscriptable items
-	if(type->type_class != TYPE_CLASS_ARRAY && type->type_class != TYPE_CLASS_POINTER){
+	//Make sure the type itself can be subscripted
+	if(is_type_subscriptable(type) == FALSE){
 		sprintf(info, "Type \"%s\" is not subscriptable", type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
@@ -3065,12 +3102,8 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 	//The conditional expression is a child of this node
 	add_child_node(accessor_node, expr);
 
-	//The values type is what we point to/have as a member type
-	if(type->type_class == TYPE_CLASS_POINTER){
-		accessor_node->inferred_type = type->internal_types.points_to;
-	} else {
-		accessor_node->inferred_type = type->internal_types.member_type;
-	}
+	//Get our member type after access this way
+	accessor_node->inferred_type = get_member_type_after_array_access(type);
 
 	//This is assignable
 	accessor_node->is_assignable = TRUE;

@@ -1860,6 +1860,9 @@ generic_type_t* create_elaborative_type(generic_type_t* elaborates, u_int32_t li
 	type->line_number = line_number;
 	type->type_class = TYPE_CLASS_ELABORATIVE;
 
+	//Store the type that we are elaborating
+	type->internal_types.elaborates = elaborates;
+
 	//Elaborative param types themselves are always immutable
 	type->mutability = NOT_MUTABLE;
 

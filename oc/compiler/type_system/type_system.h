@@ -122,6 +122,8 @@ struct generic_type_t{
 		dynamic_array_t enumeration_table;
 		//The aliased type
 		generic_type_t* aliased_type;
+		//The type that we elaborate(for an elaborative param)
+		generic_type_t* elaborates;
 	} internal_types;
 
 	/**

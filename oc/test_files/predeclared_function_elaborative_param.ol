@@ -14,5 +14,5 @@ fn my_fn(x:i32, y:params i32) -> i32 {
 
 //Dummy
 pub fn main() -> i32 {
-	ret 0;
+	ret @my_fn(1, 2, 3, 4);
 }
