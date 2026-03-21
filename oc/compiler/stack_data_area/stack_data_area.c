@@ -101,6 +101,17 @@ void mark_stack_region(stack_region_t* region){
 }
 
 
+
+/**
+ * This special handler will create a stack region for an elaborative param type. This is unique because the
+ * elaborative param allows us to have a different sized stack footprint for every unique call. The only guarantee
+ * is that there will be at least 4 bytes to hold the beginning "paramcount"
+ */
+stack_region_t* create_stack_region_for_elaborative_param(stack_data_area_t* area, generic_type_t* elaborative_type){
+
+}
+
+
 /**
  * Create a stack region for the type provided. This will handle alignment and addition
  * of this stack region

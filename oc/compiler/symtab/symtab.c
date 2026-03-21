@@ -653,6 +653,8 @@ symtab_variable_record_t* create_parameter_alias_variable(symtab_variable_record
  * passing function parameters via the stack. If we notice that we are adding a function parameter that
  * is more than the max per class register passing value, we will add that into the specialized stack
  * data area
+ *
+ * TODO - with elaborative stack params, a function with this is going to have a dynamic stack size upon every single call
  */
 void add_function_parameter(type_symtab_t* type_symtab, symtab_function_record_t* function_record, symtab_variable_record_t* variable_record){
 	//Store it in the function's parameters
