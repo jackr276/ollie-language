@@ -7169,8 +7169,10 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 	//down the road
 	generic_type_t* function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, raises_errors, mutability);
 
-	//Let's see if we have nothing in here. This is possible. We can also just see a "void"
-	//as an alternative way of saying this function takes no parameters
+	/**
+	 * Let's see if we have nothing in here. This is possible. We can also just see a "void"
+	 * as an alternative way of saying this function takes no parameters
+	 */
 	
 	//Grab the next token
 	lookahead = get_next_token(stream, &parser_line_num);
