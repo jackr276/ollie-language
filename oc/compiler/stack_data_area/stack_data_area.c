@@ -108,7 +108,12 @@ void mark_stack_region(stack_region_t* region){
  * is that there will be at least 4 bytes to hold the beginning "paramcount"
  */
 stack_region_t* create_stack_region_for_elaborative_param(stack_data_area_t* area, generic_type_t* elaborative_type){
+	//TODO
+	//
+	//
+	//
 
+	return NULL;
 }
 
 

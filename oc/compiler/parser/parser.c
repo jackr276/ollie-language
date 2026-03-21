@@ -1630,6 +1630,15 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 			//Grab the current function param
 			generic_type_t* param_type = dynamic_array_get_at(&(function_signature->function_parameters), num_params - 1);
 
+			/**
+			 * For an elaborative param, we need to sort of pause here and accumulate.
+			 * Elaborative params can have 0 to many things inside of them so inside
+			 * of a function call like this, we need to account for that
+			 */
+			if(param_type->type_class == TYPE_CLASS_ELABORATIVE){
+				printf("FOUND ELABORATIVE PARAM\n");
+			}
+
 			//Parameters are in the form of a ternary expression
 			current_param = ternary_expression(token_stream, side);
 
@@ -1693,6 +1702,10 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		//If we have a mismatch between what the function takes and what we want, throw an
 		//error
 		if(num_params != function_signature->function_parameters.current_index){
+			//TODO when we do this counting, we need to make sure that we're accounting
+			//for the fact that we could have an elaborative param in here that may have
+			//been empty
+
 			sprintf(info, "Function %s expects %d parameters, but was given %d. Defined as: %s", 
 			  function_name.string, function_signature->function_parameters.current_index, num_params, function_type->type_name.string);
 			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
