@@ -7139,9 +7139,6 @@ static u_int8_t error_definer(ollie_token_stream_t* token_stream, u_int8_t in_gl
  *
  * fn{!}? (<type-specifier>*) -> <type-specifier> {raises <error-list>}
  * NOTE: by the time we get here, we have already seen and consumed the "fn" token
- *
- *
- * TODO ELABORATIVE PARAM
  */
 static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_stream_t* stream, mutability_type_t mutability){
 	//Does this raise errors or not? This will be important later
@@ -7197,12 +7194,41 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 
 			//We need to at least one type in here
 			do {
+				//By default assume that we have not seen the params keyword
+				u_int8_t seen_params = FALSE;
+
+				//Get the next token in the stream
+				lookahead = get_next_token(stream, &parser_line_num);
+
+				//If we get here then flag it
+				if(lookahead.tok == PARAMS){
+					seen_params = TRUE;
+
+				//Otherwise push it back
+				} else {
+					push_back_token(stream, &parser_line_num);
+				}
+
 				//Now we need to see a valid type
 				generic_type_t* type = type_specifier(stream);
 
 				//If this is NULL, we'll error out
 				if(type == NULL){
 					return FALSE;
+				}
+
+				/**
+				 * If we previously saw this keyword, we'll need to add our
+				 * handling now
+				 */
+				if(seen_params == TRUE){
+					//Let the helper deal with it
+					type = handle_elaborative_param_type(type);
+
+					//Returning null signifies a failure so we fail out if that's the case
+					if(type == NULL){
+						return NULL;
+					}
 				}
 
 				//Add it to the mutable version
@@ -7244,6 +7270,14 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 	if(pop_token(&grouping_stack).tok != L_PAREN){
 		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected in parameter list declaration", parser_line_num);
 		num_errors++;
+		return NULL;
+	}
+
+	/**
+	 * Once we get down here we need to perform validations on the parameter list. The helper
+	 * will tell us whether or not we're valid
+	 */
+	if(validate_function_parameter_list(function_type) == FALSE){
 		return NULL;
 	}
 
