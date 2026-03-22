@@ -5976,11 +5976,51 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 	 * which is why we're not using a do-while
 	 */
 	while(child_cursor != NULL){
+		//Emit each expression
+		cfg_result_package_t expression_results = emit_expression(current_block, child_cursor, FALSE);
 
+		//Always reassign to be the final block that we got back
+		current_block = expression_results.final_block;
+
+		//What is the final assignee
+		three_addr_var_t* final_assignee = expression_results.assignee;
+
+		/**
+		 * If we gave back a memory address var, there will be no associated assignment.
+		 * Let's do the assignment now
+		 */
+		if(final_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+			//Emit the assignment
+			instruction_t* assignment_instruction = emit_assignment_instruction(emit_temp_var(expression_results.assignee->type), expression_results.assignee);
+
+			//Add it into the block
+			add_statement(current_block, assignment_instruction);
+
+			//This now is the final assignee
+			final_assignee = assignment_instruction->assignee;
+		}
+
+		/**
+		 * NOTE: it is very important that this final assignment is *never* coalesced. Doing so would bring 
+		 * the stack parameter that we originally set before  any function call related stack allocations to 
+		 * be after the allocation, which would cause invalid memory access on the callee-side
+		 */
+		if(current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_STMT
+			&& current_block->exit_statement->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+
+			//Flag that it cannot be combined
+			current_block->exit_statement->cannot_be_combined = TRUE;
+		}
+
+		//Add this final result into our parameter results list
+		dynamic_array_add(elaborative_param_results, final_assignee);
 
 		//Advance it up here
 		child_cursor = child_cursor->next_sibling;
 	}
+
+	//Assign this over in case it changed
+	result_package.final_block = current_block;
 
 	//Give back the result package
 	return result_package;
