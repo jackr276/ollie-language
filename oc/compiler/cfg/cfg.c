@@ -9734,8 +9734,13 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 		//Once we're done with the compound statement, we will merge it into the function
 	 	basic_block_t* compound_statement_exit_block = merge_blocks(function_starting_block, compound_statement_results.starting_block);
 
-		//Update here
-		compound_statement_exit_block = compound_statement_results.final_block;
+		/**
+		 * Only reassign here if the compound statement is not just one big block. If the start
+		 * and end are different pointers in memory then this is a valid reassignment
+		 */
+		if(compound_statement_results.starting_block != compound_statement_results.final_block){
+			compound_statement_exit_block = compound_statement_results.final_block;
+		}
 
 		//If these 2 are not the same, then ensure this works by adding a successor
 		if(compound_statement_exit_block != function_exit_block){
