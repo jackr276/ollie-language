@@ -1487,6 +1487,22 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 
 
 /**
+ * Ollie allows for elaborative params that have either 0 or many
+ * of a compatible type. We will have a special rule that accounts 
+ * for this here as well as a special type of node to allow the
+ * CFG translator to take care of it
+ *
+ * NOTE: the elaborative param parser is invoked whenever we have a param
+ * that is elaborative. Remember that since we are technically
+ * allowed to see nothing here, we may very well have elaborative
+ * params that are just empty
+ */
+static inline generic_ast_node_t* handle_elaborative_param_parsing(){
+
+}
+
+
+/**
  * A function call looks for a very specific kind of identifer followed by
  * parenthesis and the appropriate number of parameters for the function, each of
  * the appropriate type
@@ -1635,63 +1651,68 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 			 * Elaborative params can have 0 to many things inside of them so inside
 			 * of a function call like this, we need to account for that
 			 */
-			if(param_type->type_class == TYPE_CLASS_ELABORATIVE){
-				printf("FOUND ELABORATIVE PARAM\n");
-			}
+			if(param_type->type_class != TYPE_CLASS_ELABORATIVE){
+				//Parameters are in the form of a ternary expression
+				current_param = ternary_expression(token_stream, side);
 
-			//Parameters are in the form of a ternary expression
-			current_param = ternary_expression(token_stream, side);
+				//We now have an error of some kind
+				if(current_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+					return print_and_return_error("Bad parameter passed to function call", current_line);
+				}
 
-			//We now have an error of some kind
-			if(current_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-				return print_and_return_error("Bad parameter passed to function call", current_line);
-			}
+				//Let's see if we're even able to assign this here
+				generic_type_t* final_type = types_assignable(param_type, current_param->inferred_type);
 
-			//Let's see if we're even able to assign this here
-			generic_type_t* final_type = types_assignable(param_type, current_param->inferred_type);
+				//If this is null, it means that our check failed
+				if(final_type == NULL){
+					//Let's first generate the types_assignable failure message
+					generate_types_assignable_failure_message(info, current_param->inferred_type, param_type);
+					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 
-			//If this is null, it means that our check failed
-			if(final_type == NULL){
-				//Let's first generate the types_assignable failure message
-				generate_types_assignable_failure_message(info, current_param->inferred_type, param_type);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+					//Following that we'll generate another error message to make it more clear
+					sprintf(info, "Function \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
+							function_name.string, 
+							(param_type->mutability == MUTABLE ? "mut ": ""),
+							param_type->type_name.string, num_params,
+							//Print the mut keyword if we need it
+							(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
+							current_param->inferred_type->type_name.string, function_type->type_name.string);
 
-				//Following that we'll generate another error message to make it more clear
-				sprintf(info, "Function \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
-						function_name.string, 
-						(param_type->mutability == MUTABLE ? "mut ": ""),
-						param_type->type_name.string, num_params,
-						//Print the mut keyword if we need it
-						(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
-						current_param->inferred_type->type_name.string, function_type->type_name.string);
-
-				//Use the helper to return this
-				return print_and_return_error(info, parser_line_num);
-			}
-
-			//If this is a constant node, we'll force it to be whatever we expect from the type assignability
-			if(current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
-				current_param->inferred_type = final_type;
-
-				//Do coercion
-				perform_constant_assignment_coercion(current_param, final_type);
-			}
-
-			//Special checking here - if we have an enum type that is being assigned to, we need
-			//to make sure that it's being assigned to a valid value in it's range
-			if(is_enum_type(param_type) == TRUE && current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
-				if(does_enum_contain_integer_member(param_type, current_param->constant_value.signed_int_value) == FALSE){
-					sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-								param_type->type_name.string, current_param->constant_value.signed_int_value);
-
-					//Hard fail here
+					//Use the helper to return this
 					return print_and_return_error(info, parser_line_num);
 				}
-			} 
 
-			//We can now safely add this into the function call node as a child. In the function call node, 
-			//the parameters will appear in order from left to right
-			add_child_node(function_call_node, current_param);
+				//If this is a constant node, we'll force it to be whatever we expect from the type assignability
+				if(current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
+					current_param->inferred_type = final_type;
+
+					//Do coercion
+					perform_constant_assignment_coercion(current_param, final_type);
+				}
+
+				//Special checking here - if we have an enum type that is being assigned to, we need
+				//to make sure that it's being assigned to a valid value in it's range
+				if(is_enum_type(param_type) == TRUE && current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
+					if(does_enum_contain_integer_member(param_type, current_param->constant_value.signed_int_value) == FALSE){
+						sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
+									param_type->type_name.string, current_param->constant_value.signed_int_value);
+
+						//Hard fail here
+						return print_and_return_error(info, parser_line_num);
+					}
+				} 
+
+				//We can now safely add this into the function call node as a child. In the function call node, 
+				//the parameters will appear in order from left to right
+				add_child_node(function_call_node, current_param);
+
+			//Otherwise down here we'll handle an elaborative param
+			} else {
+				printf("FOUND ELABORATIVE PARAM\n");
+				exit(0);
+				//TODO
+
+			}
 
 			//Refresh the token
 			lookahead = get_next_token(token_stream, &parser_line_num);
