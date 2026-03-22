@@ -5955,10 +5955,25 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 
 
 /**
- *
+ * Handle the parsing for an elaborative parameter. This rule is just meant to help
+ * neaten things up because it's going to involve looping over all of the children
+ * inside of the elaborative param node and emitting them separately. Note that
+ * we are not going to do any kind of stack management here, that all is going
+ * to come afterwards when we do the final result assignment
  */
-static cfg_result_package_t emit_elaborative_param_statement(){
+static inline cfg_result_package_t emit_elaborative_param_expressions(basic_block_t* basic_block, generic_ast_node_t* elaborative_param_node, dynamic_array_t* elaborative_param_results){
+	//NOTE: we will never have an assignee here
+	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
 
+	//Keep track of the current block
+	basic_block_t* current_block = basic_block;
+
+
+	//TODO RUN THROUGH THE PARAMS HERE
+
+
+	//Give back the result package
+	return result_package;
 }
 
 
@@ -6032,6 +6047,13 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	//Create a temporary storage array for all of our function parameter results
 	dynamic_array_t function_parameter_results = dynamic_array_alloc();
 
+	/**
+	 * We'll also need separate temporary storage for our elaborative param results. This is
+	 * NULL most of the time so we'll account for that here
+	 */
+	dynamic_array_t elaborative_param_results;
+	INITIALIZE_NULL_DYNAMIC_ARRAY(elaborative_param_results);
+
 	//So long as this isn't NULL
 	while(param_cursor != NULL 
 		&& param_cursor->ast_node_type != AST_NODE_TYPE_HANDLE_STMT){
@@ -6044,8 +6066,10 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 			//Emit whatever we have here into the basic block
 			cfg_result_package_t package = emit_expression(current_block, param_cursor, FALSE);
 
-			//If we did hit a ternary at some point here, we'd see current as different than the final block, so we'll need
-			//to reassign
+			/**
+			 * If we did hit a ternary at some point here, we'd see current as different than the final block, so we'll need
+			 * to reassign
+			 */
 			if(package.final_block != current_block){
 				//We've seen a ternary, reassign current
 				current_block = package.final_block;
