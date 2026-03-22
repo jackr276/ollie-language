@@ -654,7 +654,8 @@ symtab_variable_record_t* create_parameter_alias_variable(symtab_variable_record
  * is more than the max per class register passing value, we will add that into the specialized stack
  * data area
  *
- * TODO - with elaborative stack params, a function with this is going to have a dynamic stack size upon every single call
+ * NOTE: In the event that we have an elaborative stack param, we will need to account for a different stack every
+ * time. The only real constant here is the bottom 4 bytes which are effectively our "count" for the number of parameters
  */
 void add_function_parameter(type_symtab_t* type_symtab, symtab_function_record_t* function_record, symtab_variable_record_t* variable_record){
 	//Store it in the function's parameters
@@ -678,6 +679,22 @@ void add_function_parameter(type_symtab_t* type_symtab, symtab_function_record_t
 		} else {
 			function_record->stack_passed_parameters.size_type = STACK_DATA_AREA_SIZE_TYPE_DYNAMIC;
 		}
+
+		//TODO STACK REGION CREATION
+
+		//This is a stack variable so flag it as such
+		variable_record->stack_variable = TRUE;
+
+		//This is passed via the stack
+		variable_record->passed_by_stack = TRUE;
+
+		//This function does contain stack variables
+		function_record->contains_stack_params = TRUE;
+
+		//Flag that this contains the special elaborative stack param
+		function_record->contains_elaborative_param = TRUE;
+
+		//TODO stack region for paramcount needed
 
 
 	//Do we need to pass via stack? If so add it here
