@@ -2915,14 +2915,8 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 		//Perform the binary operation here
 		cfg_result_package_t expression_package = emit_expression(current, ret_node->first_child, FALSE);
 
-		//If we hit a ternary here, we'll need to reassign what our current block is
-		if(expression_package.final_block != current){
-			//Assign current to be the new end
-			current = expression_package.final_block;
-
-			//The final block of the overall return chunk will be this
-			return_package.final_block = current;
-		}
+		//Reassign the block
+		current = expression_package.final_block;
 
 		//Grab this out to look at
 		return_variable = expression_package.assignee;
@@ -2951,6 +2945,9 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 
 	//This is always a predecessor of the function exit statement
 	add_successor(current, function_exit_block);
+
+	//Update the final block
+	return_package.final_block = current;
 
 	//Give back the results
 	return return_package;
@@ -4353,10 +4350,8 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	//We will first emit the postfix expression code that comes from this
 	cfg_result_package_t postfix_expression_results = emit_postfix_expression(current_block, postfix_node);
 
-	//If this is now different, which it could be, we'll change what current is
-	if(postfix_expression_results.final_block != current_block){
-		current_block = postfix_expression_results.final_block;
-	}
+	//Update the end block
+	current_block = postfix_expression_results.final_block;
 
 	//This is the value that we will be modifying
 	three_addr_var_t* assignee = postfix_expression_results.assignee;
@@ -4551,10 +4546,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
 
-			//If this is now different, which it could be, we'll change what current is
-			if(unary_package.final_block != current_block){
-				current_block = unary_package.final_block;
-			}
+			//Update the current block
+			current_block = unary_package.final_block;
 
 			//The assignee comes from our package. This is what we are ultimately using in the final result
 			assignee = unary_package.assignee;
@@ -4789,10 +4782,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//The assignee comes from the package
 			assignee = unary_package.assignee;
 
-			//If this is now different, which it could be, we'll change what current is
-			if(unary_package.final_block != current_block){
-				current_block = unary_package.final_block;
-			}
+			//Update the current block
+			current_block = unary_package.final_block;
 
 			//The new assignee will come from this helper
 			unary_package.assignee = emit_bitwise_not_expr_code(current_block, assignee);
@@ -4807,10 +4798,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//The assignee comes from the package
 			assignee = unary_package.assignee;
 
-			//If this is now different, which it could be, we'll change what current is
-			if(unary_package.final_block != current_block){
-				current_block = unary_package.final_block;
-			}
+			//Update the current block
+			current_block = unary_package.final_block;
 
 			//This will always overwrite the other value
 			instruction_t* logical_not_statement = emit_logical_not_instruction(emit_temp_var(u8), assignee);
@@ -4842,10 +4831,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//The assignee comes from the package
 			assignee = unary_package.assignee;
 
-			//If this is now different, which it could be, we'll change what current is
-			if(unary_package.final_block != current_block){
-				current_block = unary_package.final_block;
-			}
+			//Update the current block
+			current_block = unary_package.final_block;
 
 			//We'll need to assign to a temp here, these are
 			//only ever on the RHS
@@ -4920,10 +4907,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					//Emit the whole thing
 					cfg_result_package_t postfix_results = emit_postfix_expression(current_block, unary_expression_child);
 
-					//Set if need be
-					if(postfix_results.final_block != current_block){
-						current_block = postfix_results.final_block;
-					}
+					//Update the current block
+					current_block = postfix_results.final_block;
 
 					//And package the value up as what we want here
 					unary_package.assignee = postfix_results.assignee;
@@ -5016,11 +5001,8 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	//Let's first process the conditional
 	cfg_result_package_t expression_package = emit_binary_expression(current_block, cursor);
 
-	//Let's see if we need to reassign
-	if(expression_package.final_block != current_block){
-		//Reassign this to be at the true end
-		current_block = expression_package.final_block;
-	}
+	//Reassign to be the true end block
+	current_block = expression_package.final_block;
 
 	//Store for later
 	three_addr_var_t* conditional_decider = expression_package.assignee;
@@ -5046,9 +5028,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	cfg_result_package_t if_branch = emit_expression(if_block, cursor, TRUE);
 
 	//Again here we could have multiple blocks, so we'll need to account for this and reassign if necessary
-	if(if_branch.final_block != if_block){
-		if_block = if_branch.final_block;
-	}
+	if_block = if_branch.final_block;
 
 	//We'll now create a conditional move for the if branch into the result
 	instruction_t* if_assignment = emit_assignment_instruction(if_result, if_branch.assignee);
@@ -5066,9 +5046,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	cfg_result_package_t else_branch = emit_expression(else_block, cursor, TRUE);
 
 	//Again here we could have multiple blocks, so we'll need to account for this and reassign if necessary
-	if(else_branch.final_block != else_block){
-		else_block = else_branch.final_block;
-	}
+	else_block = else_branch.final_block;
 
 	//We'll now create a conditional move for the else branch into the result
 	instruction_t* else_assignment = emit_assignment_instruction(else_result, else_branch.assignee);
