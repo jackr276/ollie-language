@@ -4065,6 +4065,9 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 		//Run the primary results function
 		cfg_result_package_t primary_results = emit_primary_expr_code(basic_block, root);
 
+		//The current block now is this ones final block
+		current = primary_results.final_block;
+
 		//Extract for some analysis
 		three_addr_var_t* assignee = primary_results.assignee;
 
@@ -4086,8 +4089,20 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 			 * for the stored paramcount
 			 */
 			if(base_address_variable->type_defined_as->type_class == TYPE_CLASS_ELABORATIVE){
-				printf("FOUND ELABORATIVE BASE ADDR\n\n\n");
-				exit(0);
+				//Emit a new current offset
+				three_addr_var_t* new_current_offset = emit_temp_var(u64);
+
+				//Emit the offset constant here
+				three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(4, u64);
+
+				//Emit the constant assignment
+				instruction_t* current_offset_assignment = emit_assignment_with_const_instruction(new_current_offset, offset_constant);
+
+				//Put it into the block
+				add_statement(current, current_offset_assignment);
+
+				//This now is the current offset so we're going to denote that
+				*current_offset = new_current_offset;
 
 			/**
 			 * Otherwise we still have to account for the case where we have reference types that need
@@ -9539,7 +9554,8 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 		 * 	turns out to not be needed, then the coalescing subsystem inside of the register
 		 * 	allocator will simply knock out the top assignment as if it was never there
 		 */
-		if(parameter->stack_variable == FALSE){
+		if(parameter->stack_variable == FALSE 
+			&& parameter->type_defined_as->type_class != TYPE_CLASS_ELABORATIVE){
 			//Create the aliased variable
 			symtab_variable_record_t* alias = create_parameter_alias_variable(parameter, variable_symtab, increment_and_get_temp_id());
 

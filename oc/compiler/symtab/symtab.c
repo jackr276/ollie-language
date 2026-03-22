@@ -683,9 +683,6 @@ void add_function_parameter(type_symtab_t* type_symtab, symtab_function_record_t
 		//Create the special stack region for our elaborative param type
 		variable_record->stack_region = create_stack_region_for_type(&(function_record->stack_passed_parameters), variable_record->type_defined_as);
 
-		//This is a stack variable so flag it as such
-		variable_record->stack_variable = TRUE;
-
 		//This is passed via the stack
 		variable_record->passed_by_stack = TRUE;
 
