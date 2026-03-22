@@ -5968,9 +5968,19 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 	//Keep track of the current block
 	basic_block_t* current_block = basic_block;
 
+	//Extract the first child here
+	generic_ast_node_t* child_cursor = elaborative_param_node->first_child;
+	
+	/**
+	 * Run through everything. Do note that it's possible to have nothing in here
+	 * which is why we're not using a do-while
+	 */
+	while(child_cursor != NULL){
 
-	//TODO RUN THROUGH THE PARAMS HERE
 
+		//Advance it up here
+		child_cursor = child_cursor->next_sibling;
+	}
 
 	//Give back the result package
 	return result_package;
@@ -5995,6 +6005,9 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 
 	//Grab the function's signature type too
 	function_type_t* signature = indirect_function_call_node->variable->type_defined_as->internal_types.function_type;
+
+	//Hang onto the elaborative param count if we have any
+	u_int32_t elaborative_param_count = 0;
 
 	//Does the function signature contain stack params or not?
 	u_int8_t has_stack_params = signature->contains_stack_params;
@@ -6115,7 +6128,25 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 			//Add this final result into our parameter results list
 			dynamic_array_add(&function_parameter_results, final_assignee);
 
+		/**
+		 * Otherwise we have an elaborative param. Unrelated but worth nothing that this will
+		 * always be the last parameter in our list. Elaborative params no matter what always
+		 * come after everything else. We will let the helper emit everything here and then 
+		 * handle the stack management later
+		 */
 		} else {
+			//Extract and hold onto the elaborative param count - we are going to need this for later
+			elaborative_param_count = param_cursor->optional_storage.elaborative_param_count;
+
+			//Allocate the dynamic array as well
+			elaborative_param_results = dynamic_array_alloc();
+
+			//Let the helper do all of this - do note that there is not going to be anything in the "assignee" here - it's all handled internally
+			cfg_result_package_t results = emit_elaborative_param_expressions(current_block, param_cursor, &elaborative_param_results);
+
+			//Update the final block
+			current_block = results.final_block;
+
 			printf("TODO NOT YET HERE\n");
 			exit(0);
 		}
@@ -6268,6 +6299,9 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 
 	//Destroy the function parameter results here
 	dynamic_array_dealloc(&function_parameter_results);
+
+	//Also destroy the elaborative results if we have any
+	dynamic_array_dealloc(&elaborative_param_results);
 
 	/**
 	 * If we get here and we have a handles statement, we will let our special rule
