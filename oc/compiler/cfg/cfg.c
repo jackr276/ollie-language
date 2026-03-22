@@ -5109,14 +5109,8 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	//Emit the binary expression on the left first
 	cfg_result_package_t left_side = emit_binary_expression(current_block, cursor);
 
-	//If these are different, then we'll need to reassign current
-	if(left_side.final_block != current_block){
-		//Reassign current
-		current_block = left_side.final_block;
-
-		//This is also the new final block for the overall statement
-		package.final_block = current_block;
-	}
+	//Update the current block
+	current_block = left_side.final_block;
 
 	//Advance up here
 	cursor = cursor->next_sibling;
@@ -5124,14 +5118,8 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	//Then grab the right hand temp
 	cfg_result_package_t right_side = emit_binary_expression(current_block, cursor);
 
-	//If these are different, then we'll need to reassign current
-	if(right_side.final_block != current_block){
-		//Reassign current
-		current_block = right_side.final_block;
-
-		//This is also the new final block for the overall statement
-		package.final_block = current_block;
-	}
+	//Update the current block
+	current_block = right_side.final_block;
 
 	//If this is temporary *or* a type conversion is needed, we'll do some reassigning here
 	if(left_side.assignee->variable_type != VARIABLE_TYPE_TEMP){
@@ -5248,6 +5236,9 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 	//Add this statement to the block
 	add_statement(current_block, binary_operation);
+
+	//Flag what the final block is here
+	package.final_block = current_block;
 
 	//Return the temp variable that we assigned to
 	return package;
@@ -7902,10 +7893,8 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	//We'll first need to emit the expression node
 	cfg_result_package_t input_results = emit_expression(root_level_block, cursor, TRUE);
 
-	//Check for ternary expansion
-	if(input_results.final_block != root_level_block){
-		root_level_block = input_results.final_block;
-	}
+	//Update the block
+	root_level_block = input_results.final_block;
 
 	//This is a switch type block
 	jump_calculation_block->block_type = BLOCK_TYPE_SWITCH;
@@ -8195,10 +8184,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	cfg_result_package_t input_results = emit_expression(root_level_block, case_stmt_cursor, TRUE);
 
 	//We could have had a ternary here, so we'll need to account for that possibility
-	if(root_level_block != input_results.final_block){
-		//Just reassign what current is
-		root_level_block = input_results.final_block;
-	}
+	root_level_block = input_results.final_block;
 
 	//IMPORTANT - we'll also mark this as a block type switch, because this is where any/all switching logic
 	//will be happening
@@ -8470,11 +8456,8 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				//Emit the return statement, let the sub rule handle
 			 	generic_results = emit_return(current_block, ast_cursor);
 
-				//If this is the case, it means that we've hit a ternary at some point and need
-				//to reassign this final block
-				if(generic_results.final_block != current_block){
-					current_block = generic_results.final_block;
-				}
+				//Update the current block
+				current_block = generic_results.final_block;
 
 				//If there is anything after this statement, it is UNREACHABLE
 				if(ast_cursor->next_sibling != NULL){
@@ -8777,10 +8760,8 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				//We'll need to emit the conditional in the current block
 				cfg_result_package_t ret_package = emit_expression(current_block, cursor, TRUE);
 
-				//We'll now update the current block accordingly
-				if(ret_package.final_block != current_block){
-					current_block = ret_package.final_block;
-				}
+				//Update the current block
+				current_block = ret_package.final_block;
 
 				//We'll need a block at the very end which we'll hit after we jump
 				basic_block_t* else_block = basic_block_alloc_and_estimate();
@@ -9008,11 +8989,8 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//Emit the return statement, let the sub rule handle
 			 	generic_results = emit_return(current_block, ast_cursor);
 
-				//If this is the case, it means that we've hit a ternary at some point and need
-				//to reassign this final block
-				if(generic_results.final_block != current_block){
-					current_block = generic_results.final_block;
-				}
+				//Update the current block
+				current_block = generic_results.final_block;
 
 				//If there is anything after this statement, it is UNREACHABLE
 				if(ast_cursor->next_sibling != NULL){
@@ -9318,10 +9296,8 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//We'll need to emit the conditional in the current block
 				cfg_result_package_t ret_package = emit_expression(current_block, cursor, TRUE);
 
-				//We'll now update the current block accordingly
-				if(ret_package.final_block != current_block){
-					current_block = ret_package.final_block;
-				}
+				//Update the current block
+				current_block = ret_package.final_block;
 
 				//We'll need a block at the very end which we'll hit after we jump
 				basic_block_t* else_block = basic_block_alloc_and_estimate();
@@ -9758,10 +9734,8 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 		//Once we're done with the compound statement, we will merge it into the function
 	 	basic_block_t* compound_statement_exit_block = merge_blocks(function_starting_block, compound_statement_results.starting_block);
 
-		//Only reassign here if the two are different
-		if(compound_statement_results.starting_block != compound_statement_results.final_block){
-			compound_statement_exit_block = compound_statement_results.final_block;
-		}
+		//Update here
+		compound_statement_exit_block = compound_statement_results.final_block;
 
 		//If these 2 are not the same, then ensure this works by adding a successor
 		if(compound_statement_exit_block != function_exit_block){
@@ -10220,10 +10194,8 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* current_block,
 				break;
 		}
 
-		//Change the current block if there is a change. This is possible with ternary expressions
-		if(initializer_results.final_block != current_block){
-			current_block = initializer_results.final_block;
-		}
+		//Update the current block
+		current_block = initializer_results.final_block;
 
 		//The current array index goes up by one
 		current_array_index++;
@@ -10328,10 +10300,8 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 				break;
 		}
 
-		//Change the current block if there is a change. This is possible with ternary expressions
-		if(initializer_results.final_block != current_block){
-			current_block = initializer_results.final_block;
-		}
+		//Update the current block
+		current_block = initializer_results.final_block;
 
 		//Increment this by one
 		member_index++;
