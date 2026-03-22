@@ -3323,6 +3323,15 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		 * we have function parameters that are passed in via the stack however
 		 */
 		case FUNCTION_PARAMETER:
+			/**
+			 * Elaborative param types are special - there is no circumstance where an elaborative
+			 * param is not a memory address variable ever. We can skip all of the fluff and just
+			 * emit it as such now
+			 */
+			if(variable->type_defined_as->type_class == TYPE_CLASS_ELABORATIVE){
+				return emit_memory_address_var(variable);
+			}
+
 			//Most common case - not passed by stack
 			if(variable->passed_by_stack == FALSE){
 				//RHS can have special rules
@@ -3333,8 +3342,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 					 * only exception to this rule are elaborative stack params. Those may never be loaded 
 					 * from memory in any way
 					 */
-					if(variable->stack_variable == TRUE 
-						&& variable->type_defined_as->type_class != TYPE_CLASS_ELABORATIVE){
+					if(variable->stack_variable == TRUE){
 						//Let the helper emit our load from memory
 						return emit_automatic_load_from_memory(basic_block, variable);
 
@@ -3355,8 +3363,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 				 * The only exception to this is stack passed parameters. Those may never have an automatic
 				 * dereference emitted because they can only be accessed via the array accessor
 				 */
-				if(side == SIDE_TYPE_RIGHT
-					&& variable->type_defined_as->type_class != TYPE_CLASS_ELABORATIVE){
+				if(side == SIDE_TYPE_RIGHT){
 					return emit_automatic_load_from_memory(basic_block, variable);
 
 				//Otherwise just emit a variable
