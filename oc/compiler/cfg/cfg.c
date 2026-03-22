@@ -3680,48 +3680,34 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 	generic_type_t* member_type = array_accessor->inferred_type;
 
 	/**
-	 * If we do not have an elaborative base ADDR then we are able to just go through here
-	 * and do the normal procedure
+	 * If this is not null, we'll be adding on top of it
+	 * with this rule and eventually reassigning what the current offset
+	 * actually is
 	 */
-	if((*base_address)->type->type_class != TYPE_CLASS_ELABORATIVE){
+	if(*current_offset != NULL){
 		/**
-		 * If this is not null, we'll be adding on top of it
-		 * with this rule and eventually reassigning what the current offset
-		 * actually is
+		 * The formula for array subscript is: base_address + type_size * subscript
+		 * 
+		 * However, if we're on our second or third round, the current var may be an address
+		 *
+		 * This can be done using a lea instruction, so we will emit that directly
 		 */
-		if(*current_offset != NULL){
-			/**
-			 * The formula for array subscript is: base_address + type_size * subscript
-			 * 
-			 * However, if we're on our second or third round, the current var may be an address
-			 *
-			 * This can be done using a lea instruction, so we will emit that directly
-			 */
-			three_addr_var_t* address = emit_array_address_calculation(current_block, *current_offset, array_offset, member_type);
+		three_addr_var_t* address = emit_array_address_calculation(current_block, *current_offset, array_offset, member_type);
 
-			//And finally - our current offset is no longer the actual offset
-			*current_offset = address;
-
-		/**
-		 * If this is NULL, then we can just make the current offset be
-		 * the result + the array offset * member type
-		 */
-		} else {
-			//Emit the variable directly here
-			*current_offset = emit_temp_var(u64);
-
-			//Emit the binary operation directly with this. The current offset remains unchanged
-			emit_binary_operation_with_constant(current_block, *current_offset, array_offset, STAR, emit_direct_integer_or_char_constant(member_type->type_size, u64));
-		}
+		//And finally - our current offset is no longer the actual offset
+		*current_offset = address;
 
 	/**
-	 * However if we do have an elaborative parameter as the very base address type, 
+	 * If this is NULL, then we can just make the current offset be
+	 * the result + the array offset * member type
 	 */
 	} else {
-		printf("FOUND ELABORATIVE BASE ADDR\n");
-		exit(0);
-	}
+		//Emit the variable directly here
+		*current_offset = emit_temp_var(u64);
 
+		//Emit the binary operation directly with this. The current offset remains unchanged
+		emit_binary_operation_with_constant(current_block, *current_offset, array_offset, STAR, emit_direct_integer_or_char_constant(member_type->type_size, u64));
+	}
 
 	/**
 	 * IMPORTANT: if what we just calculated came specifically from a non-contiguous memory
@@ -4092,11 +4078,24 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 		 * areas in memory. The array itself is not on the stack
 		 */
 		if(base_address_variable != NULL 
-			&& base_address_variable->passed_by_stack == TRUE
-			&& is_type_stack_passed_by_reference(base_address_variable->type_defined_as)){
-			
-			//Let the helper do it
-			*base_address = emit_automatic_load_from_memory(basic_block, base_address_variable);
+			&& base_address_variable->passed_by_stack == TRUE){
+
+			/**
+			 * Is this an elaborative param type? If so, we'll need to add on the automatic
+			 * 4 byte offset to this base address that all stack passed parameters have to account
+			 * for the stored paramcount
+			 */
+			if(base_address_variable->type_defined_as->type_class == TYPE_CLASS_ELABORATIVE){
+				printf("FOUND ELABORATIVE BASE ADDR\n\n\n");
+				exit(0);
+
+			/**
+			 * Otherwise we still have to account for the case where we have reference types that need
+			 * to automatically be loaded(like arrays)
+			 */
+			} else if(is_type_stack_passed_by_reference(base_address_variable->type_defined_as) == TRUE){
+				*base_address = emit_automatic_load_from_memory(basic_block, base_address_variable);
+			}
 
 		//Else just update the base address
 		} else {
