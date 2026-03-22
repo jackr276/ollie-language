@@ -1513,6 +1513,9 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 	//Extract the elaborated type - this is what we'll be comparing to
 	generic_type_t* type_being_elaborated = elaborative_param_type->internal_types.elaborates;
 
+	//Keep track of how many we've got in here
+	u_int32_t elaborated_param_count = 0;
+
 	//Forever loop until we hit the R_PAREN
 	do {
 		//Handle the actual parameter
@@ -1562,6 +1565,9 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 				return print_and_return_error(info, parser_line_num);
 			}
 		} 
+
+		//This counts as one more elaborated param
+		elaborated_param_count++;
 		
 		//Grab the lookahead token
 		lookahead = get_next_token(token_stream, &parser_line_num);
@@ -1570,9 +1576,13 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 		if(lookahead.tok == COMMA){
 			continue;
 
-		//R_PAREN - push it back(parent rule handles) and get out
+		//Termination condition
 		} else if(lookahead.tok == R_PAREN){
+			//This will be handled by the helper rule
 			push_back_token(token_stream, &parser_line_num);
+
+			//Get out of here now
+			break;
 
 		//Otherwise we have some issue here
 		} else {
@@ -1581,6 +1591,9 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 		}
 
 	} while(TRUE);
+
+	//Store the final count in here - is needed in the CFG
+	elaborative_param_node->optional_storage.elaborative_param_count = elaborated_param_count;
 
 	//Give back the elaboarative param in the end
 	return elaborative_param_node;
