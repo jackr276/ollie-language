@@ -3680,34 +3680,48 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 	generic_type_t* member_type = array_accessor->inferred_type;
 
 	/**
-	 * If this is not null, we'll be adding on top of it
-	 * with this rule and eventually reassigning what the current offset
-	 * actually is
+	 * If we do not have an elaborative base ADDR then we are able to just go through here
+	 * and do the normal procedure
 	 */
-	if(*current_offset != NULL){
+	if((*base_address)->type->type_class != TYPE_CLASS_ELABORATIVE){
 		/**
-		 * The formula for array subscript is: base_address + type_size * subscript
-		 * 
-		 * However, if we're on our second or third round, the current var may be an address
-		 *
-		 * This can be done using a lea instruction, so we will emit that directly
+		 * If this is not null, we'll be adding on top of it
+		 * with this rule and eventually reassigning what the current offset
+		 * actually is
 		 */
-		three_addr_var_t* address = emit_array_address_calculation(current_block, *current_offset, array_offset, member_type);
+		if(*current_offset != NULL){
+			/**
+			 * The formula for array subscript is: base_address + type_size * subscript
+			 * 
+			 * However, if we're on our second or third round, the current var may be an address
+			 *
+			 * This can be done using a lea instruction, so we will emit that directly
+			 */
+			three_addr_var_t* address = emit_array_address_calculation(current_block, *current_offset, array_offset, member_type);
 
-		//And finally - our current offset is no longer the actual offset
-		*current_offset = address;
+			//And finally - our current offset is no longer the actual offset
+			*current_offset = address;
+
+		/**
+		 * If this is NULL, then we can just make the current offset be
+		 * the result + the array offset * member type
+		 */
+		} else {
+			//Emit the variable directly here
+			*current_offset = emit_temp_var(u64);
+
+			//Emit the binary operation directly with this. The current offset remains unchanged
+			emit_binary_operation_with_constant(current_block, *current_offset, array_offset, STAR, emit_direct_integer_or_char_constant(member_type->type_size, u64));
+		}
 
 	/**
-	 * If this is NULL, then we can just make the current offset be
-	 * the result + the array offset * member type
+	 * However if we do have an elaborative parameter as the very base address type, 
 	 */
 	} else {
-		//Emit the variable directly here
-		*current_offset = emit_temp_var(u64);
-
-		//Emit the binary operation directly with this. The current offset remains unchanged
-		emit_binary_operation_with_constant(current_block, *current_offset, array_offset, STAR, emit_direct_integer_or_char_constant(member_type->type_size, u64));
+		printf("FOUND ELABORATIVE BASE ADDR\n");
+		exit(0);
 	}
+
 
 	/**
 	 * IMPORTANT: if what we just calculated came specifically from a non-contiguous memory

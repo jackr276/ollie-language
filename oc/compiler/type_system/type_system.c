@@ -21,6 +21,7 @@ u_int8_t is_memory_region(generic_type_t* type){
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_UNION:
+		case TYPE_CLASS_ELABORATIVE:
 			return TRUE;
 		default:
 			return FALSE;
@@ -1869,6 +1870,18 @@ generic_type_t* create_elaborative_type(generic_type_t* elaborates, u_int32_t li
 
 	//Elaborative param types themselves are always immutable
 	type->mutability = NOT_MUTABLE;
+
+	/**
+	 * What does this type look like in memory? If an array type contains
+	 * all non-pointer types, it's considered "contiguous". This means that
+	 * the memory is laid out flat, all next to eachother. If an array holds 
+	 * pointers, then this is a non-contiguous memory region
+	 */
+	if(elaborates->type_class != TYPE_CLASS_POINTER){
+		type->memory_layout_type = MEMORY_LAYOUT_TYPE_CONTIGUOUS;
+	} else {
+		type->memory_layout_type = MEMORY_LAYOUT_TYPE_NON_CONTIGUOUS;
+	}
 
 	//Give it back
 	return type;
