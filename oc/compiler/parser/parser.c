@@ -2225,6 +2225,9 @@ static generic_ast_node_t* paramcount_statement(ollie_token_stream_t* token_stre
 	paramcount_node->inferred_type = immut_u32;
 	paramcount_node->line_number = parser_line_num;
 
+	//Store the paramcount variable here - we will need this for down the road
+	paramcount_node->variable = returned_variable;
+
 	//And give it back
 	return paramcount_node;
 }
