@@ -1487,6 +1487,26 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 
 
 /**
+ * Special helper for when we need to create an empty elaborative param as a placeholder for what we'd normally have. We still
+ * need to create something because if we don't, the callee would be looking inside of the stack for a paramcount where there
+ * is none. This node will still setup the stack and just have the count set to 0
+ */
+static inline generic_ast_node_t* create_empty_elaborative_param(generic_type_t* elaborative_param_type){
+	//Allocate it
+	generic_ast_node_t* elaborative_param_node = ast_node_alloc(AST_NODE_TYPE_ELABORATIVE_PARAM_STMT, SIDE_TYPE_RIGHT);
+
+	//Set the count to be 0
+	elaborative_param_node->optional_storage.elaborative_param_count = 0;
+
+	//Store the type here as well
+	elaborative_param_node->inferred_type = elaborative_param_type; 
+
+	//Give this back
+	return elaborative_param_node;
+}
+
+
+/**
  * Ollie allows for elaborative params that have either 0 or many
  * of a compatible type. We will have a special rule that accounts 
  * for this here as well as a special type of node to allow the
@@ -1513,109 +1533,108 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 	//Extract the elaborated type - this is what we'll be comparing to
 	generic_type_t* type_being_elaborated = elaborative_param_type->internal_types.elaborates;
 
-	//Keep track of how many we've got in here
-	u_int32_t elaborated_param_count = 0;
+	//Get the first lookahead - we need to test if we have an empty elaborative param here
+	lookahead = get_next_token(token_stream, &parser_line_num);
 
-	//Forever loop until we hit the R_PAREN
-	do {
-		//Handle the actual parameter
-		generic_ast_node_t* elaborated_param = ternary_expression(token_stream, side);
+	//We don't have an empty elaborated param here - so we will process everything that we see
+	if(lookahead.tok != R_PAREN){
+		//Push this token back for processing
+		push_back_token(token_stream, &parser_line_num);
 
-		//It failed so we just get out here
-		if(elaborated_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return print_and_return_error("Invalid parameter expression in elaborative param handler", parser_line_num);
-		}
+		//Keep track of how many we've got in here
+		u_int32_t elaborated_param_count = 0;
 
-		//Let's see if we're even able to assign this here
-		generic_type_t* final_type = types_assignable(type_being_elaborated, elaborated_param->inferred_type);
+		//Forever loop until we hit the R_PAREN
+		do {
+			//Handle the actual parameter
+			generic_ast_node_t* elaborated_param = ternary_expression(token_stream, side);
 
-		//If this is null, it means that our check failed
-		if(final_type == NULL){
-			//Let's first generate the types_assignable failure message
-			generate_types_assignable_failure_message(info, elaborated_param->inferred_type, type_being_elaborated);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			//It failed so we just get out here
+			if(elaborated_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+				return print_and_return_error("Invalid parameter expression in elaborative param handler", parser_line_num);
+			}
 
-			//Following that we'll generate another error message to make it more clear
-			sprintf(info, "Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s%s\".",
-					(type_being_elaborated->mutability == MUTABLE ? "mut ": ""),
-					type_being_elaborated->type_name.string,
-					(elaborated_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
-					elaborated_param->inferred_type->type_name.string);
+			//Let's see if we're even able to assign this here
+			generic_type_t* final_type = types_assignable(type_being_elaborated, elaborated_param->inferred_type);
 
-			return print_and_return_error(info, parser_line_num);
-		}
+			//If this is null, it means that our check failed
+			if(final_type == NULL){
+				//Let's first generate the types_assignable failure message
+				generate_types_assignable_failure_message(info, elaborated_param->inferred_type, type_being_elaborated);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 
-		//If this is a constant node, we'll force it to be whatever we expect from the type assignability
-		if(elaborated_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
-			elaborated_param->inferred_type = final_type;
-
-			//Do coercion
-			perform_constant_assignment_coercion(elaborated_param, final_type);
-		}
-
-		/**
-		 * Special checking here - if we have an enum type that is being assigned to, we need
-		 * to make sure that it's being assigned to a valid value in it's range
-		 */
-		if(is_enum_type(type_being_elaborated) == TRUE && elaborated_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
-			if(does_enum_contain_integer_member(type_being_elaborated, elaborated_param->constant_value.signed_int_value) == FALSE){
-				sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-							type_being_elaborated->type_name.string, elaborated_param->constant_value.signed_int_value);
+				//Following that we'll generate another error message to make it more clear
+				sprintf(info, "Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s%s\".",
+						(type_being_elaborated->mutability == MUTABLE ? "mut ": ""),
+						type_being_elaborated->type_name.string,
+						(elaborated_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
+						elaborated_param->inferred_type->type_name.string);
 
 				return print_and_return_error(info, parser_line_num);
 			}
-		} 
 
-		//This counts as one more elaborated param
-		elaborated_param_count++;
-		
-		//Grab the lookahead token
-		lookahead = get_next_token(token_stream, &parser_line_num);
-		
-		//Comma - keep going to the next param
-		if(lookahead.tok == COMMA){
-			continue;
+			//If this is a constant node, we'll force it to be whatever we expect from the type assignability
+			if(elaborated_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
+				elaborated_param->inferred_type = final_type;
 
-		//Termination condition
-		} else if(lookahead.tok == R_PAREN){
-			//This will be handled by the helper rule
-			push_back_token(token_stream, &parser_line_num);
+				//Do coercion
+				perform_constant_assignment_coercion(elaborated_param, final_type);
+			}
 
-			//Get out of here now
-			break;
+			/**
+			 * Special checking here - if we have an enum type that is being assigned to, we need
+			 * to make sure that it's being assigned to a valid value in it's range
+			 */
+			if(is_enum_type(type_being_elaborated) == TRUE && elaborated_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
+				if(does_enum_contain_integer_member(type_being_elaborated, elaborated_param->constant_value.signed_int_value) == FALSE){
+					sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
+								type_being_elaborated->type_name.string, elaborated_param->constant_value.signed_int_value);
 
-		//Otherwise we have some issue here
-		} else {
-			sprintf(info, "Commas are required between elaborative function parameters in function call");
-			return print_and_return_error(info, parser_line_num);
-		}
+					return print_and_return_error(info, parser_line_num);
+				}
+			} 
 
-	} while(TRUE);
+			//This counts as one more elaborated param
+			elaborated_param_count++;
+			
+			//Grab the lookahead token
+			lookahead = get_next_token(token_stream, &parser_line_num);
+			
+			//Comma - keep going to the next param
+			if(lookahead.tok == COMMA){
+				continue;
 
-	//Store the final count in here - is needed in the CFG
-	elaborative_param_node->optional_storage.elaborative_param_count = elaborated_param_count;
+			//Termination condition
+			} else if(lookahead.tok == R_PAREN){
+				//This will be handled by the helper rule
+				push_back_token(token_stream, &parser_line_num);
+
+				//Get out of here now
+				break;
+
+			//Otherwise we have some issue here
+			} else {
+				sprintf(info, "Commas are required between elaborative function parameters in function call");
+				return print_and_return_error(info, parser_line_num);
+			}
+
+		} while(TRUE);
+
+		//Store the final count in here - is needed in the CFG
+		elaborative_param_node->optional_storage.elaborative_param_count = elaborated_param_count;
+
+	/**
+	 * Otherwise we have an entirely empty elaborative param here. We'll just use the helper
+	 * to create an empty one and that'll be all. Note that we do still have to push back the R_PAREN
+	 * because we need to process it later
+	 */
+	} else {
+		push_back_token(token_stream, &parser_line_num);
+
+		elaborative_param_node = create_empty_elaborative_param(elaborative_param_type);
+	}
 
 	//Give back the elaboarative param in the end
-	return elaborative_param_node;
-}
-
-
-/**
- * Special helper for when we need to create an empty elaborative param as a placeholder for what we'd normally have. We still
- * need to create something because if we don't, the callee would be looking inside of the stack for a paramcount where there
- * is none. This node will still setup the stack and just have the count set to 0
- */
-static inline generic_ast_node_t* create_empty_elaborative_param(generic_type_t* elaborative_param_type){
-	//Allocate it
-	generic_ast_node_t* elaborative_param_node = ast_node_alloc(AST_NODE_TYPE_ELABORATIVE_PARAM_STMT, SIDE_TYPE_RIGHT);
-
-	//Set the count to be 0
-	elaborative_param_node->optional_storage.elaborative_param_count = 0;
-
-	//Store the type here as well
-	elaborative_param_node->inferred_type = elaborative_param_type; 
-
-	//Give this back
 	return elaborative_param_node;
 }
 
