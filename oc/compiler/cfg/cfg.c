@@ -4090,7 +4090,6 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 			*base_address = assignee;
 		}
 
-
 		//And give these back
 		return primary_results;
 	}
@@ -4450,7 +4449,6 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	//Otherwise - it is possible that we have a stack variable or reference here. In that case, we'll need to emit a
 	//store to get the variable back to where it needs to be
 	} else if (postfix_node->variable->stack_variable == TRUE){
-		//Get the "true type". If we have a reference, this goes through an implicit dereference
 		generic_type_t* type = postfix_node->variable->type_defined_as; 
 
 		//Get the version that represents our memory indirection. Be sure to use the "true type" here
@@ -5419,6 +5417,21 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 
 
 /**
+ * Handle a paramcount statement. All that a paramcount statement does is load the first 4 bytes out of the elaborative
+ * param stack region. This is because those first 4 bytes are where we store the parameter count
+ */
+static cfg_result_package_t visit_paramcount_statement(basic_block_t* basic_block, generic_ast_node_t* paramcount_node){
+	//Extract the variable
+	symtab_variable_record_t* paramcount_var = paramcount_node->variable;
+
+	//Spit out the memory address variable for this
+	three_addr_var_t* base_address = emit_memory_address_var(paramcount_var);
+
+	//TODO
+}
+
+
+/**
  * Emit abstract machine code for an expression. This is a top level statement.
  * These statements almost always involve some kind of assignment "<-" and generate temporary
  * variables
@@ -5446,8 +5459,8 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			exit(0);
 
 		case AST_NODE_TYPE_PARAMCOUNT_STMT:
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(0);
+			result_package = visit_paramcount_statement(basic_block, expr_node);
+			break;
 
 		//Handle an assignment expression
 		case AST_NODE_TYPE_ASNMNT_EXPR:
