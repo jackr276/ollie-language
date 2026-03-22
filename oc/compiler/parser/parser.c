@@ -1500,15 +1500,17 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
  * Remember that the elaborative param must always be the very last parameter in a function,
  * so to parse it we're just taking everything from the starting point until we see an R_PAREN
  */
-static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_stream_t* token_stream, generic_type_t* elaborative_param_type){
+static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_stream_t* token_stream, generic_type_t* elaborative_param_type, side_type_t side){
 	printf("HANDLING ELABORATIVE PARAM\n");
 
-	//TODO
+	//Allocate it
+	generic_ast_node_t* elaborative_param_node = ast_node_alloc(AST_NODE_TYPE_ELABORATIVE_PARAM_STMT, side);
 
 	//Grab the lookahead token
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
-	return NULL;
+	//Give back the elaboarative param in the end
+	return elaborative_param_node;
 }
 
 
@@ -1518,6 +1520,7 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
  * is none. This node will still setup the stack and just have the count set to 0
  */
 static inline generic_ast_node_t* create_empty_elaborative_param(generic_type_t* elaborative_param_type){
+	printf("HANDLING EMPTY ELABORATIVE PARAM\n");
 	//Allocate it
 	generic_ast_node_t* elaborative_param_node = ast_node_alloc(AST_NODE_TYPE_ELABORATIVE_PARAM_STMT, SIDE_TYPE_RIGHT);
 
@@ -1746,7 +1749,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 				num_params++;
 				
 				//Helper gives back an error or an elaborative param if it worked
-				generic_ast_node_t* elaborative_param_node = handle_elaborative_param_parsing(token_stream, param_type);
+				generic_ast_node_t* elaborative_param_node = handle_elaborative_param_parsing(token_stream, param_type, side);
 
 				//Fail up if we get here
 				if(elaborative_param_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){

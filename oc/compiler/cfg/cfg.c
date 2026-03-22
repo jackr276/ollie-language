@@ -5445,6 +5445,10 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			printf("TODO NOT IMPLEMENTED\n");
 			exit(0);
 
+		case AST_NODE_TYPE_PARAMCOUNT_STMT:
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(0);
+
 		//Handle an assignment expression
 		case AST_NODE_TYPE_ASNMNT_EXPR:
 			//Let the helper deal with it
@@ -5470,8 +5474,8 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 		case AST_NODE_TYPE_TERNARY_EXPRESSION:
 			//Emit the ternary expression
 			result_package = emit_ternary_expression(basic_block, expr_node);
-			break;
-			 
+			break; 
+
 		//Default is a unary expression
 		default:
 			//Let this rule handle it

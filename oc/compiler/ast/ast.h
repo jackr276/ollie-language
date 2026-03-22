@@ -73,19 +73,12 @@ typedef enum ast_node_type_t{
 	AST_NODE_TYPE_DO_WHILE_STMT,
 	AST_NODE_TYPE_FOR_STMT,
 	AST_NODE_TYPE_COMPOUND_STMT,
-	//Has no body
 	AST_NODE_TYPE_DEFER_STMT,
-	//For assembly inline statements
 	AST_NODE_TYPE_ASM_INLINE_STMT,
-	//An array initializer node
 	AST_NODE_TYPE_ARRAY_INITIALIZER_LIST,
-	//A struct initializer
 	AST_NODE_TYPE_STRUCT_INITIALIZER_LIST,
-	//A string initializer node
 	AST_NODE_TYPE_STRING_INITIALIZER,
-	//Get an elaborative paramcount
 	AST_NODE_TYPE_PARAMCOUNT_STMT,
-	//Elaborative parameter statement itself
 	AST_NODE_TYPE_ELABORATIVE_PARAM_STMT,
 	AST_NODE_TYPE_ERR_NODE, /* errors as values approach going forward */
 } ast_node_type_t;
