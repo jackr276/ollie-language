@@ -5514,11 +5514,6 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			result_package = visit_let_statement(basic_block, expr_node);
 			break;
 		
-		//TODO 
-		case AST_NODE_TYPE_ELABORATIVE_PARAM_STMT:
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(0);
-
 		case AST_NODE_TYPE_PARAMCOUNT_STMT:
 			result_package = visit_paramcount_statement(basic_block, expr_node);
 			break;
@@ -5960,6 +5955,15 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 
 
 /**
+ *
+ */
+static cfg_result_package_t emit_elaborative_param_statement(){
+
+}
+
+
+
+/**
  * Emit an indirect function call like such
  *
  * call *<function_name>
@@ -5989,19 +5993,12 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	 * for our stack passed parameters. This needs to be done on every function call
 	 * for an indirect call, regardless of whether the stack is dynamic or static
 	 */
-	if(has_stack_params == TRUE){
-		//
-		//
-		//
-		//
-		//TODO FIX
-		//
-		//
-		//
-		//
-		//
+	if(signature->contains_elaborative_stack_param == TRUE){
+		//We'll need a dynamically sized parameter for this one
+		stack_data_area_alloc(&stack_passed_parameters, STACK_TYPE_TEMP_USE, STACK_DATA_AREA_SIZE_TYPE_DYNAMIC);
 
-
+	//We'll just need a statically sized param here
+	} else if(signature->contains_stack_params == TRUE){
 		stack_data_area_alloc(&stack_passed_parameters, STACK_TYPE_TEMP_USE, STACK_DATA_AREA_SIZE_TYPE_STATIC);
 	}
 	
@@ -6036,56 +6033,68 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	dynamic_array_t function_parameter_results = dynamic_array_alloc();
 
 	//So long as this isn't NULL
-	while(param_cursor != NULL && param_cursor->ast_node_type != AST_NODE_TYPE_HANDLE_STMT){
-		//Emit whatever we have here into the basic block
-		cfg_result_package_t package = emit_expression(current_block, param_cursor, FALSE);
-
-		//If we did hit a ternary at some point here, we'd see current as different than the final block, so we'll need
-		//to reassign
-		if(package.final_block != current_block){
-			//We've seen a ternary, reassign current
-			current_block = package.final_block;
-
-			//Reassign this as well, so that we stay current
-			result_package.final_block = current_block;
-		}
-
-		//What is the final assignee
-		three_addr_var_t* final_assignee = package.assignee;
+	while(param_cursor != NULL 
+		&& param_cursor->ast_node_type != AST_NODE_TYPE_HANDLE_STMT){
 
 		/**
-		 * If we gave back a memory address var, there will be no associated assignment.
-		 * Let's do the assignment now
+		 * For everything that is not an elaborative param statement, we'll
+		 * handle it internally to this function
 		 */
-		if(final_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-			//Emit the assignment
-			instruction_t* assignment_instruction = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
+		if(param_cursor->ast_node_type != AST_NODE_TYPE_ELABORATIVE_PARAM_STMT){
+			//Emit whatever we have here into the basic block
+			cfg_result_package_t package = emit_expression(current_block, param_cursor, FALSE);
 
-			//Add it into the block
-			add_statement(current_block, assignment_instruction);
+			//If we did hit a ternary at some point here, we'd see current as different than the final block, so we'll need
+			//to reassign
+			if(package.final_block != current_block){
+				//We've seen a ternary, reassign current
+				current_block = package.final_block;
 
-			//This now is the final assignee
-			final_assignee = assignment_instruction->assignee;
-		}
-
-		/**
-		 * NOTE: if we do contain stack parameters, it is very important that this final assignment
-		 * is *never* coalesced. Doing so would bring the stack parameter that we originally set before
-		 * any function call related stack allocations to be after the allocation, which would cause
-		 * invalid memory
-		 */
-		if(has_stack_params == TRUE){
-			//If the last thing we added is an assignment with a memory address variable
-			if(current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_STMT
-				&& current_block->exit_statement->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-
-				//Flag that it cannot be combined
-				current_block->exit_statement->cannot_be_combined = TRUE;
+				//Reassign this as well, so that we stay current
+				result_package.final_block = current_block;
 			}
-		}
 
-		//Add this final result into our parameter results list
-		dynamic_array_add(&function_parameter_results, final_assignee);
+			//What is the final assignee
+			three_addr_var_t* final_assignee = package.assignee;
+
+			/**
+			 * If we gave back a memory address var, there will be no associated assignment.
+			 * Let's do the assignment now
+			 */
+			if(final_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+				//Emit the assignment
+				instruction_t* assignment_instruction = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
+
+				//Add it into the block
+				add_statement(current_block, assignment_instruction);
+
+				//This now is the final assignee
+				final_assignee = assignment_instruction->assignee;
+			}
+
+			/**
+			 * NOTE: if we do contain stack parameters, it is very important that this final assignment
+			 * is *never* coalesced. Doing so would bring the stack parameter that we originally set before
+			 * any function call related stack allocations to be after the allocation, which would cause
+			 * invalid memory
+			 */
+			if(has_stack_params == TRUE){
+				//If the last thing we added is an assignment with a memory address variable
+				if(current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_STMT
+					&& current_block->exit_statement->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+
+					//Flag that it cannot be combined
+					current_block->exit_statement->cannot_be_combined = TRUE;
+				}
+			}
+
+			//Add this final result into our parameter results list
+			dynamic_array_add(&function_parameter_results, final_assignee);
+
+		} else {
+			printf("TODO NOT YET HERE\n");
+			exit(0);
+		}
 
 		//And move up
 		param_cursor = param_cursor->next_sibling;
