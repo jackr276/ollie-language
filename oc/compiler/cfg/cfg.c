@@ -6119,17 +6119,8 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 			//Emit whatever we have here into the basic block
 			cfg_result_package_t package = emit_expression(current_block, param_cursor, FALSE);
 
-			/**
-			 * If we did hit a ternary at some point here, we'd see current as different than the final block, so we'll need
-			 * to reassign
-			 */
-			if(package.final_block != current_block){
-				//We've seen a ternary, reassign current
-				current_block = package.final_block;
-
-				//Reassign this as well, so that we stay current
-				result_package.final_block = current_block;
-			}
+			//Always reassign this
+			current_block = package.final_block;
 
 			//What is the final assignee
 			three_addr_var_t* final_assignee = package.assignee;
@@ -6392,6 +6383,9 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		//we do 
 		result_package.assignee = assignee;
 
+		//Always bump this up too just in case
+		result_package.final_block = current_block;
+
 		//Give back what we assigned to
 		return result_package;
 	}
@@ -6486,15 +6480,8 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		//Emit whatever we have here into the basic block
 		cfg_result_package_t package = emit_expression(current_block, param_cursor, FALSE);
 
-		//If we did hit a ternary at some point here, we'd see current as different than the final block, so we'll need
-		//to reassign
-		if(package.final_block != current_block){
-			//We've seen a ternary, reassign current
-			current_block = package.final_block;
-
-			//Reassign this as well, so that we stay current
-			result_package.final_block = current_block;
-		}
+		//Always reassign what our current block is
+		current_block = package.final_block;
 
 		//What is the final assignee
 		three_addr_var_t* final_assignee = package.assignee;
@@ -6658,9 +6645,14 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			add_statement(current_block, assignment);
 		}
 
-		//This is always the assignee we gave above. It is important to note
-		//that this is nullable, not all functions return something
+		/**
+		 * This is always the assignee we gave above. It is important to note
+		 * that this is nullable, not all functions return something
+		 */
 		result_package.assignee = assignee;
+
+		//Bump this up too
+		result_package.final_block = current_block;
 
 		//Give back what we assigned to
 		return result_package;
