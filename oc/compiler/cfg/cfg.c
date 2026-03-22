@@ -5439,6 +5439,11 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 		case AST_NODE_TYPE_LET_STMT:
 			result_package = visit_let_statement(basic_block, expr_node);
 			break;
+		
+		//TODO 
+		case AST_NODE_TYPE_ELABORATIVE_PARAM_STMT:
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(0);
 
 		//Handle an assignment expression
 		case AST_NODE_TYPE_ASNMNT_EXPR:

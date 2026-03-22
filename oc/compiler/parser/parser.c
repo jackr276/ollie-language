@@ -1501,12 +1501,14 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
  * so to parse it we're just taking everything from the starting point until we see an R_PAREN
  */
 static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_stream_t* token_stream, generic_type_t* elaborative_param_type){
+	printf("HANDLING ELABORATIVE PARAM\n");
 
 	//TODO
 
 	//Grab the lookahead token
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
+	return NULL;
 }
 
 
@@ -1768,14 +1770,18 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		 * the time to pick up on that
 		 */
 		if(num_params == function_signature->function_parameters.current_index - 1){
-			//TODO
+			//Extract it - let's see if it is elaborative
+			generic_type_t* final_param_type = dynamic_array_get_at(&(function_signature->function_parameters), function_signature->function_parameters.current_index - 1);
 
+			//If it is then this is ok, we will handle accordingly
+			if(final_param_type->type_class == TYPE_CLASS_ELABORATIVE){
+				generic_ast_node_t* empty_elaborative_param = create_empty_elaborative_param(final_param_type);
+
+				//Add it in and bump the param count so we pass the next check
+				add_child_node(function_call_node, empty_elaborative_param);
+				num_params++;
+			}
 		}
-
-		/**
-		 * TODO CATCH THE EDGE CASE FOR ELABORATIVE PARAM
-		 */
-
 
 		/**
 		 * Any otherwise errors, if we have a mismatch between what the function takes and what we want, throw an error
