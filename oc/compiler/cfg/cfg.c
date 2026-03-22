@@ -3329,9 +3329,12 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 				if(side == SIDE_TYPE_RIGHT){
 					/**
 					 * If we're on the RHS and we have a special "stack variable", we need to automatically
-					 * load that variable out of memory for use in whatever is happening in the caller
+					 * load that variable out of memory for use in whatever is happening in the caller. The
+					 * only exception to this rule are elaborative stack params. Those may never be loaded 
+					 * from memory in any way
 					 */
-					if(variable->stack_variable == TRUE){
+					if(variable->stack_variable == TRUE 
+						&& variable->type_defined_as->type_class != TYPE_CLASS_ELABORATIVE){
 						//Let the helper emit our load from memory
 						return emit_automatic_load_from_memory(basic_block, variable);
 
@@ -3347,9 +3350,13 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 
 			//Otherwise we are passed via stack so we'll need some special rules
 			} else {
-				//If we're on the RHS we need to handle an automatic derference for the caller
-				if(side == SIDE_TYPE_RIGHT){
-					//Let the helper emit our load from memory
+				/**
+				 * If we're here then we need to emit an automatic dereference for the caller.
+				 * The only exception to this is stack passed parameters. Those may never have an automatic
+				 * dereference emitted because they can only be accessed via the array accessor
+				 */
+				if(side == SIDE_TYPE_RIGHT
+					&& variable->type_defined_as->type_class != TYPE_CLASS_ELABORATIVE){
 					return emit_automatic_load_from_memory(basic_block, variable);
 
 				//Otherwise just emit a variable
@@ -4074,6 +4081,7 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 		//Get this if there is one
 		symtab_variable_record_t* base_address_variable = assignee->linked_var;
 
+
 		/**
 		 * If we have a linked variable that is coming to us from the stack, we'll
 		 * need to automatically get this out of the stack for our uses here. Remember
@@ -4103,6 +4111,9 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 
 				//This now is the current offset so we're going to denote that
 				*current_offset = new_current_offset;
+
+				//The base address is just the assignee in this case
+				*base_address = assignee;
 
 			/**
 			 * Otherwise we still have to account for the case where we have reference types that need
