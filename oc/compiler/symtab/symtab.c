@@ -663,23 +663,29 @@ void add_function_parameter(type_symtab_t* type_symtab, symtab_function_record_t
 	//Store what function this came from
 	variable_record->function_declared_in = function_record;
 
-	//
-	//
-	//
-	//
-	//TODO we need to handle elaborative params in the stack
-	//
-	//
-	//
-	//
-	//
+	/**
+	 * If we have an elaborative param type, this requires special handling on
+	 * our part to get right, including the creation of/conversion to a 
+	 * dynamic stack type
+	 */
+	if(variable_record->type_defined_as->type_class == TYPE_CLASS_ELABORATIVE){
+		//If we don't have a stack, let's allocate it
+		if(function_record->stack_passed_parameters.stack_regions.internal_array == NULL){
+			//This is specifically a parameter passing stack region. We must be sure to mention that
+			stack_data_area_alloc(&(function_record->stack_passed_parameters), STACK_TYPE_PARAMETER_PASSING, STACK_DATA_AREA_SIZE_TYPE_DYNAMIC);
+
+		//If it's not NULL, we need to convert the size type to dynamic because this is a dynamic stack now
+		} else {
+			function_record->stack_passed_parameters.size_type = STACK_DATA_AREA_SIZE_TYPE_DYNAMIC;
+		}
+
 
 	//Do we need to pass via stack? If so add it here
-	if(variable_record->class_relative_function_parameter_order > MAX_PER_CLASS_REGISTER_PASSED_PARAMS){
+	} else if(variable_record->class_relative_function_parameter_order > MAX_PER_CLASS_REGISTER_PASSED_PARAMS){
 		//Allocate it if need be
 		if(function_record->stack_passed_parameters.stack_regions.internal_array == NULL){
 			//This is specifically a parameter passing stack region. We must be sure to mention that
-			stack_data_area_alloc(&(function_record->stack_passed_parameters), STACK_TYPE_PARAMETER_PASSING);
+			stack_data_area_alloc(&(function_record->stack_passed_parameters), STACK_TYPE_PARAMETER_PASSING, STACK_DATA_AREA_SIZE_TYPE_STATIC);
 		}
 
 		//Special adjustments based on the types we have
@@ -717,7 +723,7 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t
 	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
 
 	//Allocate the data area internally
-	stack_data_area_alloc(&(record->local_stack), STACK_TYPE_FUNCTION_LOCAL);
+	stack_data_area_alloc(&(record->local_stack), STACK_TYPE_FUNCTION_LOCAL, STACK_DATA_AREA_SIZE_TYPE_STATIC);
 
 	//Allocate the array for all function blocks
 	record->function_blocks = dynamic_array_alloc();

@@ -20,7 +20,7 @@
 /**
  * Allocate the internal dynamic array in the data area
  */
-void stack_data_area_alloc(stack_data_area_t* area, stack_data_area_type_t type);
+void stack_data_area_alloc(stack_data_area_t* area, stack_data_area_type_t type, stack_data_area_size_type_t size_type);
 
 /**
  * This special handler will create a stack region for an elaborative param type. This is unique because the

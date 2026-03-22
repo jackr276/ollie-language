@@ -106,6 +106,8 @@ struct stack_data_area_t{
 	u_int32_t total_size;
 	//What kind of stack do we have?
 	stack_data_area_type_t stack_type;
+	//What is the size type of our stack
+	stack_data_area_size_type_t size_type;
 };
 
 

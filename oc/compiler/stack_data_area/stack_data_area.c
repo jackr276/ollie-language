@@ -31,7 +31,7 @@ static u_int32_t increment_and_get_stack_region_id(){
 /**
  * Allocate the internal dynamic array in the data area
  */
-void stack_data_area_alloc(stack_data_area_t* area, stack_data_area_type_t type){
+void stack_data_area_alloc(stack_data_area_t* area, stack_data_area_type_t type, stack_data_area_size_type_t size_type){
 	//Allocate the regions array
 	area->stack_regions = dynamic_array_alloc();
 
@@ -40,6 +40,9 @@ void stack_data_area_alloc(stack_data_area_t* area, stack_data_area_type_t type)
 
 	//Save what kind of type this is - this will become important
 	area->stack_type = type;
+
+	//Save the size type here as well
+	area->size_type = size_type;
 }
 
 
