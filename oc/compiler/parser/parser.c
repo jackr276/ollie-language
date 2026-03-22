@@ -1497,7 +1497,7 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
  * allowed to see nothing here, we may very well have elaborative
  * params that are just empty
  */
-static inline generic_ast_node_t* handle_elaborative_param_parsing(){
+static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_stream_t* token_stream, generic_type_t* elaborative_param_type){
 
 }
 
@@ -1518,8 +1518,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	lexitem_t lookahead;
 	//We'll also keep a nicer reference to the function name
 	dynamic_string_t function_name;
-	//The number of parameters that we've seen
-	u_int8_t num_params = 0;
 	//A pointer that holds our function call node
 	generic_ast_node_t* function_call_node;
 	//Hold the overall type for error printing
@@ -1623,6 +1621,9 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		//A node to hold our current parameter
 		generic_ast_node_t* current_param;
 
+		//The number of parameters that we've seen
+		u_int8_t num_params = 0;
+
 		//So long as we don't see the R_PAREN we aren't done
 		do {
 			//Record that we saw one more parameter
@@ -1708,10 +1709,19 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 
 			//Otherwise down here we'll handle an elaborative param
 			} else {
-				printf("FOUND ELABORATIVE PARAM\n");
-				exit(0);
-				//TODO
+				//This entire thing is still going to count as one big parameter
+				num_params++;
+				
+				//Helper gives back an error or an elaborative param if it worked
+				generic_ast_node_t* elaborative_param_node = handle_elaborative_param_parsing(token_stream, param_type);
 
+				//Fail up if we get here
+				if(elaborative_param_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+					return print_and_return_error("Invalid elaborative parameter detected", parser_line_num);
+				}
+
+				//This is a child
+				add_child_node(function_call_node, elaborative_param_node);
 			}
 
 			//Refresh the token
@@ -1723,10 +1733,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		//If we have a mismatch between what the function takes and what we want, throw an
 		//error
 		if(num_params != function_signature->function_parameters.current_index){
-			//TODO when we do this counting, we need to make sure that we're accounting
-			//for the fact that we could have an elaborative param in here that may have
-			//been empty
-
 			sprintf(info, "Function %s expects %d parameters, but was given %d. Defined as: %s", 
 			  function_name.string, function_signature->function_parameters.current_index, num_params, function_type->type_name.string);
 			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
@@ -1737,7 +1743,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 
 		//Once we get here, we do need to finally verify that the closing R_PAREN matched the opening one
 		if(pop_token(&grouping_stack).tok != L_PAREN){
-			//Return the error node
 			return print_and_return_error("Unmatched parenthesis detected in function call", parser_line_num);
 		}
 

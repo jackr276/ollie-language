@@ -85,6 +85,8 @@ typedef enum ast_node_type_t{
 	AST_NODE_TYPE_STRING_INITIALIZER,
 	//Get an elaborative paramcount
 	AST_NODE_TYPE_PARAMCOUNT_STMT,
+	//Elaborative parameter statement itself
+	AST_NODE_TYPE_ELABORATIVE_PARAM_STMT,
 	AST_NODE_TYPE_ERR_NODE, /* errors as values approach going forward */
 } ast_node_type_t;
 
