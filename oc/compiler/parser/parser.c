@@ -1662,14 +1662,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 			//Record that we saw one more parameter
 			num_params++;
 
-			//If we've already seen more than one parameter, we'll need a comma here
-			if(num_params > 1){
-				//Otherwise it must be a comma. If it isn't we have a failure
-				if(lookahead.tok != COMMA){
-					return print_and_return_error("Commas must be used to separate parameters in function call", parser_line_num);
-				}
-			}
-
 			//We'll let the error below handle this, we just don't
 			//want to segfault
 			if(num_params > function_signature->function_parameters.current_index){
@@ -1763,8 +1755,23 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 			//Refresh the token
 			lookahead = get_next_token(token_stream, &parser_line_num);
 
-		//Keep going so long as we don't see a right paren
-		} while (lookahead.tok != R_PAREN);
+			//Comma we continue
+			if(lookahead.tok == COMMA){
+				continue;
+			//R_PAREN we break
+			} else if(lookahead.tok == R_PAREN){
+				break;
+			} else {
+				return print_and_return_error("Commas must be used to separate parameters in function call", parser_line_num);
+			}
+
+		//Infinite loop unless we hit a breakout condition
+		} while (TRUE);
+
+		//Once we get here, we do need to finally verify that the closing R_PAREN matched the opening one
+		if(pop_token(&grouping_stack).tok != L_PAREN){
+			return print_and_return_error("Unmatched parenthesis detected in function call", parser_line_num);
+		}
 
 		/**
 		 * EDGE CASE: for elaborative params, if we find that the function parameters 
@@ -1796,11 +1803,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 			num_errors++;
 			//Error out
 			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
-		}
-
-		//Once we get here, we do need to finally verify that the closing R_PAREN matched the opening one
-		if(pop_token(&grouping_stack).tok != L_PAREN){
-			return print_and_return_error("Unmatched parenthesis detected in function call", parser_line_num);
 		}
 
 	/**
