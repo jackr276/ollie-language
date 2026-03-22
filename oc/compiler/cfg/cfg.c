@@ -5421,13 +5421,28 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
  * param stack region. This is because those first 4 bytes are where we store the parameter count
  */
 static cfg_result_package_t visit_paramcount_statement(basic_block_t* basic_block, generic_ast_node_t* paramcount_node){
+	cfg_result_package_t results = {basic_block, basic_block, NULL, BLANK};
+
 	//Extract the variable
 	symtab_variable_record_t* paramcount_var = paramcount_node->variable;
 
 	//Spit out the memory address variable for this
 	three_addr_var_t* base_address = emit_memory_address_var(paramcount_var);
 
-	//TODO
+	//Emit a temp var that is going to store our result. This will always be a u32
+	three_addr_var_t* paramcount_result = emit_temp_var(paramcount_node->inferred_type);
+
+	//Read the first 4 bytes(so in reality we have no offset)
+	instruction_t* paramcount_load = emit_load_ir_code(paramcount_result, base_address, paramcount_node->inferred_type);
+
+	//Add it into the block
+	add_statement(basic_block, paramcount_load);
+
+	//Package up the assignee inisde of these results
+	results.assignee = paramcount_result;
+
+	//Give back the results
+	return results;
 }
 
 
