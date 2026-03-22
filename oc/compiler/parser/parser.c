@@ -1496,8 +1496,15 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
  * that is elaborative. Remember that since we are technically
  * allowed to see nothing here, we may very well have elaborative
  * params that are just empty
+ *
+ * Remember that the elaborative param must always be the very last parameter in a function,
+ * so to parse it we're just taking everything from the starting point until we see an R_PAREN
  */
 static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_stream_t* token_stream, generic_type_t* elaborative_param_type){
+
+
+	//Grab the lookahead token
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
 }
 
@@ -1633,7 +1640,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 			if(num_params > 1){
 				//Otherwise it must be a comma. If it isn't we have a failure
 				if(lookahead.tok != COMMA){
-					//Create and return an error node
 					return print_and_return_error("Commas must be used to separate parameters in function call", parser_line_num);
 				}
 			}
@@ -1707,7 +1713,11 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 				//the parameters will appear in order from left to right
 				add_child_node(function_call_node, current_param);
 
-			//Otherwise down here we'll handle an elaborative param
+			/**
+			 * If the type that we have is an elaborative param type then we'll handle that now. Do note that
+			 * this method of parsing is not going to handle the edge case where we decide to put nothing
+			 * in for the the elaborative param type. We will have a catch for that down below
+			 */
 			} else {
 				//This entire thing is still going to count as one big parameter
 				num_params++;
@@ -1730,8 +1740,14 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		//Keep going so long as we don't see a right paren
 		} while (lookahead.tok != R_PAREN);
 
-		//If we have a mismatch between what the function takes and what we want, throw an
-		//error
+		/**
+		 * TODO CATCH THE EDGE CASE FOR ELABORATIVE PARAM
+		 */
+
+
+		/**
+		 * Any otherwise errors, if we have a mismatch between what the function takes and what we want, throw an error
+		 */
 		if(num_params != function_signature->function_parameters.current_index){
 			sprintf(info, "Function %s expects %d parameters, but was given %d. Defined as: %s", 
 			  function_name.string, function_signature->function_parameters.current_index, num_params, function_type->type_name.string);
