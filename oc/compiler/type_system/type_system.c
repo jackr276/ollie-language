@@ -2431,6 +2431,9 @@ void add_parameter_to_function_type(generic_type_t* function_type, generic_type_
 		//Flag that we do have stack params
 		internal_type->contains_stack_params = TRUE;
 
+		//Very important - we need to flag that we also have an elaborative stack param here
+		internal_type->contains_elaborative_stack_param = TRUE;
+
 		//Add this into the dynamic array
 		dynamic_array_add(&(internal_type->function_parameters), parameter);
 

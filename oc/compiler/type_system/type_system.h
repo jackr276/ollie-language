@@ -197,6 +197,8 @@ struct function_type_t{
 	u_int8_t is_inlined;
 	//Does this contain stack params?
 	u_int8_t contains_stack_params;
+	//Does this contain an elaborative stack param
+	u_int8_t contains_elaborative_stack_param;
 	//Is it possible for this function to raise an error?
 	u_int8_t raises_errors;
 };

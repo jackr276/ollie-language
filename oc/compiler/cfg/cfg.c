@@ -5977,19 +5977,18 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	//Grab the function's signature type too
 	function_type_t* signature = indirect_function_call_node->variable->type_defined_as->internal_types.function_type;
 
-	//Store the number of each type of param we've got
-	u_int32_t number_of_sse_params = get_number_of_sse_params(signature);
-	u_int32_t number_of_gp_params = get_number_of_gp_params(signature);
-
-	//Store a flag as to whether or not we have stack parameters
-	u_int8_t has_stack_params = (number_of_gp_params > MAX_PER_CLASS_REGISTER_PASSED_PARAMS) 
-									|| (number_of_sse_params > MAX_PER_CLASS_REGISTER_PASSED_PARAMS) ? TRUE : FALSE;
+	//Does the function signature contain stack params or not?
+	u_int8_t has_stack_params = signature->contains_stack_params;
 
 	//Store a stack data area variable in the uppermost scope. This will only be acted upon if we see that we
 	//have stack parameters though
 	stack_data_area_t stack_passed_parameters;
 
-	//If we have parameters then allocate thie
+	/**
+	 * If a function call contains stack params, we are going to have to allocate the stack data area
+	 * for our stack passed parameters. This needs to be done on every function call
+	 * for an indirect call, regardless of whether the stack is dynamic or static
+	 */
 	if(has_stack_params == TRUE){
 		//
 		//
@@ -6340,6 +6339,21 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	if(signature->returns_void == FALSE){
 		//Otherwise we have one like this
 		assignee = emit_temp_var(signature->return_type);
+	}
+
+	//
+	//
+	//
+	//
+	//
+	//TODO needs a real implementation
+	//
+	//
+	//
+	//
+	if(signature->contains_elaborative_stack_param == TRUE){
+		printf("TODO NOT IMPLEMENTED FOR DIRECT CALL\n");
+		exit(0);
 	}
 
 	//Emit the final call here
