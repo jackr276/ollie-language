@@ -1523,7 +1523,45 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 			return print_and_return_error("Invalid parameter expression in elaborative param handler", parser_line_num);
 		}
 
+		//Let's see if we're even able to assign this here
+		generic_type_t* final_type = types_assignable(type_being_elaborated, elaborated_param->inferred_type);
 
+		//If this is null, it means that our check failed
+		if(final_type == NULL){
+			//Let's first generate the types_assignable failure message
+			generate_types_assignable_failure_message(info, elaborated_param->inferred_type, type_being_elaborated);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+
+			//Following that we'll generate another error message to make it more clear
+			sprintf(info, "Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s%s\".",
+					(type_being_elaborated->mutability == MUTABLE ? "mut ": ""),
+					type_being_elaborated->type_name.string,
+					(elaborated_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
+					elaborated_param->inferred_type->type_name.string);
+
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//If this is a constant node, we'll force it to be whatever we expect from the type assignability
+		if(elaborated_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
+			elaborated_param->inferred_type = final_type;
+
+			//Do coercion
+			perform_constant_assignment_coercion(elaborated_param, final_type);
+		}
+
+		/**
+		 * Special checking here - if we have an enum type that is being assigned to, we need
+		 * to make sure that it's being assigned to a valid value in it's range
+		 */
+		if(is_enum_type(type_being_elaborated) == TRUE && elaborated_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
+			if(does_enum_contain_integer_member(type_being_elaborated, elaborated_param->constant_value.signed_int_value) == FALSE){
+				sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
+							type_being_elaborated->type_name.string, elaborated_param->constant_value.signed_int_value);
+
+				return print_and_return_error(info, parser_line_num);
+			}
+		} 
 		
 		//Grab the lookahead token
 		lookahead = get_next_token(token_stream, &parser_line_num);
@@ -1771,9 +1809,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 			 * in for the the elaborative param type. We will have a catch for that down below
 			 */
 			} else {
-				//This entire thing is still going to count as one big parameter
-				num_params++;
-				
 				//Helper gives back an error or an elaborative param if it worked
 				generic_ast_node_t* elaborative_param_node = handle_elaborative_param_parsing(token_stream, param_type, side);
 
