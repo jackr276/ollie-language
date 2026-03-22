@@ -92,6 +92,10 @@ generic_type_t* get_base_alignment_type(generic_type_t* type){
 		case TYPE_CLASS_STRUCT:
 			return get_base_alignment_type(type->internal_values.largest_member_type);
 
+		//Goes based on the elaborated type
+		case TYPE_CLASS_ELABORATIVE:
+			return get_base_alignment_type(type->internal_types.elaborates);
+
 		//By default just give the size back
 		default:
 			return type;

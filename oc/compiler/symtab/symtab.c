@@ -680,7 +680,8 @@ void add_function_parameter(type_symtab_t* type_symtab, symtab_function_record_t
 			function_record->stack_passed_parameters.size_type = STACK_DATA_AREA_SIZE_TYPE_DYNAMIC;
 		}
 
-		//TODO STACK REGION CREATION
+		//Create the special stack region for our elaborative param type
+		variable_record->stack_region = create_stack_region_for_type(&(function_record->stack_passed_parameters), variable_record->type_defined_as);
 
 		//This is a stack variable so flag it as such
 		variable_record->stack_variable = TRUE;
@@ -693,9 +694,6 @@ void add_function_parameter(type_symtab_t* type_symtab, symtab_function_record_t
 
 		//Flag that this contains the special elaborative stack param
 		function_record->contains_elaborative_param = TRUE;
-
-		//TODO stack region for paramcount needed
-
 
 	//Do we need to pass via stack? If so add it here
 	} else if(variable_record->class_relative_function_parameter_order > MAX_PER_CLASS_REGISTER_PASSED_PARAMS){
