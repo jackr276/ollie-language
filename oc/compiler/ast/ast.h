@@ -128,6 +128,8 @@ struct generic_ast_node_t{
 		//For any/all error types, we'll hold onto the actual
 		//value of the error here
 		u_int32_t error_id;
+		//Storage for the elaborative param count
+		u_int32_t elaborative_param_count;
 	} optional_storage;
 	//Storing the constant values
 	union {

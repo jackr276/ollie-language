@@ -1502,10 +1502,31 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
  */
 static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_stream_t* token_stream, generic_type_t* elaborative_param_type){
 
+	//TODO
 
 	//Grab the lookahead token
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
+}
+
+
+/**
+ * Special helper for when we need to create an empty elaborative param as a placeholder for what we'd normally have. We still
+ * need to create something because if we don't, the callee would be looking inside of the stack for a paramcount where there
+ * is none. This node will still setup the stack and just have the count set to 0
+ */
+static inline generic_ast_node_t* create_empty_elaborative_param(generic_type_t* elaborative_param_type){
+	//Allocate it
+	generic_ast_node_t* elaborative_param_node = ast_node_alloc(AST_NODE_TYPE_ELABORATIVE_PARAM_STMT, SIDE_TYPE_RIGHT);
+
+	//Set the count to be 0
+	elaborative_param_node->optional_storage.elaborative_param_count = 0;
+
+	//Store the type here as well
+	elaborative_param_node->inferred_type = elaborative_param_type; 
+
+	//Give this back
+	return elaborative_param_node;
 }
 
 
@@ -1739,6 +1760,17 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 
 		//Keep going so long as we don't see a right paren
 		} while (lookahead.tok != R_PAREN);
+
+		/**
+		 * EDGE CASE: for elaborative params, if we find that the function parameters 
+		 * are one less than what we expect, that's a sign that we may have an
+		 * empty elaborative param. We still have to handle this, so now is
+		 * the time to pick up on that
+		 */
+		if(num_params == function_signature->function_parameters.current_index - 1){
+			//TODO
+
+		}
 
 		/**
 		 * TODO CATCH THE EDGE CASE FOR ELABORATIVE PARAM
