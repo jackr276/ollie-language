@@ -102,6 +102,8 @@ typedef enum{
 
 /**
  * Is our result type a constant or a parameter
+ *
+ * TODO MOVE TO API
  */
 typedef enum {
 	PARAM_RESULT_TYPE_CONST,
@@ -113,6 +115,8 @@ typedef enum {
  * Maintain a tagged union type that allows us to
  * store either constants or variables. This is 
  * used for function calls
+ *
+ * TODO MOVE TO API
  */
 typedef struct {
 	param_result_type_t result_type;
