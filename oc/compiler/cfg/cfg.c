@@ -192,6 +192,31 @@ static inline void reset_visit_status_for_function(dynamic_array_t* function_blo
 
 
 /**
+ * Determine the number of parameters that do not count as elaborative
+ */
+static inline u_int32_t get_non_elaborative_parameter_count(function_type_t* function_type){
+	//Get the initial count here
+	u_int32_t count = function_type->function_parameters.current_index;
+
+	//Count is more than 0 - we need to check for elaborative params and update the count
+	if(count != 0){
+		//The last index is where an elaborative param would be
+		u_int32_t last_index = function_type->function_parameters.current_index - 1;
+
+		//Extract the type at the very last index
+		generic_type_t* parameter_type = dynamic_array_get_at(&(function_type->function_parameters), last_index);
+
+		//Bump the count down by one if this is the case
+		if(parameter_type->type_class == TYPE_CLASS_ELABORATIVE){
+			count--;
+		}
+	}
+
+	return count;
+}
+
+
+/**
  * For any blocks that are completely impossible to reach, we will scrap them all now
  * to avoid any confusion later in the process
  *
@@ -5982,6 +6007,7 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 			current_block->exit_statement->cannot_be_combined = TRUE;
 		}
 
+		//TODO UPDATE TO USE THE param_results_array
 		if(current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
 			printf("FOUND ASSIGN CONST");
 		}
@@ -6113,6 +6139,13 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	//Emit the final call here
 	instruction_t* func_call_stmt = emit_indirect_function_call_instruction(function_pointer_var, assignee);
 
+	/**
+	 * Our two result arrays will remain nulled out unless or until it can be determined
+	 * that an allocation here is actually needed
+	 */
+	parameter_results_array_t non_elaborative_parameter_results = NULL_PARAMETER_RESULT_ARRAY_INITIALIZER;
+	parameter_results_array_t elaborative_parameter_results = NULL_PARAMETER_RESULT_ARRAY_INITIALIZER;
+
 	//Let's grab a param cursor for ourselves
 	generic_ast_node_t* param_cursor = indirect_function_call_node->first_child;
 
@@ -6122,8 +6155,20 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		func_call_stmt->parameters = dynamic_array_alloc();
 	}
 
+	//Determine what the non-elaborative parameter count is
+	u_int32_t non_elaborative_parameter_count = get_non_elaborative_parameter_count(signature);
+
 	//Create a temporary storage array for all of our function parameter results
 	dynamic_array_t function_parameter_results = dynamic_array_alloc();
+
+	/**
+	 * If we do have non-elaborative parameter results then we're ok to allocate
+	 * here
+	 */
+	if(non_elaborative_parameter_count != 0){
+		 non_elaborative_parameter_results = parameter_results_array_alloc(non_elaborative_parameter_count); 
+	}
+
 
 	//TODO
 	//
@@ -6188,6 +6233,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 				}
 			}
 
+			//TODO UPDATE TO USE THE param_results_array
 			if(current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
 				printf("FOUND ASSIGN CONST");
 			}
@@ -6364,6 +6410,14 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		//Once we've done all of that - this has served its purpose
 		stack_data_area_dealloc(&stack_passed_parameters);
 	}
+
+	/**
+	 * Deallocate the two function parameter result arrays now that we're
+	 * done
+	 */
+	parameter_results_array_dealloc(&non_elaborative_parameter_results);
+	parameter_results_array_dealloc(&elaborative_parameter_results);
+
 
 	//Destroy the function parameter results here
 	dynamic_array_dealloc(&function_parameter_results);

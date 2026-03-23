@@ -15,6 +15,10 @@
 typedef struct parameter_result_t parameter_result_t;
 typedef struct parameter_results_array_t parameter_results_array_t;
 
+//For initializing null versions
+#define NULL_PARAMETER_RESULT_ARRAY_INITIALIZER {NULL, 0, 0}
+
+
 /**
  * Is our result type a constant or a parameter
  */
