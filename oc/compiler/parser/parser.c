@@ -1596,6 +1596,9 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 
 			//This counts as one more elaborated param
 			elaborated_param_count++;
+
+			//Add this in as a child to the parent elaborated param node
+			add_child_node(elaborative_param_node, elaborated_param);
 			
 			//Grab the lookahead token
 			lookahead = get_next_token(token_stream, &parser_line_num);

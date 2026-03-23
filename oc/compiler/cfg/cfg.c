@@ -6065,9 +6065,6 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	//Grab the function's signature type too
 	function_type_t* signature = indirect_function_call_node->variable->type_defined_as->internal_types.function_type;
 
-	//Hang onto the elaborative param count if we have any
-	u_int32_t elaborative_param_count = 0;
-
 	//Does the function signature contain stack params or not?
 	u_int8_t has_stack_params = signature->contains_stack_params;
 
@@ -6185,9 +6182,6 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		 * handle the stack management later
 		 */
 		} else {
-			//Extract and hold onto the elaborative param count - we are going to need this for later
-			elaborative_param_count = param_cursor->optional_storage.elaborative_param_count;
-
 			//Allocate the dynamic array as well
 			elaborative_param_results = dynamic_array_alloc();
 
