@@ -100,6 +100,28 @@ typedef enum{
 	VARIABLE_SCOPE_LOCAL,
 } variable_scope_type_t;
 
+/**
+ * Is our result type a constant or a parameter
+ */
+typedef enum {
+	PARAM_RESULT_TYPE_CONST,
+	PARAM_RESULT_TYPE_VAR,
+} param_result_type_t;
+
+
+/**
+ * Maintain a tagged union type that allows us to
+ * store either constants or variables. This is 
+ * used for function calls
+ */
+typedef struct {
+	param_result_type_t result_type;
+	union {
+		three_addr_const_t* constant_result;
+		three_addr_var_t* variable_result;
+	} param_result;
+} tagged_param_result_t;
+
 
 //We predeclare up here to avoid needing any rearrangements
 static void visit_declaration_statement(generic_ast_node_t* node);
@@ -5981,6 +6003,10 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 			current_block->exit_statement->cannot_be_combined = TRUE;
 		}
 
+		if(current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
+			printf("FOUND ASSIGN CONST");
+		}
+
 		//Add this final result into our parameter results list
 		dynamic_array_add(elaborative_param_results, final_assignee);
 
@@ -6116,6 +6142,13 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	//Create a temporary storage array for all of our function parameter results
 	dynamic_array_t function_parameter_results = dynamic_array_alloc();
 
+	//TODO
+	//
+	//Idea is to use a static heap array instead of all this mess with the dynamic ones. We
+	//have a tagged union type that allows us to differentiate between constant/variable
+	//results. We maintain a flat array of these union types on the heap. Will probably
+	//want maybe even an API to do this as it could get a little complex
+
 	/**
 	 * We'll also need separate temporary storage for our elaborative param results. This is
 	 * NULL most of the time so we'll account for that here
@@ -6170,6 +6203,10 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 					//Flag that it cannot be combined
 					current_block->exit_statement->cannot_be_combined = TRUE;
 				}
+			}
+
+			if(current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
+				printf("FOUND ASSIGN CONST");
 			}
 
 			//Add this final result into our parameter results list
