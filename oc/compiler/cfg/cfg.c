@@ -5999,8 +5999,6 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 /**
  * Handle the storage for elaborative stack params. This also includes handling of the first 4 byte "count" section
  * that we also need to account for
- *
- * TODO HANDLE FIRST ASSIGNMENT
  */
 static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_block, dynamic_array_t* elaborative_param_results, stack_data_area_t* stack_passed_parameters, instruction_t** first_assignment_instruction){
 	//The very first thing that we need to do is emit the paramcount helper
@@ -6026,6 +6024,26 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 	//Add this statement into the block
 	add_statement(basic_block, paramcount_store);
 
+	/**
+	 * Now that we've accounted for the first 4 bytes, we will go through the entire list of
+	 * results and create the stack regions/store those
+	 */
+	for(u_int32_t i = 0; i < elaborative_param_results->current_index; i++){
+		//Extract it
+		three_addr_var_t* elaborative_param_result = dynamic_array_get_at(elaborative_param_results, i);
+
+		//Create this one's stack region
+		stack_region_t* result_region = create_stack_region_for_type(stack_passed_parameters, elaborative_param_result->type);
+
+		//Emit the storage offset for this value
+		three_addr_const_t* storage_offset = emit_direct_integer_or_char_constant(result_region->function_local_base_address, u64);
+
+		//Now emit the store instruction for the result
+		instruction_t* elaborative_param_store = emit_store_with_constant_offset_ir_code(stack_pointer_variable, storage_offset, elaborative_param_result, elaborative_param_result->type); 
+
+		//Add it into the block
+		add_statement(basic_block, elaborative_param_store);
+	}
 }
 
 
