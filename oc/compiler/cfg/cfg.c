@@ -6062,6 +6062,10 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
  * This presents an issue when dealing with variables that are stored on the stack. Basically, we're going to need to do what the parser had to
  * for regular function calls all over again here to determine what our stack region is going to look like. We don't need to do any allocations for it,
  * but we are going to need to keep track of things
+ *
+ *
+ * TODO convert everything here to use the dynamic parameter lists so that we can avoid unnecessary copy operations when it
+ * comes to constants(which we are currently rife with) and avoid the unnecessary allocations that come with them
  */
 static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_block, generic_ast_node_t* indirect_function_call_node){
 	//Initially we'll emit this, though it may change

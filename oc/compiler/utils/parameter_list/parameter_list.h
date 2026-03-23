@@ -10,6 +10,10 @@
 
 //Link to the instruction library
 #include "../../instruction/instruction.h"
+#include <sys/types.h>
+
+typedef struct parameter_result_t parameter_result_t;
+typedef struct parameter_results_array_t parameter_results_array_t;
 
 /**
  * Is our result type a constant or a parameter
@@ -25,7 +29,7 @@ typedef enum {
  * store either constants or variables. This is 
  * used for function calls
  */
-typedef struct {
+struct parameter_result_t {
 	//The actual result type storage
 	param_result_type_t result_type;
 
@@ -38,9 +42,40 @@ typedef struct {
 		three_addr_var_t* variable_result;
 	} param_result;
 
-} function_parameter_result_t;
+};
 
 
+/**
+ * The actual array itself is just a dynamic
+ * array that contains however many results we actually
+ * need. The user is going to have to provide an
+ * initial size here unlike in a dynamic array
+ */
+struct parameter_results_array_t {
+	param_result_type_t* parameter_results;
+	u_int32_t current_index;
+	u_int32_t max_index;
+};
 
+
+/**
+ * Allocate a parameter results array with a given initial size
+ */
+parameter_results_array_t* parameter_results_array_alloc(u_int32_t initial_size);
+
+/**
+ * Add a parameter to the results array
+ */
+void add_parameter_to_results_array(parameter_results_array_t* array, u_int32_t index);
+
+/**
+ * Retrieve a parameter from the array
+ */
+param_result_type_t* get_result_at_index(parameter_results_array_t* array, u_int32_t index);
+
+/**
+ * Deallocate a parameter results array
+ */
+void parameter_results_array_dealloc(parameter_results_array_t* array);
 
 #endif /* PARAMETER_LIST_H */
