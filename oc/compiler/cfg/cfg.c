@@ -20,6 +20,7 @@
 #include "../jump_table/jump_table.h"
 #include "../utils/stack/nesting_stack.h"
 #include "../utils/constants.h"
+#include "../utils/parameter_list/parameter_list.h"
 
 //Keep global references to the number of errors and warnings
 u_int32_t* num_errors_ref;
@@ -99,32 +100,6 @@ typedef enum{
 	VARIABLE_SCOPE_GLOBAL,
 	VARIABLE_SCOPE_LOCAL,
 } variable_scope_type_t;
-
-/**
- * Is our result type a constant or a parameter
- *
- * TODO MOVE TO API
- */
-typedef enum {
-	PARAM_RESULT_TYPE_CONST,
-	PARAM_RESULT_TYPE_VAR,
-} param_result_type_t;
-
-
-/**
- * Maintain a tagged union type that allows us to
- * store either constants or variables. This is 
- * used for function calls
- *
- * TODO MOVE TO API
- */
-typedef struct {
-	param_result_type_t result_type;
-	union {
-		three_addr_const_t* constant_result;
-		three_addr_var_t* variable_result;
-	} param_result;
-} tagged_param_result_t;
 
 
 //We predeclare up here to avoid needing any rearrangements
