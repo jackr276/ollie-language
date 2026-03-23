@@ -21,7 +21,7 @@ typedef struct parameter_results_array_t parameter_results_array_t;
 typedef enum {
 	PARAM_RESULT_TYPE_CONST,
 	PARAM_RESULT_TYPE_VAR,
-} param_result_type_t;
+} parameter_result_type_t;
 
 
 /**
@@ -31,7 +31,7 @@ typedef enum {
  */
 struct parameter_result_t {
 	//The actual result type storage
-	param_result_type_t result_type;
+	parameter_result_type_t result_type;
 
 	/**
 	 * We can store either a constant or a variable - very useful for our
@@ -52,7 +52,7 @@ struct parameter_result_t {
  * initial size here unlike in a dynamic array
  */
 struct parameter_results_array_t {
-	param_result_type_t* parameter_results;
+	parameter_result_t* parameter_results;
 	u_int32_t current_index;
 	u_int32_t max_index;
 };
@@ -71,15 +71,17 @@ parameter_results_array_t parameter_results_array_alloc(u_int32_t initial_size);
 
 
 /**
- * Add a parameter to the results array
+ * Add a parameter to the results array. We will be relying on the caller to provide us an accurate result
+ * type here. The pointer is generic for this reason, we never need to actually access this memory, just
+ * store the pointer
  */
-void add_parameter_to_results_array(parameter_results_array_t* array, u_int32_t index);
+void add_parameter_result_to_results_array(parameter_results_array_t* array, void* result, parameter_result_type_t result_type);
 
 
 /**
  * Retrieve a parameter from the array
  */
-param_result_type_t* get_result_at_index(parameter_results_array_t* array, u_int32_t index);
+parameter_result_t* get_result_at_index(parameter_results_array_t* array, u_int32_t index);
 
 
 /**
