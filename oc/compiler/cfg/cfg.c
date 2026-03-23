@@ -6000,9 +6000,27 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
  * Handle the storage for elaborative stack params. This also includes handling of the first 4 byte "count" section
  * that we also need to account for
  */
-static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_block, dynamic_array_t* stack_param_results, stack_data_area_t* stack_passed_parameters){
-	//The very first thing that we need to do is emit the 
+static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_block, dynamic_array_t* elaborative_param_results, stack_data_area_t* stack_passed_parameters){
+	//The very first thing that we need to do is emit the paramcount helper
+	u_int32_t paramcount = elaborative_param_results->current_index; 
 
+	//This is always a u32 type
+	stack_region_t* paramcount_region = create_stack_region_for_type(stack_passed_parameters, u32);
+
+	//Emit an associated variable for it
+	three_addr_var_t* paramcount_var = emit_memory_address_temp_var(u32, paramcount_region);
+
+	//We'll also need the paramcount constant here
+	three_addr_const_t* paramcount_constant = emit_direct_integer_or_char_constant(paramcount, u32);
+
+	//Assign this over to where it needs to be
+	instruction_t* constant_assignment = emit_assignment_with_const_instruction(emit_temp_var(u32), paramcount_constant);
+
+	//Now we have the paramcount store instruction as the very first 4 bytes in this specific region
+	instruction_t* paramcount_store = emit_store_ir_code(paramcount_var, constant_assignment->assignee, u32);
+
+	//Add this statement into the block
+	add_statement(basic_block, paramcount_store);
 
 }
 
@@ -6156,9 +6174,6 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 
 			//Update the final block
 			current_block = results.final_block;
-
-			printf("TODO NOT YET HERE\n");
-			exit(0);
 		}
 
 		//And move up
