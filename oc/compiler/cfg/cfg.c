@@ -5996,6 +5996,16 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 }
 
 
+/**
+ * Handle the storage for elaborative stack params. This also includes handling of the first 4 byte "count" section
+ * that we also need to account for
+ */
+static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_block, dynamic_array_t* stack_param_results, stack_data_area_t* stack_passed_parameters){
+	//The very first thing that we need to do is emit the 
+
+
+}
+
 
 /**
  * Emit an indirect function call like such
@@ -6259,7 +6269,14 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		}
 	}
 
-	//Once we make it here, we should have all of the params stored in temp vars
+	/**
+	 * If we do have elaborative stack params to manage, we will do so here
+	 * using the helper method
+	 */
+	if(signature->contains_elaborative_stack_param == TRUE){
+		handle_elaborative_stack_param_storage(current_block, &elaborative_param_results, &stack_passed_parameters);
+	}
+
 	//We can now add the function call statement in
 	add_statement(current_block, func_call_stmt);
 
