@@ -20,7 +20,7 @@
 #include "../jump_table/jump_table.h"
 #include "../utils/stack/nesting_stack.h"
 #include "../utils/constants.h"
-#include "../utils/parameter_list/parameter_list.h"
+#include "../utils/parameter_result_array/parameter_result_array.h"
 
 //Keep global references to the number of errors and warnings
 u_int32_t* num_errors_ref;

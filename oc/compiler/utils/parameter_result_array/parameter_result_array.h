@@ -5,8 +5,8 @@
  * contain either three_addr_var_t objects or three_addr_const_t objects
  */
 
-#ifndef PARAMETER_LIST_H
-#define PARAMETER_LIST_H
+#ifndef PARAMETER_RESULT_ARRAY_H
+#define PARAMETER_RESULT_ARRAY_H
 
 //Link to the instruction library
 #include "../../instruction/instruction.h"
@@ -78,4 +78,4 @@ param_result_type_t* get_result_at_index(parameter_results_array_t* array, u_int
  */
 void parameter_results_array_dealloc(parameter_results_array_t* array);
 
-#endif /* PARAMETER_LIST_H */
+#endif /* PARAMETER_RESULT_ARRAY_H */
