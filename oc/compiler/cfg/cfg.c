@@ -5999,25 +5999,29 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 /**
  * Handle the storage for elaborative stack params. This also includes handling of the first 4 byte "count" section
  * that we also need to account for
+ *
+ * TODO HANDLE FIRST ASSIGNMENT
  */
-static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_block, dynamic_array_t* elaborative_param_results, stack_data_area_t* stack_passed_parameters){
+static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_block, dynamic_array_t* elaborative_param_results, stack_data_area_t* stack_passed_parameters, instruction_t** first_assignment_instruction){
 	//The very first thing that we need to do is emit the paramcount helper
 	u_int32_t paramcount = elaborative_param_results->current_index; 
 
 	//This is always a u32 type
 	stack_region_t* paramcount_region = create_stack_region_for_type(stack_passed_parameters, u32);
 
-	//Emit an associated variable for it
-	three_addr_var_t* paramcount_var = emit_memory_address_temp_var(u32, paramcount_region);
+	//Emit the storage offset here
+	three_addr_const_t* storage_offset = emit_direct_integer_or_char_constant(paramcount_region->function_local_base_address, u64);
 
 	//We'll also need the paramcount constant here
 	three_addr_const_t* paramcount_constant = emit_direct_integer_or_char_constant(paramcount, u32);
 
-	//Assign this over to where it needs to be
-	instruction_t* constant_assignment = emit_assignment_with_const_instruction(emit_temp_var(u32), paramcount_constant);
-
 	//Now we have the paramcount store instruction as the very first 4 bytes in this specific region
-	instruction_t* paramcount_store = emit_store_ir_code(paramcount_var, constant_assignment->assignee, u32);
+	instruction_t* paramcount_store = emit_store_const_with_constant_offset_ir_code(stack_pointer_variable, storage_offset, paramcount_constant, u32);
+
+	//Update this value for our stack management insertion later
+	if(*first_assignment_instruction == NULL){
+		*first_assignment_instruction = paramcount_store;
+	}
 
 	//Add this statement into the block
 	add_statement(basic_block, paramcount_store);
@@ -6289,7 +6293,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	 * using the helper method
 	 */
 	if(signature->contains_elaborative_stack_param == TRUE){
-		handle_elaborative_stack_param_storage(current_block, &elaborative_param_results, &stack_passed_parameters);
+		handle_elaborative_stack_param_storage(current_block, &elaborative_param_results, &stack_passed_parameters, &first_assignment_instruction);
 	}
 
 	//We can now add the function call statement in

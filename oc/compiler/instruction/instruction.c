@@ -5326,6 +5326,36 @@ instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_ad
 
 
 /**
+ * Emit a store constant with offset ir code. We take in a base address(assignee), 
+ * a constant offset(op1_const), and the value we're storing(op2)
+ */
+instruction_t* emit_store_const_with_constant_offset_ir_code(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_const_t* storee, generic_type_t* memory_write_type){
+	//First allocate
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Now populate with values
+	stmt->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
+	//The base address that we're assigning to
+	stmt->assignee = base_address;
+
+	//This is being dereferenced
+	stmt->assignee->is_dereferenced = TRUE;
+
+	//The offset placeholder is used for our offset, not op1_const 
+	stmt->offset = offset;
+
+	//What we're storing
+	stmt->op1_const = storee;
+
+	//Important - add the type that we expect to be writing to in memory
+	stmt->memory_read_write_type = memory_write_type;
+
+	//And give it back
+	return stmt;
+}
+
+
+/**
  * Emit a load statement. This is like an assignment instruction, but we're explicitly
  * using stack memory here
  */
