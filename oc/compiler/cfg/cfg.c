@@ -6254,8 +6254,6 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 			if(has_stack_params == TRUE){
 				//If the last thing we added is an assignment with a memory address variable
 				if(current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_STMT
-					//TODO UNSURE ABOUT THIS
-					//
 					//Make sure that we're talking about the same thing
 					&& variables_equal(final_assignee, current_block->exit_statement->assignee, FALSE) == TRUE
 					&& current_block->exit_statement->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
@@ -6671,6 +6669,8 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		if(func_record->contains_stack_params == TRUE){
 			//If the last thing we added is an assignment with a memory address variable
 			if(current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_STMT
+				//Make sure that we're talking about the same thing
+				&& variables_equal(final_assignee, current_block->exit_statement->assignee, FALSE) == TRUE
 				&& current_block->exit_statement->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
 
 				//Flag that it cannot be combined
