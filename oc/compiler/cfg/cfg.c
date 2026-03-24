@@ -6035,7 +6035,7 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
  * Handle the storage for elaborative stack params. This also includes handling of the first 4 byte "count" section
  * that we also need to account for
  */
-static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_block, dynamic_array_t* elaborative_param_results, stack_data_area_t* stack_passed_parameters, instruction_t** first_assignment_instruction){
+static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_block, parameter_results_array_t* elaborative_param_results, stack_data_area_t* stack_passed_parameters, instruction_t** first_assignment_instruction){
 	//The very first thing that we need to do is emit the paramcount helper
 	u_int32_t paramcount = elaborative_param_results->current_index; 
 
@@ -6064,20 +6064,55 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 	 * results and create the stack regions/store those
 	 */
 	for(u_int32_t i = 0; i < elaborative_param_results->current_index; i++){
-		//Extract it
-		three_addr_var_t* elaborative_param_result = dynamic_array_get_at(elaborative_param_results, i);
+		//Extract the result
+		parameter_result_t* elaborative_param_result = get_result_at_index(elaborative_param_results, i); 
 
-		//Create this one's stack region
-		stack_region_t* result_region = create_stack_region_for_type(stack_passed_parameters, elaborative_param_result->type);
+		three_addr_var_t* result_var;
+		three_addr_const_t* result_const;
 
-		//Emit the storage offset for this value
-		three_addr_const_t* storage_offset = emit_direct_integer_or_char_constant(result_region->function_local_base_address, u64);
+		/**
+		 * Based on what kind of result that we have, we will handle
+		 * slightly differently. Doing this allows us to condense
+		 * 2 assignments for constants into just one assignment(or a store
+		 * in this case)
+		 */
+		switch(elaborative_param_result->result_type){
+			case PARAM_RESULT_TYPE_CONST:
+				//Extract the constant
+				result_const = elaborative_param_result->param_result.constant_result;
 
-		//Now emit the store instruction for the result
-		instruction_t* elaborative_param_store = emit_store_with_constant_offset_ir_code(stack_pointer_variable, storage_offset, elaborative_param_result, elaborative_param_result->type); 
+				//Create this one's stack region
+				stack_region_t* constant_result_region = create_stack_region_for_type(stack_passed_parameters, result_const->type);
 
-		//Add it into the block
-		add_statement(basic_block, elaborative_param_store);
+				//Emit the storage offset for this value
+				three_addr_const_t* const_storage_offset = emit_direct_integer_or_char_constant(constant_result_region->function_local_base_address, u64);
+
+				//Now emit the store instruction for the result
+				instruction_t* const_elaborative_param_store = emit_store_const_with_constant_offset_ir_code(stack_pointer_variable, storage_offset, result_const, result_const->type); 
+
+				//Add it into the block
+				add_statement(basic_block, const_elaborative_param_store);
+
+				break;
+
+			case PARAM_RESULT_TYPE_VAR:
+				//Extract the constant
+				result_var = elaborative_param_result->param_result.variable_result;
+
+				//Create this one's stack region
+				stack_region_t* variable_result_region = create_stack_region_for_type(stack_passed_parameters, result_var->type);
+
+				//Emit the storage offset for this value
+				three_addr_const_t* var_storage_offset = emit_direct_integer_or_char_constant(variable_result_region->function_local_base_address, u64);
+
+				//Now emit the store instruction for the result
+				instruction_t* var_elaborative_param_store = emit_store_with_constant_offset_ir_code(stack_pointer_variable, storage_offset, result_var, result_var->type); 
+
+				//Add it into the block
+				add_statement(basic_block, var_elaborative_param_store);
+
+				break;
+		}
 	}
 }
 
