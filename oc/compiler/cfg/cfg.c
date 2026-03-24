@@ -6585,39 +6585,48 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	//Grab the function's signature type too
 	function_type_t* signature = func_record->signature->internal_types.function_type;
 
-	//Hang onto the parameter stack that this function relies on. Note that this will often
-	//be blank, but we need to hang onto it anyways
-	stack_data_area_t* callee_parameter_stack = &(func_record->stack_passed_parameters);
-
-	//We'll assign the first basic block to be "current" - this could change if we hit ternary operations
+	//Current block tracket
 	basic_block_t* current_block = basic_block;
 
-	//The function's assignee
-	three_addr_var_t* assignee = NULL;
+	/**
+	 * We will be dynamically constructing a callee parameter stack so that we can
+	 * account for things like dynamic parameters
+	 */
+	stack_data_area_t callee_parameter_stack;
+
+	/**
+	 * Our two result arrays will remain nulled out unless or until it can be determined
+	 * that an allocation here is actually needed
+	 */
+	parameter_results_array_t non_elaborative_parameter_results = NULL_PARAMETER_RESULT_ARRAY_INITIALIZER;
+	parameter_results_array_t elaborative_parameter_results = NULL_PARAMETER_RESULT_ARRAY_INITIALIZER;
+
+	//Does the function signature contain stack params or not?
+	u_int8_t has_stack_params = signature->contains_stack_params;
+
+	/**
+	 * If a function call contains stack params, we are going to have to allocate the stack data area
+	 * for our stack passed parameters. This needs to be done on every function call
+	 * for an indirect call, regardless of whether the stack is dynamic or static
+	 */
+	if(signature->contains_elaborative_stack_param == TRUE){
+		stack_data_area_alloc(&callee_parameter_stack, STACK_TYPE_TEMP_USE, STACK_DATA_AREA_SIZE_TYPE_DYNAMIC);
+
+	} else if(signature->contains_stack_params == TRUE){
+		stack_data_area_alloc(&callee_parameter_stack, STACK_TYPE_TEMP_USE, STACK_DATA_AREA_SIZE_TYPE_STATIC);
+	}
 
 	//May be NULL or not based on what we have as the return type
+	three_addr_var_t* function_assignee = NULL;
 	if(signature->returns_void == FALSE){
-		//Otherwise we have one like this
-		assignee = emit_temp_var(signature->return_type);
+		function_assignee = emit_temp_var(signature->return_type);
 	}
 
-	//
-	//
-	//
-	//
-	//
-	//TODO needs a real implementation
-	//
-	//
-	//
-	//
-	if(signature->contains_elaborative_stack_param == TRUE){
-		printf("TODO NOT IMPLEMENTED FOR DIRECT CALL\n");
-		exit(0);
-	}
-
-	//Emit the final call here
-	instruction_t* func_call_stmt = emit_function_call_instruction(func_record, assignee);
+	/**
+	 * The actual final statement that we'll be using is going to be emitted here,
+	 * we will be adding to it as need be
+	 */
+	instruction_t* func_call_stmt = emit_function_call_instruction(func_record, function_assignee);
 
 	//Let's grab a param cursor for ourselves
 	generic_ast_node_t* param_cursor = function_call_node->first_child;
@@ -6630,9 +6639,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 	//The current param of the indext9 <- call parameter_pass2(t10, t11, t12, t14, t16, t18)
 	u_int8_t current_func_param_idx = 1;
-
-	//Keep an array of all of our final results for the function call
-	dynamic_array_t function_parameter_results = dynamic_array_alloc();
 
 	//So long as this isn't NULL
 	while(param_cursor != NULL && param_cursor->ast_node_type != AST_NODE_TYPE_HANDLE_STMT){
