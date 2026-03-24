@@ -6298,22 +6298,33 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 
 	//Now that we have all of this, we need to go through and emit our final assignments for the function calls
 	//themselves
-	for(u_int32_t i = 0; i < function_parameter_results.current_index; i++){
+	for(u_int32_t i = 0; i < non_elaborative_parameter_results.current_index; i++){
 		//Get the result
-		three_addr_var_t* result = dynamic_array_get_at(&function_parameter_results, i);
+		parameter_result_t* result = get_result_at_index(&non_elaborative_parameter_results, i);
 
 		//Extract the parameter type here
-		generic_type_t* paramter_type = dynamic_array_get_at(&(signature->function_parameters), i);
+		generic_type_t* parameter_type = dynamic_array_get_at(&(signature->function_parameters), i);
 
 		/**
 		 * Deconstruct our processing to be by-class. This is going to be important for tracking
 		 * when/for which parameter we need to start doing stack allocations for(if any)
 		 */
-		if(IS_FLOATING_POINT(paramter_type) == FALSE){
+		if(IS_FLOATING_POINT(parameter_type) == FALSE){
 			//We're under the limit, we don't need a stack allocation
 			if(current_gp_index <= MAX_PER_CLASS_REGISTER_PASSED_PARAMS){
 				//Add the final assignment
-				instruction_t* assignment = emit_assignment_instruction(emit_temp_var(paramter_type), result);
+				instruction_t* assignment;
+
+				//Based on the result type we dynamically create the right assignment
+				switch(result->result_type){
+					case PARAM_RESULT_TYPE_CONST:
+						assignment = emit_assignment_with_const_instruction(emit_temp_var(parameter_type), result->param_result.constant_result);
+						break;
+
+					case PARAM_RESULT_TYPE_VAR:
+						assignment = emit_assignment_instruction(emit_temp_var(parameter_type), result->param_result.variable_result);
+						break;
+				}
 
 				//This is the first assignment if it's NULL
 				if(first_assignment_instruction == NULL){
@@ -6329,13 +6340,24 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 			//If we get here then we need to do a stack allocation
 			} else {
 				//Create it
-				stack_region_t* region = create_stack_region_for_type(&stack_passed_parameters, paramter_type);
+				stack_region_t* region = create_stack_region_for_type(&stack_passed_parameters, parameter_type);
 
 				//The offset. Note that this comes from the function local base address because there is no offset to add here
 				three_addr_const_t* stack_offset = emit_direct_integer_or_char_constant(region->function_local_base_address, u64);
 
 				//We need to emit a store statement now for our result
-				instruction_t* store_operation = emit_store_with_constant_offset_ir_code(stack_pointer_variable, stack_offset, result, paramter_type);
+				instruction_t* store_operation;
+
+				//Create the proper kind of store instruction based on the result that we're given
+				switch(result->result_type){
+					case PARAM_RESULT_TYPE_CONST:
+						store_operation = emit_store_const_with_constant_offset_ir_code(stack_pointer_variable, stack_offset, result->param_result.constant_result, parameter_type);
+						break;
+
+					case PARAM_RESULT_TYPE_VAR:
+						store_operation = emit_store_with_constant_offset_ir_code(stack_pointer_variable, stack_offset, result->param_result.variable_result, parameter_type);
+						break;
+				}
 
 				//This is the first assignment if it's NULL
 				if(first_assignment_instruction == NULL){
@@ -6397,7 +6419,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	 * using the helper method
 	 */
 	if(signature->contains_elaborative_stack_param == TRUE){
-		handle_elaborative_stack_param_storage(current_block, &elaborative_param_results, &stack_passed_parameters, &first_assignment_instruction);
+		handle_elaborative_stack_param_storage(current_block, &elaborative_parameter_results, &stack_passed_parameters, &first_assignment_instruction);
 	}
 
 	//We can now add the function call statement in
@@ -6443,13 +6465,6 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	 */
 	parameter_results_array_dealloc(&non_elaborative_parameter_results);
 	parameter_results_array_dealloc(&elaborative_parameter_results);
-
-
-	//Destroy the function parameter results here
-	dynamic_array_dealloc(&function_parameter_results);
-
-	//Also destroy the elaborative results if we have any
-	dynamic_array_dealloc(&elaborative_param_results);
 
 	/**
 	 * If we get here and we have a handles statement, we will let our special rule
