@@ -5955,10 +5955,8 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
  * inside of the elaborative param node and emitting them separately. Note that
  * we are not going to do any kind of stack management here, that all is going
  * to come afterwards when we do the final result assignment
- *
- * TODO UPDATE TO BE ELABORATIVE
  */
-static inline cfg_result_package_t emit_elaborative_param_expressions(basic_block_t* basic_block, generic_ast_node_t* elaborative_param_node, dynamic_array_t* elaborative_param_results){
+static inline cfg_result_package_t emit_elaborative_param_expressions(basic_block_t* basic_block, generic_ast_node_t* elaborative_param_node, parameter_results_array_t* elaborative_param_results){
 	//NOTE: we will never have an assignee here
 	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
 
@@ -6009,13 +6007,17 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 			current_block->exit_statement->cannot_be_combined = TRUE;
 		}
 
-		//TODO UPDATE TO USE THE param_results_array
-		if(current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
-			printf("FOUND ASSIGN CONST");
+		/**
+		 * If the last thing that we saw is an assn_const statement, we can actually
+		 * just optimize here and grab the const instead of the assignee. This avoids
+		 * us needing to do an extra assignment down the road. Otherwise we just
+		 * take the assignee
+		 */
+		if(current_block->exit_statement->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
+			add_parameter_result_to_results_array(elaborative_param_results, final_assignee, PARAM_RESULT_TYPE_VAR);
+		} else {
+			add_parameter_result_to_results_array(elaborative_param_results, current_block->exit_statement->op1_const, PARAM_RESULT_TYPE_CONST);
 		}
-
-		//Add this final result into our parameter results list
-		dynamic_array_add(elaborative_param_results, final_assignee);
 
 		//Advance it up here
 		child_cursor = child_cursor->next_sibling;
@@ -6221,13 +6223,17 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 				}
 			}
 
-			//TODO UPDATE TO USE THE param_results_array
-			if(current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
-				printf("FOUND ASSIGN CONST");
+			/**
+			 * If the last thing that we saw is an assn_const statement, we can actually
+			 * just optimize here and grab the const instead of the assignee. This avoids
+			 * us needing to do an extra assignment down the road. Otherwise we just
+			 * take the assignee
+			 */
+			if(current_block->exit_statement->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
+				add_parameter_result_to_results_array(&non_elaborative_parameter_results, final_assignee, PARAM_RESULT_TYPE_VAR);
+			} else {
+				add_parameter_result_to_results_array(&non_elaborative_parameter_results, current_block->exit_statement->op1_const, PARAM_RESULT_TYPE_CONST);
 			}
-
-			//Add this final result into our parameter results list
-			dynamic_array_add(&function_parameter_results, final_assignee);
 
 		/**
 		 * Otherwise we have an elaborative param. Unrelated but worth nothing that this will
