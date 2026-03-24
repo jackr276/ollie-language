@@ -81,7 +81,7 @@ void add_parameter_result_to_results_array(parameter_results_array_t* array, voi
 	}
 
 	//Current index needs to be upped for the next go around
-	array->current_index++;
+	(array->current_index)++;
 }
 
 

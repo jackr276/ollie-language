@@ -6258,6 +6258,9 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 				}
 			}
 
+			printf("CURRENT EXIT STATEMENT\n");
+			print_three_addr_code_stmt(stdout, current_block->exit_statement);
+
 			/**
 			 * If the last thing that we saw is an assn_const statement, we can actually
 			 * just optimize here and grab the const instead of the assignee. This avoids
@@ -6267,6 +6270,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 			if(current_block->exit_statement->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
 				add_parameter_result_to_results_array(&non_elaborative_parameter_results, final_assignee, PARAM_RESULT_TYPE_VAR);
 			} else {
+				printf("ADDING CONST\n");
 				add_parameter_result_to_results_array(&non_elaborative_parameter_results, current_block->exit_statement->op1_const, PARAM_RESULT_TYPE_CONST);
 			}
 
@@ -6322,6 +6326,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 						break;
 
 					case PARAM_RESULT_TYPE_VAR:
+						printf("HERE\n\n\n");
 						assignment = emit_assignment_instruction(emit_temp_var(parameter_type), result->param_result.variable_result);
 						break;
 				}
