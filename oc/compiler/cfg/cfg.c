@@ -6374,8 +6374,18 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		} else {
 			//We're under the limit, so we don't need a stack allocation
 			if(current_sse_index <= MAX_PER_CLASS_REGISTER_PASSED_PARAMS){
-				//Add the final assignment
-				instruction_t* assignment = emit_assignment_instruction(emit_temp_var(paramter_type), result);
+				instruction_t* assignment;
+
+				//We need a different assignment based on what kind of result it is
+				switch(result->result_type){
+					case PARAM_RESULT_TYPE_CONST:
+						assignment = emit_assignment_with_const_instruction(emit_temp_var(parameter_type), result->param_result.constant_result);
+						break;
+
+					case PARAM_RESULT_TYPE_VAR:
+						assignment = emit_assignment_instruction(emit_temp_var(parameter_type), result->param_result.variable_result);
+						break;
+				}
 
 				//Add this into the block
 				add_statement(basic_block, assignment);
@@ -6391,14 +6401,25 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 			//If we get here then we need to do a stack allocation
 			} else {
 				//Create it
-				stack_region_t* region = create_stack_region_for_type(&stack_passed_parameters, paramter_type);
+				stack_region_t* region = create_stack_region_for_type(&stack_passed_parameters, parameter_type);
 
 				//The offset. Note that this comes from the function local base address because we are in the function that has
 				//allocated this value
 				three_addr_const_t* stack_offset = emit_direct_integer_or_char_constant(region->function_local_base_address, u64);
 
 				//We need to emit a store statement now for our result
-				instruction_t* store_operation = emit_store_with_constant_offset_ir_code(stack_pointer_variable, stack_offset, result, paramter_type);
+				instruction_t* store_operation;
+
+				//We need a different assignment based on what kind of result it is
+				switch(result->result_type){
+					case PARAM_RESULT_TYPE_CONST:
+						store_operation = emit_store_const_with_constant_offset_ir_code(stack_pointer_variable, stack_offset, result->param_result.constant_result, parameter_type);
+						break;
+
+					case PARAM_RESULT_TYPE_VAR:
+						store_operation = emit_store_with_constant_offset_ir_code(stack_pointer_variable, stack_offset, result->param_result.variable_result, parameter_type);
+						break;
+				}
 
 				//This is the first assignment if it's NULL
 				if(first_assignment_instruction == NULL){
