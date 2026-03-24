@@ -6448,7 +6448,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 				}
 
 				//Add the parameter in
-				dynamic_array_add(&(func_call_stmt->parameters), assignment->assignee);
+				dynamic_array_add(&(function_call_statement->parameters), assignment->assignee);
 
 			//If we get here then we need to do a stack allocation
 			} else {
@@ -6496,7 +6496,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	}
 
 	//We can now add the function call statement in
-	add_statement(current_block, func_call_stmt);
+	add_statement(current_block, function_call_statement);
 
 	/**
 	 * Let's now handle everything that we need to do with the stack(if we're touching it at all)
@@ -6526,7 +6526,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		instruction_t* stack_deallocation = emit_stack_deallocation_ir_statement(stack_deallocation_constant);
 
 		//This goes right after the function call statement
-		insert_instruction_after_given(stack_deallocation, func_call_stmt);
+		insert_instruction_after_given(stack_deallocation, function_call_statement);
 
 		//Once we've done all of that - this has served its purpose
 		stack_data_area_dealloc(&stack_passed_parameters);
@@ -6552,7 +6552,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		three_addr_var_t* error_assignee = emit_temp_var(u64);
 
 		//This is stored in the optional second assignee slot
-		func_call_stmt->optional_storage.error_assignee = error_assignee;
+		function_call_statement->optional_storage.error_assignee = error_assignee;
 
 		//Now we'll have a move statement just for register allocation reasons
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(error_assignee->type), error_assignee);
@@ -6564,7 +6564,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		error_assignee = assignment->assignee;
 
 		//Let the helper do the rest. It will spit back the results of the final assignment for us
-		cfg_result_package_t handle_results = emit_handle_statement(current_block, param_cursor, assignee, error_assignee);
+		cfg_result_package_t handle_results = emit_handle_statement(current_block, param_cursor, function_assignee, error_assignee);
 
 		//Just give back these overall results
 		return handle_results;
@@ -6575,10 +6575,10 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		if(signature->returns_void == FALSE){
 			//Emit an assignment instruction. This will become very important way down the line in register
 			//allocation to avoid interference
-			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(function_assignee->type), function_assignee);
 
 			//Reassign this value
-			assignee = assignment->assignee;
+			function_assignee = assignment->assignee;
 
 			//Add it in
 			add_statement(current_block, assignment);
@@ -6586,7 +6586,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 		//This is always the assignee we gave above. Note that this is nullable,
 		//we do 
-		result_package.assignee = assignee;
+		result_package.assignee = function_assignee;
 
 		//Always bump this up too just in case
 		result_package.final_block = current_block;
