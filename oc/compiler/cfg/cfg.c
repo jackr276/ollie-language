@@ -120,7 +120,6 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 static cfg_result_package_t emit_ternary_expression(basic_block_t* basic_block, generic_ast_node_t* ternary_operation);
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_const_t* constant);
 static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node);
-static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_block, generic_ast_node_t* indirect_function_call_node);
 static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression);
 static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_condition);
 static cfg_result_package_t emit_string_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* string_initializer);
@@ -3617,13 +3616,10 @@ static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, g
 			result_package.assignee = emit_constant_assignment(basic_block, primary_parent);
 			return result_package;
 
-		//This could potentially have ternaries - so we'll just return whatever is in here
+		//We handle direct/indirect calls all in the same rule
 		case AST_NODE_TYPE_FUNCTION_CALL:
-			return emit_function_call(basic_block, primary_parent);
-
-		//Emit an indirect function call here
 		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
-			return emit_indirect_function_call(basic_block, primary_parent);
+			return emit_function_call(basic_block, primary_parent);
 
 		//By default, we're emitting some kind of expression here
 		default:
@@ -5524,15 +5520,10 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			result_package = emit_binary_expression(basic_block, expr_node);
 			break;
 
+		//We handle direct/indirect calls all in the same function
 		case AST_NODE_TYPE_FUNCTION_CALL:
-			//Emit the function call statement
-			result_package = emit_function_call(basic_block, expr_node);
-			break;
-
-		//Hanlde an indirect function call
 		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
-			//Let the helper rule deal with it
-			result_package = emit_indirect_function_call(basic_block, expr_node);
+			result_package = emit_function_call(basic_block, expr_node);
 			break;
 
 		case AST_NODE_TYPE_TERNARY_EXPRESSION:
@@ -6121,17 +6112,38 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 
 
 /**
- * Emit an indirect function call like such
+ * Emit a call statement like such:
  *
  * call *<function_name>
  *
- * Unlike in a regular call, we don't have the function record on hand to inspect. We'll instead need to rely entirely on the function signature.
+ *		OR
+ *
+ *	call <function-name>
+ *
+ *	How we call it depends on whether or not it's an indirect call or not
+ *
  *
  * This presents an issue when dealing with variables that are stored on the stack. Basically, we're going to need to do what the parser had to
  * for regular function calls all over again here to determine what our stack region is going to look like. We don't need to do any allocations for it,
  * but we are going to need to keep track of things
+ *
+ * For example:
+ *
+ * Function 1 param stack(total size 8)
+ * ------------------------------------
+ * int x   Relative Offset: 4
+ * int y   Relative Offset: 0
+ * ------------------------------------
+ *
+ * .....
+ * subq $8, %rsp //Create the stack fram
+ * ....
+ * movq param7, (%rsp)  //populate
+ * movq param8, 4(%rsp) //populate
+ * call function1 -> %eax
+ * addq $8, %rsp //cleanup post-call
  */
-static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_block, generic_ast_node_t* indirect_function_call_node){
+static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node){
 	//Initially we'll emit this, though it may change
  	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
 
@@ -6559,21 +6571,6 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
  * on-the-fly for our function call. This is somewhat simple from the caller's perspective because we just need to setup
  * the local stack frame and populate it with values 
  *
- * For example:
- *
- * Function 1 param stack(total size 8)
- * ------------------------------------
- * int x   Relative Offset: 4
- * int y   Relative Offset: 0
- * ------------------------------------
- *
- * .....
- * subq $8, %rsp //Create the stack fram
- * ....
- * movq param7, (%rsp)  //populate
- * movq param8, 4(%rsp) //populate
- * call function1 -> %eax
- * addq $8, %rsp //cleanup post-call
  */
 static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node){
 	//Initially we'll emit this, though it may change
@@ -6635,6 +6632,26 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	if(param_cursor != NULL){
 		//Create this
 		func_call_stmt->parameters = dynamic_array_alloc();
+	}
+
+	//Determine what the non-elaborative parameter count is
+	u_int32_t non_elaborative_parameter_count = get_non_elaborative_parameter_count(signature);
+
+	/**
+	 * If we do have non-elaborative parameter results then we're ok to allocate
+	 * here. We don't want to allocate if we don't have to for obvious reasons
+	 */
+	if(non_elaborative_parameter_count != 0){
+		 non_elaborative_parameter_results = parameter_results_array_alloc(non_elaborative_parameter_count); 
+	}
+
+	/**
+	 * If the signature itself contains an elaborative stack
+	 * param then allocate a default sized one. Default sized because
+	 * we cannot ever know how many there are in an elaborative param
+	 */
+	if(signature->contains_elaborative_stack_param == TRUE){
+		elaborative_parameter_results = parameter_results_array_alloc_default_size();
 	}
 
 	//The current param of the indext9 <- call parameter_pass2(t10, t11, t12, t14, t16, t18)
