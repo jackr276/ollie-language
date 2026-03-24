@@ -6001,6 +6001,8 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 		 * be after the allocation, which would cause invalid memory access on the callee-side
 		 */
 		if(current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_STMT
+			//Make sure that we're talking about the same thing
+			&& variables_equal(final_assignee, current_block->exit_statement->assignee, FALSE) == TRUE
 			&& current_block->exit_statement->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
 
 			//Flag that it cannot be combined
@@ -6008,12 +6010,13 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 		}
 
 		/**
-		 * If the last thing that we saw is an assn_const statement, we can actually
-		 * just optimize here and grab the const instead of the assignee. This avoids
-		 * us needing to do an extra assignment down the road. Otherwise we just
+		 * If the last thing that we saw is an assn_const statement *or* a non temp
+		 * var, we can actually just optimize here and grab the const instead of the assignee.
+		 * This avoids us needing to do an extra assignment down the road. Otherwise we just
 		 * take the assignee
 		 */
-		if(current_block->exit_statement->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
+		if(final_assignee->variable_type != VARIABLE_TYPE_TEMP
+			|| current_block->exit_statement->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
 			add_parameter_result_to_results_array(elaborative_param_results, final_assignee, PARAM_RESULT_TYPE_VAR);
 		} else {
 			add_parameter_result_to_results_array(elaborative_param_results, current_block->exit_statement->op1_const, PARAM_RESULT_TYPE_CONST);
@@ -6251,26 +6254,27 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 			if(has_stack_params == TRUE){
 				//If the last thing we added is an assignment with a memory address variable
 				if(current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_STMT
+					//TODO UNSURE ABOUT THIS
+					//
+					//Make sure that we're talking about the same thing
+					&& variables_equal(final_assignee, current_block->exit_statement->assignee, FALSE) == TRUE
 					&& current_block->exit_statement->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
 
-					//Flag that it cannot be combined
-					current_block->exit_statement->cannot_be_combined = TRUE;
+						//Flag that it cannot be combined
+						current_block->exit_statement->cannot_be_combined = TRUE;
 				}
 			}
 
-			printf("CURRENT EXIT STATEMENT\n");
-			print_three_addr_code_stmt(stdout, current_block->exit_statement);
-
 			/**
-			 * If the last thing that we saw is an assn_const statement, we can actually
-			 * just optimize here and grab the const instead of the assignee. This avoids
-			 * us needing to do an extra assignment down the road. Otherwise we just
+			 * If the last thing that we saw is an assn_const statement *or* a non temp
+			 * var, we can actually just optimize here and grab the const instead of the assignee.
+			 * This avoids us needing to do an extra assignment down the road. Otherwise we just
 			 * take the assignee
 			 */
-			if(current_block->exit_statement->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
+			if(final_assignee->variable_type != VARIABLE_TYPE_TEMP
+				|| current_block->exit_statement->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
 				add_parameter_result_to_results_array(&non_elaborative_parameter_results, final_assignee, PARAM_RESULT_TYPE_VAR);
 			} else {
-				printf("ADDING CONST\n");
 				add_parameter_result_to_results_array(&non_elaborative_parameter_results, current_block->exit_statement->op1_const, PARAM_RESULT_TYPE_CONST);
 			}
 
@@ -6326,7 +6330,6 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 						break;
 
 					case PARAM_RESULT_TYPE_VAR:
-						printf("HERE\n\n\n");
 						assignment = emit_assignment_instruction(emit_temp_var(parameter_type), result->param_result.variable_result);
 						break;
 				}
