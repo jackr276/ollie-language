@@ -5955,6 +5955,8 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
  * inside of the elaborative param node and emitting them separately. Note that
  * we are not going to do any kind of stack management here, that all is going
  * to come afterwards when we do the final result assignment
+ *
+ * TODO UPDATE TO BE ELABORATIVE
  */
 static inline cfg_result_package_t emit_elaborative_param_expressions(basic_block_t* basic_block, generic_ast_node_t* elaborative_param_node, dynamic_array_t* elaborative_param_results){
 	//NOTE: we will never have an assignee here
@@ -6088,14 +6090,16 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
  * This presents an issue when dealing with variables that are stored on the stack. Basically, we're going to need to do what the parser had to
  * for regular function calls all over again here to determine what our stack region is going to look like. We don't need to do any allocations for it,
  * but we are going to need to keep track of things
- *
- *
- * TODO convert everything here to use the dynamic parameter lists so that we can avoid unnecessary copy operations when it
- * comes to constants(which we are currently rife with) and avoid the unnecessary allocations that come with them
  */
 static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_block, generic_ast_node_t* indirect_function_call_node){
 	//Initially we'll emit this, though it may change
  	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
+
+	/**
+	 * Store a stack data area variable in the uppermost scope. This will only be acted upon if we see that we
+	 * have stack parameters though
+	 */
+	stack_data_area_t stack_passed_parameters;
 
 	//Grab the function's signature type too
 	function_type_t* signature = indirect_function_call_node->variable->type_defined_as->internal_types.function_type;
@@ -6103,20 +6107,14 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	//Does the function signature contain stack params or not?
 	u_int8_t has_stack_params = signature->contains_stack_params;
 
-	//Store a stack data area variable in the uppermost scope. This will only be acted upon if we see that we
-	//have stack parameters though
-	stack_data_area_t stack_passed_parameters;
-
 	/**
 	 * If a function call contains stack params, we are going to have to allocate the stack data area
 	 * for our stack passed parameters. This needs to be done on every function call
 	 * for an indirect call, regardless of whether the stack is dynamic or static
 	 */
 	if(signature->contains_elaborative_stack_param == TRUE){
-		//We'll need a dynamically sized parameter for this one
 		stack_data_area_alloc(&stack_passed_parameters, STACK_TYPE_TEMP_USE, STACK_DATA_AREA_SIZE_TYPE_DYNAMIC);
 
-	//We'll just need a statically sized param here
 	} else if(signature->contains_stack_params == TRUE){
 		stack_data_area_alloc(&stack_passed_parameters, STACK_TYPE_TEMP_USE, STACK_DATA_AREA_SIZE_TYPE_STATIC);
 	}
@@ -6129,7 +6127,6 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 
 	//May be NULL or not based on what we have as the return type
 	if(signature->returns_void == FALSE){
-		//Otherwise we have one like this
 		assignee = emit_temp_var(signature->return_type);
 	}
 
@@ -6158,9 +6155,6 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	//Determine what the non-elaborative parameter count is
 	u_int32_t non_elaborative_parameter_count = get_non_elaborative_parameter_count(signature);
 
-	//Create a temporary storage array for all of our function parameter results
-	dynamic_array_t function_parameter_results = dynamic_array_alloc();
-
 	/**
 	 * If we do have non-elaborative parameter results then we're ok to allocate
 	 * here
@@ -6169,20 +6163,14 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		 non_elaborative_parameter_results = parameter_results_array_alloc(non_elaborative_parameter_count); 
 	}
 
-
-	//TODO
-	//
-	//Idea is to use a static heap array instead of all this mess with the dynamic ones. We
-	//have a tagged union type that allows us to differentiate between constant/variable
-	//results. We maintain a flat array of these union types on the heap. Will probably
-	//want maybe even an API to do this as it could get a little complex
-
 	/**
-	 * We'll also need separate temporary storage for our elaborative param results. This is
-	 * NULL most of the time so we'll account for that here
+	 * If the signature itself contains an elaborative stack
+	 * param then allocate a default sized one. Default sized because
+	 * we cannot ever know how many there are in an elaborative param
 	 */
-	dynamic_array_t elaborative_param_results;
-	INITIALIZE_NULL_DYNAMIC_ARRAY(elaborative_param_results);
+	if(signature->contains_elaborative_stack_param == TRUE){
+		elaborative_parameter_results = parameter_results_array_alloc_default_size();
+	}
 
 	//So long as this isn't NULL
 	while(param_cursor != NULL 
@@ -6248,11 +6236,8 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		 * handle the stack management later
 		 */
 		} else {
-			//Allocate the dynamic array as well
-			elaborative_param_results = dynamic_array_alloc();
-
 			//Let the helper do all of this - do note that there is not going to be anything in the "assignee" here - it's all handled internally
-			cfg_result_package_t results = emit_elaborative_param_expressions(current_block, param_cursor, &elaborative_param_results);
+			cfg_result_package_t results = emit_elaborative_param_expressions(current_block, param_cursor, &elaborative_parameter_results);
 
 			//Update the final block
 			current_block = results.final_block;
