@@ -6088,7 +6088,7 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 				three_addr_const_t* const_storage_offset = emit_direct_integer_or_char_constant(constant_result_region->function_local_base_address, u64);
 
 				//Now emit the store instruction for the result
-				instruction_t* const_elaborative_param_store = emit_store_const_with_constant_offset_ir_code(stack_pointer_variable, storage_offset, result_const, result_const->type); 
+				instruction_t* const_elaborative_param_store = emit_store_const_with_constant_offset_ir_code(stack_pointer_variable, const_storage_offset, result_const, result_const->type); 
 
 				//Add it into the block
 				add_statement(basic_block, const_elaborative_param_store);
@@ -6106,7 +6106,7 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 				three_addr_const_t* var_storage_offset = emit_direct_integer_or_char_constant(variable_result_region->function_local_base_address, u64);
 
 				//Now emit the store instruction for the result
-				instruction_t* var_elaborative_param_store = emit_store_with_constant_offset_ir_code(stack_pointer_variable, storage_offset, result_var, result_var->type); 
+				instruction_t* var_elaborative_param_store = emit_store_with_constant_offset_ir_code(stack_pointer_variable, var_storage_offset, result_var, result_var->type); 
 
 				//Add it into the block
 				add_statement(basic_block, var_elaborative_param_store);

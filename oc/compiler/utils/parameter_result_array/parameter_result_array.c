@@ -90,7 +90,7 @@ void add_parameter_result_to_results_array(parameter_results_array_t* array, voi
  */
 parameter_result_t* get_result_at_index(parameter_results_array_t* array, u_int32_t index){
 	//Guard here to make future debugging easier
-	if(array->current_index >= index){
+	if(array->current_index <= index){
 		fprintf(stderr, "Fatal internal compiler error: attempt to access index %d in an array of size %d", index, array->current_index);
 		exit(1);
 	}
