@@ -13,6 +13,7 @@
 */
 
 #include "cfg.h"
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -6153,8 +6154,55 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 */
 	stack_data_area_t stack_passed_parameters;
 
-	//Grab the function's signature type too
-	function_type_t* signature = indirect_function_call_node->variable->type_defined_as->internal_types.function_type;
+	//We will need the function's signature. How we get it depends on the type of call
+	function_type_t* signature;
+
+	//This is either a direct or indirect call. It doesn't matter once we get passed the conditional processing
+	instruction_t* function_call_statement;
+
+	//The function's assignee
+	three_addr_var_t* function_assignee = NULL;
+
+	/**
+	 * Any/all of our conditional processing will be done here. After this everything
+	 * needs to be agnostic to the node type
+	 */
+	switch(function_call_node->ast_node_type){
+		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
+			signature = function_call_node->variable->type_defined_as->internal_types.function_type;
+
+			//May be NULL or not based on what we have as the return type
+			if(signature->returns_void == FALSE){
+				function_assignee = emit_temp_var(signature->return_type);
+			}
+
+			//We first need to emit the function pointer variable
+			three_addr_var_t* function_pointer_var = emit_var(function_call_node->variable);
+
+			//Now we can emit the indirect call statement
+			function_call_statement = emit_indirect_function_call_instruction(function_pointer_var, function_assignee);
+
+			break;
+
+		case AST_NODE_TYPE_CASE_STMT:
+			signature = function_call_node->func_record->signature->internal_types.function_type;
+
+			//May be NULL or not based on what we have as the return type
+			if(signature->returns_void == FALSE){
+				function_assignee = emit_temp_var(signature->return_type);
+			}
+
+			//Now we can emit the direct call statement
+			function_call_statement = emit_function_call_instruction(function_call_node->func_record, function_assignee);
+
+			break;
+
+		//This should be unreachable but just to be sure
+		default:
+			fprintf(stderr, "Fatal internal compiler error. Incompatible node type found in function call handler\n");
+			exit(1);
+	}
+
 
 	//Does the function signature contain stack params or not?
 	u_int8_t has_stack_params = signature->contains_stack_params;
@@ -6174,19 +6222,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	//We'll assign the first basic block to be "current" - this could change if we hit ternary operations
 	basic_block_t* current_block = basic_block;
 
-	//The function's assignee
-	three_addr_var_t* assignee = NULL;
-
-	//May be NULL or not based on what we have as the return type
-	if(signature->returns_void == FALSE){
-		assignee = emit_temp_var(signature->return_type);
-	}
-
-	//We first need to emit the function pointer variable
-	three_addr_var_t* function_pointer_var = emit_var(indirect_function_call_node->variable);
-
-	//Emit the final call here
-	instruction_t* func_call_stmt = emit_indirect_function_call_instruction(function_pointer_var, assignee);
 
 	/**
 	 * Our two result arrays will remain nulled out unless or until it can be determined
@@ -6196,12 +6231,11 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	parameter_results_array_t elaborative_parameter_results = NULL_PARAMETER_RESULT_ARRAY_INITIALIZER;
 
 	//Let's grab a param cursor for ourselves
-	generic_ast_node_t* param_cursor = indirect_function_call_node->first_child;
+	generic_ast_node_t* param_cursor = function_call_node->first_child;
 
 	//If this isn't NULL, we have parameters
 	if(param_cursor != NULL){
-		//Create this
-		func_call_stmt->parameters = dynamic_array_alloc();
+		function_call_statement->parameters = dynamic_array_alloc();
 	}
 
 	//Determine what the non-elaborative parameter count is
@@ -6353,7 +6387,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 				add_statement(basic_block, assignment);
 
 				//Add the parameter in
-				dynamic_array_add(&(func_call_stmt->parameters), assignment->assignee);
+				dynamic_array_add(&(function_call_statement->parameters), assignment->assignee);
 
 			//If we get here then we need to do a stack allocation
 			} else {
@@ -6571,8 +6605,9 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
  * on-the-fly for our function call. This is somewhat simple from the caller's perspective because we just need to setup
  * the local stack frame and populate it with values 
  *
+ * TODO DELETE
  */
-static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node){
+static cfg_result_package_t emit_function_call_DEPRECATED(basic_block_t* basic_block, generic_ast_node_t* function_call_node){
 	//Initially we'll emit this, though it may change
  	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
 
