@@ -650,6 +650,12 @@ instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_ad
 instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type);
 
 /**
+ * Emit a store constant with offset ir code. We take in a base address(assignee), 
+ * a constant offset(op1_const), and the value we're storing(op2)
+ */
+instruction_t* emit_store_const_with_constant_offset_ir_code(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_const_t* storee, generic_type_t* memory_write_type);
+
+/**
  * Emit a load statement. This is like an assignment instruction, but we're explicitly
  * using stack memory here
  */

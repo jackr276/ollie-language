@@ -13,6 +13,7 @@
 */
 
 #include "cfg.h"
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -20,6 +21,7 @@
 #include "../jump_table/jump_table.h"
 #include "../utils/stack/nesting_stack.h"
 #include "../utils/constants.h"
+#include "../utils/parameter_result_array/parameter_result_array.h"
 
 //Keep global references to the number of errors and warnings
 u_int32_t* num_errors_ref;
@@ -119,7 +121,6 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 static cfg_result_package_t emit_ternary_expression(basic_block_t* basic_block, generic_ast_node_t* ternary_operation);
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_const_t* constant);
 static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node);
-static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_block, generic_ast_node_t* indirect_function_call_node);
 static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression);
 static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_condition);
 static cfg_result_package_t emit_string_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* string_initializer);
@@ -187,6 +188,31 @@ static inline void reset_visit_status_for_function(dynamic_array_t* function_blo
 		//Flag it as false
 		current->visited = FALSE;
 	}
+}
+
+
+/**
+ * Determine the number of parameters that do not count as elaborative
+ */
+static inline u_int32_t get_non_elaborative_parameter_count(function_type_t* function_type){
+	//Get the initial count here
+	u_int32_t count = function_type->function_parameters.current_index;
+
+	//Count is more than 0 - we need to check for elaborative params and update the count
+	if(count != 0){
+		//The last index is where an elaborative param would be
+		u_int32_t last_index = function_type->function_parameters.current_index - 1;
+
+		//Extract the type at the very last index
+		generic_type_t* parameter_type = dynamic_array_get_at(&(function_type->function_parameters), last_index);
+
+		//Bump the count down by one if this is the case
+		if(parameter_type->type_class == TYPE_CLASS_ELABORATIVE){
+			count--;
+		}
+	}
+
+	return count;
 }
 
 
@@ -2915,14 +2941,8 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 		//Perform the binary operation here
 		cfg_result_package_t expression_package = emit_expression(current, ret_node->first_child, FALSE);
 
-		//If we hit a ternary here, we'll need to reassign what our current block is
-		if(expression_package.final_block != current){
-			//Assign current to be the new end
-			current = expression_package.final_block;
-
-			//The final block of the overall return chunk will be this
-			return_package.final_block = current;
-		}
+		//Reassign the block
+		current = expression_package.final_block;
 
 		//Grab this out to look at
 		return_variable = expression_package.assignee;
@@ -2951,6 +2971,9 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 
 	//This is always a predecessor of the function exit statement
 	add_successor(current, function_exit_block);
+
+	//Update the final block
+	return_package.final_block = current;
 
 	//Give back the results
 	return return_package;
@@ -3323,13 +3346,24 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		 * we have function parameters that are passed in via the stack however
 		 */
 		case FUNCTION_PARAMETER:
+			/**
+			 * Elaborative param types are special - there is no circumstance where an elaborative
+			 * param is not a memory address variable ever. We can skip all of the fluff and just
+			 * emit it as such now
+			 */
+			if(variable->type_defined_as->type_class == TYPE_CLASS_ELABORATIVE){
+				return emit_memory_address_var(variable);
+			}
+
 			//Most common case - not passed by stack
 			if(variable->passed_by_stack == FALSE){
 				//RHS can have special rules
 				if(side == SIDE_TYPE_RIGHT){
 					/**
 					 * If we're on the RHS and we have a special "stack variable", we need to automatically
-					 * load that variable out of memory for use in whatever is happening in the caller
+					 * load that variable out of memory for use in whatever is happening in the caller. The
+					 * only exception to this rule are elaborative stack params. Those may never be loaded 
+					 * from memory in any way
 					 */
 					if(variable->stack_variable == TRUE){
 						//Let the helper emit our load from memory
@@ -3347,9 +3381,12 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 
 			//Otherwise we are passed via stack so we'll need some special rules
 			} else {
-				//If we're on the RHS we need to handle an automatic derference for the caller
+				/**
+				 * If we're here then we need to emit an automatic dereference for the caller.
+				 * The only exception to this is stack passed parameters. Those may never have an automatic
+				 * dereference emitted because they can only be accessed via the array accessor
+				 */
 				if(side == SIDE_TYPE_RIGHT){
-					//Let the helper emit our load from memory
 					return emit_automatic_load_from_memory(basic_block, variable);
 
 				//Otherwise just emit a variable
@@ -3580,13 +3617,10 @@ static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, g
 			result_package.assignee = emit_constant_assignment(basic_block, primary_parent);
 			return result_package;
 
-		//This could potentially have ternaries - so we'll just return whatever is in here
+		//We handle direct/indirect calls all in the same rule
 		case AST_NODE_TYPE_FUNCTION_CALL:
-			return emit_function_call(basic_block, primary_parent);
-
-		//Emit an indirect function call here
 		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
-			return emit_indirect_function_call(basic_block, primary_parent);
+			return emit_function_call(basic_block, primary_parent);
 
 		//By default, we're emitting some kind of expression here
 		default:
@@ -4065,11 +4099,15 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 		//Run the primary results function
 		cfg_result_package_t primary_results = emit_primary_expr_code(basic_block, root);
 
+		//The current block now is this ones final block
+		current = primary_results.final_block;
+
 		//Extract for some analysis
 		three_addr_var_t* assignee = primary_results.assignee;
 
 		//Get this if there is one
 		symtab_variable_record_t* base_address_variable = assignee->linked_var;
+
 
 		/**
 		 * If we have a linked variable that is coming to us from the stack, we'll
@@ -4078,18 +4116,45 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 		 * areas in memory. The array itself is not on the stack
 		 */
 		if(base_address_variable != NULL 
-			&& base_address_variable->passed_by_stack == TRUE
-			&& is_type_stack_passed_by_reference(base_address_variable->type_defined_as)){
-			
-			//Let the helper do it
-			*base_address = emit_automatic_load_from_memory(basic_block, base_address_variable);
+			&& base_address_variable->passed_by_stack == TRUE){
+
+			/**
+			 * Is this an elaborative param type? If so, we'll need to add on the automatic
+			 * 4 byte offset to this base address that all stack passed parameters have to account
+			 * for the stored paramcount
+			 */
+			if(base_address_variable->type_defined_as->type_class == TYPE_CLASS_ELABORATIVE){
+				//Emit a new current offset
+				three_addr_var_t* new_current_offset = emit_temp_var(u64);
+
+				//Emit the offset constant here
+				three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(4, u64);
+
+				//Emit the constant assignment
+				instruction_t* current_offset_assignment = emit_assignment_with_const_instruction(new_current_offset, offset_constant);
+
+				//Put it into the block
+				add_statement(current, current_offset_assignment);
+
+				//This now is the current offset so we're going to denote that
+				*current_offset = new_current_offset;
+
+				//The base address is just the assignee in this case
+				*base_address = assignee;
+
+			/**
+			 * Otherwise we still have to account for the case where we have reference types that need
+			 * to automatically be loaded(like arrays)
+			 */
+			} else if(is_type_stack_passed_by_reference(base_address_variable->type_defined_as) == TRUE){
+				*base_address = emit_automatic_load_from_memory(basic_block, base_address_variable);
+			}
 
 		//Else just update the base address
 		} else {
 			//The base address is whatever this assignee is
 			*base_address = assignee;
 		}
-
 
 		//And give these back
 		return primary_results;
@@ -4308,10 +4373,8 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	//We will first emit the postfix expression code that comes from this
 	cfg_result_package_t postfix_expression_results = emit_postfix_expression(current_block, postfix_node);
 
-	//If this is now different, which it could be, we'll change what current is
-	if(postfix_expression_results.final_block != current_block){
-		current_block = postfix_expression_results.final_block;
-	}
+	//Update the end block
+	current_block = postfix_expression_results.final_block;
 
 	//This is the value that we will be modifying
 	three_addr_var_t* assignee = postfix_expression_results.assignee;
@@ -4450,7 +4513,6 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	//Otherwise - it is possible that we have a stack variable or reference here. In that case, we'll need to emit a
 	//store to get the variable back to where it needs to be
 	} else if (postfix_node->variable->stack_variable == TRUE){
-		//Get the "true type". If we have a reference, this goes through an implicit dereference
 		generic_type_t* type = postfix_node->variable->type_defined_as; 
 
 		//Get the version that represents our memory indirection. Be sure to use the "true type" here
@@ -4507,10 +4569,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
 
-			//If this is now different, which it could be, we'll change what current is
-			if(unary_package.final_block != current_block){
-				current_block = unary_package.final_block;
-			}
+			//Update the current block
+			current_block = unary_package.final_block;
 
 			//The assignee comes from our package. This is what we are ultimately using in the final result
 			assignee = unary_package.assignee;
@@ -4745,10 +4805,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//The assignee comes from the package
 			assignee = unary_package.assignee;
 
-			//If this is now different, which it could be, we'll change what current is
-			if(unary_package.final_block != current_block){
-				current_block = unary_package.final_block;
-			}
+			//Update the current block
+			current_block = unary_package.final_block;
 
 			//The new assignee will come from this helper
 			unary_package.assignee = emit_bitwise_not_expr_code(current_block, assignee);
@@ -4763,10 +4821,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//The assignee comes from the package
 			assignee = unary_package.assignee;
 
-			//If this is now different, which it could be, we'll change what current is
-			if(unary_package.final_block != current_block){
-				current_block = unary_package.final_block;
-			}
+			//Update the current block
+			current_block = unary_package.final_block;
 
 			//This will always overwrite the other value
 			instruction_t* logical_not_statement = emit_logical_not_instruction(emit_temp_var(u8), assignee);
@@ -4798,10 +4854,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//The assignee comes from the package
 			assignee = unary_package.assignee;
 
-			//If this is now different, which it could be, we'll change what current is
-			if(unary_package.final_block != current_block){
-				current_block = unary_package.final_block;
-			}
+			//Update the current block
+			current_block = unary_package.final_block;
 
 			//We'll need to assign to a temp here, these are
 			//only ever on the RHS
@@ -4876,10 +4930,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					//Emit the whole thing
 					cfg_result_package_t postfix_results = emit_postfix_expression(current_block, unary_expression_child);
 
-					//Set if need be
-					if(postfix_results.final_block != current_block){
-						current_block = postfix_results.final_block;
-					}
+					//Update the current block
+					current_block = postfix_results.final_block;
 
 					//And package the value up as what we want here
 					unary_package.assignee = postfix_results.assignee;
@@ -4972,11 +5024,8 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	//Let's first process the conditional
 	cfg_result_package_t expression_package = emit_binary_expression(current_block, cursor);
 
-	//Let's see if we need to reassign
-	if(expression_package.final_block != current_block){
-		//Reassign this to be at the true end
-		current_block = expression_package.final_block;
-	}
+	//Reassign to be the true end block
+	current_block = expression_package.final_block;
 
 	//Store for later
 	three_addr_var_t* conditional_decider = expression_package.assignee;
@@ -5002,9 +5051,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	cfg_result_package_t if_branch = emit_expression(if_block, cursor, TRUE);
 
 	//Again here we could have multiple blocks, so we'll need to account for this and reassign if necessary
-	if(if_branch.final_block != if_block){
-		if_block = if_branch.final_block;
-	}
+	if_block = if_branch.final_block;
 
 	//We'll now create a conditional move for the if branch into the result
 	instruction_t* if_assignment = emit_assignment_instruction(if_result, if_branch.assignee);
@@ -5022,9 +5069,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	cfg_result_package_t else_branch = emit_expression(else_block, cursor, TRUE);
 
 	//Again here we could have multiple blocks, so we'll need to account for this and reassign if necessary
-	if(else_branch.final_block != else_block){
-		else_block = else_branch.final_block;
-	}
+	else_block = else_branch.final_block;
 
 	//We'll now create a conditional move for the else branch into the result
 	instruction_t* else_assignment = emit_assignment_instruction(else_result, else_branch.assignee);
@@ -5087,14 +5132,8 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	//Emit the binary expression on the left first
 	cfg_result_package_t left_side = emit_binary_expression(current_block, cursor);
 
-	//If these are different, then we'll need to reassign current
-	if(left_side.final_block != current_block){
-		//Reassign current
-		current_block = left_side.final_block;
-
-		//This is also the new final block for the overall statement
-		package.final_block = current_block;
-	}
+	//Update the current block
+	current_block = left_side.final_block;
 
 	//Advance up here
 	cursor = cursor->next_sibling;
@@ -5102,14 +5141,8 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	//Then grab the right hand temp
 	cfg_result_package_t right_side = emit_binary_expression(current_block, cursor);
 
-	//If these are different, then we'll need to reassign current
-	if(right_side.final_block != current_block){
-		//Reassign current
-		current_block = right_side.final_block;
-
-		//This is also the new final block for the overall statement
-		package.final_block = current_block;
-	}
+	//Update the current block
+	current_block = right_side.final_block;
 
 	//If this is temporary *or* a type conversion is needed, we'll do some reassigning here
 	if(left_side.assignee->variable_type != VARIABLE_TYPE_TEMP){
@@ -5226,6 +5259,9 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 	//Add this statement to the block
 	add_statement(current_block, binary_operation);
+
+	//Flag what the final block is here
+	package.final_block = current_block;
 
 	//Return the temp variable that we assigned to
 	return package;
@@ -5419,6 +5455,36 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 
 
 /**
+ * Handle a paramcount statement. All that a paramcount statement does is load the first 4 bytes out of the elaborative
+ * param stack region. This is because those first 4 bytes are where we store the parameter count
+ */
+static cfg_result_package_t visit_paramcount_statement(basic_block_t* basic_block, generic_ast_node_t* paramcount_node){
+	cfg_result_package_t results = {basic_block, basic_block, NULL, BLANK};
+
+	//Extract the variable
+	symtab_variable_record_t* paramcount_var = paramcount_node->variable;
+
+	//Spit out the memory address variable for this
+	three_addr_var_t* base_address = emit_memory_address_var(paramcount_var);
+
+	//Emit a temp var that is going to store our result. This will always be a u32
+	three_addr_var_t* paramcount_result = emit_temp_var(paramcount_node->inferred_type);
+
+	//Read the first 4 bytes(so in reality we have no offset)
+	instruction_t* paramcount_load = emit_load_ir_code(paramcount_result, base_address, paramcount_node->inferred_type);
+
+	//Add it into the block
+	add_statement(basic_block, paramcount_load);
+
+	//Package up the assignee inisde of these results
+	results.assignee = paramcount_result;
+
+	//Give back the results
+	return results;
+}
+
+
+/**
  * Emit abstract machine code for an expression. This is a top level statement.
  * These statements almost always involve some kind of assignment "<-" and generate temporary
  * variables
@@ -5439,6 +5505,10 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 		case AST_NODE_TYPE_LET_STMT:
 			result_package = visit_let_statement(basic_block, expr_node);
 			break;
+		
+		case AST_NODE_TYPE_PARAMCOUNT_STMT:
+			result_package = visit_paramcount_statement(basic_block, expr_node);
+			break;
 
 		//Handle an assignment expression
 		case AST_NODE_TYPE_ASNMNT_EXPR:
@@ -5451,22 +5521,17 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			result_package = emit_binary_expression(basic_block, expr_node);
 			break;
 
+		//We handle direct/indirect calls all in the same function
 		case AST_NODE_TYPE_FUNCTION_CALL:
-			//Emit the function call statement
-			result_package = emit_function_call(basic_block, expr_node);
-			break;
-
-		//Hanlde an indirect function call
 		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
-			//Let the helper rule deal with it
-			result_package = emit_indirect_function_call(basic_block, expr_node);
+			result_package = emit_function_call(basic_block, expr_node);
 			break;
 
 		case AST_NODE_TYPE_TERNARY_EXPRESSION:
 			//Emit the ternary expression
 			result_package = emit_ternary_expression(basic_block, expr_node);
-			break;
-			 
+			break; 
+
 		//Default is a unary expression
 		default:
 			//Let this rule handle it
@@ -5877,87 +5942,35 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 
 
 /**
- * Emit an indirect function call like such
- *
- * call *<function_name>
- *
- * Unlike in a regular call, we don't have the function record on hand to inspect. We'll instead need to rely entirely on the function signature.
- *
- * This presents an issue when dealing with variables that are stored on the stack. Basically, we're going to need to do what the parser had to
- * for regular function calls all over again here to determine what our stack region is going to look like. We don't need to do any allocations for it,
- * but we are going to need to keep track of things
+ * Handle the parsing for an elaborative parameter. This rule is just meant to help
+ * neaten things up because it's going to involve looping over all of the children
+ * inside of the elaborative param node and emitting them separately. Note that
+ * we are not going to do any kind of stack management here, that all is going
+ * to come afterwards when we do the final result assignment
  */
-static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_block, generic_ast_node_t* indirect_function_call_node){
-	//Initially we'll emit this, though it may change
- 	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
+static inline cfg_result_package_t emit_elaborative_param_expressions(basic_block_t* basic_block, generic_ast_node_t* elaborative_param_node, parameter_results_array_t* elaborative_param_results){
+	//NOTE: we will never have an assignee here
+	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
 
-	//Grab the function's signature type too
-	function_type_t* signature = indirect_function_call_node->variable->type_defined_as->internal_types.function_type;
-
-	//Store the number of each type of param we've got
-	u_int32_t number_of_sse_params = get_number_of_sse_params(signature);
-	u_int32_t number_of_gp_params = get_number_of_gp_params(signature);
-
-	//Store a flag as to whether or not we have stack parameters
-	u_int8_t has_stack_params = (number_of_gp_params > MAX_PER_CLASS_REGISTER_PASSED_PARAMS) 
-									|| (number_of_sse_params > MAX_PER_CLASS_REGISTER_PASSED_PARAMS) ? TRUE : FALSE;
-
-	//Store a stack data area variable in the uppermost scope. This will only be acted upon if we see that we
-	//have stack parameters though
-	stack_data_area_t stack_passed_parameters;
-
-	//If we have parameters then allocate thie
-	if(has_stack_params == TRUE){
-		stack_data_area_alloc(&stack_passed_parameters, STACK_TYPE_TEMP_USE);
-	}
-	
-	//We'll assign the first basic block to be "current" - this could change if we hit ternary operations
+	//Keep track of the current block
 	basic_block_t* current_block = basic_block;
 
-	//The function's assignee
-	three_addr_var_t* assignee = NULL;
+	//Extract the first child here
+	generic_ast_node_t* child_cursor = elaborative_param_node->first_child;
+	
+	/**
+	 * Run through everything. Do note that it's possible to have nothing in here
+	 * which is why we're not using a do-while
+	 */
+	while(child_cursor != NULL){
+		//Emit each expression
+		cfg_result_package_t expression_results = emit_expression(current_block, child_cursor, FALSE);
 
-	//May be NULL or not based on what we have as the return type
-	if(signature->returns_void == FALSE){
-		//Otherwise we have one like this
-		assignee = emit_temp_var(signature->return_type);
-	}
-
-	//We first need to emit the function pointer variable
-	three_addr_var_t* function_pointer_var = emit_var(indirect_function_call_node->variable);
-
-	//Emit the final call here
-	instruction_t* func_call_stmt = emit_indirect_function_call_instruction(function_pointer_var, assignee);
-
-	//Let's grab a param cursor for ourselves
-	generic_ast_node_t* param_cursor = indirect_function_call_node->first_child;
-
-	//If this isn't NULL, we have parameters
-	if(param_cursor != NULL){
-		//Create this
-		func_call_stmt->parameters = dynamic_array_alloc();
-	}
-
-	//Create a temporary storage array for all of our function parameter results
-	dynamic_array_t function_parameter_results = dynamic_array_alloc();
-
-	//So long as this isn't NULL
-	while(param_cursor != NULL && param_cursor->ast_node_type != AST_NODE_TYPE_HANDLE_STMT){
-		//Emit whatever we have here into the basic block
-		cfg_result_package_t package = emit_expression(current_block, param_cursor, FALSE);
-
-		//If we did hit a ternary at some point here, we'd see current as different than the final block, so we'll need
-		//to reassign
-		if(package.final_block != current_block){
-			//We've seen a ternary, reassign current
-			current_block = package.final_block;
-
-			//Reassign this as well, so that we stay current
-			result_package.final_block = current_block;
-		}
+		//Always reassign to be the final block that we got back
+		current_block = expression_results.final_block;
 
 		//What is the final assignee
-		three_addr_var_t* final_assignee = package.assignee;
+		three_addr_var_t* final_assignee = expression_results.assignee;
 
 		/**
 		 * If we gave back a memory address var, there will be no associated assignment.
@@ -5965,7 +5978,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		 */
 		if(final_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
 			//Emit the assignment
-			instruction_t* assignment_instruction = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
+			instruction_t* assignment_instruction = emit_assignment_instruction(emit_temp_var(expression_results.assignee->type), expression_results.assignee);
 
 			//Add it into the block
 			add_statement(current_block, assignment_instruction);
@@ -5975,23 +5988,353 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		}
 
 		/**
-		 * NOTE: if we do contain stack parameters, it is very important that this final assignment
-		 * is *never* coalesced. Doing so would bring the stack parameter that we originally set before
-		 * any function call related stack allocations to be after the allocation, which would cause
-		 * invalid memory
+		 * NOTE: it is very important that this final assignment is *never* coalesced. Doing so would bring 
+		 * the stack parameter that we originally set before  any function call related stack allocations to 
+		 * be after the allocation, which would cause invalid memory access on the callee-side
 		 */
-		if(has_stack_params == TRUE){
-			//If the last thing we added is an assignment with a memory address variable
-			if(current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_STMT
-				&& current_block->exit_statement->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+		if(current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_STMT
+			//Make sure that we're talking about the same thing
+			&& variables_equal(final_assignee, current_block->exit_statement->assignee, FALSE) == TRUE
+			&& current_block->exit_statement->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
 
-				//Flag that it cannot be combined
-				current_block->exit_statement->cannot_be_combined = TRUE;
-			}
+			//Flag that it cannot be combined
+			current_block->exit_statement->cannot_be_combined = TRUE;
 		}
 
-		//Add this final result into our parameter results list
-		dynamic_array_add(&function_parameter_results, final_assignee);
+		/**
+		 * If the last thing that we saw is an assn_const statement *or* a non temp
+		 * var, we can actually just optimize here and grab the const instead of the assignee.
+		 * This avoids us needing to do an extra assignment down the road. Otherwise we just
+		 * take the assignee
+		 */
+		if(final_assignee->variable_type != VARIABLE_TYPE_TEMP
+			|| current_block->exit_statement->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
+			add_parameter_result_to_results_array(elaborative_param_results, final_assignee, PARAM_RESULT_TYPE_VAR);
+		} else {
+			add_parameter_result_to_results_array(elaborative_param_results, current_block->exit_statement->op1_const, PARAM_RESULT_TYPE_CONST);
+		}
+
+		//Advance it up here
+		child_cursor = child_cursor->next_sibling;
+	}
+
+	//Assign this over in case it changed
+	result_package.final_block = current_block;
+
+	//Give back the result package
+	return result_package;
+}
+
+
+/**
+ * Handle the storage for elaborative stack params. This also includes handling of the first 4 byte "count" section
+ * that we also need to account for
+ */
+static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_block, parameter_results_array_t* elaborative_param_results, stack_data_area_t* stack_passed_parameters, instruction_t** first_assignment_instruction){
+	//The very first thing that we need to do is emit the paramcount helper
+	u_int32_t paramcount = elaborative_param_results->current_index; 
+
+	//This is always a u32 type
+	stack_region_t* paramcount_region = create_stack_region_for_type(stack_passed_parameters, u32);
+
+	//Emit the storage offset here
+	three_addr_const_t* storage_offset = emit_direct_integer_or_char_constant(paramcount_region->function_local_base_address, u64);
+
+	//We'll also need the paramcount constant here
+	three_addr_const_t* paramcount_constant = emit_direct_integer_or_char_constant(paramcount, u32);
+
+	//Now we have the paramcount store instruction as the very first 4 bytes in this specific region
+	instruction_t* paramcount_store = emit_store_const_with_constant_offset_ir_code(stack_pointer_variable, storage_offset, paramcount_constant, u32);
+
+	//Update this value for our stack management insertion later
+	if(*first_assignment_instruction == NULL){
+		*first_assignment_instruction = paramcount_store;
+	}
+
+	//Add this statement into the block
+	add_statement(basic_block, paramcount_store);
+
+	/**
+	 * Now that we've accounted for the first 4 bytes, we will go through the entire list of
+	 * results and create the stack regions/store those
+	 */
+	for(u_int32_t i = 0; i < elaborative_param_results->current_index; i++){
+		//Extract the result
+		parameter_result_t* elaborative_param_result = get_result_at_index(elaborative_param_results, i); 
+
+		three_addr_var_t* result_var;
+		three_addr_const_t* result_const;
+
+		/**
+		 * Based on what kind of result that we have, we will handle
+		 * slightly differently. Doing this allows us to condense
+		 * 2 assignments for constants into just one assignment(or a store
+		 * in this case)
+		 */
+		switch(elaborative_param_result->result_type){
+			case PARAM_RESULT_TYPE_CONST:
+				//Extract the constant
+				result_const = elaborative_param_result->param_result.constant_result;
+
+				//Create this one's stack region
+				stack_region_t* constant_result_region = create_stack_region_for_type(stack_passed_parameters, result_const->type);
+
+				//Emit the storage offset for this value
+				three_addr_const_t* const_storage_offset = emit_direct_integer_or_char_constant(constant_result_region->function_local_base_address, u64);
+
+				//Now emit the store instruction for the result
+				instruction_t* const_elaborative_param_store = emit_store_const_with_constant_offset_ir_code(stack_pointer_variable, const_storage_offset, result_const, result_const->type); 
+
+				//Add it into the block
+				add_statement(basic_block, const_elaborative_param_store);
+
+				break;
+
+			case PARAM_RESULT_TYPE_VAR:
+				//Extract the constant
+				result_var = elaborative_param_result->param_result.variable_result;
+
+				//Create this one's stack region
+				stack_region_t* variable_result_region = create_stack_region_for_type(stack_passed_parameters, result_var->type);
+
+				//Emit the storage offset for this value
+				three_addr_const_t* var_storage_offset = emit_direct_integer_or_char_constant(variable_result_region->function_local_base_address, u64);
+
+				//Now emit the store instruction for the result
+				instruction_t* var_elaborative_param_store = emit_store_with_constant_offset_ir_code(stack_pointer_variable, var_storage_offset, result_var, result_var->type); 
+
+				//Add it into the block
+				add_statement(basic_block, var_elaborative_param_store);
+
+				break;
+		}
+	}
+}
+
+
+/**
+ * Emit a call statement like such:
+ *
+ * call *<function_name>
+ *
+ *		OR
+ *
+ *	call <function-name>
+ *
+ *	How we call it depends on whether or not it's an indirect call or not
+ *
+ *
+ * This presents an issue when dealing with variables that are stored on the stack. Basically, we're going to need to do what the parser had to
+ * for regular function calls all over again here to determine what our stack region is going to look like. We don't need to do any allocations for it,
+ * but we are going to need to keep track of things
+ *
+ * For example:
+ *
+ * Function 1 param stack(total size 8)
+ * ------------------------------------
+ * int x   Relative Offset: 4
+ * int y   Relative Offset: 0
+ * ------------------------------------
+ *
+ * .....
+ * subq $8, %rsp //Create the stack fram
+ * ....
+ * movq param7, (%rsp)  //populate
+ * movq param8, 4(%rsp) //populate
+ * call function1 -> %eax
+ * addq $8, %rsp //cleanup post-call
+ */
+static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node){
+	//Initially we'll emit this, though it may change
+ 	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
+
+	/**
+	 * Store a stack data area variable in the uppermost scope. This will only be acted upon if we see that we
+	 * have stack parameters though
+	 */
+	stack_data_area_t stack_passed_parameters;
+
+	//We will need the function's signature. How we get it depends on the type of call
+	function_type_t* signature;
+
+	//This is either a direct or indirect call. It doesn't matter once we get passed the conditional processing
+	instruction_t* function_call_statement;
+
+	//The function's assignee
+	three_addr_var_t* function_assignee = NULL;
+
+	/**
+	 * Any/all of our conditional processing will be done here. After this everything
+	 * needs to be agnostic to the node type
+	 */
+	switch(function_call_node->ast_node_type){
+		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
+			signature = function_call_node->variable->type_defined_as->internal_types.function_type;
+
+			//May be NULL or not based on what we have as the return type
+			if(signature->returns_void == FALSE){
+				function_assignee = emit_temp_var(signature->return_type);
+			}
+
+			//We first need to emit the function pointer variable
+			three_addr_var_t* function_pointer_var = emit_var(function_call_node->variable);
+
+			//Now we can emit the indirect call statement
+			function_call_statement = emit_indirect_function_call_instruction(function_pointer_var, function_assignee);
+
+			break;
+
+		case AST_NODE_TYPE_FUNCTION_CALL:
+			signature = function_call_node->func_record->signature->internal_types.function_type;
+
+			//May be NULL or not based on what we have as the return type
+			if(signature->returns_void == FALSE){
+				function_assignee = emit_temp_var(signature->return_type);
+			}
+
+			//Now we can emit the direct call statement
+			function_call_statement = emit_function_call_instruction(function_call_node->func_record, function_assignee);
+
+			break;
+
+		//This should be unreachable but just to be sure
+		default:
+			fprintf(stderr, "Fatal internal compiler error. Incompatible node type found in function call handler\n");
+			exit(1);
+	}
+
+
+	//Does the function signature contain stack params or not?
+	u_int8_t has_stack_params = signature->contains_stack_params;
+
+	/**
+	 * If a function call contains stack params, we are going to have to allocate the stack data area
+	 * for our stack passed parameters. This needs to be done on every function call
+	 * for an indirect call, regardless of whether the stack is dynamic or static
+	 */
+	if(signature->contains_elaborative_stack_param == TRUE){
+		stack_data_area_alloc(&stack_passed_parameters, STACK_TYPE_TEMP_USE, STACK_DATA_AREA_SIZE_TYPE_DYNAMIC);
+
+	} else if(signature->contains_stack_params == TRUE){
+		stack_data_area_alloc(&stack_passed_parameters, STACK_TYPE_TEMP_USE, STACK_DATA_AREA_SIZE_TYPE_STATIC);
+	}
+	
+	//We'll assign the first basic block to be "current" - this could change if we hit ternary operations
+	basic_block_t* current_block = basic_block;
+
+
+	/**
+	 * Our two result arrays will remain nulled out unless or until it can be determined
+	 * that an allocation here is actually needed
+	 */
+	parameter_results_array_t non_elaborative_parameter_results = NULL_PARAMETER_RESULT_ARRAY_INITIALIZER;
+	parameter_results_array_t elaborative_parameter_results = NULL_PARAMETER_RESULT_ARRAY_INITIALIZER;
+
+	//Let's grab a param cursor for ourselves
+	generic_ast_node_t* param_cursor = function_call_node->first_child;
+
+	//If this isn't NULL, we have parameters
+	if(param_cursor != NULL){
+		function_call_statement->parameters = dynamic_array_alloc();
+	}
+
+	//Determine what the non-elaborative parameter count is
+	u_int32_t non_elaborative_parameter_count = get_non_elaborative_parameter_count(signature);
+
+	/**
+	 * If we do have non-elaborative parameter results then we're ok to allocate
+	 * here
+	 */
+	if(non_elaborative_parameter_count != 0){
+		 non_elaborative_parameter_results = parameter_results_array_alloc(non_elaborative_parameter_count); 
+	}
+
+	/**
+	 * If the signature itself contains an elaborative stack
+	 * param then allocate a default sized one. Default sized because
+	 * we cannot ever know how many there are in an elaborative param
+	 */
+	if(signature->contains_elaborative_stack_param == TRUE){
+		elaborative_parameter_results = parameter_results_array_alloc_default_size();
+	}
+
+	//So long as this isn't NULL
+	while(param_cursor != NULL 
+		&& param_cursor->ast_node_type != AST_NODE_TYPE_HANDLE_STMT){
+
+		/**
+		 * For everything that is not an elaborative param statement, we'll
+		 * handle it internally to this function
+		 */
+		if(param_cursor->ast_node_type != AST_NODE_TYPE_ELABORATIVE_PARAM_STMT){
+			//Emit whatever we have here into the basic block
+			cfg_result_package_t package = emit_expression(current_block, param_cursor, FALSE);
+
+			//Always reassign this
+			current_block = package.final_block;
+
+			//What is the final assignee
+			three_addr_var_t* final_assignee = package.assignee;
+
+			/**
+			 * If we gave back a memory address var, there will be no associated assignment.
+			 * Let's do the assignment now
+			 */
+			if(final_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+				//Emit the assignment
+				instruction_t* assignment_instruction = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
+
+				//Add it into the block
+				add_statement(current_block, assignment_instruction);
+
+				//This now is the final assignee
+				final_assignee = assignment_instruction->assignee;
+			}
+
+			/**
+			 * NOTE: if we do contain stack parameters, it is very important that this final assignment
+			 * is *never* coalesced. Doing so would bring the stack parameter that we originally set before
+			 * any function call related stack allocations to be after the allocation, which would cause
+			 * invalid memory
+			 */
+			if(has_stack_params == TRUE){
+				//If the last thing we added is an assignment with a memory address variable
+				if(current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_STMT
+					//Make sure that we're talking about the same thing
+					&& variables_equal(final_assignee, current_block->exit_statement->assignee, FALSE) == TRUE
+					&& current_block->exit_statement->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+
+						//Flag that it cannot be combined
+						current_block->exit_statement->cannot_be_combined = TRUE;
+				}
+			}
+
+			/**
+			 * If the last thing that we saw is an assn_const statement *or* a non temp
+			 * var, we can actually just optimize here and grab the const instead of the assignee.
+			 * This avoids us needing to do an extra assignment down the road. Otherwise we just
+			 * take the assignee
+			 */
+			if(final_assignee->variable_type != VARIABLE_TYPE_TEMP
+				|| current_block->exit_statement->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
+				add_parameter_result_to_results_array(&non_elaborative_parameter_results, final_assignee, PARAM_RESULT_TYPE_VAR);
+			} else {
+				add_parameter_result_to_results_array(&non_elaborative_parameter_results, current_block->exit_statement->op1_const, PARAM_RESULT_TYPE_CONST);
+			}
+
+		/**
+		 * Otherwise we have an elaborative param. Unrelated but worth nothing that this will
+		 * always be the last parameter in our list. Elaborative params no matter what always
+		 * come after everything else. We will let the helper emit everything here and then 
+		 * handle the stack management later
+		 */
+		} else {
+			//Let the helper do all of this - do note that there is not going to be anything in the "assignee" here - it's all handled internally
+			cfg_result_package_t results = emit_elaborative_param_expressions(current_block, param_cursor, &elaborative_parameter_results);
+
+			//Update the final block
+			current_block = results.final_block;
+		}
 
 		//And move up
 		param_cursor = param_cursor->next_sibling;
@@ -6007,22 +6350,33 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 
 	//Now that we have all of this, we need to go through and emit our final assignments for the function calls
 	//themselves
-	for(u_int32_t i = 0; i < function_parameter_results.current_index; i++){
+	for(u_int32_t i = 0; i < non_elaborative_parameter_results.current_index; i++){
 		//Get the result
-		three_addr_var_t* result = dynamic_array_get_at(&function_parameter_results, i);
+		parameter_result_t* result = get_result_at_index(&non_elaborative_parameter_results, i);
 
 		//Extract the parameter type here
-		generic_type_t* paramter_type = dynamic_array_get_at(&(signature->function_parameters), i);
+		generic_type_t* parameter_type = dynamic_array_get_at(&(signature->function_parameters), i);
 
 		/**
 		 * Deconstruct our processing to be by-class. This is going to be important for tracking
 		 * when/for which parameter we need to start doing stack allocations for(if any)
 		 */
-		if(IS_FLOATING_POINT(paramter_type) == FALSE){
+		if(IS_FLOATING_POINT(parameter_type) == FALSE){
 			//We're under the limit, we don't need a stack allocation
 			if(current_gp_index <= MAX_PER_CLASS_REGISTER_PASSED_PARAMS){
 				//Add the final assignment
-				instruction_t* assignment = emit_assignment_instruction(emit_temp_var(paramter_type), result);
+				instruction_t* assignment;
+
+				//Based on the result type we dynamically create the right assignment
+				switch(result->result_type){
+					case PARAM_RESULT_TYPE_CONST:
+						assignment = emit_assignment_with_const_instruction(emit_temp_var(parameter_type), result->param_result.constant_result);
+						break;
+
+					case PARAM_RESULT_TYPE_VAR:
+						assignment = emit_assignment_instruction(emit_temp_var(parameter_type), result->param_result.variable_result);
+						break;
+				}
 
 				//This is the first assignment if it's NULL
 				if(first_assignment_instruction == NULL){
@@ -6033,18 +6387,29 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 				add_statement(basic_block, assignment);
 
 				//Add the parameter in
-				dynamic_array_add(&(func_call_stmt->parameters), assignment->assignee);
+				dynamic_array_add(&(function_call_statement->parameters), assignment->assignee);
 
 			//If we get here then we need to do a stack allocation
 			} else {
 				//Create it
-				stack_region_t* region = create_stack_region_for_type(&stack_passed_parameters, paramter_type);
+				stack_region_t* region = create_stack_region_for_type(&stack_passed_parameters, parameter_type);
 
 				//The offset. Note that this comes from the function local base address because there is no offset to add here
 				three_addr_const_t* stack_offset = emit_direct_integer_or_char_constant(region->function_local_base_address, u64);
 
 				//We need to emit a store statement now for our result
-				instruction_t* store_operation = emit_store_with_constant_offset_ir_code(stack_pointer_variable, stack_offset, result, paramter_type);
+				instruction_t* store_operation;
+
+				//Create the proper kind of store instruction based on the result that we're given
+				switch(result->result_type){
+					case PARAM_RESULT_TYPE_CONST:
+						store_operation = emit_store_const_with_constant_offset_ir_code(stack_pointer_variable, stack_offset, result->param_result.constant_result, parameter_type);
+						break;
+
+					case PARAM_RESULT_TYPE_VAR:
+						store_operation = emit_store_with_constant_offset_ir_code(stack_pointer_variable, stack_offset, result->param_result.variable_result, parameter_type);
+						break;
+				}
 
 				//This is the first assignment if it's NULL
 				if(first_assignment_instruction == NULL){
@@ -6061,8 +6426,18 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		} else {
 			//We're under the limit, so we don't need a stack allocation
 			if(current_sse_index <= MAX_PER_CLASS_REGISTER_PASSED_PARAMS){
-				//Add the final assignment
-				instruction_t* assignment = emit_assignment_instruction(emit_temp_var(paramter_type), result);
+				instruction_t* assignment;
+
+				//We need a different assignment based on what kind of result it is
+				switch(result->result_type){
+					case PARAM_RESULT_TYPE_CONST:
+						assignment = emit_assignment_with_const_instruction(emit_temp_var(parameter_type), result->param_result.constant_result);
+						break;
+
+					case PARAM_RESULT_TYPE_VAR:
+						assignment = emit_assignment_instruction(emit_temp_var(parameter_type), result->param_result.variable_result);
+						break;
+				}
 
 				//Add this into the block
 				add_statement(basic_block, assignment);
@@ -6073,19 +6448,30 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 				}
 
 				//Add the parameter in
-				dynamic_array_add(&(func_call_stmt->parameters), assignment->assignee);
+				dynamic_array_add(&(function_call_statement->parameters), assignment->assignee);
 
 			//If we get here then we need to do a stack allocation
 			} else {
 				//Create it
-				stack_region_t* region = create_stack_region_for_type(&stack_passed_parameters, paramter_type);
+				stack_region_t* region = create_stack_region_for_type(&stack_passed_parameters, parameter_type);
 
 				//The offset. Note that this comes from the function local base address because we are in the function that has
 				//allocated this value
 				three_addr_const_t* stack_offset = emit_direct_integer_or_char_constant(region->function_local_base_address, u64);
 
 				//We need to emit a store statement now for our result
-				instruction_t* store_operation = emit_store_with_constant_offset_ir_code(stack_pointer_variable, stack_offset, result, paramter_type);
+				instruction_t* store_operation;
+
+				//We need a different assignment based on what kind of result it is
+				switch(result->result_type){
+					case PARAM_RESULT_TYPE_CONST:
+						store_operation = emit_store_const_with_constant_offset_ir_code(stack_pointer_variable, stack_offset, result->param_result.constant_result, parameter_type);
+						break;
+
+					case PARAM_RESULT_TYPE_VAR:
+						store_operation = emit_store_with_constant_offset_ir_code(stack_pointer_variable, stack_offset, result->param_result.variable_result, parameter_type);
+						break;
+				}
 
 				//This is the first assignment if it's NULL
 				if(first_assignment_instruction == NULL){
@@ -6101,9 +6487,16 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		}
 	}
 
-	//Once we make it here, we should have all of the params stored in temp vars
+	/**
+	 * If we do have elaborative stack params to manage, we will do so here
+	 * using the helper method
+	 */
+	if(signature->contains_elaborative_stack_param == TRUE){
+		handle_elaborative_stack_param_storage(current_block, &elaborative_parameter_results, &stack_passed_parameters, &first_assignment_instruction);
+	}
+
 	//We can now add the function call statement in
-	add_statement(current_block, func_call_stmt);
+	add_statement(current_block, function_call_statement);
 
 	/**
 	 * Let's now handle everything that we need to do with the stack(if we're touching it at all)
@@ -6133,14 +6526,18 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		instruction_t* stack_deallocation = emit_stack_deallocation_ir_statement(stack_deallocation_constant);
 
 		//This goes right after the function call statement
-		insert_instruction_after_given(stack_deallocation, func_call_stmt);
+		insert_instruction_after_given(stack_deallocation, function_call_statement);
 
 		//Once we've done all of that - this has served its purpose
 		stack_data_area_dealloc(&stack_passed_parameters);
 	}
 
-	//Destroy the function parameter results here
-	dynamic_array_dealloc(&function_parameter_results);
+	/**
+	 * Deallocate the two function parameter result arrays now that we're
+	 * done
+	 */
+	parameter_results_array_dealloc(&non_elaborative_parameter_results);
+	parameter_results_array_dealloc(&elaborative_parameter_results);
 
 	/**
 	 * If we get here and we have a handles statement, we will let our special rule
@@ -6155,7 +6552,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		three_addr_var_t* error_assignee = emit_temp_var(u64);
 
 		//This is stored in the optional second assignee slot
-		func_call_stmt->optional_storage.error_assignee = error_assignee;
+		function_call_statement->optional_storage.error_assignee = error_assignee;
 
 		//Now we'll have a move statement just for register allocation reasons
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(error_assignee->type), error_assignee);
@@ -6167,7 +6564,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		error_assignee = assignment->assignee;
 
 		//Let the helper do the rest. It will spit back the results of the final assignment for us
-		cfg_result_package_t handle_results = emit_handle_statement(current_block, param_cursor, assignee, error_assignee);
+		cfg_result_package_t handle_results = emit_handle_statement(current_block, param_cursor, function_assignee, error_assignee);
 
 		//Just give back these overall results
 		return handle_results;
@@ -6178,10 +6575,10 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		if(signature->returns_void == FALSE){
 			//Emit an assignment instruction. This will become very important way down the line in register
 			//allocation to avoid interference
-			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(function_assignee->type), function_assignee);
 
 			//Reassign this value
-			assignee = assignment->assignee;
+			function_assignee = assignment->assignee;
 
 			//Add it in
 			add_statement(current_block, assignment);
@@ -6189,262 +6586,10 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 
 		//This is always the assignee we gave above. Note that this is nullable,
 		//we do 
-		result_package.assignee = assignee;
+		result_package.assignee = function_assignee;
 
-		//Give back what we assigned to
-		return result_package;
-	}
-}
-
-
-/**
- * Emit a function call node. In this iteration of a function call, we will still be parameterized, so the actual 
- * node will record what needs to be passed into the function
- *
- * For functions that have stack-passed parameters, we will need to account for this and perform a stack allocation/deallocation
- * on-the-fly for our function call. This is somewhat simple from the caller's perspective because we just need to setup
- * the local stack frame and populate it with values 
- *
- * For example:
- *
- * Function 1 param stack(total size 8)
- * ------------------------------------
- * int x   Relative Offset: 4
- * int y   Relative Offset: 0
- * ------------------------------------
- *
- * .....
- * subq $8, %rsp //Create the stack fram
- * ....
- * movq param7, (%rsp)  //populate
- * movq param8, 4(%rsp) //populate
- * call function1 -> %eax
- * addq $8, %rsp //cleanup post-call
- */
-static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node){
-	//Initially we'll emit this, though it may change
- 	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
-
-	//Grab this out first
-	symtab_function_record_t* func_record = function_call_node->func_record;
-
-	//Grab the function's signature type too
-	function_type_t* signature = func_record->signature->internal_types.function_type;
-
-	//Hang onto the parameter stack that this function relies on. Note that this will often
-	//be blank, but we need to hang onto it anyways
-	stack_data_area_t* callee_parameter_stack = &(func_record->stack_passed_parameters);
-
-	//We'll assign the first basic block to be "current" - this could change if we hit ternary operations
-	basic_block_t* current_block = basic_block;
-
-	//The function's assignee
-	three_addr_var_t* assignee = NULL;
-
-	//May be NULL or not based on what we have as the return type
-	if(signature->returns_void == FALSE){
-		//Otherwise we have one like this
-		assignee = emit_temp_var(signature->return_type);
-	}
-
-	//Emit the final call here
-	instruction_t* func_call_stmt = emit_function_call_instruction(func_record, assignee);
-
-	//Let's grab a param cursor for ourselves
-	generic_ast_node_t* param_cursor = function_call_node->first_child;
-
-	//If this isn't NULL, we have parameters
-	if(param_cursor != NULL){
-		//Create this
-		func_call_stmt->parameters = dynamic_array_alloc();
-	}
-
-	//The current param of the indext9 <- call parameter_pass2(t10, t11, t12, t14, t16, t18)
-	u_int8_t current_func_param_idx = 1;
-
-	//Keep an array of all of our final results for the function call
-	dynamic_array_t function_parameter_results = dynamic_array_alloc();
-
-	//So long as this isn't NULL
-	while(param_cursor != NULL && param_cursor->ast_node_type != AST_NODE_TYPE_HANDLE_STMT){
-		//Emit whatever we have here into the basic block
-		cfg_result_package_t package = emit_expression(current_block, param_cursor, FALSE);
-
-		//If we did hit a ternary at some point here, we'd see current as different than the final block, so we'll need
-		//to reassign
-		if(package.final_block != current_block){
-			//We've seen a ternary, reassign current
-			current_block = package.final_block;
-
-			//Reassign this as well, so that we stay current
-			result_package.final_block = current_block;
-		}
-
-		//What is the final assignee
-		three_addr_var_t* final_assignee = package.assignee;
-
-		/**
-		 * If we gave back a memory address var, there will be no associated assignment.
-		 * Let's do the assignment now
-		 */
-		if(final_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-			//Emit the assignment
-			instruction_t* assignment_instruction = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
-
-			//Add it into the block
-			add_statement(current_block, assignment_instruction);
-
-			//This now is the final assignee
-			final_assignee = assignment_instruction->assignee;
-		}
-
-		/**
-		 * NOTE: if we do contain stack parameters, it is very important that this final assignment
-		 * is *never* coalesced. Doing so would bring the stack parameter that we originally set before
-		 * any function call related stack allocations to be after the allocation, which would cause
-		 * invalid memory
-		 */
-		if(func_record->contains_stack_params == TRUE){
-			//If the last thing we added is an assignment with a memory address variable
-			if(current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_STMT
-				&& current_block->exit_statement->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-
-				//Flag that it cannot be combined
-				current_block->exit_statement->cannot_be_combined = TRUE;
-			}
-		}
-
-		//Add this final result into our parameter results list
-		dynamic_array_add(&function_parameter_results, final_assignee);
-
-		//And move up
-		param_cursor = param_cursor->next_sibling;
-
-		//Increment this
-		current_func_param_idx++;
-	}
-	
-	/**
-	 * If we have any stack variables, now is the time where we need to emit the local frame allocation
-	 * so that we can load up stack variables for the callee without issue
-	 */
-	if(callee_parameter_stack->total_size != 0){
-		//Emit the constant
-		three_addr_const_t* stack_allocation_offset = emit_direct_integer_or_char_constant(callee_parameter_stack->total_size, u64);
-
-		//Now the stack allocation
-		instruction_t* stack_allocation = emit_stack_allocation_ir_statement(stack_allocation_offset);
-
-		//Get it into the block
-		add_statement(current_block, stack_allocation);
-	}
-
-	//Now that we have all of this, we need to go through and emit our final assignments for the function calls
-	//themselves
-	for(u_int32_t i = 1; i < current_func_param_idx; i++){
-		//Get the result
-		three_addr_var_t* result = dynamic_array_get_at(&function_parameter_results, i - 1);
-
-		//Extract our type here
-		generic_type_t* parameter_type = dynamic_array_get_at(&(signature->function_parameters), i - 1);
-
-		//Get the variable record that we're after
-		symtab_variable_record_t* var_record = dynamic_array_get_at(&(func_record->function_parameters), i - 1);
-
-		//If this has no stack region, then we don't need to do anything special
-		if(var_record->passed_by_stack == FALSE){
-			//We need one more assignment here
-			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(parameter_type), result);
-
-			//Add this into the block
-			add_statement(current_block, assignment);
-
-			//Add the parameter in
-			dynamic_array_add(&func_call_stmt->parameters, assignment->assignee);
-
-		//However if we do have a stack region, we need to instead emit a store that gets this
-		//variable into the appopriate spot
-		} else {
-			//Allocation for our offset. Note that this is from the function local base address because we are in the funciton that has allocated
-			//this value
-			three_addr_const_t* offset = emit_direct_integer_or_char_constant(var_record->stack_region->function_local_base_address, u64);
-
-			//Emit the store instruction
-			instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(stack_pointer_variable, offset, result, parameter_type);
-
-			//Now get it into the block
-			add_statement(current_block, store_instruction);
-		}
-	}
-
-	//Once we make it here, we should have all of the params stored in temp vars
-	//We can now add the function call statement in
-	add_statement(current_block, func_call_stmt);
-
-	//We need to clean up the stack if we had anything on it
-	if(callee_parameter_stack->total_size != 0){
-		//Emit the constant
-		three_addr_const_t* stack_allocation_offset = emit_direct_integer_or_char_constant(callee_parameter_stack->total_size, u64);
-
-		//Now the stack allocation
-		instruction_t* stack_deallocation = emit_stack_deallocation_ir_statement(stack_allocation_offset);
-
-		//Get it into the block
-		add_statement(current_block, stack_deallocation);
-	}
-
-	//Destroy the dynamic array now that we're done
-	dynamic_array_dealloc(&function_parameter_results);
-
-	/**
-	 * If we get here and we have a handles statement, we will let our special rule
-	 * translate it into a switch statement. Our strategy is this - handle the error
-	 * and emit the final result assignment inside of the handle statement itself
-	 */
-	if(param_cursor != NULL && param_cursor->ast_node_type == AST_NODE_TYPE_HANDLE_STMT){
-		/**
-		 * Since we have a handle statement, we have to have an error assignee. Let's also now emit that and
-		 * the result assignment that comes with it
-		 */
-		three_addr_var_t* error_assignee = emit_temp_var(u64);
-
-		//This is stored in the optional second assignee slot
-		func_call_stmt->optional_storage.error_assignee = error_assignee;
-
-		//Now we'll have a move statement just for register allocation reasons
-		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(error_assignee->type), error_assignee);
-
-		//Add it into the block
-		add_statement(current_block, assignment);
-
-		//This now is our error assignee that will be used in the CFG
-		error_assignee = assignment->assignee;
-
-		//Let the helper do the rest. It will spit back the results of the final assignment for us
-		cfg_result_package_t handle_results = emit_handle_statement(current_block, param_cursor, assignee, error_assignee);
-		
-		//Just give back what we got
-		return handle_results;
-
-
-	//If there's no error handling then we just do a regular result assignment
-	} else {
-		//If this is not a void return type, we'll need to emit this temp assignment
-		if(signature->returns_void == FALSE){
-			//Emit an assignment instruction. This will become very important way down the line in register
-			//allocation to avoid interference
-			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
-					
-			//Reassign this value
-			assignee = assignment->assignee;
-
-			//Add it in
-			add_statement(current_block, assignment);
-		}
-
-		//This is always the assignee we gave above. It is important to note
-		//that this is nullable, not all functions return something
-		result_package.assignee = assignee;
+		//Always bump this up too just in case
+		result_package.final_block = current_block;
 
 		//Give back what we assigned to
 		return result_package;
@@ -7716,10 +7861,8 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	//We'll first need to emit the expression node
 	cfg_result_package_t input_results = emit_expression(root_level_block, cursor, TRUE);
 
-	//Check for ternary expansion
-	if(input_results.final_block != root_level_block){
-		root_level_block = input_results.final_block;
-	}
+	//Update the block
+	root_level_block = input_results.final_block;
 
 	//This is a switch type block
 	jump_calculation_block->block_type = BLOCK_TYPE_SWITCH;
@@ -8009,10 +8152,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	cfg_result_package_t input_results = emit_expression(root_level_block, case_stmt_cursor, TRUE);
 
 	//We could have had a ternary here, so we'll need to account for that possibility
-	if(root_level_block != input_results.final_block){
-		//Just reassign what current is
-		root_level_block = input_results.final_block;
-	}
+	root_level_block = input_results.final_block;
 
 	//IMPORTANT - we'll also mark this as a block type switch, because this is where any/all switching logic
 	//will be happening
@@ -8284,11 +8424,8 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				//Emit the return statement, let the sub rule handle
 			 	generic_results = emit_return(current_block, ast_cursor);
 
-				//If this is the case, it means that we've hit a ternary at some point and need
-				//to reassign this final block
-				if(generic_results.final_block != current_block){
-					current_block = generic_results.final_block;
-				}
+				//Update the current block
+				current_block = generic_results.final_block;
 
 				//If there is anything after this statement, it is UNREACHABLE
 				if(ast_cursor->next_sibling != NULL){
@@ -8591,10 +8728,8 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				//We'll need to emit the conditional in the current block
 				cfg_result_package_t ret_package = emit_expression(current_block, cursor, TRUE);
 
-				//We'll now update the current block accordingly
-				if(ret_package.final_block != current_block){
-					current_block = ret_package.final_block;
-				}
+				//Update the current block
+				current_block = ret_package.final_block;
 
 				//We'll need a block at the very end which we'll hit after we jump
 				basic_block_t* else_block = basic_block_alloc_and_estimate();
@@ -8822,11 +8957,8 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//Emit the return statement, let the sub rule handle
 			 	generic_results = emit_return(current_block, ast_cursor);
 
-				//If this is the case, it means that we've hit a ternary at some point and need
-				//to reassign this final block
-				if(generic_results.final_block != current_block){
-					current_block = generic_results.final_block;
-				}
+				//Update the current block
+				current_block = generic_results.final_block;
 
 				//If there is anything after this statement, it is UNREACHABLE
 				if(ast_cursor->next_sibling != NULL){
@@ -9132,10 +9264,8 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//We'll need to emit the conditional in the current block
 				cfg_result_package_t ret_package = emit_expression(current_block, cursor, TRUE);
 
-				//We'll now update the current block accordingly
-				if(ret_package.final_block != current_block){
-					current_block = ret_package.final_block;
-				}
+				//Update the current block
+				current_block = ret_package.final_block;
 
 				//We'll need a block at the very end which we'll hit after we jump
 				basic_block_t* else_block = basic_block_alloc_and_estimate();
@@ -9477,7 +9607,8 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 		 * 	turns out to not be needed, then the coalescing subsystem inside of the register
 		 * 	allocator will simply knock out the top assignment as if it was never there
 		 */
-		if(parameter->stack_variable == FALSE){
+		if(parameter->stack_variable == FALSE 
+			&& parameter->type_defined_as->type_class != TYPE_CLASS_ELABORATIVE){
 			//Create the aliased variable
 			symtab_variable_record_t* alias = create_parameter_alias_variable(parameter, variable_symtab, increment_and_get_temp_id());
 
@@ -9571,7 +9702,10 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 		//Once we're done with the compound statement, we will merge it into the function
 	 	basic_block_t* compound_statement_exit_block = merge_blocks(function_starting_block, compound_statement_results.starting_block);
 
-		//Only reassign here if the two are different
+		/**
+		 * Only reassign here if the compound statement is not just one big block. If the start
+		 * and end are different pointers in memory then this is a valid reassignment
+		 */
 		if(compound_statement_results.starting_block != compound_statement_results.final_block){
 			compound_statement_exit_block = compound_statement_results.final_block;
 		}
@@ -10033,10 +10167,8 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* current_block,
 				break;
 		}
 
-		//Change the current block if there is a change. This is possible with ternary expressions
-		if(initializer_results.final_block != current_block){
-			current_block = initializer_results.final_block;
-		}
+		//Update the current block
+		current_block = initializer_results.final_block;
 
 		//The current array index goes up by one
 		current_array_index++;
@@ -10141,10 +10273,8 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 				break;
 		}
 
-		//Change the current block if there is a change. This is possible with ternary expressions
-		if(initializer_results.final_block != current_block){
-			current_block = initializer_results.final_block;
-		}
+		//Update the current block
+		current_block = initializer_results.final_block;
 
 		//Increment this by one
 		member_index++;

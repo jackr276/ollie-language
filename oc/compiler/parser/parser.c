@@ -14,7 +14,6 @@
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/types.h>
 #include "parser.h"
 #include "../utils/stack/lexstack.h"
@@ -109,7 +108,8 @@ static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* f
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_global_scope);
 static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, u_int8_t is_global);
-
+static inline generic_type_t* handle_elaborative_param_type(generic_type_t* elaborated_type);
+static u_int8_t validate_function_parameter_list(generic_type_t* function_type);
 
 /**
  * Simply prints a parse message in a nice formatted way
@@ -1487,6 +1487,162 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 
 
 /**
+ * Special helper for when we need to create an empty elaborative param as a placeholder for what we'd normally have. We still
+ * need to create something because if we don't, the callee would be looking inside of the stack for a paramcount where there
+ * is none. This node will still setup the stack and just have the count set to 0
+ */
+static inline generic_ast_node_t* create_empty_elaborative_param(generic_type_t* elaborative_param_type){
+	//Allocate it
+	generic_ast_node_t* elaborative_param_node = ast_node_alloc(AST_NODE_TYPE_ELABORATIVE_PARAM_STMT, SIDE_TYPE_RIGHT);
+
+	//Set the count to be 0
+	elaborative_param_node->optional_storage.elaborative_param_count = 0;
+
+	//Store the type here as well
+	elaborative_param_node->inferred_type = elaborative_param_type; 
+
+	//Give this back
+	return elaborative_param_node;
+}
+
+
+/**
+ * Ollie allows for elaborative params that have either 0 or many
+ * of a compatible type. We will have a special rule that accounts 
+ * for this here as well as a special type of node to allow the
+ * CFG translator to take care of it
+ *
+ * NOTE: the elaborative param parser is invoked whenever we have a param
+ * that is elaborative. Remember that since we are technically
+ * allowed to see nothing here, we may very well have elaborative
+ * params that are just empty
+ *
+ * Remember that the elaborative param must always be the very last parameter in a function,
+ * so to parse it we're just taking everything from the starting point until we see an R_PAREN
+ *
+ * If we get to this rule, then we know that the elaborative param itself is not empty so we
+ * don't need to worry about that case
+ */
+static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_stream_t* token_stream, generic_type_t* elaborative_param_type, side_type_t side){
+	//Lookahead token
+	lexitem_t lookahead;
+
+	//Allocate it
+	generic_ast_node_t* elaborative_param_node = ast_node_alloc(AST_NODE_TYPE_ELABORATIVE_PARAM_STMT, side);
+
+	//Extract the elaborated type - this is what we'll be comparing to
+	generic_type_t* type_being_elaborated = elaborative_param_type->internal_types.elaborates;
+
+	//Get the first lookahead - we need to test if we have an empty elaborative param here
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//We don't have an empty elaborated param here - so we will process everything that we see
+	if(lookahead.tok != R_PAREN){
+		//Push this token back for processing
+		push_back_token(token_stream, &parser_line_num);
+
+		//Keep track of how many we've got in here
+		u_int32_t elaborated_param_count = 0;
+
+		//Forever loop until we hit the R_PAREN
+		do {
+			//Handle the actual parameter
+			generic_ast_node_t* elaborated_param = ternary_expression(token_stream, side);
+
+			//It failed so we just get out here
+			if(elaborated_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+				return print_and_return_error("Invalid parameter expression in elaborative param handler", parser_line_num);
+			}
+
+			//Let's see if we're even able to assign this here
+			generic_type_t* final_type = types_assignable(type_being_elaborated, elaborated_param->inferred_type);
+
+			//If this is null, it means that our check failed
+			if(final_type == NULL){
+				//Let's first generate the types_assignable failure message
+				generate_types_assignable_failure_message(info, elaborated_param->inferred_type, type_being_elaborated);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+
+				//Following that we'll generate another error message to make it more clear
+				sprintf(info, "Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s%s\".",
+						(type_being_elaborated->mutability == MUTABLE ? "mut ": ""),
+						type_being_elaborated->type_name.string,
+						(elaborated_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
+						elaborated_param->inferred_type->type_name.string);
+
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			//If this is a constant node, we'll force it to be whatever we expect from the type assignability
+			if(elaborated_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
+				elaborated_param->inferred_type = final_type;
+
+				//Do coercion
+				perform_constant_assignment_coercion(elaborated_param, final_type);
+			}
+
+			/**
+			 * Special checking here - if we have an enum type that is being assigned to, we need
+			 * to make sure that it's being assigned to a valid value in it's range
+			 */
+			if(is_enum_type(type_being_elaborated) == TRUE && elaborated_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
+				if(does_enum_contain_integer_member(type_being_elaborated, elaborated_param->constant_value.signed_int_value) == FALSE){
+					sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
+								type_being_elaborated->type_name.string, elaborated_param->constant_value.signed_int_value);
+
+					return print_and_return_error(info, parser_line_num);
+				}
+			} 
+
+			//This counts as one more elaborated param
+			elaborated_param_count++;
+
+			//Add this in as a child to the parent elaborated param node
+			add_child_node(elaborative_param_node, elaborated_param);
+			
+			//Grab the lookahead token
+			lookahead = get_next_token(token_stream, &parser_line_num);
+			
+			//Comma - keep going to the next param
+			if(lookahead.tok == COMMA){
+				continue;
+
+			//Termination condition
+			} else if(lookahead.tok == R_PAREN){
+				//This will be handled by the helper rule
+				push_back_token(token_stream, &parser_line_num);
+
+				//Get out of here now
+				break;
+
+			//Otherwise we have some issue here
+			} else {
+				sprintf(info, "Commas are required between elaborative function parameters in function call");
+				return print_and_return_error(info, parser_line_num);
+			}
+
+		} while(TRUE);
+
+		//Store the final count in here - is needed in the CFG
+		elaborative_param_node->optional_storage.elaborative_param_count = elaborated_param_count;
+
+	/**
+	 * Otherwise we have an entirely empty elaborative param here. We'll just use the helper
+	 * to create an empty one and that'll be all. Note that we do still have to push back the R_PAREN
+	 * because we need to process it later
+	 */
+	} else {
+		push_back_token(token_stream, &parser_line_num);
+
+		elaborative_param_node = create_empty_elaborative_param(elaborative_param_type);
+	}
+
+	//Give back the elaboarative param in the end
+	return elaborative_param_node;
+}
+
+
+/**
  * A function call looks for a very specific kind of identifer followed by
  * parenthesis and the appropriate number of parameters for the function, each of
  * the appropriate type
@@ -1502,8 +1658,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	lexitem_t lookahead;
 	//We'll also keep a nicer reference to the function name
 	dynamic_string_t function_name;
-	//The number of parameters that we've seen
-	u_int8_t num_params = 0;
 	//A pointer that holds our function call node
 	generic_ast_node_t* function_call_node;
 	//Hold the overall type for error printing
@@ -1607,19 +1761,13 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		//A node to hold our current parameter
 		generic_ast_node_t* current_param;
 
+		//The number of parameters that we've seen
+		u_int8_t num_params = 0;
+
 		//So long as we don't see the R_PAREN we aren't done
 		do {
 			//Record that we saw one more parameter
 			num_params++;
-
-			//If we've already seen more than one parameter, we'll need a comma here
-			if(num_params > 1){
-				//Otherwise it must be a comma. If it isn't we have a failure
-				if(lookahead.tok != COMMA){
-					//Create and return an error node
-					return print_and_return_error("Commas must be used to separate parameters in function call", parser_line_num);
-				}
-			}
 
 			//We'll let the error below handle this, we just don't
 			//want to segfault
@@ -1630,68 +1778,128 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 			//Grab the current function param
 			generic_type_t* param_type = dynamic_array_get_at(&(function_signature->function_parameters), num_params - 1);
 
-			//Parameters are in the form of a ternary expression
-			current_param = ternary_expression(token_stream, side);
+			/**
+			 * For an elaborative param, we need to sort of pause here and accumulate.
+			 * Elaborative params can have 0 to many things inside of them so inside
+			 * of a function call like this, we need to account for that
+			 */
+			if(param_type->type_class != TYPE_CLASS_ELABORATIVE){
+				//Parameters are in the form of a ternary expression
+				current_param = ternary_expression(token_stream, side);
 
-			//We now have an error of some kind
-			if(current_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-				return print_and_return_error("Bad parameter passed to function call", current_line);
-			}
+				//We now have an error of some kind
+				if(current_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+					return print_and_return_error("Bad parameter passed to function call", current_line);
+				}
 
-			//Let's see if we're even able to assign this here
-			generic_type_t* final_type = types_assignable(param_type, current_param->inferred_type);
+				//Let's see if we're even able to assign this here
+				generic_type_t* final_type = types_assignable(param_type, current_param->inferred_type);
 
-			//If this is null, it means that our check failed
-			if(final_type == NULL){
-				//Let's first generate the types_assignable failure message
-				generate_types_assignable_failure_message(info, current_param->inferred_type, param_type);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				//If this is null, it means that our check failed
+				if(final_type == NULL){
+					//Let's first generate the types_assignable failure message
+					generate_types_assignable_failure_message(info, current_param->inferred_type, param_type);
+					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 
-				//Following that we'll generate another error message to make it more clear
-				sprintf(info, "Function \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
-						function_name.string, 
-						(param_type->mutability == MUTABLE ? "mut ": ""),
-						param_type->type_name.string, num_params,
-						//Print the mut keyword if we need it
-						(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
-						current_param->inferred_type->type_name.string, function_type->type_name.string);
+					//Following that we'll generate another error message to make it more clear
+					sprintf(info, "Function \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
+							function_name.string, 
+							(param_type->mutability == MUTABLE ? "mut ": ""),
+							param_type->type_name.string, num_params,
+							//Print the mut keyword if we need it
+							(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
+							current_param->inferred_type->type_name.string, function_type->type_name.string);
 
-				//Use the helper to return this
-				return print_and_return_error(info, parser_line_num);
-			}
-
-			//If this is a constant node, we'll force it to be whatever we expect from the type assignability
-			if(current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
-				current_param->inferred_type = final_type;
-
-				//Do coercion
-				perform_constant_assignment_coercion(current_param, final_type);
-			}
-
-			//Special checking here - if we have an enum type that is being assigned to, we need
-			//to make sure that it's being assigned to a valid value in it's range
-			if(is_enum_type(param_type) == TRUE && current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
-				if(does_enum_contain_integer_member(param_type, current_param->constant_value.signed_int_value) == FALSE){
-					sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-								param_type->type_name.string, current_param->constant_value.signed_int_value);
-
-					//Hard fail here
+					//Use the helper to return this
 					return print_and_return_error(info, parser_line_num);
 				}
-			} 
 
-			//We can now safely add this into the function call node as a child. In the function call node, 
-			//the parameters will appear in order from left to right
-			add_child_node(function_call_node, current_param);
+				//If this is a constant node, we'll force it to be whatever we expect from the type assignability
+				if(current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
+					current_param->inferred_type = final_type;
+
+					//Do coercion
+					perform_constant_assignment_coercion(current_param, final_type);
+				}
+
+				//Special checking here - if we have an enum type that is being assigned to, we need
+				//to make sure that it's being assigned to a valid value in it's range
+				if(is_enum_type(param_type) == TRUE && current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
+					if(does_enum_contain_integer_member(param_type, current_param->constant_value.signed_int_value) == FALSE){
+						sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
+									param_type->type_name.string, current_param->constant_value.signed_int_value);
+
+						//Hard fail here
+						return print_and_return_error(info, parser_line_num);
+					}
+				} 
+
+				//We can now safely add this into the function call node as a child. In the function call node, 
+				//the parameters will appear in order from left to right
+				add_child_node(function_call_node, current_param);
+
+			/**
+			 * If the type that we have is an elaborative param type then we'll handle that now. Do note that
+			 * this method of parsing is not going to handle the edge case where we decide to put nothing
+			 * in for the the elaborative param type. We will have a catch for that down below
+			 */
+			} else {
+				//Helper gives back an error or an elaborative param if it worked
+				generic_ast_node_t* elaborative_param_node = handle_elaborative_param_parsing(token_stream, param_type, side);
+
+				//Fail up if we get here
+				if(elaborative_param_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+					return print_and_return_error("Invalid elaborative parameter detected", parser_line_num);
+				}
+
+				//This is a child
+				add_child_node(function_call_node, elaborative_param_node);
+			}
 
 			//Refresh the token
 			lookahead = get_next_token(token_stream, &parser_line_num);
 
-		//Keep going so long as we don't see a right paren
-		} while (lookahead.tok != R_PAREN);
+			//Comma we continue
+			if(lookahead.tok == COMMA){
+				continue;
+			//R_PAREN we break
+			} else if(lookahead.tok == R_PAREN){
+				break;
+			} else {
+				return print_and_return_error("Commas must be used to separate parameters in function call", parser_line_num);
+			}
 
-		//If we have a mismatch between what the function takes and what we want, throw an
-		//error
+		//Infinite loop unless we hit a breakout condition
+		} while (TRUE);
+
+		//Once we get here, we do need to finally verify that the closing R_PAREN matched the opening one
+		if(pop_token(&grouping_stack).tok != L_PAREN){
+			return print_and_return_error("Unmatched parenthesis detected in function call", parser_line_num);
+		}
+
+		/**
+		 * EDGE CASE: for elaborative params, if we find that the function parameters 
+		 * are one less than what we expect, that's a sign that we may have an
+		 * empty elaborative param. We still have to handle this, so now is
+		 * the time to pick up on that
+		 */
+		if(num_params == function_signature->function_parameters.current_index - 1){
+			//Extract it - let's see if it is elaborative
+			generic_type_t* final_param_type = dynamic_array_get_at(&(function_signature->function_parameters), function_signature->function_parameters.current_index - 1);
+
+			//If it is then this is ok, we will handle accordingly
+			if(final_param_type->type_class == TYPE_CLASS_ELABORATIVE){
+				generic_ast_node_t* empty_elaborative_param = create_empty_elaborative_param(final_param_type);
+
+				//Add it in and bump the param count so we pass the next check
+				add_child_node(function_call_node, empty_elaborative_param);
+				num_params++;
+			}
+		}
+
+		/**
+		 * Any otherwise errors, if we have a mismatch between what the function takes and what we want, throw an error
+		 */
 		if(num_params != function_signature->function_parameters.current_index){
 			sprintf(info, "Function %s expects %d parameters, but was given %d. Defined as: %s", 
 			  function_name.string, function_signature->function_parameters.current_index, num_params, function_type->type_name.string);
@@ -1699,12 +1907,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 			num_errors++;
 			//Error out
 			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
-		}
-
-		//Once we get here, we do need to finally verify that the closing R_PAREN matched the opening one
-		if(pop_token(&grouping_stack).tok != L_PAREN){
-			//Return the error node
-			return print_and_return_error("Unmatched parenthesis detected in function call", parser_line_num);
 		}
 
 	/**
@@ -1807,7 +2009,10 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 
 
 /**
- * Handle a sizeof statement
+ * Handle a sizeof statement. Sizeof statements rely on compile-time knowledge 
+ * of a type size. This works great for everything *except* elaborative parameters
+ * because their size varies. The specialized "paramcount" keyword is used for that. If
+ * we attempt to use sizeof on an elaborative param variable, it will error
  *
  * NOTE: By the time we get here, we have already seen and consumed the sizeof token
  */
@@ -1856,6 +2061,16 @@ static generic_ast_node_t* sizeof_statement(ollie_token_stream_t* token_stream, 
 	//Now we know that we have an entirely syntactically valid call to sizeof. Let's now extract the 
 	//type information for ourselves
 	generic_type_t* return_type = expr_node->inferred_type;
+
+	/**
+	 * If we have an elaborative type - that's an issue. We'll have to fail
+	 * out here
+	 */
+	if(return_type->type_class == TYPE_CLASS_ELABORATIVE){
+		sprintf(info, "Elaborative type \"%s\" does not have a compile-time known size. Use \"paramcount(...)\" to get the number of parameters",
+		  				return_type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
 
 	//Create a constant node
 	generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
@@ -1940,6 +2155,84 @@ static generic_ast_node_t* typesize_statement(ollie_token_stream_t* token_stream
 
 	//Finally we'll return this constant node
 	return const_node;
+}
+
+
+/**
+ * Handle a paramcount expression
+ *
+ * NOTE: by the time we get here, we have already seen and consumed the typesize token
+ *
+ * paramcount_statement ::= paramcount(<logical-or-expression>)
+ */
+static generic_ast_node_t* paramcount_statement(ollie_token_stream_t* token_stream, side_type_t side){
+	//Lookahead token
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//First thing that we need to see is an L_PAREN
+	if(lookahead.tok != L_PAREN){
+		sprintf(info, "Expected ( but got \"%s\" instead", lexitem_to_string(&lookahead));
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Get this onto the grouping stack
+	push_token(&grouping_stack, lookahead);
+
+	//Now we need to see a valid logical or expression
+	generic_ast_node_t* expr = logical_or_expression(token_stream, side);
+
+	//Guard in case we fail
+	if(expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return print_and_return_error("Invalid expression given to paramcount statement", parser_line_num);
+	}
+
+	//Now let's validate that we see the closing paren
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Fail out if we don't have it
+	if(lookahead.tok != R_PAREN){
+		sprintf(info, "Expected ) but got \"%s\"", lexitem_to_string(&lookahead));
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Also match the parens up
+	if(pop_token(&grouping_stack).tok != L_PAREN){
+		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
+	}
+
+	/**
+	 * Now that all of that is done, we need to validate that what we're taking the paramcount of
+	 * is actually valid. Remember that we can only take the paramcount of an elaborative param
+	 * variable, so we're going to have to check that: we have a variable, and it's type is
+	 * an elaborative param. Anything short of this is a failure
+	 */
+
+	//Grab this out
+	symtab_variable_record_t* returned_variable = expr->variable;
+
+	//Avoid any exceptions
+	if(returned_variable == NULL){
+		return print_and_return_error("Expression did not return a variable and is invalid for the paramcount operation", parser_line_num);
+	}
+
+	//Check the type
+	if(returned_variable->type_defined_as->type_class != TYPE_CLASS_ELABORATIVE){
+		sprintf(info, "Variable \"%s\" is not an elaborative param type. The paramcount operation is therefore invalid", returned_variable->var_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Let's now allocate the final node and give it back
+	generic_ast_node_t* paramcount_node = ast_node_alloc(AST_NODE_TYPE_PARAMCOUNT_STMT, SIDE_TYPE_RIGHT);
+
+	//The type is always a u32
+	paramcount_node->inferred_type = immut_u32;
+	paramcount_node->line_number = parser_line_num;
+
+	//Store the paramcount variable here - we will need this for down the road
+	paramcount_node->variable = returned_variable;
+
+	//And give it back
+	return paramcount_node;
 }
 
 
@@ -2112,18 +2405,30 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 			//Give back the constant node - if it's an error, the parent will handle
 			return constant_node;
 		
-		//We can see a sizeof call
+		/**
+		 * Sizeof is known at compile time with the exception of a variable
+		 * that is an elaborative parameter. This is variable and as such sizeof
+		 * will error out if we try it
+		 */
 		case SIZEOF:
-			//Let the helper handle this
 			return sizeof_statement(token_stream, side);
 
-		//If we see the typesize keyword, we are locked in to the typesize rule
-		//The typesize rule is a compiler only directive. Since we know the size of all
-		//valid types at compile-time, we will be able to return an INT-CONST node with the
-		//size here
+		/**
+		 * If we see the typesize keyword, we are locked in to the typesize rule
+		 * The typesize rule is a compiler only directive. Since we know the size of all
+		 * valid types at compile-time, we will be able to return an INT-CONST node with the
+		 * size here
+		 */
 		case TYPESIZE:
-			//Let the helper deal with this
 			return typesize_statement(token_stream, side);
+
+		/**
+		 * The paramcount is used specifically to determine the number of parameters inside
+		 * of an elaborative stack param. The count of the parameters of a given type will
+		 * be stored as a 4-byte integer at the base of the elaborative param on the stack
+		 */
+		case PARAMCOUNT:
+			return paramcount_statement(token_stream, side);
 
 		//We could see a case where we have a parenthesis in an expression
 		case L_PAREN:
@@ -2889,6 +3194,43 @@ static generic_ast_node_t* union_accessor(ollie_token_stream_t* token_stream, ge
 
 
 /**
+ * Is a given type subscriptable? There are only 3 cases where
+ * types are subscriptable:
+ * 	1: An array type(obvious)
+ * 	2: Pointer type(arrays are just pointers)
+ * 	3: An elaborative param type(this is just an array)
+ */
+static inline u_int8_t is_type_subscriptable(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_POINTER:
+		case TYPE_CLASS_ELABORATIVE:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Get the member type that we have after we perform an array access
+ */
+static inline generic_type_t* get_member_type_after_array_access(generic_type_t* parent_type){
+	switch(parent_type->type_class){
+		case TYPE_CLASS_POINTER:
+			return parent_type->internal_types.points_to;
+		case TYPE_CLASS_ARRAY:
+			return parent_type->internal_types.member_type;
+		case TYPE_CLASS_ELABORATIVE:
+			return parent_type->internal_types.elaborates;
+		default:
+			printf("Fatal internal compiler error: attempt to subscript non-subscriptable type\n");
+			exit(1);
+	}
+}
+
+
+/**
  * An array accessor represents a request to get something from an array memory region. Like all
  * nodes, an array accessor will return a reference to the subtree that it creates
  *
@@ -2902,8 +3244,8 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 	//Freeze the current line
 	u_int32_t current_line = parser_line_num;
 
-	//Before we go on, let's see what we have as the current type here. Both arrays and pointers are subscriptable items
-	if(type->type_class != TYPE_CLASS_ARRAY && type->type_class != TYPE_CLASS_POINTER){
+	//Make sure the type itself can be subscripted
+	if(is_type_subscriptable(type) == FALSE){
 		sprintf(info, "Type \"%s\" is not subscriptable", type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
@@ -2965,12 +3307,8 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 	//The conditional expression is a child of this node
 	add_child_node(accessor_node, expr);
 
-	//The values type is what we point to/have as a member type
-	if(type->type_class == TYPE_CLASS_POINTER){
-		accessor_node->inferred_type = type->internal_types.points_to;
-	} else {
-		accessor_node->inferred_type = type->internal_types.member_type;
-	}
+	//Get our member type after access this way
+	accessor_node->inferred_type = get_member_type_after_array_access(type);
 
 	//This is assignable
 	accessor_node->is_assignable = TRUE;
@@ -5685,12 +6023,36 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 
 			//We need to at least one type in here
 			do {
+				//By default assume we haven't seen the params keyword
+				u_int8_t seen_params = FALSE;
+
+				//Refresh the lookahead
+				lookahead = get_next_token(token_stream, &parser_line_num);
+
+				//If we see it then flag it, else push this token back
+				if(lookahead.tok == PARAMS){
+					seen_params = TRUE;
+				} else {
+					push_back_token(token_stream, &parser_line_num);
+				}
+
 				//Now we need to see a valid type
 				generic_type_t* type = type_specifier(token_stream);
 
 				//If this is NULL, we'll error out
 				if(type == NULL){
 					return FALSE;
+				}
+
+				//If we've seen this keyword, we need to do our extra processing/validation
+				if(seen_params == TRUE){
+					//Let the helper do it
+					type = handle_elaborative_param_type(type);
+
+					//If we returned NULL that means we failed so we'll fail here too
+					if(type == NULL){
+						return FALSE;
+					}
 				}
 
 				//Add it to the mutable version
@@ -5737,6 +6099,17 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 		//Fail out
 		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected in parameter list declaration", parser_line_num);
 		num_errors++;
+		return FALSE;
+	}
+
+	/**
+	 * Now that the parameter list is parsed in, let's do some validation to 
+	 * make sure it's all in order. If either one of our types fail
+	 * then the whole thing is bad
+	 */
+	if(validate_function_parameter_list(mutable_function_type) == FALSE
+		|| validate_function_parameter_list(immutable_function_type) == FALSE){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid function type detected", parser_line_num);
 		return FALSE;
 	}
 
@@ -7034,8 +7407,10 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 	//down the road
 	generic_type_t* function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, raises_errors, mutability);
 
-	//Let's see if we have nothing in here. This is possible. We can also just see a "void"
-	//as an alternative way of saying this function takes no parameters
+	/**
+	 * Let's see if we have nothing in here. This is possible. We can also just see a "void"
+	 * as an alternative way of saying this function takes no parameters
+	 */
 	
 	//Grab the next token
 	lookahead = get_next_token(stream, &parser_line_num);
@@ -7059,12 +7434,41 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 
 			//We need to at least one type in here
 			do {
+				//By default assume that we have not seen the params keyword
+				u_int8_t seen_params = FALSE;
+
+				//Get the next token in the stream
+				lookahead = get_next_token(stream, &parser_line_num);
+
+				//If we get here then flag it
+				if(lookahead.tok == PARAMS){
+					seen_params = TRUE;
+
+				//Otherwise push it back
+				} else {
+					push_back_token(stream, &parser_line_num);
+				}
+
 				//Now we need to see a valid type
 				generic_type_t* type = type_specifier(stream);
 
 				//If this is NULL, we'll error out
 				if(type == NULL){
 					return FALSE;
+				}
+
+				/**
+				 * If we previously saw this keyword, we'll need to add our
+				 * handling now
+				 */
+				if(seen_params == TRUE){
+					//Let the helper deal with it
+					type = handle_elaborative_param_type(type);
+
+					//Returning null signifies a failure so we fail out if that's the case
+					if(type == NULL){
+						return NULL;
+					}
 				}
 
 				//Add it to the mutable version
@@ -7106,6 +7510,14 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 	if(pop_token(&grouping_stack).tok != L_PAREN){
 		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected in parameter list declaration", parser_line_num);
 		num_errors++;
+		return NULL;
+	}
+
+	/**
+	 * Once we get down here we need to perform validations on the parameter list. The helper
+	 * will tell us whether or not we're valid
+	 */
+	if(validate_function_parameter_list(function_type) == FALSE){
 		return NULL;
 	}
 
@@ -11213,6 +11625,45 @@ static u_int8_t validate_main_function(generic_type_t* type){
 
 
 /**
+ * Handle an elaborative param type. This includes error checking
+ * to see if the type is valid, and checking to see if we've already created
+ * an elaborative param of the given type to avoid duplicates
+ */
+static inline generic_type_t* handle_elaborative_param_type(generic_type_t* elaborated_type){
+	//If the type cannot be used for an elaborative param, we leave
+	if(is_type_valid_for_elaborative_param(elaborated_type) == FALSE){
+		sprintf(info, "Type \"%s\" is invalid to be used as an elaborative param. Only pointers and primitive types may be elaborated. Remove the \"params\" keyword", elaborated_type->type_name.string);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		num_errors++;
+		return NULL;
+	}
+
+	//Let's construct the name that would exist if we had an identical elaborative param in the symtab
+	dynamic_string_t elaborative_param_name = dynamic_string_alloc();
+	dynamic_string_set(&elaborative_param_name, "params ");
+	dynamic_string_concatenate(&elaborative_param_name, elaborated_type->type_name.string);
+
+	//Let's see if we can find it first
+	symtab_type_record_t* param_type_record = lookup_type_name_only(type_symtab, elaborative_param_name.string, NOT_MUTABLE);
+
+	//If we didn't find it we'll need to create it
+	if(param_type_record == NULL){
+		//Create it
+		generic_type_t* param_type = create_elaborative_type(elaborated_type, parser_line_num);
+
+		//Now we'll insert this
+		insert_type(type_symtab, create_type_record(param_type));
+
+		//Give back the final param type
+		return param_type;
+
+	} else {
+		return param_type_record->type;
+	}
+}
+
+
+/**
  * A parameter declaration is a fancy kind of variable. It is stored in the symtable at the 
  * top lexical scope for the function itself. Like all rules, it returns a reference to the
  * root of the subtree that it creates
@@ -11220,11 +11671,18 @@ static u_int8_t validate_main_function(generic_type_t* type){
  * This rule will return a symtab variable record that represents the parameter it made. If will return
  * NULL if an error occurs
  *
- * BNF Rule: <parameter-declaration> ::= <identifier> : <type-specifier>
+ * We can optionally see the "params" keyword here to denote that this is actually
+ * a variable length, specifically stack passed array of values of a given type. We know
+ * that the params parameter must also be the absolute last parameter given to us
+ * for a function
+ *
+ * BNF Rule: <parameter-declaration> ::= <identifier> : {params}? <type-specifier>
  */
 static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* token_stream, u_int16_t* current_gen_purpose_param, u_int16_t* current_sse_param){
 	//Lookahead token
 	lexitem_t lookahead;
+	//Did we see the params keyword or not
+	u_int8_t params_seen = FALSE;
 
 	//Now we can optionally see the constant keyword here
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -11270,6 +11728,22 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 		return NULL;
 	}
 
+	/**
+	 * There is a chance that we could be seeing the "params" keyword here
+	 * to denote that we have an elaborative stack param. This is only valid in 
+	 * the context of a function signature which is why we must see it here
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Flag this if we see it
+	if(lookahead.tok == PARAMS){
+		params_seen = TRUE;
+
+	//Otherwise put it back
+	} else {
+		push_back_token(token_stream, &parser_line_num);
+	}
+
 	//We are now required to see a valid type specifier node
 	generic_type_t* type = type_specifier(token_stream);
 	
@@ -11290,12 +11764,27 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 		return NULL;
 	}
 
-	//Once we get here, we have actually seen an entire valid parameter 
-	//declaration. It is now incumbent on us to store it in the variable 
-	//symbol table
-	
-	//Let's first construct the variable record
+	/**
+	 * Once we get here, we have actually seen an entire valid parameter 
+	 * declaration. It is now incumbent on us to store it in the variable 
+	 * symbol table
+	 */
 	symtab_variable_record_t* param_record = create_variable_record(name);
+
+	/**
+	 * If we've seen the params keyword now is the time
+	 * to update the type to be an elaborative type
+	 */
+	if(params_seen == TRUE){
+		//Let the handler deal with it
+		type = handle_elaborative_param_type(type);
+
+		//Null is an error, fail out
+		if(type == NULL){
+			return NULL;
+		}
+	}
+
 	//It is a function parameter
 	param_record->membership = FUNCTION_PARAMETER;
 	//We assume that it was initialized
@@ -11490,6 +11979,50 @@ static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* f
 }
 
 
+/**
+ * Validate the parameter list for a given function type. There are a few fail
+ * cases that we currently watch out for. They are:
+ * 	1.) Inlined functions may not have elaborative parameters
+ * 	2.) Elaborative parameters must always be the very last function parameter
+ * 	3.) There may not be more than one elaborative parameter per function
+ */
+static u_int8_t validate_function_parameter_list(generic_type_t* function_type){
+	//Grab the internal function type out
+	function_type_t* internal_type = function_type->internal_types.function_type;
+
+	//Case 1: inlined functions cannot have stack params
+	if(internal_type->is_inlined == TRUE && internal_type->contains_stack_params == TRUE){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Inlined functions may not contain stack passed parameters", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Extract the number of parameters
+	u_int32_t num_params = internal_type->function_parameters.current_index;
+
+	//Run through all of the parameters
+	for(u_int32_t i = 0; i < num_params; i++){
+		//Extract it
+		generic_type_t* parameter_type = dynamic_array_get_at(&(internal_type->function_parameters), i);
+
+		/**
+		 * If we have an elaborative param here, let's check to make
+		 * sure that it is the very last parameter in the function
+		 */
+		if(parameter_type->type_class == TYPE_CLASS_ELABORATIVE){
+			//Not the very last one
+			if(i != num_params - 1){
+				print_parse_message(MESSAGE_TYPE_ERROR, "Elaborative param types must always be the last type in a parameter list", parser_line_num);
+				num_errors++;
+				return FAILURE;
+			}
+		}
+	}
+
+	//If we survive to down here then we're good
+	return TRUE;
+}
+
 
 /**
  * A paramater list will handle all of the parameters in a function definition. It is important
@@ -11658,7 +12191,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 
 			//If these 2 don't match, we fail
 			if(defined_type != declared_type){
-				sprintf(info, "Parameter %d was defined with type %s, but declared with type %s",  absolute_parameter_number, defined_type->type_name.string, declared_type->type_name.string);
+				sprintf(info, "Parameter %d was defined with type \"%s\", but declared with type \"%s\"",  absolute_parameter_number, defined_type->type_name.string, declared_type->type_name.string);
 				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				num_errors++;
 				return FAILURE;
@@ -11708,6 +12241,13 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 	 */
 	if(sse_parameter_number > 6 || general_purpose_parameter_number > 6){
 		align_stack_data_area(&(function_record->stack_passed_parameters));
+	}
+
+	/**
+	 * Validate the function parameter list using our helper
+	 */
+	if(validate_function_parameter_list(function_type) == FALSE){
+		return FAILURE;
 	}
 
 	//If we make it down here then this all worked, so
@@ -11864,46 +12404,82 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 				return print_and_return_error("Right parenthesis required after void parameter declaration", parser_line_num);
 			}
 
-			//Otherwise just go to after r_paren
-			goto after_rparen;
+			break;
 
 		//We'll just hop out
 		case R_PAREN:
-			goto after_rparen;
+			break;
 
 		//By default we can just leave
 		default:
 			push_back_token(token_stream, &parser_line_num);
+
+			//Keep processing so long as we keep seeing commas
+			do {
+				//By default assume we have not seen this
+				u_int8_t seen_params = FALSE;
+
+				//Grab the next token - we could see a "params"
+				lookahead = get_next_token(token_stream, &parser_line_num);
+
+				//Flag that we've seen the params keyword, otherwise push it back
+				if(lookahead.tok == PARAMS){
+					seen_params = TRUE;
+
+				} else {
+					push_back_token(token_stream, &parser_line_num);
+				}
+
+				//Now we need to see a valid type
+				generic_type_t* type = type_specifier(token_stream);
+
+				//If this is NULL, we'll error out
+				if(type == NULL){
+					return print_and_return_error("Invalid parameter type given", parser_line_num);
+				}
+
+				//If we have seen the params type, then handle it here
+				if(seen_params == TRUE){
+					//Helper deals with it
+					type = handle_elaborative_param_type(type);
+
+					//If it's null it failed, so we fail out
+					if(type == NULL){
+						return print_and_return_error("Invlaid elaborative parameter declaration", parser_line_num);
+					}
+				}
+
+				//Let the helper add the type in
+				add_parameter_to_function_type(function_record->signature, type);
+
+				//Refresh the lookahead token
+				lookahead = get_next_token(token_stream, &parser_line_num);
+
+			} while(lookahead.tok == COMMA);
+
+			//Now that we're done processing the list, we need to ensure that we have a right paren
+			if(lookahead.tok != R_PAREN){
+				return print_and_return_error("Right parenthesis required after parameter list declaration", parser_line_num);
+			}
+
 			break;
 	}
 
-	//Keep processing so long as we keep seeing commas
-	do{
-		//Now we need to see a valid type
-		generic_type_t* type = type_specifier(token_stream);
-
-		//If this is NULL, we'll error out
-		if(type == NULL){
-			return print_and_return_error("Invalid parameter type given", parser_line_num);
-		}
-
-		//Let the helper add the type in
-		add_parameter_to_function_type(function_record->signature, type);
-
-		//Refresh the lookahead token
-		lookahead = get_next_token(token_stream, &parser_line_num);
-
-	} while(lookahead.tok == COMMA);
-
-	//Now that we're done processing the list, we need to ensure that we have a right paren
-	if(lookahead.tok != R_PAREN){
-		return print_and_return_error("Right parenthesis required after parameter list declaration", parser_line_num);
-	}
-
-after_rparen:
-	//Make sure that we can pop the grouping stack and get a match
+	/**
+	 * By the time we get down here we have seen the right parenthesis in some way or form
+	 * so we don't need to worry about finding it again
+	 */
 	if(pop_token(&grouping_stack).tok != L_PAREN){
 		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
+	}
+
+	/**
+	 * Once we're done with all of the parameters, let's validate the parameter
+	 * list to ensure that we aren't breaking any rules
+	 */
+	if(validate_function_parameter_list(function_record->signature) == FALSE){
+		sprintf(info, "Invalid parameter list for function \"%s\"", function_name.string);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Following this, we need to see the -> symbol

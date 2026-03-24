@@ -71,6 +71,7 @@ typedef enum type_class_t {
 	TYPE_CLASS_UNION, /* For discriminating union types */
 	TYPE_CLASS_ALIAS, /* Alias types */
 	TYPE_CLASS_ERROR, /* Specialized error types */
+	TYPE_CLASS_ELABORATIVE /* Specialized elaborative param type */
 } type_class_t;
 
 //========================= Utility Macros ============================
@@ -121,6 +122,8 @@ struct generic_type_t{
 		dynamic_array_t enumeration_table;
 		//The aliased type
 		generic_type_t* aliased_type;
+		//The type that we elaborate(for an elaborative param)
+		generic_type_t* elaborates;
 	} internal_types;
 
 	/**
@@ -194,6 +197,8 @@ struct function_type_t{
 	u_int8_t is_inlined;
 	//Does this contain stack params?
 	u_int8_t contains_stack_params;
+	//Does this contain an elaborative stack param
+	u_int8_t contains_elaborative_stack_param;
 	//Is it possible for this function to raise an error?
 	u_int8_t raises_errors;
 };
@@ -270,6 +275,11 @@ generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type, mut
  * Dynamically allocate and create an error type
  */
 generic_type_t* create_error_type(char* type_name, u_int32_t line_number);
+
+/**
+ * Dynamically allocate and create an elaborative stack param type
+ */
+generic_type_t* create_elaborative_type(generic_type_t* elaborates, u_int32_t line_number);
 
 /**
  * Strip any aliasing away from a type that we have
@@ -384,6 +394,12 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type);
  * Generate a failure message for when the "types_assignable" call fails
  */
 void generate_types_assignable_failure_message(char* info, generic_type_t* source_type, generic_type_t* destination_type);
+
+/**
+ * Is a given type valid to be an elaborative param? Only types smaller than 8 bytes(so think pointer, primitive) can be
+ * elaborative params. Arrays/structs/unions are banned
+ */
+u_int8_t is_type_valid_for_elaborative_param(generic_type_t* type);
 
 /**
  * Perform a symbolic dereference of a type

@@ -42,6 +42,19 @@ typedef enum {
 
 
 /**
+ * Is a given stack data area statically sized or not? The only
+ * time that this would not be true is when we have an elaborative
+ * param. In that case, the stack data area needs to be dynamically sized
+ * for every single type
+ */
+typedef enum {
+	STACK_DATA_AREA_SIZE_TYPE_STATIC,
+	//Changes upon every instance - this is specifically used for elaborative params
+	STACK_DATA_AREA_SIZE_TYPE_DYNAMIC,
+} stack_data_area_size_type_t;
+
+
+/**
  * A stack region has a size and a base address on
  * the stack. Anything whose stack offset is *within*
  * that region is considered to be a part of it
@@ -93,6 +106,8 @@ struct stack_data_area_t{
 	u_int32_t total_size;
 	//What kind of stack do we have?
 	stack_data_area_type_t stack_type;
+	//What is the size type of our stack
+	stack_data_area_size_type_t size_type;
 };
 
 

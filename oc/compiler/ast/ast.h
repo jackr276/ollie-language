@@ -73,16 +73,13 @@ typedef enum ast_node_type_t{
 	AST_NODE_TYPE_DO_WHILE_STMT,
 	AST_NODE_TYPE_FOR_STMT,
 	AST_NODE_TYPE_COMPOUND_STMT,
-	//Has no body
 	AST_NODE_TYPE_DEFER_STMT,
-	//For assembly inline statements
 	AST_NODE_TYPE_ASM_INLINE_STMT,
-	//An array initializer node
 	AST_NODE_TYPE_ARRAY_INITIALIZER_LIST,
-	//A struct initializer
 	AST_NODE_TYPE_STRUCT_INITIALIZER_LIST,
-	//A string initializer node
 	AST_NODE_TYPE_STRING_INITIALIZER,
+	AST_NODE_TYPE_PARAMCOUNT_STMT,
+	AST_NODE_TYPE_ELABORATIVE_PARAM_STMT,
 	AST_NODE_TYPE_ERR_NODE, /* errors as values approach going forward */
 } ast_node_type_t;
 
@@ -124,6 +121,8 @@ struct generic_ast_node_t{
 		//For any/all error types, we'll hold onto the actual
 		//value of the error here
 		u_int32_t error_id;
+		//Storage for the elaborative param count
+		u_int32_t elaborative_param_count;
 	} optional_storage;
 	//Storing the constant values
 	union {

@@ -21,6 +21,7 @@ u_int8_t is_memory_region(generic_type_t* type){
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_UNION:
+		case TYPE_CLASS_ELABORATIVE:
 			return TRUE;
 		default:
 			return FALSE;
@@ -91,6 +92,10 @@ generic_type_t* get_base_alignment_type(generic_type_t* type){
 		//A struct it's the largest member size
 		case TYPE_CLASS_STRUCT:
 			return get_base_alignment_type(type->internal_values.largest_member_type);
+
+		//Goes based on the elaborated type
+		case TYPE_CLASS_ELABORATIVE:
+			return get_base_alignment_type(type->internal_types.elaborates);
 
 		//By default just give the size back
 		default:
@@ -773,6 +778,14 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 							}
 					}
 			}
+
+		//Error types are never assignable
+		case TYPE_CLASS_ERROR:
+			return NULL;
+
+		//Same for elaborative types
+		case TYPE_CLASS_ELABORATIVE:
+			return NULL;
 
 		//Should be impossible to hit this
 		default:
@@ -1835,6 +1848,47 @@ generic_type_t* create_error_type(char* type_name, u_int32_t line_number){
 
 
 /**
+ * Dynamically allocate and create an elaborative stack param type
+ */
+generic_type_t* create_elaborative_type(generic_type_t* elaborates, u_int32_t line_number){
+	//Allocate it first
+	generic_type_t* type = calloc(1, sizeof(generic_type_t));
+
+	//Make room for the name
+	type->type_name = dynamic_string_alloc();
+
+	//The name will always be "params <type>"
+	dynamic_string_set(&(type->type_name), "params ");
+	dynamic_string_concatenate(&(type->type_name), elaborates->type_name.string);
+
+	//Update the type, line number and mutability
+	type->line_number = line_number;
+	type->type_class = TYPE_CLASS_ELABORATIVE;
+
+	//Store the type that we are elaborating
+	type->internal_types.elaborates = elaborates;
+
+	//Elaborative param types themselves are always immutable
+	type->mutability = NOT_MUTABLE;
+
+	/**
+	 * What does this type look like in memory? If an array type contains
+	 * all non-pointer types, it's considered "contiguous". This means that
+	 * the memory is laid out flat, all next to eachother. If an array holds 
+	 * pointers, then this is a non-contiguous memory region
+	 */
+	if(elaborates->type_class != TYPE_CLASS_POINTER){
+		type->memory_layout_type = MEMORY_LAYOUT_TYPE_CONTIGUOUS;
+	} else {
+		type->memory_layout_type = MEMORY_LAYOUT_TYPE_NON_CONTIGUOUS;
+	}
+
+	//Give it back
+	return type;
+}
+
+
+/**
  * Create a pointer type dynamically. In order to have a pointer type, we must also
  * have what it points to.
  */
@@ -2370,6 +2424,23 @@ void add_parameter_to_function_type(generic_type_t* function_type, generic_type_
 	//Extract this for convenience
 	function_type_t* internal_type = function_type->internal_types.function_type;
 
+	/**
+	 * Special case - handle adding if we have an elaborative param
+	 */
+	if(parameter->type_class == TYPE_CLASS_ELABORATIVE){
+		//Flag that we do have stack params
+		internal_type->contains_stack_params = TRUE;
+
+		//Very important - we need to flag that we also have an elaborative stack param here
+		internal_type->contains_elaborative_stack_param = TRUE;
+
+		//Add this into the dynamic array
+		dynamic_array_add(&(internal_type->function_parameters), parameter);
+
+		//Early return to skip all of this other processing
+		return;
+	}
+	
 	//Let's up our counts for parameter types before we add this in
 	if(IS_FLOATING_POINT(parameter) == FALSE){
 		internal_type->general_purpose_param_count++;
@@ -2651,6 +2722,22 @@ void generate_types_assignable_failure_message(char* info, generic_type_t* sourc
 		sprintf(info, "Type \"%s%s\" cannot be assigned to incompatible type \"%s%s\"",
 				source_mutability, source_type->type_name.string,
 				dest_mutability, destination_type->type_name.string);
+	}
+}
+
+
+/**
+ * Is a given type valid to be an elaborative param? Only types smaller than 8 bytes(so think pointer, primitive) can be
+ * elaborative params. Arrays/structs/unions are banned
+ */
+u_int8_t is_type_valid_for_elaborative_param(generic_type_t* type){
+	//Go based on the type class here
+	switch(type->type_class){
+		case TYPE_CLASS_BASIC:
+		case TYPE_CLASS_POINTER:
+			return TRUE;
+		default:
+			return FALSE;
 	}
 }
 
