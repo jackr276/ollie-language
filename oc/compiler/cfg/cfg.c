@@ -6462,12 +6462,17 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 			//If we get here then we need to do a stack allocation
 			} else {
+				/**
+				 * If we have an array type here, we need to convert this into an equivalent pointer type
+				 * instead. Since we are just using memory addresses, we can use a void* to represent
+				 * this and it will be fine
+				 */
+				if(parameter_type->type_class == TYPE_CLASS_ARRAY){
+					parameter_type = immut_void_ptr;
+				}
+
 				//Create it
 				stack_region_t* region = create_stack_region_for_type(&stack_passed_parameters, parameter_type);
-
-				if(parameter_type->type_class == TYPE_CLASS_ARRAY){
-					printf("HERE\n\n");
-				}
 
 				//The offset. Note that this comes from the function local base address because we are in the function that has
 				//allocated this value
