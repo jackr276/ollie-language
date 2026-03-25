@@ -52,6 +52,7 @@ static generic_type_t* u64 = NULL;
 static generic_type_t* i64 = NULL;
 static generic_type_t* f32 = NULL;
 static generic_type_t* f64 = NULL;
+static generic_type_t* immut_void_ptr = NULL;
 //The break and continue stack will
 //hold values that we can break & continue
 //to. This is done here to avoid the need
@@ -6391,6 +6392,15 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 			//If we get here then we need to do a stack allocation
 			} else {
+				/**
+				 * If we have an array type here, we need to convert this into an equivalent pointer type
+				 * instead. Since we are just using memory addresses, we can use a void* to represent
+				 * this and it will be fine
+				 */
+				if(parameter_type->type_class == TYPE_CLASS_ARRAY){
+					parameter_type = immut_void_ptr;
+				}
+
 				//Create it
 				stack_region_t* region = create_stack_region_for_type(&stack_passed_parameters, parameter_type);
 
@@ -6454,6 +6464,10 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			} else {
 				//Create it
 				stack_region_t* region = create_stack_region_for_type(&stack_passed_parameters, parameter_type);
+
+				if(parameter_type->type_class == TYPE_CLASS_ARRAY){
+					printf("HERE\n\n");
+				}
 
 				//The offset. Note that this comes from the function local base address because we are in the function that has
 				//allocated this value
@@ -10698,6 +10712,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	i16 = lookup_type_name_only(type_symtab, "i16", NOT_MUTABLE)->type;
 	u8 = lookup_type_name_only(type_symtab, "u8", NOT_MUTABLE)->type;
 	i8 = lookup_type_name_only(type_symtab, "i8", NOT_MUTABLE)->type;
+	immut_void_ptr = lookup_type_name_only(type_symtab, "void*", NOT_MUTABLE)->type;
 	char_type = lookup_type_name_only(type_symtab, "char", NOT_MUTABLE)->type;
 
 	//We'll first create the fresh CFG here
