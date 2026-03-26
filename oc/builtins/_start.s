@@ -17,15 +17,15 @@ _start:
 	/* Align the stack to 16 bytes */
 	andq $-16, %rsp
 
-	/**
-	* Push a fake return address(%rax) and a stack end
-	*/
+	/* Push a fake return address(%rax) and a stack end */
 	pushq %rax
 	pushq %rsp
 
 	/* Function pointer to main */
 	leaq main(%rip), %rdi
+	
+	/* Invoke the actual call itself */
+	call __ostl_start_main
 
-	//TODO CALL STAT MAIN
-
+	/* This is unreachable - if it somehow is reached then hlt causes a segfault */
 	hlt

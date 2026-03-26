@@ -39,4 +39,7 @@ pub fn __ostl_start_main(main_pointer:fn(i32, char**, char**) -> i32, argc:i32, 
 
 	//This will kill the process
 	@ostl_start_main_exit(result);
+
+	//This is unreachable but here for cleanliness
+	ret 0;
 }
