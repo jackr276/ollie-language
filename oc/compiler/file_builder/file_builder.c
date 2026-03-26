@@ -12,6 +12,9 @@
 //The current tmp file id
 static u_int32_t current_tmp_file_id = 0;
 
+//For any/all error printing
+static char error_info[2000];
+
 
 /**
  * Helper that grabs the file id for us
@@ -124,25 +127,23 @@ u_int8_t output_generated_assembly(compiler_options_t* options, cfg_t* cfg, dyna
 		//Open the temp file here
 		output = fopen(file_name, "w");
 
+		//If the file is null, we fail out here
+		if(output == NULL){
+			sprintf(error_info, "[ERROR]: Could not open output file: %s\n", file_name);
+			printf("%s", error_info);
+			return 1;
+		}
+
 	} else {
 		//Open the file for the purpose of writing
 		output = fopen(options->output_file, "w");
-	}
 
-	//If the output file is NULL, we'll use "out.s"
-	if(options->output_file != NULL){
-	} else {
-		//Open the default file
-		output = fopen("out.s", "w");
-	}
-
-	//If the file is null, we fail out here
-	if(output == NULL){
-		char error_info[2000];
-		sprintf(error_info, "[ERROR]: Could not open output file: %s\n", options->output_file != NULL ? options->output_file : "out.s");
-		printf("%s", error_info);
-		//1 means we failed
-		return 1;
+		//If the file is null, we fail out here
+		if(output == NULL){
+			sprintf(error_info, "[ERROR]: Could not open output file: %s\n", options->output_file != NULL ? options->output_file : "out.s");
+			printf("%s", error_info);
+			return 1;
+		}
 	}
 
 	//We'll first print the text segment of the program

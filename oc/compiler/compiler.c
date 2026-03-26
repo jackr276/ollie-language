@@ -21,6 +21,7 @@
 #include "file_builder/file_builder.h"
 #include "optimizer/optimizer.h"
 #include "utils/constants.h"
+#include "utils/dynamic_string/dynamic_string.h"
 
 //The number of errors and warnings
 u_int32_t num_errors;
@@ -425,17 +426,26 @@ static u_int8_t compile(compiler_options_t* options){
 
 	//Now we'll assemble the file *if* we are not doing a CI run
 	if(options->is_test_run == FALSE){
-		output_generated_assembly(options, cfg);
-	}
+		//We'll need a placeholder string for our asm file
+		dynamic_string_t generated_assembly_file = dynamic_string_alloc();
 
-	/**
-	 * If we are not *just* going to assembly, we can now
-	 * take our outputted assembly code and assemble it using
-	 * gas
-	 */
-	if(options->go_to_assembly == FALSE){
-		//TODO
+		//Write the asm file
+		output_generated_assembly(options, cfg, &generated_assembly_file);
 
+		/**
+		 * If we are not *just* going to assembly, we can now
+		 * take our outputted assembly code and assemble it using
+		 * gas, and then link it with our builtins for a full
+		 * result
+		 */
+		if(options->go_to_assembly == FALSE){
+			printf("NEED TO ASSEMBLE %s\n", generated_assembly_file.string);
+			//TODO
+
+		}
+
+		//Destroy the string now
+		dynamic_string_dealloc(&generated_assembly_file);
 	}
 
 	//Finish the timer here if we need to
