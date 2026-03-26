@@ -24,7 +24,6 @@ u_int8_t assemble_code(compiler_options_t* options);
 /**
  * Perform all of the assembly and linkage that we need to do here
  */
-u_int8_t assemble_and_link(compiler_options_t* options, cfg_t* cfg);
-
+void assemble_and_link(compiler_options_t* options, cfg_t* cfg, u_int32_t* num_errors, u_int32_t* num_warnings);
 
 #endif /* FILE_BUILDER_H */

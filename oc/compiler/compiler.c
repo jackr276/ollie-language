@@ -429,6 +429,11 @@ static u_int8_t compile(compiler_options_t* options){
 	 * guard against that is here
 	 */
 	if(options->is_test_run == FALSE){
+		//Run the assembler/linker. This will update errors if we have them
+		assemble_and_link(options, cfg, &num_errors, &num_warnings);
+
+		//TODO SCRAP BELOW
+
 		//We'll need a placeholder string for our asm file
 		dynamic_string_t generated_assembly_file = dynamic_string_alloc();
 

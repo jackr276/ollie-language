@@ -192,6 +192,11 @@ u_int8_t output_generated_assembly(compiler_options_t* options, cfg_t* cfg, dyna
  * Take the generated assembly and convert it to an object file using GAS
  */
 u_int8_t assemble_code(compiler_options_t* options){
+
+	//TODO - SPLIT into outputting generated assembly to a file or outputting to the temp file
+
+
+
 	//TODO
 	return FAILURE;
 
@@ -203,6 +208,6 @@ u_int8_t assemble_code(compiler_options_t* options){
  * Perform all of the assembly and linkage that we need to do here. This is the only
  * API that is accessible for the final builder
  */
-u_int8_t assemble_and_link(compiler_options_t* options, cfg_t* cfg){
+void assemble_and_link(compiler_options_t* options, cfg_t* cfg, u_int32_t* num_errors, u_int32_t* num_warnings){
 
 }

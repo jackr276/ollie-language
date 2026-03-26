@@ -2,7 +2,14 @@
  * Author: Jack Robbins
  * This file in the Ollie Standard Library(ostl) will actually
  * handle the calling of our user code.
+ *
+ *
+ * NOTE: a version of this that has already been compiled to assembly will be persisted
+ * inside of oc/builtins/precompiled_builtins.
+ *
+ * WARNING: IF YOU UPDATE THIS FILE, YOU MUST RECOMPILE TO ASSEMBLY AND UPDATE THE PRECOMPILED FILE
  */
+
 
 /**
  * The exit code is going to involve a syscall to the kernel with the given
