@@ -21,5 +21,10 @@ u_int8_t output_generated_assembly(compiler_options_t* options, cfg_t* cfg, dyna
  */
 u_int8_t assemble_code(compiler_options_t* options);
 
+/**
+ * Perform all of the assembly and linkage that we need to do here
+ */
+u_int8_t assemble_and_link(compiler_options_t* options, cfg_t* cfg);
+
 
 #endif /* FILE_BUILDER_H */

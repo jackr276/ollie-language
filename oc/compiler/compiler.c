@@ -424,7 +424,10 @@ static u_int8_t compile(compiler_options_t* options){
 		printf("=============================== Register Allocation  ===================================\n");
 	}
 
-	//Now we'll assemble the file *if* we are not doing a CI run
+	/**
+	 * Note that if we are doing a test run, we will not do any file outputting at all. Our
+	 * guard against that is here
+	 */
 	if(options->is_test_run == FALSE){
 		//We'll need a placeholder string for our asm file
 		dynamic_string_t generated_assembly_file = dynamic_string_alloc();
