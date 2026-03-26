@@ -91,10 +91,9 @@ static inline void print_start_section(compiler_options_t* options, FILE* fl, cf
 
 
 /**
- * Assemble the program by first writing it to a .s file, and then
- * assembling that file into an object file
+ * Assemble the program by writing it to a .s file
 */
-u_int8_t output_generated_code(compiler_options_t* options, cfg_t* cfg){
+u_int8_t output_generated_assembly(compiler_options_t* options, cfg_t* cfg){
 	//If we have no output file given, we will use the default name
 	
 	//The output file(Null initally)
@@ -133,3 +132,12 @@ u_int8_t output_generated_code(compiler_options_t* options, cfg_t* cfg){
 	return 0;
 }
 
+
+/**
+ * Take the generated assembly and convert it to an object file using GAS
+ */
+u_int8_t assemble_code(compiler_options_t* options){
+	//TODO
+	return FAILURE;
+
+}

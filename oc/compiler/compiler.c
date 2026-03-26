@@ -35,9 +35,9 @@ static void print_help(){
 	printf("\n######################################## Required Fields #########################################\n");
 	printf("-f <filename>: Required field. Specifies the .ol source file to be compiled\n");
 	printf("\n######################################## Optional Fields #########################################\n");
-	printf("-o <filename>: Specificy the output location. If none is given, out.s will be used\n");
+	printf("-o <filename>: Specificy the output location. If none is given, a.s will be used\n");
 	printf("-s: Show a summary at the end of compilation\n");
-	printf("-a: Generate an assembly code file with a .s extension\n");
+	printf("-a: Generate an assembly code file with a .s extension. Note that this will stop the actual assembler from running\n");
 	printf("-d: Show all debug information printed. This includes compiler warnings, info statements\n");
 	printf("-r: Print the result of the register allocation. This is done by default in -i\n");
 	printf("-t: Time execution of compiler. Can be used for performance testing\n");
@@ -122,6 +122,11 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 		exit(1);
 	}
 
+	//This is going to be a.out
+	if(options->output_file == NULL){
+		options->output_file = "a.out";
+	}
+
 	//Give back the options we got in the structure
 	return options;
 }
@@ -181,7 +186,7 @@ static u_int8_t compile(compiler_options_t* options){
 
 	//Warn the user if no file name is given
 	if(options->output_file == NULL){
-		printf("[WARNING]: No output file name given. The name \"out.s\" will be used\n\n");
+		printf("[WARNING]: No output file name given. The name \"a.s\" will be used\n\n");
 	}
 
 	//And we'll keep track of everything we have here
@@ -420,7 +425,17 @@ static u_int8_t compile(compiler_options_t* options){
 
 	//Now we'll assemble the file *if* we are not doing a CI run
 	if(options->is_test_run == FALSE){
-		output_generated_code(options, cfg);
+		output_generated_assembly(options, cfg);
+	}
+
+	/**
+	 * If we are not *just* going to assembly, we can now
+	 * take our outputted assembly code and assemble it using
+	 * gas
+	 */
+	if(options->go_to_assembly == FALSE){
+		//TODO
+
 	}
 
 	//Finish the timer here if we need to

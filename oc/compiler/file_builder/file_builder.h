@@ -12,9 +12,14 @@
 #include "../cfg/cfg.h"
 
 /**
- * Assemble the program by first writing it to a .s file, and then
- * assembling that file into an object file
+ * Assemble the program by first writing it to a .s file
 */
-u_int8_t output_generated_code(compiler_options_t* options, cfg_t* cfg);
+u_int8_t output_generated_assembly(compiler_options_t* options, cfg_t* cfg);
+
+/**
+ * Take the generated assembly and convert it to an object file using GAS
+ */
+u_int8_t assemble_code(compiler_options_t* options);
+
 
 #endif /* FILE_BUILDER_H */
