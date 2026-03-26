@@ -19,21 +19,38 @@
  * 	 	We then assemble _start.s and put that in the temp directory
  * 	 	We call the linked(ld) to link everything and put it into a final executable
   */
+//For directory management
+#include <dirent.h>
+#include <errno.h>
+
 #include <stdio.h>
 #include <sys/types.h>
 #include "file_builder.h"
 #include "../utils/constants.h"
+#include "../utils/error_management.h"
 #include "../utils/dynamic_string/dynamic_string.h"
 
 //The current tmp file id
 static u_int32_t current_tmp_file_id = 0;
 
-//In case we need the file name
-static char file_name[1000];
+//For any/all error printing
+static char info[ERROR_SIZE];
 
 //Hold all of our error counts
-u_int32_t* error_count;
-u_int32_t* warning_count;
+static u_int32_t* error_count;
+static u_int32_t* warning_count;
+
+/**
+ * Simply prints a parse message in a nice formatted way
+ */
+static void print_assembler_message(error_message_type_t message_type, char* info){
+	//Now print it
+	const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
+
+	//Print this out on a single line
+	fprintf(stdout, "\n[COMPILER %s]: %s\n", type[message_type], info);
+}
+
 
 /**
  * Helper that grabs the file id for us
@@ -140,8 +157,8 @@ static u_int8_t output_generated_assembly_only(compiler_options_t* options, cfg_
 
 	//If the file is null, we fail out here
 	if(output == NULL){
-		//TODO BREAKOUT INTO print_assembler_error
-		fprintf(stdout, "[ASSEMBLER ERROR]: Could not open output file: %s\n", options->output_file != NULL ? options->output_file : "out.s");
+		sprintf(info, "[ASSEMBLER ERROR]: Failed to create the output file: %s\n", options->output_file);
+		print_assembler_message(MESSAGE_TYPE_ERROR, info);
 		error_count++;
 		return FAILURE;
 	}
@@ -164,10 +181,52 @@ static u_int8_t output_generated_assembly_only(compiler_options_t* options, cfg_
 
 
 /**
+ * We need to verify if the /tmp/oc/ directory exists on the machine. If it does not, we
+ * will need to create it. We will not empty the directory in this step because that will
+ * be handled by the cleanup function at the end of all compilation
+ */
+static u_int8_t perform_tmp_directory_management(){
+	//Can we open /tmp?
+	DIR* root_temp_dir = opendir("/tmp");
+
+	/**
+	 * If we can't even open the /tmp directory then the user
+	 * is going to need to make it - we aren't going to mess
+	 * around with that
+	 */
+	if(root_temp_dir == NULL){
+		print_assembler_message(MESSAGE_TYPE_ERROR, "Unable to open the /tmp/ directory. If you are running linux, please create this directory and retry\n");
+		(*error_count)++;
+		return FAILURE;
+	}
+
+	//Remove the resource when done
+	closedir(root_temp_dir);
+
+
+	//If we made it to here then this worked
+	return SUCCESS;
+}
+
+
+/**
  * Take the generated assembly and convert it to an object file using GAS
  */
 static void assemble_code(compiler_options_t* options){
 
+}
+
+
+/**
+ * This inlined helper will perform all of the work, including management of the /tmp/oc/ directory
+ * in order for us to compiler and link into a final executable
+ */
+static inline void assemble_and_link_with_temp_files(compiler_options_t* options, cfg_t* cfg){
+
+
+
+	printf("TODO NOT DONE\n\n\n\n");
+	exit(1);
 }
 
 
@@ -186,8 +245,8 @@ void assemble_and_link(compiler_options_t* options, cfg_t* cfg, u_int32_t* num_e
 
 	//We assume that most of the time we actually want to compile
 	if(options->go_to_assembly == FALSE){
-		printf("TODO NOT DONE\n\n\n\n");
-		exit(1);
+		//Let the helper assemble and link with our temporary files
+		assemble_and_link_with_temp_files(options, cfg);
 
 	//Otherwise we likely have a test run - we need to just ouput the assembly *ONLY*
 	} else {

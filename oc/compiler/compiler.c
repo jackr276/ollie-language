@@ -51,7 +51,7 @@ static void print_help(){
 
 /**
  * Simply prints a parse message in a nice formatted way
-*/
+ */
 static void print_compiler_message(error_message_type_t message_type, char* info){
 	//Now print it
 	const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
