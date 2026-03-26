@@ -28,10 +28,12 @@
 //The current tmp file id
 static u_int32_t current_tmp_file_id = 0;
 
-//For any/all error printing
-static char error_info[2000];
 //In case we need the file name
 static char file_name[1000];
+
+//Hold all of our error counts
+u_int32_t* error_count;
+u_int32_t* warning_count;
 
 /**
  * Helper that grabs the file id for us
@@ -125,55 +127,27 @@ static inline void print_start_section(char* file_name, FILE* fl, cfg_t* cfg){
 
 
 /**
- * Assemble the program by writing it to a .s file
+ * Assemble the program by writing it to a .s file. This is specifically intended for when the user
+ * does *not* want to actually compile the program and requests that we output an assembly file only.
+ * This case really only happens when we are doing test runs
 */
-u_int8_t output_generated_assembly(compiler_options_t* options, cfg_t* cfg, dynamic_string_t* assembly_output){
+static u_int8_t output_generated_assembly_only(compiler_options_t* options, cfg_t* cfg){
 	//The output file(Null initally)
 	FILE* output = NULL;
 
-	//What is the final file name that we're using
-	char* final_file_name;
+	//Open the file for the purpose of writing
+	output = fopen(options->output_file, "w");
 
-	/**
-	 * If we are specifically requesting that we go to assembly,
-	 * we will need to just write the file out to whatever the
-	 * user wanted. If we are not, then we put the file inside
-	 * of tmp/ocX, where X is the temp file name
-	 */
-	if(options->go_to_assembly == FALSE){
-		//Generate using the standard pattern
-		sprintf(file_name, "/tmp/oc/ocAsm%d", increment_and_get_tmp_file_id());
-
-		//Open the temp file here
-		output = fopen(file_name, "w");
-
-		//If the file is null, we fail out here
-		if(output == NULL){
-			sprintf(error_info, "[ERROR]: Could not open output file: %s\n", file_name);
-			printf("%s", error_info);
-			return 1;
-		}
-
-		//Whatever we made here is the final file name
-		final_file_name = file_name;
-
-	} else {
-		//Open the file for the purpose of writing
-		output = fopen(options->output_file, "w");
-
-		//If the file is null, we fail out here
-		if(output == NULL){
-			sprintf(error_info, "[ERROR]: Could not open output file: %s\n", options->output_file != NULL ? options->output_file : "out.s");
-			printf("%s", error_info);
-			return 1;
-		}
-
-		//This is the final file name
-		final_file_name = options->output_file;
+	//If the file is null, we fail out here
+	if(output == NULL){
+		//TODO BREAKOUT INTO print_assembler_error
+		fprintf(stdout, "[ASSEMBLER ERROR]: Could not open output file: %s\n", options->output_file != NULL ? options->output_file : "out.s");
+		error_count++;
+		return FAILURE;
 	}
 
 	//We'll first print the text segment of the program
-	print_start_section(final_file_name, output, cfg);
+	print_start_section(options->output_file, output, cfg);
 
 	//Handle all of the global vars first
 	print_all_global_variables(output, &(cfg->global_variables));
@@ -184,21 +158,15 @@ u_int8_t output_generated_assembly(compiler_options_t* options, cfg_t* cfg, dyna
 	//Once we're done, close the file
 	fclose(output);
 
-	return 0;
+	//Tell the caller that all went well
+	return SUCCESS;
 }
 
 
 /**
  * Take the generated assembly and convert it to an object file using GAS
  */
-u_int8_t assemble_code(compiler_options_t* options){
-
-	//TODO - SPLIT into outputting generated assembly to a file or outputting to the temp file
-
-
-
-	//TODO
-	return FAILURE;
+static void assemble_code(compiler_options_t* options){
 
 }
 
@@ -209,5 +177,20 @@ u_int8_t assemble_code(compiler_options_t* options){
  * API that is accessible for the final builder
  */
 void assemble_and_link(compiler_options_t* options, cfg_t* cfg, u_int32_t* num_errors, u_int32_t* num_warnings){
+	//Save these so we can update easily
+	error_count = num_errors;
+	warning_count = num_warnings;
 
+	//Instruct the compiler to only output assembly
+	u_int8_t output_assembly_only = options->go_to_assembly;
+
+	//We assume that most of the time we actually want to compile
+	if(options->go_to_assembly == FALSE){
+		printf("TODO NOT DONE\n\n\n\n");
+		exit(1);
+
+	//Otherwise we likely have a test run - we need to just ouput the assembly *ONLY*
+	} else {
+		output_generated_assembly_only(options, cfg);
+	}
 }

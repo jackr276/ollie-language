@@ -21,7 +21,7 @@
 #include "file_builder/file_builder.h"
 #include "optimizer/optimizer.h"
 #include "utils/constants.h"
-#include "utils/dynamic_string/dynamic_string.h"
+#include "utils/error_management.h"
 
 //The number of errors and warnings
 u_int32_t num_errors;
@@ -47,6 +47,17 @@ static void print_help(){
 	printf("-i: Print intermediate representations. This will generate *a lot* of text, so be careful\n");
 	printf("-h: Show help\n");
 	printf("\n==================================================================================================\n");
+}
+
+/**
+ * Simply prints a parse message in a nice formatted way
+*/
+static void print_compiler_message(error_message_type_t message_type, char* info){
+	//Now print it
+	const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
+
+	//Print this out on a single line
+	fprintf(stdout, "\n[COMPILER %s]: %s\n", type[message_type], info);
 }
 
 
@@ -123,9 +134,26 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 		exit(1);
 	}
 
-	//This is going to be a.out
+	/**
+	 * If we don't get an input file it's either going to be a.s or a.out. We will warn about this
+	 */
 	if(options->output_file == NULL){
-		options->output_file = "a.out";
+		//Full compilation run
+		if(options->go_to_assembly == FALSE){
+			options->output_file = "a.out";
+
+			//Warn the user
+			print_compiler_message(MESSAGE_TYPE_WARNING, "No ouput file was given, \"a.out\" will be used");
+			num_warnings++;
+
+		//Test run where we only go to assembly(.s)
+		} else {
+			options->output_file = "a.s";
+
+			//Warn the user
+			print_compiler_message(MESSAGE_TYPE_WARNING, "No ouput file was given, \"a.s\" will be used");
+			num_warnings++;
+		}
 	}
 
 	//Give back the options we got in the structure
@@ -183,7 +211,7 @@ static u_int8_t compile(compiler_options_t* options){
 	module_times_t times = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 	//Print out the file name if we're debug printing
-	printf("Compiling source file: %s\n\n\n", options->file_name);
+	printf("\n\n\n============================== Compiling source file: %s ==============================\n\n\n", options->file_name);
 
 	//Warn the user if no file name is given
 	if(options->output_file == NULL){
@@ -431,29 +459,6 @@ static u_int8_t compile(compiler_options_t* options){
 	if(options->is_test_run == FALSE){
 		//Run the assembler/linker. This will update errors if we have them
 		assemble_and_link(options, cfg, &num_errors, &num_warnings);
-
-		//TODO SCRAP BELOW
-
-		//We'll need a placeholder string for our asm file
-		dynamic_string_t generated_assembly_file = dynamic_string_alloc();
-
-		//Write the asm file
-		output_generated_assembly(options, cfg, &generated_assembly_file);
-
-		/**
-		 * If we are not *just* going to assembly, we can now
-		 * take our outputted assembly code and assemble it using
-		 * gas, and then link it with our builtins for a full
-		 * result
-		 */
-		if(options->go_to_assembly == FALSE){
-			printf("NEED TO ASSEMBLE %s\n", generated_assembly_file.string);
-			//TODO
-
-		}
-
-		//Destroy the string now
-		dynamic_string_dealloc(&generated_assembly_file);
 	}
 
 	//Finish the timer here if we need to
