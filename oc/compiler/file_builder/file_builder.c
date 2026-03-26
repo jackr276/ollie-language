@@ -22,6 +22,7 @@
 //For directory management
 #include <dirent.h>
 #include <errno.h>
+#include <sys/stat.h>
 
 #include <stdio.h>
 #include <sys/types.h>
@@ -195,13 +196,44 @@ static u_int8_t perform_tmp_directory_management(){
 	 * around with that
 	 */
 	if(root_temp_dir == NULL){
-		print_assembler_message(MESSAGE_TYPE_ERROR, "Unable to open the /tmp/ directory. If you are running linux, please create this directory and retry\n");
+		//Most likely thing - it just isn't there
+		if(errno == ENOENT){
+			print_assembler_message(MESSAGE_TYPE_ERROR, "The \"/tmp/\" directory does not exist on your system. Please create it and retry.");
+		} else {
+			print_assembler_message(MESSAGE_TYPE_ERROR, "Unable to open the \"/tmp/\" directory. If you are running linux, please create this directory and retry.");
+		}
+
 		(*error_count)++;
 		return FAILURE;
 	}
 
 	//Remove the resource when done
 	closedir(root_temp_dir);
+
+	//For holding our directory
+	struct stat stats = {0};
+
+	/**
+	 * Now that we know that the /tmp directory exists, we will
+	 * now need to create the /tmp/oc/ directory to store all
+	 * of our compiled files
+	 */
+	int32_t stat_result = stat("/tmp/oc/", &stats);
+
+	/**
+	 * If it's not here, then we need to make it
+	 */
+	if(stat_result != 0 || S_ISDIR(stats.st_mode) == FALSE){
+		//Invoke the system call to make it
+		int32_t mkdir_result = mkdir("/tmp/oc", 0777);
+
+		//Not being 0 is unsuccessful, not much we can do here but leave if this happens
+		if(mkdir_result != 0){
+			print_assembler_message(MESSAGE_TYPE_ERROR, "OC was unable to create the needed \"/tmp/oc/\" directory. Please create it manually.");
+			(*error_count)++;
+			return FAILURE;
+		}
+	}
 
 
 	//If we made it to here then this worked
@@ -222,6 +254,17 @@ static void assemble_code(compiler_options_t* options){
  * in order for us to compiler and link into a final executable
  */
 static inline void assemble_and_link_with_temp_files(compiler_options_t* options, cfg_t* cfg){
+	/**
+	 * Step 1: OC requires that we have a /tmp/oc/ directory to hold all of our temporary
+	 * compiled files. This is the first step that we need to take to ensure we're good
+	 * to even go forward
+	 */
+	u_int32_t directory_management_result = perform_tmp_directory_management();
+
+	//If this fails we're done
+	if(directory_management_result == FAILURE){
+		return;
+	}
 
 
 
