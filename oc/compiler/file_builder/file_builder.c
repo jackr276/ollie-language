@@ -4,8 +4,22 @@
  * This file contains the implementations for the assembler.h file
  */
 #include <stdio.h>
+#include <sys/types.h>
 #include "file_builder.h"
 #include "../utils/constants.h"
+#include "../utils/dynamic_string/dynamic_string.h"
+
+//The current tmp file id
+static u_int32_t current_tmp_file_id = 0;
+
+
+/**
+ * Helper that grabs the file id for us
+ */
+static inline u_int32_t increment_and_get_tmp_file_id(){
+	return current_tmp_file_id++;
+}
+
 
 /**
  * Print an assembly block out
@@ -93,16 +107,30 @@ static inline void print_start_section(compiler_options_t* options, FILE* fl, cf
 /**
  * Assemble the program by writing it to a .s file
 */
-u_int8_t output_generated_assembly(compiler_options_t* options, cfg_t* cfg){
-	//If we have no output file given, we will use the default name
-	
+u_int8_t output_generated_assembly(compiler_options_t* options, cfg_t* cfg, dynamic_string_t* assembly_output){
 	//The output file(Null initally)
 	FILE* output = NULL;
 
-	//If the output file is NULL, we'll use "out.s"
-	if(options->output_file != NULL){
+	/**
+	 * If we are specifically requesting that we go to assembly,
+	 * we will need to just write the file out to whatever the
+	 * user wanted. If we are not, then we put the file inside
+	 * of tmp/ocX, where X is the temp file name
+	 */
+	if(options->go_to_assembly == FALSE){
+		char file_name[1000];
+		sprintf(file_name, "/tmp/oc/ocAsm%d", increment_and_get_tmp_file_id());
+
+		//Open the temp file here
+		output = fopen(file_name, "w");
+
+	} else {
 		//Open the file for the purpose of writing
 		output = fopen(options->output_file, "w");
+	}
+
+	//If the output file is NULL, we'll use "out.s"
+	if(options->output_file != NULL){
 	} else {
 		//Open the default file
 		output = fopen("out.s", "w");

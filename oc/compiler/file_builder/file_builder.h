@@ -14,7 +14,7 @@
 /**
  * Assemble the program by first writing it to a .s file
 */
-u_int8_t output_generated_assembly(compiler_options_t* options, cfg_t* cfg);
+u_int8_t output_generated_assembly(compiler_options_t* options, cfg_t* cfg, dynamic_string_t* assembly_output);
 
 /**
  * Take the generated assembly and convert it to an object file using GAS
