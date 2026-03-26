@@ -249,6 +249,30 @@ static void assemble_code(compiler_options_t* options){
 }
 
 
+
+/**
+ * Perform the directory cleanup needed which includes wiping out all of the
+ * object(.o) and assembly(.s) files that were placed in here. Ollie compilations 
+ * are meant to never be incremental, and we enforce this by wiping out all of our
+ * old compiled files at the end of every build
+ */
+static void perform_tmp_directory_cleanup(){
+	//Open up the temp directory
+	DIR* tmp_directory = opendir("/tmp/oc/");
+
+	/**
+	 * This should absolutely never happen. If it does it is a critcal error
+	 */
+	if(tmp_directory == NULL){
+		fprintf(stderr, "Fatal internal compiler error: Attempt to open /tmp/oc/ failed\n");
+		exit(1);
+	}
+
+	//Close it down before we leave
+	closedir(tmp_directory);
+}
+
+
 /**
  * This inlined helper will perform all of the work, including management of the /tmp/oc/ directory
  * in order for us to compiler and link into a final executable
@@ -266,6 +290,15 @@ static inline void assemble_and_link_with_temp_files(compiler_options_t* options
 		return;
 	}
 
+	/**
+	 * Step TODO FILL ME OUT: OC will always clean up after itself. Ollie does not 
+	 * do incremental builds, and the .o object files that it produces are single use. Once
+	 * we've linked them into an executable, they're going to be scrapped.
+	 *
+	 * NOTE: if this fails it's a critical error and will hard crash the program, no need
+	 * for error codes here at all
+	 */
+	perform_tmp_directory_cleanup();
 
 
 	printf("TODO NOT DONE\n\n\n\n");
