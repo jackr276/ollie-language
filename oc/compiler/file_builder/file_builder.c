@@ -14,7 +14,8 @@ static u_int32_t current_tmp_file_id = 0;
 
 //For any/all error printing
 static char error_info[2000];
-
+//In case we need the file name
+static char file_name[1000];
 
 /**
  * Helper that grabs the file id for us
@@ -98,9 +99,9 @@ static void print_all_basic_blocks(FILE* fl, cfg_t* cfg){
 /**
  * Print the .text section by running through and printing all of our basic blocks in assembly
  */
-static inline void print_start_section(compiler_options_t* options, FILE* fl, cfg_t* cfg){
+static inline void print_start_section(char* file_name, FILE* fl, cfg_t* cfg){
 	//Declare the start of the new file to gas
-	fprintf(fl, "\t.file\t\"%s\"\n", options->file_name);
+	fprintf(fl, "\t.file\t\"%s\"\n", file_name);
 
 	//Now that we've printed the text section, we need to print all basic blocks
 	print_all_basic_blocks(fl, cfg);
@@ -114,6 +115,9 @@ u_int8_t output_generated_assembly(compiler_options_t* options, cfg_t* cfg, dyna
 	//The output file(Null initally)
 	FILE* output = NULL;
 
+	//What is the final file name that we're using
+	char* final_file_name;
+
 	/**
 	 * If we are specifically requesting that we go to assembly,
 	 * we will need to just write the file out to whatever the
@@ -121,7 +125,7 @@ u_int8_t output_generated_assembly(compiler_options_t* options, cfg_t* cfg, dyna
 	 * of tmp/ocX, where X is the temp file name
 	 */
 	if(options->go_to_assembly == FALSE){
-		char file_name[1000];
+		//Generate using the standard pattern
 		sprintf(file_name, "/tmp/oc/ocAsm%d", increment_and_get_tmp_file_id());
 
 		//Open the temp file here
@@ -134,6 +138,9 @@ u_int8_t output_generated_assembly(compiler_options_t* options, cfg_t* cfg, dyna
 			return 1;
 		}
 
+		//Whatever we made here is the final file name
+		final_file_name = file_name;
+
 	} else {
 		//Open the file for the purpose of writing
 		output = fopen(options->output_file, "w");
@@ -144,10 +151,13 @@ u_int8_t output_generated_assembly(compiler_options_t* options, cfg_t* cfg, dyna
 			printf("%s", error_info);
 			return 1;
 		}
+
+		//This is the final file name
+		final_file_name = options->output_file;
 	}
 
 	//We'll first print the text segment of the program
-	print_start_section(options, output, cfg);
+	print_start_section(final_file_name, output, cfg);
 
 	//Handle all of the global vars first
 	print_all_global_variables(output, &(cfg->global_variables));
