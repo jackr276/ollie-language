@@ -30,10 +30,13 @@ fn ostl_start_main_exit(result:i32) -> void {
  * This function requires a pointer to the main function as well as the argc and argv
  * values
  */
-pub fn __ostl_start_main(main:fn(i32, char**, char**) -> i32, argc:i32, argv:char**) -> i32 {
+pub fn __ostl_start_main(main_pointer:fn(i32, char**, char**) -> i32, argc:i32, argv:char**) -> i32 {
+	//The environment pointer always comes 1 after all of the argument vector arguments
+	let envp:char** = &(argv[argc + 1]);
+
 	//Invoke our actual main function
-	let result:i32 = main(argc, argv);
+	let result:i32 = @main_pointer(argc, argv, envp);
 
 	//This will kill the process
-	ostl_start_main_exit(result);
+	@ostl_start_main_exit(result);
 }
