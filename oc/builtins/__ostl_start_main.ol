@@ -9,8 +9,20 @@
  * result. Note that on paper this returns void because we're killing a process
  */
 fn ostl_start_main_exit(result:i32) -> void { 
+	/**
+	* Our result is already in %rdi because of the parameter
+	* passing convention, so all we need to do here is move
+	* the code for the SYS_exit_group(231) into here
+	*/
+	asm {
+		"
+		movq $231, %rax
+		syscall
+		"
+	    };
 
-
+	//If that fails then we loop forever
+	while(true){}
 }
 
 
@@ -19,5 +31,9 @@ fn ostl_start_main_exit(result:i32) -> void {
  * values
  */
 pub fn __ostl_start_main(main:fn(i32, char**, char**) -> i32, argc:i32, argv:char**) -> i32 {
+	//Invoke our actual main function
+	let result:i32 = main(argc, argv);
 
+	//This will kill the process
+	ostl_start_main_exit(result);
 }
