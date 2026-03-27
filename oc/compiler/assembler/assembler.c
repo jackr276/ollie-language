@@ -24,6 +24,7 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <sys/wait.h>
 #include <libgen.h>
 
 #include <stdio.h>
@@ -299,6 +300,39 @@ static u_int8_t perform_tmp_directory_management(){
 
 
 /**
+ * Convert an assembly file name into a .o file name. This is really
+ * as simple as replacing the ".s" with a ".o". We return a new string for
+ * this
+ *
+ * This assumes we have a pre-allocated result buffer that we will be storing
+ * to. We return void because there's no case where this fails
+ */
+static inline void convert_assembly_file_name_to_object_file_name(char* result, const char* full_file_path){
+
+}
+
+
+/**
+ * Handle all of the process management using fork() to call as on a given
+ * full file path. These full files will always output to /oc/tmp/ as
+ * .o files
+ */
+static inline u_int8_t run_file_through_assembler(const char* full_file_path){
+	//We will need this for the eventual output
+	char object_file_name[1000];
+
+	//Let the converter get us the .o file name
+	convert_assembly_file_name_to_object_file_name(object_file_name, full_file_path);
+
+	//Fork the process
+	pid_t assembler_pid = fork();
+
+
+
+}
+
+
+/**
  * Take all of the generated assembly that we've produced and convert
  * it into object files using AS. These object files will also reside in
  * /tmp/oc/ and are only alive for the duration of the program
@@ -308,15 +342,25 @@ static u_int8_t perform_tmp_directory_management(){
  * TODO may want to reuse that dynamic array for the .o files too
  */
 static u_int8_t assemble_code(dynamic_array_t* outputted_files){
+	u_int8_t result;
+
 	/**
 	 * Step 1: assemble the builtin _start.s file into /tmp/oc/_start.o
 	 */
+	result = run_file_through_assembler("./oc/builtins/precompiled_builtins/_start.s");
 
+	if(result == FAILURE){
+		return FAILURE;
+	}
 
 	/**
 	 * Step 2: assemble the builtin __ostl_start_main.s file into /tmp/oc/__ostl_start_main.o
 	 */
+	result = run_file_through_assembler("./oc/builtins/precompiled_builtins/_start.s");
 
+	if(result == FAILURE){
+		return FAILURE;
+	}
 
 	/**
 	 * Step 3: For everything in our list of temporary assembly files, assembly
