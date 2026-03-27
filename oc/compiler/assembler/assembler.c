@@ -26,7 +26,7 @@
 
 #include <stdio.h>
 #include <sys/types.h>
-#include "file_builder.h"
+#include "assembler.h"
 #include "../utils/constants.h"
 #include "../utils/error_management.h"
 #include "../utils/dynamic_string/dynamic_string.h"

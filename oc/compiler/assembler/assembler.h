@@ -6,8 +6,8 @@
 */
 
 //Include guards
-#ifndef FILE_BUILDER_H 
-#define FILE_BUILDER_H
+#ifndef ASSEMBLER_H 
+#define ASSEMBLER_H 
 #include <sys/types.h>
 #include "../cfg/cfg.h"
 
@@ -16,4 +16,4 @@
  */
 void assemble_and_link(compiler_options_t* options, cfg_t* cfg, u_int32_t* num_errors, u_int32_t* num_warnings);
 
-#endif /* FILE_BUILDER_H */
+#endif /* ASSEMBLER_H */

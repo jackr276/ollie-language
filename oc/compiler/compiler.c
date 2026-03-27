@@ -18,7 +18,7 @@
 #include "register_allocator/register_allocator.h"
 #include "instruction_selector/instruction_selector.h"
 #include "instruction_scheduler/instruction_scheduler.h"
-#include "file_builder/file_builder.h"
+#include "assembler/assembler.h"
 #include "optimizer/optimizer.h"
 #include "utils/constants.h"
 #include "utils/error_management.h"
