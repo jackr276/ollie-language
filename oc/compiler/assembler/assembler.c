@@ -183,6 +183,46 @@ static u_int8_t output_generated_assembly_only(compiler_options_t* options, cfg_
 
 
 /**
+ * Construct the assembly for the program and output it to a temp file. This temp file will 
+ * be placed inside of the /tmp/oc/ directory while it is waiting for final assembly and linkage
+ * into the file that we're after
+ */
+static u_int8_t output_generated_assembly_to_temp_file(compiler_options_t* options, cfg_t* cfg){
+	//TODO NOT DONE
+
+
+	//The output file(Null initally)
+	FILE* output = NULL;
+
+	//Open the file for the purpose of writing
+	output = fopen(options->output_file, "w");
+
+	//If the file is null, we fail out here
+	if(output == NULL){
+		sprintf(info, "[ASSEMBLER ERROR]: Failed to create the output file: %s\n", options->output_file);
+		print_assembler_message(MESSAGE_TYPE_ERROR, info);
+		error_count++;
+		return FAILURE;
+	}
+
+	//We'll first print the text segment of the program
+	print_start_section(options->output_file, output, cfg);
+
+	//Handle all of the global vars first
+	print_all_global_variables(output, &(cfg->global_variables));
+
+	//Print all of the local constants as well
+	print_local_constants(output, &(cfg->local_string_constants), &(cfg->local_f32_constants), &(cfg->local_f64_constants), &(cfg->local_xmm128_constants));
+
+	//Once we're done, close the file
+	fclose(output);
+
+	//Tell the caller that all went well
+	return SUCCESS;
+}
+
+
+/**
  * We need to verify if the /tmp/oc/ directory exists on the machine. If it does not, we
  * will need to create it. We will not empty the directory in this step because that will
  * be handled by the cleanup function at the end of all compilation
@@ -246,6 +286,14 @@ static u_int8_t perform_tmp_directory_management(){
  * Take the generated assembly and convert it to an object file using GAS
  */
 static void assemble_code(compiler_options_t* options){
+
+}
+
+
+/**
+ * Link the code using ld and produce the final executable
+ */
+static void link_and_produce_final_executable(compiler_options_t* options){
 
 }
 
@@ -336,6 +384,13 @@ static inline void assemble_and_link_with_temp_files(compiler_options_t* options
 	if(directory_management_result == FAILURE){
 		return;
 	}
+
+	/**
+	 * Step 2: we need to now output the cfg into a temporary .s assembly
+	 * file. We will place this temporary .s assembly file inside of the
+	 * oc/tmp directory waiting to be assembled
+	 */
+
 
 	/**
 	 * Step TODO FILL ME OUT: OC will always clean up after itself. Ollie does not 
