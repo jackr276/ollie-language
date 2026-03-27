@@ -320,7 +320,7 @@ static void link_and_produce_final_executable(compiler_options_t* options){
  * Recursively delete all files and directories inside of the "path"
  * directory
  */
-static void clear_directory_recursive(char* path){
+static u_int8_t clear_directory_recursive(char* path){
 	//We need this for printing
 	char full_path[1000];
 
@@ -336,7 +336,7 @@ static void clear_directory_recursive(char* path){
 	 */
 	if(tmp_directory == NULL){
 		fprintf(stderr, "Fatal internal compiler error: Attempt to open /tmp/oc/ failed\n");
-		exit(1);
+		return FAILURE;
 	}
 
 	//Infinite loop until we break out
@@ -363,7 +363,7 @@ static void clear_directory_recursive(char* path){
 				clear_directory_recursive(full_path);
 			} else {
 				if(unlink(full_path) != 0){
-					printf("Internal compiler error: could not delete file %s\n", full_path);
+					return FAILURE;
 				}
 			}
 		}
@@ -371,6 +371,8 @@ static void clear_directory_recursive(char* path){
 
 	//Close it down before we leave
 	closedir(tmp_directory);
+
+	return SUCCESS;
 }
 
 
@@ -380,9 +382,9 @@ static void clear_directory_recursive(char* path){
  * are meant to never be incremental, and we enforce this by wiping out all of our
  * old compiled files at the end of every build
  */
-static inline void perform_tmp_directory_cleanup(){
+static inline u_int8_t perform_tmp_directory_cleanup(){
 	//Seed the helper and let it do the rest
-	clear_directory_recursive("/tmp/oc");
+	return clear_directory_recursive("/tmp/oc");
 }
 
 
@@ -400,6 +402,17 @@ static inline void assemble_and_link_with_temp_files(compiler_options_t* options
 
 	//If this fails we're done
 	if(directory_management_result == FAILURE){
+		return;
+	}
+
+	/**
+	 * Step 2: We will now clean everything else inside of our directory out. There will
+	 * likely be stuff in here from old runs
+	 */
+	u_int32_t directory_clean_result = perform_tmp_directory_cleanup();
+
+	//Fatal error here so we get out if it fails
+	if(directory_clean_result == FAILURE){
 		return;
 	}
 
@@ -422,17 +435,6 @@ static inline void assemble_and_link_with_temp_files(compiler_options_t* options
 	 * assemble them into .o files. These .o files will also all reside inside of the /oc/tmp/
 	 * directory. If any of these files fail to assemble then we fail out
 	 */
-
-
-	/**
-	 * Step TODO FILL ME OUT: OC will always clean up after itself. Ollie does not 
-	 * do incremental builds, and the .o object files that it produces are single use. Once
-	 * we've linked them into an executable, they're going to be scrapped.
-	 *
-	 * NOTE: if this fails it's a critical error and will hard crash the program, no need
-	 * for error codes here at all
-	 */
-	perform_tmp_directory_cleanup();
 
 	//Destroy all of the outputted files
 	dynamic_array_dealloc(&outputted_files);
