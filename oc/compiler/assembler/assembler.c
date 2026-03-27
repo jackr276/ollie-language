@@ -23,6 +23,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include <stdio.h>
 #include <sys/types.h>
@@ -249,19 +250,16 @@ static void assemble_code(compiler_options_t* options){
 }
 
 
-
 /**
- * Perform the directory cleanup needed which includes wiping out all of the
- * object(.o) and assembly(.s) files that were placed in here. Ollie compilations 
- * are meant to never be incremental, and we enforce this by wiping out all of our
- * old compiled files at the end of every build
+ * Recursively delete all files and directories inside of the "path"
+ * directory
  */
-static void perform_tmp_directory_cleanup(){
+static void clear_directory_recursive(char* path){
 	//We need this for printing
 	char full_path[1000];
 
 	//Open up the temp directory
-	DIR* tmp_directory = opendir("/tmp/oc/");
+	DIR* tmp_directory = opendir(path);
 	//Entry pointer
 	struct dirent* entry;
 	//Status struct
@@ -285,26 +283,40 @@ static void perform_tmp_directory_cleanup(){
 			break;
 		}
 
-		//Don't want to delete . or .. here
+		//Don't want to delete . or .. here, skip them
 		if(strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0){
 			continue;
 		}
 
 		//Here's our full path
-		snprintf(full_path, 1000, "/tmp/oc/%s", entry->d_name);
+		snprintf(full_path, 1000, "%s/%s", path, entry->d_name);
 
 		//If we can read it
 		if(stat(full_path, &st) == 0){
 			if(S_ISDIR(st.st_mode)){
-
+				clear_directory_recursive(full_path);
 			} else {
-
+				if(unlink(path) != 0){
+					printf("Internal compiler error: could not delete file %s\n", full_path);
+				}
 			}
 		}
 	}
 
 	//Close it down before we leave
 	closedir(tmp_directory);
+}
+
+
+/**
+ * Perform the directory cleanup needed which includes wiping out all of the
+ * object(.o) and assembly(.s) files that were placed in here. Ollie compilations 
+ * are meant to never be incremental, and we enforce this by wiping out all of our
+ * old compiled files at the end of every build
+ */
+static inline void perform_tmp_directory_cleanup(){
+	//Seed the helper and let it do the rest
+	clear_directory_recursive("/tmp/oc");
 }
 
 
