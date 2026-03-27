@@ -302,8 +302,27 @@ static u_int8_t perform_tmp_directory_management(){
  * Take all of the generated assembly that we've produced and convert
  * it into object files using AS. These object files will also reside in
  * /tmp/oc/ and are only alive for the duration of the program
+ *
+ * NOTE: This will spawn child processes so that we can run the GNU assembler
+ *
+ * TODO may want to reuse that dynamic array for the .o files too
  */
-static void assemble_code(dynamic_string_t* temporary_assembly_file){
+static u_int8_t assemble_code(dynamic_array_t* outputted_files){
+	/**
+	 * Step 1: assemble the builtin _start.s file into /tmp/oc/_start.o
+	 */
+
+
+	/**
+	 * Step 2: assemble the builtin __ostl_start_main.s file into /tmp/oc/__ostl_start_main.o
+	 */
+
+
+	/**
+	 * Step 3: For everything in our list of temporary assembly files, assembly
+	 * them into their own .o files respectively
+	 */
+
 
 }
 
@@ -423,10 +442,11 @@ static inline void assemble_and_link_with_temp_files(compiler_options_t* options
 	 */
 	dynamic_array_t outputted_files = dynamic_array_alloc();
 
-	u_int8_t result = output_generated_assembly_to_temp_file(options, cfg, &outputted_files);
+	//Let the helper produce this
+	u_int8_t assembly_outputter_result = output_generated_assembly_to_temp_file(options, cfg, &outputted_files);
 
 	//It didn't work so don't bother going on
-	if(result == FAILURE){
+	if(assembly_outputter_result == FAILURE){
 		return;
 	}
 
@@ -435,6 +455,12 @@ static inline void assemble_and_link_with_temp_files(compiler_options_t* options
 	 * assemble them into .o files. These .o files will also all reside inside of the /oc/tmp/
 	 * directory. If any of these files fail to assemble then we fail out
 	 */
+	u_int8_t assembler_result = assemble_code(&outputted_files);
+
+	//This means we generated incorrect assembly which would be bad
+	if(assembler_result == FAILURE){
+		return;
+	}
 
 	//Destroy all of the outputted files
 	dynamic_array_dealloc(&outputted_files);
