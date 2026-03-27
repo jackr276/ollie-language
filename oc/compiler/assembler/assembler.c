@@ -191,9 +191,15 @@ static u_int8_t output_generated_assembly_only(compiler_options_t* options, cfg_
  * be placed inside of the /tmp/oc/ directory while it is waiting for final assembly and linkage
  * into the file that we're after
  */
-static u_int8_t output_generated_assembly_to_temp_file(compiler_options_t* options, cfg_t* cfg, dynamic_string_t* output_file_name){
+static u_int8_t output_generated_assembly_to_temp_file(compiler_options_t* options, cfg_t* cfg, dynamic_array_t* outputted_files){
 	//The output file(Null initally)
 	FILE* output = NULL;
+
+	//Heap allocate this so we can keep it in the dynamic array
+	dynamic_string_t* temporary_file_name = dynamic_string_heap_alloc();
+
+	//Just add it in now
+	dynamic_array_add(outputted_files, temporary_file_name);
 
 	//We need to create the name ourselves
 	char outputted_assembly_file[1000];
@@ -201,8 +207,8 @@ static u_int8_t output_generated_assembly_to_temp_file(compiler_options_t* optio
 	//Output it like so, we need to set the dynamic string to be this
 	sprintf(outputted_assembly_file, "/tmp/oc/ollie_asm_tmp%d.s", increment_and_get_tmp_file_id());
 
-	//Store this for down the road
-	dynamic_string_set(output_file_name, outputted_assembly_file);
+	//Set the dynamic string to be this
+	dynamic_string_set(temporary_file_name, outputted_assembly_file);
 
 	//Open the file for the purpose of writing
 	output = fopen(outputted_assembly_file, "w");
@@ -297,7 +303,7 @@ static u_int8_t perform_tmp_directory_management(){
  * it into object files using AS. These object files will also reside in
  * /tmp/oc/ and are only alive for the duration of the program
  */
-static void assemble_code(compiler_options_t* options){
+static void assemble_code(dynamic_string_t* temporary_assembly_file){
 
 }
 
@@ -402,9 +408,9 @@ static inline void assemble_and_link_with_temp_files(compiler_options_t* options
 	 * file. We will place this temporary .s assembly file inside of the
 	 * oc/tmp directory waiting to be assembled
 	 */
-	dynamic_string_t outputted_file_name = dynamic_string_alloc();
+	dynamic_array_t outputted_files = dynamic_array_alloc();
 
-	u_int8_t result = output_generated_assembly_to_temp_file(options, cfg, &outputted_file_name);
+	u_int8_t result = output_generated_assembly_to_temp_file(options, cfg, &outputted_files);
 
 	//It didn't work so don't bother going on
 	if(result == FAILURE){
@@ -428,8 +434,9 @@ static inline void assemble_and_link_with_temp_files(compiler_options_t* options
 	 */
 	perform_tmp_directory_cleanup();
 
-	//Destroy the outputted file name
-	dynamic_string_dealloc(&outputted_file_name);
+	//Destroy all of the outputted files
+	dynamic_array_dealloc(&outputted_files);
+	
 
 	printf("TODO NOT DONE\n\n\n\n");
 	exit(1);
@@ -445,9 +452,6 @@ void assemble_and_link(compiler_options_t* options, cfg_t* cfg, u_int32_t* num_e
 	//Save these so we can update easily
 	error_count = num_errors;
 	warning_count = num_warnings;
-
-	//Instruct the compiler to only output assembly
-	u_int8_t output_assembly_only = options->go_to_assembly;
 
 	//We assume that most of the time we actually want to compile
 	if(options->go_to_assembly == FALSE){
