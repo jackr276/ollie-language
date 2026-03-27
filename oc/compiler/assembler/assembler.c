@@ -304,6 +304,78 @@ static u_int8_t perform_tmp_directory_management(){
 
 
 /**
+ * Recursively delete all files and directories inside of the "path"
+ * directory
+ */
+static u_int8_t clear_directory_recursive(char* path){
+	//We need this for printing
+	char full_path[1000];
+
+	//Open up the temp directory
+	DIR* tmp_directory = opendir(path);
+	//Entry pointer
+	struct dirent* entry;
+	//Status struct
+	struct stat st;
+
+	/**
+	 * This should absolutely never happen. If it does it is a critcal error
+	 */
+	if(tmp_directory == NULL){
+		fprintf(stderr, "Fatal internal compiler error: Attempt to open /tmp/oc/ failed\n");
+		return FAILURE;
+	}
+
+	//Infinite loop until we break out
+	while(TRUE){
+		//Seed the entry
+		entry = readdir(tmp_directory);
+
+		//We're done
+		if(entry == NULL){
+			break;
+		}
+
+		//Don't want to delete . or .. here, skip them
+		if(strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0){
+			continue;
+		}
+
+		//Here's our full path
+		snprintf(full_path, 1000, "%s/%s", path, entry->d_name);
+
+		//If we can read it
+		if(stat(full_path, &st) == 0){
+			if(S_ISDIR(st.st_mode)){
+				clear_directory_recursive(full_path);
+			} else {
+				if(unlink(full_path) != 0){
+					return FAILURE;
+				}
+			}
+		}
+	}
+
+	//Close it down before we leave
+	closedir(tmp_directory);
+
+	return SUCCESS;
+}
+
+
+/**
+ * Perform the directory cleanup needed which includes wiping out all of the
+ * object(.o) and assembly(.s) files that were placed in here. Ollie compilations 
+ * are meant to never be incremental, and we enforce this by wiping out all of our
+ * old compiled files at the end of every build
+ */
+static inline u_int8_t perform_tmp_directory_cleanup(){
+	//Seed the helper and let it do the rest
+	return clear_directory_recursive("/tmp/oc");
+}
+
+
+/**
  * Convert an assembly file name into a .o file name. This is really
  * as simple as replacing the ".s" with a ".o". We return a new string for
  * this
@@ -418,23 +490,17 @@ static u_int8_t assemble_code(dynamic_array_t* outputted_files){
 
 
 /**
- * Link the code using ld and produce the final executable
+ * Link the code using ld and produce the final executable. Our strategy
+ * for linking is simple - every single file inside of /tmp/oc/ that ends in 
+ * a ".o" extension is being linked together.
  */
-static void link_and_produce_final_executable(compiler_options_t* options){
+static u_int8_t link_and_produce_final_executable(compiler_options_t* options){
+	//No real choice but to use dynamic allocation here
+	dynamic_string_t command_string = dynamic_string_alloc();
 
-}
+	//Open up the tmp directory
+	DIR* tmp_directory = opendir("/oc/tmp");
 
-
-/**
- * Recursively delete all files and directories inside of the "path"
- * directory
- */
-static u_int8_t clear_directory_recursive(char* path){
-	//We need this for printing
-	char full_path[1000];
-
-	//Open up the temp directory
-	DIR* tmp_directory = opendir(path);
 	//Entry pointer
 	struct dirent* entry;
 	//Status struct
@@ -481,20 +547,11 @@ static u_int8_t clear_directory_recursive(char* path){
 	//Close it down before we leave
 	closedir(tmp_directory);
 
-	return SUCCESS;
+
+	//Destroy it
+	dynamic_string_dealloc(&command_string);
 }
 
-
-/**
- * Perform the directory cleanup needed which includes wiping out all of the
- * object(.o) and assembly(.s) files that were placed in here. Ollie compilations 
- * are meant to never be incremental, and we enforce this by wiping out all of our
- * old compiled files at the end of every build
- */
-static inline u_int8_t perform_tmp_directory_cleanup(){
-	//Seed the helper and let it do the rest
-	return clear_directory_recursive("/tmp/oc");
-}
 
 
 /**
@@ -551,6 +608,8 @@ static inline void assemble_and_link_with_temp_files(compiler_options_t* options
 	if(assembler_result == FAILURE){
 		return;
 	}
+
+	u_int8_t linker_result = link_and_produce_final_executable(options);
 
 	//Destroy all of the outputted files
 	dynamic_array_dealloc(&outputted_files);
