@@ -100,8 +100,7 @@ static inline void print_assembly_block(FILE* fl, basic_block_t* block){
 		fprintf(fl, ".L%d:\n", block->block_id);
 	}
 
-	//Now grab a cursor and print out every statement that we 
-	//have
+	//Now grab a cursor and print out every statement that we have
 	instruction_t* cursor = block->leader_statement;
 
 	//So long as it isn't null
@@ -196,7 +195,7 @@ static u_int8_t output_generated_assembly_only(compiler_options_t* options, cfg_
  * be placed inside of the /tmp/oc/ directory while it is waiting for final assembly and linkage
  * into the file that we're after
  */
-static u_int8_t output_generated_assembly_to_temp_file(compiler_options_t* options, cfg_t* cfg, dynamic_array_t* outputted_files){
+static u_int8_t output_generated_assembly_to_temp_file(cfg_t* cfg, dynamic_array_t* outputted_files){
 	//The output file(Null initally)
 	FILE* output = NULL;
 
@@ -414,7 +413,7 @@ static inline void convert_assembly_file_name_to_object_file_name(char* result, 
  * full file path. These full files will always output to /oc/tmp/ as
  * .o files
  */
-static inline u_int8_t run_file_through_assembler(char* full_file_path){
+static inline u_int8_t run_file_through_assembler(char* full_file_path, u_int8_t debug_printing){
 	//We will need this for the eventual output
 	char object_file_name[TEMP_FILE_NAME_MAX_LENGTH];
 	char command[MAX_COMMAND_LENGTH];
@@ -424,6 +423,11 @@ static inline u_int8_t run_file_through_assembler(char* full_file_path){
 
 	//Now create the command
 	snprintf(command, MAX_COMMAND_LENGTH, "as %s -o /tmp/oc/%s", full_file_path, object_file_name);
+
+	//Show the assembler command if we're debugging
+	if(debug_printing == TRUE){
+		printf("ASSEMBLER COMMAND: %s\n", command);
+	}
 
 	//Run the command in the shell
 	int result = system(command);
@@ -446,13 +450,13 @@ static inline u_int8_t run_file_through_assembler(char* full_file_path){
  *
  * NOTE: This will spawn child processes so that we can run the GNU assembler
  */
-static u_int8_t assemble_code(dynamic_array_t* outputted_files){
+static u_int8_t assemble_code(compiler_options_t* options, dynamic_array_t* outputted_files){
 	u_int8_t result;
 
 	/**
 	 * Step 1: assemble the builtin _start.s file into /tmp/oc/_start.o
 	 */
-	result = run_file_through_assembler("./oc/builtins/precompiled_builtins/_start.s");
+	result = run_file_through_assembler("./oc/builtins/precompiled_builtins/_start.s", options->enable_debug_printing);
 
 	if(result == FAILURE){
 		return FAILURE;
@@ -461,7 +465,7 @@ static u_int8_t assemble_code(dynamic_array_t* outputted_files){
 	/**
 	 * Step 2: assemble the builtin __ostl_start_main.s file into /tmp/oc/__ostl_start_main.o
 	 */
-	result = run_file_through_assembler("./oc/builtins/precompiled_builtins/__ostl_start_main.s");
+	result = run_file_through_assembler("./oc/builtins/precompiled_builtins/__ostl_start_main.s", options->enable_debug_printing);
 
 	if(result == FAILURE){
 		return FAILURE;
@@ -476,7 +480,7 @@ static u_int8_t assemble_code(dynamic_array_t* outputted_files){
 		dynamic_string_t* file_to_compile = dynamic_array_get_at(outputted_files, i);
 
 		//Run it through the assembler
-		result = run_file_through_assembler(file_to_compile->string);
+		result = run_file_through_assembler(file_to_compile->string, options->enable_debug_printing);
 
 		//The error already got printed out by the callee so just fail out
 		if(result == FAILURE){
@@ -510,14 +514,13 @@ static u_int8_t link_and_produce_final_executable(compiler_options_t* options){
 
 	//Entry pointer
 	struct dirent* entry;
-	//Status struct
-	struct stat st;
 
 	/**
 	 * This should absolutely never happen. If it does it is a critcal error
 	 */
 	if(tmp_directory == NULL){
 		fprintf(stderr, "Fatal internal compiler error: Attempt to open /tmp/oc failed\n");
+		(*error_count)++;
 		return FAILURE;
 	}
 
@@ -547,7 +550,7 @@ static u_int8_t link_and_produce_final_executable(compiler_options_t* options){
 		 * dynamically construct what we need and go from there
 		 */
 		if(entry->d_name[file_length - 2] == '.' && entry->d_name[file_length - 1] == 'o'){
-			snprintf(buffer, TEMP_FILE_NAME_MAX_LENGTH, "/tmp/oc/%s", entry->d_name);
+			snprintf(buffer, TEMP_FILE_NAME_MAX_LENGTH, "/tmp/oc/%s ", entry->d_name);
 			dynamic_string_concatenate(&command_string, buffer);
 		}
 	}
@@ -555,18 +558,20 @@ static u_int8_t link_and_produce_final_executable(compiler_options_t* options){
 	//Close it down before we leave
 	closedir(tmp_directory);
 
-	fprintf(stderr, "Fatal internal compiler error: Linking failed. Linker command attempted was: %s\n", command_string.string);
-	//We should now have a fully formed command string to run
-	//int result = system(command_string.string);
+	//Show the linker command if we're debugging
+	if(options->enable_debug_printing == TRUE){
+		printf("LINKER COMMAND: %s\n", command_string.string);
+	}
 
+	//We should now have a fully formed command string to run
+	int32_t result = system(command_string.string);
 
 	//Fatal error if this fails
-	/*
 	if(result != 0){
 		fprintf(stderr, "Fatal internal compiler error: Linking failed. Linker command attempted was: %s\n", command_string.string);
+		(*error_count)++;
 		return FAILURE;
 	}
-	*/
 
 	//Destroy it
 	dynamic_string_dealloc(&command_string);
@@ -611,7 +616,7 @@ static inline void assemble_and_link_with_temp_files(compiler_options_t* options
 	dynamic_array_t outputted_files = dynamic_array_alloc();
 
 	//Let the helper produce this
-	u_int8_t assembly_outputter_result = output_generated_assembly_to_temp_file(options, cfg, &outputted_files);
+	u_int8_t assembly_outputter_result = output_generated_assembly_to_temp_file(cfg, &outputted_files);
 
 	//It didn't work so don't bother going on
 	if(assembly_outputter_result == FAILURE){
@@ -623,21 +628,18 @@ static inline void assemble_and_link_with_temp_files(compiler_options_t* options
 	 * assemble them into .o files. These .o files will also all reside inside of the /oc/tmp/
 	 * directory. If any of these files fail to assemble then we fail out
 	 */
-	u_int8_t assembler_result = assemble_code(&outputted_files);
+	u_int8_t assembler_result = assemble_code(options, &outputted_files);
 
 	//This means we generated incorrect assembly which would be bad
 	if(assembler_result == FAILURE){
 		return;
 	}
 
-	u_int8_t linker_result = link_and_produce_final_executable(options);
+	//Finally pass on to the linker
+	link_and_produce_final_executable(options);
 
 	//Destroy all of the outputted files
 	dynamic_array_dealloc(&outputted_files);
-	
-
-	printf("TODO NOT DONE\n\n\n\n");
-	exit(1);
 }
 
 

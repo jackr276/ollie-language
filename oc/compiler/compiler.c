@@ -211,7 +211,7 @@ static u_int8_t compile(compiler_options_t* options){
 	module_times_t times = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 	//Print out the file name if we're debug printing
-	printf("\n\n\n============================== Compiling source file: %s ==============================\n\n\n", options->file_name);
+	printf("Compiling source file: %s\n\n\n", options->file_name);
 
 	//Warn the user if no file name is given
 	if(options->output_file == NULL){
