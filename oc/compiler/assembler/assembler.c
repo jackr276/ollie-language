@@ -22,6 +22,7 @@
 //For directory management
 #include <dirent.h>
 #include <errno.h>
+#include <stdlib.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <sys/wait.h>
@@ -35,6 +36,7 @@
 #include "../utils/dynamic_string/dynamic_string.h"
 
 #define TEMP_FILE_NAME_MAX_LENGTH 1000
+#define MAX_COMMAND_LENGTH 2000
 
 //The current tmp file id
 static u_int32_t current_tmp_file_id = 0;
@@ -314,7 +316,7 @@ static inline void convert_assembly_file_name_to_object_file_name(char* result, 
 	char* base_name = basename((char*)full_file_path);
 
 	//Copy the base name into the result
-	strncpy(base_name, result, TEMP_FILE_NAME_MAX_LENGTH);
+	strncpy(result, base_name, TEMP_FILE_NAME_MAX_LENGTH);
 
 	//Convert the .s into a .o
 	char* pointer = result;
@@ -343,14 +345,15 @@ static inline void convert_assembly_file_name_to_object_file_name(char* result, 
 static inline u_int8_t run_file_through_assembler(char* full_file_path){
 	//We will need this for the eventual output
 	char object_file_name[TEMP_FILE_NAME_MAX_LENGTH];
+	char command[MAX_COMMAND_LENGTH];
 
 	//Let the converter get us the .o file name
 	convert_assembly_file_name_to_object_file_name(object_file_name, full_file_path);
 
-	//Fork the process
-	//pid_t assembler_pid = fork();
+	//Now create the command
+	snprintf(command, MAX_COMMAND_LENGTH, "as %s -o /tmp/oc/%s", full_file_path, object_file_name);
 
-
+	printf("COMMAND IS %s\n", command);
 
 }
 
@@ -361,8 +364,6 @@ static inline u_int8_t run_file_through_assembler(char* full_file_path){
  * /tmp/oc/ and are only alive for the duration of the program
  *
  * NOTE: This will spawn child processes so that we can run the GNU assembler
- *
- * TODO may want to reuse that dynamic array for the .o files too
  */
 static u_int8_t assemble_code(dynamic_array_t* outputted_files){
 	u_int8_t result;
@@ -379,7 +380,7 @@ static u_int8_t assemble_code(dynamic_array_t* outputted_files){
 	/**
 	 * Step 2: assemble the builtin __ostl_start_main.s file into /tmp/oc/__ostl_start_main.o
 	 */
-	result = run_file_through_assembler("./oc/builtins/precompiled_builtins/_start.s");
+	result = run_file_through_assembler("./oc/builtins/precompiled_builtins/__ostl_start_main.s");
 
 	if(result == FAILURE){
 		return FAILURE;
