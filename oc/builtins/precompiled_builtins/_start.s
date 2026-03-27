@@ -4,15 +4,16 @@
  * is what will actually invoke main for us
  */
 
+.globl _start
 _start:
 	/* 0 out the frame pointer */
 	xorq %rbp, %rbp
 
 	/* Get argc off of the stack */
-	popq %rsi
+	movq (%rsp), %rsi
 
 	/* Put argv(stack pointer) into %rdx */
-	movq %rsp, %rdx
+	leaq 8(%rsp), %rdx
 
 	/* Align the stack to 16 bytes */
 	andq $-16, %rsp
