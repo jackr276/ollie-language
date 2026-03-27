@@ -42,7 +42,7 @@
 static u_int32_t current_tmp_file_id = 0;
 
 //For any/all error printing
-static char info[ERROR_SIZE];
+static char info[ERROR_SIZE * 3];
 
 //Hold all of our error counts
 static u_int32_t* error_count;
@@ -495,11 +495,18 @@ static u_int8_t assemble_code(dynamic_array_t* outputted_files){
  * a ".o" extension is being linked together.
  */
 static u_int8_t link_and_produce_final_executable(compiler_options_t* options){
+	//We'll need a buffer for file printing
+	char buffer[TEMP_FILE_NAME_MAX_LENGTH];
+
 	//No real choice but to use dynamic allocation here
 	dynamic_string_t command_string = dynamic_string_alloc();
 
+	//Print out the ld -o <output_name> part of our string
+	snprintf(buffer, TEMP_FILE_NAME_MAX_LENGTH, "ld -o %s ", options->output_file);
+	dynamic_string_set(&command_string, buffer);
+
 	//Open up the tmp directory
-	DIR* tmp_directory = opendir("/oc/tmp");
+	DIR* tmp_directory = opendir("/tmp/oc");
 
 	//Entry pointer
 	struct dirent* entry;
@@ -510,7 +517,7 @@ static u_int8_t link_and_produce_final_executable(compiler_options_t* options){
 	 * This should absolutely never happen. If it does it is a critcal error
 	 */
 	if(tmp_directory == NULL){
-		fprintf(stderr, "Fatal internal compiler error: Attempt to open /tmp/oc/ failed\n");
+		fprintf(stderr, "Fatal internal compiler error: Attempt to open /tmp/oc failed\n");
 		return FAILURE;
 	}
 
@@ -529,29 +536,43 @@ static u_int8_t link_and_produce_final_executable(compiler_options_t* options){
 			continue;
 		}
 
-		//Here's our full path
-		snprintf(full_path, 1000, "%s/%s", path, entry->d_name);
+		/**
+		 * We now need to determine if this file ends in a ".o". If it does it's
+		 * going onto the list
+		 */
+		int32_t file_length = strlen(entry->d_name);
 
-		//If we can read it
-		if(stat(full_path, &st) == 0){
-			if(S_ISDIR(st.st_mode)){
-				clear_directory_recursive(full_path);
-			} else {
-				if(unlink(full_path) != 0){
-					return FAILURE;
-				}
-			}
+		/**
+		 * If we end in ".o", it's coming along for the ride in the linker. We will
+		 * dynamically construct what we need and go from there
+		 */
+		if(entry->d_name[file_length - 2] == '.' && entry->d_name[file_length - 1] == 'o'){
+			snprintf(buffer, TEMP_FILE_NAME_MAX_LENGTH, "/tmp/oc/%s", entry->d_name);
+			dynamic_string_concatenate(&command_string, buffer);
 		}
 	}
 
 	//Close it down before we leave
 	closedir(tmp_directory);
 
+	fprintf(stderr, "Fatal internal compiler error: Linking failed. Linker command attempted was: %s\n", command_string.string);
+	//We should now have a fully formed command string to run
+	//int result = system(command_string.string);
+
+
+	//Fatal error if this fails
+	/*
+	if(result != 0){
+		fprintf(stderr, "Fatal internal compiler error: Linking failed. Linker command attempted was: %s\n", command_string.string);
+		return FAILURE;
+	}
+	*/
 
 	//Destroy it
 	dynamic_string_dealloc(&command_string);
-}
 
+	return SUCCESS;
+}
 
 
 /**
