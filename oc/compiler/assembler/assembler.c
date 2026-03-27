@@ -353,8 +353,17 @@ static inline u_int8_t run_file_through_assembler(char* full_file_path){
 	//Now create the command
 	snprintf(command, MAX_COMMAND_LENGTH, "as %s -o /tmp/oc/%s", full_file_path, object_file_name);
 
-	printf("COMMAND IS %s\n", command);
+	//Run the command in the shell
+	int result = system(command);
 
+	if(result == 0) { 
+		return SUCCESS;
+	} else {
+		sprintf(info, "The command %s failed with the error code %d", command, result);
+		print_assembler_message(MESSAGE_TYPE_ERROR, info);
+		(*error_count)++;
+		return FAILURE;
+	}
 }
 
 
@@ -390,8 +399,21 @@ static u_int8_t assemble_code(dynamic_array_t* outputted_files){
 	 * Step 3: For everything in our list of temporary assembly files, assembly
 	 * them into their own .o files respectively
 	 */
+	for(u_int32_t i = 0; i < outputted_files->current_index; i++){
+		//Get the full path name to the file
+		dynamic_string_t* file_to_compile = dynamic_array_get_at(outputted_files, i);
 
+		//Run it through the assembler
+		result = run_file_through_assembler(file_to_compile->string);
 
+		//The error already got printed out by the callee so just fail out
+		if(result == FAILURE){
+			return FAILURE;
+		}
+	}
+
+	//If we have made it to here then we have success
+	return SUCCESS;
 }
 
 
