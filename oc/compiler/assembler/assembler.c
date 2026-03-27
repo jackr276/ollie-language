@@ -24,6 +24,7 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <libgen.h>
 
 #include <stdio.h>
 #include <sys/types.h>
@@ -58,7 +59,9 @@ static void print_assembler_message(error_message_type_t message_type, char* inf
  * Helper that grabs the file id for us
  */
 static inline u_int32_t increment_and_get_tmp_file_id(){
-	return current_tmp_file_id++;
+	current_tmp_file_id++;
+
+	return current_tmp_file_id;
 }
 
 
@@ -165,8 +168,9 @@ static u_int8_t output_generated_assembly_only(compiler_options_t* options, cfg_
 		return FAILURE;
 	}
 
-	//We'll first print the text segment of the program
-	print_start_section(options->output_file, output, cfg);
+	//We'll first print the text segment of the program. Make sure that we use the basename
+	//for this
+	print_start_section(basename(options->output_file), output, cfg);
 
 	//Handle all of the global vars first
 	print_all_global_variables(output, &(cfg->global_variables));
@@ -187,26 +191,32 @@ static u_int8_t output_generated_assembly_only(compiler_options_t* options, cfg_
  * be placed inside of the /tmp/oc/ directory while it is waiting for final assembly and linkage
  * into the file that we're after
  */
-static u_int8_t output_generated_assembly_to_temp_file(compiler_options_t* options, cfg_t* cfg){
-	//TODO NOT DONE
-
-
+static u_int8_t output_generated_assembly_to_temp_file(compiler_options_t* options, cfg_t* cfg, dynamic_string_t* output_file_name){
 	//The output file(Null initally)
 	FILE* output = NULL;
 
+	//We need to create the name ourselves
+	char outputted_assembly_file[1000];
+	
+	//Output it like so, we need to set the dynamic string to be this
+	sprintf(outputted_assembly_file, "/tmp/oc/ollie_asm_tmp%d.s", increment_and_get_tmp_file_id());
+
+	//Store this for down the road
+	dynamic_string_set(output_file_name, outputted_assembly_file);
+
 	//Open the file for the purpose of writing
-	output = fopen(options->output_file, "w");
+	output = fopen(outputted_assembly_file, "w");
 
 	//If the file is null, we fail out here
 	if(output == NULL){
-		sprintf(info, "[ASSEMBLER ERROR]: Failed to create the output file: %s\n", options->output_file);
+		sprintf(info, "Failed to create the output file: %s\n", outputted_assembly_file);
 		print_assembler_message(MESSAGE_TYPE_ERROR, info);
 		error_count++;
 		return FAILURE;
 	}
 
 	//We'll first print the text segment of the program
-	print_start_section(options->output_file, output, cfg);
+	print_start_section(basename(outputted_assembly_file), output, cfg);
 
 	//Handle all of the global vars first
 	print_all_global_variables(output, &(cfg->global_variables));
@@ -390,6 +400,14 @@ static inline void assemble_and_link_with_temp_files(compiler_options_t* options
 	 * file. We will place this temporary .s assembly file inside of the
 	 * oc/tmp directory waiting to be assembled
 	 */
+	dynamic_string_t outputted_file_name = dynamic_string_alloc();
+
+	u_int8_t result = output_generated_assembly_to_temp_file(options, cfg, &outputted_file_name);
+
+	//It didn't work so don't bother going on
+	if(result == FAILURE){
+		return;
+	}
 
 
 	/**
@@ -402,6 +420,8 @@ static inline void assemble_and_link_with_temp_files(compiler_options_t* options
 	 */
 	perform_tmp_directory_cleanup();
 
+	//Destroy the outputted file name
+	dynamic_string_dealloc(&outputted_file_name);
 
 	printf("TODO NOT DONE\n\n\n\n");
 	exit(1);
