@@ -257,8 +257,15 @@ static void assemble_code(compiler_options_t* options){
  * old compiled files at the end of every build
  */
 static void perform_tmp_directory_cleanup(){
+	//We need this for printing
+	char full_path[1000];
+
 	//Open up the temp directory
 	DIR* tmp_directory = opendir("/tmp/oc/");
+	//Entry pointer
+	struct dirent* entry;
+	//Status struct
+	struct stat st;
 
 	/**
 	 * This should absolutely never happen. If it does it is a critcal error
@@ -266,6 +273,34 @@ static void perform_tmp_directory_cleanup(){
 	if(tmp_directory == NULL){
 		fprintf(stderr, "Fatal internal compiler error: Attempt to open /tmp/oc/ failed\n");
 		exit(1);
+	}
+
+	//Infinite loop until we break out
+	while(TRUE){
+		//Seed the entry
+		entry = readdir(tmp_directory);
+
+		//We're done
+		if(entry == NULL){
+			break;
+		}
+
+		//Don't want to delete . or .. here
+		if(strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0){
+			continue;
+		}
+
+		//Here's our full path
+		snprintf(full_path, 1000, "/tmp/oc/%s", entry->d_name);
+
+		//If we can read it
+		if(stat(full_path, &st) == 0){
+			if(S_ISDIR(st.st_mode)){
+
+			} else {
+
+			}
+		}
 	}
 
 	//Close it down before we leave
