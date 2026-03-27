@@ -293,7 +293,9 @@ static u_int8_t perform_tmp_directory_management(){
 
 
 /**
- * Take the generated assembly and convert it to an object file using GAS
+ * Take all of the generated assembly that we've produced and convert
+ * it into object files using AS. These object files will also reside in
+ * /tmp/oc/ and are only alive for the duration of the program
  */
 static void assemble_code(compiler_options_t* options){
 
@@ -354,7 +356,7 @@ static void clear_directory_recursive(char* path){
 			if(S_ISDIR(st.st_mode)){
 				clear_directory_recursive(full_path);
 			} else {
-				if(unlink(path) != 0){
+				if(unlink(full_path) != 0){
 					printf("Internal compiler error: could not delete file %s\n", full_path);
 				}
 			}
@@ -408,6 +410,12 @@ static inline void assemble_and_link_with_temp_files(compiler_options_t* options
 	if(result == FAILURE){
 		return;
 	}
+
+	/**
+	 * Step 3: we now need to take that assembly *and* the compiler builtins that we have and
+	 * assemble them into .o files. These .o files will also all reside inside of the /oc/tmp/
+	 * directory. If any of these files fail to assemble then we fail out
+	 */
 
 
 	/**
