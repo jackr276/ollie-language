@@ -34,6 +34,8 @@
 #include "../utils/error_management.h"
 #include "../utils/dynamic_string/dynamic_string.h"
 
+#define TEMP_FILE_NAME_MAX_LENGTH 1000
+
 //The current tmp file id
 static u_int32_t current_tmp_file_id = 0;
 
@@ -307,8 +309,29 @@ static u_int8_t perform_tmp_directory_management(){
  * This assumes we have a pre-allocated result buffer that we will be storing
  * to. We return void because there's no case where this fails
  */
-static inline void convert_assembly_file_name_to_object_file_name(char* result, const char* full_file_path){
+static inline void convert_assembly_file_name_to_object_file_name(char* result, char* full_file_path){
+	//Get the base name
+	char* base_name = basename((char*)full_file_path);
 
+	//Copy the base name into the result
+	strncpy(base_name, result, TEMP_FILE_NAME_MAX_LENGTH);
+
+	//Convert the .s into a .o
+	char* pointer = result;
+
+	//Run through everything here - the null terminator is more of a precaution
+	while(*pointer != '\0'){
+		//If we find the .s just make the s into an o
+		if(*pointer == '.' && *(pointer + 1) == 's'){
+			*(pointer + 1) = 'o';
+			return;
+		}
+
+		pointer++;
+	}
+
+	//If we somehow got here then we actually didn't find a .s at all
+	fprintf(stderr, "Fatal internal compiler error: string %s does not end in the standard assembly .s extension\n", full_file_path);
 }
 
 
@@ -317,15 +340,15 @@ static inline void convert_assembly_file_name_to_object_file_name(char* result, 
  * full file path. These full files will always output to /oc/tmp/ as
  * .o files
  */
-static inline u_int8_t run_file_through_assembler(const char* full_file_path){
+static inline u_int8_t run_file_through_assembler(char* full_file_path){
 	//We will need this for the eventual output
-	char object_file_name[1000];
+	char object_file_name[TEMP_FILE_NAME_MAX_LENGTH];
 
 	//Let the converter get us the .o file name
 	convert_assembly_file_name_to_object_file_name(object_file_name, full_file_path);
 
 	//Fork the process
-	pid_t assembler_pid = fork();
+	//pid_t assembler_pid = fork();
 
 
 
