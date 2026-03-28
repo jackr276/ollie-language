@@ -11241,7 +11241,7 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	if(lookahead.tok == STATIC){
 		//It is not possible to have a static global variable
 		if(is_global == TRUE){
-			return print_and_return_error("It is not possible to have a static global variable", parser_line_num);
+			return print_and_return_error("Global variables may not be declared as static", parser_line_num);
 		}
 
 		is_static = TRUE;
