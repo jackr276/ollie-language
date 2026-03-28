@@ -10779,11 +10779,24 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 	if(strcmp(type_spec->type_name.string, "void") == 0){
 		return print_and_return_error("\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
 	}
+	
+	/**
+	 * Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
+	 * now create the variable record for this function
+	 */
+	symtab_variable_record_t* declared_var;
 
-	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
-	//now create the variable record for this function
-	//Initialize the record
-	symtab_variable_record_t* declared_var = create_variable_record(name);
+	//Based on the type we'll create appropriately
+	if(is_static == FALSE){
+		declared_var = create_variable_record(name);
+
+		//Is it global? This speeds up optimization down the line
+		declared_var->membership = is_global == TRUE ? GLOBAL_VARIABLE : NO_MEMBERSHIP;
+
+	} else {
+		declared_var = create_static_variable_record(name);
+	}
+
 	//Store the type--make sure that we strip any aliasing off of it first
 	declared_var->type_defined_as = dealias_type(type_spec);
 	//It was declared
@@ -10792,8 +10805,6 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 	declared_var->function_declared_in = current_function;
 	//The line_number
 	declared_var->line_number = current_line;
-	//Is it global? This speeds up optimization down the line
-	declared_var->membership = is_global == TRUE ? GLOBAL_VARIABLE : NO_MEMBERSHIP;
 	//Now that we're all good, we can add it into the symbol table
 	insert_variable(variable_symtab, declared_var);
 
@@ -11325,10 +11336,24 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	//Otherwise it worked, so we'll add it in as a child
 	add_child_node(let_stmt_node, initializer_node);
 
-	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
-	//now create the variable record for this function
-	//Initialize the record
-	symtab_variable_record_t* declared_var = create_variable_record(name);
+	/**
+	 * Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
+	 * now create the variable record for this function
+	 * Initialize the record
+	 */
+	symtab_variable_record_t* declared_var;
+
+	//Declare and set appropriately based on the membership
+	if(is_static == FALSE){
+		declared_var = create_variable_record(name);
+
+		//Is it a global var or not? This speeds up optimization
+		declared_var->membership = is_global == TRUE ? GLOBAL_VARIABLE : NO_MEMBERSHIP;
+
+	} else {
+		declared_var = create_static_variable_record(name);
+	}
+
 	//Store the type
 	declared_var->type_defined_as = type_spec;
 	//It was initialized
@@ -11337,8 +11362,6 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	declared_var->function_declared_in = current_function;
 	//It was "letted" 
 	declared_var->declare_or_let = 1;
-	//Is it a global var or not? This speeds up optimization
-	declared_var->membership = is_global == TRUE ? GLOBAL_VARIABLE : NO_MEMBERSHIP;
 	//Save the line num
 	declared_var->line_number = current_line;
 
