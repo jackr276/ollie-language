@@ -499,7 +499,7 @@ static inline u_int64_t hash_type(generic_type_t* type){
 */
 symtab_variable_record_t* create_variable_record(dynamic_string_t name){
 	//Allocate it
-	symtab_variable_record_t* record = (symtab_variable_record_t*)calloc(1, sizeof(symtab_variable_record_t));
+	symtab_variable_record_t* record = calloc(1, sizeof(symtab_variable_record_t));
 
 	//Store the name
 	record->var_name = name;
@@ -507,6 +507,39 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t name){
 	record->hash = hash_variable(name.string);
 	//The current generation is always 1 at first
 	record->current_generation = 1;
+
+	//For eventual SSA generation
+	record->counter_stack.stack = NULL;
+	record->counter_stack.top_index = 0;
+	record->counter_stack.current_size = 0;
+
+	return record;
+}
+
+
+/**
+ * Create a static variable record. These variables are really global vars
+ */
+symtab_variable_record_t* create_static_variable_record(dynamic_string_t name){
+
+	//Allocate it
+	symtab_variable_record_t* record = calloc(1, sizeof(symtab_variable_record_t));
+
+	//Store the name
+	record->var_name = name;
+	//Hash it and store it to avoid to repeated hashing
+	record->hash = hash_variable(name.string);
+	//The current generation is always 1 at first
+	record->current_generation = 1;
+
+	/**
+	 * This may change - but for right now we'll have a static variable mangler of 0. This
+	 * will be used by the CFG in case we have a bunch
+	 */
+	record->static_variable_mangler = 0;
+
+	//Flag this as static
+	record->membership = STATIC_VARIABLE;
 
 	//For eventual SSA generation
 	record->counter_stack.stack = NULL;

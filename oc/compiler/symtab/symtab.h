@@ -69,13 +69,14 @@ typedef struct symtab_macro_record_t symtab_macro_record_t;
  */
 typedef enum variable_membership_t {
 	NO_MEMBERSHIP = 0, //Generic var, no type/function members
-	STRUCT_MEMBER = 1,
-	UNION_MEMBER = 2,
-	ENUM_MEMBER = 3,
-	GLOBAL_VARIABLE = 4,
-	FUNCTION_PARAMETER = 5,
-	LABEL_VARIABLE = 6,
-	RETURNED_VARIABLE = 7, //Is this returned by a function?
+	STRUCT_MEMBER,
+	UNION_MEMBER,
+	ENUM_MEMBER,
+	GLOBAL_VARIABLE,
+	STATIC_VARIABLE,
+	FUNCTION_PARAMETER,
+	LABEL_VARIABLE,
+	RETURNED_VARIABLE, //Is this returned by a function?
 } variable_membership_t;
 
 
@@ -169,6 +170,13 @@ struct symtab_variable_record_t{
 	stack_region_t* stack_region;
 	//The line number
 	u_int32_t line_number;
+	/**
+	 * Static variables(which are really global) will have
+	 * their name mangled to avoid collisions. So for example,
+	 * the static variable x may come out as "x.0" in the actual
+	 * final product
+	 */
+	u_int32_t static_variable_mangler;
 	//What is the enum member value
 	int32_t enum_member_value;
 	//The current generation of the variable - FOR SSA in CFG
@@ -384,6 +392,11 @@ void finalize_type_scope(type_symtab_t* symtab);
  * Create a record for the symbol table
  */
 symtab_variable_record_t* create_variable_record(dynamic_string_t name);
+
+/**
+ * Create a static variable record. These variables are really global vars
+ */
+symtab_variable_record_t* create_static_variable_record(dynamic_string_t name);
 
 /**
  * Create a ternary variable record

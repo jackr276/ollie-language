@@ -3,7 +3,7 @@
 * Test the case where we have a very basic static variable
 */
 
-pub fn reentrant(int adder){
+pub fn reentrant(adder:i32) -> i32 {
 	let static x:mut i32 = 5;
 
 	x += adder;
