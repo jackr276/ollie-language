@@ -18,9 +18,10 @@
 #include "register_allocator/register_allocator.h"
 #include "instruction_selector/instruction_selector.h"
 #include "instruction_scheduler/instruction_scheduler.h"
-#include "file_builder/file_builder.h"
+#include "assembler/assembler.h"
 #include "optimizer/optimizer.h"
 #include "utils/constants.h"
+#include "utils/error_management.h"
 
 //The number of errors and warnings
 u_int32_t num_errors;
@@ -35,9 +36,9 @@ static void print_help(){
 	printf("\n######################################## Required Fields #########################################\n");
 	printf("-f <filename>: Required field. Specifies the .ol source file to be compiled\n");
 	printf("\n######################################## Optional Fields #########################################\n");
-	printf("-o <filename>: Specificy the output location. If none is given, out.s will be used\n");
+	printf("-o <filename>: Specificy the output file. If none is given, a.out will be used\n");
 	printf("-s: Show a summary at the end of compilation\n");
-	printf("-a: Generate an assembly code file with a .s extension\n");
+	printf("-a: Generate an assembly code file with a .s extension. Note that this will stop the actual assembler from running\n");
 	printf("-d: Show all debug information printed. This includes compiler warnings, info statements\n");
 	printf("-r: Print the result of the register allocation. This is done by default in -i\n");
 	printf("-t: Time execution of compiler. Can be used for performance testing\n");
@@ -46,6 +47,17 @@ static void print_help(){
 	printf("-i: Print intermediate representations. This will generate *a lot* of text, so be careful\n");
 	printf("-h: Show help\n");
 	printf("\n==================================================================================================\n");
+}
+
+/**
+ * Simply prints a parse message in a nice formatted way
+ */
+static void print_compiler_message(error_message_type_t message_type, char* info){
+	//Now print it
+	const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
+
+	//Print this out on a single line
+	fprintf(stdout, "\n[COMPILER %s]: %s\n", type[message_type], info);
 }
 
 
@@ -122,6 +134,28 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 		exit(1);
 	}
 
+	/**
+	 * If we don't get an input file it's either going to be a.s or a.out. We will warn about this
+	 */
+	if(options->output_file == NULL){
+		//Full compilation run
+		if(options->go_to_assembly == FALSE){
+			options->output_file = "a.out";
+
+			//Warn the user
+			print_compiler_message(MESSAGE_TYPE_WARNING, "No ouput file was given, \"a.out\" will be used");
+			num_warnings++;
+
+		//Test run where we only go to assembly(.s)
+		} else {
+			options->output_file = "a.s";
+
+			//Warn the user
+			print_compiler_message(MESSAGE_TYPE_WARNING, "No ouput file was given, \"a.s\" will be used");
+			num_warnings++;
+		}
+	}
+
 	//Give back the options we got in the structure
 	return options;
 }
@@ -181,7 +215,7 @@ static u_int8_t compile(compiler_options_t* options){
 
 	//Warn the user if no file name is given
 	if(options->output_file == NULL){
-		printf("[WARNING]: No output file name given. The name \"out.s\" will be used\n\n");
+		printf("[WARNING]: No output file name given. The name \"a.s\" will be used\n\n");
 	}
 
 	//And we'll keep track of everything we have here
@@ -418,9 +452,13 @@ static u_int8_t compile(compiler_options_t* options){
 		printf("=============================== Register Allocation  ===================================\n");
 	}
 
-	//Now we'll assemble the file *if* we are not doing a CI run
+	/**
+	 * Note that if we are doing a test run, we will not do any file outputting at all. Our
+	 * guard against that is here
+	 */
 	if(options->is_test_run == FALSE){
-		output_generated_code(options, cfg);
+		//Run the assembler/linker. This will update errors if we have them
+		assemble_and_link(options, cfg, &num_errors, &num_warnings);
 	}
 
 	//Finish the timer here if we need to

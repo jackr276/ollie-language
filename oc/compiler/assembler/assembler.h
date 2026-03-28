@@ -6,15 +6,14 @@
 */
 
 //Include guards
-#ifndef FILE_BUILDER_H 
-#define FILE_BUILDER_H
+#ifndef ASSEMBLER_H 
+#define ASSEMBLER_H 
 #include <sys/types.h>
 #include "../cfg/cfg.h"
 
 /**
- * Assemble the program by first writing it to a .s file, and then
- * assembling that file into an object file
-*/
-u_int8_t output_generated_code(compiler_options_t* options, cfg_t* cfg);
+ * Perform all of the assembly and linkage that we need to do here
+ */
+void assemble_and_link(compiler_options_t* options, cfg_t* cfg, u_int32_t* num_errors, u_int32_t* num_warnings);
 
-#endif /* FILE_BUILDER_H */
+#endif /* ASSEMBLER_H */

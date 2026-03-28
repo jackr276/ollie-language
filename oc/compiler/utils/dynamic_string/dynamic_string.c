@@ -31,6 +31,32 @@ dynamic_string_t dynamic_string_alloc(){
 
 
 /**
+ * Heap allocate the entire dynamic_string. This includes the control
+ * structure and the string itself. We should only be doing this if absolutely
+ * necessary
+ *
+ * This version requires 2 allocations on the heap and is thus more inefficient, so
+ * again only use if we have a use case that requires it
+ */
+dynamic_string_t* dynamic_string_heap_alloc(){
+	//Heap allocate
+	dynamic_string_t* string = calloc(1, sizeof(dynamic_string_t));
+
+	//Set the length to be the default length
+	string->length = DEFAULT_DYNAMIC_STRING_LENGTH;
+
+	//Now we'll allocate this using the default strategy
+	string->string = calloc(string->length, sizeof(char));
+
+	//Set the current length to be zero
+	string->current_length = 0;
+
+	//Give back the stack allocated version
+	return string;
+}
+
+
+/**
  * Clone a dynamic string into a new one
  */
 dynamic_string_t clone_dynamic_string(dynamic_string_t* dynamic_string){
@@ -186,6 +212,19 @@ void clear_dynamic_string(dynamic_string_t* dynamic_string){
 
 	//And the current length is now just 0
 	dynamic_string->current_length = 0;
+}
+
+
+/**
+ * Deallocate a dynamic string that was heap allocated
+ */
+void dynamic_string_heap_dealloc(dynamic_string_t* dynamic_string){
+	if(dynamic_string->string != NULL){
+		free(dynamic_string->string);
+	}
+
+	//This entire thing is on the heap so free it
+	free(dynamic_string);
 }
 
 

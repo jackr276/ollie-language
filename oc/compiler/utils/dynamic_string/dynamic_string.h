@@ -44,6 +44,13 @@ struct dynamic_string_t {
 dynamic_string_t dynamic_string_alloc();
 
 /**
+ * Heap allocate the entire dynamic_string. This includes the control
+ * structure and the string itself. We should only be doing this if absolutely
+ * necessary
+ */
+dynamic_string_t* dynamic_string_heap_alloc();
+
+/**
  * Clone a dynamic string into a new one
  */
 dynamic_string_t clone_dynamic_string(dynamic_string_t* dynamic_string);
@@ -76,6 +83,11 @@ u_int8_t dynamic_strings_equal(dynamic_string_t* a, dynamic_string_t* b);
  * we've allocated once over and over again. This is particularly useful in the lexer
  */
 void clear_dynamic_string(dynamic_string_t* dynamic_string);
+
+/**
+ * Deallocate a dynamic string that was heap allocated
+ */
+void dynamic_string_heap_dealloc(dynamic_string_t* dynamic_string);
 
 /**
  * Deallocate a dynamic string from the heap
