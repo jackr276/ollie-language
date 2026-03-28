@@ -10664,22 +10664,26 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
  * 
  * NOTE: We have already seen and consume the "declare" keyword by the time that we get here
  *
- * BNF Rule: <declare-statement> ::= declare {<function_predeclaration> | {static}? {mut}? <identifier> : <type-specifier>}
+ * BNF Rule: <declare-statement> ::= declare {<function_predeclaration> | {static}? <identifier> : <type-specifier>}
  */
 static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream, u_int8_t is_global){
 	//Freeze the current line number
 	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
+	//Is it static - this is almost always false
+	u_int8_t is_static = FALSE;
 
 	//Let's see if we have a storage class
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
 	//Go based on what we see here
 	switch(lookahead.tok){
-		//If we see any of these tokens, it means that the user is predeclaring a function.
-		//In this case, we push the token back and let the function predeclaration rule
-		//handle it
+		/**
+		 * If we see any of these tokens, it means that the user is predeclaring a function.
+		 * In this case, we push the token back and let the function predeclaration rule
+		 * handle it
+		 */
 		case PUB:
 		case INLINE:
 		case FN:
@@ -10691,6 +10695,24 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 			push_back_token(token_stream, &parser_line_num);
 			//Let this rule handle it
 			return function_predeclaration(token_stream);
+
+		/**
+		 * If we see the static keyword, then we know that
+		 * we are declaring a static variable here so we'll
+		 * flag it and refresh the token
+		 */
+		case STATIC:
+			//Not possible to have a static global variable
+			if(is_global == TRUE){
+				return print_and_return_error("Global variables may not be declared as static", parser_line_num);
+			}
+
+			is_static = TRUE;
+
+			//Refresh the token
+			lookahead = get_next_token(token_stream, &parser_line_num);
+
+			break;
 	
 		//By default just leave
 		default:
@@ -11184,19 +11206,37 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
  *
  * NOTE: By the time we get here, we've already consumed the let keyword
  *
- * BNF Rule: <let-statement> ::= let {register | static}? <identifier> : <type-specifier> := <ternary_expression>
+ * BNF Rule: <let-statement> ::= let {static}? <identifier> : <type-specifier> := <ternary_expression>
  */
 static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global){
 	//The line number
 	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
+	//Is this variable static - almost always false
+	u_int8_t is_static = FALSE;
 
 	//Let's first declare the root node
 	generic_ast_node_t* let_stmt_node = ast_node_alloc(AST_NODE_TYPE_LET_STMT, SIDE_TYPE_LEFT);
 
 	//Grab the next token -- we could potentially see a storage class specifier
 	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	/**
+	 * If we've seen the static declaration, we will simply
+	 * note it and move along.
+	 */
+	if(lookahead.tok == STATIC){
+		//It is not possible to have a static global variable
+		if(is_global == TRUE){
+			return print_and_return_error("It is not possible to have a static global variable", parser_line_num);
+		}
+
+		is_static = TRUE;
+
+		//Refresh the lookahead
+		lookahead = get_next_token(token_stream, &parser_line_num);
+	}
 
 	//If it's not an identifier, we fail
 	if(lookahead.tok != IDENT){
