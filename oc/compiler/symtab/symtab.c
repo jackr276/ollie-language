@@ -508,6 +508,35 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t name){
 	//The current generation is always 1 at first
 	record->current_generation = 1;
 
+	//This is just a regular variable(for now)
+	record->membership = NO_MEMBERSHIP;
+
+	//For eventual SSA generation
+	record->counter_stack.stack = NULL;
+	record->counter_stack.top_index = 0;
+	record->counter_stack.current_size = 0;
+
+	return record;
+}
+
+
+/**
+ * Create a global variable record
+ */
+symtab_variable_record_t* create_global_variable_record(dynamic_string_t name){
+	//Allocate it
+	symtab_variable_record_t* record = calloc(1, sizeof(symtab_variable_record_t));
+
+	//Store the name
+	record->var_name = name;
+	//Hash it and store it to avoid to repeated hashing
+	record->hash = hash_variable(name.string);
+	//The current generation is always 1 at first
+	record->current_generation = 1;
+
+	//Flag that this is a global variable
+	record->membership = GLOBAL_VARIABLE;
+
 	//For eventual SSA generation
 	record->counter_stack.stack = NULL;
 	record->counter_stack.top_index = 0;

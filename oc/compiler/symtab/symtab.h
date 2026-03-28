@@ -394,6 +394,11 @@ void finalize_type_scope(type_symtab_t* symtab);
 symtab_variable_record_t* create_variable_record(dynamic_string_t name);
 
 /**
+ * Create a global variable record
+ */
+symtab_variable_record_t* create_global_variable_record(dynamic_string_t name);
+
+/**
  * Create a static variable record. These variables are really global vars
  */
 symtab_variable_record_t* create_static_variable_record(dynamic_string_t name);

@@ -10788,11 +10788,12 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 
 	//Based on the type we'll create appropriately
 	if(is_static == FALSE){
-		declared_var = create_variable_record(name);
-
-		//Is it global? This speeds up optimization down the line
-		declared_var->membership = is_global == TRUE ? GLOBAL_VARIABLE : NO_MEMBERSHIP;
-
+		//Go based on it's global status
+		if(is_global == FALSE){
+			declared_var = create_variable_record(name);
+		} else {
+			declared_var = create_global_variable_record(name);
+		}
 	} else {
 		declared_var = create_static_variable_record(name);
 	}
@@ -11345,11 +11346,12 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 
 	//Declare and set appropriately based on the membership
 	if(is_static == FALSE){
-		declared_var = create_variable_record(name);
-
-		//Is it a global var or not? This speeds up optimization
-		declared_var->membership = is_global == TRUE ? GLOBAL_VARIABLE : NO_MEMBERSHIP;
-
+		//Go based on it's global status
+		if(is_global == FALSE){
+			declared_var = create_variable_record(name);
+		} else {
+			declared_var = create_global_variable_record(name);
+		}
 	} else {
 		declared_var = create_static_variable_record(name);
 	}
