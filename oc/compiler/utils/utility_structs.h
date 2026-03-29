@@ -38,8 +38,6 @@ struct compiler_options_t {
 	u_int8_t time_execution;
 	//Do we want module-specific timing
 	u_int8_t module_specific_timing;
-	//Is this a CI run?
-	u_int8_t is_test_run;
 	//Print intermediate representations
 	u_int8_t print_irs;
 	//What kind of output have we been told to generate

@@ -48,7 +48,7 @@ static void print_help(){
 	printf("-r: Print the result of the register allocation. This is done by default in -i\n");
 	printf("-t: Time execution of compiler. Can be used for performance testing\n");
 	printf("-m: Time each module of the compiler. This is used for even more granular performance testing\n");
-	printf("-@: Should only be used for CI runs. Avoids generating any assembly files\n");
+	printf("-@: Should only be used for CI runs. Avoids generating any assembly/object files\n");
 	printf("-i: Print intermediate representations. This will generate *a lot* of text, so be careful\n");
 	printf("-h: Show help\n");
 	printf("\n==================================================================================================\n");
@@ -107,9 +107,9 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 			case 't':
 				options->time_execution = TRUE;
 				break;
-			//Flag that this is a test run
+			//Test run flag means that we have no output
 			case '@':
-				options->is_test_run = TRUE;
+				options->output_type = OUTPUT_TYPE_NO_OUTPUT;
 				break;
 			//Flag that this is a test run
 			case 'r':
@@ -130,6 +130,9 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 					case OUTPUT_TYPE_OBJECT_FILE:
 						print_compiler_message(MESSAGE_TYPE_ERROR, "The --to-object-file flag was already provided. These two flags are mutually exclusive");
 						exit(1);
+					case OUTPUT_TYPE_NO_OUTPUT:
+						print_compiler_message(MESSAGE_TYPE_ERROR, "The @ flag already marked this as a test run. -a request is ignored");
+						break;
 					default:
 						options->output_type = OUTPUT_TYPE_ASSEMBLY_ONLY;
 						break;
@@ -155,6 +158,9 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 					case OUTPUT_TYPE_ASSEMBLY_ONLY:
 						print_compiler_message(MESSAGE_TYPE_ERROR, "The -a \"to assembly\" flag was already provided. These two flags are mutually exclusive");
 						exit(1);
+					case OUTPUT_TYPE_NO_OUTPUT:
+						print_compiler_message(MESSAGE_TYPE_ERROR, "The @ flag already marked this as a test run. --to-object-file request is ignored");
+						break;
 					default:
 						options->output_type = OUTPUT_TYPE_OBJECT_FILE;
 						break;
@@ -180,32 +186,34 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 	if(options->output_file == NULL){
 		switch(options->output_type){
 			case OUTPUT_TYPE_OBJECT_FILE:
+				options->output_file = "a.o";
+
+				//Warn the user
+				print_compiler_message(MESSAGE_TYPE_WARNING, "No ouput file was given, \"a.o\" will be used");
+				num_warnings++;
+
 				break;
-		}
 
-		//Full compilation run
-		if(options->go_to_assembly == FALSE){
-			options->output_file = "a.out";
+			case OUTPUT_TYPE_ASSEMBLY_ONLY:
+				options->output_file = "a.s";
 
-			//Warn the user
-			print_compiler_message(MESSAGE_TYPE_WARNING, "No ouput file was given, \"a.out\" will be used");
-			num_warnings++;
-			
-		//Just outputting to an object file
-		} else if(options->object_file_only == FALSE){
-			options->output_file = "a.o";
+				//Warn the user
+				print_compiler_message(MESSAGE_TYPE_WARNING, "No ouput file was given, \"a.s\" will be used");
+				num_warnings++;
 
-			//Warn the user
-			print_compiler_message(MESSAGE_TYPE_WARNING, "No ouput file was given, \"a.o\" will be used");
-			num_warnings++;
+				break;
 
-		//Test run where we only go to assembly(.s)
-		} else {
-			options->output_file = "a.s";
+			case OUTPUT_TYPE_FULL_COMPILATION:
+				options->output_file = "a.out";
 
-			//Warn the user
-			print_compiler_message(MESSAGE_TYPE_WARNING, "No ouput file was given, \"a.s\" will be used");
-			num_warnings++;
+				//Warn the user
+				print_compiler_message(MESSAGE_TYPE_WARNING, "No ouput file was given, \"a.out\" will be used");
+				num_warnings++;
+
+				break;
+
+			default:	
+				break;
 		}
 	}
 
@@ -309,12 +317,14 @@ static u_int8_t compile(compiler_options_t* options){
 			print_summary(options, &times, 0, num_errors, num_warnings, FALSE);
 		}
 
-		//If this is a test run, we will return 0 because we don't want to show a makefile error. If it 
-		//is not, we'll return 1 to show the error
-		if(options->is_test_run == TRUE){
-			return 0;
-		} else {
+		/**
+		 * If this is a test run, we will return 0 because we don't want to show a makefile error. If it 
+		 * is not, we'll return 1 to show the error
+		 */
+		if(options->output_type != OUTPUT_TYPE_NO_OUTPUT){
 			return 1;
+		} else {
+			return 0;
 		}
 	}
 
@@ -354,12 +364,14 @@ static u_int8_t compile(compiler_options_t* options){
 			print_summary(options, &times, 0, num_errors, num_warnings, FALSE);
 		}
 
-		//If this is a test run, we will return 0 because we don't want to show a makefile error. If it 
-		//is not, we'll return 1 to show the error
-		if(options->is_test_run == TRUE){
-			return 0;
-		} else {
+		/**
+		 * If this is a test run, we will return 0 because we don't want to show a makefile error. If it 
+		 * is not, we'll return 1 to show the error
+		 */
+		if(options->output_type != OUTPUT_TYPE_NO_OUTPUT){
 			return 1;
+		} else {
+			return 0;
 		}
 	}
 
@@ -393,12 +405,14 @@ static u_int8_t compile(compiler_options_t* options){
 			print_summary(options, &times, results->lines_processed, num_errors, num_warnings, FALSE);
 		}
 
-		//If this is a test run, we will return 0 because we don't want to show a makefile error. If it 
-		//is not, we'll return 1 to show the error
-		if(options->is_test_run == TRUE){
-			return 0;
-		} else {
+		/**
+		 * If this is a test run, we will return 0 because we don't want to show a makefile error. If it 
+		 * is not, we'll return 1 to show the error
+		 */
+		if(options->output_type != OUTPUT_TYPE_NO_OUTPUT){
 			return 1;
+		} else {
+			return 0;
 		}
 	}
 
@@ -490,6 +504,7 @@ static u_int8_t compile(compiler_options_t* options){
 		printf("=============================== Register Allocation ====================================\n");
 	}
 	//Run the register allocator. This will take the OIR version and truly put it into assembler-ready code
+	//
 	allocate_all_registers(options, cfg);
 
 	//If we are doing module specific timing, store the selector time
@@ -509,7 +524,7 @@ static u_int8_t compile(compiler_options_t* options){
 	 * Note that if we are doing a test run, we will not do any file outputting at all. Our
 	 * guard against that is here
 	 */
-	if(options->is_test_run == FALSE){
+	if(options->output_type != OUTPUT_TYPE_NO_OUTPUT){
 		//Run the assembler/linker. This will update errors if we have them
 		assemble_and_link(options, cfg, &num_errors, &num_warnings);
 	}

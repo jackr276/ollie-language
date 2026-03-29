@@ -10,6 +10,7 @@
 
 typedef enum {
 	OUTPUT_TYPE_FULL_COMPILATION,
+	OUTPUT_TYPE_NO_OUTPUT, //For test runs
 	OUTPUT_TYPE_OBJECT_FILE,
 	OUTPUT_TYPE_ASSEMBLY_ONLY,
 } compiler_output_type_t;
