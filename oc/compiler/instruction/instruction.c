@@ -1897,8 +1897,10 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 		//Extract the name
 		char* name = variable->variable->var_name.string;
 
-		//Mark that this is global(globl)
-		fprintf(fl, "\t.globl %s\n", name);
+		//If this is a public global variable, then we will mark it as such
+		if(variable->variable->visibility == VISIBILITY_TYPE_PUBLIC){
+			fprintf(fl, "\t.globl %s\n", name);
+		}
 
 		//If it's not initialized, it goes to .bss. If it is initialized, it
 		//goes to .data
