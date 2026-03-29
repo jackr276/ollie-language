@@ -10836,13 +10836,21 @@ void calculate_all_control_relations(basic_block_t* function_entry_block, dynami
  * this, we will mangle those names such that we now get "x.0" and "x.1" instead
  * of two "x"'s
  */
-static void mangle_global_variable_names(dynamic_array_t* global_variables){
+static void mangle_static_variable_names(dynamic_array_t* global_variables){
 	/**
 	 * Run through all of our global variables here
 	 */
 	for(u_int32_t i = 0; i < global_variables->current_index; i++){
 		//Extract our current candidate
-		global_variable_t* global_or_static_var = dynamic_array_get_at(global_variables, i);
+		global_variable_t* candidate = dynamic_array_get_at(global_variables, i);
+		
+		/**
+		 * Global variable name collision is already enforced by the symtab in the
+		 * parser so we can skip this for efficiency's sake
+		 */
+		if(candidate->variable->membership == GLOBAL_VARIABLE){
+			continue;
+		}
 
 		//TODO
 	}
@@ -10924,9 +10932,9 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	}
 
 	/**
-	 * Correct any global name collisions that we may run into
+	 * Correct any static variable name collisions that we may run into
 	 */
-	mangle_global_variable_names(&(cfg->global_variables));
+	mangle_static_variable_names(&(cfg->global_variables));
 
 	//Add all phi functions for SSA
 	insert_phi_functions(cfg, results->variable_symtab);
