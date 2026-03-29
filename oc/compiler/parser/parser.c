@@ -10884,7 +10884,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 			}
 
 			//If this is a global variable, then we also must ensure that a declaration exists
-			if(is_global == TRUE){
+			if(is_variable_data_segment_variable(declared_var) == TRUE){
 				//Actually create the node now
 				declaration_node = ast_node_alloc(AST_NODE_TYPE_DECL_STMT, SIDE_TYPE_LEFT);
 
@@ -10902,8 +10902,10 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 			break;
 	}
 
-	//Return this. It will either be NULL or a generic node based on whether or not
-	//a stack allocation was required
+	/**
+	 * Return this. It will either be NULL or a generic node based on whether or not
+	 * a stack/global variable allocation was required
+	 */
 	return declaration_node;
 }
 
