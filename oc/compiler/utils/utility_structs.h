@@ -46,6 +46,8 @@ struct compiler_options_t {
 	u_int8_t is_test_run;
 	//Print intermediate representations
 	u_int8_t print_irs;
+	//Only output to an object file. This is an extremely niche case
+	u_int8_t object_file_only;
 };
 
 

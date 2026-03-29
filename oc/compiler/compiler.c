@@ -4,7 +4,6 @@
  * The compiler for Ollie-Lang. Depends on the lexer and the parser. See documentation for
  * full option details
 */
-#include <bits/getopt_ext.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -29,6 +28,9 @@
 //The number of errors and warnings
 u_int32_t num_errors;
 u_int32_t num_warnings;
+
+//Objectfile opt for getopt_long
+#define objectfile_opt 5
 
 
 /**
@@ -73,15 +75,12 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 	//Allocate it
 	compiler_options_t* options = calloc(1, sizeof(compiler_options_t));
 
-	//Object file opt is 5 so as to not collide with chars
-	const int32_t objectfile_opt = 5;
-
 	/**
 	 * Longopts for us to use. Currently we only have the objectfile
 	 * longopt here
 	 */
-	static struct option long_opts[] = {
-		{"objectfile", no_argument, NULL, objectfile_opt},
+	const struct option long_opts[] = {
+		{"to-object-file", no_argument, NULL, objectfile_opt},
 		//Null terminator
 		{0,0,0,0}
 	};
@@ -90,7 +89,7 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 	int opt;
 
 	//Run through all of our options
-	while((opt = getopt_long(argc, argv, "rima@tdhsf:o:?")) != -1){
+	while((opt = getopt_long(argc, argv, "rima@tdhsf:o:?", long_opts, NULL)) != -1){
 		//Switch based on opt
 		switch(opt){
 			//Invalid option
@@ -138,6 +137,10 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 			case 'm':
 				options->module_specific_timing = TRUE;
 				break;
+			//Specify that we want to specifically output to an objectfile *only*
+			case objectfile_opt:
+				options->object_file_only = TRUE;
+				break;
 			//Specific output file
 			case 'o':
 				options->output_file = optarg;
@@ -161,6 +164,14 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 
 			//Warn the user
 			print_compiler_message(MESSAGE_TYPE_WARNING, "No ouput file was given, \"a.out\" will be used");
+			num_warnings++;
+			
+		//Just outputting to an object file
+		} else if(options->object_file_only == FALSE){
+			options->output_file = "a.o";
+
+			//Warn the user
+			print_compiler_message(MESSAGE_TYPE_WARNING, "No ouput file was given, \"a.o\" will be used");
 			num_warnings++;
 
 		//Test run where we only go to assembly(.s)
