@@ -163,6 +163,22 @@ static inline u_int8_t is_type_stack_passed_by_reference(generic_type_t* type){
 
 
 /**
+ * Is a given variable a data segment variable? These variables are not actually
+ * stored in registers or in memory so we need to treat them a bit differently. In
+ * ollie only static and global variables fit the bill for this
+ */
+static inline u_int8_t is_variable_data_segment_variable(symtab_variable_record_t* variable){
+	switch(variable->membership){
+		case GLOBAL_VARIABLE:
+		case STATIC_VARIABLE:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Delete a block, including all of the needed internal
  * bookkeeping
  */
@@ -3343,6 +3359,36 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 			}
 
 		/**
+		 * For a static variable, if we are on the RHS of an equation and we're trying to
+		 * use this, we really are looking to load it out of memory. So, we will
+		 * help out here by emitting a load to get this out
+		 */
+		case STATIC_VARIABLE:
+			/**
+			 * Emit a special variable that denotes that we are seeking the memory address of this variable,
+			 * not anything else with it
+			 */
+			if(is_memory_region(variable->type_defined_as) == TRUE){
+				return emit_memory_address_var(variable);
+			}
+
+			/**
+			 * Otherwise it's not a memory address. Depending on what side of the equation that we're
+			 * on, we're going to either emit a normal variable or load the variable out of memory. If
+			 * we're on the RHS of the equation, we'll want to auto-load the variable for the caller
+			 */
+			if(side == SIDE_TYPE_RIGHT){
+				//Let the helper emit our load from memory
+				return emit_automatic_load_from_memory(basic_block, variable);
+
+			//Otherwise emit a normal variable
+			} else {
+				return emit_var(variable);
+			}
+
+
+
+		/**
 		 * Most function parameters are simple variable emittals. We do need to account for the case where
 		 * we have function parameters that are passed in via the stack however
 		 */
@@ -4889,7 +4935,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					 * stack - it is already there. We need to account for these nuances when
 					 * we do this
 					 *
-					 * We do not do this if it's a global variable, because global variables have their own unique storage
+					 * We do not do this if it's a global/static variable, because global/static variables have their own unique storage
 					 * mechanism that is not stack related
 					 *
 					 *
@@ -4897,7 +4943,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					 * receive a type of int[]*(pointer to an array). In order to achieve this, we will need to create
 					 * a whole new stack variable to save the array
 					 */
-					if(unary_expression_child->variable->membership != GLOBAL_VARIABLE
+					if(is_variable_data_segment_variable(unary_expression_child->variable) == FALSE 
 						//Is it not on the stack already?
 						&& unary_expression_child->variable->stack_region == NULL) {
 						//Create the stack region and store it in the variable
@@ -5400,7 +5446,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	 * work. We'll need to do a store here
 	 */
 	} else if(left_hand_var->linked_var != NULL
-				&& (left_hand_var->linked_var->stack_variable == TRUE || left_hand_var->linked_var->membership == GLOBAL_VARIABLE)){
+				&& (left_hand_var->linked_var->stack_variable == TRUE || is_variable_data_segment_variable(left_hand_var->linked_var) == TRUE)){
 
 		//Emit the memory address var for this variable
 		three_addr_var_t* memory_address = emit_memory_address_var(left_hand_var->linked_var);
