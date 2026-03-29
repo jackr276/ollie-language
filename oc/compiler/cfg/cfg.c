@@ -10829,6 +10829,27 @@ void calculate_all_control_relations(basic_block_t* function_entry_block, dynami
 
 
 /**
+ * Since static variables also count for us as global variables, we need to
+ * be able to handle a case where say, for instance, that two separate
+ * functions have a static variable called "x". If we just left it as is,
+ * we would have an ambiguous reference and the assembler woudl fail. To fix
+ * this, we will mangle those names such that we now get "x.0" and "x.1" instead
+ * of two "x"'s
+ */
+static void mangle_global_variable_names(dynamic_array_t* global_variables){
+	/**
+	 * Run through all of our global variables here
+	 */
+	for(u_int32_t i = 0; i < global_variables->current_index; i++){
+		//Extract our current candidate
+		global_variable_t* global_or_static_var = dynamic_array_get_at(global_variables, i);
+
+		//TODO
+	}
+}
+
+
+/**
  * Build a cfg from the ground up
 */
 cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_int32_t* num_warnings){
@@ -10902,11 +10923,10 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 		(*num_errors_ref)++;
 	}
 
-	//
-	//
-	//TODO - MANGLE ALL GLOBAL VARIABLES
-	//
-	//
+	/**
+	 * Correct any global name collisions that we may run into
+	 */
+	mangle_global_variable_names(&(cfg->global_variables));
 
 	//Add all phi functions for SSA
 	insert_phi_functions(cfg, results->variable_symtab);
