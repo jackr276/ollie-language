@@ -523,7 +523,7 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t name){
 /**
  * Create a global variable record
  */
-symtab_variable_record_t* create_global_variable_record(dynamic_string_t name, visibilty_type_t visibility){
+symtab_variable_record_t* create_global_variable_record(dynamic_string_t name){
 	//Allocate it
 	symtab_variable_record_t* record = calloc(1, sizeof(symtab_variable_record_t));
 
@@ -536,9 +536,6 @@ symtab_variable_record_t* create_global_variable_record(dynamic_string_t name, v
 
 	//Flag that this is a global variable
 	record->membership = GLOBAL_VARIABLE;
-
-	//Flag the visibility level
-	record->visibility = visibility;
 
 	//For eventual SSA generation
 	record->counter_stack.stack = NULL;

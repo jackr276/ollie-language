@@ -102,7 +102,7 @@ static generic_ast_node_t* defer_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* idle_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_type_t side);
-static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream, visibilty_type_t visibility);
+static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream);
 static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* function_type, u_int8_t defining_predeclared_function);
@@ -10695,8 +10695,6 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 	lexitem_t lookahead;
 	//Is it static - this is almost always false
 	u_int8_t is_static = FALSE;
-	//The visibility type - almost always private
-	visibilty_type_t visibility = VISIBILITY_TYPE_PRIVATE;
 
 	//Let's see if we have a storage class
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -10709,31 +10707,16 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 		 * handle it
 		 */
 		case PUB:
-			//Flag that we're public
-			visibility = VISIBILITY_TYPE_PUBLIC;
-
-			//This could still be a variabe, let's refresh again
-			lookahead = get_next_token(token_stream, &parser_line_num);
-
-			switch(lookahead.tok){
-				case INLINE:
-				case FN:
-					//If this is now global, then we cannot do this
-					if(is_global == FALSE){
-						return print_and_return_error("Function predeclarations must occur in global scope", parser_line_num);
-					}
-
-					push_back_token(token_stream, &parser_line_num);
-					//Let this rule handle it
-					return function_predeclaration(token_stream, visibility);
-				
-				default:
-					push_back_token(token_stream, &parser_line_num);
-					break;
-					
+		case INLINE:
+		case FN:
+			//If this is now global, then we cannot do this
+			if(is_global == FALSE){
+				return print_and_return_error("Function predeclarations must occur in global scope", parser_line_num);
 			}
 
-			break;
+			push_back_token(token_stream, &parser_line_num);
+			//Let this rule handle it
+			return function_predeclaration(token_stream);
 
 		/**
 		 * If we see the static keyword, then we know that
@@ -10831,7 +10814,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 		if(is_global == FALSE){
 			declared_var = create_variable_record(name);
 		} else {
-			declared_var = create_global_variable_record(name, visibility);
+			declared_var = create_global_variable_record(name);
 		}
 	} else {
 		declared_var = create_static_variable_record(name);
@@ -12398,17 +12381,43 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
  *
  * NOTE: by the time we get here, we've already seen the declare keyword
  */
-static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream, visibilty_type_t visibility){
+static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream){
 	//Is this an inline function? Also assume no by default
 	u_int8_t is_inlined = FALSE;
 	//Does this funtion raise errors? We know based on the ! after the fn keyword
 	u_int8_t raises_errors = FALSE;
+	//Store the visibility type
+	visibilty_type_t visibility = VISIBILITY_TYPE_PRIVATE;
 
 	//Lookahead token
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
 	//We could see either fn or inline here
 	switch(lookahead.tok){
+		//Explicat declaration that this function is visible
+		case PUB:
+			//Flag that it is public
+			visibility = VISIBILITY_TYPE_PUBLIC;
+			
+			//Refresh the token
+			lookahead = get_next_token(token_stream, &parser_line_num);
+
+			//Go based on the lookahead
+			switch(lookahead.tok){
+				//Good case - breakout
+				case FN:
+					break;
+
+				case INLINE:
+					return print_and_return_error("Public functions may not be inlined", parser_line_num);
+
+				default:
+					return print_and_return_error("Expected \"fn\" keyword after \"pub\" in function declaration.", parser_line_num);
+			}
+
+			//If we get to here then we're set
+			break;
+
 		//Explicit inline request. Note that inlining functions and functions being public are mutually exclusive. You cannot have
 		//one or the other
 		case INLINE:
@@ -13070,8 +13079,18 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
  * already seen and consumed the DECLARE token
  */
 static generic_ast_node_t* global_declare_statement(ollie_token_stream_t* token_stream){
+	//What visibility type do we have. We are able to declare global vars as public
+	visibilty_type_t visibility = VISIBILITY_TYPE_PRIVATE;
+
 	//Lookahead token
-	lexitem_t lookahead;
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Flag that it's pulic
+	if(lookahead.tok == PUB){
+		visibility = VISIBILITY_TYPE_PUBLIC;
+	} else {
+		push_back_token(token_stream, &parser_line_num);
+	}
 
 	//Onvoke the helper
 	generic_ast_node_t* declaration_node = declare_statement(token_stream, TRUE);
@@ -13100,8 +13119,18 @@ static generic_ast_node_t* global_declare_statement(ollie_token_stream_t* token_
  * already seen and consumed the DECLARE token
  */
 static generic_ast_node_t* global_let_statement(ollie_token_stream_t* token_stream){
+	//What visibility type do we have. We are able to declare global vars as public
+	visibilty_type_t visibility = VISIBILITY_TYPE_PRIVATE;
+
 	//Lookahead token
-	lexitem_t lookahead;
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Flag that it's pulic
+	if(lookahead.tok == PUB){
+		visibility = VISIBILITY_TYPE_PUBLIC;
+	} else {
+		push_back_token(token_stream, &parser_line_num);
+	}
 
 	//Onvoke the helper
 	generic_ast_node_t* let_node = let_statement(token_stream, TRUE);
