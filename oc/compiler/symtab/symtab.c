@@ -823,7 +823,7 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, visibilt
 	record->inlined = is_inlined;
 
 	//We know that we need to create this immediately
-	record->signature = create_function_pointer_type(is_public, is_inlined, line_number, raises_errors, NOT_MUTABLE);
+	record->signature = create_function_pointer_type(visibility, is_inlined, line_number, raises_errors, NOT_MUTABLE);
 
 	//And give it back
 	return record;
@@ -1719,7 +1719,7 @@ void print_function_name_to_buffer(char* buffer, symtab_function_record_t* recor
 	char internal_buffer[ERROR_SIZE];
 	char temp_buffer[ERROR_SIZE / 5];
 
-	if(record->signature->internal_types.function_type->is_public == TRUE){
+	if(record->signature->internal_types.function_type->visibility == VISIBILITY_TYPE_PUBLIC){
 		sprintf(internal_buffer, "\t---> %d | pub fn%s %s(", record->line_number, record->signature->internal_types.function_type->raises_errors == TRUE ? "!" : "", record->func_name.string);
 	} else {
 		sprintf(internal_buffer, "\t---> %d | fn%s %s(", record->line_number, record->signature->internal_types.function_type->raises_errors == TRUE ? "!" : "", record->func_name.string);
@@ -1770,7 +1770,7 @@ void print_function_name_to_buffer(char* buffer, symtab_function_record_t* recor
  * Print a function name out in a stylised way
  */
 void print_function_name(symtab_function_record_t* record){
-	if(record->signature->internal_types.function_type->is_public == TRUE){
+	if(record->signature->internal_types.function_type->visibility == VISIBILITY_TYPE_PUBLIC){
 		printf("\t---> %d | pub fn %s(", record->line_number, record->func_name.string);
 	} else {
 		printf("\t---> %d | fn %s(", record->line_number, record->func_name.string);
@@ -2043,7 +2043,7 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnin
 				print_function_name(record);
 
 			//Only generate here if we have a private function. Public functions may be called from external files
-			} else if(record->called == FALSE && record->defined == TRUE && record->function_visibility == FUNCTION_VISIBILITY_PRIVATE){
+			} else if(record->called == FALSE && record->defined == TRUE && record->visibility == VISIBILITY_TYPE_PRIVATE){
 				//Generate a warning here
 				(*num_warnings)++;
 

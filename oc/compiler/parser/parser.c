@@ -11681,7 +11681,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
 	function_type_t* signature = type->internal_types.function_type;
 
 	//If the main function is not public, then we fail
-	if(signature->is_public == FALSE){
+	if(signature->visibility == VISIBILITY_TYPE_PRIVATE){
 		print_parse_message(MESSAGE_TYPE_ERROR, "The main function must be prefixed with the \"pub\" keyword", parser_line_num);
 		return FALSE;
 	}
@@ -12382,8 +12382,8 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
  * NOTE: by the time we get here, we've already seen the declare keyword
  */
 static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream){
-	//Is this a public function?
-	u_int8_t is_public = FALSE;
+	//Store the visibility here
+	visibilty_type_t visibility = VISIBILITY_TYPE_PRIVATE;
 	//Is this an inline function? Also assume no by default
 	u_int8_t is_inlined = FALSE;
 	//Does this funtion raise errors? We know based on the ! after the fn keyword
@@ -12397,7 +12397,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 		//Explicit declaration that this function is visible to other partial programs
 		case PUB:
 			//Flag that it is public
-			is_public = TRUE;
+			visibility = VISIBILITY_TYPE_PUBLIC;
 
 			//Refresh the lookahead token
 			lookahead = get_next_token(token_stream, &parser_line_num);
@@ -12493,7 +12493,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	}
 
 	//Now that we've survived up to here, we can make the actual record
-	symtab_function_record_t* function_record = create_function_record(function_name, is_public, is_inlined, raises_errors, parser_line_num);
+	symtab_function_record_t* function_record = create_function_record(function_name, visibility, is_inlined, raises_errors, parser_line_num);
 
 	//Now we need to see an lparen to begin the parameters
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -12671,8 +12671,8 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	u_int8_t defining_predeclared_function = FALSE;
 	//Is it the main function?
 	u_int8_t is_main_function = FALSE;
-	//Is this function public or private? Unless explicitly stated, all functions are private
-	u_int8_t is_public = FALSE;
+	//Function visitibility level
+	visibilty_type_t visibility = VISIBILITY_TYPE_PRIVATE;
 	//Is this function inlined? By default no
 	u_int8_t is_inlined = FALSE;
 	//Does this funtion raise errors? We know based on the ! after the fn keyword
@@ -12688,7 +12688,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		//Explicit declaration that this function is visible to other partial programs
 		case PUB:
 			//Flag that it is public
-			is_public = TRUE;
+			visibility = VISIBILITY_TYPE_PUBLIC;
 
 			//Refresh the lookahead token
 			lookahead = get_next_token(token_stream, &parser_line_num);
@@ -12810,7 +12810,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-		function_record = create_function_record(function_name, is_public, is_inlined, raises_errors, parser_line_num);
+		function_record = create_function_record(function_name, visibility, is_inlined, raises_errors, parser_line_num);
 
 		//We'll put the function into the symbol table
 		//since we now know that everything worked
@@ -12836,12 +12836,12 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		current_function = function_record;
 
 		//Let's now check - if the is_public's don't match here, we can fail already
-		if(function_record->signature->internal_types.function_type->is_public == TRUE && is_public == FALSE){
+		if(function_record->signature->internal_types.function_type->visibility == VISIBILITY_TYPE_PUBLIC && visibility == VISIBILITY_TYPE_PRIVATE){
 			sprintf(info, "Function \"%s\" was predeclared as public, but defined as private", function_record->func_name.string);
 			return print_and_return_error(info, parser_line_num);
 
 		//Other case, still a failure
-		} else if(function_record->signature->internal_types.function_type->is_public == FALSE && is_public == TRUE){
+		} else if(function_record->signature->internal_types.function_type->visibility == VISIBILITY_TYPE_PRIVATE && visibility == VISIBILITY_TYPE_PUBLIC){
 			sprintf(info, "Function \"%s\" was predeclared as private, but defined as public", function_record->func_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}

@@ -387,7 +387,7 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t name);
 /**
  * Create a global variable record
  */
-symtab_variable_record_t* create_global_variable_record(dynamic_string_t name, visibilty_type_t visibility);
+symtab_variable_record_t* create_global_variable_record(dynamic_string_t name);
 
 /**
  * Create a static variable record. These variables are really global vars
