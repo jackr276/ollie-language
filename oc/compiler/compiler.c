@@ -4,9 +4,12 @@
  * The compiler for Ollie-Lang. Depends on the lexer and the parser. See documentation for
  * full option details
 */
+#include <bits/getopt_ext.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <getopt.h>
 #include <stdio.h>
 #include <time.h>
 #include "ast/ast.h"
@@ -37,6 +40,7 @@ static void print_help(){
 	printf("-f <filename>: Required field. Specifies the .ol source file to be compiled\n");
 	printf("\n######################################## Optional Fields #########################################\n");
 	printf("-o <filename>: Specificy the output file. If none is given, a.out will be used\n");
+	printf("--objectfile: Compile the entire thing to an object(.o) file. If you do not know what this is then you shoud not be using it\n");
 	printf("-s: Show a summary at the end of compilation\n");
 	printf("-a: Generate an assembly code file with a .s extension. Note that this will stop the actual assembler from running\n");
 	printf("-d: Show all debug information printed. This includes compiler warnings, info statements\n");
@@ -68,12 +72,25 @@ static void print_compiler_message(error_message_type_t message_type, char* info
 static compiler_options_t* parse_and_store_options(int argc, char** argv){
 	//Allocate it
 	compiler_options_t* options = calloc(1, sizeof(compiler_options_t));
+
+	//Object file opt is 5 so as to not collide with chars
+	const int32_t objectfile_opt = 5;
+
+	/**
+	 * Longopts for us to use. Currently we only have the objectfile
+	 * longopt here
+	 */
+	static struct option long_opts[] = {
+		{"objectfile", no_argument, NULL, objectfile_opt},
+		//Null terminator
+		{0,0,0,0}
+	};
 	
 	//For storing our opt
 	int opt;
 
 	//Run through all of our options
-	while((opt = getopt(argc, argv, "rima@tdhsf:o:?")) != -1){
+	while((opt = getopt_long(argc, argv, "rima@tdhsf:o:?")) != -1){
 		//Switch based on opt
 		switch(opt){
 			//Invalid option
