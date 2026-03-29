@@ -10837,6 +10837,10 @@ void calculate_all_control_relations(basic_block_t* function_entry_block, dynami
  * of two "x"'s
  */
 static void mangle_static_variable_names(dynamic_array_t* global_variables){
+	//We'll keep a running id to mangle things
+	u_int32_t static_var_mangler = 0;
+	char mangler[100];
+
 	/**
 	 * Run through all of our global variables here
 	 */
@@ -10852,7 +10856,14 @@ static void mangle_static_variable_names(dynamic_array_t* global_variables){
 			continue;
 		}
 
-		//TODO
+		//Print this into the buffer
+		snprintf(mangler, 100, ".%d", static_var_mangler);
+		
+		//Now concatenate it to our variable name
+		dynamic_string_concatenate(&(candidate->variable->var_name), mangler);
+
+		//Bump it up for the next go around
+		static_var_mangler++;
 	}
 }
 
