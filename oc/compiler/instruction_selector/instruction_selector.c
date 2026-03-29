@@ -8114,6 +8114,9 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
  * address calc reg1 and the offset if appropriate
  */
 static inline void handle_load_instruction_base_address(instruction_t* load_statement){
+	int64_t stack_offset;
+	instruction_t* address_calculation;
+
 	/**
 	 * Go based on the kind of variable that we have here
 	 */
@@ -8123,42 +8126,53 @@ static inline void handle_load_instruction_base_address(instruction_t* load_stat
 		 * here
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
-			//If this is *not* a global variable
-			if(load_statement->op1->linked_var->membership != GLOBAL_VARIABLE){
-				//This is our stack offset, it will be needed going forward
-				int64_t stack_offset = load_statement->op1->linked_var->stack_region->function_local_base_address;
+			//Based on the variable's membership, we load accordingly
+			switch(load_statement->op1->linked_var->membership){
+				/**
+				 * We are loading a global/static variable(same thing) with a subsequent offset. We will need to first
+				 * load the address of said global variable, and then use that with an address calculation. We 
+				 * are not able to combine the 2 in such a way
+				 */
+				case GLOBAL_VARIABLE:
+				case STATIC_VARIABLE:
+					//Let the helper do the work
+					address_calculation = emit_global_variable_address_calculation_x86(load_statement->op1, instruction_pointer_variable, u64);
 
-				//If we actually have a stack offset to deal with. We'll store the offset constant
-				//and op1
-				if(stack_offset != 0){
-					//Emit the offset
-					load_statement->offset = emit_direct_integer_or_char_constant(stack_offset, i64);
+					//Now insert this before the given instruction
+					insert_instruction_before_given(address_calculation, load_statement);
 
-					//This will be the stack pointer
-					load_statement->address_calc_reg1 = stack_pointer_variable;
+					/**
+					 * The destination of the global variable address will be our new address calc reg 1. 
+					 * We already have the offset loaded in, so that remains unchanged
+					 */
+					load_statement->address_calc_reg1 = address_calculation->destination_register;
 
-				//Otherwise there's no stack offset, so we'll just have the stack
-				//pointer
-				} else {
-					//Copy both over
-					load_statement->address_calc_reg1 = stack_pointer_variable;
-				}
+					break;
 
-			/**
-			 * Otherwise, we are loading a global variable with a subsequent offset. We will need to first
-			 * load the address of said global variable, and then use that with an address calculation. We 
-			 * are not able to combine the 2 in such a way
-			 */
-			} else {
-				//Let the helper do the work
-				instruction_t* global_variable_address = emit_global_variable_address_calculation_x86(load_statement->op1, instruction_pointer_variable, u64);
+				/**
+				 * Otherwise we're here with a non global/static variable so we do the normal procedure
+				 */
+				default:
+					//This is our stack offset, it will be needed going forward
+					stack_offset = load_statement->op1->linked_var->stack_region->function_local_base_address;
 
-				//Now insert this before the given instruction
-				insert_instruction_before_given(global_variable_address, load_statement);
+					//If we actually have a stack offset to deal with. We'll store the offset constant
+					//and op1
+					if(stack_offset != 0){
+						//Emit the offset
+						load_statement->offset = emit_direct_integer_or_char_constant(stack_offset, i64);
 
-				//The destination of the global variable address will be our new address calc reg 1. 
-				//We already have the offset loaded in, so that remains unchanged
-				load_statement->address_calc_reg1 = global_variable_address->destination_register;
+						//This will be the stack pointer
+						load_statement->address_calc_reg1 = stack_pointer_variable;
+
+					//Otherwise there's no stack offset, so we'll just have the stack
+					//pointer
+					} else {
+						//Copy both over
+						load_statement->address_calc_reg1 = stack_pointer_variable;
+					}
+
+					break;
 			}
 
 			break;
