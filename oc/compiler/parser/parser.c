@@ -155,6 +155,23 @@ static inline u_int8_t does_enum_contain_integer_member(generic_type_t* enum_typ
 	return FALSE;
 }
 
+
+/**
+ * Is a given variable a data segment variable? These variables are not actually
+ * stored in registers or in memory so we need to treat them a bit differently. In
+ * ollie only static and global variables fit the bill for this
+ */
+static inline u_int8_t is_variable_data_segment_variable(symtab_variable_record_t* variable){
+	switch(variable->membership){
+		case GLOBAL_VARIABLE:
+		case STATIC_VARIABLE:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
 /**
  * Perform any needed constant coercion that is being done for an assignment. This includes converting pointers to 64-bit
  * integers for constant coercion
@@ -2332,10 +2349,12 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 					return ident;
 				}
 
-				//If this is the right hand side and our variable is not initialized,
-				//this is invalid as we are trying to use before initialization
+				/**
+				 * If this is the right hand side and our variable is not initialized,
+				 * this is invalid as we are trying to use before initialization
+				 */
 				if(side == SIDE_TYPE_RIGHT 
-					&& found_var->membership != GLOBAL_VARIABLE //We do not care for such checks with global vars
+					&& is_variable_data_segment_variable(found_var) == FALSE
 					&& found_var->initialized == FALSE){
 					sprintf(info, "Attempt to use variable %s before initialization", found_var->var_name.string);
 					return print_and_return_error(info, parser_line_num);
@@ -3637,12 +3656,14 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 			switch(cast_expr->ast_node_type){
 				//We can take an identifiers address
 				case AST_NODE_TYPE_IDENTIFIER:
-					//If this is not already a memory region, then we need to flag it as one
-					//for later so that the cfg constructor knows what we'll eventually need to
-					//load
+					/**
+					 * If this is not already a memory region, then we need to flag it as one
+					 * for later so that the cfg constructor knows what we'll eventually need to
+					 * load. We need to exclude anything that is a data segment variable for
+					 * these checks
+					 */
 					if(is_memory_region(cast_expr->variable->type_defined_as) == FALSE
-						//AND it's not a global var
-						&& cast_expr->variable->membership != GLOBAL_VARIABLE){
+						&& is_variable_data_segment_variable(cast_expr->variable) == FALSE){
 
 						//IMPORTANT - we need to flag this as a stack variable now
 						cast_expr->variable->stack_variable = TRUE;
