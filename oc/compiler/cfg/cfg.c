@@ -108,6 +108,8 @@ typedef enum{
 static void visit_declaration_statement(generic_ast_node_t* node);
 static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_let_statement(basic_block_t* basic_block, generic_ast_node_t* node);
+static void visit_static_let_statement(generic_ast_node_t* node);
+static inline void visit_static_declare_statement(generic_ast_node_t* node);
 static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_node);
@@ -5538,19 +5540,28 @@ static cfg_result_package_t visit_paramcount_statement(basic_block_t* basic_bloc
  */
 static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_conditional){
 	//Declare and initialize the results
-	cfg_result_package_t result_package;
+	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
 
 	//We'll process based on the class of our expression node
 	switch(expr_node->ast_node_type){
 		case AST_NODE_TYPE_DECL_STMT:
-			visit_declaration_statement(expr_node);
+			//Split based on the kind of variable that we have
+			if(expr_node->variable->membership != STATIC_VARIABLE){
+				visit_declaration_statement(expr_node);
+			} else {
+				visit_static_declare_statement(expr_node);
+			}
 
-			result_package.starting_block = basic_block;
-			result_package.final_block = basic_block;
 			break;
 
 		case AST_NODE_TYPE_LET_STMT:
-			result_package = visit_let_statement(basic_block, expr_node);
+			//Split based on the kind of variable that we have
+			if(expr_node->variable->membership != STATIC_VARIABLE){
+				result_package = visit_let_statement(basic_block, expr_node);
+			} else{
+				visit_static_let_statement(expr_node);
+			}
+
 			break;
 		
 		case AST_NODE_TYPE_PARAMCOUNT_STMT:
