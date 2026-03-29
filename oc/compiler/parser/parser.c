@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 #include "parser.h"
 #include "../utils/stack/lexstack.h"
@@ -107,7 +108,7 @@ static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream);
 static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* function_type, u_int8_t defining_predeclared_function);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_global_scope);
-static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, u_int8_t is_global);
+static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, variable_membership_t membership);
 static inline generic_type_t* handle_elaborative_param_type(generic_type_t* elaborated_type);
 static u_int8_t validate_function_parameter_list(generic_type_t* function_type);
 
@@ -10913,7 +10914,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 /**
  * Crawl the array initializer list and validate that we have a compatible type for each entry in the list
  */
-static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node, u_int8_t is_global){
+static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node, variable_membership_t membership){
 	//Grab the member type here out as well
 	generic_type_t* member_type = array_type->internal_types.member_type;
 
@@ -10930,7 +10931,7 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 	//to the given array type
 	while(cursor != NULL){
 		//We'll use the same top level initialization check for this rule as well
-		generic_type_t* final_type = validate_intializer_types(member_type, cursor, is_global);
+		generic_type_t* final_type = validate_intializer_types(member_type, cursor, membership);
 
 		//If these fail, then we're done here. No need for an error message, they'll have already been
 		//printed
@@ -10979,7 +10980,7 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
  * fields in the struct in the initializer. Unlike in C or other languages, we will not allows users to partially fill a struct
  * up
  */
-static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struct_type, generic_ast_node_t* initializer_list_node, u_int8_t is_global){
+static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struct_type, generic_ast_node_t* initializer_list_node, variable_membership_t membership){
 	//We'll need to extract the struct table and that max index that it holds
 	dynamic_array_t struct_table = struct_type->internal_types.struct_table;
 
@@ -11005,7 +11006,7 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
 		symtab_variable_record_t* variable = dynamic_array_get_at(&struct_table, seen_count);
 
 		//Recursively call the initializer processor rule. This allows us to handle nested initializations
-		generic_type_t* final_type = validate_intializer_types(variable->type_defined_as, cursor, is_global);
+		generic_type_t* final_type = validate_intializer_types(variable->type_defined_as, cursor, membership);
 
 		//Let's check to see if the types are assignable
 		if(final_type == NULL){
@@ -11092,7 +11093,7 @@ static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic
 /**
  * Top level initializer value for type validation
  */
-static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, u_int8_t is_global){
+static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, variable_membership_t membership){
 	//Dealias this just to be safe
 	target_type = dealias_type(target_type);
 
@@ -11124,7 +11125,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 			}
 
 			//Run the validation step for the intializer list
-			validation_succeeded = validate_types_for_array_initializer_list(target_type, initializer_node, is_global);
+			validation_succeeded = validate_types_for_array_initializer_list(target_type, initializer_node, membership);
 
 			//If this didn't work we fail out
 			if(validation_succeeded == FALSE){
@@ -11146,7 +11147,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 			}
 
 			//Run the validation step for a struct
-			validation_succeeded = validate_types_for_struct_initializer_list(target_type, initializer_node, is_global);
+			validation_succeeded = validate_types_for_struct_initializer_list(target_type, initializer_node, membership);
 
 			//If this didn't work we fail out
 			if(validation_succeeded == FALSE){
@@ -11179,11 +11180,25 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 				return return_type;
 			}
 
-			//If it's a global VAR, the initialization here must be a constant
-			if(is_global == TRUE && initializer_node->ast_node_type != AST_NODE_TYPE_CONSTANT){
-				//Fail out if we hit this
-				print_parse_message(MESSAGE_TYPE_ERROR, "Initializer value is not a compile-time constant", parser_line_num);
-				return NULL;
+			/**
+			 * For static and global variables, we cannot initialize to anything
+			 * that is not a constant. Failure to enforce this will lead
+			 * to invalid assembly so we check here
+			 */
+			switch(membership){
+				case STATIC_VARIABLE:
+				case GLOBAL_VARIABLE:
+					//Not a constant is invalid
+					if(initializer_node->ast_node_type != AST_NODE_TYPE_CONSTANT){
+						print_parse_message(MESSAGE_TYPE_ERROR, "Initializer value is not a compile-time constant", parser_line_num);
+						num_errors++;
+						return NULL;
+					}
+					
+					break;
+
+				default:
+					break;
 			}
 
 			/**
@@ -11250,6 +11265,8 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	lexitem_t lookahead;
 	//Is this variable static - almost always false
 	u_int8_t is_static = FALSE;
+	//What is our variable membership? By default we use the generic
+	variable_membership_t membership = NO_MEMBERSHIP;
 
 	//Let's first declare the root node
 	generic_ast_node_t* let_stmt_node = ast_node_alloc(AST_NODE_TYPE_LET_STMT, SIDE_TYPE_LEFT);
@@ -11271,6 +11288,16 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 
 		//Refresh the lookahead
 		lookahead = get_next_token(token_stream, &parser_line_num);
+	}
+
+	/**
+	 * Update our membership. This will come into play during the initializer
+	 * validation
+	 */
+	if(is_global == TRUE){
+		membership = GLOBAL_VARIABLE;
+	} else if(is_static == TRUE){
+		membership = STATIC_VARIABLE;
 	}
 
 	//If it's not an identifier, we fail
@@ -11338,9 +11365,11 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	//Now we need to see a valid initializer
 	generic_ast_node_t* initializer_node = initializer(token_stream, SIDE_TYPE_RIGHT);
 	
-	//Store the return type here after we do all needed validations. This rule allows 
-	//for recursive validation, so that we can handle recursive initialization
-	generic_type_t* return_type = validate_intializer_types(type_spec, initializer_node, is_global);
+	/**
+	 * Store the return type here after we do all needed validations. This rule allows 
+	 * for recursive validation, so that we can handle recursive initialization
+	 */
+	generic_type_t* return_type = validate_intializer_types(type_spec, initializer_node, membership);
 
 	//If the return type is NULL, we fail out here
 	if(return_type == NULL){
