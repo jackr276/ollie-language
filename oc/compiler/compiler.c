@@ -41,7 +41,7 @@ static void print_help(){
 	printf("-f <filename>: Required field. Specifies the .ol source file to be compiled\n");
 	printf("\n######################################## Optional Fields #########################################\n");
 	printf("-o <filename>: Specificy the output file. If none is given, a.out will be used\n");
-	printf("--objectfile: Compile the entire thing to an object(.o) file. If you do not know what this is then you shoud not be using it\n");
+	printf("--to-object-file: Compile the entire thing to an object(.o) file. If you do not know what this is then you shoud not be using it\n");
 	printf("-s: Show a summary at the end of compilation\n");
 	printf("-a: Generate an assembly code file with a .s extension. Note that this will stop the actual assembler from running\n");
 	printf("-d: Show all debug information printed. This includes compiler warnings, info statements\n");
