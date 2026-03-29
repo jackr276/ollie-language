@@ -15,6 +15,7 @@
 #include "../utils/dynamic_set/dynamic_set.h"
 #include "../utils/dynamic_array/dynamic_array.h"
 #include "../utils/constants.h"
+#include "../utils/visibility.h"
 //Every function record has one of these
 #include "../stack_data_area/stack_data_area.h"
 
@@ -69,24 +70,15 @@ typedef struct symtab_macro_record_t symtab_macro_record_t;
  */
 typedef enum variable_membership_t {
 	NO_MEMBERSHIP = 0, //Generic var, no type/function members
-	STRUCT_MEMBER = 1,
-	UNION_MEMBER = 2,
-	ENUM_MEMBER = 3,
-	GLOBAL_VARIABLE = 4,
-	FUNCTION_PARAMETER = 5,
-	LABEL_VARIABLE = 6,
-	RETURNED_VARIABLE = 7, //Is this returned by a function?
+	STRUCT_MEMBER,
+	UNION_MEMBER,
+	ENUM_MEMBER,
+	GLOBAL_VARIABLE,
+	STATIC_VARIABLE,
+	FUNCTION_PARAMETER,
+	LABEL_VARIABLE,
+	RETURNED_VARIABLE, //Is this returned by a function?
 } variable_membership_t;
-
-
-/**
- * Is a given function public or private? Simple enum for
- * this 
- */
-typedef enum {
-	FUNCTION_VISIBILITY_PRIVATE,
-	FUNCTION_VISIBILITY_PUBLIC
-} function_visibility_t;
 
 
 /**
@@ -140,8 +132,8 @@ struct symtab_function_record_t{
 	u_int8_t contains_stack_params;
 	//Does this contain the special elaborative stack param?
 	u_int8_t contains_elaborative_param;
-	//Is this function public or private
-	function_visibility_t function_visibility;
+	//Are we public or private
+	visibilty_type_t visibility;
 };
 
 
@@ -169,6 +161,13 @@ struct symtab_variable_record_t{
 	stack_region_t* stack_region;
 	//The line number
 	u_int32_t line_number;
+	/**
+	 * Static variables(which are really global) will have
+	 * their name mangled to avoid collisions. So for example,
+	 * the static variable x may come out as "x.0" in the actual
+	 * final product
+	 */
+	u_int32_t static_variable_mangler;
 	//What is the enum member value
 	int32_t enum_member_value;
 	//The current generation of the variable - FOR SSA in CFG
@@ -198,6 +197,8 @@ struct symtab_variable_record_t{
 	u_int8_t passed_by_stack;
 	//Was it declared or letted
 	u_int8_t declare_or_let; /* 0 = declare, 1 = let */
+	//What's the visibility of this(only used for global variables)
+	visibilty_type_t visibility;
 };
 
 
@@ -386,6 +387,16 @@ void finalize_type_scope(type_symtab_t* symtab);
 symtab_variable_record_t* create_variable_record(dynamic_string_t name);
 
 /**
+ * Create a global variable record
+ */
+symtab_variable_record_t* create_global_variable_record(dynamic_string_t name, visibilty_type_t visibility);
+
+/**
+ * Create a static variable record. These variables are really global vars
+ */
+symtab_variable_record_t* create_static_variable_record(dynamic_string_t name);
+
+/**
  * Create a ternary variable record
  */
 symtab_variable_record_t* create_ssa_compatible_temp_var(generic_type_t* type, variable_symtab_t* variable_symtab, u_int32_t temp_id);
@@ -408,7 +419,7 @@ void add_function_parameter(type_symtab_t* symtab, symtab_function_record_t* fun
 /**
  * Make a function record
  */
-symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t is_public, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number);
+symtab_function_record_t* create_function_record(dynamic_string_t name, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number);
 
 /**
  * Create a type record for the symbol table

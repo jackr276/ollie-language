@@ -10,6 +10,7 @@
 
 #include "../lexer/lexer.h"
 #include "../utils/dynamic_array/dynamic_array.h"
+#include "../utils/visibility.h"
 #include <stdint.h>
 #include <sys/types.h>
 
@@ -191,8 +192,8 @@ struct function_type_t{
 	u_int32_t SSE_param_count;
 	//Does this return a void type?
 	u_int8_t returns_void;
-	//Is this function public? By default it is not
-	u_int8_t is_public;
+	//What is the visibility level of the given function
+	visibilty_type_t visibility;
 	//Is this function inlined:
 	u_int8_t is_inlined;
 	//Does this contain stack params?
@@ -378,7 +379,7 @@ generic_type_t* create_aliased_type(char* type_name, generic_type_t* aliased_typ
 /**
  * Dynamically allocate and create a function pointer type
  */
-generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int8_t is_inlined, u_int32_t line_number, u_int8_t raises_errors, mutability_type_t mutability);
+generic_type_t* create_function_pointer_type(visibilty_type_t visibility, u_int8_t is_inlined, u_int32_t line_number, u_int8_t raises_errors, mutability_type_t mutability);
 
 /**
  * Add a function's parameter in

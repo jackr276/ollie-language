@@ -499,7 +499,7 @@ static inline u_int64_t hash_type(generic_type_t* type){
 */
 symtab_variable_record_t* create_variable_record(dynamic_string_t name){
 	//Allocate it
-	symtab_variable_record_t* record = (symtab_variable_record_t*)calloc(1, sizeof(symtab_variable_record_t));
+	symtab_variable_record_t* record = calloc(1, sizeof(symtab_variable_record_t));
 
 	//Store the name
 	record->var_name = name;
@@ -507,6 +507,73 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t name){
 	record->hash = hash_variable(name.string);
 	//The current generation is always 1 at first
 	record->current_generation = 1;
+
+	//This is just a regular variable(for now)
+	record->membership = NO_MEMBERSHIP;
+
+	//For eventual SSA generation
+	record->counter_stack.stack = NULL;
+	record->counter_stack.top_index = 0;
+	record->counter_stack.current_size = 0;
+
+	return record;
+}
+
+
+/**
+ * Create a global variable record
+ */
+symtab_variable_record_t* create_global_variable_record(dynamic_string_t name, visibilty_type_t visibility){
+	//Allocate it
+	symtab_variable_record_t* record = calloc(1, sizeof(symtab_variable_record_t));
+
+	//Store the name
+	record->var_name = name;
+	//Hash it and store it to avoid to repeated hashing
+	record->hash = hash_variable(name.string);
+	//The current generation is always 1 at first
+	record->current_generation = 1;
+
+	//Flag that this is a global variable
+	record->membership = GLOBAL_VARIABLE;
+
+	//Store the visibility level
+	record->visibility = visibility;
+
+	//For eventual SSA generation
+	record->counter_stack.stack = NULL;
+	record->counter_stack.top_index = 0;
+	record->counter_stack.current_size = 0;
+
+	return record;
+}
+
+
+/**
+ * Create a static variable record. These variables are really global vars
+ */
+symtab_variable_record_t* create_static_variable_record(dynamic_string_t name){
+	//Allocate it
+	symtab_variable_record_t* record = calloc(1, sizeof(symtab_variable_record_t));
+
+	//Store the name
+	record->var_name = name;
+	//Hash it and store it to avoid to repeated hashing
+	record->hash = hash_variable(name.string);
+	//The current generation is always 1 at first
+	record->current_generation = 1;
+
+	/**
+	 * This may change - but for right now we'll have a static variable mangler of 0. This
+	 * will be used by the CFG in case we have a bunch
+	 */
+	record->static_variable_mangler = 0;
+
+	//Flag this as static
+	record->membership = STATIC_VARIABLE;
+
+	//These are always private
+	record->visibility = VISIBILITY_TYPE_PRIVATE;
 
 	//For eventual SSA generation
 	record->counter_stack.stack = NULL;
@@ -730,7 +797,7 @@ void add_function_parameter(type_symtab_t* type_symtab, symtab_function_record_t
 /**
  * Dynamically allocate a function record
 */
-symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t is_public, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number){
+symtab_function_record_t* create_function_record(dynamic_string_t name, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number){
 	//Allocate it
 	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
 
@@ -749,7 +816,7 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t
 	record->hash = hash_function(name.string);
 
 	//Throw in whether or not it's public or private
-	record->function_visibility = is_public == TRUE ? FUNCTION_VISIBILITY_PUBLIC : FUNCTION_VISIBILITY_PRIVATE;
+	record->visibility = visibility;
 
 	//Store the line number
 	record->line_number = line_number;
@@ -761,7 +828,7 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t
 	record->inlined = is_inlined;
 
 	//We know that we need to create this immediately
-	record->signature = create_function_pointer_type(is_public, is_inlined, line_number, raises_errors, NOT_MUTABLE);
+	record->signature = create_function_pointer_type(visibility, is_inlined, line_number, raises_errors, NOT_MUTABLE);
 
 	//And give it back
 	return record;
@@ -1657,7 +1724,7 @@ void print_function_name_to_buffer(char* buffer, symtab_function_record_t* recor
 	char internal_buffer[ERROR_SIZE];
 	char temp_buffer[ERROR_SIZE / 5];
 
-	if(record->signature->internal_types.function_type->is_public == TRUE){
+	if(record->signature->internal_types.function_type->visibility == VISIBILITY_TYPE_PUBLIC){
 		sprintf(internal_buffer, "\t---> %d | pub fn%s %s(", record->line_number, record->signature->internal_types.function_type->raises_errors == TRUE ? "!" : "", record->func_name.string);
 	} else {
 		sprintf(internal_buffer, "\t---> %d | fn%s %s(", record->line_number, record->signature->internal_types.function_type->raises_errors == TRUE ? "!" : "", record->func_name.string);
@@ -1708,7 +1775,7 @@ void print_function_name_to_buffer(char* buffer, symtab_function_record_t* recor
  * Print a function name out in a stylised way
  */
 void print_function_name(symtab_function_record_t* record){
-	if(record->signature->internal_types.function_type->is_public == TRUE){
+	if(record->signature->internal_types.function_type->visibility == VISIBILITY_TYPE_PUBLIC){
 		printf("\t---> %d | pub fn %s(", record->line_number, record->func_name.string);
 	} else {
 		printf("\t---> %d | fn %s(", record->line_number, record->func_name.string);
@@ -1981,7 +2048,7 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnin
 				print_function_name(record);
 
 			//Only generate here if we have a private function. Public functions may be called from external files
-			} else if(record->called == FALSE && record->defined == TRUE && record->function_visibility == FUNCTION_VISIBILITY_PRIVATE){
+			} else if(record->called == FALSE && record->defined == TRUE && record->visibility == VISIBILITY_TYPE_PRIVATE){
 				//Generate a warning here
 				(*num_warnings)++;
 

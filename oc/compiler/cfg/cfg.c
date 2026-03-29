@@ -108,6 +108,8 @@ typedef enum{
 static void visit_declaration_statement(generic_ast_node_t* node);
 static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_let_statement(basic_block_t* basic_block, generic_ast_node_t* node);
+static void visit_static_let_statement(generic_ast_node_t* node);
+static inline void visit_static_declare_statement(generic_ast_node_t* node);
 static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_node);
@@ -155,6 +157,22 @@ static inline u_int8_t is_type_stack_passed_by_reference(generic_type_t* type){
 	switch(type->type_class){
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_POINTER:	
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Is a given variable a data segment variable? These variables are not actually
+ * stored in registers or in memory so we need to treat them a bit differently. In
+ * ollie only static and global variables fit the bill for this
+ */
+static inline u_int8_t is_variable_data_segment_variable(symtab_variable_record_t* variable){
+	switch(variable->membership){
+		case GLOBAL_VARIABLE:
+		case STATIC_VARIABLE:
 			return TRUE;
 		default:
 			return FALSE;
@@ -3343,6 +3361,36 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 			}
 
 		/**
+		 * For a static variable, if we are on the RHS of an equation and we're trying to
+		 * use this, we really are looking to load it out of memory. So, we will
+		 * help out here by emitting a load to get this out
+		 */
+		case STATIC_VARIABLE:
+			/**
+			 * Emit a special variable that denotes that we are seeking the memory address of this variable,
+			 * not anything else with it
+			 */
+			if(is_memory_region(variable->type_defined_as) == TRUE){
+				return emit_memory_address_var(variable);
+			}
+
+			/**
+			 * Otherwise it's not a memory address. Depending on what side of the equation that we're
+			 * on, we're going to either emit a normal variable or load the variable out of memory. If
+			 * we're on the RHS of the equation, we'll want to auto-load the variable for the caller
+			 */
+			if(side == SIDE_TYPE_RIGHT){
+				//Let the helper emit our load from memory
+				return emit_automatic_load_from_memory(basic_block, variable);
+
+			//Otherwise emit a normal variable
+			} else {
+				return emit_var(variable);
+			}
+
+
+
+		/**
 		 * Most function parameters are simple variable emittals. We do need to account for the case where
 		 * we have function parameters that are passed in via the stack however
 		 */
@@ -4889,7 +4937,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					 * stack - it is already there. We need to account for these nuances when
 					 * we do this
 					 *
-					 * We do not do this if it's a global variable, because global variables have their own unique storage
+					 * We do not do this if it's a global/static variable, because global/static variables have their own unique storage
 					 * mechanism that is not stack related
 					 *
 					 *
@@ -4897,7 +4945,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					 * receive a type of int[]*(pointer to an array). In order to achieve this, we will need to create
 					 * a whole new stack variable to save the array
 					 */
-					if(unary_expression_child->variable->membership != GLOBAL_VARIABLE
+					if(is_variable_data_segment_variable(unary_expression_child->variable) == FALSE 
 						//Is it not on the stack already?
 						&& unary_expression_child->variable->stack_region == NULL) {
 						//Create the stack region and store it in the variable
@@ -5400,7 +5448,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	 * work. We'll need to do a store here
 	 */
 	} else if(left_hand_var->linked_var != NULL
-				&& (left_hand_var->linked_var->stack_variable == TRUE || left_hand_var->linked_var->membership == GLOBAL_VARIABLE)){
+				&& (left_hand_var->linked_var->stack_variable == TRUE || is_variable_data_segment_variable(left_hand_var->linked_var) == TRUE)){
 
 		//Emit the memory address var for this variable
 		three_addr_var_t* memory_address = emit_memory_address_var(left_hand_var->linked_var);
@@ -5492,19 +5540,28 @@ static cfg_result_package_t visit_paramcount_statement(basic_block_t* basic_bloc
  */
 static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_conditional){
 	//Declare and initialize the results
-	cfg_result_package_t result_package;
+	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
 
 	//We'll process based on the class of our expression node
 	switch(expr_node->ast_node_type){
 		case AST_NODE_TYPE_DECL_STMT:
-			visit_declaration_statement(expr_node);
+			//Split based on the kind of variable that we have
+			if(expr_node->variable->membership != STATIC_VARIABLE){
+				visit_declaration_statement(expr_node);
+			} else {
+				visit_static_declare_statement(expr_node);
+			}
 
-			result_package.starting_block = basic_block;
-			result_package.final_block = basic_block;
 			break;
 
 		case AST_NODE_TYPE_LET_STMT:
-			result_package = visit_let_statement(basic_block, expr_node);
+			//Split based on the kind of variable that we have
+			if(expr_node->variable->membership != STATIC_VARIABLE){
+				result_package = visit_let_statement(basic_block, expr_node);
+			} else{
+				visit_static_let_statement(expr_node);
+			}
+
 			break;
 		
 		case AST_NODE_TYPE_PARAMCOUNT_STMT:
@@ -10028,6 +10085,74 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 
 
 /**
+ * Visit a static let statement and handle the initializer appropriately.
+ * Do note that we have already checked that the entire initialization
+ * only contains constants, so we can assume we're only processing constants
+ * here
+ */
+static void visit_static_let_statement(generic_ast_node_t* node){
+	/**
+	 * We'll store it inside of the global variable struct. Leave it as NULL
+	 * here so that it's automatically initialized to 0
+	 */
+	global_variable_t* static_variable = create_global_variable(node->variable, NULL);
+
+	//This has been initialized already
+	static_variable->variable->initialized = TRUE;
+
+	//Figure out what this decays into
+	static_variable->is_relative = does_type_decay_to_char_pointer(node->variable->type_defined_as);
+
+	//And add it into the CFG
+	dynamic_array_add(&(cfg->global_variables), static_variable);
+
+	//Grab out the initializer node
+	generic_ast_node_t* initializer = node->first_child;
+
+	//We can see arrays or constants here
+	switch(initializer->ast_node_type){
+		//Array init list - goes to the helper
+		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+			//Initialized to an array
+			static_variable->initializer_type = GLOBAL_VAR_INITIALIZER_ARRAY;
+
+			//Give it an array of values
+			static_variable->initializer_value.array_initializer_values = dynamic_array_alloc();
+
+			//Let the helper take care of it
+			emit_global_array_initializer(initializer, &(static_variable->initializer_value.array_initializer_values));
+
+			break;
+		
+		//Should be our most common case - we just have a constant
+		case AST_NODE_TYPE_CONSTANT:
+			//Initialized to a constant
+			static_variable->initializer_type = GLOBAL_VAR_INITIALIZER_CONSTANT;
+
+			//All we need to do here
+			static_variable->initializer_value.constant_value = emit_global_variable_constant(initializer);
+
+			break;
+
+		//Let the helper take over with this one as well
+		case AST_NODE_TYPE_STRING_INITIALIZER:
+			//This is a special kind of constant
+			static_variable->initializer_type = GLOBAL_VAR_INITIALIZER_STRING;
+
+			//This will handle a variety of cases for us
+			static_variable->initializer_value.constant_value = emit_global_variable_string_constant(initializer);
+
+			break;
+
+		//This shouldn't be reachable
+		default:
+			printf("Fatal internal compiler error: Unrecognized/unimplemented static initializer node type encountered\n");
+			exit(1);
+	}
+}
+
+
+/**
  * Visit a global variable declaration statement
  *
  * NOTE: declared global variables will always be initialized to be 0
@@ -10044,6 +10169,23 @@ static inline void visit_global_declare_statement(generic_ast_node_t* node){
 	dynamic_array_add(&(cfg->global_variables), global_variable);
 }
 
+
+/**
+ * Visit a static variable declaration statement
+ *
+ * NOTE: declared static variables will always be initialized to be 0
+ */
+static inline void visit_static_declare_statement(generic_ast_node_t* node){
+	//We'll store it inside of the global variable struct. Leave it as NULL
+	//here so that it's automatically initialized to 0
+	global_variable_t* static_variable = create_global_variable(node->variable, NULL);
+
+	//This has no initializer-so flag that here
+	static_variable->initializer_type = GLOBAL_VAR_INITIALIZER_NONE;
+
+	//And add it into the CFG
+	dynamic_array_add(&(cfg->global_variables), static_variable);
+}
 
 /**
  * Visit a declaration statement. If we see an actual declaration node, then
@@ -10687,6 +10829,46 @@ void calculate_all_control_relations(basic_block_t* function_entry_block, dynami
 
 
 /**
+ * Since static variables also count for us as global variables, we need to
+ * be able to handle a case where say, for instance, that two separate
+ * functions have a static variable called "x". If we just left it as is,
+ * we would have an ambiguous reference and the assembler woudl fail. To fix
+ * this, we will mangle those names such that we now get "x.0" and "x.1" instead
+ * of two "x"'s
+ */
+static void mangle_static_variable_names(dynamic_array_t* global_variables){
+	//We'll keep a running id to mangle things
+	u_int32_t static_var_mangler = 0;
+	char mangler[100];
+
+	/**
+	 * Run through all of our global variables here
+	 */
+	for(u_int32_t i = 0; i < global_variables->current_index; i++){
+		//Extract our current candidate
+		global_variable_t* candidate = dynamic_array_get_at(global_variables, i);
+		
+		/**
+		 * Global variable name collision is already enforced by the symtab in the
+		 * parser so we can skip this for efficiency's sake
+		 */
+		if(candidate->variable->membership == GLOBAL_VARIABLE){
+			continue;
+		}
+
+		//Print this into the buffer
+		snprintf(mangler, 100, ".%d", static_var_mangler);
+		
+		//Now concatenate it to our variable name
+		dynamic_string_concatenate(&(candidate->variable->var_name), mangler);
+
+		//Bump it up for the next go around
+		static_var_mangler++;
+	}
+}
+
+
+/**
  * Build a cfg from the ground up
 */
 cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_int32_t* num_warnings){
@@ -10759,6 +10941,11 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 		print_parse_message(MESSAGE_TYPE_ERROR, "CFG was unable to be constructed", 0);
 		(*num_errors_ref)++;
 	}
+
+	/**
+	 * Correct any static variable name collisions that we may run into
+	 */
+	mangle_static_variable_names(&(cfg->global_variables));
 
 	//Add all phi functions for SSA
 	insert_phi_functions(cfg, results->variable_symtab);

@@ -2380,7 +2380,7 @@ generic_type_t* create_aliased_type(char* name, generic_type_t* aliased_type, u_
 /**
  * Dynamically allocate and create a function pointer type
  */
-generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int8_t is_inlined, u_int32_t line_number, u_int8_t raises_errors, mutability_type_t mutability){
+generic_type_t* create_function_pointer_type(visibilty_type_t visibility, u_int8_t is_inlined, u_int32_t line_number, u_int8_t raises_errors, mutability_type_t mutability){
 	//First allocate the parent
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
@@ -2400,8 +2400,8 @@ generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int8_t is_inl
 	//Allocate space for the parameters
 	type->internal_types.function_type->function_parameters = dynamic_array_alloc();
 
-	//Store whether or not this is public
-	type->internal_types.function_type->is_public = is_public;
+	//Store the visibility of the type
+	type->internal_types.function_type->visibility = visibility;
 
 	//Store the inlined status too
 	type->internal_types.function_type->is_inlined = is_inlined;

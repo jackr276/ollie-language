@@ -697,6 +697,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 	//For later use
 	int64_t stack_offset;
 	three_addr_const_t* stack_offset_constant;
+	instruction_t* address_instruction;
 
 	//Grab this out
 	symtab_variable_record_t* var = instruction->op1->linked_var;
@@ -708,76 +709,79 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 	 *
 	 * NOTE: since this is a global variable, it is impossible for a function parameter that is passed via the stack to get caught up in this
 	 */
-	if(var->membership == GLOBAL_VARIABLE){
-		//The global variable address calculation
-		instruction_t* global_var_address_instruction;
+	switch(var->membership){
+		case GLOBAL_VARIABLE:
+		case STATIC_VARIABLE:
+			switch(instruction->statement_type){
+				/**
+				 * A global variable address assignment like this will turn into a leaq statement
+				 */
+				case THREE_ADDR_CODE_ASSN_STMT:
+					//Let the helper emit the statement
+					address_instruction = emit_global_variable_address_calculation_oir(instruction->assignee, instruction->op1, instruction_pointer_variable);
 
-		switch(instruction->statement_type){
-			/**
-			 * A global variable address assignment like this will turn into a leaq statement
-			 */
-			case THREE_ADDR_CODE_ASSN_STMT:
-				//Let the helper emit the statement
-				global_var_address_instruction = emit_global_variable_address_calculation_oir(instruction->assignee, instruction->op1, instruction_pointer_variable);
+					//Insert this after the given instruction
+					insert_instruction_after_given(address_instruction, instruction);
 
-				//Insert this after the given instruction
-				insert_instruction_after_given(global_var_address_instruction, instruction);
+					//Once we've done that, the old instruction is useless to us
+					delete_statement(instruction);
 
-				//Once we've done that, the old instruction is useless to us
-				delete_statement(instruction);
+					//Rebuild the window based around the new instruction
+					reconstruct_window(window, address_instruction);
 
-				//Rebuild the window based around the new instruction
-				reconstruct_window(window, global_var_address_instruction);
+					break;
 
-				break;
+				/**
+				 * A global var address assignment like this will generate
+				 * 2 separate instructions. One instruction will hold the global variable address,
+				 * while the other holds the actual binary operation
+				 */
+				case THREE_ADDR_CODE_BIN_OP_STMT:
+					//Let the helper emit the statement. We will use a temp destination for this
+					address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op1, instruction_pointer_variable);
 
-			/**
-			 * A global var address assignment like this will generate
-			 * 2 separate instructions. One instruction will hold the global variable address,
-			 * while the other holds the actual binary operation
-			 */
-			case THREE_ADDR_CODE_BIN_OP_STMT:
-				//Let the helper emit the statement. We will use a temp destination for this
-				global_var_address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op1, instruction_pointer_variable);
+					//This goes in before the given one
+					insert_instruction_before_given(address_instruction, instruction);
 
-				//This goes in before the given one
-				insert_instruction_before_given(global_var_address_instruction, instruction);
+					//We'll now replace op1 with what our assignee here is
+					instruction->op1 = address_instruction->assignee;
 
-				//We'll now replace op1 with what our assignee here is
-				instruction->op1 = global_var_address_instruction->assignee;
+					//And now we'll reconstruct around our instruction just ot keep the window in order
+					reconstruct_window(window, instruction);
 
-				//And now we'll reconstruct around our instruction just ot keep the window in order
-				reconstruct_window(window, instruction);
+					break;
 
-				break;
+				/**
+				 * A global var address like this will generate one special instruction that is RIP relative
+				 * with a constant offset
+				 */
+				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+					//Let the helper do all of the work
+					address_instruction = emit_global_variable_address_calculation_with_offset_oir(instruction->assignee, instruction->op1, instruction_pointer_variable, instruction->op1_const);
 
-			/**
-			 * A global var address like this will generate one special instruction that is RIP relative
-			 * with a constant offset
-			 */
-			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-				//Let the helper do all of the work
-				global_var_address_instruction = emit_global_variable_address_calculation_with_offset_oir(instruction->assignee, instruction->op1, instruction_pointer_variable, instruction->op1_const);
+					//This goes in before the given one
+					insert_instruction_before_given(address_instruction, instruction);
 
-				//This goes in before the given one
-				insert_instruction_before_given(global_var_address_instruction, instruction);
+					//Now we can delete the old one
+					delete_statement(instruction);
+					
+					//And reconstruct the window around the new one
+					reconstruct_window(window, address_instruction);
 
-				//Now we can delete the old one
-				delete_statement(instruction);
-				
-				//And reconstruct the window around the new one
-				reconstruct_window(window, global_var_address_instruction);
+					break;
 
-				break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: unreachable path hit in global/static variable memory address remediation\n");
+					exit(1);
+			}
 
-			//This should never happen
-			default:
-				printf("Fatal internal compiler error: unreachable path hit in memory address remediation\n");
-				exit(1);
-		}
+			//We're completely done once we get here
+			return;
 
-		//We're completely done once we get here
-		return;
+		//Otherwise we get out
+		default:
+			break;
 	}
 
 	/**
@@ -8110,6 +8114,9 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
  * address calc reg1 and the offset if appropriate
  */
 static inline void handle_load_instruction_base_address(instruction_t* load_statement){
+	int64_t stack_offset;
+	instruction_t* address_calculation;
+
 	/**
 	 * Go based on the kind of variable that we have here
 	 */
@@ -8119,42 +8126,53 @@ static inline void handle_load_instruction_base_address(instruction_t* load_stat
 		 * here
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
-			//If this is *not* a global variable
-			if(load_statement->op1->linked_var->membership != GLOBAL_VARIABLE){
-				//This is our stack offset, it will be needed going forward
-				int64_t stack_offset = load_statement->op1->linked_var->stack_region->function_local_base_address;
+			//Based on the variable's membership, we load accordingly
+			switch(load_statement->op1->linked_var->membership){
+				/**
+				 * We are loading a global/static variable(same thing) with a subsequent offset. We will need to first
+				 * load the address of said global variable, and then use that with an address calculation. We 
+				 * are not able to combine the 2 in such a way
+				 */
+				case GLOBAL_VARIABLE:
+				case STATIC_VARIABLE:
+					//Let the helper do the work
+					address_calculation = emit_global_variable_address_calculation_x86(load_statement->op1, instruction_pointer_variable, u64);
 
-				//If we actually have a stack offset to deal with. We'll store the offset constant
-				//and op1
-				if(stack_offset != 0){
-					//Emit the offset
-					load_statement->offset = emit_direct_integer_or_char_constant(stack_offset, i64);
+					//Now insert this before the given instruction
+					insert_instruction_before_given(address_calculation, load_statement);
 
-					//This will be the stack pointer
-					load_statement->address_calc_reg1 = stack_pointer_variable;
+					/**
+					 * The destination of the global variable address will be our new address calc reg 1. 
+					 * We already have the offset loaded in, so that remains unchanged
+					 */
+					load_statement->address_calc_reg1 = address_calculation->destination_register;
 
-				//Otherwise there's no stack offset, so we'll just have the stack
-				//pointer
-				} else {
-					//Copy both over
-					load_statement->address_calc_reg1 = stack_pointer_variable;
-				}
+					break;
 
-			/**
-			 * Otherwise, we are loading a global variable with a subsequent offset. We will need to first
-			 * load the address of said global variable, and then use that with an address calculation. We 
-			 * are not able to combine the 2 in such a way
-			 */
-			} else {
-				//Let the helper do the work
-				instruction_t* global_variable_address = emit_global_variable_address_calculation_x86(load_statement->op1, instruction_pointer_variable, u64);
+				/**
+				 * Otherwise we're here with a non global/static variable so we do the normal procedure
+				 */
+				default:
+					//This is our stack offset, it will be needed going forward
+					stack_offset = load_statement->op1->linked_var->stack_region->function_local_base_address;
 
-				//Now insert this before the given instruction
-				insert_instruction_before_given(global_variable_address, load_statement);
+					//If we actually have a stack offset to deal with. We'll store the offset constant
+					//and op1
+					if(stack_offset != 0){
+						//Emit the offset
+						load_statement->offset = emit_direct_integer_or_char_constant(stack_offset, i64);
 
-				//The destination of the global variable address will be our new address calc reg 1. 
-				//We already have the offset loaded in, so that remains unchanged
-				load_statement->address_calc_reg1 = global_variable_address->destination_register;
+						//This will be the stack pointer
+						load_statement->address_calc_reg1 = stack_pointer_variable;
+
+					//Otherwise there's no stack offset, so we'll just have the stack
+					//pointer
+					} else {
+						//Copy both over
+						load_statement->address_calc_reg1 = stack_pointer_variable;
+					}
+
+					break;
 			}
 
 			break;
@@ -8188,6 +8206,8 @@ static inline void handle_load_instruction_base_address(instruction_t* load_stat
  * NOTE: We assume that the very fist instruction in this window is what we're after
  */
 static void handle_load_instruction(instruction_window_t* window){
+	int64_t stack_offset;
+
 	//The load instruction itself
 	instruction_t* load_instruction = window->instruction1;
 
@@ -8204,45 +8224,57 @@ static void handle_load_instruction(instruction_window_t* window){
 		 * as well as stack offsets in this case
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
-			//If this is *not* a global variable
-			if(load_instruction->op1->linked_var->membership != GLOBAL_VARIABLE){
-				//This is our stack offset, it will be needed going forward
-				int64_t stack_offset = load_instruction->op1->linked_var->stack_region->function_local_base_address;
+			//Go based on what kind of variable that we have
+			switch(load_instruction->op1->linked_var->membership){
+				/**
+				 * Global and static variables require special attention because they belong to the data
+				 * segment of the program
+				 */
+				case GLOBAL_VARIABLE:
+				case STATIC_VARIABLE:
+					//Global/static are rip-relative
+					load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
 
-				//If we actually have a stack offset to deal with
-				if(stack_offset != 0){
-					//Let's get the offset from this memory address
-					three_addr_const_t* offset = emit_direct_integer_or_char_constant(load_instruction->op1->linked_var->stack_region->function_local_base_address, u64);
+					//The address calc reg1 is the instruction pointer
+					load_instruction->address_calc_reg1 = instruction_pointer_variable;
 
-					//We now will have something like <offset>(%rsp)
-					load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+					//The offset field holds the global var's name
+					load_instruction->rip_offset_variable = load_instruction->op1;
 
-					//This will be the stack pointer
-					load_instruction->address_calc_reg1 = stack_pointer_variable;
+					break;
 
-					//Store the offset too
-					load_instruction->offset = offset;
+				/**
+				 * Otherwise we have a regular variable that we're taking the memory address of
+				 */
+				default:
+					//This is our stack offset, it will be needed going forward
+					stack_offset = load_instruction->op1->linked_var->stack_region->function_local_base_address;
 
-				//Otherwise there's no stack offset, so we're just dereferencing the
-				//stack pointer
-				} else {
-					//Change the mode
-					load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
-					
-					//Source is now just the stack pointer
-					load_instruction->source_register = stack_pointer_variable;
-				}
+					//If we actually have a stack offset to deal with
+					if(stack_offset != 0){
+						//Let's get the offset from this memory address
+						three_addr_const_t* offset = emit_direct_integer_or_char_constant(load_instruction->op1->linked_var->stack_region->function_local_base_address, u64);
 
-			//Otherwise, we are loading a global variable
-			} else {
-				//This is going to be a global variable movement
-				load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
+						//We now will have something like <offset>(%rsp)
+						load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
-				//The address calc reg1 is the instruction pointer
-				load_instruction->address_calc_reg1 = instruction_pointer_variable;
+						//This will be the stack pointer
+						load_instruction->address_calc_reg1 = stack_pointer_variable;
 
-				//The offset field holds the global var's name
-				load_instruction->rip_offset_variable = load_instruction->op1;
+						//Store the offset too
+						load_instruction->offset = offset;
+
+					//Otherwise there's no stack offset, so we're just dereferencing the
+					//stack pointer
+					} else {
+						//Change the mode
+						load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
+						
+						//Source is now just the stack pointer
+						load_instruction->source_register = stack_pointer_variable;
+					}
+
+					break;
 			}
 
 			break;
@@ -8288,8 +8320,10 @@ static void handle_load_instruction(instruction_window_t* window){
  * NOTE: we assume that the first instruction in the window is the load instruction
  */
 static void handle_load_with_constant_offset_instruction(instruction_window_t* window){
+	int64_t stack_offset;
+
 	//Holder for down the line
-	three_addr_const_t* stack_offset;
+	three_addr_const_t* stack_offset_constant;
 
 	//This is the load that we're after
 	instruction_t* load_instruction = window->instruction1;
@@ -8307,44 +8341,56 @@ static void handle_load_with_constant_offset_instruction(instruction_window_t* w
 		 * global variable
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
-			//If this is *not* a global variable
-			if(load_instruction->op1->linked_var->membership != GLOBAL_VARIABLE){
-				//This is our stack offset, it will be needed going forward
-				int64_t stack_offset = load_instruction->op1->linked_var->stack_region->function_local_base_address;
+			switch(load_instruction->op1->linked_var->membership){
+				/**
+				 * Global and static variables require a special rip-relative addressing
+				 * to work
+				 */
+				case GLOBAL_VARIABLE:
+				case STATIC_VARIABLE:
+					//The first address calc register is the instruction pointer
+					load_instruction->address_calc_reg1 = instruction_pointer_variable;
 
-				//If we actually have a stack offset to deal with
-				if(stack_offset != 0){
-					//We need to sum the existing offset with the stack offset to get an accurate picture
-					sum_constant_with_raw_int64_value(load_instruction->offset, i64, stack_offset);
+					//The global var comes from op1
+					load_instruction->rip_offset_variable = load_instruction->op1;
 
-					//We now will have something like <offset>(%rsp)
-					load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+					/**
+					 * The offset is already where it needs to be
+					 * Now we just need to change the mode to make this work
+					 */
+					load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET;
 
-					//This will be the stack pointer
-					load_instruction->address_calc_reg1 = stack_pointer_variable;
+					break;
 
-				//Otherwise there's no stack offset, so we're just dereferencing the
-				//stack pointer with the pre-existing offset
-				} else {
-					//Change the mode
-					load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
-					
-					//Address calc just needs the stack pointer
-					load_instruction->address_calc_reg1 = stack_pointer_variable;
-				}
+				/**
+				 * Otherwise we have a standard non-global non-static variable that we will load the normal way
+				 */
+				default:
+					//This is our stack offset, it will be needed going forward
+					stack_offset = load_instruction->op1->linked_var->stack_region->function_local_base_address;
 
-			//Otherwise, we are loading a global variable with a subsequent offset. We can use a special
-			//rip-relative addressing mode to make this happen in one instruction
-			} else {
-				//The first address calc register is the instruction pointer
-				load_instruction->address_calc_reg1 = instruction_pointer_variable;
+					//If we actually have a stack offset to deal with
+					if(stack_offset != 0){
+						//We need to sum the existing offset with the stack offset to get an accurate picture
+						sum_constant_with_raw_int64_value(load_instruction->offset, i64, stack_offset);
 
-				//The global var comes from op1
-				load_instruction->rip_offset_variable = load_instruction->op1;
+						//We now will have something like <offset>(%rsp)
+						load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
-				//The offset is already where it needs to be
-				//Now we just need to change the mode to make this work
-				load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET;
+						//This will be the stack pointer
+						load_instruction->address_calc_reg1 = stack_pointer_variable;
+
+					//Otherwise there's no stack offset, so we're just dereferencing the
+					//stack pointer with the pre-existing offset
+					} else {
+						//Change the mode
+						load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+						
+						//Address calc just needs the stack pointer
+						load_instruction->address_calc_reg1 = stack_pointer_variable;
+					}
+
+					break;
 			}
 
 			break;
@@ -8356,14 +8402,14 @@ static void handle_load_with_constant_offset_instruction(instruction_window_t* w
 		 */
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:	
 			//Emit the stack passed parameter offset
-			stack_offset = emit_stack_passed_parameter_offset_constant(load_instruction->op1->associated_memory_region.stack_region, u64);
+			stack_offset_constant = emit_stack_passed_parameter_offset_constant(load_instruction->op1->associated_memory_region.stack_region, u64);
 
 			//Add these two values together. Make sure that we're storing the result inside of the stack offset - the other way around
 			//will not work
-			add_constants(stack_offset, load_instruction->offset);
+			add_constants(stack_offset_constant, load_instruction->offset);
 
 			//Now reassing the offset to be this stack offset
-			load_instruction->offset = stack_offset;
+			load_instruction->offset = stack_offset_constant;
 
 			//We now will have something like <offset>(%rsp)
 			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
@@ -8396,6 +8442,9 @@ static void handle_load_with_constant_offset_instruction(instruction_window_t* w
  * NOTE: We assume that the load instruction is always the first in the window
  */
 static void handle_load_with_variable_offset_instruction(instruction_window_t* window){
+	int64_t stack_offset;
+	instruction_t* global_variable_address;
+
 	//As noted above, this is the assumption
 	instruction_t* load_instruction = window->instruction1;
 
@@ -8413,41 +8462,30 @@ static void handle_load_with_variable_offset_instruction(instruction_window_t* w
 		 * is possible that this is also a global variable memory address as well
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
-			//If this is *not* a global variable
-			if(load_instruction->op1->linked_var->membership != GLOBAL_VARIABLE){
-				//This is our stack offset, it will be needed going forward
-				int64_t stack_offset = load_instruction->op1->linked_var->stack_region->function_local_base_address;
+			switch(load_instruction->op1->linked_var->membership){
+				/**
+				 * We are loading a global/static variable with a subsequent offset. We will need to first
+				 * load the address of said global variable, and then use that with an address calculation. We 
+				 * are not able to combine the 2 in such a way
+				 */
+				case GLOBAL_VARIABLE:
+				case STATIC_VARIABLE:
+					//Let the helper do the work
+					global_variable_address = emit_global_variable_address_calculation_x86(load_instruction->op1, instruction_pointer_variable, u64);
 
-				//If we actually have a stack offset to deal with
-				if(stack_offset != 0){
-					//We'll have something like <offset>(%rsp, t4)
-					load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+					//Now insert this before the given instruction
+					insert_instruction_before_given(global_variable_address, load_instruction);
 
-					//Emit the offset
-					load_instruction->offset = emit_direct_integer_or_char_constant(stack_offset, i64);
-
-					//This will be the stack pointer
-					load_instruction->address_calc_reg1 = stack_pointer_variable;
-
-					//And this is whatever was there before
-					load_instruction->address_calc_reg2 = load_instruction->op2;
-
-					/**
-					 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-					 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-					 * must adhere to this one's type
-					 */
-					if(is_converting_move_required(load_instruction->address_calc_reg1->type, load_instruction->address_calc_reg2->type) == TRUE){
-						load_instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(load_instruction, load_instruction->address_calc_reg2, load_instruction->address_calc_reg1->type);
-					}
-
-				//Otherwise there's no stack offset, so we'll keep the op2 and only have registers
-				} else {
-					//Change the mode
+					//These are registers only
 					load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
-					
-					//Copy both over
-					load_instruction->address_calc_reg1 = stack_pointer_variable;
+
+					/**
+					 * The destination of the global variable address will be our new address calc reg 1. 
+					 * We already have the offset loaded in, so that remains unchanged
+					 */
+					load_instruction->address_calc_reg1 = global_variable_address->destination_register;
+
+					//The second address calc register is whatever is in op2
 					load_instruction->address_calc_reg2 = load_instruction->op2;
 
 					/**
@@ -8458,40 +8496,59 @@ static void handle_load_with_variable_offset_instruction(instruction_window_t* w
 					if(is_converting_move_required(load_instruction->address_calc_reg1->type, load_instruction->address_calc_reg2->type) == TRUE){
 						load_instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(load_instruction, load_instruction->address_calc_reg2, load_instruction->address_calc_reg1->type);
 					}
-				}
 
-			/**
-			 * Otherwise, we are loading a global variable with a subsequent offset. We will need to first
-			 * load the address of said global variable, and then use that with an address calculation. We 
-			 * are not able to combine the 2 in such a way
-			 */
-			} else {
-				//Let the helper do the work
-				instruction_t* global_variable_address = emit_global_variable_address_calculation_x86(load_instruction->op1, instruction_pointer_variable, u64);
-
-				//Now insert this before the given instruction
-				insert_instruction_before_given(global_variable_address, load_instruction);
-
-				//These are registers only
-				load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
-
+					break;
+				
 				/**
-				 * The destination of the global variable address will be our new address calc reg 1. 
-				 * We already have the offset loaded in, so that remains unchanged
+				 * Not global or static - normal handling of the address
 				 */
-				load_instruction->address_calc_reg1 = global_variable_address->destination_register;
+				default:
+					//This is our stack offset, it will be needed going forward
+					stack_offset = load_instruction->op1->linked_var->stack_region->function_local_base_address;
 
-				//The second address calc register is whatever is in op2
-				load_instruction->address_calc_reg2 = load_instruction->op2;
+					//If we actually have a stack offset to deal with
+					if(stack_offset != 0){
+						//We'll have something like <offset>(%rsp, t4)
+						load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
 
-				/**
-				 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-				 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-				 * must adhere to this one's type
-				 */
-				if(is_converting_move_required(load_instruction->address_calc_reg1->type, load_instruction->address_calc_reg2->type) == TRUE){
-					load_instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(load_instruction, load_instruction->address_calc_reg2, load_instruction->address_calc_reg1->type);
-				}
+						//Emit the offset
+						load_instruction->offset = emit_direct_integer_or_char_constant(stack_offset, i64);
+
+						//This will be the stack pointer
+						load_instruction->address_calc_reg1 = stack_pointer_variable;
+
+						//And this is whatever was there before
+						load_instruction->address_calc_reg2 = load_instruction->op2;
+
+						/**
+						 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+						 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+						 * must adhere to this one's type
+						 */
+						if(is_converting_move_required(load_instruction->address_calc_reg1->type, load_instruction->address_calc_reg2->type) == TRUE){
+							load_instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(load_instruction, load_instruction->address_calc_reg2, load_instruction->address_calc_reg1->type);
+						}
+
+					//Otherwise there's no stack offset, so we'll keep the op2 and only have registers
+					} else {
+						//Change the mode
+						load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+						
+						//Copy both over
+						load_instruction->address_calc_reg1 = stack_pointer_variable;
+						load_instruction->address_calc_reg2 = load_instruction->op2;
+
+						/**
+						 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+						 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+						 * must adhere to this one's type
+						 */
+						if(is_converting_move_required(load_instruction->address_calc_reg1->type, load_instruction->address_calc_reg2->type) == TRUE){
+							load_instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(load_instruction, load_instruction->address_calc_reg2, load_instruction->address_calc_reg1->type);
+						}
+					}
+
+					break;
 			}
 
 			break;
@@ -8754,6 +8811,8 @@ static void combine_lea_with_regular_load_instruction(instruction_window_t* wind
  * Handle a store instruction. This will be reorganized into a memory accessing move.
  */
 static void handle_store_instruction(instruction_t* instruction){
+	int64_t stack_offset;
+
 	//Store is to memory
 	instruction->memory_access_type = WRITE_TO_MEMORY;
 
@@ -8765,44 +8824,54 @@ static void handle_store_instruction(instruction_t* instruction){
 		 * on what the stack offset is
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
-			//If it is *not* a global variable(most common case)
-			if(instruction->assignee->linked_var->membership != GLOBAL_VARIABLE){
-				//Get the stack offset
-				int64_t stack_offset = instruction->assignee->linked_var->stack_region->function_local_base_address;
+			switch(instruction->assignee->linked_var->membership){
+				/**
+				 * Global or static variable, we will need to load these as rip-relative
+				 */
+				case GLOBAL_VARIABLE:
+				case STATIC_VARIABLE:
+					//This is going to be a global variable movement
+					instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
 
-				//If it's not 0, we need to do some arithmetic
-				if(stack_offset != 0){
-					//Let's get the offset from this memory address
-					three_addr_const_t* offset = emit_direct_integer_or_char_constant(instruction->assignee->linked_var->stack_region->function_local_base_address, u64);
+					//The address calc reg1 is the instruction pointer
+					instruction->address_calc_reg1 = instruction_pointer_variable;
 
-					//The first address calc register will be the stack pointer
-					instruction->address_calc_reg1 = stack_pointer_variable;
+					//The global variable is held by the offset
+					instruction->rip_offset_variable = instruction->assignee;
+					
+					break;
 
-					//And we need to store the offset
-					instruction->offset = offset;
+				/**
+				 * Non global variable - no special steps required
+				 */
+				default:
+					//Get the stack offset
+					stack_offset = instruction->assignee->linked_var->stack_region->function_local_base_address;
 
-					//This counts for our destination only
-					instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+					//If it's not 0, we need to do some arithmetic
+					if(stack_offset != 0){
+						//Let's get the offset from this memory address
+						three_addr_const_t* offset = emit_direct_integer_or_char_constant(instruction->assignee->linked_var->stack_region->function_local_base_address, u64);
 
-				//If it is 0, we only need to deref the stack pointer
-				} else {
-					//This is the stack pointer, no offset is needed
-					instruction->destination_register = stack_pointer_variable;
+						//The first address calc register will be the stack pointer
+						instruction->address_calc_reg1 = stack_pointer_variable;
 
-					//Just dereference the destination here, nothing more
-					instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
-				}
+						//And we need to store the offset
+						instruction->offset = offset;
 
-			//Otherwise, this is a global variable so we need to take special steps to deal with it
-			} else {
-				//This is going to be a global variable movement
-				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
+						//This counts for our destination only
+						instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
-				//The address calc reg1 is the instruction pointer
-				instruction->address_calc_reg1 = instruction_pointer_variable;
+					//If it is 0, we only need to deref the stack pointer
+					} else {
+						//This is the stack pointer, no offset is needed
+						instruction->destination_register = stack_pointer_variable;
 
-				//The global variable is held by the offset
-				instruction->rip_offset_variable = instruction->assignee;
+						//Just dereference the destination here, nothing more
+						instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
+					}
+
+					break;
 			}
 
 			break;
@@ -8852,6 +8921,8 @@ static void handle_store_instruction(instruction_t* instruction){
  * This will always be an OFFSET_ONLY calculation type
  */
 static void handle_store_with_constant_offset_instruction(instruction_t* instruction){
+	int64_t stack_offset;
+
 	//For later use
 	symtab_variable_record_t* linked_var;
 
@@ -8871,46 +8942,55 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 			//Grab the linked var out
 			linked_var = instruction->assignee->linked_var;
 
-			//If we have a non-global variable, then we've got a stack
-			//address
-			if(linked_var->membership != GLOBAL_VARIABLE){
-				//Get the stack offset
-				int64_t stack_offset = instruction->assignee->linked_var->stack_region->function_local_base_address;
+			switch(linked_var->membership){
+				/**
+				 * Global and static variable require special rip-relative addressing to be done
+				 */
+				case GLOBAL_VARIABLE:
+				case STATIC_VARIABLE:
+					//The first address calc register is the instruction pointer always
+					instruction->address_calc_reg1 = instruction_pointer_variable;
 
-				//If it's not 0, we need to do some arithmetic with the constants
-				if(stack_offset != 0){
-					//This is still the stack pointer
-					instruction->address_calc_reg1 = stack_pointer_variable;
+					//The offset is already in place, we just need to set the rip offset variable based on the assignee
+					instruction->rip_offset_variable = instruction->assignee;
 
-					//We'll now add the stack offset to the offset that we already have
-					//in the "offset variable"
-					sum_constant_with_raw_int64_value(instruction->offset, i64, stack_offset);
+					//All that we need to do now is change the calculation mode to be rip with offset
+					instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET;
 
-					//Once that's done, we just need to change the address calc mode
-					instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+					break;
 
-				//Even if this is 0, we still need to account for the offset in the original
-				//statement
-				} else {
-					//The base address is the assignee
-					instruction->address_calc_reg1 = stack_pointer_variable;
+				/**
+				 * Not global or static - pure stack memory we're dealing with here
+				 */
+				default:
+					//Get the stack offset
+					stack_offset = instruction->assignee->linked_var->stack_region->function_local_base_address;
 
-					//The offset is already stored in the "offset" field
-					
-					//This has the address calc and the offset
-					instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
-				}
+					//If it's not 0, we need to do some arithmetic with the constants
+					if(stack_offset != 0){
+						//This is still the stack pointer
+						instruction->address_calc_reg1 = stack_pointer_variable;
 
-			//If we have a global variable, we can use a special rip-relative addressing mode to make this happen
-			} else {
-				//The first address calc register is the instruction pointer always
-				instruction->address_calc_reg1 = instruction_pointer_variable;
+						//We'll now add the stack offset to the offset that we already have
+						//in the "offset variable"
+						sum_constant_with_raw_int64_value(instruction->offset, i64, stack_offset);
 
-				//The offset is already in place, we just need to set the rip offset variable based on the assignee
-				instruction->rip_offset_variable = instruction->assignee;
+						//Once that's done, we just need to change the address calc mode
+						instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
-				//All that we need to do now is change the calculation mode to be rip with offset
-				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET;
+					//Even if this is 0, we still need to account for the offset in the original
+					//statement
+					} else {
+						//The base address is the assignee
+						instruction->address_calc_reg1 = stack_pointer_variable;
+
+						//The offset is already stored in the "offset" field
+						
+						//This has the address calc and the offset
+						instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+					}
+
+					break;
 			}
 
 			break;
@@ -8960,6 +9040,9 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
  * This will most often generate stores with offsets and registers
  */
 static void handle_store_with_variable_offset_instruction(instruction_t* instruction){
+	int64_t stack_offset;
+	instruction_t* global_variable_address;
+
 	//For later use
 	symtab_variable_record_t* linked_var;
 
@@ -8980,78 +9063,90 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 			//Grab the linked var out
 			linked_var = instruction->assignee->linked_var;
 
-			//If we have a non-global variable, then we've got a stack
-			//address
-			if(linked_var->membership != GLOBAL_VARIABLE){
-				//Get the stack offset
-				int64_t stack_offset = instruction->assignee->linked_var->stack_region->function_local_base_address;
+			switch(linked_var->membership){
+				/**
+				 * Global and static variable require special rip-relative
+				 * addressing modes to work
+				 */
+				case GLOBAL_VARIABLE:
+				case STATIC_VARIABLE:
+					//Let the helper do the work
+					global_variable_address = emit_global_variable_address_calculation_x86(instruction->assignee, instruction_pointer_variable, u64);
 
-				//If it's not 0, we need to do some arithmetic with the constants
-				if(stack_offset != 0){
-					//Once that's done, we just need to change the address calc mode
-					instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+					//Now insert this before the given instruction
+					insert_instruction_before_given(global_variable_address, instruction);
 
-					//This is still the stack pointer
-					instruction->address_calc_reg1 = stack_pointer_variable;
-
-					//This is the variable offset
-					instruction->address_calc_reg2 = instruction->op1;
-
-					//We will need to have a stack offset here since the memory base address has one
-					instruction->offset = emit_direct_integer_or_char_constant(stack_offset, i64);
-
-					//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-					//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-					//must adhere to this one's type
-					if(is_converting_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
-						instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
-					}
-
-				//Even if this is 0, we still need to account for the offset in the original
-				//statement
-				} else {
-					//This has registers only
+					//We have 2 registers so this is registers only
 					instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
 
-					//The base address is the assignee
-					instruction->address_calc_reg1 = stack_pointer_variable;
+					//The destination of the global variable address will be our new address calc reg 1. 
+					//We already have the offset loaded in, so that remains unchanged
+					instruction->address_calc_reg1 = global_variable_address->destination_register;
 
-					//And the offset is op1
+					//Address calc reg 2 is op1 always
 					instruction->address_calc_reg2 = instruction->op1;
 
-					//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-					//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-					//must adhere to this one's type
+					/**
+					 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+					 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+					 * must adhere to this one's type
+					 */
 					if(is_converting_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
 						instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
 					}
-				}
 
-			//If we have a global variable, we will need to first load in the address and then go through and 
-			//handle the value normally
-			} else {
-				//Let the helper do the work
-				instruction_t* global_variable_address = emit_global_variable_address_calculation_x86(instruction->assignee, instruction_pointer_variable, u64);
+					break;
 
-				//Now insert this before the given instruction
-				insert_instruction_before_given(global_variable_address, instruction);
+				/**
+				 * Regular stack offset variable handling
+				 */
+				default:
+					//Get the stack offset
+					stack_offset = instruction->assignee->linked_var->stack_region->function_local_base_address;
 
-				//We have 2 registers so this is registers only
-				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+					//If it's not 0, we need to do some arithmetic with the constants
+					if(stack_offset != 0){
+						//Once that's done, we just need to change the address calc mode
+						instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
 
-				//The destination of the global variable address will be our new address calc reg 1. 
-				//We already have the offset loaded in, so that remains unchanged
-				instruction->address_calc_reg1 = global_variable_address->destination_register;
+						//This is still the stack pointer
+						instruction->address_calc_reg1 = stack_pointer_variable;
 
-				//Address calc reg 2 is op1 always
-				instruction->address_calc_reg2 = instruction->op1;
+						//This is the variable offset
+						instruction->address_calc_reg2 = instruction->op1;
 
-				//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-				//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-				//must adhere to this one's type
-				if(is_converting_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
-					instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
-				}
+						//We will need to have a stack offset here since the memory base address has one
+						instruction->offset = emit_direct_integer_or_char_constant(stack_offset, i64);
+
+						//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+						//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+						//must adhere to this one's type
+						if(is_converting_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
+							instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+						}
+
+					//Even if this is 0, we still need to account for the offset in the original statement
+					} else {
+						//This has registers only
+						instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+
+						//The base address is the assignee
+						instruction->address_calc_reg1 = stack_pointer_variable;
+
+						//And the offset is op1
+						instruction->address_calc_reg2 = instruction->op1;
+
+						/**
+						 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+						 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+						 * must adhere to this one's type
+						 */
+						if(is_converting_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
+							instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+						}
+					}
+
+					break;
 			}
 
 			break;
@@ -9114,46 +9209,58 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
  * address calc reg1 and the offset if appropriate
  */
 static void handle_store_statement_base_address(instruction_t* store_instruction){
+	int64_t stack_offset;
+	instruction_t* global_variable_address;
+
 	//Do we have a memory address variable(very common) or not?
 	if(store_instruction->assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
 		//Grab the linked var out
 		symtab_variable_record_t* linked_var = store_instruction->assignee->linked_var;
 
-		//If we have a non-global variable, then we've got a stack
-		//address
-		if(linked_var->membership != GLOBAL_VARIABLE){
-			//Get the stack offset
-			int64_t stack_offset = linked_var->stack_region->function_local_base_address;
+		switch(linked_var->membership){
+			/**
+			 * Global and static variables require specialized rip-relative addressing
+			 */
+			case GLOBAL_VARIABLE:
+			case STATIC_VARIABLE:
+				//Let the helper do the work
+				global_variable_address = emit_global_variable_address_calculation_x86(store_instruction->assignee, instruction_pointer_variable, u64);
 
-			//If it's not 0, we need to do some arithmetic with the constants
-			if(stack_offset != 0){
-				//Once that's done, we just need to change the address calc mode
-				store_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+				//Now insert this before the given instruction
+				insert_instruction_before_given(global_variable_address, store_instruction);
 
-				//This is still the stack pointer
-				store_instruction->address_calc_reg1 = stack_pointer_variable;
+				/**
+				 * The destination of the global variable address will be our new address calc reg 1. 
+				 * We already have the offset loaded in, so that remains unchanged
+				 */
+				store_instruction->address_calc_reg1 = global_variable_address->destination_register;
 
-				//We will need to have a stack offset here since the memory base address has one
-				store_instruction->offset = emit_direct_integer_or_char_constant(stack_offset, i64);
+				break;
 
-			//All that we need to do now is use the stack pointer
-			} else {
-				//The base address is the assignee
-				store_instruction->address_calc_reg1 = stack_pointer_variable;
-			}
+			/**
+			 * Regular stack memory - default handling
+			 */
+			default:
+				//Get the stack offset
+				stack_offset = linked_var->stack_region->function_local_base_address;
 
-		//If we have a global variable, we will need to first load in the address and then go through and 
-		//handle the value normally
-		} else {
-			//Let the helper do the work
-			instruction_t* global_variable_address = emit_global_variable_address_calculation_x86(store_instruction->assignee, instruction_pointer_variable, u64);
+				//If it's not 0, we need to do some arithmetic with the constants
+				if(stack_offset != 0){
+					//Once that's done, we just need to change the address calc mode
+					store_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
 
-			//Now insert this before the given instruction
-			insert_instruction_before_given(global_variable_address, store_instruction);
+					//This is still the stack pointer
+					store_instruction->address_calc_reg1 = stack_pointer_variable;
 
-			//The destination of the global variable address will be our new address calc reg 1. 
-			//We already have the offset loaded in, so that remains unchanged
-			store_instruction->address_calc_reg1 = global_variable_address->destination_register;
+					//We will need to have a stack offset here since the memory base address has one
+					store_instruction->offset = emit_direct_integer_or_char_constant(stack_offset, i64);
+
+				//All that we need to do now is use the stack pointer
+				} else {
+					//The base address is the assignee
+					store_instruction->address_calc_reg1 = stack_pointer_variable;
+				}
+				break;
 		}
 
 	//Otherwise there is no memory address, so we just handle normally

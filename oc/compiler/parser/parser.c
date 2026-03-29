@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 #include "parser.h"
 #include "../utils/stack/lexstack.h"
@@ -92,22 +93,22 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream, u_int8_t new_variable_scope_required);
 static generic_ast_node_t* statement(ollie_token_stream_t* token_stream);
-static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global);
+static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global, visibilty_type_t visibility);
 static generic_ast_node_t* logical_or_expression(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, generic_ast_node_t* switch_stmt_node, int32_t* values, int32_t* current_case_value);
 static generic_ast_node_t* default_statement(ollie_token_stream_t* token_stream);
-static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream, u_int8_t is_global);
+static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream, u_int8_t is_global, visibilty_type_t visibility);
 static generic_ast_node_t* defer_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* idle_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_type_t side);
-static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream);
+static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream, visibilty_type_t visibility);
 static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream);
 static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* function_type, u_int8_t defining_predeclared_function);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_global_scope);
-static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, u_int8_t is_global);
+static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, variable_membership_t membership);
 static inline generic_type_t* handle_elaborative_param_type(generic_type_t* elaborated_type);
 static u_int8_t validate_function_parameter_list(generic_type_t* function_type);
 
@@ -154,6 +155,23 @@ static inline u_int8_t does_enum_contain_integer_member(generic_type_t* enum_typ
 	//If we get down here we don't have it
 	return FALSE;
 }
+
+
+/**
+ * Is a given variable a data segment variable? These variables are not actually
+ * stored in registers or in memory so we need to treat them a bit differently. In
+ * ollie only static and global variables fit the bill for this
+ */
+static inline u_int8_t is_variable_data_segment_variable(symtab_variable_record_t* variable){
+	switch(variable->membership){
+		case GLOBAL_VARIABLE:
+		case STATIC_VARIABLE:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
 
 /**
  * Perform any needed constant coercion that is being done for an assignment. This includes converting pointers to 64-bit
@@ -2332,10 +2350,12 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 					return ident;
 				}
 
-				//If this is the right hand side and our variable is not initialized,
-				//this is invalid as we are trying to use before initialization
+				/**
+				 * If this is the right hand side and our variable is not initialized,
+				 * this is invalid as we are trying to use before initialization
+				 */
 				if(side == SIDE_TYPE_RIGHT 
-					&& found_var->membership != GLOBAL_VARIABLE //We do not care for such checks with global vars
+					&& is_variable_data_segment_variable(found_var) == FALSE
 					&& found_var->initialized == FALSE){
 					sprintf(info, "Attempt to use variable %s before initialization", found_var->var_name.string);
 					return print_and_return_error(info, parser_line_num);
@@ -3637,12 +3657,14 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 			switch(cast_expr->ast_node_type){
 				//We can take an identifiers address
 				case AST_NODE_TYPE_IDENTIFIER:
-					//If this is not already a memory region, then we need to flag it as one
-					//for later so that the cfg constructor knows what we'll eventually need to
-					//load
+					/**
+					 * If this is not already a memory region, then we need to flag it as one
+					 * for later so that the cfg constructor knows what we'll eventually need to
+					 * load. We need to exclude anything that is a data segment variable for
+					 * these checks
+					 */
 					if(is_memory_region(cast_expr->variable->type_defined_as) == FALSE
-						//AND it's not a global var
-						&& cast_expr->variable->membership != GLOBAL_VARIABLE){
+						&& is_variable_data_segment_variable(cast_expr->variable) == FALSE){
 
 						//IMPORTANT - we need to flag this as a stack variable now
 						cast_expr->variable->stack_variable = TRUE;
@@ -8243,11 +8265,11 @@ static inline generic_ast_node_t* expression_statement_no_ending_semicolon(ollie
 		switch (lookahead.tok) {
 			case DECLARE:
 				//IMPORTANT - declares can/will be null if they're declaring a primitive type
-				current_expression_node = declare_statement(token_stream, FALSE);
+				current_expression_node = declare_statement(token_stream, FALSE, VISIBILITY_TYPE_PRIVATE);
 				break;
 
 			case LET:
-				current_expression_node = let_statement(token_stream, FALSE);
+				current_expression_node = let_statement(token_stream, FALSE, VISIBILITY_TYPE_PRIVATE);
 				break;
 
 			//If we don't see declare or let, we push it back
@@ -8323,11 +8345,11 @@ static inline generic_ast_node_t* expression_statement(ollie_token_stream_t* tok
 		switch (lookahead.tok) {
 			case DECLARE:
 				//IMPORTANT - declares can/will be null if they're declaring a primitive type
-				current_expression_node = declare_statement(token_stream, FALSE);
+				current_expression_node = declare_statement(token_stream, FALSE, VISIBILITY_TYPE_PRIVATE);
 				break;
 
 			case LET:
-				current_expression_node = let_statement(token_stream, FALSE);
+				current_expression_node = let_statement(token_stream, FALSE, VISIBILITY_TYPE_PRIVATE);
 				break;
 
 			//If we don't see declare or let, we push it back
@@ -10664,23 +10686,26 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
  * 
  * NOTE: We have already seen and consume the "declare" keyword by the time that we get here
  *
- * BNF Rule: <declare-statement> ::= declare {<function_predeclaration> | {static}? {mut}? <identifier> : <type-specifier>}
+ * BNF Rule: <declare-statement> ::= declare {<function_predeclaration> | {static}? <identifier> : <type-specifier>}
  */
-static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream, u_int8_t is_global){
+static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream, u_int8_t is_global, visibilty_type_t visibility){
 	//Freeze the current line number
 	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
+	//Is it static - this is almost always false
+	u_int8_t is_static = FALSE;
 
 	//Let's see if we have a storage class
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
 	//Go based on what we see here
 	switch(lookahead.tok){
-		//If we see any of these tokens, it means that the user is predeclaring a function.
-		//In this case, we push the token back and let the function predeclaration rule
-		//handle it
-		case PUB:
+		/**
+		 * If we see any of these tokens, it means that the user is predeclaring a function.
+		 * In this case, we push the token back and let the function predeclaration rule
+		 * handle it
+		 */
 		case INLINE:
 		case FN:
 			//If this is now global, then we cannot do this
@@ -10690,7 +10715,25 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 
 			push_back_token(token_stream, &parser_line_num);
 			//Let this rule handle it
-			return function_predeclaration(token_stream);
+			return function_predeclaration(token_stream, visibility);
+
+		/**
+		 * If we see the static keyword, then we know that
+		 * we are declaring a static variable here so we'll
+		 * flag it and refresh the token
+		 */
+		case STATIC:
+			//Not possible to have a static global variable
+			if(is_global == TRUE){
+				return print_and_return_error("Global variables may not be declared as static", parser_line_num);
+			}
+
+			is_static = TRUE;
+
+			//Refresh the token
+			lookahead = get_next_token(token_stream, &parser_line_num);
+
+			break;
 	
 		//By default just leave
 		default:
@@ -10757,11 +10800,25 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 	if(strcmp(type_spec->type_name.string, "void") == 0){
 		return print_and_return_error("\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
 	}
+	
+	/**
+	 * Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
+	 * now create the variable record for this function
+	 */
+	symtab_variable_record_t* declared_var;
 
-	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
-	//now create the variable record for this function
-	//Initialize the record
-	symtab_variable_record_t* declared_var = create_variable_record(name);
+	//Based on the type we'll create appropriately
+	if(is_static == FALSE){
+		//Go based on it's global status
+		if(is_global == FALSE){
+			declared_var = create_variable_record(name);
+		} else {
+			declared_var = create_global_variable_record(name, visibility);
+		}
+	} else {
+		declared_var = create_static_variable_record(name);
+	}
+
 	//Store the type--make sure that we strip any aliasing off of it first
 	declared_var->type_defined_as = dealias_type(type_spec);
 	//It was declared
@@ -10770,8 +10827,6 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 	declared_var->function_declared_in = current_function;
 	//The line_number
 	declared_var->line_number = current_line;
-	//Is it global? This speeds up optimization down the line
-	declared_var->membership = is_global == TRUE ? GLOBAL_VARIABLE : NO_MEMBERSHIP;
 	//Now that we're all good, we can add it into the symbol table
 	insert_variable(variable_symtab, declared_var);
 
@@ -10829,7 +10884,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 			}
 
 			//If this is a global variable, then we also must ensure that a declaration exists
-			if(is_global == TRUE){
+			if(is_variable_data_segment_variable(declared_var) == TRUE){
 				//Actually create the node now
 				declaration_node = ast_node_alloc(AST_NODE_TYPE_DECL_STMT, SIDE_TYPE_LEFT);
 
@@ -10847,8 +10902,10 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 			break;
 	}
 
-	//Return this. It will either be NULL or a generic node based on whether or not
-	//a stack allocation was required
+	/**
+	 * Return this. It will either be NULL or a generic node based on whether or not
+	 * a stack/global variable allocation was required
+	 */
 	return declaration_node;
 }
 
@@ -10856,7 +10913,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 /**
  * Crawl the array initializer list and validate that we have a compatible type for each entry in the list
  */
-static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node, u_int8_t is_global){
+static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node, variable_membership_t membership){
 	//Grab the member type here out as well
 	generic_type_t* member_type = array_type->internal_types.member_type;
 
@@ -10873,7 +10930,7 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 	//to the given array type
 	while(cursor != NULL){
 		//We'll use the same top level initialization check for this rule as well
-		generic_type_t* final_type = validate_intializer_types(member_type, cursor, is_global);
+		generic_type_t* final_type = validate_intializer_types(member_type, cursor, membership);
 
 		//If these fail, then we're done here. No need for an error message, they'll have already been
 		//printed
@@ -10922,7 +10979,7 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
  * fields in the struct in the initializer. Unlike in C or other languages, we will not allows users to partially fill a struct
  * up
  */
-static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struct_type, generic_ast_node_t* initializer_list_node, u_int8_t is_global){
+static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struct_type, generic_ast_node_t* initializer_list_node, variable_membership_t membership){
 	//We'll need to extract the struct table and that max index that it holds
 	dynamic_array_t struct_table = struct_type->internal_types.struct_table;
 
@@ -10948,7 +11005,7 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
 		symtab_variable_record_t* variable = dynamic_array_get_at(&struct_table, seen_count);
 
 		//Recursively call the initializer processor rule. This allows us to handle nested initializations
-		generic_type_t* final_type = validate_intializer_types(variable->type_defined_as, cursor, is_global);
+		generic_type_t* final_type = validate_intializer_types(variable->type_defined_as, cursor, membership);
 
 		//Let's check to see if the types are assignable
 		if(final_type == NULL){
@@ -11035,7 +11092,7 @@ static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic
 /**
  * Top level initializer value for type validation
  */
-static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, u_int8_t is_global){
+static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, variable_membership_t membership){
 	//Dealias this just to be safe
 	target_type = dealias_type(target_type);
 
@@ -11067,7 +11124,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 			}
 
 			//Run the validation step for the intializer list
-			validation_succeeded = validate_types_for_array_initializer_list(target_type, initializer_node, is_global);
+			validation_succeeded = validate_types_for_array_initializer_list(target_type, initializer_node, membership);
 
 			//If this didn't work we fail out
 			if(validation_succeeded == FALSE){
@@ -11089,7 +11146,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 			}
 
 			//Run the validation step for a struct
-			validation_succeeded = validate_types_for_struct_initializer_list(target_type, initializer_node, is_global);
+			validation_succeeded = validate_types_for_struct_initializer_list(target_type, initializer_node, membership);
 
 			//If this didn't work we fail out
 			if(validation_succeeded == FALSE){
@@ -11122,11 +11179,25 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 				return return_type;
 			}
 
-			//If it's a global VAR, the initialization here must be a constant
-			if(is_global == TRUE && initializer_node->ast_node_type != AST_NODE_TYPE_CONSTANT){
-				//Fail out if we hit this
-				print_parse_message(MESSAGE_TYPE_ERROR, "Initializer value is not a compile-time constant", parser_line_num);
-				return NULL;
+			/**
+			 * For static and global variables, we cannot initialize to anything
+			 * that is not a constant. Failure to enforce this will lead
+			 * to invalid assembly so we check here
+			 */
+			switch(membership){
+				case STATIC_VARIABLE:
+				case GLOBAL_VARIABLE:
+					//Not a constant is invalid
+					if(initializer_node->ast_node_type != AST_NODE_TYPE_CONSTANT){
+						print_parse_message(MESSAGE_TYPE_ERROR, "Initializer value is not a compile-time constant", parser_line_num);
+						num_errors++;
+						return NULL;
+					}
+					
+					break;
+
+				default:
+					break;
 			}
 
 			/**
@@ -11184,19 +11255,49 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
  *
  * NOTE: By the time we get here, we've already consumed the let keyword
  *
- * BNF Rule: <let-statement> ::= let {register | static}? <identifier> : <type-specifier> := <ternary_expression>
+ * BNF Rule: <let-statement> ::= let {static}? <identifier> : <type-specifier> := <ternary_expression>
  */
-static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global){
+static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global, visibilty_type_t visibility){
 	//The line number
 	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
+	//Is this variable static - almost always false
+	u_int8_t is_static = FALSE;
+	//What is our variable membership? By default we use the generic
+	variable_membership_t membership = NO_MEMBERSHIP;
 
 	//Let's first declare the root node
 	generic_ast_node_t* let_stmt_node = ast_node_alloc(AST_NODE_TYPE_LET_STMT, SIDE_TYPE_LEFT);
 
 	//Grab the next token -- we could potentially see a storage class specifier
 	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	/**
+	 * If we've seen the static declaration, we will simply
+	 * note it and move along.
+	 */
+	if(lookahead.tok == STATIC){
+		//It is not possible to have a static global variable
+		if(is_global == TRUE){
+			return print_and_return_error("Global variables may not be declared as static", parser_line_num);
+		}
+
+		is_static = TRUE;
+
+		//Refresh the lookahead
+		lookahead = get_next_token(token_stream, &parser_line_num);
+	}
+
+	/**
+	 * Update our membership. This will come into play during the initializer
+	 * validation
+	 */
+	if(is_global == TRUE){
+		membership = GLOBAL_VARIABLE;
+	} else if(is_static == TRUE){
+		membership = STATIC_VARIABLE;
+	}
 
 	//If it's not an identifier, we fail
 	if(lookahead.tok != IDENT){
@@ -11263,9 +11364,11 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	//Now we need to see a valid initializer
 	generic_ast_node_t* initializer_node = initializer(token_stream, SIDE_TYPE_RIGHT);
 	
-	//Store the return type here after we do all needed validations. This rule allows 
-	//for recursive validation, so that we can handle recursive initialization
-	generic_type_t* return_type = validate_intializer_types(type_spec, initializer_node, is_global);
+	/**
+	 * Store the return type here after we do all needed validations. This rule allows 
+	 * for recursive validation, so that we can handle recursive initialization
+	 */
+	generic_type_t* return_type = validate_intializer_types(type_spec, initializer_node, membership);
 
 	//If the return type is NULL, we fail out here
 	if(return_type == NULL){
@@ -11285,10 +11388,25 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	//Otherwise it worked, so we'll add it in as a child
 	add_child_node(let_stmt_node, initializer_node);
 
-	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
-	//now create the variable record for this function
-	//Initialize the record
-	symtab_variable_record_t* declared_var = create_variable_record(name);
+	/**
+	 * Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
+	 * now create the variable record for this function
+	 * Initialize the record
+	 */
+	symtab_variable_record_t* declared_var;
+
+	//Declare and set appropriately based on the membership
+	if(is_static == FALSE){
+		//Go based on it's global status
+		if(is_global == FALSE){
+			declared_var = create_variable_record(name);
+		} else {
+			declared_var = create_global_variable_record(name, visibility);
+		}
+	} else {
+		declared_var = create_static_variable_record(name);
+	}
+
 	//Store the type
 	declared_var->type_defined_as = type_spec;
 	//It was initialized
@@ -11297,8 +11415,6 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	declared_var->function_declared_in = current_function;
 	//It was "letted" 
 	declared_var->declare_or_let = 1;
-	//Is it a global var or not? This speeds up optimization
-	declared_var->membership = is_global == TRUE ? GLOBAL_VARIABLE : NO_MEMBERSHIP;
 	//Save the line num
 	declared_var->line_number = current_line;
 
@@ -11564,7 +11680,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
 	function_type_t* signature = type->internal_types.function_type;
 
 	//If the main function is not public, then we fail
-	if(signature->is_public == FALSE){
+	if(signature->visibility == VISIBILITY_TYPE_PRIVATE){
 		print_parse_message(MESSAGE_TYPE_ERROR, "The main function must be prefixed with the \"pub\" keyword", parser_line_num);
 		return FALSE;
 	}
@@ -12264,9 +12380,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
  *
  * NOTE: by the time we get here, we've already seen the declare keyword
  */
-static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream){
-	//Is this a public function?
-	u_int8_t is_public = FALSE;
+static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream, visibilty_type_t visibility){
 	//Is this an inline function? Also assume no by default
 	u_int8_t is_inlined = FALSE;
 	//Does this funtion raise errors? We know based on the ! after the fn keyword
@@ -12275,35 +12389,16 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	//Lookahead token
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
-	//We could see pub fn or fn here, so we need to process both cases
+	//We could see either fn or inline here
 	switch(lookahead.tok){
-		//Explicit declaration that this function is visible to other partial programs
-		case PUB:
-			//Flag that it is public
-			is_public = TRUE;
-
-			//Refresh the lookahead token
-			lookahead = get_next_token(token_stream, &parser_line_num);
-
-			//Go based on the lookahead. We will catch some common errors and provide helpful warnings
-			switch(lookahead.tok){
-				//This is good, break out
-				case FN:
-					break;
-
-				case INLINE:
-					return print_and_return_error("Public functions may not be inlined", parser_line_num);
-
-				default:
-					return print_and_return_error("Expected \"fn\" keyword after \"pub\" in function declaration", parser_line_num);
-			}
-
-			//Otherwise we're all good if we get here, so break out
-			break;
-
 		//Explicit inline request. Note that inlining functions and functions being public are mutually exclusive. You cannot have
 		//one or the other
 		case INLINE:
+			//This is invalid so we fail out
+			if(visibility == VISIBILITY_TYPE_PUBLIC){
+				return print_and_return_error("Public functions may not be inlined", parser_line_num);
+			}
+
 			//This is being inlined
 			is_inlined = TRUE;
 
@@ -12376,7 +12471,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	}
 
 	//Now that we've survived up to here, we can make the actual record
-	symtab_function_record_t* function_record = create_function_record(function_name, is_public, is_inlined, raises_errors, parser_line_num);
+	symtab_function_record_t* function_record = create_function_record(function_name, visibility, is_inlined, raises_errors, parser_line_num);
 
 	//Now we need to see an lparen to begin the parameters
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -12554,8 +12649,8 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	u_int8_t defining_predeclared_function = FALSE;
 	//Is it the main function?
 	u_int8_t is_main_function = FALSE;
-	//Is this function public or private? Unless explicitly stated, all functions are private
-	u_int8_t is_public = FALSE;
+	//Function visitibility level
+	visibilty_type_t visibility = VISIBILITY_TYPE_PRIVATE;
 	//Is this function inlined? By default no
 	u_int8_t is_inlined = FALSE;
 	//Does this funtion raise errors? We know based on the ! after the fn keyword
@@ -12571,7 +12666,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		//Explicit declaration that this function is visible to other partial programs
 		case PUB:
 			//Flag that it is public
-			is_public = TRUE;
+			visibility = VISIBILITY_TYPE_PUBLIC;
 
 			//Refresh the lookahead token
 			lookahead = get_next_token(token_stream, &parser_line_num);
@@ -12693,7 +12788,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-		function_record = create_function_record(function_name, is_public, is_inlined, raises_errors, parser_line_num);
+		function_record = create_function_record(function_name, visibility, is_inlined, raises_errors, parser_line_num);
 
 		//We'll put the function into the symbol table
 		//since we now know that everything worked
@@ -12719,12 +12814,12 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		current_function = function_record;
 
 		//Let's now check - if the is_public's don't match here, we can fail already
-		if(function_record->signature->internal_types.function_type->is_public == TRUE && is_public == FALSE){
+		if(function_record->signature->internal_types.function_type->visibility == VISIBILITY_TYPE_PUBLIC && visibility == VISIBILITY_TYPE_PRIVATE){
 			sprintf(info, "Function \"%s\" was predeclared as public, but defined as private", function_record->func_name.string);
 			return print_and_return_error(info, parser_line_num);
 
 		//Other case, still a failure
-		} else if(function_record->signature->internal_types.function_type->is_public == FALSE && is_public == TRUE){
+		} else if(function_record->signature->internal_types.function_type->visibility == VISIBILITY_TYPE_PRIVATE && visibility == VISIBILITY_TYPE_PUBLIC){
 			sprintf(info, "Function \"%s\" was predeclared as private, but defined as public", function_record->func_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
@@ -12962,11 +13057,21 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
  * already seen and consumed the DECLARE token
  */
 static generic_ast_node_t* global_declare_statement(ollie_token_stream_t* token_stream){
+	//What visibility type do we have. We are able to declare global vars as public
+	visibilty_type_t visibility = VISIBILITY_TYPE_PRIVATE;
+
 	//Lookahead token
-	lexitem_t lookahead;
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Flag that it's pulic
+	if(lookahead.tok == PUB){
+		visibility = VISIBILITY_TYPE_PUBLIC;
+	} else {
+		push_back_token(token_stream, &parser_line_num);
+	}
 
 	//Onvoke the helper
-	generic_ast_node_t* declaration_node = declare_statement(token_stream, TRUE);
+	generic_ast_node_t* declaration_node = declare_statement(token_stream, TRUE, visibility);
 
 	//If it's an error send it up the chain
 	if(declaration_node != NULL 
@@ -12992,11 +13097,21 @@ static generic_ast_node_t* global_declare_statement(ollie_token_stream_t* token_
  * already seen and consumed the DECLARE token
  */
 static generic_ast_node_t* global_let_statement(ollie_token_stream_t* token_stream){
+	//What visibility type do we have. We are able to declare global vars as public
+	visibilty_type_t visibility = VISIBILITY_TYPE_PRIVATE;
+
 	//Lookahead token
-	lexitem_t lookahead;
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Flag that it's pulic
+	if(lookahead.tok == PUB){
+		visibility = VISIBILITY_TYPE_PUBLIC;
+	} else {
+		push_back_token(token_stream, &parser_line_num);
+	}
 
 	//Onvoke the helper
-	generic_ast_node_t* let_node = let_statement(token_stream, TRUE);
+	generic_ast_node_t* let_node = let_statement(token_stream, TRUE, visibility);
 
 	//If it's an error send it up the chain
 	if(let_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){

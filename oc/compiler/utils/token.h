@@ -149,6 +149,7 @@ typedef enum {
 	PARAMCOUNT, //Get the elaborative param count
 	TRUE_CONST,
 	FALSE_CONST,
+	STATIC, //For static variables
 	INLINE,
 	MACRO_PARAM, //The special macro param token is used to show that we are a parameter
 	STACK_PASSED_PARAM_OFFSET, //Special constant type that will display the stack offset of a passed param
