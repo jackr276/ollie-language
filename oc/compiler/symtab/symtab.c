@@ -792,7 +792,7 @@ void add_function_parameter(type_symtab_t* type_symtab, symtab_function_record_t
 /**
  * Dynamically allocate a function record
 */
-symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t is_public, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number){
+symtab_function_record_t* create_function_record(dynamic_string_t name, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number){
 	//Allocate it
 	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
 
@@ -811,7 +811,7 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t
 	record->hash = hash_function(name.string);
 
 	//Throw in whether or not it's public or private
-	record->function_visibility = is_public == TRUE ? FUNCTION_VISIBILITY_PUBLIC : FUNCTION_VISIBILITY_PRIVATE;
+	record->visibility = visibility;
 
 	//Store the line number
 	record->line_number = line_number;

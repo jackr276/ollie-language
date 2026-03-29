@@ -15,6 +15,7 @@
 #include "../utils/dynamic_set/dynamic_set.h"
 #include "../utils/dynamic_array/dynamic_array.h"
 #include "../utils/constants.h"
+#include "../utils/visibility.h"
 //Every function record has one of these
 #include "../stack_data_area/stack_data_area.h"
 
@@ -81,16 +82,6 @@ typedef enum variable_membership_t {
 
 
 /**
- * Is a given function public or private? Simple enum for
- * this 
- */
-typedef enum {
-	FUNCTION_VISIBILITY_PRIVATE,
-	FUNCTION_VISIBILITY_PUBLIC
-} function_visibility_t;
-
-
-/**
  * The symtab function record. This stores data about the function's name, parameter
  * numbers, parameter types, return types, etc.
  *
@@ -141,8 +132,8 @@ struct symtab_function_record_t{
 	u_int8_t contains_stack_params;
 	//Does this contain the special elaborative stack param?
 	u_int8_t contains_elaborative_param;
-	//Is this function public or private
-	function_visibility_t function_visibility;
+	//Are we public or private
+	visibilty_type_t visibility;
 };
 
 
@@ -396,7 +387,7 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t name);
 /**
  * Create a global variable record
  */
-symtab_variable_record_t* create_global_variable_record(dynamic_string_t name);
+symtab_variable_record_t* create_global_variable_record(dynamic_string_t name, visibilty_type_t visibility);
 
 /**
  * Create a static variable record. These variables are really global vars
@@ -426,7 +417,7 @@ void add_function_parameter(type_symtab_t* symtab, symtab_function_record_t* fun
 /**
  * Make a function record
  */
-symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t is_public, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number);
+symtab_function_record_t* create_function_record(dynamic_string_t name, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number);
 
 /**
  * Create a type record for the symbol table
