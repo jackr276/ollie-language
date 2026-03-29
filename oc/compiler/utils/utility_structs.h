@@ -9,6 +9,7 @@
 
 #include <sys/types.h>
 #include "../lexer/lexer.h"
+#include "compiler_output_type.h"
 
 //Compiler option type
 typedef struct compiler_options_t compiler_options_t;
@@ -27,17 +28,12 @@ struct compiler_options_t {
 	char* file_name;
 	//The name of the output file(-o )
 	char* output_file;
-	//Do we want to skip outputting
-	//to assembly? 
-	u_int8_t skip_output;
 	//Enable all debug printing 
 	u_int8_t enable_debug_printing;
 	//Print only the post allocation results
 	u_int8_t print_post_allocation;
 	//Print out summary? 
 	u_int8_t show_summary;
-	//Only output assembly(no .o)
-	u_int8_t go_to_assembly; 
 	//Time execution for performance testing
 	u_int8_t time_execution;
 	//Do we want module-specific timing
@@ -46,8 +42,8 @@ struct compiler_options_t {
 	u_int8_t is_test_run;
 	//Print intermediate representations
 	u_int8_t print_irs;
-	//Only output to an object file. This is an extremely niche case
-	u_int8_t object_file_only;
+	//What kind of output have we been told to generate
+	compiler_output_type_t output_type;
 };
 
 

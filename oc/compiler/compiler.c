@@ -1,10 +1,8 @@
 /**
  * Author: Jack Robbins
  *
- * The compiler for Ollie-Lang. Depends on the lexer and the parser. See documentation for
- * full option details
+ * This file is the entry point for the entire OC compiler
 */
-#include <stdint.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -22,6 +20,7 @@
 #include "instruction_scheduler/instruction_scheduler.h"
 #include "assembler/assembler.h"
 #include "optimizer/optimizer.h"
+#include "utils/compiler_output_type.h"
 #include "utils/constants.h"
 #include "utils/error_management.h"
 
@@ -75,6 +74,9 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 	//Allocate it
 	compiler_options_t* options = calloc(1, sizeof(compiler_options_t));
 
+	//By default, assume we are requesting a full compilation
+	options->output_type = OUTPUT_TYPE_FULL_COMPILATION;
+
 	/**
 	 * Longopts for us to use. Currently we only have the objectfile
 	 * longopt here
@@ -123,7 +125,16 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 				break;
 			//Output to assembly only
 			case 'a':
-				options->go_to_assembly = TRUE;
+				//Input validation based on past state
+				switch(options->output_type){
+					case OUTPUT_TYPE_OBJECT_FILE:
+						print_compiler_message(MESSAGE_TYPE_ERROR, "The --to-object-file flag was already provided. These two flags are mutually exclusive");
+						exit(1);
+					default:
+						options->output_type = OUTPUT_TYPE_ASSEMBLY_ONLY;
+						break;
+				}
+
 				break;
 			//Specify that we want a summary to be shown
 			case 's':
@@ -139,7 +150,16 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 				break;
 			//Specify that we want to specifically output to an objectfile *only*
 			case objectfile_opt:
-				options->object_file_only = TRUE;
+				//Input validation based on past state
+				switch(options->output_type){
+					case OUTPUT_TYPE_ASSEMBLY_ONLY:
+						print_compiler_message(MESSAGE_TYPE_ERROR, "The -a \"to assembly\" flag was already provided. These two flags are mutually exclusive");
+						exit(1);
+					default:
+						options->output_type = OUTPUT_TYPE_OBJECT_FILE;
+						break;
+				}
+
 				break;
 			//Specific output file
 			case 'o':
@@ -158,6 +178,11 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 	 * If we don't get an input file it's either going to be a.s or a.out. We will warn about this
 	 */
 	if(options->output_file == NULL){
+		switch(options->output_type){
+			case OUTPUT_TYPE_OBJECT_FILE:
+				break;
+		}
+
 		//Full compilation run
 		if(options->go_to_assembly == FALSE){
 			options->output_file = "a.out";

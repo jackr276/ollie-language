@@ -581,6 +581,69 @@ static u_int8_t link_and_produce_final_executable(compiler_options_t* options){
 
 
 /**
+ * This inlined helper will perform all of the work, including management of the /tmp/oc/ directory,
+ * when we want to assemble and go directly to an object file with *no* linking
+ */
+static inline void assemble_to_object_file_only(cfg_t* cfg){
+	/**
+	 * Step 1: OC requires that we have a /tmp/oc/ directory to hold all of our temporary
+	 * compiled files. This is the first step that we need to take to ensure we're good
+	 * to even go forward
+	 */
+	u_int32_t directory_management_result = perform_tmp_directory_management();
+
+	//If this fails we're done
+	if(directory_management_result == FAILURE){
+		return;
+	}
+
+	/**
+	 * Step 2: We will now clean everything else inside of our directory out. There will
+	 * likely be stuff in here from old runs
+	 */
+	u_int32_t directory_clean_result = perform_tmp_directory_cleanup();
+
+	//Fatal error here so we get out if it fails
+	if(directory_clean_result == FAILURE){
+		return;
+	}
+
+	/**
+	 * Step 2: we need to now output the cfg into a temporary .s assembly
+	 * file. We will place this temporary .s assembly file inside of the
+	 * oc/tmp directory waiting to be assembled
+	 */
+	dynamic_array_t outputted_files = dynamic_array_alloc();
+
+	//Let the helper produce this
+	u_int8_t assembly_outputter_result = output_generated_assembly_to_temp_file(cfg, &outputted_files);
+
+	//It didn't work so don't bother going on
+	if(assembly_outputter_result == FAILURE){
+		return;
+	}
+
+	/**
+	 * Step 3: we now need to take that assembly *and* the compiler builtins that we have and
+	 * assemble them into .o files. These .o files will also all reside inside of the /oc/tmp/
+	 * directory. If any of these files fail to assemble then we fail out
+	 */
+	u_int8_t assembler_result = assemble_code(options, &outputted_files);
+
+	//This means we generated incorrect assembly which would be bad
+	if(assembler_result == FAILURE){
+		return;
+	}
+
+	//Finally pass on to the linker
+	link_and_produce_final_executable(options);
+
+	//Destroy all of the outputted files
+	dynamic_array_dealloc(&outputted_files);
+}
+
+
+/**
  * This inlined helper will perform all of the work, including management of the /tmp/oc/ directory
  * in order for us to compiler and link into a final executable
  */
@@ -643,7 +706,6 @@ static inline void assemble_and_link_with_temp_files(compiler_options_t* options
 }
 
 
-
 /**
  * Perform all of the assembly and linkage that we need to do here. This is the only
  * API that is accessible for the final builder
@@ -653,7 +715,10 @@ void assemble_and_link(compiler_options_t* options, cfg_t* cfg, u_int32_t* num_e
 	error_count = num_errors;
 	warning_count = num_warnings;
 
-	//We assume that most of the time we actually want to compile
+	/**
+	 * We assume that most of the time we actually want to compile or at
+	 * least go to an object file for our code
+	 */
 	if(options->go_to_assembly == FALSE){
 		//Let the helper assemble and link with our temporary files
 		assemble_and_link_with_temp_files(options, cfg);
