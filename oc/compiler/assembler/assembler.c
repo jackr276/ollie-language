@@ -444,6 +444,36 @@ static inline u_int8_t run_file_through_assembler(char* full_file_path, u_int8_t
 
 
 /**
+ * Run the file throw GNU assembler and output it to a custom destination as opposed to automatically generating
+ * the objectfile name. This is only invoked for custom runs where the user has specifically said that they
+ * want an object file
+ */
+static inline u_int8_t run_file_through_assembler_custom_output(char* full_source_file_path, char* full_dest_file_path, u_int8_t debug_printing){
+	char command[MAX_COMMAND_LENGTH];
+
+	//Now create the command
+	snprintf(command, MAX_COMMAND_LENGTH, "as %s -o %s", full_source_file_path, full_dest_file_path);
+
+	//Show the assembler command if we're debugging
+	if(debug_printing == TRUE){
+		printf("ASSEMBLER COMMAND: %s\n", command);
+	}
+
+	//Run the command in the shell
+	int result = system(command);
+
+	if(result == 0) { 
+		return SUCCESS;
+	} else {
+		sprintf(info, "The command %s failed with the error code %d", command, result);
+		print_assembler_message(MESSAGE_TYPE_ERROR, info);
+		(*error_count)++;
+		return FAILURE;
+	}
+}
+
+
+/**
  * Take all of the generated assembly that we've produced and convert
  * it into object files using AS. These object files will also reside in
  * /tmp/oc/ and are only alive for the duration of the program
@@ -584,7 +614,7 @@ static u_int8_t link_and_produce_final_executable(compiler_options_t* options){
  * This inlined helper will perform all of the work, including management of the /tmp/oc/ directory,
  * when we want to assemble and go directly to an object file with *no* linking
  */
-static inline void assemble_to_object_file_only(cfg_t* cfg){
+static inline void output_object_file_only(compiler_options_t* options, cfg_t* cfg){
 	/**
 	 * Step 1: OC requires that we have a /tmp/oc/ directory to hold all of our temporary
 	 * compiled files. This is the first step that we need to take to ensure we're good
@@ -624,19 +654,13 @@ static inline void assemble_to_object_file_only(cfg_t* cfg){
 	}
 
 	/**
-	 * Step 3: we now need to take that assembly *and* the compiler builtins that we have and
-	 * assemble them into .o files. These .o files will also all reside inside of the /oc/tmp/
-	 * directory. If any of these files fail to assemble then we fail out
+	 * Step 3: Run the file through the assembler. Unlike in other runs, the object
+	 * file here will be stored at the custom destination that the user wanted
+	 *
+	 * TODO FIX
 	 */
-	u_int8_t assembler_result = assemble_code(options, &outputted_files);
-
-	//This means we generated incorrect assembly which would be bad
-	if(assembler_result == FAILURE){
-		return;
-	}
-
-	//Finally pass on to the linker
-	link_and_produce_final_executable(options);
+	dynamic_string_t* file = dynamic_array_get_at(&outputted_files, 0);
+	run_file_through_assembler_custom_output(file->string, options->output_file, options->enable_debug_printing);
 
 	//Destroy all of the outputted files
 	dynamic_array_dealloc(&outputted_files);
@@ -716,15 +740,26 @@ void assemble_and_link(compiler_options_t* options, cfg_t* cfg, u_int32_t* num_e
 	warning_count = num_warnings;
 
 	/**
-	 * We assume that most of the time we actually want to compile or at
-	 * least go to an object file for our code
+	 * Based on what we were given, should be able to output things appropriately here
 	 */
-	if(options->go_to_assembly == FALSE){
-		//Let the helper assemble and link with our temporary files
-		assemble_and_link_with_temp_files(options, cfg);
+	switch(options->output_type){
+		//Just leave
+		case OUTPUT_TYPE_NO_OUTPUT:
+			return;
 
-	//Otherwise we likely have a test run - we need to just ouput the assembly *ONLY*
-	} else {
-		output_generated_assembly_only(options, cfg);
+		//Exclusively output assembly(.s)
+		case OUTPUT_TYPE_ASSEMBLY_ONLY:
+			output_generated_assembly_only(options, cfg);
+			break;
+		
+		//Exclusively output the object(.o) file
+		case OUTPUT_TYPE_OBJECT_FILE:
+			output_object_file_only(options, cfg);
+			break;
+
+		//This is the most common case - full compilation
+		case OUTPUT_TYPE_FULL_COMPILATION:
+			assemble_and_link_with_temp_files(options, cfg);
+			break;
 	}
 }
