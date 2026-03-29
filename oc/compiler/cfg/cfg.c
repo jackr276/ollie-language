@@ -10074,6 +10074,74 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 
 
 /**
+ * Visit a static let statement and handle the initializer appropriately.
+ * Do note that we have already checked that the entire initialization
+ * only contains constants, so we can assume we're only processing constants
+ * here
+ */
+static void visit_static_let_statement(generic_ast_node_t* node){
+	/**
+	 * We'll store it inside of the global variable struct. Leave it as NULL
+	 * here so that it's automatically initialized to 0
+	 */
+	global_variable_t* static_variable = create_global_variable(node->variable, NULL);
+
+	//This has been initialized already
+	static_variable->variable->initialized = TRUE;
+
+	//Figure out what this decays into
+	static_variable->is_relative = does_type_decay_to_char_pointer(node->variable->type_defined_as);
+
+	//And add it into the CFG
+	dynamic_array_add(&(cfg->global_variables), static_variable);
+
+	//Grab out the initializer node
+	generic_ast_node_t* initializer = node->first_child;
+
+	//We can see arrays or constants here
+	switch(initializer->ast_node_type){
+		//Array init list - goes to the helper
+		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+			//Initialized to an array
+			static_variable->initializer_type = GLOBAL_VAR_INITIALIZER_ARRAY;
+
+			//Give it an array of values
+			static_variable->initializer_value.array_initializer_values = dynamic_array_alloc();
+
+			//Let the helper take care of it
+			emit_global_array_initializer(initializer, &(static_variable->initializer_value.array_initializer_values));
+
+			break;
+		
+		//Should be our most common case - we just have a constant
+		case AST_NODE_TYPE_CONSTANT:
+			//Initialized to a constant
+			static_variable->initializer_type = GLOBAL_VAR_INITIALIZER_CONSTANT;
+
+			//All we need to do here
+			static_variable->initializer_value.constant_value = emit_global_variable_constant(initializer);
+
+			break;
+
+		//Let the helper take over with this one as well
+		case AST_NODE_TYPE_STRING_INITIALIZER:
+			//This is a special kind of constant
+			static_variable->initializer_type = GLOBAL_VAR_INITIALIZER_STRING;
+
+			//This will handle a variety of cases for us
+			static_variable->initializer_value.constant_value = emit_global_variable_string_constant(initializer);
+
+			break;
+
+		//This shouldn't be reachable
+		default:
+			printf("Fatal internal compiler error: Unrecognized/unimplemented static initializer node type encountered\n");
+			exit(1);
+	}
+}
+
+
+/**
  * Visit a global variable declaration statement
  *
  * NOTE: declared global variables will always be initialized to be 0
@@ -10090,6 +10158,23 @@ static inline void visit_global_declare_statement(generic_ast_node_t* node){
 	dynamic_array_add(&(cfg->global_variables), global_variable);
 }
 
+
+/**
+ * Visit a static variable declaration statement
+ *
+ * NOTE: declared static variables will always be initialized to be 0
+ */
+static inline void visit_static_declare_statement(generic_ast_node_t* node){
+	//We'll store it inside of the global variable struct. Leave it as NULL
+	//here so that it's automatically initialized to 0
+	global_variable_t* static_variable = create_global_variable(node->variable, NULL);
+
+	//This has no initializer-so flag that here
+	static_variable->initializer_type = GLOBAL_VAR_INITIALIZER_NONE;
+
+	//And add it into the CFG
+	dynamic_array_add(&(cfg->global_variables), static_variable);
+}
 
 /**
  * Visit a declaration statement. If we see an actual declaration node, then
