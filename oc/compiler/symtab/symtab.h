@@ -197,6 +197,8 @@ struct symtab_variable_record_t{
 	u_int8_t passed_by_stack;
 	//Was it declared or letted
 	u_int8_t declare_or_let; /* 0 = declare, 1 = let */
+	//What's the visibility of this(only used for global variables)
+	visibilty_type_t visibility;
 };
 
 
@@ -387,7 +389,7 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t name);
 /**
  * Create a global variable record
  */
-symtab_variable_record_t* create_global_variable_record(dynamic_string_t name);
+symtab_variable_record_t* create_global_variable_record(dynamic_string_t name, visibilty_type_t visibility);
 
 /**
  * Create a static variable record. These variables are really global vars
