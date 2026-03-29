@@ -93,16 +93,16 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream, u_int8_t new_variable_scope_required);
 static generic_ast_node_t* statement(ollie_token_stream_t* token_stream);
-static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global);
+static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global, visibilty_type_t visibility);
 static generic_ast_node_t* logical_or_expression(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, generic_ast_node_t* switch_stmt_node, int32_t* values, int32_t* current_case_value);
 static generic_ast_node_t* default_statement(ollie_token_stream_t* token_stream);
-static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream, u_int8_t is_global);
+static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream, u_int8_t is_global, visibilty_type_t visibility);
 static generic_ast_node_t* defer_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* idle_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_type_t side);
-static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream);
+static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream, visibilty_type_t visibility);
 static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream);
 static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* function_type, u_int8_t defining_predeclared_function);
@@ -8265,11 +8265,11 @@ static inline generic_ast_node_t* expression_statement_no_ending_semicolon(ollie
 		switch (lookahead.tok) {
 			case DECLARE:
 				//IMPORTANT - declares can/will be null if they're declaring a primitive type
-				current_expression_node = declare_statement(token_stream, FALSE);
+				current_expression_node = declare_statement(token_stream, FALSE, VISIBILITY_TYPE_PRIVATE);
 				break;
 
 			case LET:
-				current_expression_node = let_statement(token_stream, FALSE);
+				current_expression_node = let_statement(token_stream, FALSE, VISIBILITY_TYPE_PRIVATE);
 				break;
 
 			//If we don't see declare or let, we push it back
@@ -8345,11 +8345,11 @@ static inline generic_ast_node_t* expression_statement(ollie_token_stream_t* tok
 		switch (lookahead.tok) {
 			case DECLARE:
 				//IMPORTANT - declares can/will be null if they're declaring a primitive type
-				current_expression_node = declare_statement(token_stream, FALSE);
+				current_expression_node = declare_statement(token_stream, FALSE, VISIBILITY_TYPE_PRIVATE);
 				break;
 
 			case LET:
-				current_expression_node = let_statement(token_stream, FALSE);
+				current_expression_node = let_statement(token_stream, FALSE, VISIBILITY_TYPE_PRIVATE);
 				break;
 
 			//If we don't see declare or let, we push it back
@@ -10688,7 +10688,7 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
  *
  * BNF Rule: <declare-statement> ::= declare {<function_predeclaration> | {static}? <identifier> : <type-specifier>}
  */
-static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream, u_int8_t is_global){
+static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream, u_int8_t is_global, visibilty_type_t visibility){
 	//Freeze the current line number
 	u_int32_t current_line = parser_line_num;
 	//Lookahead token
@@ -10706,7 +10706,6 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 		 * In this case, we push the token back and let the function predeclaration rule
 		 * handle it
 		 */
-		case PUB:
 		case INLINE:
 		case FN:
 			//If this is now global, then we cannot do this
@@ -10716,7 +10715,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 
 			push_back_token(token_stream, &parser_line_num);
 			//Let this rule handle it
-			return function_predeclaration(token_stream);
+			return function_predeclaration(token_stream, visibility);
 
 		/**
 		 * If we see the static keyword, then we know that
@@ -10814,7 +10813,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 		if(is_global == FALSE){
 			declared_var = create_variable_record(name);
 		} else {
-			declared_var = create_global_variable_record(name);
+			declared_var = create_global_variable_record(name, visibility);
 		}
 	} else {
 		declared_var = create_static_variable_record(name);
@@ -11258,7 +11257,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
  *
  * BNF Rule: <let-statement> ::= let {static}? <identifier> : <type-specifier> := <ternary_expression>
  */
-static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global){
+static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global, visibilty_type_t visibility){
 	//The line number
 	u_int32_t current_line = parser_line_num;
 	//Lookahead token
@@ -11402,7 +11401,7 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 		if(is_global == FALSE){
 			declared_var = create_variable_record(name);
 		} else {
-			declared_var = create_global_variable_record(name);
+			declared_var = create_global_variable_record(name, visibility);
 		}
 	} else {
 		declared_var = create_static_variable_record(name);
@@ -12381,46 +12380,25 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
  *
  * NOTE: by the time we get here, we've already seen the declare keyword
  */
-static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream){
+static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream, visibilty_type_t visibility){
 	//Is this an inline function? Also assume no by default
 	u_int8_t is_inlined = FALSE;
 	//Does this funtion raise errors? We know based on the ! after the fn keyword
 	u_int8_t raises_errors = FALSE;
-	//Store the visibility type
-	visibilty_type_t visibility = VISIBILITY_TYPE_PRIVATE;
 
 	//Lookahead token
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
 	//We could see either fn or inline here
 	switch(lookahead.tok){
-		//Explicat declaration that this function is visible
-		case PUB:
-			//Flag that it is public
-			visibility = VISIBILITY_TYPE_PUBLIC;
-			
-			//Refresh the token
-			lookahead = get_next_token(token_stream, &parser_line_num);
-
-			//Go based on the lookahead
-			switch(lookahead.tok){
-				//Good case - breakout
-				case FN:
-					break;
-
-				case INLINE:
-					return print_and_return_error("Public functions may not be inlined", parser_line_num);
-
-				default:
-					return print_and_return_error("Expected \"fn\" keyword after \"pub\" in function declaration.", parser_line_num);
-			}
-
-			//If we get to here then we're set
-			break;
-
 		//Explicit inline request. Note that inlining functions and functions being public are mutually exclusive. You cannot have
 		//one or the other
 		case INLINE:
+			//This is invalid so we fail out
+			if(visibility == VISIBILITY_TYPE_PUBLIC){
+				return print_and_return_error("Public functions may not be inlined", parser_line_num);
+			}
+
 			//This is being inlined
 			is_inlined = TRUE;
 
@@ -13093,7 +13071,7 @@ static generic_ast_node_t* global_declare_statement(ollie_token_stream_t* token_
 	}
 
 	//Onvoke the helper
-	generic_ast_node_t* declaration_node = declare_statement(token_stream, TRUE);
+	generic_ast_node_t* declaration_node = declare_statement(token_stream, TRUE, visibility);
 
 	//If it's an error send it up the chain
 	if(declaration_node != NULL 
@@ -13133,7 +13111,7 @@ static generic_ast_node_t* global_let_statement(ollie_token_stream_t* token_stre
 	}
 
 	//Onvoke the helper
-	generic_ast_node_t* let_node = let_statement(token_stream, TRUE);
+	generic_ast_node_t* let_node = let_statement(token_stream, TRUE, visibility);
 
 	//If it's an error send it up the chain
 	if(let_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
