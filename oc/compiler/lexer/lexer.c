@@ -22,7 +22,7 @@
 #include "../utils/constants.h"
 
 //Total number of keywords
-#define KEYWORD_COUNT 62
+#define KEYWORD_COUNT 61
 
 //We will use this to keep track of what the current lexer state is
 typedef enum {
@@ -44,18 +44,18 @@ static char* file_name;
 static char info[2000];
 
 //Token array, we will index using their enum values
-static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, ERROR, RAISE, RAISES, RETURN, JUMP, REQUIRE, 
+static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, ERROR, RAISE, RAISES, RETURN, JUMP, 
 					U8, I8, U16, I16, U32, I32, U64, I64, F32, F64, CHAR, DEFINE, ENUM, STATIC,
 					REGISTER, CONSTANT, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
 					STRUCT, HANDLE, IGNORE, AS, ALIAS, SIZEOF, DEFER, MUT, DEPENDENCIES, ASM, WITH, LIB, IDLE, PUB, UNION, BOOL,
-				    EXTERNAL, PARAMS, PARAMCOUNT, TRUE_CONST, FALSE_CONST, INLINE, MACRO, ENDMACRO};
+				    PARAMS, PARAMCOUNT, TRUE_CONST, FALSE_CONST, INLINE, MACRO, ENDMACRO};
 
 //Direct one to one mapping
 static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", "error", "raise", "raises", "ret", "jump",
-						 "require", "u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "f32", "f64", 
+						 "u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "f32", "f64", 
 						  "char", "define", "enum", "static", "register", "constant", "void", "typesize", "let", "declare", "when", "case", "default", "switch",
 						  "break", "continue", "struct", "handle", "ignore", "as", "alias", "sizeof", "defer", "mut", "dependencies", "asm",
-						  "with", "lib", "idle", "pub", "union", "bool", "external", "params", "paramcount", "true", "false", "inline", "$macro", "$endmacro"};
+						  "with", "lib", "idle", "pub", "union", "bool", "params", "paramcount", "true", "false", "inline", "$macro", "$endmacro"};
 
 /* ============================================= GLOBAL VARIABLES  ============================================ */
 

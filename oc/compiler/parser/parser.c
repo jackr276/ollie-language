@@ -13190,14 +13190,6 @@ static generic_ast_node_t* declaration_partition(ollie_token_stream_t* token_str
 			//Otherwise we'll just return null, the caller will know what to do with it
 			return NULL;
 
-		//This is an error. The #dependencies directive must be the very first thing in a file
-		case DEPENDENCIES:
-			return print_and_return_error("The #dependencies section must be the very first thing in a file", parser_line_num);
-
-		//This is out of place if we see it here
-		case REQUIRE:
-			return print_and_return_error("Any require statements must be nested in a top level #dependencies block", parser_line_num);
-
 		case LET:
 			return global_let_statement(token_stream);
 
@@ -13226,32 +13218,6 @@ static generic_ast_node_t* program(ollie_token_stream_t* token_stream){
 		prog = ast_node_alloc(AST_NODE_TYPE_PROG, SIDE_TYPE_LEFT);
 	}
 
-	//Let's lookahead to see what we have
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//If we've actually found the comptime section, we'll
-	//go through it until we don't have it anymore. The preprocessor
-	//will have already consumed these tokens, so we need to get past them
-	if(lookahead.tok == DEPENDENCIES){
-		//Just run through here until we see the end of the comptime section
-		lookahead = get_next_token(token_stream, &parser_line_num);
-
-		//So long as we don't hit the end or the end of the region, keep going
-		while(lookahead.tok != DEPENDENCIES && lookahead.tok != DONE){
-			//Refresh the token
-			lookahead = get_next_token(token_stream, &parser_line_num);
-		}
-
-		//If we get to the DONE, we error out
-		if(lookahead.tok == DONE){
-			return print_and_return_error("Unmatched #dependencies region detected", parser_line_num);
-		}
-
-	} else {
-		//Put it back
-		push_back_token(token_stream, &parser_line_num);
-	}
-	
 	//As long as we aren't done
 	while((lookahead = get_next_token(token_stream, &parser_line_num)).tok != DONE){
 		//Put the token back

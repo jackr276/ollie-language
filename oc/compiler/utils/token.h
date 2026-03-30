@@ -32,8 +32,6 @@ typedef enum {
 	IF,
 	MACRO,
 	ENDMACRO,
-	//For preprocessor sections
-	DEPENDENCIES,
 	ELSE,
 	DO,
 	WHILE,
@@ -47,14 +45,10 @@ typedef enum {
 	SWITCH,
 	FN,
 	REGISTER,
-	WITH,
-	CONSTANT,
 	TYPESIZE,
 	SIZEOF,
-	REQUIRE,
 	RETURN,
 	JUMP,
-	EXTERNAL,
 	DOUBLE_AND,
 	DOUBLE_OR,
 	SINGLE_AND, /* & */
@@ -72,7 +66,6 @@ typedef enum {
 	RSHIFTEQ, // >>=
 	DOT,
 	PLUS,
-	LIB,
 	PLUSPLUS,
 	DEFINE,
 	AS,
