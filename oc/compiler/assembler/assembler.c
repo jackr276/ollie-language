@@ -195,15 +195,9 @@ static u_int8_t output_generated_assembly_only(compiler_options_t* options, cfg_
  * be placed inside of the /tmp/oc/ directory while it is waiting for final assembly and linkage
  * into the file that we're after
  */
-static u_int8_t output_generated_assembly_to_temp_file(cfg_t* cfg, dynamic_array_t* outputted_files){
+static u_int8_t output_generated_assembly_to_temp_file(cfg_t* cfg, dynamic_string_t* assembly_file){
 	//The output file(Null initally)
 	FILE* output = NULL;
-
-	//Heap allocate this so we can keep it in the dynamic array
-	dynamic_string_t* temporary_file_name = dynamic_string_heap_alloc();
-
-	//Just add it in now
-	dynamic_array_add(outputted_files, temporary_file_name);
 
 	//We need to create the name ourselves
 	char outputted_assembly_file[1000];
@@ -212,7 +206,7 @@ static u_int8_t output_generated_assembly_to_temp_file(cfg_t* cfg, dynamic_array
 	sprintf(outputted_assembly_file, "/tmp/oc/ollie_asm_tmp%d.s", increment_and_get_tmp_file_id());
 
 	//Set the dynamic string to be this
-	dynamic_string_set(temporary_file_name, outputted_assembly_file);
+	dynamic_string_set(assembly_file, outputted_assembly_file);
 
 	//Open the file for the purpose of writing
 	output = fopen(outputted_assembly_file, "w");
@@ -444,13 +438,43 @@ static inline u_int8_t run_file_through_assembler(char* full_file_path, u_int8_t
 
 
 /**
+ * Run the file throw GNU assembler and output it to a custom destination as opposed to automatically generating
+ * the objectfile name. This is only invoked for custom runs where the user has specifically said that they
+ * want an object file
+ */
+static inline u_int8_t run_file_through_assembler_custom_output(char* full_source_file_path, char* full_dest_file_path, u_int8_t debug_printing){
+	char command[MAX_COMMAND_LENGTH];
+
+	//Now create the command
+	snprintf(command, MAX_COMMAND_LENGTH, "as %s -o %s", full_source_file_path, full_dest_file_path);
+
+	//Show the assembler command if we're debugging
+	if(debug_printing == TRUE){
+		printf("ASSEMBLER COMMAND: %s\n", command);
+	}
+
+	//Run the command in the shell
+	int result = system(command);
+
+	if(result == 0) { 
+		return SUCCESS;
+	} else {
+		sprintf(info, "The command %s failed with the error code %d", command, result);
+		print_assembler_message(MESSAGE_TYPE_ERROR, info);
+		(*error_count)++;
+		return FAILURE;
+	}
+}
+
+
+/**
  * Take all of the generated assembly that we've produced and convert
  * it into object files using AS. These object files will also reside in
  * /tmp/oc/ and are only alive for the duration of the program
  *
  * NOTE: This will spawn child processes so that we can run the GNU assembler
  */
-static u_int8_t assemble_code(compiler_options_t* options, dynamic_array_t* outputted_files){
+static u_int8_t assemble_code(compiler_options_t* options, dynamic_string_t* assembly_file){
 	u_int8_t result;
 
 	/**
@@ -475,17 +499,12 @@ static u_int8_t assemble_code(compiler_options_t* options, dynamic_array_t* outp
 	 * Step 3: For everything in our list of temporary assembly files, assembly
 	 * them into their own .o files respectively
 	 */
-	for(u_int32_t i = 0; i < outputted_files->current_index; i++){
-		//Get the full path name to the file
-		dynamic_string_t* file_to_compile = dynamic_array_get_at(outputted_files, i);
+	//Run it through the assembler
+	result = run_file_through_assembler(assembly_file->string, options->enable_debug_printing);
 
-		//Run it through the assembler
-		result = run_file_through_assembler(file_to_compile->string, options->enable_debug_printing);
-
-		//The error already got printed out by the callee so just fail out
-		if(result == FAILURE){
-			return FAILURE;
-		}
+	//The error already got printed out by the callee so just fail out
+	if(result == FAILURE){
+		return FAILURE;
 	}
 
 	//If we have made it to here then we have success
@@ -581,6 +600,60 @@ static u_int8_t link_and_produce_final_executable(compiler_options_t* options){
 
 
 /**
+ * This inlined helper will perform all of the work, including management of the /tmp/oc/ directory,
+ * when we want to assemble and go directly to an object file with *no* linking
+ */
+static inline void output_object_file_only(compiler_options_t* options, cfg_t* cfg){
+	/**
+	 * Step 1: OC requires that we have a /tmp/oc/ directory to hold all of our temporary
+	 * compiled files. This is the first step that we need to take to ensure we're good
+	 * to even go forward
+	 */
+	u_int32_t directory_management_result = perform_tmp_directory_management();
+
+	//If this fails we're done
+	if(directory_management_result == FAILURE){
+		return;
+	}
+
+	/**
+	 * Step 2: We will now clean everything else inside of our directory out. There will
+	 * likely be stuff in here from old runs
+	 */
+	u_int32_t directory_clean_result = perform_tmp_directory_cleanup();
+
+	//Fatal error here so we get out if it fails
+	if(directory_clean_result == FAILURE){
+		return;
+	}
+
+	/**
+	 * Step 2: we need to now output the cfg into a temporary .s assembly
+	 * file. We will place this temporary .s assembly file inside of the
+	 * oc/tmp directory waiting to be assembled
+	 */
+	dynamic_string_t assembly_file = dynamic_string_alloc();
+
+	//Let the helper produce this
+	u_int8_t assembly_outputter_result = output_generated_assembly_to_temp_file(cfg, &assembly_file);
+
+	//It didn't work so don't bother going on
+	if(assembly_outputter_result == FAILURE){
+		return;
+	}
+
+	/**
+	 * Step 3: Run the file through the assembler. Unlike in other runs, the object
+	 * file here will be stored at the custom destination that the user wanted
+	 */
+	run_file_through_assembler_custom_output(assembly_file.string, options->output_file, options->enable_debug_printing);
+
+	//Finally destroy the dynamic memory
+	dynamic_string_dealloc(&assembly_file);
+}
+
+
+/**
  * This inlined helper will perform all of the work, including management of the /tmp/oc/ directory
  * in order for us to compiler and link into a final executable
  */
@@ -613,10 +686,9 @@ static inline void assemble_and_link_with_temp_files(compiler_options_t* options
 	 * file. We will place this temporary .s assembly file inside of the
 	 * oc/tmp directory waiting to be assembled
 	 */
-	dynamic_array_t outputted_files = dynamic_array_alloc();
+	dynamic_string_t assembled_file = dynamic_string_alloc();
 
-	//Let the helper produce this
-	u_int8_t assembly_outputter_result = output_generated_assembly_to_temp_file(cfg, &outputted_files);
+	u_int8_t assembly_outputter_result = output_generated_assembly_to_temp_file(cfg, &assembled_file);
 
 	//It didn't work so don't bother going on
 	if(assembly_outputter_result == FAILURE){
@@ -628,20 +700,22 @@ static inline void assemble_and_link_with_temp_files(compiler_options_t* options
 	 * assemble them into .o files. These .o files will also all reside inside of the /oc/tmp/
 	 * directory. If any of these files fail to assemble then we fail out
 	 */
-	u_int8_t assembler_result = assemble_code(options, &outputted_files);
+	u_int8_t assembler_result = assemble_code(options, &assembled_file);
 
 	//This means we generated incorrect assembly which would be bad
 	if(assembler_result == FAILURE){
 		return;
 	}
 
-	//Finally pass on to the linker
+	//Destroy the dynamic string for this
+	dynamic_string_dealloc(&assembled_file);
+
+	/**
+	 * Step 4: take all of the .o files in /tmp/oc and link them together into our final
+	 * executable
+	 */
 	link_and_produce_final_executable(options);
-
-	//Destroy all of the outputted files
-	dynamic_array_dealloc(&outputted_files);
 }
-
 
 
 /**
@@ -653,13 +727,27 @@ void assemble_and_link(compiler_options_t* options, cfg_t* cfg, u_int32_t* num_e
 	error_count = num_errors;
 	warning_count = num_warnings;
 
-	//We assume that most of the time we actually want to compile
-	if(options->go_to_assembly == FALSE){
-		//Let the helper assemble and link with our temporary files
-		assemble_and_link_with_temp_files(options, cfg);
+	/**
+	 * Based on what we were given, should be able to output things appropriately here
+	 */
+	switch(options->output_type){
+		//Just leave
+		case OUTPUT_TYPE_NO_OUTPUT:
+			return;
 
-	//Otherwise we likely have a test run - we need to just ouput the assembly *ONLY*
-	} else {
-		output_generated_assembly_only(options, cfg);
+		//Exclusively output assembly(.s)
+		case OUTPUT_TYPE_ASSEMBLY_ONLY:
+			output_generated_assembly_only(options, cfg);
+			break;
+		
+		//Exclusively output the object(.o) file
+		case OUTPUT_TYPE_OBJECT_FILE:
+			output_object_file_only(options, cfg);
+			break;
+
+		//This is the most common case - full compilation
+		case OUTPUT_TYPE_FULL_COMPILATION:
+			assemble_and_link_with_temp_files(options, cfg);
+			break;
 	}
 }

@@ -65,10 +65,6 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 			case 'd':
 				options->enable_debug_printing = TRUE;
 				break;
-			//Output to assembly only
-			case 'a':
-				options->go_to_assembly = TRUE;
-				break;
 			//Specify that we want a summary to be shown
 			case 's':
 				options->show_summary = TRUE;
