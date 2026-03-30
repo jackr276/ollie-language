@@ -28,8 +28,12 @@
 //All error sizes are 2000
 #define ERROR_SIZE 2000
 
-//The maximum number of per-class register passed parameters
-#define MAX_PER_CLASS_REGISTER_PASSED_PARAMS 6
+/**
+ * The maximum number of register passed parameters - this differs
+ * for each class of register. General purpose has 6, SSE has 8
+ */
+#define MAX_GP_REGISTER_PASSED_PARAMS 6
+#define MAX_SSE_REGISTER_PASSED_PARAMS 8
 
 //The size that it takes for a parameter to be callee-saved
 #define CALLEE_SAVED_REGISTER_STACK_SIZE_BYTES 8

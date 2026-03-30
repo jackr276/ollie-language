@@ -713,6 +713,23 @@ symtab_variable_record_t* create_parameter_alias_variable(symtab_variable_record
 
 
 /**
+ * Does the given value need to be passed by the stack or not? This is 
+ * going to depend largely on if it's a floating point value or not *and*
+ * if the current number of parameters is above the amount that are allowed. This
+ * value is different for float/gp
+ */
+static inline u_int8_t is_parameter_stack_passed(symtab_variable_record_t* variable){
+	//Non-float our max is 6 register
+	if(IS_FLOATING_POINT(variable->type_defined_as) == FALSE){
+		return variable->class_relative_function_parameter_order > MAX_GP_REGISTER_PASSED_PARAMS ? TRUE : FALSE;
+	//If it is a float then our max is 8 registers
+	} else {
+		return variable->class_relative_function_parameter_order > MAX_SSE_REGISTER_PASSED_PARAMS ? TRUE : FALSE;
+	}
+}
+
+
+/**
  * Add a parameter to a function and perform all internal bookkeeping needed
  *
  * *Stack Parameters*
@@ -760,7 +777,7 @@ void add_function_parameter(type_symtab_t* type_symtab, symtab_function_record_t
 		function_record->contains_elaborative_param = TRUE;
 
 	//Do we need to pass via stack? If so add it here
-	} else if(variable_record->class_relative_function_parameter_order > MAX_PER_CLASS_REGISTER_PASSED_PARAMS){
+	} else if(is_parameter_stack_passed(variable_record) == TRUE){
 		//Allocate it if need be
 		if(function_record->stack_passed_parameters.stack_regions.internal_array == NULL){
 			//This is specifically a parameter passing stack region. We must be sure to mention that
@@ -2138,7 +2155,9 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 		}
 
 		//If it's mutable but never mutated
-		if(record->type_defined_as->mutability == MUTABLE && record->mutated == FALSE){
+		if(record->type_defined_as->mutability == MUTABLE 
+			&& record->membership != FUNCTION_PARAMETER
+			&& record->mutated == FALSE){
 			sprintf(info, "Variable \"%s\" is declared as mutable but never mutated. Consider removing the \"mut\" keyword. First defined here:", record->var_name.string);
 			PRINT_WARNING(info, record->line_number);
 			print_variable_name(record);

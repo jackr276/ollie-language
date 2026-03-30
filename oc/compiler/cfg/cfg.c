@@ -6421,7 +6421,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 */
 		if(IS_FLOATING_POINT(parameter_type) == FALSE){
 			//We're under the limit, we don't need a stack allocation
-			if(current_gp_index <= MAX_PER_CLASS_REGISTER_PASSED_PARAMS){
+			if(current_gp_index <= MAX_GP_REGISTER_PASSED_PARAMS){
 				//Add the final assignment
 				instruction_t* assignment;
 
@@ -6492,7 +6492,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 		} else {
 			//We're under the limit, so we don't need a stack allocation
-			if(current_sse_index <= MAX_PER_CLASS_REGISTER_PASSED_PARAMS){
+			if(current_sse_index <= MAX_SSE_REGISTER_PASSED_PARAMS){
 				instruction_t* assignment;
 
 				//We need a different assignment based on what kind of result it is
