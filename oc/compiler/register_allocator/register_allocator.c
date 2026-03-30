@@ -15,20 +15,19 @@
 #include "../postprocessor/postprocessor.h"
 #include "../utils/queue/max_priority_queue.h"
 #include "../cfg/cfg.h"
-#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
-#include <sys/ucontext.h>
 
 //The atomically increasing live range id
 u_int32_t live_range_id = 0;
 
 /**
- * Cache all of our register parameters for passing
+ * Cache all of our register parameters for passing. Recall that floating registers have 8 parameter
+ * passing registers via ABI while general purpose only has 6
  */
 const general_purpose_register_t gen_purpose_parameter_registers[] = {RDI, RSI, RDX, RCX, R8, R9};
-const sse_register_t sse_parameter_registers[] = {XMM0, XMM1, XMM2, XMM3, XMM4, XMM5};
+const sse_register_t sse_parameter_registers[] = {XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7};
 
 //Spill a live range
 static void spill_in_function(basic_block_t* function_entry_block, dynamic_array_t* live_ranges, live_range_t* spill_range);
