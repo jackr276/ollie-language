@@ -181,6 +181,32 @@ static inline u_int8_t is_variable_data_segment_variable(symtab_variable_record_
 
 
 /**
+ * Do the values on the left and right hand side of the expression require a copy assignment? This is 
+ * going to be true if we have structs or unions on both sides of the equation
+ */
+static inline u_int8_t is_copy_assignment_required(generic_type_t* destination_type, generic_type_t* source_type){
+	switch(destination_type->type_class){
+		case TYPE_CLASS_STRUCT:
+			if(source_type->type_class == TYPE_CLASS_STRUCT){
+				return TRUE;
+			} else {
+				return FALSE;
+			}
+
+		case TYPE_CLASS_UNION:
+			if(source_type->type_class == TYPE_CLASS_UNION){
+				return TRUE;
+			} else {
+				return FALSE;
+			}
+
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Delete a block, including all of the needed internal
  * bookkeeping
  */
@@ -5351,10 +5377,12 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	//The final first operand will be the expression package's assignee for now
 	three_addr_var_t* final_op1 = right_hand_package.assignee;
 
-	//If the final op1 is a memory address, we need to emit a temp assignment
-	//to make it not one. This is because later on down in the instruction selector,
-	//we will need to translate a memory address into an actual result and we can't
-	//do that inside of a store
+	/**
+	 * If the final op1 is a memory address, we need to emit a temp assignment
+	 * to make it not one. This is because later on down in the instruction selector,
+	 * we will need to translate a memory address into an actual result and we can't
+	 * do that inside of a store
+	 */
 	if(final_op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
 		//Emit the assignment
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(u64), final_op1);
@@ -5477,6 +5505,11 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		
 		//Now add thi statement in here
 		add_statement(current_block, final_assignment);
+
+	} else if(is_copy_assignment_required(left_hand_var->type, final_op1->type) == TRUE){
+		printf("COPY ASSIGNMENT REQUIRED\n");
+		exit(1);
+
 	
 	/**
 	 * If we get here, then we just have a regular variable that is not on the stack at all and is not a global variable,
