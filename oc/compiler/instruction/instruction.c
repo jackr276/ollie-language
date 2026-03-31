@@ -2185,6 +2185,17 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "\n");
 			break;
 
+		/**
+		 * Specialized memory copy statement. This exists for deep
+		 * copies from struct to struct or union to union
+		 */
+		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
+			fprintf(fl, "MEMORY COPY INTO ");
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " FROM ");
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			break;
+
 		//Special kind of statement for things like "if(x)"
 		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
 			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
