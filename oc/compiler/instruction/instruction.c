@@ -5121,6 +5121,27 @@ instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_add
 
 
 /**
+ * Emit a memory copy statement from one memory region to another. This exists
+ * purely as an OIR statement and is converted to moves later on down the road
+ *
+ * Note that both the assignee and the op1 should be memory address variables when
+ * we do this
+ */
+instruction_t* emit_memory_copy_instruction(three_addr_var_t* assignee_memory_region, three_addr_var_t* source_memory_region){
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Flag as a memory copy statement
+	stmt->statement_type = THREE_ADDR_CODE_MEMORY_COPY_STATEMENT;
+
+	//Now throw in the values. These are both going to be memory address vars
+	stmt->assignee = assignee_memory_region;
+	stmt->op1 = source_memory_region;
+
+	return stmt;
+}
+
+
+/**
  * Emit a memory access statement
  */
 instruction_t* emit_memory_access_instruction(three_addr_var_t* assignee, three_addr_var_t* op1){

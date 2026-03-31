@@ -632,6 +632,15 @@ instruction_t* emit_conditional_assignment_instruction(three_addr_var_t* assigne
 instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1);
 
 /**
+ * Emit a memory copy statement from one memory region to another. This exists
+ * purely as an OIR statement and is converted to moves later on down the road
+ *
+ * Note that both the assignee and the op1 should be memory address variables when
+ * we do this
+ */
+instruction_t* emit_memory_copy_instruction(three_addr_var_t* assignee_memory_region, three_addr_var_t* source_memory_region);
+
+/**
  * Emit a store statement. This is like an assignment instruction, but we're explicitly
  * using stack memory here
  */

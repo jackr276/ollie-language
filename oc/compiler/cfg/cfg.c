@@ -5430,8 +5430,11 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	 * identified by the other checks down the road
 	 */
 	if(is_copy_assignment_required(left_hand_var->type, final_op1->type) == TRUE){
-		printf("COPY IS NEEDED\n\n\n");
-		exit(1);
+		//Emit the copy from the left hand var to the final op1
+		instruction_t* copy_statement = emit_memory_copy_instruction(left_hand_var, final_op1);
+
+		//Get it into the block
+		add_statement(current_block, copy_statement);
 
 	/**
 	 * Do we have a pre-loaded up store statement ready for us to go? If so, then
@@ -10567,8 +10570,11 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 	 * we'll need some special handling for it
 	 */
 	if(is_copy_assignment_required(let_variable->type, final_op1->type) == TRUE){
-		printf("COPY IS REQUIRED\n");
-		exit(1);
+		//Emit the copy from the left hand var to the final op1
+		instruction_t* copy_statement = emit_memory_copy_instruction(let_variable, final_op1);
+
+		//Get it into the block
+		add_statement(current_block, copy_statement);
 
 	/**
 	 * Is the left hand variable a regular variable or is it a stack address variable? If it's a
