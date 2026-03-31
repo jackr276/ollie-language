@@ -578,6 +578,16 @@ static void mark(dynamic_array_t* function_blocks){
 					break;
 
 				/**
+				 * Any/all memory copying statements are considered useful by the ollie
+				 * optimizer regardless of use count tracking
+				 */
+				case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
+					current_stmt->mark = TRUE;
+					dynamic_array_add(&worklist, current_stmt);
+					current->contains_mark = TRUE;
+					break;
+
+				/**
 				 * Special cases: these stack allocation and deallocation statements
 				 * do not have any variables in them(%rsp is inferred because it is the stack)
 				 * They must always be marked, and they may never be deleted. However, since there
