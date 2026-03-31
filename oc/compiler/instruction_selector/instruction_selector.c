@@ -1088,6 +1088,43 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 
 
 /**
+ * A memory copy instruction that is only one statement inside of OIR will 
+ * routinely balloon to 10/20 statements inside of actual assembly. The
+ * most that we can copy in a two instruction pair is 16 bytes. We may
+ * need to scale that down if we have a fractional part of the struct/union
+ * remaining to copy
+ *
+ * General idea:
+ * 	Say we have a struct that occupies 40 bytes of memory. We will need
+ * 	to chunk this into 16 + 16 + 8 bytes of copying. Each copy takes
+ * 	2 instructions so we will end up producing at least 6 instructions to make
+ * 	this happen
+ *
+ * 	memory copy MEM<x> <- MEM<y>
+ * 	Assume that x and y are 40 byte structs. y starts at stack address 0, x will start at address 48(padding)
+ *
+ * 	 movdqu (%rsp), %xmm2  	 <--- Load 16 byte chunk #1
+ * 	 movaps %xmm2, 48(%rsp)  <--- Store 16 byte chunk #1
+ * 	 movdqu 16(%rsp), %xmm2  <--- Load 16 byte chunk #2
+ * 	 movaps %xmm2, 64(%rsp)  <--- Store 16 byte chunk #2
+ * 	 movq 32(%rsp), %rax  	 <--- Load 8 byte chunk #3
+ * 	 movq %rax, 80(%rsp)  <--- Store 8 byte chunk #3
+ * 	
+ *	 Note that we need to to use SSE registers and the special "movdqu"(move unaligned double quadword) to just
+ *	 go about copying here when we have 16 byte chunks. Anything 8 bytes and below we will just be using
+ *	 movq/movl/movw etc.
+ *
+ *	 In order to simplify things, we will first be converting these all into load/store operations and will
+ *	 allow the existing processes to convert from there inside of the instruction selector itself. This ensures
+ *	 that we maintain all of the existing logic around memory address variables
+ */
+static void convert_memory_copy_statement_into_loads_and_stores(instruction_window_t* window, instruction_t* memory_copy_statement){
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
+}
+
+
+/**
  * Emit a setne three address code statement
  */
 static inline instruction_t* emit_setne_code(three_addr_var_t* assignee, three_addr_var_t* relies_on){
@@ -1244,6 +1281,14 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			
 			break;
 
+		/**
+		 * If we have a memory copy statement, we will need to convert it into the
+		 * loads/stores that we need now. This will reconstruct the window when done.
+		 */
+		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
+			convert_memory_copy_statement_into_loads_and_stores(window, first);
+			break;
+
 		//By default do nothing
 		default:
 			break;
@@ -1264,6 +1309,14 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					break;
 			}
 			
+			break;
+
+		/**
+		 * If we have a memory copy statement, we will need to convert it into the
+		 * loads/stores that we need now. This will reconstruct the window when done
+		 */
+		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
+			convert_memory_copy_statement_into_loads_and_stores(window, second);
 			break;
 
 		//By default do nothing
@@ -1289,6 +1342,14 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				}
 				
 				break;
+
+		/**
+		 * If we have a memory copy statement, we will need to convert it into the
+		 * loads/stores that we need now. This will reconstruct the window when done
+		 */
+		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
+			convert_memory_copy_statement_into_loads_and_stores(window, third);
+			break;
 
 			//By default do nothing
 			default:
@@ -9585,39 +9646,6 @@ static inline void handle_stack_deallocation_statement(instruction_t* instructio
 
 
 /**
- * A memory copy instruction that is only one statement inside of OIR will 
- * routinely balloon to 10/20 statements inside of actual assembly. The
- * most that we can copy in a two instruction pair is 16 bytes. We may
- * need to scale that down if we have a fractional part of the struct/union
- * remaining to copy
- *
- * General idea:
- * 	Say we have a struct that occupies 40 bytes of memory. We will need
- * 	to chunk this into 16 + 16 + 8 bytes of copying. Each copy takes
- * 	2 instructions so we will end up producing at least 6 instructions to make
- * 	this happen
- *
- * 	memory copy MEM<x> <- MEM<y>
- * 	Assume that x and y are 40 byte structs. y starts at stack address 0, x will start at address 48(padding)
- *
- * 	 movdqu (%rsp), %xmm2  	 <--- Load 16 byte chunk #1
- * 	 movaps %xmm2, 48(%rsp)  <--- Store 16 byte chunk #1
- * 	 movdqu 16(%rsp), %xmm2  <--- Load 16 byte chunk #2
- * 	 movaps %xmm2, 64(%rsp)  <--- Store 16 byte chunk #2
- * 	 movq 32(%rsp), %rax  	 <--- Load 8 byte chunk #3
- * 	 movq %rax, 80(%rsp)  <--- Store 8 byte chunk #3
- * 	
- *	 Note that we need to to use SSE registers and the special "movdqu"(move unaligned double quadword) to just
- *	 go about copying here when we have 16 byte chunks. Anything 8 bytes and below we will just be using
- *	 movq/movl/movw etc.
- */
-static void handle_memory_copy_statement(instruction_window_t* window){
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
-}
-
-
-/**
  * Select instructions that follow a singular pattern. This one single pass will run after
  * the pattern selector ran and perform one-to-one mappings on whatever is left.
  */
@@ -9908,15 +9936,7 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		case THREE_ADDR_CODE_STACK_DEALLOCATION_STMT:
 			handle_stack_deallocation_statement(instruction);
 			break;
-		/**
-		 * A memory copy statement will generate a large number
-		 * of instructions(this is why it's inefficient). The number
-		 * it generates is dependent on how large the region that we're
-		 * copying is
-		 */
-		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
-			handle_memory_copy_statement(window);
-			break;
+		//TODO THIS SHOULD BE AN ERROR
 		default:
 			break;
 	}
