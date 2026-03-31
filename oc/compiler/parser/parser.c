@@ -11201,14 +11201,18 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 			}
 
 			/**
-			 * If we somehow get here and we have either an array, struct
-			 * or union type, this is incorrect. These types can only be initialized using
+			 * If we somehow get here and we have either an array or union type,
+			 * this is incorrect. These types can only be initialized using
 			 * the initializer strategy
 			 */
-			if(is_memory_region(target_type) == TRUE){
-				sprintf(info, "Type \"%s\" may only be initialized using the appropriate initializer list syntax", target_type->type_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				return NULL;
+			switch(target_type->type_class){
+				case TYPE_CLASS_UNION:
+				case TYPE_CLASS_ARRAY:
+					sprintf(info, "Type \"%s\" may only be initialized using the appropriate initializer list syntax", target_type->type_name.string);
+					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+					return NULL;
+				default:
+					break;
 			}
 
 			//Use the helper to determine if the types are assignable
