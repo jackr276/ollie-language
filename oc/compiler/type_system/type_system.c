@@ -392,49 +392,26 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 	generic_type_t* true_source_type = source_type;
 
 	switch(destination_type->type_class){
-		//This is a simpler case - constructs can only be assigned
-		//if they're the exact same
+		/**
+		 * This is a simpler case - constructs can only be assigned
+		 * if they're the exact same. We do not need to worry about
+		 * mutability here because struct assignment is always a copy,
+		 * so the destination won't be the same as the source anyway
+		 */
 		case TYPE_CLASS_STRUCT:
-			//If the string compare works, they are the same type. We must now check for mutability
 			if(strcmp(destination_type->type_name.string, true_source_type->type_name.string) == 0){
-				//This is fine, we can assign to something immutable
-				if(destination_type->mutability == NOT_MUTABLE){
-					return destination_type;
-
-				//Otherwise, the destination *is* mutable. The only way
-				//that this works is if the source is also mutable
-				} else {
-					//Good case
-					if(true_source_type->mutability == MUTABLE){
-						return destination_type;
-					//Fail out
-					} else {
-						return NULL;
-					}
-				}
+				return destination_type;
 			}
 
 			return NULL;
 
-		//This will only work if they're the exact same
+		/**
+		 * The same goes for a union type. They are assignable if they are the exact same. Mutability
+		 * also does not matter because this is always a direct copy
+		 */
 		case TYPE_CLASS_UNION:
-			//If the string compare works, they are the same type. We must now check for mutability
 			if(strcmp(destination_type->type_name.string, true_source_type->type_name.string) == 0){
-				//This is fine, we can assign to something immutable
-				if(destination_type->mutability == NOT_MUTABLE){
-					return destination_type;
-
-				//Otherwise, the destination *is* mutable. The only way
-				//that this works is if the source is also mutable
-				} else {
-					//Good case
-					if(true_source_type->mutability == MUTABLE){
-						return destination_type;
-					//Fail out
-					} else {
-						return NULL;
-					}
-				}
+				return destination_type;
 			}
 
 			return NULL;
