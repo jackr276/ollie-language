@@ -5344,6 +5344,26 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 
 /**
+ * Remediate a memory address variable that we have given to use in the assignment context.
+ * This is simply done by spitting out a temporary assignment instruction that takes the memory
+ * address and moves it over
+ */
+static inline three_addr_var_t* remediate_memory_address_in_assignment_context(instruction_t** before_instruction, three_addr_var_t* memory_address_var){
+	//Emit the assignment
+	instruction_t* assignment = emit_assignment_instruction(emit_temp_var(u64), memory_address_var);
+
+	//Insert this into the block before the store
+	insert_instruction_after_given(assignment, *before_instruction);
+
+	//This is now the last instruction
+	*before_instruction = assignment;
+
+	//Give back the temp assignee
+	return assignment->assignee;
+}
+
+
+/**
  * Handle an assignment expression and all of the required bookkeeping that comes 
  * with it
  */
@@ -5377,6 +5397,8 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	//The final first operand will be the expression package's assignee for now
 	three_addr_var_t* final_op1 = right_hand_package.assignee;
 
+	generic_type_t* old_final_op1_type = final_op1->type;
+
 	/**
 	 * If the final op1 is a memory address, we need to emit a temp assignment
 	 * to make it not one. This is because later on down in the instruction selector,
@@ -5384,17 +5406,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	 * do that inside of a store
 	 */
 	if(final_op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-		//Emit the assignment
-		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(u64), final_op1);
-
-		//Insert this into the block before the store
-		insert_instruction_after_given(assignment, last_instruction);
-
-		//This is now the last instruction
-		last_instruction = assignment;
-
-		//And the final op1 is this one's assignee
-		final_op1 = last_instruction->assignee;
+		final_op1 = remediate_memory_address_in_assignment_context(&last_instruction, final_op1);
 	}
 
 	//Emit the left hand unary expression
@@ -5405,6 +5417,11 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 
 	//The left hand var is the final assignee of the unary statement
 	three_addr_var_t* left_hand_var = unary_package.assignee;
+
+	if(is_copy_assignment_required(left_hand_var->type, old_final_op1_type) == TRUE){
+		printf("COPY IS REQUIRED\n");
+		exit(1);
+	}
 
 	/**
 	 * Do we have a pre-loaded up store statement ready for us to go? If so, then
@@ -5471,6 +5488,11 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				break;
 		}
 
+	} else if(is_copy_assignment_required(left_hand_var->type, final_op1->type) == TRUE){
+		printf("COPY ASSIGNMENT REQUIRED\n");
+		exit(1);
+
+
 	/**
 	 * If we have a variable that is on the stack or is a global variable, then a regular assignment won't
 	 * work. We'll need to do a store here
@@ -5505,11 +5527,6 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		
 		//Now add thi statement in here
 		add_statement(current_block, final_assignment);
-
-	} else if(is_copy_assignment_required(left_hand_var->type, final_op1->type) == TRUE){
-		printf("COPY ASSIGNMENT REQUIRED\n");
-		exit(1);
-
 	
 	/**
 	 * If we get here, then we just have a regular variable that is not on the stack at all and is not a global variable,
