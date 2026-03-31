@@ -1119,6 +1119,11 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
  *	 that we maintain all of the existing logic around memory address variables
  */
 static void convert_memory_copy_statement_into_loads_and_stores(instruction_window_t* window, instruction_t* memory_copy_statement){
+	//We'll want these on hand for down the road
+	three_addr_var_t* source_memory_address_var = memory_copy_statement->op1;
+	three_addr_var_t* destination_memory_address_var = memory_copy_statement->assignee;
+
+
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
 }
