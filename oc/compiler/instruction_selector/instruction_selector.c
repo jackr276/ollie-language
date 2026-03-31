@@ -9585,6 +9585,39 @@ static inline void handle_stack_deallocation_statement(instruction_t* instructio
 
 
 /**
+ * A memory copy instruction that is only one statement inside of OIR will 
+ * routinely balloon to 10/20 statements inside of actual assembly. The
+ * most that we can copy in a two instruction pair is 16 bytes. We may
+ * need to scale that down if we have a fractional part of the struct/union
+ * remaining to copy
+ *
+ * General idea:
+ * 	Say we have a struct that occupies 40 bytes of memory. We will need
+ * 	to chunk this into 16 + 16 + 8 bytes of copying. Each copy takes
+ * 	2 instructions so we will end up producing at least 6 instructions to make
+ * 	this happen
+ *
+ * 	memory copy MEM<x> <- MEM<y>
+ * 	Assume that x and y are 40 byte structs. y starts at stack address 0, x will start at address 48(padding)
+ *
+ * 	 movdqu (%rsp), %xmm2  	 <--- Load 16 byte chunk #1
+ * 	 movaps %xmm2, 48(%rsp)  <--- Store 16 byte chunk #1
+ * 	 movdqu 16(%rsp), %xmm2  <--- Load 16 byte chunk #2
+ * 	 movaps %xmm2, 64(%rsp)  <--- Store 16 byte chunk #2
+ * 	 movq 32(%rsp), %rax  	 <--- Load 8 byte chunk #3
+ * 	 movq %rax, 80(%rsp)  <--- Store 8 byte chunk #3
+ * 	
+ *	 Note that we need to to use SSE registers and the special "movdqu"(move unaligned double quadword) to just
+ *	 go about copying here when we have 16 byte chunks. Anything 8 bytes and below we will just be using
+ *	 movq/movl/movw etc.
+ */
+static void handle_memory_copy_statement(instruction_window_t* window){
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
+}
+
+
+/**
  * Select instructions that follow a singular pattern. This one single pass will run after
  * the pattern selector ran and perform one-to-one mappings on whatever is left.
  */
@@ -9874,6 +9907,15 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 			break;
 		case THREE_ADDR_CODE_STACK_DEALLOCATION_STMT:
 			handle_stack_deallocation_statement(instruction);
+			break;
+		/**
+		 * A memory copy statement will generate a large number
+		 * of instructions(this is why it's inefficient). The number
+		 * it generates is dependent on how large the region that we're
+		 * copying is
+		 */
+		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
+			handle_memory_copy_statement(window);
 			break;
 		default:
 			break;
