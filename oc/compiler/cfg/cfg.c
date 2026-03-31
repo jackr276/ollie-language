@@ -10508,36 +10508,6 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 
 
 /**
- * Emit an initialization statement given only a variable and
- * the top level of what could be a larger initialization sequence
- *
- * For more complex initializers, we're able to bypass the emitting of extra instructions and simply emit the 
- * offset that we need directly. We're able to do this because all array and struct initialization statements at
- * the end of the day just calculate offsets.
- */
-static cfg_result_package_t emit_complex_initialization(basic_block_t* current_block, three_addr_var_t* base_address, generic_ast_node_t* initializer_root){
-	switch(initializer_root->ast_node_type){
-		//Make a direct call to the rule. Seed with 0 as the initial offset
-		case AST_NODE_TYPE_STRING_INITIALIZER:
-			return emit_string_initializer(current_block, base_address, 0, initializer_root);
-
-		//Make a direct call to the rule. Seed with 0 as the initial offset
-		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
-			return emit_struct_initializer(current_block, base_address, 0, initializer_root);
-		
-		//Make a direct call to the array initializer. We'll "seed" with 0 as the starting address
-		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
-			return emit_array_initializer(current_block, base_address, 0, initializer_root);
-
-		//We should never actually hit this. If we do it's bad news
-		default:
-			print_parse_message(MESSAGE_TYPE_ERROR, "Fatal Internal Compiler Error. Unreachable path reached", 0);
-			exit(1);
-	}
-}
-
-
-/**
  * Emit a normal intialization
  *
  * We'll hit this when we have something like:
@@ -10652,6 +10622,41 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 
 	//And give it back
 	return let_results;
+}
+
+
+/**
+ * Emit an initialization statement given only a variable and
+ * the top level of what could be a larger initialization sequence
+ *
+ * For more complex initializers, we're able to bypass the emitting of extra instructions and simply emit the 
+ * offset that we need directly. We're able to do this because all array and struct initialization statements at
+ * the end of the day just calculate offsets.
+ *
+ * There is chance that we'll need to just default to a regular simple initialization here in the event that
+ * we have a struct copy. This is no big deal and a supported use case
+ */
+static inline cfg_result_package_t emit_complex_initialization(basic_block_t* current_block, three_addr_var_t* base_address, generic_ast_node_t* initializer_root){
+	switch(initializer_root->ast_node_type){
+		//Make a direct call to the rule. Seed with 0 as the initial offset
+		case AST_NODE_TYPE_STRING_INITIALIZER:
+			return emit_string_initializer(current_block, base_address, 0, initializer_root);
+
+		//Make a direct call to the rule. Seed with 0 as the initial offset
+		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
+			return emit_struct_initializer(current_block, base_address, 0, initializer_root);
+		
+		//Make a direct call to the array initializer. We'll "seed" with 0 as the starting address
+		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+			return emit_array_initializer(current_block, base_address, 0, initializer_root);
+
+		/**
+		 * It is possible for our struct copy assignments that we may hit a simple initialization here. This
+		 * is perfectly fine, and we will just let this rule handle it
+		 */
+		default:
+			return emit_simple_initialization(current_block, base_address, initializer_root);
+	}
 }
 
 
