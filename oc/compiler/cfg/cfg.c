@@ -5424,16 +5424,20 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	//The left hand var is the final assignee of the unary statement
 	three_addr_var_t* left_hand_var = unary_package.assignee;
 
+	/**
+	 * Is a copy assignment required between the destination and source types? This
+	 * is going to have to be our first case because it may be incorrectly
+	 * identified by the other checks down the road
+	 */
 	if(is_copy_assignment_required(left_hand_var->type, final_op1->type) == TRUE){
 		printf("COPY IS NEEDED\n\n\n");
 		exit(1);
-	}
 
 	/**
 	 * Do we have a pre-loaded up store statement ready for us to go? If so, then
 	 * we'll need to handle this appropriately
 	 */
-	if(is_store_operation(current_block->exit_statement) == TRUE){
+	} else if(is_store_operation(current_block->exit_statement) == TRUE){
 		//This is our store statement
 		instruction_t* store_statement = current_block->exit_statement;
 
@@ -5493,10 +5497,6 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			default:
 				break;
 		}
-
-	} else if(is_copy_assignment_required(left_hand_var->type, final_op1->type) == TRUE){
-		printf("COPY ASSIGNMENT REQUIRED\n");
-		exit(1);
 
 	/**
 	 * If we have a variable that is on the stack or is a global variable, then a regular assignment won't
@@ -10562,11 +10562,18 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 	//Store the last instruction for later use
 	instruction_t* last_instruction = current_block->exit_statement;
 
-	//If the final op1 is a memory address, we need to emit a temp assignment
-	//to make it not one. This is because later on down in the instruction selector,
-	//we will need to translate a memory address into an actual result and we can't
-	//do that inside of a store
-	if(final_op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+	/**
+	 * If the final op1 is a memory address, we need to emit a temp assignment
+	 * to make it not one. This is because later on down in the instruction selector,
+	 * we will need to translate a memory address into an actual result and we can't
+	 * do that inside of a store
+	 *
+	 * NOTE: we will only do this if the final op1 type that we are after does not require a copy
+	 * assignment. If the type does require us to copy in order to assign, then doing this would mangle
+	 * the result that we need to do the actual copy
+	 */
+	if(final_op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
+		&& does_type_require_copy_assignment(final_op1->type) == FALSE){
 		//Emit the assignment
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(u64), final_op1);
 
@@ -10585,11 +10592,20 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 	let_results.final_block = current_block;
 
 	/**
+	 * Is a copy assignment required between the two variables? This will only
+	 * occur if we have a struct to struct or union to union assignment but if we do,
+	 * we'll need some special handling for it
+	 */
+	if(is_copy_assignment_required(let_variable->type, final_op1->type) == TRUE){
+		printf("COPY IS REQUIRED\n");
+		exit(1);
+
+	/**
 	 * Is the left hand variable a regular variable or is it a stack address variable? If it's a
 	 * variable that is on the stack, then a regular assignment just won't do. We'll need to
 	 * emit a store operation
 	 */
-	if(let_variable->linked_var == NULL || let_variable->linked_var->stack_variable == FALSE){
+	} else if(let_variable->linked_var == NULL || let_variable->linked_var->stack_variable == FALSE){
 		//The actual statement is the assignment of right to left
 		instruction_t* assignment_statement = emit_assignment_instruction(let_variable, final_op1);
 
