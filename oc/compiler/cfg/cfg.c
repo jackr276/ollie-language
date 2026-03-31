@@ -207,6 +207,20 @@ static inline u_int8_t is_copy_assignment_required(generic_type_t* destination_t
 
 
 /**
+ * Is the type a struct or union type that requires copy assignment?
+ */
+static inline u_int8_t does_type_require_copy_assignment(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_UNION:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Delete a block, including all of the needed internal
  * bookkeeping
  */
@@ -5344,26 +5358,6 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 
 /**
- * Remediate a memory address variable that we have given to use in the assignment context.
- * This is simply done by spitting out a temporary assignment instruction that takes the memory
- * address and moves it over
- */
-static inline three_addr_var_t* remediate_memory_address_in_assignment_context(instruction_t** before_instruction, three_addr_var_t* memory_address_var){
-	//Emit the assignment
-	instruction_t* assignment = emit_assignment_instruction(emit_temp_var(u64), memory_address_var);
-
-	//Insert this into the block before the store
-	insert_instruction_after_given(assignment, *before_instruction);
-
-	//This is now the last instruction
-	*before_instruction = assignment;
-
-	//Give back the temp assignee
-	return assignment->assignee;
-}
-
-
-/**
  * Handle an assignment expression and all of the required bookkeeping that comes 
  * with it
  */
@@ -5397,16 +5391,28 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	//The final first operand will be the expression package's assignee for now
 	three_addr_var_t* final_op1 = right_hand_package.assignee;
 
-	generic_type_t* old_final_op1_type = final_op1->type;
-
 	/**
 	 * If the final op1 is a memory address, we need to emit a temp assignment
 	 * to make it not one. This is because later on down in the instruction selector,
 	 * we will need to translate a memory address into an actual result and we can't
-	 * do that inside of a store
+	 * do that inside of a store.
+	 *
+	 * Note that we will skip this test if the memory address is for a struct or union. Those
+	 * types require copying which is a special operation that would be ruined by this temp assignment
 	 */
-	if(final_op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-		final_op1 = remediate_memory_address_in_assignment_context(&last_instruction, final_op1);
+	if(final_op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
+		&& does_type_require_copy_assignment(final_op1->type) == FALSE) {
+		//Emit the assignment
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(u64), final_op1);
+
+		//Insert this into the block before the store
+		insert_instruction_after_given(assignment, last_instruction);
+
+		//This is now the last instruction
+		last_instruction = assignment;
+
+		//Give back the temp assignee
+		final_op1 = assignment->assignee;
 	}
 
 	//Emit the left hand unary expression
@@ -5418,8 +5424,8 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	//The left hand var is the final assignee of the unary statement
 	three_addr_var_t* left_hand_var = unary_package.assignee;
 
-	if(is_copy_assignment_required(left_hand_var->type, old_final_op1_type) == TRUE){
-		printf("COPY IS REQUIRED\n");
+	if(is_copy_assignment_required(left_hand_var->type, final_op1->type) == TRUE){
+		printf("COPY IS NEEDED\n\n\n");
 		exit(1);
 	}
 
@@ -5491,7 +5497,6 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	} else if(is_copy_assignment_required(left_hand_var->type, final_op1->type) == TRUE){
 		printf("COPY ASSIGNMENT REQUIRED\n");
 		exit(1);
-
 
 	/**
 	 * If we have a variable that is on the stack or is a global variable, then a regular assignment won't
