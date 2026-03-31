@@ -1,6 +1,7 @@
 /**
 * Author: Jack Robbins
-* Test the most basic case where we're assigning from one local struct over to another
+* Test struct copying when we have an assignment operation as opposed to a
+* let statement
 */
 
 //Define a struct type
@@ -12,10 +13,11 @@ define struct custom {
 
 
 pub fn main() -> i32 {
+	declare y:mut my_struct;
 	let x:my_struct = {2, 8, 'a'};
 
 	//Copy assignment here
-	let y:mut my_struct = x;
+	y = x;
 
 	ret y:y;
 }
