@@ -7353,6 +7353,14 @@ static inline instruction_t* emit_local_constant_from_memory_load(generic_type_t
 			}
 
 			break;
+
+		/**
+		 * The double quad word type should be impossible to reach here so if we do hit it we'll need to fail
+		 * out and kill the whole process
+		 */
+		default:
+			fprintf(stderr, "Fatal internal compiler error: unreachable path hit in local constant loader\n");
+			exit(1);
 	}
 
 	//Destination var is straightforward

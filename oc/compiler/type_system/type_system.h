@@ -54,8 +54,9 @@ typedef enum{
 	WORD,
 	DOUBLE_WORD,
 	QUAD_WORD,
+	DOUBLE_QUAD_WORD, //Double quad word for memory copying
 	SINGLE_PRECISION, //F32
-	DOUBLE_PRECISION  //F64
+	DOUBLE_PRECISION, //F64
 } variable_size_t;
 
 
@@ -86,7 +87,7 @@ typedef enum type_class_t {
  * Determine whether a type is or is not floating point
  */
 #define IS_FLOATING_POINT(type)\
-	((type->type_class == TYPE_CLASS_BASIC && ((type->basic_type_token == F32) || (type->basic_type_token == F64))) ? TRUE : FALSE)
+	((type->type_class == TYPE_CLASS_BASIC && ((type->basic_type_token == F32) || (type->basic_type_token == F64) || (type->basic_type_token == F128))) ? TRUE : FALSE)
 //========================= Utility Macros ============================
 
 

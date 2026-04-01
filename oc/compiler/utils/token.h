@@ -132,6 +132,7 @@ typedef enum {
 	I64,
 	F32,
 	F64,
+	F128, //A 128 bit type that allows us to copy 16 bytes at a time
 	CHAR,
 	PUB,
 	RAISE, //Error raising

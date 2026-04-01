@@ -62,11 +62,14 @@ static inline u_int32_t convert_type_size_to_bytes(variable_size_t size){
 		case QUAD_WORD:
 			return 8;
 
+		case DOUBLE_QUAD_WORD:
+			return 16;
+
 		case SINGLE_PRECISION:
 			return 4;
 
 		case DOUBLE_PRECISION:
-			return 8;;
+			return 8;
 
 		default:
 			return 8;
@@ -2544,6 +2547,14 @@ variable_size_t get_type_size(generic_type_t* type){
 				//This is double precision
 				case F64:
 					size = DOUBLE_PRECISION;
+					break;
+
+				/**
+				 * An F128 is an internal classification only for a double
+				 * quad word. This is a 16 byte type
+				 */
+				case F128:
+					size = DOUBLE_QUAD_WORD;
 					break;
 
 				//These are all quad word(64 bit)
