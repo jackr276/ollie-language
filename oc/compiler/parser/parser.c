@@ -174,6 +174,32 @@ static inline u_int8_t is_variable_data_segment_variable(symtab_variable_record_
 
 
 /**
+ * Do the values on the left and right hand side of the expression require a copy assignment? This is 
+ * going to be true if we have structs or unions on both sides of the equation
+ */
+static inline u_int8_t is_copy_assignment_required(generic_type_t* destination_type, generic_type_t* source_type){
+	switch(destination_type->type_class){
+		case TYPE_CLASS_STRUCT:
+			if(source_type->type_class == TYPE_CLASS_STRUCT){
+				return TRUE;
+			} else {
+				return FALSE;
+			}
+
+		case TYPE_CLASS_UNION:
+			if(source_type->type_class == TYPE_CLASS_UNION){
+				return TRUE;
+			} else {
+				return FALSE;
+			}
+
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Perform any needed constant coercion that is being done for an assignment. This includes converting pointers to 64-bit
  * integers for constant coercion
  */
@@ -2822,6 +2848,16 @@ loop_end:
 				return print_and_return_error(info, parser_line_num);
 			}
 		} 
+
+		/**
+		 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
+		 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
+		 * no dereference from said expression. Dereferencing would mess up the memory copying, we should just be
+		 * doing an address calculation.
+		 */
+		if(is_copy_assignment_required(left_hand_type, right_hand_type) == TRUE){
+			printf("POSTFIX EXPRESSION COPY REQUIRED\n\n");
+		}
 
 		//Otherwise the overall type is the final type
 		asn_expr_node->inferred_type = final_type;

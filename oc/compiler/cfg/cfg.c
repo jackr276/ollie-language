@@ -5379,10 +5379,6 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	generic_ast_node_t* left_child = parent_node->first_child;
 	generic_ast_node_t* right_child = left_child->next_sibling;
 
-	if(is_copy_assignment_required(left_child->inferred_type, right_child->inferred_type) == TRUE){
-		printf("COPY ASSIGNMENT NEEDED: LEFT %s and RIGHT %s\n", left_child->inferred_type->type_name.string, right_child->inferred_type->type_name.string);
-	}
-
 	//Now emit the right hand expression
 	cfg_result_package_t right_hand_package = emit_expression(current_block, right_child, FALSE);
 
