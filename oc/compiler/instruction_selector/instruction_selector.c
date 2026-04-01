@@ -9941,9 +9941,14 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		case THREE_ADDR_CODE_STACK_DEALLOCATION_STMT:
 			handle_stack_deallocation_statement(instruction);
 			break;
-		//TODO THIS SHOULD BE AN ERROR
+		/**
+		 * If we get here then we're encountering something that we've never seen
+		 * before or was never meant to reach this part of selection. Either way
+		 * we fail out
+		 */
 		default:
-			break;
+			fprintf(stderr, "Fatal internal compiler error: instruction with code %d reached an unreachable path", instruction->statement_type);
+			exit(1);
 	}
 }
 

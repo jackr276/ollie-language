@@ -2863,7 +2863,6 @@ loop_end:
 			 */
 			if(left_hand_unary->ast_node_type == AST_NODE_TYPE_POSTFIX_EXPR){
 				left_hand_unary->dereference_needed = FALSE;
-				printf("POSTFIX EXPRESSION COPY REQUIRED\n\n");
 			}
 
 			/**
@@ -2873,7 +2872,6 @@ loop_end:
 			 */
 			if(expr->ast_node_type == AST_NODE_TYPE_POSTFIX_EXPR){
 				expr->dereference_needed = FALSE;
-				printf("POSTFIX EXPRESSION COPY REQUIRED\n\n");
 			}
 		}
 

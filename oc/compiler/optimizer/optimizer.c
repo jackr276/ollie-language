@@ -681,6 +681,15 @@ static void mark(dynamic_array_t* function_blocks){
 				mark_and_add_definition(function_blocks, stmt->op2, &worklist);
 				break;
 
+			/**
+			 * For a memory copy statement, we need the defitinition of the assignee
+			 * and op1 marked as they are both important to the overall copy
+			 */
+			case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
+				mark_and_add_definition(function_blocks, stmt->assignee, &worklist);
+				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
+				break;
+
 			//In all other cases, we'll just mark and add the two operands 
 			default:
 				//We need to mark the place where each definition is set
