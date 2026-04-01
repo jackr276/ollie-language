@@ -10570,8 +10570,8 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 	 * we'll need some special handling for it
 	 */
 	if(is_copy_assignment_required(let_variable->type, final_op1->type) == TRUE){
-		//Emit the copy from the left hand var to the final op1
-		instruction_t* copy_statement = emit_memory_copy_instruction(let_variable, final_op1, 0);
+		//Emit the copy from the left hand var to the final op1. The copy size is always the let variable's size
+		instruction_t* copy_statement = emit_memory_copy_instruction(let_variable, final_op1, let_variable->type->type_size);
 
 		//Get it into the block
 		add_statement(current_block, copy_statement);

@@ -2192,7 +2192,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		 * copies from struct to struct or union to union
 		 */
 		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
-			fprintf(fl, "memory copy %d bytes ", stmt->op1->type->type_size);
+			fprintf(fl, "memory copy %ld bytes ", stmt->optional_storage.byte_amount_to_copy);
 			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- ");
 			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);

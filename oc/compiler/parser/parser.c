@@ -11441,7 +11441,7 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	let_stmt_node->inferred_type = return_type;
 
 	//Store the bytes that we need to copy here
-	let_stmt_node->optional_storage.bytes_to_copy = return_type->type_size;
+	let_stmt_node->optional_storage.bytes_to_copy = type_spec->type_size; 
 
 	//Otherwise it worked, so we'll add it in as a child
 	add_child_node(let_stmt_node, initializer_node);
