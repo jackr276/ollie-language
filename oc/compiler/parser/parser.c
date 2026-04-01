@@ -2856,7 +2856,16 @@ loop_end:
 		 * doing an address calculation.
 		 */
 		if(is_copy_assignment_required(left_hand_type, right_hand_type) == TRUE){
+			if(left_hand_unary->ast_node_type == AST_NODE_TYPE_POSTFIX_EXPR){
 			printf("POSTFIX EXPRESSION COPY REQUIRED\n\n");
+
+			}
+
+			if(expr->ast_node_type == AST_NODE_TYPE_POSTFIX_EXPR){
+			printf("POSTFIX EXPRESSION COPY REQUIRED\n\n");
+
+			}
+			
 		}
 
 		//Otherwise the overall type is the final type
