@@ -2856,16 +2856,25 @@ loop_end:
 		 * doing an address calculation.
 		 */
 		if(is_copy_assignment_required(left_hand_type, right_hand_type) == TRUE){
+			/**
+			 * If the left hand unary is a postfix expression *and* we are looking
+			 * to perform a memory copy assignment here, we need to flag that 
+			 * we do *not* require a dereference to make this work
+			 */
 			if(left_hand_unary->ast_node_type == AST_NODE_TYPE_POSTFIX_EXPR){
-			printf("POSTFIX EXPRESSION COPY REQUIRED\n\n");
-
+				left_hand_unary->dereference_needed = FALSE;
+				printf("POSTFIX EXPRESSION COPY REQUIRED\n\n");
 			}
 
+			/**
+			 * If the right hand expression is a postfix expression *and* we are looking
+			 * to perform a memory copy assignment here, we need to flag that 
+			 * we do *not* require a dereference to make this work
+			 */
 			if(expr->ast_node_type == AST_NODE_TYPE_POSTFIX_EXPR){
-			printf("POSTFIX EXPRESSION COPY REQUIRED\n\n");
-
+				expr->dereference_needed = FALSE;
+				printf("POSTFIX EXPRESSION COPY REQUIRED\n\n");
 			}
-			
 		}
 
 		//Otherwise the overall type is the final type
