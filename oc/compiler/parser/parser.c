@@ -2873,6 +2873,9 @@ loop_end:
 			if(expr->ast_node_type == AST_NODE_TYPE_POSTFIX_EXPR){
 				expr->dereference_needed = FALSE;
 			}
+
+			//Store this for down the road - how many bytes do we need to copy
+			asn_expr_node->optional_storage.bytes_to_copy = final_type->type_size;
 		}
 
 		//Otherwise the overall type is the final type
@@ -11436,6 +11439,9 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 
 	//Store this just in case--most likely won't use
 	let_stmt_node->inferred_type = return_type;
+
+	//Store the bytes that we need to copy here
+	let_stmt_node->optional_storage.bytes_to_copy = return_type->type_size;
 
 	//Otherwise it worked, so we'll add it in as a child
 	add_child_node(let_stmt_node, initializer_node);

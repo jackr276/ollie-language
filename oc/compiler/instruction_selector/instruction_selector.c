@@ -1123,6 +1123,23 @@ static void convert_memory_copy_statement_into_loads_and_stores(instruction_wind
 	three_addr_var_t* source_memory_address_var = memory_copy_statement->op1;
 	three_addr_var_t* destination_memory_address_var = memory_copy_statement->assignee;
 
+	/**
+	 * We will maintain current offsets for the source
+	 * and destination as well as the amount that we have
+	 * yet to copy
+	 */
+	u_int64_t source_current_offset = 0;
+	u_int64_t dest_current_offset = 0;
+	//Always use the source to get how much we want to copy
+	u_int64_t remaining_copy_amount = source_memory_address_var->type->type_size;
+
+	/*
+	do {
+
+	} while(remaining_copy_amount > 0);
+	*/
+
+
 
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);

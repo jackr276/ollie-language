@@ -2192,7 +2192,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		 * copies from struct to struct or union to union
 		 */
 		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
-			fprintf(fl, "memory copy ");
+			fprintf(fl, "memory copy %d bytes ", stmt->op1->type->type_size);
 			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- ");
 			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
@@ -5133,7 +5133,7 @@ instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_add
  * Note that both the assignee and the op1 should be memory address variables when
  * we do this
  */
-instruction_t* emit_memory_copy_instruction(three_addr_var_t* assignee_memory_region, three_addr_var_t* source_memory_region){
+instruction_t* emit_memory_copy_instruction(three_addr_var_t* assignee_memory_region, three_addr_var_t* source_memory_region, u_int64_t byte_amount_to_copy){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Flag as a memory copy statement
@@ -5142,6 +5142,9 @@ instruction_t* emit_memory_copy_instruction(three_addr_var_t* assignee_memory_re
 	//Now throw in the values. These are both going to be memory address vars
 	stmt->assignee = assignee_memory_region;
 	stmt->op1 = source_memory_region;
+
+	//Store how much we need to copy - eliminate all guessing
+	stmt->optional_storage.byte_amount_to_copy = byte_amount_to_copy;
 
 	return stmt;
 }

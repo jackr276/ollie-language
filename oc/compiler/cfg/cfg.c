@@ -5431,7 +5431,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	 */
 	if(is_copy_assignment_required(left_hand_var->type, final_op1->type) == TRUE){
 		//Emit the copy from the left hand var to the final op1
-		instruction_t* copy_statement = emit_memory_copy_instruction(left_hand_var, final_op1);
+		instruction_t* copy_statement = emit_memory_copy_instruction(left_hand_var, final_op1, parent_node->optional_storage.bytes_to_copy);
 
 		//Get it into the block
 		add_statement(current_block, copy_statement);
@@ -10571,7 +10571,7 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 	 */
 	if(is_copy_assignment_required(let_variable->type, final_op1->type) == TRUE){
 		//Emit the copy from the left hand var to the final op1
-		instruction_t* copy_statement = emit_memory_copy_instruction(let_variable, final_op1);
+		instruction_t* copy_statement = emit_memory_copy_instruction(let_variable, final_op1, 0);
 
 		//Get it into the block
 		add_statement(current_block, copy_statement);
