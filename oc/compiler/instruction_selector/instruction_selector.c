@@ -1142,8 +1142,28 @@ static inline void emit_16_byte_copy_pair(instruction_t** last_instruction, thre
  * This function will update the last instruction reference so that we always maintain a pointer to the last instruction in
  * our work area
  */
-static inline void emit_8_byte_copy_pair(instruction_t** before_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t* current_offset){
+static inline void emit_8_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t current_offset){
+	//Double quad word storage variable here
+	three_addr_var_t* temporary_storage_variable = emit_temp_var(i64);
 
+	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
+	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
+	three_addr_const_t* dest_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
+
+	//First load the 16 bytes out of memory
+	instruction_t* load_instruction = emit_load_with_constant_offset_ir_code(temporary_storage_variable, source_memory_address, source_offset_constant, i64);
+
+	//The load goes right after whatever came first
+	insert_instruction_after_given(*last_instruction, load_instruction);
+
+	//Now emit the corresponding store to take that retrieved memory and put it into the destination
+	instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(dest_memory_address, dest_offset_constant, temporary_storage_variable, i64);
+
+	//The store goes right after the load
+	insert_instruction_after_given(load_instruction, store_instruction);
+
+	//Finally update the reference
+	*last_instruction = store_instruction;
 }
 
 
@@ -1161,8 +1181,28 @@ static inline void emit_8_byte_copy_pair(instruction_t** before_instruction, thr
  * This function will update the last instruction reference so that we always maintain a pointer to the last instruction in
  * our work area
  */
-static inline void emit_4_byte_copy_pair(instruction_t** before_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t* current_offset){
+static inline void emit_4_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t current_offset){
+	//Double quad word storage variable here
+	three_addr_var_t* temporary_storage_variable = emit_temp_var(i32);
 
+	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
+	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
+	three_addr_const_t* dest_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
+
+	//First load the 16 bytes out of memory
+	instruction_t* load_instruction = emit_load_with_constant_offset_ir_code(temporary_storage_variable, source_memory_address, source_offset_constant, i32);
+
+	//The load goes right after whatever came first
+	insert_instruction_after_given(*last_instruction, load_instruction);
+
+	//Now emit the corresponding store to take that retrieved memory and put it into the destination
+	instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(dest_memory_address, dest_offset_constant, temporary_storage_variable, i32);
+
+	//The store goes right after the load
+	insert_instruction_after_given(load_instruction, store_instruction);
+
+	//Finally update the reference
+	*last_instruction = store_instruction;
 }
 
 
@@ -1235,38 +1275,49 @@ static void convert_memory_copy_statement_into_loads_and_stores(instruction_wind
 		 * byte copy
 		 */
 		if(remaining_copy_amount >= 16) {
-			emit_16_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, &current_offset);
+			emit_16_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, current_offset);
 
 			//We copied 16 so we knock down how much we have left
 			remaining_copy_amount -= 16;
+
+			//The current offset has now increased by 16
+			current_offset += 16;
 
 		/**
 		 * More than 8 but less than 16, we will use a regular movq for this
 		 */
 		} else if(remaining_copy_amount >= 8) {
-			emit_8_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, &current_offset);
+			emit_8_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, current_offset);
 
 			//We copied 8 so we knock down how much we have left
 			remaining_copy_amount -= 8;
+
+			//The current offset has now increased by 8
+			current_offset += 8;
 
 		/**
 		 * More than 4 but less than 8, we will use a movl for this
 		 */
 		} else if(remaining_copy_amount >= 4) {
-			emit_4_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, &current_offset);
+			emit_4_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, current_offset);
 
 			//We copied 4 so we knock down how much we have left
 			remaining_copy_amount -= 4;
+
+			//The current offset has now increased by 4
+			current_offset += 4;
 
 		/**
 		 * More than 2 but less than 4 - copy 2 at a time
 		 */
 		} else if(remaining_copy_amount >= 2) {
-			emit_2_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, &current_offset);
-
+			emit_2_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, current_offset);
 
 			//We copied 2 so we knock down how much we have left
 			remaining_copy_amount -= 2;
+
+			//The current offset has now increased by 2
+			current_offset += 2;
 
 		/**
 		 * Anything less is completely invalid and we should error - this likely means we have 
