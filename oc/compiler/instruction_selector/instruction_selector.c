@@ -1116,13 +1116,13 @@ static inline void emit_16_byte_copy_pair(instruction_t** last_instruction, thre
 	instruction_t* load_instruction = emit_load_with_constant_offset_ir_code(temporary_storage_variable, source_memory_address, source_offset_constant, double_quad_word);
 
 	//The load goes right after whatever came first
-	insert_instruction_after_given(*last_instruction, load_instruction);
+	insert_instruction_after_given(load_instruction, *last_instruction);
 
 	//Now emit the corresponding store to take that retrieved memory and put it into the destination
 	instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(dest_memory_address, dest_offset_constant, temporary_storage_variable, double_quad_word);
 
 	//The store goes right after the load
-	insert_instruction_after_given(load_instruction, store_instruction);
+	insert_instruction_after_given(store_instruction, load_instruction);
 
 	//Finally update the reference
 	*last_instruction = store_instruction;
@@ -1155,13 +1155,13 @@ static inline void emit_8_byte_copy_pair(instruction_t** last_instruction, three
 	instruction_t* load_instruction = emit_load_with_constant_offset_ir_code(temporary_storage_variable, source_memory_address, source_offset_constant, i64);
 
 	//The load goes right after whatever came first
-	insert_instruction_after_given(*last_instruction, load_instruction);
+	insert_instruction_after_given(load_instruction, *last_instruction);
 
 	//Now emit the corresponding store to take that retrieved memory and put it into the destination
 	instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(dest_memory_address, dest_offset_constant, temporary_storage_variable, i64);
 
 	//The store goes right after the load
-	insert_instruction_after_given(load_instruction, store_instruction);
+	insert_instruction_after_given(store_instruction, load_instruction);
 
 	//Finally update the reference
 	*last_instruction = store_instruction;
@@ -1194,13 +1194,13 @@ static inline void emit_4_byte_copy_pair(instruction_t** last_instruction, three
 	instruction_t* load_instruction = emit_load_with_constant_offset_ir_code(temporary_storage_variable, source_memory_address, source_offset_constant, i32);
 
 	//The load goes right after whatever came first
-	insert_instruction_after_given(*last_instruction, load_instruction);
+	insert_instruction_after_given(load_instruction, *last_instruction);
 
 	//Now emit the corresponding store to take that retrieved memory and put it into the destination
 	instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(dest_memory_address, dest_offset_constant, temporary_storage_variable, i32);
 
 	//The store goes right after the load
-	insert_instruction_after_given(load_instruction, store_instruction);
+	insert_instruction_after_given(store_instruction, load_instruction);
 
 	//Finally update the reference
 	*last_instruction = store_instruction;
@@ -1233,13 +1233,13 @@ static inline void emit_2_byte_copy_pair(instruction_t** last_instruction, three
 	instruction_t* load_instruction = emit_load_with_constant_offset_ir_code(temporary_storage_variable, source_memory_address, source_offset_constant, i16);
 
 	//The load goes right after whatever came first
-	insert_instruction_after_given(*last_instruction, load_instruction);
+	insert_instruction_after_given(load_instruction, *last_instruction);
 
 	//Now emit the corresponding store to take that retrieved memory and put it into the destination
 	instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(dest_memory_address, dest_offset_constant, temporary_storage_variable, i16);
 
 	//The store goes right after the load
-	insert_instruction_after_given(load_instruction, store_instruction);
+	insert_instruction_after_given(store_instruction, load_instruction);
 
 	//Finally update the reference
 	*last_instruction = store_instruction;
