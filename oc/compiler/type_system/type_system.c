@@ -1772,20 +1772,31 @@ generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type, mut
 			//1 BYTE
 			type->type_size = 1;
 			break;
+
 		case I16:
 		case U16:
 			//2 BYTES
 			type->type_size = 2;
 			break;
+
 		case I32:
 		case U32:
 		case F32:
 			//4 BYTES
 			type->type_size = 4;
 			break;
+
 		case VOID:
 			//Special case -- 0 bytes
 			type->type_size = 0;
+			break;
+			
+		/**
+		 * Double quad word type for memory copying. This is a 16
+		 * byte type that requires the use of the XMM registers
+		 */
+		case F128:
+			type->type_size = 16;
 			break;
 		default:
 			//Otheriwse is 8 BYTES

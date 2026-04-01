@@ -1202,6 +1202,13 @@ u_int16_t add_all_basic_types(type_symtab_t* symtab){
 	num_collisions += insert_type(symtab,  create_type_record(type));
 
 	// ================================ Mutable versions of our primitive types ==============================
+	
+	// ================================ Specialized internal-only types ======================================
+	// F128 DOUBLE_QUAD_WORD type for memory copying - mangle the name so that a user could never get this
+	type = create_basic_type("&double_quad_word", F128, NOT_MUTABLE);
+	num_collisions += insert_type(symtab, create_type_record(type));
+	
+	// ================================ Specialized internal-only types ======================================
 
 	/**
 	 * For any/all generic error handling, we need the ability to have a generic error type. In practice
