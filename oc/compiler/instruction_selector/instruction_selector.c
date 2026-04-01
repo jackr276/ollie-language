@@ -25,6 +25,7 @@ static generic_type_t* i64;
 static generic_type_t* u32;
 static generic_type_t* i32;
 static generic_type_t* u16;
+static generic_type_t* i16;
 static generic_type_t* u8;
 
 //A holder for the stack pointer
@@ -1143,14 +1144,14 @@ static inline void emit_16_byte_copy_pair(instruction_t** last_instruction, thre
  * our work area
  */
 static inline void emit_8_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t current_offset){
-	//Double quad word storage variable here
+	//Quad word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(i64);
 
 	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
 	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
 	three_addr_const_t* dest_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
 
-	//First load the 16 bytes out of memory
+	//First load the 8 bytes out of memory
 	instruction_t* load_instruction = emit_load_with_constant_offset_ir_code(temporary_storage_variable, source_memory_address, source_offset_constant, i64);
 
 	//The load goes right after whatever came first
@@ -1182,14 +1183,14 @@ static inline void emit_8_byte_copy_pair(instruction_t** last_instruction, three
  * our work area
  */
 static inline void emit_4_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t current_offset){
-	//Double quad word storage variable here
+	//Double word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(i32);
 
 	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
 	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
 	three_addr_const_t* dest_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
 
-	//First load the 16 bytes out of memory
+	//First load the 4 bytes out of memory
 	instruction_t* load_instruction = emit_load_with_constant_offset_ir_code(temporary_storage_variable, source_memory_address, source_offset_constant, i32);
 
 	//The load goes right after whatever came first
@@ -1220,8 +1221,28 @@ static inline void emit_4_byte_copy_pair(instruction_t** last_instruction, three
  * This function will update the last instruction reference so that we always maintain a pointer to the last instruction in
  * our work area
  */
-static inline void emit_2_byte_copy_pair(instruction_t** before_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t* current_offset){
+static inline void emit_2_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t current_offset){
+	//Word storage variable here
+	three_addr_var_t* temporary_storage_variable = emit_temp_var(i16);
 
+	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
+	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
+	three_addr_const_t* dest_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
+
+	//First load the 2 bytes out of memory
+	instruction_t* load_instruction = emit_load_with_constant_offset_ir_code(temporary_storage_variable, source_memory_address, source_offset_constant, i16);
+
+	//The load goes right after whatever came first
+	insert_instruction_after_given(*last_instruction, load_instruction);
+
+	//Now emit the corresponding store to take that retrieved memory and put it into the destination
+	instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(dest_memory_address, dest_offset_constant, temporary_storage_variable, i16);
+
+	//The store goes right after the load
+	insert_instruction_after_given(load_instruction, store_instruction);
+
+	//Finally update the reference
+	*last_instruction = store_instruction;
 }
 
 
@@ -1330,9 +1351,11 @@ static void convert_memory_copy_statement_into_loads_and_stores(instruction_wind
 
 	} while(remaining_copy_amount > 0);
 
+	//Now we can delete the old memory copy instruction
+	delete_statement(memory_copy_statement);
 
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
+	//And we will reorganize the window around the last instruction we've inserted
+	reconstruct_window(window, last_instruction);
 }
 
 
@@ -10229,6 +10252,7 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	i64 = lookup_type_name_only(cfg->type_symtab, "i64", NOT_MUTABLE)->type;
 	i32 = lookup_type_name_only(cfg->type_symtab, "i32", NOT_MUTABLE)->type;
 	u32 = lookup_type_name_only(cfg->type_symtab, "u32", NOT_MUTABLE)->type;
+	i16 = lookup_type_name_only(cfg->type_symtab, "i16", NOT_MUTABLE)->type;
 	u16 = lookup_type_name_only(cfg->type_symtab, "u16", NOT_MUTABLE)->type;
 	u8 = lookup_type_name_only(cfg->type_symtab, "u8", NOT_MUTABLE)->type;
 
