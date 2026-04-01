@@ -1105,6 +1105,54 @@ static inline void emit_16_byte_copy_pair(instruction_t* before_instruction, thr
 
 
 /**
+ * Emit an 8 byte load/store copy instruction pair. This instruction will use a regular movq and an i64 when
+ * it gets instruction selected down the road
+ *
+ * We assume that the source and destination variables given to us are memory addresses. Whether or not they
+ * are memory address variables or not is actually not relevant, which is why the strategy of converting to OIR first
+ * is desirable for us
+ *
+ * This helper will update the current_offset variable. The current offset is going to be the same for the source and the
+ * destination because they have the exact same memory shape/size(compiler enforces this)
+ */
+static inline void emit_8_byte_copy_pair(instruction_t* before_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t* current_offset){
+
+}
+
+
+/**
+ * Emit a 4 byte load/store copy instruction pair. This instruction will use a regular movl and an i32 when
+ * it gets instruction selected down the road
+ *
+ * We assume that the source and destination variables given to us are memory addresses. Whether or not they
+ * are memory address variables or not is actually not relevant, which is why the strategy of converting to OIR first
+ * is desirable for us
+ *
+ * This helper will update the current_offset variable. The current offset is going to be the same for the source and the
+ * destination because they have the exact same memory shape/size(compiler enforces this)
+ */
+static inline void emit_4_byte_copy_pair(instruction_t* before_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t* current_offset){
+
+}
+
+
+/**
+ * Emit a 2 byte load/store copy instruction pair. This instruction will use a regular movw and an i16 when
+ * it gets instruction selected down the road
+ *
+ * We assume that the source and destination variables given to us are memory addresses. Whether or not they
+ * are memory address variables or not is actually not relevant, which is why the strategy of converting to OIR first
+ * is desirable for us
+ *
+ * This helper will update the current_offset variable. The current offset is going to be the same for the source and the
+ * destination because they have the exact same memory shape/size(compiler enforces this)
+ */
+static inline void emit_2_byte_copy_pair(instruction_t* before_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t* current_offset){
+
+}
+
+
+/**
  * A memory copy instruction that is only one statement inside of OIR will 
  * routinely balloon to 10/20 statements inside of actual assembly. The
  * most that we can copy in a two instruction pair is 16 bytes. We may
