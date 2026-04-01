@@ -1133,12 +1133,49 @@ static void convert_memory_copy_statement_into_loads_and_stores(instruction_wind
 	//Always use the source to get how much we want to copy
 	u_int64_t remaining_copy_amount = source_memory_address_var->type->type_size;
 
-	/*
 	do {
+		/**
+		 * More than 16 bytes remain - we will tackle this using a 16
+		 * byte copy
+		 */
+		if(remaining_copy_amount >= 16) {
+
+
+			//We copied 16 so we knock down how much we have left
+			remaining_copy_amount -= 16;
+
+		/**
+		 * More than 8 but less than 16, we will use a regular movq for this
+		 */
+		} else if(remaining_copy_amount >= 8) {
+
+			//We copied 8 so we knock down how much we have left
+			remaining_copy_amount -= 8;
+
+		/**
+		 * More than 4 but less than 8, we will use a movl for this
+		 */
+		} else if(remaining_copy_amount >= 4) {
+
+			//We copied 4 so we knock down how much we have left
+			remaining_copy_amount -= 4;
+
+		} else if(remaining_copy_amount >= 2) {
+
+
+			//We copied 2 so we knock down how much we have left
+			remaining_copy_amount -= 2;
+
+		/**
+		 * Anything less is completely invalid and we should error - this likely means we have 
+		 * an issue somewhere else in the system that needs to be addressed
+		 */
+		} else {
+			fprintf(stderr, "Fatal Internal Compiler Error: Remaining copy amount for a memory copy was less than 2 bytes\n");
+			exit(1);
+		}
 
 	} while(remaining_copy_amount > 0);
-	*/
-
 
 
 	printf("TODO NOT IMPLEMENTED\n");
@@ -10039,9 +10076,11 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	//Store a reference to the CFG as well
 	cfg_reference = cfg;
 
-	//Our very first step in the instruction selector is to order all of the blocks in one 
-	//straight line. This step is also able to recognize and exploit some early optimizations,
-	//such as when a block ends in a jump to the block right below it
+	/**
+	 * Our very first step in the instruction selector is to order all of the blocks in one 
+	 * straight line. This step is also able to recognize and exploit some early optimizations,
+	 * such as when a block ends in a jump to the block right below it 
+	 */
 	order_blocks(cfg);
 
 	//Do we need to print intermediate representations?
@@ -10054,9 +10093,11 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 		printf("============================== AFTER SIMPLIFY ========================================\n");
 	}
 
-	//Once we've printed, we now need to simplify the operations. OIR already comes in an expanded
-	//format that is used in the optimization phase. Now, we need to take that expanded IR and
-	//recognize any redundant operations, dead values, unnecessary loads, etc.
+	/**
+	 * Once we've printed, we now need to simplify the operations. OIR already comes in an expanded
+	 * format that is used in the optimization phase. Now, we need to take that expanded IR and
+	 * recognize any redundant operations, dead values, unnecessary loads, etc.
+	 */
 	simplify(cfg);
 
 	//If we need to print IRS, we can do so here
