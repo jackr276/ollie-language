@@ -205,6 +205,7 @@ typedef enum{
 	MOVAPS, //Move aligned packed f32 -> used if we need to clear out the whole thing
 	MOVAPD, //Move aligned packed f64 -> used if we need to clear out the whole thing
 	MOVDQU, //Move unaligned double quad word -> used for memory copying with structs/unions
+	MOVDQA, //Move aligned double quad word -> used for memory copying with structs/unions
 	CVTSS2SD, //Convert scalar f32 to scalar f64
 	CVTSD2SS, //Convert scalar f64 to scalar f32
 	CVTTSD2SIL, //Convert scalar f64 to i32 with truncation

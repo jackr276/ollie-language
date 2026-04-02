@@ -290,6 +290,7 @@ u_int8_t is_load_instruction(instruction_t* instruction){
 		case MOVW:
 		case MOVB:
 		case MOVDQU:
+		case MOVDQA:
 		case MOVSBW:
 		case MOVSBL:
 		case MOVSBQ:
@@ -445,6 +446,7 @@ u_int8_t is_move_instruction_destination_assigned(instruction_t* instruction){
 		case MOVZWL:
 		case MOVZWQ:
 		case MOVDQU:
+		case MOVDQA:
 			//If we have a move where we are writing to memory, the destination
 			//does not count as assigned
 			if(instruction->memory_access_type == WRITE_TO_MEMORY){
@@ -3088,6 +3090,10 @@ static inline void print_move_instruction(FILE* fl, instruction_type_t instructi
 			break;
 		case MOVDQU:
 			fprintf(fl, "movdqu ");
+			break;
+		case MOVDQA:
+			fprintf(fl, "movdqa ");
+			break;
 		//We should never hit this
 		default:
 			printf("Fatal internal compiler error: unreachable path hit\n");
@@ -4496,6 +4502,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case MOVQ:
 		case MOVD:
 		case MOVDQU:
+		case MOVDQA:
 		case MOVSBW:
 		case MOVSBL:
 		case MOVSBQ:
@@ -8200,6 +8207,7 @@ u_int32_t get_estimated_cycle_count(instruction_t* instruction){
 		case MOVB:
 		case MOVW:
 		case MOVDQU:
+		case MOVDQA:
 		case MOVSBL:
 		case MOVSBW:
 		case MOVSBQ:
