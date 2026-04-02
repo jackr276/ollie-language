@@ -2171,9 +2171,11 @@ void add_struct_member(generic_type_t* type, void* member_var){
 		return;
 	}
 
-	//Let's now see where the ending address of the struct is. We can find
-	//this ending dress by calculating the offset of the latest field plus
-	//the size of the latest variable
+	/**
+	 * Let's now see where the ending address of the struct is. We can find
+	 * this ending dress by calculating the offset of the latest field plus
+	 * the size of the latest variable
+	 */
 	
 	//The prior variable
 	symtab_variable_record_t* prior_variable = dynamic_array_get_at(&(type->internal_types.struct_table), type->internal_types.struct_table.current_index - 1);
@@ -2193,8 +2195,10 @@ void add_struct_member(generic_type_t* type, void* member_var){
 		type->internal_values.largest_member_type = aligning_by_type;
 	}
 
-	//We will satisfy this by adding the remainder of the division of the new variable with the current
-	//end in as padding to the previous entry
+	/**
+	 * We will satisfy this by adding the remainder of the division of the new variable with the current
+	 * end in as padding to the previous entry
+	 */
 	
 	//What padding is needed?
 	u_int32_t needed_padding = 0;
@@ -2303,19 +2307,32 @@ u_int8_t add_union_member(generic_type_t* union_type, void* member_var){
  * The struct's end address needs to be a multiple of the size
  * of it's largest field. We keep track of the largest field
  * throughout the entirety of construction, so this should be easy
+ *
+ * We mandate that the struct's end address must at least be even
  */
 void finalize_struct_alignment(generic_type_t* type){
 	//Grab the alignable type size
 	int32_t alignable_type_size = type->internal_values.largest_member_type->type_size;
 
-	//If the size is already a multiple of the alignable type size,
-	//then we can stop here and leave
+	/**
+	 * If the alignable type size is less than 2 somehow, we will
+	 * force it to be 2. We cannot have structs with odd numbered
+	 * ending addresses
+	 */
+	if(alignable_type_size < 2){
+		alignable_type_size = 2;
+	}
+
+	/**
+	 * If the size is already a multiple of the alignable type size,
+	 * then we can stop here and leave
+	 */
 	if(type->type_size % alignable_type_size == 0){
 		return;
 	}
 
 	/**
-	 * The alignable type size is either: 1, 2, 4 or 8
+	 * The alignable type size is either: 2, 4 or 8
 	 *
 	 * We will add this alignable type size on so that we are guaranteed to be over
 	 * the next highest multiple of said type size

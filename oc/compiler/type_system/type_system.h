@@ -332,6 +332,12 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, ollie_token_t u
 void add_struct_member(generic_type_t* type, void* member_var);
 
 /**
+ * Finalize the alignment of the struct. This finalization step guarantees
+ * that the struct ends up with an address that is at least a multiple of 4
+ */
+void finalize_struct_alignment(generic_type_t* type);
+
+/**
  * Add a value to an enumeration's list of values
  */
 u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member, u_int8_t user_defined_values);
@@ -340,11 +346,6 @@ u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member, u_int8_t 
  * Add a value into the union's list of members
  */
 u_int8_t add_union_member(generic_type_t* union_type, void* member_var);
-
-/**
- * Finalize the struct alignment
- */
-void finalize_struct_alignment(generic_type_t* type);
 
 /**
  * Print the full name of a type *into* the char buffer that
