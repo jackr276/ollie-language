@@ -1328,8 +1328,8 @@ static void convert_memory_copy_statement_into_loads_and_stores(instruction_wind
 
 	//Maintain the current offset. This is going to be the same for the source and destination
 	u_int64_t current_offset = 0;
-	//Always use the source to get how much we want to copy
-	u_int64_t remaining_copy_amount = source_memory_address_var->type->type_size;
+	//We always use the dedicated field to determine how many bytes we should be copying
+	u_int64_t remaining_copy_amount = memory_copy_statement->optional_storage.byte_amount_to_copy;
 
 	//We need to keep track of the last instruction. This will be constantly updated by every function we call
 	instruction_t* last_instruction = memory_copy_statement;
