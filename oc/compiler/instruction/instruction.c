@@ -1677,6 +1677,67 @@ void print_double_precision_sse_register(FILE* fl, sse_register_t reg){
 
 
 /**
+ * Print a double quad word SSE register out
+ */
+void print_double_quad_word_sse_register(FILE* fl, sse_register_t reg){
+	switch(reg){
+		//Exclusively for debug purposes. Under normal operation, we shouldn't be hitting this
+		case NO_REG_SSE:
+			fprintf(fl, "NOREG Double Quad Word");
+			break;
+		case XMM0:
+			fprintf(fl, "%%xmm0");
+			break;
+		case XMM1:
+			fprintf(fl, "%%xmm1");
+			break;
+		case XMM2:
+			fprintf(fl, "%%xmm2");
+			break;
+		case XMM3:
+			fprintf(fl, "%%xmm3");
+			break;
+		case XMM4:
+			fprintf(fl, "%%xmm4");
+			break;
+		case XMM5:
+			fprintf(fl, "%%xmm5");
+			break;
+		case XMM6:
+			fprintf(fl, "%%xmm6");
+			break;
+		case XMM7:
+			fprintf(fl, "%%xmm7");
+			break;
+		case XMM8:
+			fprintf(fl, "%%xmm8");
+			break;
+		case XMM9:
+			fprintf(fl, "%%xmm9");
+			break;
+		case XMM10:
+			fprintf(fl, "%%xmm10");
+			break;
+		case XMM11:
+			fprintf(fl, "%%xmm11");
+			break;
+		case XMM12:
+			fprintf(fl, "%%xmm12");
+			break;
+		case XMM13:
+			fprintf(fl, "%%xmm13");
+			break;
+		case XMM14:
+			fprintf(fl, "%%xmm14");
+			break;
+		case XMM15:
+			fprintf(fl, "%%xmm15");
+			break;
+	}
+}
+
+
+/**
  * Print a variable in name only. There are no spaces around the variable, and there
  * will be no newline inserted at all. This is meant solely for the use of the "print_three_addr_code_stmt"
  * and nothing more. This function is also designed to take into account the indirection aspected as well
@@ -1732,22 +1793,22 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 
 					break;
 
-				//SSE registers only have the option for single
-				//or double precision
+				/**
+				 * SSE registers can be single/double precision or the special double quad word type
+				 */
 				case LIVE_RANGE_CLASS_SSE:
-					//Special edge case
-					if(variable->associated_live_range->reg.sse_reg == NO_REG_SSE){
-						fprintf(fl, "LR%d", variable->associated_live_range->live_range_id);
-						break;
-					}
-
-					//There are only 2 potential correct sizes here
+					/**
+					 * We have 3 
+					 */
 					switch(variable->variable_size){
 						case SINGLE_PRECISION:
 							print_single_precision_sse_register(fl, variable->associated_live_range->reg.sse_reg);
 							break;
 						case DOUBLE_PRECISION:
 							print_double_precision_sse_register(fl, variable->associated_live_range->reg.sse_reg);
+							break;
+						case DOUBLE_QUAD_WORD:
+							print_double_quad_word_sse_register(fl, variable->associated_live_range->reg.sse_reg);
 							break;
 						default:
 							printf("Fatal internal compiler error: unknown/invalid SSE variable size encountered\n");

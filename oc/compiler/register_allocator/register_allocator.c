@@ -440,6 +440,11 @@ static inline live_range_class_t get_live_range_class_for_variable(three_addr_va
 
 		case SINGLE_PRECISION:
 		case DOUBLE_PRECISION:
+		/**
+		 * Even though this has a type of "double quad word", we still consider
+		 * it to be SSE *because* we need to use XMM registers to hold these values
+		 */
+		case DOUBLE_QUAD_WORD:
 			return LIVE_RANGE_CLASS_SSE;
 
 		default:
