@@ -8343,18 +8343,11 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 	u_int8_t is_destination_signed;
 
 	/**
-	 * TODO for the load instruction, is the memory region guaranteed to be aligned
-	 * or not? If it is, we need to flag that for our move instruction selector
-	 *
-	 * We consider memory alignment to be guaranteed IFF the stack memory that we are reading
-	 * from is local
-	 *
-	 * TODO NOT DONE
-	 *
-	 *
-	 *
+	 * For some of our load instructions, the memory alignment is very important. This is
+	 * most commonly true when we are doing 16 byte loads during large struct copy operations.
+	 * We will invoke a helper to determine whether or not the source memory region is aligned
 	 */
-	alignment_type_t source_region_alignment = is_memory_region_alignment_guarnateed();
+	alignment_type_t source_region_alignment = is_memory_region_alignment_guarnateed(load_instruction->op1);
 
 	//By default, assume it's the assignee
 	three_addr_var_t* destination_register = load_instruction->assignee;
