@@ -185,6 +185,17 @@ static inline u_int8_t is_operation_valid_for_op1_assignment_folding(ollie_token
 
 
 /**
+ * Is the memory region alignment guaranteed or not? We will discover this by finding 
+ * the place where our given memory variable was defined from.
+ *
+ * TODO
+ */
+static inline u_int8_t is_memory_region_alignment_guarnateed(/* TODO */){
+	return FALSE;
+}
+
+
+/**
  * Is a type an unsigned 64 bit type? This is used for type conversions in 
  * the instruction selector
  */
@@ -8295,6 +8306,21 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 	variable_size_t source_size;
 	u_int8_t is_destination_signed;
 
+	/**
+	 * TODO for the load instruction, is the memory region guaranteed to be aligned
+	 * or not? If it is, we need to flag that for our move instruction selector
+	 *
+	 * We consider memory alignment to be guaranteed IFF the stack memory that we are reading
+	 * from is local
+	 *
+	 * TODO NOT DONE
+	 *
+	 *
+	 *
+	 */
+	u_int8_t is_source_memory_region_aligned = is_memory_region_alignment_guarnateed();
+
+
 	//By default, assume it's the assignee
 	three_addr_var_t* destination_register = load_instruction->assignee;
 
@@ -8353,7 +8379,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 				is_destination_signed = is_type_signed(intermediary_destination->type);
 
 				//Let the helper select for us. We are passing clean as true, since we are coming from memory
-				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE, READ_FROM_MEMORY);
+				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, is_source_memory_region_aligned, READ_FROM_MEMORY);
 
 				//Since we know that this is a floating point conversion, we will emit the PXOR here
 				pxor_instruction = emit_sse_register_clear_instruction(destination_register);
@@ -8385,7 +8411,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 				is_destination_signed = is_type_signed(intermediary_destination->type);
 
 				//Let the helper select for us. We are passing clean as true, since we are coming from memory
-				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE, READ_FROM_MEMORY);
+				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, is_source_memory_region_aligned, READ_FROM_MEMORY);
 
 				//Since we know that this is a floating point conversion, we will emit the PXOR here
 				pxor_instruction = emit_sse_register_clear_instruction(destination_register);
@@ -8419,7 +8445,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 		is_destination_signed = is_type_signed(destination_register->type);
 
 		//Let the helper select for us. We are passing clean as true, since we are coming from memory
-		load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE, READ_FROM_MEMORY);
+		load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, is_source_memory_region_aligned, READ_FROM_MEMORY);
 
 		/**
 		 * If we have a conversion instruction that has an SSE destination, we need to emit
