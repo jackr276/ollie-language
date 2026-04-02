@@ -62,11 +62,14 @@ static inline u_int32_t convert_type_size_to_bytes(variable_size_t size){
 		case QUAD_WORD:
 			return 8;
 
+		case DOUBLE_QUAD_WORD:
+			return 16;
+
 		case SINGLE_PRECISION:
 			return 4;
 
 		case DOUBLE_PRECISION:
-			return 8;;
+			return 8;
 
 		default:
 			return 8;
@@ -392,49 +395,26 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 	generic_type_t* true_source_type = source_type;
 
 	switch(destination_type->type_class){
-		//This is a simpler case - constructs can only be assigned
-		//if they're the exact same
+		/**
+		 * This is a simpler case - constructs can only be assigned
+		 * if they're the exact same. We do not need to worry about
+		 * mutability here because struct assignment is always a copy,
+		 * so the destination won't be the same as the source anyway
+		 */
 		case TYPE_CLASS_STRUCT:
-			//If the string compare works, they are the same type. We must now check for mutability
 			if(strcmp(destination_type->type_name.string, true_source_type->type_name.string) == 0){
-				//This is fine, we can assign to something immutable
-				if(destination_type->mutability == NOT_MUTABLE){
-					return destination_type;
-
-				//Otherwise, the destination *is* mutable. The only way
-				//that this works is if the source is also mutable
-				} else {
-					//Good case
-					if(true_source_type->mutability == MUTABLE){
-						return destination_type;
-					//Fail out
-					} else {
-						return NULL;
-					}
-				}
+				return destination_type;
 			}
 
 			return NULL;
 
-		//This will only work if they're the exact same
+		/**
+		 * The same goes for a union type. They are assignable if they are the exact same. Mutability
+		 * also does not matter because this is always a direct copy
+		 */
 		case TYPE_CLASS_UNION:
-			//If the string compare works, they are the same type. We must now check for mutability
 			if(strcmp(destination_type->type_name.string, true_source_type->type_name.string) == 0){
-				//This is fine, we can assign to something immutable
-				if(destination_type->mutability == NOT_MUTABLE){
-					return destination_type;
-
-				//Otherwise, the destination *is* mutable. The only way
-				//that this works is if the source is also mutable
-				} else {
-					//Good case
-					if(true_source_type->mutability == MUTABLE){
-						return destination_type;
-					//Fail out
-					} else {
-						return NULL;
-					}
-				}
+				return destination_type;
 			}
 
 			return NULL;
@@ -1792,20 +1772,31 @@ generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type, mut
 			//1 BYTE
 			type->type_size = 1;
 			break;
+
 		case I16:
 		case U16:
 			//2 BYTES
 			type->type_size = 2;
 			break;
+
 		case I32:
 		case U32:
 		case F32:
 			//4 BYTES
 			type->type_size = 4;
 			break;
+
 		case VOID:
 			//Special case -- 0 bytes
 			type->type_size = 0;
+			break;
+			
+		/**
+		 * Double quad word type for memory copying. This is a 16
+		 * byte type that requires the use of the XMM registers
+		 */
+		case F128:
+			type->type_size = 16;
 			break;
 		default:
 			//Otheriwse is 8 BYTES
@@ -2180,9 +2171,11 @@ void add_struct_member(generic_type_t* type, void* member_var){
 		return;
 	}
 
-	//Let's now see where the ending address of the struct is. We can find
-	//this ending dress by calculating the offset of the latest field plus
-	//the size of the latest variable
+	/**
+	 * Let's now see where the ending address of the struct is. We can find
+	 * this ending dress by calculating the offset of the latest field plus
+	 * the size of the latest variable
+	 */
 	
 	//The prior variable
 	symtab_variable_record_t* prior_variable = dynamic_array_get_at(&(type->internal_types.struct_table), type->internal_types.struct_table.current_index - 1);
@@ -2202,8 +2195,10 @@ void add_struct_member(generic_type_t* type, void* member_var){
 		type->internal_values.largest_member_type = aligning_by_type;
 	}
 
-	//We will satisfy this by adding the remainder of the division of the new variable with the current
-	//end in as padding to the previous entry
+	/**
+	 * We will satisfy this by adding the remainder of the division of the new variable with the current
+	 * end in as padding to the previous entry
+	 */
 	
 	//What padding is needed?
 	u_int32_t needed_padding = 0;
@@ -2228,6 +2223,50 @@ void add_struct_member(generic_type_t* type, void* member_var){
 
 	//Done
 	return; 
+}
+
+
+/**
+ * Finalize the construct alignment. This should only be invoked 
+ * when we're done processing members
+ *
+ * The struct's end address needs to be a multiple of the size
+ * of it's largest field. We keep track of the largest field
+ * throughout the entirety of construction, so this should be easy
+ *
+ * We mandate that the struct's end address must at least be even
+ */
+void finalize_struct_alignment(generic_type_t* type){
+	//Grab the alignable type size
+	int32_t alignable_type_size = type->internal_values.largest_member_type->type_size;
+
+	/**
+	 * If the alignable type size is less than 2 somehow, we will
+	 * force it to be 2. We cannot have structs with odd numbered
+	 * ending addresses
+	 */
+	if(alignable_type_size < 2){
+		alignable_type_size = 2;
+	}
+
+	/**
+	 * If the size is already a multiple of the alignable type size,
+	 * then we can stop here and leave
+	 */
+	if(type->type_size % alignable_type_size == 0){
+		return;
+	}
+
+	/**
+	 * The alignable type size is either: 2, 4 or 8
+	 *
+	 * We will add this alignable type size on so that we are guaranteed to be over
+	 * the next highest multiple of said type size
+	 *
+	 * Then we will and by the 2's complement of this value to 0 out the lowest bits
+	 * that need to be 0'd out. At most, we will 0 out the bottom 3 bits for 8-byte aligned
+	 */
+	type->type_size = (type->type_size + alignable_type_size) & (-alignable_type_size);
 }
 
 
@@ -2306,25 +2345,32 @@ u_int8_t add_union_member(generic_type_t* union_type, void* member_var){
 
 
 /**
- * Finalize the construct alignment. This should only be invoked 
- * when we're done processing members
- *
- * The struct's end address needs to be a multiple of the size
- * of it's largest field. We keep track of the largest field
- * throughout the entirety of construction, so this should be easy
+ * Finalize the alignment of the union. This finalization step guarantees
+ * that the union ends up with an address that is at least a multiple of 2
  */
-void finalize_struct_alignment(generic_type_t* type){
-	//Grab the alignable type size
-	int32_t alignable_type_size = type->internal_values.largest_member_type->type_size;
+void finalize_union_alignment(generic_type_t* type){
+	//Get the size of the union
+	int32_t alignable_type_size = type->type_size;
 
-	//If the size is already a multiple of the alignable type size,
-	//then we can stop here and leave
+	/**
+	 * If the alignable type size is less than 2 somehow, we will
+	 * force it to be 2. We cannot have structs with odd numbered
+	 * ending addresses
+	 */
+	if(alignable_type_size < 2){
+		alignable_type_size = 2;
+	}
+
+	/**
+	 * If the size is already a multiple of the alignable type size,
+	 * then we can stop here and leave
+	 */
 	if(type->type_size % alignable_type_size == 0){
 		return;
 	}
 
 	/**
-	 * The alignable type size is either: 1, 2, 4 or 8
+	 * The alignable type size is either: 2, 4 or 8
 	 *
 	 * We will add this alignable type size on so that we are guaranteed to be over
 	 * the next highest multiple of said type size
@@ -2567,6 +2613,14 @@ variable_size_t get_type_size(generic_type_t* type){
 				//This is double precision
 				case F64:
 					size = DOUBLE_PRECISION;
+					break;
+
+				/**
+				 * An F128 is an internal classification only for a double
+				 * quad word. This is a 16 byte type
+				 */
+				case F128:
+					size = DOUBLE_QUAD_WORD;
 					break;
 
 				//These are all quad word(64 bit)

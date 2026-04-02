@@ -306,6 +306,8 @@ struct instruction_t{
 		//The second error assignee for an errorable
 		//function
 		three_addr_var_t* error_assignee;
+		//Store the byte amount that we want to copy by
+		u_int64_t byte_amount_to_copy;
 	} optional_storage;
 	//Generic parameter list - could be used for phi functions or function calls
 	dynamic_array_t parameters;
@@ -630,6 +632,15 @@ instruction_t* emit_conditional_assignment_instruction(three_addr_var_t* assigne
  * Emit a statement that only uses two vars of the form var1 <- var2
  */
 instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1);
+
+/**
+ * Emit a memory copy statement from one memory region to another. This exists
+ * purely as an OIR statement and is converted to moves later on down the road
+ *
+ * Note that both the assignee and the op1 should be memory address variables when
+ * we do this
+ */
+instruction_t* emit_memory_copy_instruction(three_addr_var_t* assignee_memory_region, three_addr_var_t* source_memory_region, u_int64_t byte_amount_to_copy);
 
 /**
  * Emit a store statement. This is like an assignment instruction, but we're explicitly

@@ -289,6 +289,8 @@ u_int8_t is_load_instruction(instruction_t* instruction){
 		case MOVL:
 		case MOVW:
 		case MOVB:
+		case MOVDQU:
+		case MOVDQA:
 		case MOVSBW:
 		case MOVSBL:
 		case MOVSBQ:
@@ -443,6 +445,8 @@ u_int8_t is_move_instruction_destination_assigned(instruction_t* instruction){
 		case MOVZBQ:
 		case MOVZWL:
 		case MOVZWQ:
+		case MOVDQU:
+		case MOVDQA:
 			//If we have a move where we are writing to memory, the destination
 			//does not count as assigned
 			if(instruction->memory_access_type == WRITE_TO_MEMORY){
@@ -1673,6 +1677,67 @@ void print_double_precision_sse_register(FILE* fl, sse_register_t reg){
 
 
 /**
+ * Print a double quad word SSE register out
+ */
+void print_double_quad_word_sse_register(FILE* fl, sse_register_t reg){
+	switch(reg){
+		//Exclusively for debug purposes. Under normal operation, we shouldn't be hitting this
+		case NO_REG_SSE:
+			fprintf(fl, "NOREG Double Quad Word");
+			break;
+		case XMM0:
+			fprintf(fl, "%%xmm0");
+			break;
+		case XMM1:
+			fprintf(fl, "%%xmm1");
+			break;
+		case XMM2:
+			fprintf(fl, "%%xmm2");
+			break;
+		case XMM3:
+			fprintf(fl, "%%xmm3");
+			break;
+		case XMM4:
+			fprintf(fl, "%%xmm4");
+			break;
+		case XMM5:
+			fprintf(fl, "%%xmm5");
+			break;
+		case XMM6:
+			fprintf(fl, "%%xmm6");
+			break;
+		case XMM7:
+			fprintf(fl, "%%xmm7");
+			break;
+		case XMM8:
+			fprintf(fl, "%%xmm8");
+			break;
+		case XMM9:
+			fprintf(fl, "%%xmm9");
+			break;
+		case XMM10:
+			fprintf(fl, "%%xmm10");
+			break;
+		case XMM11:
+			fprintf(fl, "%%xmm11");
+			break;
+		case XMM12:
+			fprintf(fl, "%%xmm12");
+			break;
+		case XMM13:
+			fprintf(fl, "%%xmm13");
+			break;
+		case XMM14:
+			fprintf(fl, "%%xmm14");
+			break;
+		case XMM15:
+			fprintf(fl, "%%xmm15");
+			break;
+	}
+}
+
+
+/**
  * Print a variable in name only. There are no spaces around the variable, and there
  * will be no newline inserted at all. This is meant solely for the use of the "print_three_addr_code_stmt"
  * and nothing more. This function is also designed to take into account the indirection aspected as well
@@ -1728,22 +1793,22 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 
 					break;
 
-				//SSE registers only have the option for single
-				//or double precision
+				/**
+				 * SSE registers can be single/double precision or the special double quad word type
+				 */
 				case LIVE_RANGE_CLASS_SSE:
-					//Special edge case
-					if(variable->associated_live_range->reg.sse_reg == NO_REG_SSE){
-						fprintf(fl, "LR%d", variable->associated_live_range->live_range_id);
-						break;
-					}
-
-					//There are only 2 potential correct sizes here
+					/**
+					 * We have 3 
+					 */
 					switch(variable->variable_size){
 						case SINGLE_PRECISION:
 							print_single_precision_sse_register(fl, variable->associated_live_range->reg.sse_reg);
 							break;
 						case DOUBLE_PRECISION:
 							print_double_precision_sse_register(fl, variable->associated_live_range->reg.sse_reg);
+							break;
+						case DOUBLE_QUAD_WORD:
+							print_double_quad_word_sse_register(fl, variable->associated_live_range->reg.sse_reg);
 							break;
 						default:
 							printf("Fatal internal compiler error: unknown/invalid SSE variable size encountered\n");
@@ -2179,6 +2244,18 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 		case THREE_ADDR_CODE_ASSN_STMT:
 			//We'll print out the left and right ones here
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- ");
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+			break;
+
+		/**
+		 * Specialized memory copy statement. This exists for deep
+		 * copies from struct to struct or union to union
+		 */
+		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
+			fprintf(fl, "memory copy %ld bytes ", stmt->optional_storage.byte_amount_to_copy);
 			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- ");
 			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
@@ -3071,6 +3148,12 @@ static inline void print_move_instruction(FILE* fl, instruction_type_t instructi
 			break;
 		case CMOVP:
 			fprintf(fl, "cmovp ");
+			break;
+		case MOVDQU:
+			fprintf(fl, "movdqu ");
+			break;
+		case MOVDQA:
+			fprintf(fl, "movdqa ");
 			break;
 		//We should never hit this
 		default:
@@ -4479,6 +4562,8 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case MOVL:
 		case MOVQ:
 		case MOVD:
+		case MOVDQU:
+		case MOVDQA:
 		case MOVSBW:
 		case MOVSBL:
 		case MOVSBQ:
@@ -5105,6 +5190,30 @@ instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_add
 	stmt->op1 = op1;
 
 	//And that's it, we'll just leave our now
+	return stmt;
+}
+
+
+/**
+ * Emit a memory copy statement from one memory region to another. This exists
+ * purely as an OIR statement and is converted to moves later on down the road
+ *
+ * Note that both the assignee and the op1 should be memory address variables when
+ * we do this
+ */
+instruction_t* emit_memory_copy_instruction(three_addr_var_t* assignee_memory_region, three_addr_var_t* source_memory_region, u_int64_t byte_amount_to_copy){
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Flag as a memory copy statement
+	stmt->statement_type = THREE_ADDR_CODE_MEMORY_COPY_STATEMENT;
+
+	//Now throw in the values. These are both going to be memory address vars
+	stmt->assignee = assignee_memory_region;
+	stmt->op1 = source_memory_region;
+
+	//Store how much we need to copy - eliminate all guessing
+	stmt->optional_storage.byte_amount_to_copy = byte_amount_to_copy;
+
 	return stmt;
 }
 
@@ -8158,6 +8267,8 @@ u_int32_t get_estimated_cycle_count(instruction_t* instruction){
 		case MOVQ:
 		case MOVB:
 		case MOVW:
+		case MOVDQU:
+		case MOVDQA:
 		case MOVSBL:
 		case MOVSBW:
 		case MOVSBQ:

@@ -181,6 +181,46 @@ static inline u_int8_t is_variable_data_segment_variable(symtab_variable_record_
 
 
 /**
+ * Do the values on the left and right hand side of the expression require a copy assignment? This is 
+ * going to be true if we have structs or unions on both sides of the equation
+ */
+static inline u_int8_t is_copy_assignment_required(generic_type_t* destination_type, generic_type_t* source_type){
+	switch(destination_type->type_class){
+		case TYPE_CLASS_STRUCT:
+			if(source_type->type_class == TYPE_CLASS_STRUCT){
+				return TRUE;
+			} else {
+				return FALSE;
+			}
+
+		case TYPE_CLASS_UNION:
+			if(source_type->type_class == TYPE_CLASS_UNION){
+				return TRUE;
+			} else {
+				return FALSE;
+			}
+
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Is the type a struct or union type that requires copy assignment?
+ */
+static inline u_int8_t does_type_require_copy_assignment(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_UNION:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Delete a block, including all of the needed internal
  * bookkeeping
  */
@@ -5351,11 +5391,17 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	//The final first operand will be the expression package's assignee for now
 	three_addr_var_t* final_op1 = right_hand_package.assignee;
 
-	//If the final op1 is a memory address, we need to emit a temp assignment
-	//to make it not one. This is because later on down in the instruction selector,
-	//we will need to translate a memory address into an actual result and we can't
-	//do that inside of a store
-	if(final_op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+	/**
+	 * If the final op1 is a memory address, we need to emit a temp assignment
+	 * to make it not one. This is because later on down in the instruction selector,
+	 * we will need to translate a memory address into an actual result and we can't
+	 * do that inside of a store.
+	 *
+	 * Note that we will skip this test if the memory address is for a struct or union. Those
+	 * types require copying which is a special operation that would be ruined by this temp assignment
+	 */
+	if(final_op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
+		&& does_type_require_copy_assignment(final_op1->type) == FALSE) {
 		//Emit the assignment
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(u64), final_op1);
 
@@ -5365,8 +5411,8 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		//This is now the last instruction
 		last_instruction = assignment;
 
-		//And the final op1 is this one's assignee
-		final_op1 = last_instruction->assignee;
+		//Give back the temp assignee
+		final_op1 = assignment->assignee;
 	}
 
 	//Emit the left hand unary expression
@@ -5379,10 +5425,22 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	three_addr_var_t* left_hand_var = unary_package.assignee;
 
 	/**
+	 * Is a copy assignment required between the destination and source types? This
+	 * is going to have to be our first case because it may be incorrectly
+	 * identified by the other checks down the road
+	 */
+	if(is_copy_assignment_required(left_child->inferred_type, right_child->inferred_type) == TRUE){
+		//Emit the copy from the left hand var to the final op1
+		instruction_t* copy_statement = emit_memory_copy_instruction(left_hand_var, final_op1, parent_node->optional_storage.bytes_to_copy);
+
+		//Get it into the block
+		add_statement(current_block, copy_statement);
+
+	/**
 	 * Do we have a pre-loaded up store statement ready for us to go? If so, then
 	 * we'll need to handle this appropriately
 	 */
-	if(is_store_operation(current_block->exit_statement) == TRUE){
+	} else if(is_store_operation(current_block->exit_statement) == TRUE){
 		//This is our store statement
 		instruction_t* store_statement = current_block->exit_statement;
 
@@ -10453,36 +10511,6 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 
 
 /**
- * Emit an initialization statement given only a variable and
- * the top level of what could be a larger initialization sequence
- *
- * For more complex initializers, we're able to bypass the emitting of extra instructions and simply emit the 
- * offset that we need directly. We're able to do this because all array and struct initialization statements at
- * the end of the day just calculate offsets.
- */
-static cfg_result_package_t emit_complex_initialization(basic_block_t* current_block, three_addr_var_t* base_address, generic_ast_node_t* initializer_root){
-	switch(initializer_root->ast_node_type){
-		//Make a direct call to the rule. Seed with 0 as the initial offset
-		case AST_NODE_TYPE_STRING_INITIALIZER:
-			return emit_string_initializer(current_block, base_address, 0, initializer_root);
-
-		//Make a direct call to the rule. Seed with 0 as the initial offset
-		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
-			return emit_struct_initializer(current_block, base_address, 0, initializer_root);
-		
-		//Make a direct call to the array initializer. We'll "seed" with 0 as the starting address
-		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
-			return emit_array_initializer(current_block, base_address, 0, initializer_root);
-
-		//We should never actually hit this. If we do it's bad news
-		default:
-			print_parse_message(MESSAGE_TYPE_ERROR, "Fatal Internal Compiler Error. Unreachable path reached", 0);
-			exit(1);
-	}
-}
-
-
-/**
  * Emit a normal intialization
  *
  * We'll hit this when we have something like:
@@ -10507,11 +10535,18 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 	//Store the last instruction for later use
 	instruction_t* last_instruction = current_block->exit_statement;
 
-	//If the final op1 is a memory address, we need to emit a temp assignment
-	//to make it not one. This is because later on down in the instruction selector,
-	//we will need to translate a memory address into an actual result and we can't
-	//do that inside of a store
-	if(final_op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+	/**
+	 * If the final op1 is a memory address, we need to emit a temp assignment
+	 * to make it not one. This is because later on down in the instruction selector,
+	 * we will need to translate a memory address into an actual result and we can't
+	 * do that inside of a store
+	 *
+	 * NOTE: we will only do this if the final op1 type that we are after does not require a copy
+	 * assignment. If the type does require us to copy in order to assign, then doing this would mangle
+	 * the result that we need to do the actual copy
+	 */
+	if(final_op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
+		&& does_type_require_copy_assignment(final_op1->type) == FALSE){
 		//Emit the assignment
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(u64), final_op1);
 
@@ -10530,11 +10565,23 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 	let_results.final_block = current_block;
 
 	/**
+	 * Is a copy assignment required between the two variables? This will only
+	 * occur if we have a struct to struct or union to union assignment but if we do,
+	 * we'll need some special handling for it
+	 */
+	if(is_copy_assignment_required(let_variable->type, expression_node->inferred_type) == TRUE){
+		//Emit the copy from the left hand var to the final op1. The copy size is always the let variable's size
+		instruction_t* copy_statement = emit_memory_copy_instruction(let_variable, final_op1, let_variable->type->type_size);
+
+		//Get it into the block
+		add_statement(current_block, copy_statement);
+
+	/**
 	 * Is the left hand variable a regular variable or is it a stack address variable? If it's a
 	 * variable that is on the stack, then a regular assignment just won't do. We'll need to
 	 * emit a store operation
 	 */
-	if(let_variable->linked_var == NULL || let_variable->linked_var->stack_variable == FALSE){
+	} else if(let_variable->linked_var == NULL || let_variable->linked_var->stack_variable == FALSE){
 		//The actual statement is the assignment of right to left
 		instruction_t* assignment_statement = emit_assignment_instruction(let_variable, final_op1);
 
@@ -10585,6 +10632,41 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 
 
 /**
+ * Emit an initialization statement given only a variable and
+ * the top level of what could be a larger initialization sequence
+ *
+ * For more complex initializers, we're able to bypass the emitting of extra instructions and simply emit the 
+ * offset that we need directly. We're able to do this because all array and struct initialization statements at
+ * the end of the day just calculate offsets.
+ *
+ * There is chance that we'll need to just default to a regular simple initialization here in the event that
+ * we have a struct copy. This is no big deal and a supported use case
+ */
+static inline cfg_result_package_t emit_complex_initialization(basic_block_t* current_block, three_addr_var_t* base_address, generic_ast_node_t* initializer_root){
+	switch(initializer_root->ast_node_type){
+		//Make a direct call to the rule. Seed with 0 as the initial offset
+		case AST_NODE_TYPE_STRING_INITIALIZER:
+			return emit_string_initializer(current_block, base_address, 0, initializer_root);
+
+		//Make a direct call to the rule. Seed with 0 as the initial offset
+		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
+			return emit_struct_initializer(current_block, base_address, 0, initializer_root);
+		
+		//Make a direct call to the array initializer. We'll "seed" with 0 as the starting address
+		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+			return emit_array_initializer(current_block, base_address, 0, initializer_root);
+
+		/**
+		 * It is possible for our struct copy assignments that we may hit a simple initialization here. This
+		 * is perfectly fine, and we will just let this rule handle it
+		 */
+		default:
+			return emit_simple_initialization(current_block, base_address, initializer_root);
+	}
+}
+
+
+/**
  * Visit a let statement
  */
 static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, generic_ast_node_t* node){
@@ -10603,9 +10685,13 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 
 	//Based on what type we have, we'll need to do some special intialization
 	switch(type->type_class){
-		//Arrays or structs require stack allocation
+		/**
+		 * Array, structures and unions are all stored on the stack. So, when
+		 * we see one, we need to make sure that we are actually allocating the stack space for it
+		 */
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_UNION:
 			//Create a stack region for this variable and store it in the associated region
 			node->variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
 

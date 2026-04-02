@@ -17,6 +17,7 @@
 #include <sys/types.h>
 
 //We'll need this a lot, so we may as well have it here
+static generic_type_t* double_quad_word;
 static generic_type_t* f64;
 static generic_type_t* f32;
 static generic_type_t* u64;
@@ -24,6 +25,7 @@ static generic_type_t* i64;
 static generic_type_t* u32;
 static generic_type_t* i32;
 static generic_type_t* u16;
+static generic_type_t* i16;
 static generic_type_t* u8;
 
 //A holder for the stack pointer
@@ -45,6 +47,18 @@ typedef enum {
 	PRINT_THREE_ADDRESS_CODE,
 	PRINT_INSTRUCTION
 } instruction_printing_mode_t;
+
+
+/**
+ * What is the alignment type for a given variable. Most of the time
+ * this will be "don't care"
+ */
+typedef enum {
+	ALIGNMENT_TYPE_DONT_CARE,
+	ALIGNMENT_TYPE_GUARANTEED,
+	ALIGNMENT_TYPE_NOT_GUARANTEED
+} alignment_type_t;
+
 
 /**
  * What kind of insertion do we want? Do we want to insert before
@@ -178,6 +192,38 @@ static inline u_int8_t is_operation_valid_for_op1_assignment_folding(ollie_token
 			return TRUE;
 		default:
 			return FALSE;
+	}
+}
+
+
+/**
+ * Is the memory region alignment guaranteed or not? We will discover this by finding 
+ * the place where our given memory variable was defined from.
+ */
+static inline alignment_type_t is_memory_region_alignment_guarnateed(three_addr_var_t* variable){
+	switch(variable->variable_type){
+		/**
+		 * We know for a fact that our memory addresses on the local stack
+		 * are always going to be aligned
+		 */
+		case VARIABLE_TYPE_MEMORY_ADDRESS:
+			return ALIGNMENT_TYPE_GUARANTEED;
+
+		/**
+		 * Stack param memory addresses, for the sake of safety, are going to be
+		 * assumed to be unaligned
+		 */
+		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+			return ALIGNMENT_TYPE_NOT_GUARANTEED;
+
+		/**
+		 * This may be enhanced in the future, but everything else we
+		 * are going to play it safe and not guarantee the alignment. x86-64
+		 * processors are *nearly* as fast when doing aligned vs. unaligned moves
+		 * anyways
+		 */
+		default:
+			return ALIGNMENT_TYPE_NOT_GUARANTEED;
 	}
 }
 
@@ -1088,6 +1134,276 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 
 
 /**
+ * Emit a 16 byte load/store copy instruction pair. This instruction will be using the specialized
+ * movdqu instruction when it eventually gets selected later on down the road and will use the specialied
+ * F128 basic type to represent the 16 byte copy
+ *
+ * We assume that the source and destination variables given to us are memory addresses. Whether or not they
+ * are memory address variables or not is actually not relevant, which is why the strategy of converting to OIR first
+ * is desirable for us
+ *
+ * This helper will update the current_offset variable. The current offset is going to be the same for the source and the
+ * destination because they have the exact same memory shape/size(compiler enforces this)
+ *
+ * This function will update the last instruction reference so that we always maintain a pointer to the last instruction in
+ * our work area
+ */
+static inline void emit_16_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t current_offset){
+	//Double quad word storage variable here
+	three_addr_var_t* temporary_storage_variable = emit_temp_var(double_quad_word);
+
+	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
+	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
+	three_addr_const_t* dest_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
+
+	//First load the 16 bytes out of memory
+	instruction_t* load_instruction = emit_load_with_constant_offset_ir_code(temporary_storage_variable, source_memory_address, source_offset_constant, double_quad_word);
+
+	//The load goes right after whatever came first
+	insert_instruction_after_given(load_instruction, *last_instruction);
+
+	//Now emit the corresponding store to take that retrieved memory and put it into the destination
+	instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(dest_memory_address, dest_offset_constant, temporary_storage_variable, double_quad_word);
+
+	//The store goes right after the load
+	insert_instruction_after_given(store_instruction, load_instruction);
+
+	//Finally update the reference
+	*last_instruction = store_instruction;
+}
+
+
+/**
+ * Emit an 8 byte load/store copy instruction pair. This instruction will use a regular movq and an i64 when
+ * it gets instruction selected down the road
+ *
+ * We assume that the source and destination variables given to us are memory addresses. Whether or not they
+ * are memory address variables or not is actually not relevant, which is why the strategy of converting to OIR first
+ * is desirable for us
+ *
+ * This helper will update the current_offset variable. The current offset is going to be the same for the source and the
+ * destination because they have the exact same memory shape/size(compiler enforces this)
+ *
+ * This function will update the last instruction reference so that we always maintain a pointer to the last instruction in
+ * our work area
+ */
+static inline void emit_8_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t current_offset){
+	//Quad word storage variable here
+	three_addr_var_t* temporary_storage_variable = emit_temp_var(i64);
+
+	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
+	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
+	three_addr_const_t* dest_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
+
+	//First load the 8 bytes out of memory
+	instruction_t* load_instruction = emit_load_with_constant_offset_ir_code(temporary_storage_variable, source_memory_address, source_offset_constant, i64);
+
+	//The load goes right after whatever came first
+	insert_instruction_after_given(load_instruction, *last_instruction);
+
+	//Now emit the corresponding store to take that retrieved memory and put it into the destination
+	instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(dest_memory_address, dest_offset_constant, temporary_storage_variable, i64);
+
+	//The store goes right after the load
+	insert_instruction_after_given(store_instruction, load_instruction);
+
+	//Finally update the reference
+	*last_instruction = store_instruction;
+}
+
+
+/**
+ * Emit a 4 byte load/store copy instruction pair. This instruction will use a regular movl and an i32 when
+ * it gets instruction selected down the road
+ *
+ * We assume that the source and destination variables given to us are memory addresses. Whether or not they
+ * are memory address variables or not is actually not relevant, which is why the strategy of converting to OIR first
+ * is desirable for us
+ *
+ * This helper will update the current_offset variable. The current offset is going to be the same for the source and the
+ * destination because they have the exact same memory shape/size(compiler enforces this)
+ *
+ * This function will update the last instruction reference so that we always maintain a pointer to the last instruction in
+ * our work area
+ */
+static inline void emit_4_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t current_offset){
+	//Double word storage variable here
+	three_addr_var_t* temporary_storage_variable = emit_temp_var(i32);
+
+	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
+	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
+	three_addr_const_t* dest_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
+
+	//First load the 4 bytes out of memory
+	instruction_t* load_instruction = emit_load_with_constant_offset_ir_code(temporary_storage_variable, source_memory_address, source_offset_constant, i32);
+
+	//The load goes right after whatever came first
+	insert_instruction_after_given(load_instruction, *last_instruction);
+
+	//Now emit the corresponding store to take that retrieved memory and put it into the destination
+	instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(dest_memory_address, dest_offset_constant, temporary_storage_variable, i32);
+
+	//The store goes right after the load
+	insert_instruction_after_given(store_instruction, load_instruction);
+
+	//Finally update the reference
+	*last_instruction = store_instruction;
+}
+
+
+/**
+ * Emit a 2 byte load/store copy instruction pair. This instruction will use a regular movw and an i16 when
+ * it gets instruction selected down the road
+ *
+ * We assume that the source and destination variables given to us are memory addresses. Whether or not they
+ * are memory address variables or not is actually not relevant, which is why the strategy of converting to OIR first
+ * is desirable for us
+ *
+ * This helper will update the current_offset variable. The current offset is going to be the same for the source and the
+ * destination because they have the exact same memory shape/size(compiler enforces this)
+ *
+ * This function will update the last instruction reference so that we always maintain a pointer to the last instruction in
+ * our work area
+ */
+static inline void emit_2_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t current_offset){
+	//Word storage variable here
+	three_addr_var_t* temporary_storage_variable = emit_temp_var(i16);
+
+	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
+	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
+	three_addr_const_t* dest_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
+
+	//First load the 2 bytes out of memory
+	instruction_t* load_instruction = emit_load_with_constant_offset_ir_code(temporary_storage_variable, source_memory_address, source_offset_constant, i16);
+
+	//The load goes right after whatever came first
+	insert_instruction_after_given(load_instruction, *last_instruction);
+
+	//Now emit the corresponding store to take that retrieved memory and put it into the destination
+	instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(dest_memory_address, dest_offset_constant, temporary_storage_variable, i16);
+
+	//The store goes right after the load
+	insert_instruction_after_given(store_instruction, load_instruction);
+
+	//Finally update the reference
+	*last_instruction = store_instruction;
+}
+
+
+/**
+ * A memory copy instruction that is only one statement inside of OIR will 
+ * routinely balloon to 10/20 statements inside of actual assembly. The
+ * most that we can copy in a two instruction pair is 16 bytes. We may
+ * need to scale that down if we have a fractional part of the struct/union
+ * remaining to copy
+ *
+ * General idea:
+ * 	Say we have a struct that occupies 40 bytes of memory. We will need
+ * 	to chunk this into 16 + 16 + 8 bytes of copying. Each copy takes
+ * 	2 instructions so we will end up producing at least 6 instructions to make
+ * 	this happen
+ *
+ * 	memory copy MEM<x> <- MEM<y>
+ * 	Assume that x and y are 40 byte structs. y starts at stack address 0, x will start at address 48(padding)
+ *
+ * 	 movdqu (%rsp), %xmm2  	 <--- Load 16 byte chunk #1
+ * 	 movaps %xmm2, 48(%rsp)  <--- Store 16 byte chunk #1
+ * 	 movdqu 16(%rsp), %xmm2  <--- Load 16 byte chunk #2
+ * 	 movaps %xmm2, 64(%rsp)  <--- Store 16 byte chunk #2
+ * 	 movq 32(%rsp), %rax  	 <--- Load 8 byte chunk #3
+ * 	 movq %rax, 80(%rsp)  <--- Store 8 byte chunk #3
+ * 	
+ *	 Note that we need to to use SSE registers and the special "movdqu"(move unaligned double quadword) to just
+ *	 go about copying here when we have 16 byte chunks. Anything 8 bytes and below we will just be using
+ *	 movq/movl/movw etc.
+ *
+ *	 In order to simplify things, we will first be converting these all into load/store operations and will
+ *	 allow the existing processes to convert from there inside of the instruction selector itself. This ensures
+ *	 that we maintain all of the existing logic around memory address variables
+ */
+static void convert_memory_copy_statement_into_loads_and_stores(instruction_window_t* window, instruction_t* memory_copy_statement){
+	//We'll want these on hand for down the road
+	three_addr_var_t* source_memory_address_var = memory_copy_statement->op1;
+	three_addr_var_t* destination_memory_address_var = memory_copy_statement->assignee;
+
+	//Maintain the current offset. This is going to be the same for the source and destination
+	u_int64_t current_offset = 0;
+	//We always use the dedicated field to determine how many bytes we should be copying
+	u_int64_t remaining_copy_amount = memory_copy_statement->optional_storage.byte_amount_to_copy;
+
+	//We need to keep track of the last instruction. This will be constantly updated by every function we call
+	instruction_t* last_instruction = memory_copy_statement;
+
+	do {
+		/**
+		 * More than 16 bytes remain - we will tackle this using a 16
+		 * byte copy
+		 */
+		if(remaining_copy_amount >= 16) {
+			emit_16_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, current_offset);
+
+			//We copied 16 so we knock down how much we have left
+			remaining_copy_amount -= 16;
+
+			//The current offset has now increased by 16
+			current_offset += 16;
+
+		/**
+		 * More than 8 but less than 16, we will use a regular movq for this
+		 */
+		} else if(remaining_copy_amount >= 8) {
+			emit_8_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, current_offset);
+
+			//We copied 8 so we knock down how much we have left
+			remaining_copy_amount -= 8;
+
+			//The current offset has now increased by 8
+			current_offset += 8;
+
+		/**
+		 * More than 4 but less than 8, we will use a movl for this
+		 */
+		} else if(remaining_copy_amount >= 4) {
+			emit_4_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, current_offset);
+
+			//We copied 4 so we knock down how much we have left
+			remaining_copy_amount -= 4;
+
+			//The current offset has now increased by 4
+			current_offset += 4;
+
+		/**
+		 * More than 2 but less than 4 - copy 2 at a time
+		 */
+		} else if(remaining_copy_amount >= 2) {
+			emit_2_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, current_offset);
+
+			//We copied 2 so we knock down how much we have left
+			remaining_copy_amount -= 2;
+
+			//The current offset has now increased by 2
+			current_offset += 2;
+
+		/**
+		 * Anything less is completely invalid and we should error - this likely means we have 
+		 * an issue somewhere else in the system that needs to be addressed
+		 */
+		} else {
+			fprintf(stderr, "Fatal Internal Compiler Error: Remaining copy amount for a memory copy was less than 2 bytes\n");
+			exit(1);
+		}
+
+	} while(remaining_copy_amount > 0);
+
+	//Now we can delete the old memory copy instruction
+	delete_statement(memory_copy_statement);
+
+	//And we will reorganize the window around the last instruction we've inserted
+	reconstruct_window(window, last_instruction);
+}
+
+
+/**
  * Emit a setne three address code statement
  */
 static inline instruction_t* emit_setne_code(three_addr_var_t* assignee, three_addr_var_t* relies_on){
@@ -1244,6 +1560,17 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			
 			break;
 
+		/**
+		 * If we have a memory copy statement, we will need to convert it into the
+		 * loads/stores that we need now. This will reconstruct the window when done.
+		 */
+		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
+			convert_memory_copy_statement_into_loads_and_stores(window, first);
+
+			//This counts as a change
+			changed = TRUE;
+			break;
+
 		//By default do nothing
 		default:
 			break;
@@ -1264,6 +1591,17 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					break;
 			}
 			
+			break;
+
+		/**
+		 * If we have a memory copy statement, we will need to convert it into the
+		 * loads/stores that we need now. This will reconstruct the window when done
+		 */
+		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
+			convert_memory_copy_statement_into_loads_and_stores(window, second);
+
+			//This counts as a change
+			changed = TRUE;
 			break;
 
 		//By default do nothing
@@ -1289,6 +1627,17 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				}
 				
 				break;
+
+		/**
+		 * If we have a memory copy statement, we will need to convert it into the
+		 * loads/stores that we need now. This will reconstruct the window when done
+		 */
+		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
+			convert_memory_copy_statement_into_loads_and_stores(window, third);
+				
+			//This counts as a change
+			changed = TRUE;
+			break;
 
 			//By default do nothing
 			default:
@@ -3449,7 +3798,7 @@ static void simplify(cfg_t* cfg){
  * placed in front of the instruction *if* the destination is an XMM register to maintain
  * this "clean" register idea
  */
-static instruction_type_t select_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t destination_signed, u_int8_t source_clean){
+static instruction_type_t select_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t destination_signed, u_int8_t source_clean, alignment_type_t source_alignment, memory_access_type_t memory_access_type){
 	//These two have the same size, we can select easily
 	//and be out of here
 	if(destination_size == source_size){
@@ -3478,6 +3827,36 @@ static instruction_type_t select_move_instruction(variable_size_t destination_si
 					return MOVSD;
 				} else {
 					return MOVAPD;
+				}
+
+			/**
+			 * For the double quad word type, we guarantee that the
+			 * source and destination sizes will be the same
+			 */
+			case DOUBLE_QUAD_WORD:
+				switch(memory_access_type){
+					case NO_MEMORY_ACCESS:
+						return MOVDQA;
+
+					//Load - we use MOVDQx
+					case READ_FROM_MEMORY:
+						/**
+						 * If the source is aligned, we will be using the 
+						 * aligned instruction. If it cannot be guaranteed
+						 * to be aligned, then we will use the unaligned
+						 * instruction
+						 */
+						switch(source_alignment){
+							case ALIGNMENT_TYPE_DONT_CARE:
+							case ALIGNMENT_TYPE_NOT_GUARANTEED:
+								return MOVDQU;
+							case ALIGNMENT_TYPE_GUARANTEED:
+								return MOVDQA;
+						}
+
+					//Store - we know it's aligned - so we use MOVAPS
+					case WRITE_TO_MEMORY:
+						return MOVAPS;
 				}
 
 			default:
@@ -3715,7 +4094,7 @@ static instruction_t* emit_and_insert_move_instruction(three_addr_var_t* destina
 				intermediate_move->source_register = true_source;
 
 				//Let the helper get the converting move for us
-				intermediate_move->instruction_type = select_move_instruction(get_type_size(intermediate_destination->type), get_type_size(true_source->type), FALSE, TRUE);
+				intermediate_move->instruction_type = select_move_instruction(get_type_size(intermediate_destination->type), get_type_size(true_source->type), FALSE, TRUE, ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
 
 				//Based on the instructions, we will insert this appropriately
 				switch(insertion_order){
@@ -3752,7 +4131,7 @@ static instruction_t* emit_and_insert_move_instruction(three_addr_var_t* destina
 				intermediate_move->source_register = true_source;
 
 				//Let the helper get the converting move for us
-				intermediate_move->instruction_type = select_move_instruction(get_type_size(intermediate_destination->type), get_type_size(true_source->type), TRUE, TRUE);
+				intermediate_move->instruction_type = select_move_instruction(get_type_size(intermediate_destination->type), get_type_size(true_source->type), TRUE, TRUE, ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
 
 				//Based on the instructions, we will insert this appropriately
 				switch(insertion_order){
@@ -3784,7 +4163,7 @@ static instruction_t* emit_and_insert_move_instruction(three_addr_var_t* destina
 	instruction_t* move_instruction = calloc(1, sizeof(instruction_t));
 
 	//Emit the actual move here
-	move_instruction->instruction_type = select_move_instruction(get_type_size(destination->type), get_type_size(true_source->type), is_type_signed(destination->type), is_source_register_clean(true_source));
+	move_instruction->instruction_type = select_move_instruction(get_type_size(destination->type), get_type_size(true_source->type), is_type_signed(destination->type), is_source_register_clean(true_source), ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
 
 	//Update the source/dest
 	move_instruction->source_register = true_source;
@@ -3816,9 +4195,11 @@ static instruction_t* emit_move_instruction(three_addr_var_t* destination, three
 	//First we'll allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
-	//Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
-	//movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
-	//zero pad when 32 bit moves happen
+	/**
+	 * Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
+	 * movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
+	 * zero pad when 32 bit moves happen
+	 */
 	if(is_type_unsigned_64_bit(destination->type) == TRUE && is_type_32_bit_int(source->type) == TRUE){
 		//Emit a variable copy of the source
 		source = emit_var_copy(source);
@@ -3831,7 +4212,7 @@ static instruction_t* emit_move_instruction(three_addr_var_t* destination, three
 	}
 
 	//Link to the helper to select the instruction
-	instruction->instruction_type = select_move_instruction(get_type_size(destination->type), get_type_size(source->type), is_type_signed(destination->type), is_source_register_clean(source));
+	instruction->instruction_type = select_move_instruction(get_type_size(destination->type), get_type_size(source->type), is_type_signed(destination->type), is_source_register_clean(source), ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
 
 	//Finally we set the destination
 	instruction->destination_register = destination;
@@ -3972,7 +4353,7 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 	variable_size_t source_size = get_type_size(op1->type);
 
 	//Let the helper rule determine what our instruction is
-	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_type_signed(assignee->type), is_source_register_clean(op1));
+	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_type_signed(assignee->type), is_source_register_clean(op1), ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
 
 	/**
 	 * If we have a conversion instruction that has an SSE destination, we need to emit
@@ -7287,6 +7668,14 @@ static inline instruction_t* emit_local_constant_from_memory_load(generic_type_t
 			}
 
 			break;
+
+		/**
+		 * The double quad word type should be impossible to reach here so if we do hit it we'll need to fail
+		 * out and kill the whole process
+		 */
+		default:
+			fprintf(stderr, "Fatal internal compiler error: unreachable path hit in local constant loader\n");
+			exit(1);
 	}
 
 	//Destination var is straightforward
@@ -7553,7 +7942,7 @@ static instruction_t* emit_register_movement_instruction_directly(three_addr_var
 	generic_type_t* source_type = source_register->type;
 
 	//Now we will decide what the move instruction is
-	move_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type), is_source_register_clean(source_register));
+	move_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type), is_source_register_clean(source_register), ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
 
 	//Give back the pointer
 	return move_instruction;
@@ -7920,7 +8309,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 	}
 
 	//Once we've done all the above assignments, we need to determine what our instruction type is. The source here is always clean, we are moving to memory
-	store_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type), TRUE);
+	store_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type), TRUE, ALIGNMENT_TYPE_DONT_CARE, WRITE_TO_MEMORY);
 }
 
 
@@ -7952,6 +8341,13 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 	variable_size_t destination_size;
 	variable_size_t source_size;
 	u_int8_t is_destination_signed;
+
+	/**
+	 * For some of our load instructions, the memory alignment is very important. This is
+	 * most commonly true when we are doing 16 byte loads during large struct copy operations.
+	 * We will invoke a helper to determine whether or not the source memory region is aligned
+	 */
+	alignment_type_t source_region_alignment = is_memory_region_alignment_guarnateed(load_instruction->op1);
 
 	//By default, assume it's the assignee
 	three_addr_var_t* destination_register = load_instruction->assignee;
@@ -8011,7 +8407,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 				is_destination_signed = is_type_signed(intermediary_destination->type);
 
 				//Let the helper select for us. We are passing clean as true, since we are coming from memory
-				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
+				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE, source_region_alignment, READ_FROM_MEMORY);
 
 				//Since we know that this is a floating point conversion, we will emit the PXOR here
 				pxor_instruction = emit_sse_register_clear_instruction(destination_register);
@@ -8043,7 +8439,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 				is_destination_signed = is_type_signed(intermediary_destination->type);
 
 				//Let the helper select for us. We are passing clean as true, since we are coming from memory
-				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
+				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE, source_region_alignment, READ_FROM_MEMORY);
 
 				//Since we know that this is a floating point conversion, we will emit the PXOR here
 				pxor_instruction = emit_sse_register_clear_instruction(destination_register);
@@ -8067,12 +8463,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 				break;
 		}
 
-
-		//Let the helper select for us. We are passing clean as true, since we are coming from memory
-		//load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
-	
-	//Otherwise, we just assign the destination to be the destination
-	//register
+	//Otherwise, we just assign the destination to be the destination register
 	} else {
 		load_instruction->destination_register = destination_register;
 
@@ -8082,7 +8473,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 		is_destination_signed = is_type_signed(destination_register->type);
 
 		//Let the helper select for us. We are passing clean as true, since we are coming from memory
-		load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
+		load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE, source_region_alignment, READ_FROM_MEMORY);
 
 		/**
 		 * If we have a conversion instruction that has an SSE destination, we need to emit
@@ -9875,8 +10266,14 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		case THREE_ADDR_CODE_STACK_DEALLOCATION_STMT:
 			handle_stack_deallocation_statement(instruction);
 			break;
+		/**
+		 * If we get here then we're encountering something that we've never seen
+		 * before or was never meant to reach this part of selection. Either way
+		 * we fail out
+		 */
 		default:
-			break;
+			fprintf(stderr, "Fatal internal compiler error: instruction with code %d reached an unreachable path", instruction->statement_type);
+			exit(1);
 	}
 }
 
@@ -9926,12 +10323,14 @@ static void select_instructions(cfg_t* cfg){
  */
 void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	//Grab these general use types first
+	double_quad_word = lookup_type_name_only(cfg->type_symtab, "&double_quad_word", NOT_MUTABLE)->type;
 	f64 = lookup_type_name_only(cfg->type_symtab, "f64", NOT_MUTABLE)->type;
 	f32 = lookup_type_name_only(cfg->type_symtab, "f32", NOT_MUTABLE)->type;
 	u64 = lookup_type_name_only(cfg->type_symtab, "u64", NOT_MUTABLE)->type;
 	i64 = lookup_type_name_only(cfg->type_symtab, "i64", NOT_MUTABLE)->type;
 	i32 = lookup_type_name_only(cfg->type_symtab, "i32", NOT_MUTABLE)->type;
 	u32 = lookup_type_name_only(cfg->type_symtab, "u32", NOT_MUTABLE)->type;
+	i16 = lookup_type_name_only(cfg->type_symtab, "i16", NOT_MUTABLE)->type;
 	u16 = lookup_type_name_only(cfg->type_symtab, "u16", NOT_MUTABLE)->type;
 	u8 = lookup_type_name_only(cfg->type_symtab, "u8", NOT_MUTABLE)->type;
 
@@ -9942,9 +10341,11 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	//Store a reference to the CFG as well
 	cfg_reference = cfg;
 
-	//Our very first step in the instruction selector is to order all of the blocks in one 
-	//straight line. This step is also able to recognize and exploit some early optimizations,
-	//such as when a block ends in a jump to the block right below it
+	/**
+	 * Our very first step in the instruction selector is to order all of the blocks in one 
+	 * straight line. This step is also able to recognize and exploit some early optimizations,
+	 * such as when a block ends in a jump to the block right below it 
+	 */
 	order_blocks(cfg);
 
 	//Do we need to print intermediate representations?
@@ -9957,9 +10358,11 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 		printf("============================== AFTER SIMPLIFY ========================================\n");
 	}
 
-	//Once we've printed, we now need to simplify the operations. OIR already comes in an expanded
-	//format that is used in the optimization phase. Now, we need to take that expanded IR and
-	//recognize any redundant operations, dead values, unnecessary loads, etc.
+	/**
+	 * Once we've printed, we now need to simplify the operations. OIR already comes in an expanded
+	 * format that is used in the optimization phase. Now, we need to take that expanded IR and
+	 * recognize any redundant operations, dead values, unnecessary loads, etc.
+	 */
 	simplify(cfg);
 
 	//If we need to print IRS, we can do so here

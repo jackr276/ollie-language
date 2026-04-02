@@ -54,8 +54,9 @@ typedef enum{
 	WORD,
 	DOUBLE_WORD,
 	QUAD_WORD,
+	DOUBLE_QUAD_WORD, //Double quad word for memory copying
 	SINGLE_PRECISION, //F32
-	DOUBLE_PRECISION  //F64
+	DOUBLE_PRECISION, //F64
 } variable_size_t;
 
 
@@ -86,7 +87,7 @@ typedef enum type_class_t {
  * Determine whether a type is or is not floating point
  */
 #define IS_FLOATING_POINT(type)\
-	((type->type_class == TYPE_CLASS_BASIC && ((type->basic_type_token == F32) || (type->basic_type_token == F64))) ? TRUE : FALSE)
+	((type->type_class == TYPE_CLASS_BASIC && ((type->basic_type_token == F32) || (type->basic_type_token == F64) || (type->basic_type_token == F128))) ? TRUE : FALSE)
 //========================= Utility Macros ============================
 
 
@@ -331,6 +332,12 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, ollie_token_t u
 void add_struct_member(generic_type_t* type, void* member_var);
 
 /**
+ * Finalize the alignment of the struct. This finalization step guarantees
+ * that the struct ends up with an address that is at least a multiple of 2
+ */
+void finalize_struct_alignment(generic_type_t* type);
+
+/**
  * Add a value to an enumeration's list of values
  */
 u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member, u_int8_t user_defined_values);
@@ -341,9 +348,10 @@ u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member, u_int8_t 
 u_int8_t add_union_member(generic_type_t* union_type, void* member_var);
 
 /**
- * Finalize the struct alignment
+ * Finalize the alignment of the union. This finalization step guarantees
+ * that the union ends up with an address that is at least a multiple of 2
  */
-void finalize_struct_alignment(generic_type_t* type);
+void finalize_union_alignment(generic_type_t* type);
 
 /**
  * Print the full name of a type *into* the char buffer that
