@@ -48,6 +48,18 @@ typedef enum {
 	PRINT_INSTRUCTION
 } instruction_printing_mode_t;
 
+
+/**
+ * What is the alignment type for a given variable. Most of the time
+ * this will be "don't care"
+ */
+typedef enum {
+	ALIGNMENT_TYPE_DONT_CARE,
+	ALIGNMENT_TYPE_GUARANTEED,
+	ALIGNMENT_TYPE_NOT_GUARANTEED
+} alignment_type_t;
+
+
 /**
  * What kind of insertion do we want? Do we want to insert before
  * or after a given instruction?
@@ -3765,7 +3777,7 @@ static void simplify(cfg_t* cfg){
  * placed in front of the instruction *if* the destination is an XMM register to maintain
  * this "clean" register idea
  */
-static instruction_type_t select_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t destination_signed, u_int8_t source_clean, memory_access_type_t memory_access_type){
+static instruction_type_t select_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t destination_signed, u_int8_t source_clean, alignment_type_t source_alignment, memory_access_type_t memory_access_type){
 	//These two have the same size, we can select easily
 	//and be out of here
 	if(destination_size == source_size){
@@ -3808,14 +3820,17 @@ static instruction_type_t select_move_instruction(variable_size_t destination_si
 					//Load - we use MOVDQx
 					case READ_FROM_MEMORY:
 						/**
-						 * We will hijack the source_clean flag to do this. The caller
-						 * will provide TRUE if the source *can* be guaranteed to be aligned,
-						 * and FALSE if it *CANNOT*
+						 * If the source is aligned, we will be using the 
+						 * aligned instruction. If it cannot be guaranteed
+						 * to be aligned, then we will use the unaligned
+						 * instruction
 						 */
-						if(source_clean == TRUE){
-							return MOVDQA;
-						} else {
-							return MOVDQU;
+						switch(source_alignment){
+							case ALIGNMENT_TYPE_DONT_CARE:
+							case ALIGNMENT_TYPE_NOT_GUARANTEED:
+								return MOVDQU;
+							case ALIGNMENT_TYPE_GUARANTEED:
+								return MOVDQA;
 						}
 
 					//Store - we know it's aligned - so we use MOVAPS
