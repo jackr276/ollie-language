@@ -10804,7 +10804,8 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 
 	//If we get here and it's not an identifier, there is an issue
 	if(lookahead.tok != IDENT){
-		return print_and_return_error("Invalid identifier given in declaration", parser_line_num);
+		sprintf(info, "Expected identifier in declaration, but instead saw \"%s\"", lexitem_to_string(&lookahead));
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Let's get a pointer to the name for convenience
