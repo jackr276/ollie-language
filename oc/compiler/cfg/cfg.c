@@ -10685,9 +10685,13 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 
 	//Based on what type we have, we'll need to do some special intialization
 	switch(type->type_class){
-		//Arrays or structs require stack allocation
+		/**
+		 * Array, structures and unions are all stored on the stack. So, when
+		 * we see one, we need to make sure that we are actually allocating the stack space for it
+		 */
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_UNION:
 			//Create a stack region for this variable and store it in the associated region
 			node->variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
 
