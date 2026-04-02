@@ -11313,6 +11313,22 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 
 
 /**
+ * Is a given node an initializer node or not? Initializer nodes get special
+ * treatment by the CFG constructor so we may need to exclude them from certain checks
+ */
+static inline u_int8_t is_initializer_node(generic_ast_node_t* initializer_node){
+	switch(initializer_node->ast_node_type){
+		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
+		case AST_NODE_TYPE_STRING_INITIALIZER:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * A let statement is always the child of an overall declaration statement. Like a declare statement, it also
  * performs type checking and inference and all needed symbol table manipulation
  *
@@ -11448,8 +11464,26 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	//Store this just in case--most likely won't use
 	let_stmt_node->inferred_type = return_type;
 
-	//Store the bytes that we need to copy here
-	let_stmt_node->optional_storage.bytes_to_copy = type_spec->type_size; 
+	/**
+	 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
+	 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
+	 * no dereference from said expression. Dereferencing would mess up the memory copying, we should just be
+	 * doing an address calculation.
+	 */
+	if(is_initializer_node(initializer_node) == FALSE
+		&& is_copy_assignment_required(type_spec, initializer_node->inferred_type) == TRUE){
+		/**
+		 * If the right hand expression is a postfix expression *and* we are looking
+		 * to perform a memory copy assignment here, we need to flag that 
+		 * we do *not* require a dereference to make this work
+		 */
+		if(initializer_node->ast_node_type == AST_NODE_TYPE_POSTFIX_EXPR){
+			initializer_node->dereference_needed = FALSE;
+		}
+
+		//Store the bytes that we need to copy here
+		let_stmt_node->optional_storage.bytes_to_copy = type_spec->type_size; 
+	}
 
 	//Otherwise it worked, so we'll add it in as a child
 	add_child_node(let_stmt_node, initializer_node);
