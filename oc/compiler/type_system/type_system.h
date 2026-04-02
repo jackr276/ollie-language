@@ -333,7 +333,7 @@ void add_struct_member(generic_type_t* type, void* member_var);
 
 /**
  * Finalize the alignment of the struct. This finalization step guarantees
- * that the struct ends up with an address that is at least a multiple of 4
+ * that the struct ends up with an address that is at least a multiple of 2
  */
 void finalize_struct_alignment(generic_type_t* type);
 
@@ -346,6 +346,12 @@ u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member, u_int8_t 
  * Add a value into the union's list of members
  */
 u_int8_t add_union_member(generic_type_t* union_type, void* member_var);
+
+/**
+ * Finalize the alignment of the union. This finalization step guarantees
+ * that the union ends up with an address that is at least a multiple of 2
+ */
+void finalize_union_alignment(generic_type_t* type);
 
 /**
  * Print the full name of a type *into* the char buffer that

@@ -2227,6 +2227,50 @@ void add_struct_member(generic_type_t* type, void* member_var){
 
 
 /**
+ * Finalize the construct alignment. This should only be invoked 
+ * when we're done processing members
+ *
+ * The struct's end address needs to be a multiple of the size
+ * of it's largest field. We keep track of the largest field
+ * throughout the entirety of construction, so this should be easy
+ *
+ * We mandate that the struct's end address must at least be even
+ */
+void finalize_struct_alignment(generic_type_t* type){
+	//Grab the alignable type size
+	int32_t alignable_type_size = type->internal_values.largest_member_type->type_size;
+
+	/**
+	 * If the alignable type size is less than 2 somehow, we will
+	 * force it to be 2. We cannot have structs with odd numbered
+	 * ending addresses
+	 */
+	if(alignable_type_size < 2){
+		alignable_type_size = 2;
+	}
+
+	/**
+	 * If the size is already a multiple of the alignable type size,
+	 * then we can stop here and leave
+	 */
+	if(type->type_size % alignable_type_size == 0){
+		return;
+	}
+
+	/**
+	 * The alignable type size is either: 2, 4 or 8
+	 *
+	 * We will add this alignable type size on so that we are guaranteed to be over
+	 * the next highest multiple of said type size
+	 *
+	 * Then we will and by the 2's complement of this value to 0 out the lowest bits
+	 * that need to be 0'd out. At most, we will 0 out the bottom 3 bits for 8-byte aligned
+	 */
+	type->type_size = (type->type_size + alignable_type_size) & (-alignable_type_size);
+}
+
+
+/**
  * Add a value to an enumeration's list of values
  */
 u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member, u_int8_t user_defined_values){
@@ -2301,18 +2345,12 @@ u_int8_t add_union_member(generic_type_t* union_type, void* member_var){
 
 
 /**
- * Finalize the construct alignment. This should only be invoked 
- * when we're done processing members
- *
- * The struct's end address needs to be a multiple of the size
- * of it's largest field. We keep track of the largest field
- * throughout the entirety of construction, so this should be easy
- *
- * We mandate that the struct's end address must at least be even
+ * Finalize the alignment of the union. This finalization step guarantees
+ * that the union ends up with an address that is at least a multiple of 2
  */
-void finalize_struct_alignment(generic_type_t* type){
-	//Grab the alignable type size
-	int32_t alignable_type_size = type->internal_values.largest_member_type->type_size;
+void finalize_union_alignment(generic_type_t* type){
+	//Get the size of the union
+	int32_t alignable_type_size = type->type_size;
 
 	/**
 	 * If the alignable type size is less than 2 somehow, we will

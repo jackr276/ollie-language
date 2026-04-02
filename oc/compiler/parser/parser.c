@@ -6927,6 +6927,13 @@ static u_int8_t union_definer(ollie_token_stream_t* token_stream){
 		return FAILURE;
 	}
 
+	/**
+	 * Finalize the alignment of both types here. This ensures that we aren't going
+	 * to have any odd addressed unions
+	 */
+	finalize_union_alignment(mutable_union_type);
+	finalize_union_alignment(immutable_union_type);
+
 	//Once we've gotten here, the union type is officially considered complete
 	mutable_union_type->type_complete = TRUE;
 	immutable_union_type->type_complete = TRUE;
