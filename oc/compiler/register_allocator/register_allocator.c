@@ -30,9 +30,11 @@ const general_purpose_register_t gen_purpose_parameter_registers[] = {RDI, RSI, 
 const sse_register_t sse_parameter_registers[] = {XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7};
 
 /**
- * Our dummy push register(if one is needed) will always be R12
+ * Our dummy push register(if one is needed) will always be R12 for caller
+ * saving and r8 for callee saving
  */
-const general_purpose_register_t dummy_push_register = R12;
+const general_purpose_register_t dummy_caller_saving_push_register = R12;
+const general_purpose_register_t dummy_callee_saving_push_register = R8;
 
 //Spill a live range
 static void spill_in_function(basic_block_t* function_entry_block, dynamic_array_t* live_ranges, live_range_t* spill_range);
@@ -3851,14 +3853,14 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	 */
 	if(gp_caller_saved_space % 16 != 0){
 		//Emit the dummy push
-		instruction_t* dummy_push = emit_direct_gp_register_push_instruction(dummy_push_register);
+		instruction_t* dummy_push = emit_direct_gp_register_push_instruction(dummy_caller_saving_push_register);
 
 		//Insert and update the first instruction pointer
 		insert_instruction_before_given(dummy_push, first_instruction);
 		first_instruction = dummy_push;
 
 		//And now the dummy pop
-		instruction_t* dummy_pop = emit_direct_gp_register_pop_instruction(dummy_push_register);
+		instruction_t* dummy_pop = emit_direct_gp_register_pop_instruction(dummy_caller_saving_push_register);
 
 		//Now this goes after the last instruction
 		insert_instruction_after_given(dummy_pop, last_instruction);
@@ -4121,14 +4123,14 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 	 */
 	if(gp_caller_saved_space % 16 != 0){
 		//Emit the dummy push
-		instruction_t* dummy_push = emit_direct_gp_register_push_instruction(dummy_push_register);
+		instruction_t* dummy_push = emit_direct_gp_register_push_instruction(dummy_caller_saving_push_register);
 
 		//Insert and update the first instruction pointer
 		insert_instruction_before_given(dummy_push, first_instruction);
 		first_instruction = dummy_push;
 
 		//And now the dummy pop
-		instruction_t* dummy_pop = emit_direct_gp_register_pop_instruction(dummy_push_register);
+		instruction_t* dummy_pop = emit_direct_gp_register_pop_instruction(dummy_caller_saving_push_register);
 
 		//Now this goes after the last instruction
 		insert_instruction_after_given(dummy_pop, last_instruction);
@@ -4332,8 +4334,17 @@ static void insert_callee_saving_logic(basic_block_t* function_entry, basic_bloc
 		}
 	}
 
+	/**
+	 * If we get here then we need to add the dummy push. We will use the register
+	 * %r8 for dummy callee saved pushing but remember it does not truly matter
+	 * as this is all just junk anyways, it exists purely for alignment
+	 */
 	if(gp_callee_saved_bytes % 16 != 0){
-		printf("NEED TO ADD DUMMY PUSH\n\n");
+		//Emit it 
+		instruction_t* dummy_push = emit_direct_gp_register_push_instruction(dummy_callee_saving_push_register);
+
+		//Important to note that this will be the very last thing we push to the stack 
+		insert_instruction_before_given(dummy_push, entry_instruction);
 	}
 
 	/**
@@ -4346,6 +4357,19 @@ static void insert_callee_saving_logic(basic_block_t* function_entry, basic_bloc
 	for(u_int16_t i = 0; i < function_exit->predecessors.current_index; i++){
 		//Grab the given predecessor out
 		basic_block_t* predecessor = dynamic_array_get_at(&(function_exit->predecessors), i);
+
+		/**
+		 * If we have a non 16-byte aligned amount, we've already emitted a dummy push at the
+		 * function entry. Since that dummy push was the last thing pushed on, our dummy
+		 * pop will be the first thing popped off
+		 */
+		if(gp_callee_saved_bytes % 16 != 0){
+			//Emit the dummy pop
+			instruction_t* dummy_pop = emit_direct_gp_register_pop_instruction(dummy_callee_saving_push_register);
+
+			//This goes right after the exit(successive pops will be inserted after it)
+			insert_instruction_before_given(dummy_pop, predecessor->exit_statement);
+		}
 
 		/**
 		 * Now we'll go through the registers in the reverse order. This time, when we hit one that
