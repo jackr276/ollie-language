@@ -126,8 +126,6 @@ struct symtab_function_record_t{
 	u_int8_t defined;
 	//Has it ever been called?
 	u_int8_t called;
-	//Will this function ever call another function(direct or indirect)
-	u_int8_t calls_function;
 	/**
 	 * Does the given function require an initial alignment? Functions that
 	 * require initial alignments may meet the following cirteria:

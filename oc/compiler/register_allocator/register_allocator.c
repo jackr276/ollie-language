@@ -4502,15 +4502,21 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 	u_int32_t local_stack_size = area->total_size;
 
 	/**
-	 * Very important nuance: If a function calls *any* other function at all, then we need to make
-	 * aboslutely sure that this function has some alignment when it enters. System V ABI requires
-	 * that we have 16 byte alignment before *any* call direct or indirect. Since functions
-	 * naturally enter with only 8 byte alignment(due to how call subtracts 8 from RSP), if we are
-	 * going to call any other functions, then we need to at least have a subq $8, %rsp at the start
-	 * to fully align
+	 * Very important nuance: if a function has been flagged by the parser as requiring
+	 * initial alignment, this means 1 of 3 things:
+	 *
+	 * 	1.) The function performs an indirect call, so whatever it is calling may require initial alignment
+	 *
+	 * 	2.) The function performs a direct call to a function that itself requires an initial alignment
+	 *
+	 * 	3.) The function will make use of aligned memory copy(THREE_ADDR_CODE_MEMORY_COPY_STMT)instructions
+	 * 		that rely entirely on alignment being valid and will segfault if it is not
+	 *
+	 * If we see this flag *AND* there is nothing currently on the stack, we will bump the
+	 * amount up by 8 to flag that we need this. If there is something already on the stack
+	 * then we don't need to do this
 	 */
-	if(function->calls_function == TRUE && local_stack_size == 0){
-		//Update this by 8, that's the alignment that we need
+	if(function->requires_initial_alignment == TRUE && local_stack_size == 0){
 		local_stack_size = 8;
 	}
 
