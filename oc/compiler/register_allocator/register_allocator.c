@@ -3973,6 +3973,12 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 	//Also cache what the class of the destination LR is
 	live_range_class_t destination_lr_class;
 
+	/**
+	 * The total amount of caller saved space that we have. Remember this
+	 * must always be a multiple of 16
+	 */
+	u_int32_t gp_caller_saved_space = 0;
+
 	//Extract the actual function type
 	generic_type_t* function_type = function_call->source_register->type;
 
@@ -4069,6 +4075,11 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 					general_purpose_lrs_to_save = dynamic_array_alloc();
 				}
 
+				/**
+				 * One more push = 8 more bytes on the stack
+				 */
+				gp_caller_saved_space += 8;
+
 				//Add it into the array
 				dynamic_array_add(&general_purpose_lrs_to_save, lr);
 
@@ -4099,6 +4110,16 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 	//We'll need to keep track of the last instruction to return it in the end
 	instruction_t* first_instruction = before_stack_param_setup;
 	instruction_t* last_instruction = after_stack_param_setup;
+
+	/**
+	 * If, with all of our pushing/popping, we're going to end
+	 * up misalinging the stack, we need to fix this by inserting
+	 * a dummy push/pop operation to balance things out
+	 */
+	if(gp_caller_saved_space % 16 != 0){
+		printf("HERE\n\n\n\n");
+
+	}
 
 	//Now let's run through all of the general purpose registers first
 	for(u_int32_t i = 0; i < general_purpose_lrs_to_save.current_index; i++){
