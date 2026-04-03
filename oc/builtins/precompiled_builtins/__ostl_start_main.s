@@ -1,4 +1,4 @@
-	.file	"./oc/builtins/precompiled_builtins/__ostl_start_main.s"
+	.file	"__ostl_start_main.s"
 	.text
 	.type ostl_start_main_exit, @function
 ostl_start_main_exit:
@@ -9,6 +9,7 @@ ostl_start_main_exit:
 	.globl __ostl_start_main
 	.type __ostl_start_main, @function
 __ostl_start_main:
+	subq $8, %rsp
 	movq %rdi, %rcx
 	movl %esi, %eax
 	addl $1, %eax
@@ -21,4 +22,5 @@ __ostl_start_main:
 	movl %eax, %edi
 	call ostl_start_main_exit /* --> void */
 	movl $0, %eax
+	addq $8, %rsp
 	ret /* --> %eax */
