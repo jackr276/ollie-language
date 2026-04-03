@@ -29,6 +29,13 @@ u_int32_t live_range_id = 0;
 const general_purpose_register_t gen_purpose_parameter_registers[] = {RDI, RSI, RDX, RCX, R8, R9};
 const sse_register_t sse_parameter_registers[] = {XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7};
 
+/**
+ * Our dummy push register(if one is needed) will always be R12 for caller
+ * saving and r8 for callee saving
+ */
+const general_purpose_register_t dummy_caller_saving_push_register = R12;
+const general_purpose_register_t dummy_callee_saving_push_register = R8;
+
 //Spill a live range
 static void spill_in_function(basic_block_t* function_entry_block, dynamic_array_t* live_ranges, live_range_t* spill_range);
 
@@ -3646,12 +3653,26 @@ static u_int8_t graph_color_and_allocate_sse(basic_block_t* function_entry, dyna
  *
  * NOTE: All SSE(xmm) registers are caller saved. The callee is free to clobber these however it
  * sees fit. As such, the burden for saving all of these falls onto the caller here
+ *
+ * NOTE: We need to guarantee 16-byte alignment at the time the "call" is made. So for example, if
+ * we were to only caller save one register, we would have thrown our 16 byte alignment off into an
+ * 8 byte alignment. To fix this, we will just insert a dummy push/pop to always balance things out.
+ * This is only an issue for the push/pop instructions that we use. Using the stack saving instructions
+ * already go through the regular aligner
  */
 static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_record_t* caller, instruction_t* function_call){
-	//If we get here we know that we have a call instruction. Let's
-	//grab whatever it's calling out. We're able to do this for a direct call,
-	//whereas in an indirect call we are not
+	/**
+	 * If we get here we know that we have a call instruction. Let's
+	 * grab whatever it's calling out. We're able to do this for a direct call,
+	 * whereas in an indirect call we are not
+	 */
 	symtab_function_record_t* callee = function_call->called_function;
+
+	/**
+	 * The total amount of caller saved space that we have. Remember this
+	 * must always be a multiple of 16
+	 */
+	u_int32_t gp_caller_saved_space = 0;
 
 	//Grab out this LR for reference later on. Remember that this is nullable, so we 
 	//need to account for that
@@ -3759,7 +3780,6 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 
 				//There's also no point in saving the error LR if real. This could happen if we have precoloring
 				if(error_lr != NULL){
-					//Skip it
 					if(general_purpose_reg == error_lr->reg.gen_purpose){
 						continue;
 					}
@@ -3776,6 +3796,11 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 						general_purpose_lrs_to_save = dynamic_array_alloc();
 					}
 
+					/**
+					 * We have seen 8 more bytes that we need to save
+					 */
+					gp_caller_saved_space += 8;
+
 					//Add this into our list of GP LRs to save
 					dynamic_array_add(&general_purpose_lrs_to_save, lr);
 				}
@@ -3791,7 +3816,6 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 				//There's also no point in saving this. This could happen if we have precoloring
 				//We'll only check this if the classes match though
 				if(destination_lr != NULL && destination_lr_class == LIVE_RANGE_CLASS_SSE){
-					//Skip it
 					if(sse_reg == destination_lr->reg.sse_reg){
 						continue;
 					}
@@ -3819,6 +3843,29 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	//We'll need to keep track of the last instruction to return it in the end
 	instruction_t* first_instruction = before_stack_param_setup;
 	instruction_t* last_instruction = after_stack_param_setup;
+
+	/**
+	 * If we get here, then we have an alignment issue that we need to resolve. This *must*
+	 * be 16 byte aligned. Anything else will cause segmentation fault issues down the road
+	 *
+	 * To fix this, we will take a non caller saved register and just have a dummy push/pop
+	 * here that does it. We'll always use %r12 for this
+	 */
+	if(gp_caller_saved_space % 16 != 0){
+		//Emit the dummy push
+		instruction_t* dummy_push = emit_direct_gp_register_push_instruction(dummy_caller_saving_push_register);
+
+		//Insert and update the first instruction pointer
+		insert_instruction_before_given(dummy_push, first_instruction);
+		first_instruction = dummy_push;
+
+		//And now the dummy pop
+		instruction_t* dummy_pop = emit_direct_gp_register_pop_instruction(dummy_caller_saving_push_register);
+
+		//Now this goes after the last instruction
+		insert_instruction_after_given(dummy_pop, last_instruction);
+		last_instruction = dummy_pop;
+	}
 
 	/**
 	 * Due to the way that we use push/pop for general purpose caller saving, we need
@@ -3928,6 +3975,12 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 	//Also cache what the class of the destination LR is
 	live_range_class_t destination_lr_class;
 
+	/**
+	 * The total amount of caller saved space that we have. Remember this
+	 * must always be a multiple of 16
+	 */
+	u_int32_t gp_caller_saved_space = 0;
+
 	//Extract the actual function type
 	generic_type_t* function_type = function_call->source_register->type;
 
@@ -4024,6 +4077,11 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 					general_purpose_lrs_to_save = dynamic_array_alloc();
 				}
 
+				/**
+				 * One more push = 8 more bytes on the stack
+				 */
+				gp_caller_saved_space += 8;
+
 				//Add it into the array
 				dynamic_array_add(&general_purpose_lrs_to_save, lr);
 
@@ -4054,6 +4112,30 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 	//We'll need to keep track of the last instruction to return it in the end
 	instruction_t* first_instruction = before_stack_param_setup;
 	instruction_t* last_instruction = after_stack_param_setup;
+
+	/**
+	 * If, with all of our pushing/popping, we're going to end
+	 * up misalinging the stack, we need to fix this by inserting
+	 * a dummy push/pop operation to balance things out
+	 *
+	 * We will use %r12 as our dummy push. It does not matter what is in there
+	 * as this is just dummy space for us to use
+	 */
+	if(gp_caller_saved_space % 16 != 0){
+		//Emit the dummy push
+		instruction_t* dummy_push = emit_direct_gp_register_push_instruction(dummy_caller_saving_push_register);
+
+		//Insert and update the first instruction pointer
+		insert_instruction_before_given(dummy_push, first_instruction);
+		first_instruction = dummy_push;
+
+		//And now the dummy pop
+		instruction_t* dummy_pop = emit_direct_gp_register_pop_instruction(dummy_caller_saving_push_register);
+
+		//Now this goes after the last instruction
+		insert_instruction_after_given(dummy_pop, last_instruction);
+		last_instruction = dummy_pop;
+	}
 
 	//Now let's run through all of the general purpose registers first
 	for(u_int32_t i = 0; i < general_purpose_lrs_to_save.current_index; i++){
@@ -4187,31 +4269,50 @@ static inline void insert_caller_saved_register_logic(basic_block_t* function_en
  *
  * NOTE: since all SSE registers are caller-saved, we actually don't need to worry about any SSE registers here because
  * they will all be handled by the caller anyway
+ *
+ * NOTE: We need to guarantee alignment when we enter inside of this function block. It is for this reason
+ * that if we are saving an odd number of GP registers(would be a multiple of 8 but not 16), we need to 
+ * add one final dummy push to ensure that we are always 16 byte aligned
  */
 static void insert_callee_saving_logic(basic_block_t* function_entry, basic_block_t* function_exit){
-	//Keep a reference to the original entry instruction that we had before
-	//we insert any pushes. This will be important for when we need to
-	//reassign the function's leader statement
+	/**
+	 * Keep a reference to the original entry instruction that we had before
+	 * we insert any pushes. This will be important for when we need to
+	 * reassign the function's leader statement
+	 */
 	instruction_t* entry_instruction = function_entry->leader_statement;
+
+	/**
+	 * Keep track of how many bytes we've saved
+	 */
+	u_int32_t gp_callee_saved_bytes = 0; 
 	
 	//Grab the function record out now too
 	symtab_function_record_t* function = function_entry->function_defined_in;
 
 	//We need to see which registers that we use
-	for(u_int16_t i = 0; i < K_COLORS_GEN_USE; i++){
+	for(u_int32_t i = 0; i < K_COLORS_GEN_USE; i++){
 		//We don't use this register, so move on
 		if(get_bitmap_at_index(function->assigned_general_purpose_registers, i) == FALSE){
 			continue;
 		}
 
-		//Otherwise if we get here, we know that we use it. Remember
-		//the register value is always offset by one
+		/**
+		 * Otherwise if we get here, we know that we use it. Remember
+		 * the register value is always offset by one
+		 */
 		general_purpose_register_t used_reg = i + 1;
 
 		//If this isn't callee saved, then we know to move on
 		if(is_general_purpose_register_callee_saved(used_reg) == FALSE){
 			continue;
 		}
+
+		/**
+		 * We now know that we will be callee-saving this. We need to update the
+		 * byte count for later checks
+		 */
+		gp_callee_saved_bytes += 8;
 
 		//Now we'll need to add an instruction to push this at the entry point of our function
 		instruction_t* push_instruction = emit_direct_gp_register_push_instruction(used_reg);
@@ -4222,27 +4323,59 @@ static void insert_callee_saving_logic(basic_block_t* function_entry, basic_bloc
 		//Insert this push before the leader instruction
 		insert_instruction_before_given(push_instruction, entry_instruction);
 
-		//If the entry instruction is still the function's leader statement, then
-		//we'll need to update it. This only happens on the very first push. For
-		//everyting subsequent, we won't need to do this
+		/**
+		 * If the entry instruction is still the function's leader statement, then
+		 * we'll need to update it. This only happens on the very first push. For
+		 * everyting subsequent, we won't need to do this
+		 */
 		if(entry_instruction == function_entry->leader_statement){
 			//Reassign this to be the very first push
 			function_entry->leader_statement = push_instruction;
 		}
 	}
 
-	//Now that we've added all of the callee saving logic at the function entry, we'll need to
-	//go through and add it at the exit(s) as well. Note that we're given the function exit block
-	//as an input value here
+	/**
+	 * If we get here then we need to add the dummy push. We will use the register
+	 * %r8 for dummy callee saved pushing but remember it does not truly matter
+	 * as this is all just junk anyways, it exists purely for alignment
+	 */
+	if(gp_callee_saved_bytes % 16 != 0){
+		//Emit it 
+		instruction_t* dummy_push = emit_direct_gp_register_push_instruction(dummy_callee_saving_push_register);
+
+		//Important to note that this will be the very last thing we push to the stack 
+		insert_instruction_before_given(dummy_push, entry_instruction);
+	}
+
+	/**
+	 * Now that we've added all of the callee saving logic at the function entry, we'll need to
+	 * go through and add it at the exit(s) as well. Note that we're given the function exit block
+	 * as an input value here
+	 */
 	
 	//For each and every predecessor of the function exit block
 	for(u_int16_t i = 0; i < function_exit->predecessors.current_index; i++){
 		//Grab the given predecessor out
 		basic_block_t* predecessor = dynamic_array_get_at(&(function_exit->predecessors), i);
 
-		//Now we'll go through the registers in the reverse order. This time, when we hit one that
-		//is callee-saved and used, we'll emit the push instruction and insert it directly before
-		//the "ret". This will ensure that our LIFO structure for pushing/popping is maintained
+		/**
+		 * If we have a non 16-byte aligned amount, we've already emitted a dummy push at the
+		 * function entry. Since that dummy push was the last thing pushed on, our dummy
+		 * pop will be the first thing popped off
+		 */
+		if(gp_callee_saved_bytes % 16 != 0){
+			//Emit the dummy pop
+			instruction_t* dummy_pop = emit_direct_gp_register_pop_instruction(dummy_callee_saving_push_register);
+
+			//This goes right after the exit(successive pops will be inserted after it)
+			insert_instruction_before_given(dummy_pop, predecessor->exit_statement);
+		}
+
+		/**
+		 * Now we'll go through the registers in the reverse order. This time, when we hit one that
+		 * is callee-saved and used, we'll emit the push instruction and insert it directly before
+		 * the "ret". This will ensure that our LIFO structure for pushing/popping is maintained
+		 */
 
 		//Run through all the registers backwards
 		for(int16_t j = K_COLORS_GEN_USE - 1; j >= 0; j--){
