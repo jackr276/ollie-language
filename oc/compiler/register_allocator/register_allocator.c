@@ -29,6 +29,11 @@ u_int32_t live_range_id = 0;
 const general_purpose_register_t gen_purpose_parameter_registers[] = {RDI, RSI, RDX, RCX, R8, R9};
 const sse_register_t sse_parameter_registers[] = {XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7};
 
+/**
+ * Our dummy push register(if one is needed) will always be R12
+ */
+const general_purpose_register_t dummy_push_register = R12;
+
 //Spill a live range
 static void spill_in_function(basic_block_t* function_entry_block, dynamic_array_t* live_ranges, live_range_t* spill_range);
 
@@ -3649,7 +3654,9 @@ static u_int8_t graph_color_and_allocate_sse(basic_block_t* function_entry, dyna
  *
  * NOTE: We need to guarantee 16-byte alignment at the time the "call" is made. So for example, if
  * we were to only caller save one register, we would have thrown our 16 byte alignment off into an
- * 8 byte alignment. To fix this, we will just insert a dummy push/pop to always balance things out
+ * 8 byte alignment. To fix this, we will just insert a dummy push/pop to always balance things out.
+ * This is only an issue for the push/pop instructions that we use. Using the stack saving instructions
+ * already go through the regular aligner
  */
 static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_record_t* caller, instruction_t* function_call){
 	/**
@@ -3663,7 +3670,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	 * The total amount of caller saved space that we have. Remember this
 	 * must always be a multiple of 16
 	 */
-	u_int32_t caller_saved_space = 0;
+	u_int32_t gp_caller_saved_space = 0;
 
 	//Grab out this LR for reference later on. Remember that this is nullable, so we 
 	//need to account for that
@@ -3771,7 +3778,6 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 
 				//There's also no point in saving the error LR if real. This could happen if we have precoloring
 				if(error_lr != NULL){
-					//Skip it
 					if(general_purpose_reg == error_lr->reg.gen_purpose){
 						continue;
 					}
@@ -3791,7 +3797,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 					/**
 					 * We have seen 8 more bytes that we need to save
 					 */
-					caller_saved_space += 8;
+					gp_caller_saved_space += 8;
 
 					//Add this into our list of GP LRs to save
 					dynamic_array_add(&general_purpose_lrs_to_save, lr);
@@ -3808,7 +3814,6 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 				//There's also no point in saving this. This could happen if we have precoloring
 				//We'll only check this if the classes match though
 				if(destination_lr != NULL && destination_lr_class == LIVE_RANGE_CLASS_SSE){
-					//Skip it
 					if(sse_reg == destination_lr->reg.sse_reg){
 						continue;
 					}
@@ -3825,11 +3830,6 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 						SSE_lrs_to_save = dynamic_array_alloc();
 					}
 
-					/**
-					 * We have seen 8 more bytes that we need to save
-					 */
-					caller_saved_space += 8;
-
 					//Add this into our list of GP LRs to save
 					dynamic_array_add(&SSE_lrs_to_save, lr);
 				}
@@ -3838,17 +3838,32 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 		}
 	}
 
-	/**
-	 * If we get here, then we have an alignment issue that we need to resolve. This *must*
-	 * be 16 byte aligned. Anything else will cause segmentation fault issues down the road
-	 */
-	if(caller_saved_space % 16 != 0){
-		printf("SPACE IS %d BYTES, NOT ALIGNED\n\n\n", caller_saved_space);
-	}
-
 	//We'll need to keep track of the last instruction to return it in the end
 	instruction_t* first_instruction = before_stack_param_setup;
 	instruction_t* last_instruction = after_stack_param_setup;
+
+	/**
+	 * If we get here, then we have an alignment issue that we need to resolve. This *must*
+	 * be 16 byte aligned. Anything else will cause segmentation fault issues down the road
+	 *
+	 * To fix this, we will take a non caller saved register and just have a dummy push/pop
+	 * here that does it. We'll always use %r12 for this
+	 */
+	if(gp_caller_saved_space % 16 != 0){
+		//Emit the dummy push
+		instruction_t* dummy_push = emit_direct_gp_register_push_instruction(dummy_push_register);
+
+		//Insert and update the first instruction pointer
+		insert_instruction_before_given(dummy_push, first_instruction);
+		first_instruction = dummy_push;
+
+		//And now the dummy pop
+		instruction_t* dummy_pop = emit_direct_gp_register_pop_instruction(dummy_push_register);
+
+		//Now this goes after the last instruction
+		insert_instruction_after_given(dummy_pop, last_instruction);
+		last_instruction = dummy_pop;
+	}
 
 	/**
 	 * Due to the way that we use push/pop for general purpose caller saving, we need
