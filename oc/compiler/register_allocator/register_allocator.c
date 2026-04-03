@@ -3646,12 +3646,24 @@ static u_int8_t graph_color_and_allocate_sse(basic_block_t* function_entry, dyna
  *
  * NOTE: All SSE(xmm) registers are caller saved. The callee is free to clobber these however it
  * sees fit. As such, the burden for saving all of these falls onto the caller here
+ *
+ * NOTE: We need to guarantee 16-byte alignment at the time the "call" is made. So for example, if
+ * we were to only caller save one register, we would have thrown our 16 byte alignment off into an
+ * 8 byte alignment. To fix this, we will just insert a dummy push/pop to always balance things out
  */
 static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_record_t* caller, instruction_t* function_call){
-	//If we get here we know that we have a call instruction. Let's
-	//grab whatever it's calling out. We're able to do this for a direct call,
-	//whereas in an indirect call we are not
+	/**
+	 * If we get here we know that we have a call instruction. Let's
+	 * grab whatever it's calling out. We're able to do this for a direct call,
+	 * whereas in an indirect call we are not
+	 */
 	symtab_function_record_t* callee = function_call->called_function;
+
+	/**
+	 * The total amount of caller saved space that we have. Remember this
+	 * must always be a multiple of 16
+	 */
+	u_int32_t caller_saved_space = 0;
 
 	//Grab out this LR for reference later on. Remember that this is nullable, so we 
 	//need to account for that
@@ -3776,6 +3788,11 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 						general_purpose_lrs_to_save = dynamic_array_alloc();
 					}
 
+					/**
+					 * We have seen 8 more bytes that we need to save
+					 */
+					caller_saved_space += 8;
+
 					//Add this into our list of GP LRs to save
 					dynamic_array_add(&general_purpose_lrs_to_save, lr);
 				}
@@ -3808,12 +3825,25 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 						SSE_lrs_to_save = dynamic_array_alloc();
 					}
 
+					/**
+					 * We have seen 8 more bytes that we need to save
+					 */
+					caller_saved_space += 8;
+
 					//Add this into our list of GP LRs to save
 					dynamic_array_add(&SSE_lrs_to_save, lr);
 				}
 
 				break;
 		}
+	}
+
+	/**
+	 * If we get here, then we have an alignment issue that we need to resolve. This *must*
+	 * be 16 byte aligned. Anything else will cause segmentation fault issues down the road
+	 */
+	if(caller_saved_space % 16 != 0){
+		printf("SPACE IS %d BYTES, NOT ALIGNED\n\n\n", caller_saved_space);
 	}
 
 	//We'll need to keep track of the last instruction to return it in the end
