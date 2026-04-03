@@ -4502,6 +4502,19 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 	u_int32_t local_stack_size = area->total_size;
 
 	/**
+	 * Very important nuance: If a function calls *any* other function at all, then we need to make
+	 * aboslutely sure that this function has some alignment when it enters. System V ABI requires
+	 * that we have 16 byte alignment before *any* call direct or indirect. Since functions
+	 * naturally enter with only 8 byte alignment(due to how call subtracts 8 from RSP), if we are
+	 * going to call any other functions, then we need to at least have a subq $8, %rsp at the start
+	 * to fully align
+	 */
+	if(function->calls_function == TRUE && local_stack_size == 0){
+		//Update this by 8, that's the alignment that we need
+		local_stack_size = 8;
+	}
+
+	/**
 	 * The total stack frame size is the total footprint that this function will take
 	 * up on the stack. Note that this is not always *just* the local stack size. If 
 	 * we have callee-saving instructions(pushq instructions) at the top, that also

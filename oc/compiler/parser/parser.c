@@ -2047,6 +2047,13 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	//Add the line number in
 	function_call_node->line_number = current_line;
 
+	/**
+	 * VERY IMPORTANT - whether this is a direct or indirect call, we need to flag
+	 * that the current function will call out to other functions. This is extremely
+	 * important information that we need to know for alignment down the road
+	 */
+	current_function->calls_function = TRUE;
+
 	//Otherwise, if we make it here, we're all good to return the function call node
 	return function_call_node;
 }
