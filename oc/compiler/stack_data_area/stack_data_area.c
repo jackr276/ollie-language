@@ -69,9 +69,7 @@ void align_stack_data_area(stack_data_area_t* area){
 	 *
 	 * This is: 272, and it is now aligned
 	 */
-	if(area->total_size % 16 == 0){
-		area->total_size = (area->total_size + 15) & ~0xF;
-	}
+	area->total_size = (area->total_size + 15) & ~0xF;
 
 	/**
 	 * *IF* we have a function local stack, we need to keep
@@ -247,12 +245,6 @@ static void realign_data_area(stack_data_area_t* area){
 		//with the needed padding and the new type's size added onto it
 		area->total_size = area->total_size + needed_padding + region->type->type_size;
 	}
-
-	/**
-	 * Once we're done with this realignment we need to update the overall size too. We must
-	 * guarantee 16-byte alignment
-	 */
-	align_stack_data_area(area);
 }
 
 
