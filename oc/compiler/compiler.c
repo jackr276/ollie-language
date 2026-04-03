@@ -25,8 +25,8 @@
 #include "utils/error_management.h"
 
 //The number of errors and warnings
-u_int32_t num_errors;
-u_int32_t num_warnings;
+u_int32_t num_errors = 0;
+u_int32_t num_warnings = 0;
 
 //Objectfile opt for getopt_long
 #define objectfile_opt 5
@@ -226,9 +226,9 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
  * Print a final summary for the ollie compiler. This could show success or
  * failure, based on what the caller wants
  */
-static void print_summary(compiler_options_t* options, module_times_t* times, u_int32_t lines_processed, u_int32_t num_errors, u_int32_t num_warnings, u_int8_t success){
+static void print_summary(compiler_options_t* options, module_times_t* times, u_int32_t lines_processed, u_int8_t success){
 	//For holding our message
-	char info[500];
+	char info[2000];
 
 	//Show a success
 	if(success == TRUE){
@@ -274,11 +274,6 @@ static u_int8_t compile(compiler_options_t* options){
 	//Print out the file name if we're debug printing
 	printf("Compiling source file: %s\n\n\n", options->file_name);
 
-	//Warn the user if no file name is given
-	if(options->output_file == NULL){
-		printf("[WARNING]: No output file name given. The name \"a.s\" will be used\n\n");
-	}
-
 	//And we'll keep track of everything we have here
 	clock_t begin = 0;
 	clock_t lexer_end = 0;
@@ -314,7 +309,7 @@ static u_int8_t compile(compiler_options_t* options){
 
 		//Print summary with a failure here
 		if(options->show_summary == TRUE){
-			print_summary(options, &times, 0, num_errors, num_warnings, FALSE);
+			print_summary(options, &times, 0, FALSE);
 		}
 
 		/**
@@ -337,8 +332,10 @@ static u_int8_t compile(compiler_options_t* options){
 		times.lexer_time = (double)(lexer_end - begin) / CLOCKS_PER_SEC;
 	}
 
-	//Now we cache the token stream reference inside of the options. The parser will reference this for
-	//all of its operations
+	/**
+	 * Now we cache the token stream reference inside of the options. The parser will reference this for
+	 * all of its operations
+	 */
 	options->token_stream = &token_stream;
 
 	/**
@@ -361,7 +358,7 @@ static u_int8_t compile(compiler_options_t* options){
 
 		//Print summary with a failure here
 		if(options->show_summary == TRUE){
-			print_summary(options, &times, 0, num_errors, num_warnings, FALSE);
+			print_summary(options, &times, 0, FALSE);
 		}
 
 		/**
@@ -402,7 +399,7 @@ static u_int8_t compile(compiler_options_t* options){
 
 		//Print summary with a failure here
 		if(options->show_summary == TRUE){
-			print_summary(options, &times, results->lines_processed, num_errors, num_warnings, FALSE);
+			print_summary(options, &times, results->lines_processed, FALSE);
 		}
 
 		/**
@@ -503,8 +500,8 @@ static u_int8_t compile(compiler_options_t* options){
 		printf("=============================== Instruction Scheduling =================================\n");
 		printf("=============================== Register Allocation ====================================\n");
 	}
+
 	//Run the register allocator. This will take the OIR version and truly put it into assembler-ready code
-	//
 	allocate_all_registers(options, cfg);
 
 	//If we are doing module specific timing, store the selector time
@@ -540,7 +537,7 @@ static u_int8_t compile(compiler_options_t* options){
 
 	//Show the summary if we need to
 	if(options->show_summary == TRUE){
-		print_summary(options, &times, results->lines_processed, num_errors, num_warnings, TRUE);
+		print_summary(options, &times, results->lines_processed, TRUE);
 	}
 
 	/**

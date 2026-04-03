@@ -4502,6 +4502,25 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 	u_int32_t local_stack_size = area->total_size;
 
 	/**
+	 * Very important nuance: if a function has been flagged by the parser as requiring
+	 * initial alignment, this means 1 of 3 things:
+	 *
+	 * 	1.) The function performs an indirect call, so whatever it is calling may require initial alignment
+	 *
+	 * 	2.) The function performs a direct call to a function that itself requires an initial alignment
+	 *
+	 * 	3.) The function will make use of aligned memory copy(THREE_ADDR_CODE_MEMORY_COPY_STMT)instructions
+	 * 		that rely entirely on alignment being valid and will segfault if it is not
+	 *
+	 * If we see this flag *AND* there is nothing currently on the stack, we will bump the
+	 * amount up by 8 to flag that we need this. If there is something already on the stack
+	 * then we don't need to do this
+	 */
+	if(function->requires_initial_alignment == TRUE && local_stack_size == 0){
+		local_stack_size = 8;
+	}
+
+	/**
 	 * The total stack frame size is the total footprint that this function will take
 	 * up on the stack. Note that this is not always *just* the local stack size. If 
 	 * we have callee-saving instructions(pushq instructions) at the top, that also

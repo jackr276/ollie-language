@@ -5434,7 +5434,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		instruction_t* copy_statement = emit_memory_copy_instruction(left_hand_var, final_op1, parent_node->optional_storage.bytes_to_copy);
 
 		//Get it into the block
-		add_statement(current_block, copy_statement);
+		add_statement(current_block, copy_statement);		
 
 	/**
 	 * Do we have a pre-loaded up store statement ready for us to go? If so, then

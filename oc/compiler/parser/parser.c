@@ -1773,6 +1773,13 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		//Store the variable too
 		function_call_node->variable = function_pointer_variable;
 
+		/**
+		 * This function performs an indirect call. We do not and can not know what the function 
+		 * that results from this call is. As such, we need to be safe and now assume that we require an 
+		 * initial alignment for this function
+		 */
+		current_function->requires_initial_alignment = TRUE;
+
 	//This means that they're both NULL. We'll need to throw an error here
 	} else{
 		sprintf(info, "\"%s\" is not currently defined as a function or function pointer", function_name.string);
@@ -2876,6 +2883,14 @@ loop_end:
 
 			//Store this for down the road - how many bytes do we need to copy
 			asn_expr_node->optional_storage.bytes_to_copy = final_type->type_size;
+
+			/**
+			 * Since we are performing a memory copy instruction, this function
+			 * is required to perform an initial alignment when we enter it. If we did
+			 * not align this way, then we would get segmentation faults when trying to execute
+			 * SIMD instructions
+			 */
+			current_function->requires_initial_alignment = TRUE;
 		}
 
 		//Otherwise the overall type is the final type
@@ -11483,6 +11498,14 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 
 		//Store the bytes that we need to copy here
 		let_stmt_node->optional_storage.bytes_to_copy = type_spec->type_size; 
+
+		/**
+		 * Since we are performing a memory copy instruction, this function
+		 * is required to perform an initial alignment when we enter it. If we did
+		 * not align this way, then we would get segmentation faults when trying to execute
+		 * SIMD instructions
+		 */
+		current_function->requires_initial_alignment = TRUE;
 	}
 
 	//Otherwise it worked, so we'll add it in as a child
@@ -13355,7 +13378,7 @@ static generic_ast_node_t* program(ollie_token_stream_t* token_stream){
  * We only look for this after the entire file has been parsed, so now that it has, we will
  * check every function to make sure it adheres to this rule
  */
-static inline u_int8_t validate_inlined_functions_are_non_revursive(function_symtab_t* symtab) {
+static inline u_int8_t validate_inlined_functions_are_non_recursive(function_symtab_t* symtab) {
 	//Use the error count so that we can do all functions at once
 	u_int32_t error_count = 0;
 
@@ -13391,6 +13414,97 @@ static inline u_int8_t validate_inlined_functions_are_non_revursive(function_sym
 
 	//Based on the error count give back what we got here
 	return error_count == 0 ? SUCCESS : FAILURE;
+}
+
+
+/**
+ * Algorithm for fuction flagging
+ *
+ * Procedure flag:
+ * 	for each record in the symtab:
+ * 		if record is not flagged then return
+ * 		for each other function record:
+ * 			if record is reachable from other then flag other
+ * 			
+ * The algorithm relies on the transitive closure. With the transitive closure, we can do this in one pass
+ * and just mark everything that the flagged function is reachable from
+ */
+static inline void flag_function_for_alignment(function_symtab_t* symtab, symtab_function_record_t* record){
+	//If it doesn't require alignment then get out
+	if(record->requires_initial_alignment == FALSE){
+		return;
+	}
+
+	//Grab the call graph index, we will be doing a reverse lookup
+	u_int32_t flagged_function_index = record->function_id;
+
+	//The number of functions is also the current id
+	u_int32_t function_count = symtab->current_function_id;
+
+	//For every other function
+	for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+		symtab_function_record_t* other = symtab->records[i];
+		
+		//Traverse the linked list in case of collisions
+		while(other != NULL){
+			//No point in comparing if they match
+			if(other != record){
+				/**
+				 * The "other" is the row, and the record is the index, so 
+				 * we need to compute other_index * count + record_index
+				 */
+				u_int32_t index = other->function_id * function_count + flagged_function_index;
+
+				//If this is TRUE then
+				if(symtab->call_graph_transitive_closure[index] == TRUE){
+					//Flag that the other needs initial alignment
+					other->requires_initial_alignment = TRUE;
+				}
+			}
+
+			//Bump it up
+			other = other->next;
+		}
+	}
+}
+
+
+/**
+ * We need to flag functions that require an initial alignment for later on
+ * down the road. We use the following cirteria to flag this:
+ *
+ * Does the given function require an initial alignment? Functions that
+ * require initial alignments may meet the following cirteria:
+ * 	
+ * 	1.) The function performs an indirect call
+ * 	2.) The function performs a direct call to a function
+ * 		that itself requires an initial alignment(either indirect call or aligned memory copy)
+ * 	3.) The function will make use of aligned memory copy(THREE_ADDR_CODE_MEMORY_COPY_STMT)
+ * 		instructions
+ * 
+ * We have already computed the transitive closure by the time we get here, so now all that we need
+ * to do is investigate whether a given fun
+ *
+ * We will use a while change algorithm to do this to ensure that we fully propogate out
+ * the entire list
+ */
+static void flag_functions_that_require_initial_alignment(function_symtab_t* symtab){
+	/**
+	 * Run through all of the records in the function keyspace
+	 */
+	for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+		//Extract it
+		symtab_function_record_t* record = symtab->records[i];
+
+		//So long as it's not NULL keep drilling
+		while(record != NULL){
+			//Flag it
+			flag_function_for_alignment(symtab, record);
+
+			//Bump it up
+			record = record->next;
+		}
+	}
 }
 
 
@@ -13474,11 +13588,20 @@ front_end_results_package_t* parse(compiler_options_t* options){
 		//Finalize the function symtab
 		finalize_function_symtab(function_symtab);
 
-		//Validate that we have no recursive & inlined functions. If this fails, 
-		//we force to an error
-		if(validate_inlined_functions_are_non_revursive(function_symtab) == FAILURE){
+		/**
+		 * Validate that we have no recursive & inlined functions. If this fails, 
+		 * we force to an error
+		 */
+		if(validate_inlined_functions_are_non_recursive(function_symtab) == FAILURE){
 			prog->ast_node_type = AST_NODE_TYPE_ERR_NODE;
 		}
+
+		/**
+		 * Flag functions that require initial alignments. This can *only* be done
+		 * after we have finalized the function symtab and computed the transitive
+		 * closure
+		 */
+		flag_functions_that_require_initial_alignment(function_symtab);
 
 		//Check for any unused functions
 		check_for_unused_functions(function_symtab, &num_warnings);

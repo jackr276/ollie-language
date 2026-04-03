@@ -126,6 +126,20 @@ struct symtab_function_record_t{
 	u_int8_t defined;
 	//Has it ever been called?
 	u_int8_t called;
+	/**
+	 * Does the given function require an initial alignment? Functions that
+	 * require initial alignments may meet the following cirteria:
+	 * 	
+	 * 	1.) The function performs an indirect call
+	 * 	2.) The function performs a direct call to a function
+	 * 		that itself requires an initial alignment
+	 * 	3.) The function will make use of aligned memory copy(THREE_ADDR_CODE_MEMORY_COPY_STMT)
+	 * 		instructions
+	 *
+	 * 	We will eventually traverse the call graph's transitive closure to see what does and does
+	 * 	not require alignment like this
+	 */
+	u_int8_t requires_initial_alignment;
 	//Has this function been inlined?
 	u_int8_t inlined;
 	//Does this function contain stack params?
