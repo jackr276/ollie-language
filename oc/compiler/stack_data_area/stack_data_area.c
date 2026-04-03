@@ -271,11 +271,163 @@ stack_region_t* create_stack_region_for_type(stack_data_area_t* area, generic_ty
  * TODO UPDATE
  */
 static void realign_data_area(stack_data_area_t* area){
+	//Needed local variables
+	generic_type_t* base_alignment_type;
+	u_int32_t alignable_size;
+	u_int32_t needed_padding;
+
+
 	//We're completely restarting here, so set this to 0
 	area->total_size = 0;
 
 	//Run through every single variable
-	for(u_int16_t i = 0; i < area->stack_regions.current_index; i++){
+	for(u_int32_t i = 0; i < area->stack_regions.current_index; i++){
+		//Fetch the region out
+		stack_region_t* region = dynamic_array_get_at(&(area->stack_regions), i);
+
+		//We'll need this too
+		generic_type_t* type = region->type;
+
+
+		/**
+		 * To align new variables that are added onto the stack, we will pad
+		 * their starting addresses as needed to ensure that the starting
+		 * address of the variable is a multiple of alignable type size
+		 */
+		switch(type->type_class){
+			/**
+			 * If we have an elaborative type inside of our stack, then we'll need to add everything
+			 * in and flag that the stack size is now dynamic and cannot simply be relied 
+			 */
+			case TYPE_CLASS_ELABORATIVE:
+				//First we'll need the type that we can align by
+				base_alignment_type = get_base_alignment_type(type);
+
+				//Get the alignment size
+				alignable_size = base_alignment_type->type_size;
+
+				//How much padding do we need? Initially we assume none
+				needed_padding = 0;
+
+				//We can just use the overall data area size for this
+				if(area->total_size % alignable_size != 0){
+					//Grab the needed padding
+					needed_padding = area->total_size % alignable_size;
+				}
+
+				/**
+				 * NOTE: our type size is currently 4 because for all
+				 * that we currently know, we have 4 bytes to hold the size
+				 * and nothing else here.
+				 */
+				u_int32_t type_size = 4;
+
+				/**
+				 * Create a new stack region. The base address of this stack region must be the total area plus
+				 * the needed padding
+				 */
+				region = create_stack_region(area->total_size + needed_padding, type_size);
+
+				//Store the type in here - we'll need it for later on
+				region->type = type;
+
+				//Total size here is again deceptive as we don't know what the total size is at all
+				area->total_size = area->total_size + needed_padding + type_size;
+
+				//Add the region into the stack data area
+				dynamic_array_add(&(area->stack_regions), region);
+
+				//Give back the allocated region
+				return region;
+
+			/**
+			 * For struct/union types, we need to guarantee that their starting addresses are
+			 * 16 byte-aligned on the stack.
+			 */
+			case TYPE_CLASS_UNION:
+			case TYPE_CLASS_STRUCT:
+				//Assume we need nothing
+				needed_padding = 0;
+
+				/**
+				 * Example: align 258 to 16-bytes by rounding up
+				 * 258 is 100000010
+				 * 15 is  000001111
+				 *
+				 * Add them we get 273: 100010001
+				 * 0XF is 1111
+				 * ~0XF is 1111110000
+				 *  100010001
+				 * &111110000
+				 * 100010000
+				 *
+				 * This is: 272, and it is now aligned
+				 */
+				u_int32_t nearest_16_byte_aligned_address = (area->total_size + 15) & (~0xF);
+
+				//How much padding do we need?
+				needed_padding = nearest_16_byte_aligned_address - area->total_size;
+
+				/**
+				 * Now that we know what our base address is going to be, we can allocate
+				 * the region
+				 */
+				region = create_stack_region(nearest_16_byte_aligned_address, type->type_size);
+
+				//Store the type as well
+				region->type = type;
+
+				//Now update the overall size
+				area->total_size = area->total_size + needed_padding + type->type_size;
+
+				//Add it in
+				dynamic_array_add(&(area->stack_regions), region);
+
+				//Now give back the region
+				return region;
+
+			default:
+				//First we'll need the type that we can align by
+				base_alignment_type = get_base_alignment_type(type);
+
+				//Get the alignment size
+				alignable_size = base_alignment_type->type_size;
+
+				//How much padding do we need? Initially we assume none
+				needed_padding = 0;
+
+				//We can just use the overall data area size for this
+				if(area->total_size % alignable_size != 0){
+					//Grab the needed padding
+					needed_padding = area->total_size % alignable_size;
+				}
+
+				//Create a new stack region. The base address of this stack region must be the total area plus
+				//the needed padding
+				region = create_stack_region(area->total_size + needed_padding, type->type_size);
+
+				//Store the type in here - we'll need it for later on
+				region->type = type;
+
+				//The new size has the needed padding and the new region's size on top of it
+				area->total_size = area->total_size + needed_padding + type->type_size;
+
+				//Add the region into the stack data area
+				dynamic_array_add(&(area->stack_regions), region);
+
+				//Give back the allocated region
+				return region;
+		}
+
+
+
+
+
+
+
+
+
+
 		//Grab it out
 		stack_region_t* region = dynamic_array_get_at(&(area->stack_regions), i);
 
