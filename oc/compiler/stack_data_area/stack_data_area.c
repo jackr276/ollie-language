@@ -72,6 +72,19 @@ void align_stack_data_area(stack_data_area_t* area){
 	 * This is: 272, and it is now aligned
 	 */
 	area->total_size = (area->total_size + 15) & ~0xF;
+
+
+	/**
+	 * *IF* we have a function local stack, we need to keep
+	 * in mind that before we call this function 8 bytes
+	 * was subtracted from the stack. So even though
+	 * our value here is 16 byte aligned, 16 + 8 = 24 is
+	 * not. We will account for this by simply adding 8,
+	 * that way we guarantee the alignment
+	 */
+	if(area->stack_type == STACK_TYPE_FUNCTION_LOCAL){
+		area->total_size += 8;
+	}
 }
 
 
