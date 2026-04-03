@@ -4115,10 +4115,24 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 	 * If, with all of our pushing/popping, we're going to end
 	 * up misalinging the stack, we need to fix this by inserting
 	 * a dummy push/pop operation to balance things out
+	 *
+	 * We will use %r12 as our dummy push. It does not matter what is in there
+	 * as this is just dummy space for us to use
 	 */
 	if(gp_caller_saved_space % 16 != 0){
-		printf("HERE\n\n\n\n");
+		//Emit the dummy push
+		instruction_t* dummy_push = emit_direct_gp_register_push_instruction(dummy_push_register);
 
+		//Insert and update the first instruction pointer
+		insert_instruction_before_given(dummy_push, first_instruction);
+		first_instruction = dummy_push;
+
+		//And now the dummy pop
+		instruction_t* dummy_pop = emit_direct_gp_register_pop_instruction(dummy_push_register);
+
+		//Now this goes after the last instruction
+		insert_instruction_after_given(dummy_pop, last_instruction);
+		last_instruction = dummy_pop;
 	}
 
 	//Now let's run through all of the general purpose registers first
