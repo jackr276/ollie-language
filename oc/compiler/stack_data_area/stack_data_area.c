@@ -50,13 +50,11 @@ void stack_data_area_alloc(stack_data_area_t* area, stack_data_area_type_t type,
  * Align the stack data area size to be 16-byte aligned
  */
 void align_stack_data_area(stack_data_area_t* area){
-	//If it already is a perfect multiple of 16, then we're good
-	if(area->total_size % 16 == 0){
+	//Doesn't even have a local stack, get out
+	if(area->total_size == 0){
 		return;
 	}
 
-	//Otherwise we can align
-	
 	/**
 	 * Example: align 258 to 16-bytes by rounding up
 	 * 258 is 100000010
@@ -71,8 +69,9 @@ void align_stack_data_area(stack_data_area_t* area){
 	 *
 	 * This is: 272, and it is now aligned
 	 */
-	area->total_size = (area->total_size + 15) & ~0xF;
-
+	if(area->total_size % 16 == 0){
+		area->total_size = (area->total_size + 15) & ~0xF;
+	}
 
 	/**
 	 * *IF* we have a function local stack, we need to keep
