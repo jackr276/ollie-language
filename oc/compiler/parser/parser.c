@@ -13385,7 +13385,7 @@ static generic_ast_node_t* program(ollie_token_stream_t* token_stream){
  * We only look for this after the entire file has been parsed, so now that it has, we will
  * check every function to make sure it adheres to this rule
  */
-static inline u_int8_t validate_inlined_functions_are_non_revursive(function_symtab_t* symtab) {
+static inline u_int8_t validate_inlined_functions_are_non_recursive(function_symtab_t* symtab) {
 	//Use the error count so that we can do all functions at once
 	u_int32_t error_count = 0;
 
@@ -13421,6 +13421,50 @@ static inline u_int8_t validate_inlined_functions_are_non_revursive(function_sym
 
 	//Based on the error count give back what we got here
 	return error_count == 0 ? SUCCESS : FAILURE;
+}
+
+
+static inline void flag_function_for_alignment( symtab_function_record_t* record){
+
+}
+
+
+/**
+ * We need to flag functions that require an initial alignment for later on
+ * down the road. We use the following cirteria to flag this:
+ *
+ * Does the given function require an initial alignment? Functions that
+ * require initial alignments may meet the following cirteria:
+ * 	
+ * 	1.) The function performs an indirect call
+ * 	2.) The function performs a direct call to a function
+ * 		that itself requires an initial alignment(either indirect call or aligned memory copy)
+ * 	3.) The function will make use of aligned memory copy(THREE_ADDR_CODE_MEMORY_COPY_STMT)
+ * 		instructions
+ * 
+ * We have already computed the transitive closure by the time we get here, so now all that we need
+ * to do is investigate whether a given fun
+ *
+ * We will use a while change algorithm to do this to ensure that we fully propogate out
+ * the entire list
+ */
+static void flag_functions_that_require_initial_alignment(function_symtab_t* symtab){
+	/**
+	 * Run through all of the records in the function keyspace
+	 */
+	for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+		//Extract it
+		symtab_function_record_t* record = symtab->records[i];
+
+		//So long as it's not NULL keep drilling
+		while(record != NULL){
+			//Flag it
+			flag_function_for_alignment(record);
+
+			//Bump it up
+			record = record->next;
+		}
+	}
 }
 
 
@@ -13508,9 +13552,16 @@ front_end_results_package_t* parse(compiler_options_t* options){
 		 * Validate that we have no recursive & inlined functions. If this fails, 
 		 * we force to an error
 		 */
-		if(validate_inlined_functions_are_non_revursive(function_symtab) == FAILURE){
+		if(validate_inlined_functions_are_non_recursive(function_symtab) == FAILURE){
 			prog->ast_node_type = AST_NODE_TYPE_ERR_NODE;
 		}
+
+		/**
+		 * Flag functions that require initial alignments. This can *only* be done
+		 * after we have finalized the function symtab and computed the transitive
+		 * closure
+		 */
+		flag_functions_that_require_initial_alignment(function_symtab);
 
 		//Check for any unused functions
 		check_for_unused_functions(function_symtab, &num_warnings);
