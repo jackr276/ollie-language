@@ -4267,31 +4267,50 @@ static inline void insert_caller_saved_register_logic(basic_block_t* function_en
  *
  * NOTE: since all SSE registers are caller-saved, we actually don't need to worry about any SSE registers here because
  * they will all be handled by the caller anyway
+ *
+ * NOTE: We need to guarantee alignment when we enter inside of this function block. It is for this reason
+ * that if we are saving an odd number of GP registers(would be a multiple of 8 but not 16), we need to 
+ * add one final dummy push to ensure that we are always 16 byte aligned
  */
 static void insert_callee_saving_logic(basic_block_t* function_entry, basic_block_t* function_exit){
-	//Keep a reference to the original entry instruction that we had before
-	//we insert any pushes. This will be important for when we need to
-	//reassign the function's leader statement
+	/**
+	 * Keep a reference to the original entry instruction that we had before
+	 * we insert any pushes. This will be important for when we need to
+	 * reassign the function's leader statement
+	 */
 	instruction_t* entry_instruction = function_entry->leader_statement;
+
+	/**
+	 * Keep track of how many bytes we've saved
+	 */
+	u_int32_t gp_callee_saved_bytes = 0; 
 	
 	//Grab the function record out now too
 	symtab_function_record_t* function = function_entry->function_defined_in;
 
 	//We need to see which registers that we use
-	for(u_int16_t i = 0; i < K_COLORS_GEN_USE; i++){
+	for(u_int32_t i = 0; i < K_COLORS_GEN_USE; i++){
 		//We don't use this register, so move on
 		if(get_bitmap_at_index(function->assigned_general_purpose_registers, i) == FALSE){
 			continue;
 		}
 
-		//Otherwise if we get here, we know that we use it. Remember
-		//the register value is always offset by one
+		/**
+		 * Otherwise if we get here, we know that we use it. Remember
+		 * the register value is always offset by one
+		 */
 		general_purpose_register_t used_reg = i + 1;
 
 		//If this isn't callee saved, then we know to move on
 		if(is_general_purpose_register_callee_saved(used_reg) == FALSE){
 			continue;
 		}
+
+		/**
+		 * We now know that we will be callee-saving this. We need to update the
+		 * byte count for later checks
+		 */
+		gp_callee_saved_bytes += 8;
 
 		//Now we'll need to add an instruction to push this at the entry point of our function
 		instruction_t* push_instruction = emit_direct_gp_register_push_instruction(used_reg);
@@ -4302,27 +4321,37 @@ static void insert_callee_saving_logic(basic_block_t* function_entry, basic_bloc
 		//Insert this push before the leader instruction
 		insert_instruction_before_given(push_instruction, entry_instruction);
 
-		//If the entry instruction is still the function's leader statement, then
-		//we'll need to update it. This only happens on the very first push. For
-		//everyting subsequent, we won't need to do this
+		/**
+		 * If the entry instruction is still the function's leader statement, then
+		 * we'll need to update it. This only happens on the very first push. For
+		 * everyting subsequent, we won't need to do this
+		 */
 		if(entry_instruction == function_entry->leader_statement){
 			//Reassign this to be the very first push
 			function_entry->leader_statement = push_instruction;
 		}
 	}
 
-	//Now that we've added all of the callee saving logic at the function entry, we'll need to
-	//go through and add it at the exit(s) as well. Note that we're given the function exit block
-	//as an input value here
+	if(gp_callee_saved_bytes % 16 != 0){
+		printf("NEED TO ADD DUMMY PUSH\n\n");
+	}
+
+	/**
+	 * Now that we've added all of the callee saving logic at the function entry, we'll need to
+	 * go through and add it at the exit(s) as well. Note that we're given the function exit block
+	 * as an input value here
+	 */
 	
 	//For each and every predecessor of the function exit block
 	for(u_int16_t i = 0; i < function_exit->predecessors.current_index; i++){
 		//Grab the given predecessor out
 		basic_block_t* predecessor = dynamic_array_get_at(&(function_exit->predecessors), i);
 
-		//Now we'll go through the registers in the reverse order. This time, when we hit one that
-		//is callee-saved and used, we'll emit the push instruction and insert it directly before
-		//the "ret". This will ensure that our LIFO structure for pushing/popping is maintained
+		/**
+		 * Now we'll go through the registers in the reverse order. This time, when we hit one that
+		 * is callee-saved and used, we'll emit the push instruction and insert it directly before
+		 * the "ret". This will ensure that our LIFO structure for pushing/popping is maintained
+		 */
 
 		//Run through all the registers backwards
 		for(int16_t j = K_COLORS_GEN_USE - 1; j >= 0; j--){
