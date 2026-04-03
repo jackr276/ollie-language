@@ -13424,8 +13424,57 @@ static inline u_int8_t validate_inlined_functions_are_non_recursive(function_sym
 }
 
 
-static inline void flag_function_for_alignment( symtab_function_record_t* record){
+/**
+ * Algorithm for fuction flagging
+ *
+ * Procedure flag:
+ * 	for each record in the symtab:
+ * 		if record is not flagged then return
+ * 		for each other function record:
+ * 			if record is reachable from other then flag other
+ * 			
+ * The algorithm relies on the transitive closure. With the transitive closure, we can do this in one pass
+ * and just mark everything that the flagged function is reachable from
+ */
+static inline void flag_function_for_alignment(function_symtab_t* symtab, symtab_function_record_t* record){
+	//If it doesn't require alignment then get out
+	if(record->requires_initial_alignment == FALSE){
+		return;
+	}
 
+	//Grab the call graph index, we will be doing a reverse lookup
+	u_int32_t flagged_function_index = record->function_id;
+
+	//The number of functions is also the current id
+	u_int32_t function_count = symtab->current_function_id;
+
+	//For every other function
+	for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+		symtab_function_record_t* other = symtab->records[i];
+		
+		//Traverse the linked list in case of collisions
+		while(other != NULL){
+			//No point in comparing if they match
+			if(other != record){
+				/**
+				 * The "other" is the row, and the record is the index, so 
+				 * we need to compute other_index * count + record_index
+				 */
+				u_int32_t index = other->function_id * function_count + flagged_function_index;
+
+				//If this is TRUE then
+				if(symtab->call_graph_transitive_closure[index] == TRUE){
+					//Flag that the other needs initial alignment
+					other->requires_initial_alignment = TRUE;
+
+					printf("%s CAN REACH %s, needs to be aligned\n\n\n", other->func_name.string, record->func_name.string);
+				}
+			}
+
+			//Bump it up
+			other = other->next;
+		}
+	}
 }
 
 
@@ -13459,7 +13508,7 @@ static void flag_functions_that_require_initial_alignment(function_symtab_t* sym
 		//So long as it's not NULL keep drilling
 		while(record != NULL){
 			//Flag it
-			flag_function_for_alignment(record);
+			flag_function_for_alignment(symtab, record);
 
 			//Bump it up
 			record = record->next;
