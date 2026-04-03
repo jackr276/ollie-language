@@ -186,6 +186,7 @@ stack_region_t* create_stack_region_for_type(stack_data_area_t* area, generic_ty
 		 */
 		case TYPE_CLASS_UNION:
 		case TYPE_CLASS_STRUCT:
+			//Assume we need nothing
 			needed_padding = 0;
 
 			/**
@@ -202,8 +203,28 @@ stack_region_t* create_stack_region_for_type(stack_data_area_t* area, generic_ty
 			 *
 			 * This is: 272, and it is now aligned
 			 */
-			u_int32_t nearest_16_byte_aligned_address = area->total_size + 15 & (~0xF);
+			u_int32_t nearest_16_byte_aligned_address = (area->total_size + 15) & (~0xF);
 
+			//How much padding do we need?
+			needed_padding = nearest_16_byte_aligned_address - area->total_size;
+
+			/**
+			 * Now that we know what our base address is going to be, we can allocate
+			 * the region
+			 */
+			region = create_stack_region(nearest_16_byte_aligned_address, type->type_size);
+
+			//Store the type as well
+			region->type = type;
+
+			//Now update the overall size
+			area->total_size = area->total_size + needed_padding + type->type_size;
+
+			//Add it in
+			dynamic_array_add(&(area->stack_regions), region);
+
+			//Now give back the region
+			return region;
 
 		default:
 			//First we'll need the type that we can align by
@@ -243,6 +264,11 @@ stack_region_t* create_stack_region_for_type(stack_data_area_t* area, generic_ty
 /**
  * Completely realign every piece of data in the stack data
  * area. This is only done after a deletion takes place
+ *
+ * 
+ *
+ *
+ * TODO UPDATE
  */
 static void realign_data_area(stack_data_area_t* area){
 	//We're completely restarting here, so set this to 0
@@ -300,6 +326,9 @@ void remove_region_from_stack(stack_data_area_t* area, stack_region_t* region){
  * Sweep the stack data area from any unmarked regions
  */
 void sweep_stack_data_area(stack_data_area_t* area){
+	//Did we modify anything?
+	u_int8_t modified = FALSE;
+
 	//What regions are marked for deletion
 	dynamic_array_t marked_for_deletion = dynamic_array_alloc();
 
@@ -310,6 +339,10 @@ void sweep_stack_data_area(stack_data_area_t* area){
 
 		//Not marked, it needs to go
 		if(region->mark == FALSE){
+			//We have modified it
+			modified = TRUE;
+
+			//Add it for deletion
 			dynamic_array_add(&marked_for_deletion, region);
 		}
 	}
@@ -321,7 +354,9 @@ void sweep_stack_data_area(stack_data_area_t* area){
 	}
 
 	//And once all of the deletion is done, we will invoke the stack realigner to fix all of the alignments
-	realign_data_area(area);
+	if(modified == TRUE){
+		realign_data_area(area);
+	}
 
 	//Scrap the array
 	dynamic_array_dealloc(&marked_for_deletion);
