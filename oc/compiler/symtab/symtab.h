@@ -126,6 +126,8 @@ struct symtab_function_record_t{
 	u_int8_t defined;
 	//Has it ever been called?
 	u_int8_t called;
+	//Will this function ever call another function(direct or indirect)
+	u_int8_t calls;
 	//Has this function been inlined?
 	u_int8_t inlined;
 	//Does this function contain stack params?

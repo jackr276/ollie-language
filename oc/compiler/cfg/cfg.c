@@ -344,6 +344,19 @@ static inline void delete_all_unreachable_blocks(dynamic_array_t* function_block
 
 
 /**
+ * Very important nuance: If a function calls *any* other function at all, then we need to make
+ * aboslutely sure that this function has some alignment when it enters. System V ABI requires
+ * that we have 16 byte alignment before *any* call direct or indirect. Since functions
+ * naturally enter with only 8 byte alignment(due to how call subtracts 8 from RSP), if we are
+ * going to call any other functions, then we need to at least have a subq $8, %rsp at the start
+ * to fully align
+ */
+static inline void insert_alignment_stack_if_needed(symtab_function_record_t* function_record){
+
+}
+
+
+/**
  * A helper function that makes a new block id. This ensures we have an atomically
  * increasing block ID
  */
@@ -9873,6 +9886,13 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	 * statements to delete
 	 */
 	delete_all_unreachable_blocks(current_function_blocks);
+
+	/**
+	 * If a function calls *any* other function at all, we are mandated to have a stack data
+	 * area because we must guarantee alignment. Remember that when we enter into a function,
+	 * it is aligned at 8 bytes not 16 bytes because of the way that call works
+	 */
+	insert_alignment_stack_if_needed(func_record);
 
 	/**
 	 * Let's now use the helper to compute all of the USE/DEF sets for each
