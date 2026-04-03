@@ -5434,15 +5434,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		instruction_t* copy_statement = emit_memory_copy_instruction(left_hand_var, final_op1, parent_node->optional_storage.bytes_to_copy);
 
 		//Get it into the block
-		add_statement(current_block, copy_statement);
-		
-		/**
-		 * Since we are performing a memory copy instruction, this function
-		 * is required to perform an initial alignment when we enter it. If we did
-		 * not align this way, then we would get segmentation faults when trying to execute
-		 * SIMD instructions
-		 */
-		current_function->requires_initial_alignment = TRUE;
+		add_statement(current_block, copy_statement);		
 
 	/**
 	 * Do we have a pre-loaded up store statement ready for us to go? If so, then
@@ -6305,13 +6297,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 			//Now we can emit the indirect call statement
 			function_call_statement = emit_indirect_function_call_instruction(function_pointer_var, function_assignee);
-
-			/**
-			 * This function performs an indirect call. We do not and can not know what the function 
-			 * that results from this call is. As such, we need to be safe and now assume that we require an 
-			 * initial alignment for this function
-			 */
-			current_function->requires_initial_alignment = TRUE;
 
 			break;
 
@@ -10590,14 +10575,6 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 
 		//Get it into the block
 		add_statement(current_block, copy_statement);
-
-		/**
-		 * Since we are performing a memory copy instruction, this function
-		 * is required to perform an initial alignment when we enter it. If we did
-		 * not align this way, then we would get segmentation faults when trying to execute
-		 * SIMD instructions
-		 */
-		current_function->requires_initial_alignment = TRUE;
 
 	/**
 	 * Is the left hand variable a regular variable or is it a stack address variable? If it's a

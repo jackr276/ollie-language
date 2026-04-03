@@ -1773,6 +1773,13 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		//Store the variable too
 		function_call_node->variable = function_pointer_variable;
 
+		/**
+		 * This function performs an indirect call. We do not and can not know what the function 
+		 * that results from this call is. As such, we need to be safe and now assume that we require an 
+		 * initial alignment for this function
+		 */
+		current_function->requires_initial_alignment = TRUE;
+
 	//This means that they're both NULL. We'll need to throw an error here
 	} else{
 		sprintf(info, "\"%s\" is not currently defined as a function or function pointer", function_name.string);
@@ -2883,6 +2890,14 @@ loop_end:
 
 			//Store this for down the road - how many bytes do we need to copy
 			asn_expr_node->optional_storage.bytes_to_copy = final_type->type_size;
+
+			/**
+			 * Since we are performing a memory copy instruction, this function
+			 * is required to perform an initial alignment when we enter it. If we did
+			 * not align this way, then we would get segmentation faults when trying to execute
+			 * SIMD instructions
+			 */
+			current_function->requires_initial_alignment = TRUE;
 		}
 
 		//Otherwise the overall type is the final type
@@ -11490,6 +11505,14 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 
 		//Store the bytes that we need to copy here
 		let_stmt_node->optional_storage.bytes_to_copy = type_spec->type_size; 
+
+		/**
+		 * Since we are performing a memory copy instruction, this function
+		 * is required to perform an initial alignment when we enter it. If we did
+		 * not align this way, then we would get segmentation faults when trying to execute
+		 * SIMD instructions
+		 */
+		current_function->requires_initial_alignment = TRUE;
 	}
 
 	//Otherwise it worked, so we'll add it in as a child
@@ -13481,8 +13504,10 @@ front_end_results_package_t* parse(compiler_options_t* options){
 		//Finalize the function symtab
 		finalize_function_symtab(function_symtab);
 
-		//Validate that we have no recursive & inlined functions. If this fails, 
-		//we force to an error
+		/**
+		 * Validate that we have no recursive & inlined functions. If this fails, 
+		 * we force to an error
+		 */
 		if(validate_inlined_functions_are_non_revursive(function_symtab) == FAILURE){
 			prog->ast_node_type = AST_NODE_TYPE_ERR_NODE;
 		}
