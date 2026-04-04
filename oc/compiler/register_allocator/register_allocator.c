@@ -1045,6 +1045,9 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 			//destination before the use in this one case
 			case PXOR_CLEAR:
 			case XORQ_CLEAR:
+			case XORL_CLEAR:
+			case XORW_CLEAR:
+			case XORB_CLEAR:
 				//First the def
 				add_live_range_to_def_set(current->destination_register->associated_live_range, basic_block);
 
@@ -2157,6 +2160,13 @@ static void precolor_instruction(instruction_t* instruction){
 			//The source register for a division must be in RAX
 			instruction->source_register2->associated_live_range->reg.gen_purpose = RAX;
 
+			/**
+			 * We've hijacked the address_calc_reg1 register for the higher order bits in
+			 * our division instruction. These higher order bits will always be stored in
+			 * RDX
+			 */
+			instruction->address_calc_reg1->associated_live_range->reg.gen_purpose = RDX;
+
 			//The first destination register is the quotient, and is in RAX
 			instruction->destination_register->associated_live_range->reg.gen_purpose = RAX;
 
@@ -2320,6 +2330,9 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 			 */
 			case PXOR_CLEAR:
 			case XORQ_CLEAR:
+			case XORL_CLEAR:
+			case XORW_CLEAR:
+			case XORB_CLEAR:
 				//Do the def first(very unique)
 				add_live_range_to_def_set(cursor->destination_register->associated_live_range, block);
 
