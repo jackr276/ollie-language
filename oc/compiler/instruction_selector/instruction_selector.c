@@ -3144,250 +3144,231 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 *
 	 * These may seem trivial, but this is not so uncommon when we're doing address calculation
 	 */
-
-	//Shove these all into an array for selecting
-	instruction_t* instructions[3] = {window->instruction1, window->instruction2, window->instruction3};
-
 	//The current instruction pointer
-	instruction_t* current_instruction;
+	instruction_t* current_instruction = window->instruction1;
 
-	//If we have a bin op with const statement, we have an opportunity
-	for(u_int16_t i = 0; i < 3; i++){
-		//Grab the current instruction out
-		current_instruction = instructions[i];
+	/**
+	 * We have a chance to do some optimizations if we see a BIN_OP_WITH_CONST. It will
+	 * have been primed for us by the constant folding portion. Now, we'll search and see
+	 * if we're able to simplify some instructions
+	 */
+	if(current_instruction->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
+		//Grab this out for convenience
+		three_addr_const_t* constant = current_instruction->op1_const;
 
-		//Skip if NULL
-		if(current_instruction == NULL){
-			continue;
-		}
-
-		/**
-		 * We have a chance to do some optimizations if we see a BIN_OP_WITH_CONST. It will
-		 * have been primed for us by the constant folding portion. Now, we'll search and see
-		 * if we're able to simplify some instructions
-		 */
-		if(current_instruction->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
-			//If it isn't in the list here, we won't be considering it and as such shouldn't waste time
-			//processing
+		//If this is 0, then we can optimize
+		if(is_constant_value_zero(constant) == TRUE){
+			//Switch based on current instruction's op
 			switch(current_instruction->op){
+				//If we made it out of this conditional with the flag being set, we can simplify.
+				//If this is the case, then this just becomes a regular assignment expression
 				case PLUS:
-				case R_SHIFT:
-				case L_SHIFT:
 				case MINUS:
-				case STAR:
-				case F_SLASH:
-				case MOD:
+				case L_SHIFT:
+				case R_SHIFT:
+					//We're just assigning here
+					current_instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+					//Wipe the values out
+					current_instruction->op1_const = NULL;
+
+					//Also scrap the op
+					current_instruction->op = BLANK;
+
+					//We changed something
+					changed = TRUE;
+
 					break;
+
+				case STAR:
+					//Now we're assigning a const
+					current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+					//The constant is still the same thing(0), let's just wipe out the ops
+					if(current_instruction->op1 != NULL){
+						current_instruction->op1->use_count--;
+						current_instruction->op1 = NULL;
+					}
+
+					//We changed something
+					changed = TRUE;
+
+					break;
+
+				//Just do nothing here
 				default:
-					continue;
+					break;
 			}
 
-			//Grab this out for convenience
-			three_addr_const_t* constant = current_instruction->op1_const;
-
-			//If this is 0, then we can optimize
-			if(is_constant_value_zero(constant) == TRUE){
-				//Switch based on current instruction's op
-				switch(current_instruction->op){
-					//If we made it out of this conditional with the flag being set, we can simplify.
-					//If this is the case, then this just becomes a regular assignment expression
-					case PLUS:
-					case MINUS:
-					case L_SHIFT:
-					case R_SHIFT:
-						//We're just assigning here
-						current_instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
-						//Wipe the values out
-						current_instruction->op1_const = NULL;
-
-						//Also scrap the op
-						current_instruction->op = BLANK;
-
-						//We changed something
-						changed = TRUE;
-
-						break;
-
-					case STAR:
-						//Now we're assigning a const
-						current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-
-						//The constant is still the same thing(0), let's just wipe out the ops
-						if(current_instruction->op1 != NULL){
-							current_instruction->op1->use_count--;
-							current_instruction->op1 = NULL;
-						}
-
-						//We changed something
-						changed = TRUE;
-
-						break;
-
-					//Just do nothing here
-					default:
-						break;
-				}
-
-			/**
-			 * Notice how we do NOT mark any change as true here. This is because, even though yes we
-			 * did change the instructions, the sliding window itself did not change at all. This is
-			 * an important note as if we did mark a change, there are cases where this could
-			 * cause an infinite loop
-			 *
-			 * What if this is a 1? Well if it is, we can transform this statement into an inc or dec statement
-			 * if it's addition or subtraction, or we can turn it into a simple assignment statement if it's multiplication
-			 * or division
-			 */
-			} else if(is_constant_value_one(constant) == TRUE){
-				//Switch based on the op in the current instruction
-				switch(current_instruction->op){
-					/**
-					* If it's an addition statement, turn it into an inc statement
-					*
-				 	* NOTE: for addition and subtraction, since we'll be turning this into inc/dec statements, we'll
-				 	* want to first make sure that the assignees are not temporary variables. If they are temporary variables,
-				 	* then doing this would mess the whole operation up
-				 	*/
-					case PLUS:
-						//If it's temporary, we jump out
-						if(current_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
-							break;
-						}
-
-						//Now turn it into an inc statement
-						current_instruction->statement_type = THREE_ADDR_CODE_INC_STMT;
-						//Wipe the values out
-						current_instruction->op1_const = NULL;
-						current_instruction->op = BLANK;
-						//We changed something
-						changed = TRUE;
-
-						break;
-
-					case MINUS:
-						//If it's temporary, we jump out
-						if(current_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
-							break;
-						}
-
-						//Change what the class is
-						current_instruction->statement_type = THREE_ADDR_CODE_DEC_STMT;
-						//Wipe the values out
-						current_instruction->op1_const = NULL;
-						current_instruction->op = BLANK;
-						//We changed something
-						changed = TRUE;
-
-						break;
-
-					//These are both the same - handle a 1 multiply, 1 divide
-					case STAR:
-					case F_SLASH:
-						//Change it to a regular assignment statement
-						current_instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
-						//Wipe the operator out
-						current_instruction->op1_const = NULL;
-						current_instruction->op = BLANK;
-						//We changed something
-						changed = TRUE;
-
-						break;
-
-					//Modulo by 1 will always result in 0
-					case MOD:
-						//Change it to a regular assignment statement
-						current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-
-						//This is blank
-						current_instruction->op = BLANK;
-
-						//We no longer even need our op1
-						if(current_instruction->op1 != NULL){
-							current_instruction->op1->use_count--;
-							current_instruction->op1 = NULL;
-						}
-
-						//We can modify op1 const to just be 0 now. This is lazy but it
-						//works, we'll just 0 out all 64 bits
-						current_instruction->op1_const->constant_value.signed_long_constant = 0;
-
-						//We changed something
-						changed = TRUE;
-
-					//Just bail out
-					default:
-						break;
-				}
-
-			/**
-			 * What if we have a power of 2 here? For any kind of multiplication or division, this can
-			 * be optimized into a left or right shift if we have a compatible type(not a float) *and*
-			 * the assignee is equal to the variable being multiplied
-			 */
-			} else if(is_constant_power_of_2(constant) == TRUE){
+		/**
+		 * Notice how we do NOT mark any change as true here. This is because, even though yes we
+		 * did change the instructions, the sliding window itself did not change at all. This is
+		 * an important note as if we did mark a change, there are cases where this could
+		 * cause an infinite loop
+		 *
+		 * What if this is a 1? Well if it is, we can transform this statement into an inc or dec statement
+		 * if it's addition or subtraction, or we can turn it into a simple assignment statement if it's multiplication
+		 * or division
+		 */
+		} else if(is_constant_value_one(constant) == TRUE){
+			//Switch based on the op in the current instruction
+			switch(current_instruction->op){
 				/**
-				 * Multiplication and/or division are the only things that could benefit from this
-				 */
-				switch(current_instruction->op){
-					case STAR:
+				* If it's an addition statement, turn it into an inc statement
+				*
+				* NOTE: for addition and subtraction, since we'll be turning this into inc/dec statements, we'll
+				* want to first make sure that the assignees are not temporary variables. If they are temporary variables,
+				* then doing this would mess the whole operation up
+				*/
+				case PLUS:
+					//If it's temporary, we jump out
+					if(current_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
+						break;
+					}
+
+					//Now turn it into an inc statement
+					current_instruction->statement_type = THREE_ADDR_CODE_INC_STMT;
+					//Wipe the values out
+					current_instruction->op1_const = NULL;
+					current_instruction->op = BLANK;
+					//We changed something
+					changed = TRUE;
+
+					break;
+
+				case MINUS:
+					//If it's temporary, we jump out
+					if(current_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
+						break;
+					}
+
+					//Change what the class is
+					current_instruction->statement_type = THREE_ADDR_CODE_DEC_STMT;
+					//Wipe the values out
+					current_instruction->op1_const = NULL;
+					current_instruction->op = BLANK;
+					//We changed something
+					changed = TRUE;
+
+					break;
+
+				//These are both the same - handle a 1 multiply, 1 divide
+				case STAR:
+				case F_SLASH:
+					//Change it to a regular assignment statement
+					current_instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+					//Wipe the operator out
+					current_instruction->op1_const = NULL;
+					current_instruction->op = BLANK;
+					//We changed something
+					changed = TRUE;
+
+					break;
+
+				//Modulo by 1 will always result in 0
+				case MOD:
+					//Change it to a regular assignment statement
+					current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+					//This is blank
+					current_instruction->op = BLANK;
+
+					//We no longer even need our op1
+					if(current_instruction->op1 != NULL){
+						current_instruction->op1->use_count--;
+						current_instruction->op1 = NULL;
+					}
+
+					//We can modify op1 const to just be 0 now. This is lazy but it
+					//works, we'll just 0 out all 64 bits
+					current_instruction->op1_const->constant_value.signed_long_constant = 0;
+
+					//We changed something
+					changed = TRUE;
+
+				//Just bail out
+				default:
+					break;
+			}
+
+		/**
+		 * What if we have a power of 2 here? For any kind of multiplication or division, this can
+		 * be optimized into a left or right shift if we have a compatible type(not a float) *and*
+		 * the assignee is equal to the variable being multiplied
+		 */
+		} else if(is_constant_power_of_2(constant) == TRUE){
+			/**
+			 * Multiplication and/or division are the only things that could benefit from this
+			 */
+			switch(current_instruction->op){
+				case STAR:
+					/**
+					 * If the assignee and op1 are equal(which they almost always should be) - then we are set to go here. If not then
+					 * we'll just leave this for the eventual helper rule to handle
+					 */
+					if(variables_valid_shift_optimization(current_instruction->assignee, current_instruction->op1) == TRUE){
+						//Multiplication is a left shift
+						current_instruction->op = L_SHIFT;
+						//Update the constant with its log2 value
+						update_constant_with_log2_value(current_instruction->op1_const);
+
 						/**
-						 * If the assignee and op1 are equal(which they almost always should be) - then we are set to go here. If not then
-						 * we'll just leave this for the eventual helper rule to handle
+						 * IMPORTANT - if we a have a temp variable here, since we're now using a shift,
+						 * we'll need to wipe this temp var away and instead use the op1 temp var for everything
 						 */
-						if(variables_valid_shift_optimization(current_instruction->assignee, current_instruction->op1) == TRUE){
-							//Multiplication is a left shift
-							current_instruction->op = L_SHIFT;
-							//Update the constant with its log2 value
-							update_constant_with_log2_value(current_instruction->op1_const);
-
-							/**
-							 * IMPORTANT - if we a have a temp variable here, since we're now using a shift,
-							 * we'll need to wipe this temp var away and instead use the op1 temp var for everything
-							 */
-							if(current_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
-								replace_all_variables_after_instruction(current_instruction->assignee, current_instruction->op1, current_instruction);
-							}
-
-							//We changed something
-							changed = TRUE;
+						if(current_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
+							replace_all_variables_after_instruction(current_instruction->assignee, current_instruction->op1, current_instruction);
 						}
 
-						break;
+						//We changed something
+						changed = TRUE;
+					}
 
-					case F_SLASH:
+					break;
+
+				case F_SLASH:
+					/**
+					 * If we are able to perform this optimization, now is when we will do so. If we are not, then we will just leave
+					 * everything as is for the eventual selector rule to take care of it
+					 */
+					if(variables_valid_shift_optimization(current_instruction->assignee, current_instruction->op1) == TRUE){
+						//Division is a right shift
+						current_instruction->op = R_SHIFT;
+						//Update the constant with its log2 value
+						update_constant_with_log2_value(current_instruction->op1_const);
+
 						/**
-						 * If we are able to perform this optimization, now is when we will do so. If we are not, then we will just leave
-						 * everything as is for the eventual selector rule to take care of it
+						 * IMPORTANT - if we have a temp variable here, since we're now using
+						 * a shift, we'll need to wipe this temp var away and instead use the op1
+						 * temp var for everything
 						 */
-						if(variables_valid_shift_optimization(current_instruction->assignee, current_instruction->op1) == TRUE){
-							//Division is a right shift
-							current_instruction->op = R_SHIFT;
-							//Update the constant with its log2 value
-							update_constant_with_log2_value(current_instruction->op1_const);
-
-							/**
-							 * IMPORTANT - if we have a temp variable here, since we're now using
-							 * a shift, we'll need to wipe this temp var away and instead use the op1
-							 * temp var for everything
-							 */
-							if(current_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
-								replace_all_variables_after_instruction(current_instruction->assignee, current_instruction->op1, current_instruction);
-							}
-
-							//We changed something
-							changed = TRUE;
+						if(current_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
+							replace_all_variables_after_instruction(current_instruction->assignee, current_instruction->op1, current_instruction);
 						}
 
-						break;
+						//We changed something
+						changed = TRUE;
+					}
 
-					case MOD:
+					break;
+
+				case MOD:
+					/**
+					 * If we are able to perform this optimization, now is when we will do so. If we are not, then we will just leave
+					 * everything as is for the eventual selector rule to take care of it
+					 *
+					 * This is a little more involved then the way that we handle division so we'll break this out into an inlined function
+					 */
+					if(variables_valid_shift_optimization(current_instruction->assignee, current_instruction->op1) == TRUE){
+	//					optimize_mod_by_power_of_2_into_shift(window, current_instruction);
+
 						printf("FOUND FOR MOD\n\n\n\n\n");
-						break;
+					}
 
-					//Do nothing
-					default:
-						break;
-				}
+					break;
+
+				//Do nothing
+				default:
+					break;
 			}
 		}
 	}
