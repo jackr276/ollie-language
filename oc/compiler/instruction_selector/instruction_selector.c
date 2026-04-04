@@ -1513,6 +1513,22 @@ static inline u_int8_t variables_valid_shift_optimization(three_addr_var_t* dest
 }
 
 
+/**
+ * Optimize a modulus by power of 2 instruction into a shift instruction. This works slightly
+ * differently for signed and unsigned operations but the principle is the same. If we are
+ * say modding by 8, if there is going to be a remainder it will be in the first 3 bytes. So,
+ * we can just extract the first 3 bytes using an AND operation and avoid doing any division
+ * entirely
+ *
+ *
+ * NOTE: We assume that instruction1 is the one we are dealing with here
+ */
+static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
+	//Extract the mod instruction
+	instruction_t* mod_instruction = window->instruction1;
+
+
+}
 
 
 /**
@@ -3145,21 +3161,21 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * These may seem trivial, but this is not so uncommon when we're doing address calculation
 	 */
 	//The current instruction pointer
-	instruction_t* current_instruction = window->instruction1;
+	instruction_t* first_instruction = window->instruction1;
 
 	/**
 	 * We have a chance to do some optimizations if we see a BIN_OP_WITH_CONST. It will
 	 * have been primed for us by the constant folding portion. Now, we'll search and see
 	 * if we're able to simplify some instructions
 	 */
-	if(current_instruction->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
+	if(first_instruction->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
 		//Grab this out for convenience
-		three_addr_const_t* constant = current_instruction->op1_const;
+		three_addr_const_t* constant = first_instruction->op1_const;
 
 		//If this is 0, then we can optimize
 		if(is_constant_value_zero(constant) == TRUE){
 			//Switch based on current instruction's op
-			switch(current_instruction->op){
+			switch(first_instruction->op){
 				//If we made it out of this conditional with the flag being set, we can simplify.
 				//If this is the case, then this just becomes a regular assignment expression
 				case PLUS:
@@ -3167,12 +3183,12 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				case L_SHIFT:
 				case R_SHIFT:
 					//We're just assigning here
-					current_instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+					first_instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
 					//Wipe the values out
-					current_instruction->op1_const = NULL;
+					first_instruction->op1_const = NULL;
 
 					//Also scrap the op
-					current_instruction->op = BLANK;
+					first_instruction->op = BLANK;
 
 					//We changed something
 					changed = TRUE;
@@ -3181,12 +3197,12 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 				case STAR:
 					//Now we're assigning a const
-					current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+					first_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
 					//The constant is still the same thing(0), let's just wipe out the ops
-					if(current_instruction->op1 != NULL){
-						current_instruction->op1->use_count--;
-						current_instruction->op1 = NULL;
+					if(first_instruction->op1 != NULL){
+						first_instruction->op1->use_count--;
+						first_instruction->op1 = NULL;
 					}
 
 					//We changed something
@@ -3211,7 +3227,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		 */
 		} else if(is_constant_value_one(constant) == TRUE){
 			//Switch based on the op in the current instruction
-			switch(current_instruction->op){
+			switch(first_instruction->op){
 				/**
 				* If it's an addition statement, turn it into an inc statement
 				*
@@ -3221,15 +3237,15 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				*/
 				case PLUS:
 					//If it's temporary, we jump out
-					if(current_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
+					if(first_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
 						break;
 					}
 
 					//Now turn it into an inc statement
-					current_instruction->statement_type = THREE_ADDR_CODE_INC_STMT;
+					first_instruction->statement_type = THREE_ADDR_CODE_INC_STMT;
 					//Wipe the values out
-					current_instruction->op1_const = NULL;
-					current_instruction->op = BLANK;
+					first_instruction->op1_const = NULL;
+					first_instruction->op = BLANK;
 					//We changed something
 					changed = TRUE;
 
@@ -3237,15 +3253,15 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 				case MINUS:
 					//If it's temporary, we jump out
-					if(current_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
+					if(first_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
 						break;
 					}
 
 					//Change what the class is
-					current_instruction->statement_type = THREE_ADDR_CODE_DEC_STMT;
+					first_instruction->statement_type = THREE_ADDR_CODE_DEC_STMT;
 					//Wipe the values out
-					current_instruction->op1_const = NULL;
-					current_instruction->op = BLANK;
+					first_instruction->op1_const = NULL;
+					first_instruction->op = BLANK;
 					//We changed something
 					changed = TRUE;
 
@@ -3255,10 +3271,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				case STAR:
 				case F_SLASH:
 					//Change it to a regular assignment statement
-					current_instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+					first_instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
 					//Wipe the operator out
-					current_instruction->op1_const = NULL;
-					current_instruction->op = BLANK;
+					first_instruction->op1_const = NULL;
+					first_instruction->op = BLANK;
 					//We changed something
 					changed = TRUE;
 
@@ -3267,20 +3283,20 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				//Modulo by 1 will always result in 0
 				case MOD:
 					//Change it to a regular assignment statement
-					current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+					first_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
 					//This is blank
-					current_instruction->op = BLANK;
+					first_instruction->op = BLANK;
 
 					//We no longer even need our op1
-					if(current_instruction->op1 != NULL){
-						current_instruction->op1->use_count--;
-						current_instruction->op1 = NULL;
+					if(first_instruction->op1 != NULL){
+						first_instruction->op1->use_count--;
+						first_instruction->op1 = NULL;
 					}
 
 					//We can modify op1 const to just be 0 now. This is lazy but it
 					//works, we'll just 0 out all 64 bits
-					current_instruction->op1_const->constant_value.signed_long_constant = 0;
+					first_instruction->op1_const->constant_value.signed_long_constant = 0;
 
 					//We changed something
 					changed = TRUE;
@@ -3299,24 +3315,24 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			/**
 			 * Multiplication and/or division are the only things that could benefit from this
 			 */
-			switch(current_instruction->op){
+			switch(first_instruction->op){
 				case STAR:
 					/**
 					 * If the assignee and op1 are equal(which they almost always should be) - then we are set to go here. If not then
 					 * we'll just leave this for the eventual helper rule to handle
 					 */
-					if(variables_valid_shift_optimization(current_instruction->assignee, current_instruction->op1) == TRUE){
+					if(variables_valid_shift_optimization(first_instruction->assignee, first_instruction->op1) == TRUE){
 						//Multiplication is a left shift
-						current_instruction->op = L_SHIFT;
+						first_instruction->op = L_SHIFT;
 						//Update the constant with its log2 value
-						update_constant_with_log2_value(current_instruction->op1_const);
+						update_constant_with_log2_value(first_instruction->op1_const);
 
 						/**
 						 * IMPORTANT - if we a have a temp variable here, since we're now using a shift,
 						 * we'll need to wipe this temp var away and instead use the op1 temp var for everything
 						 */
-						if(current_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
-							replace_all_variables_after_instruction(current_instruction->assignee, current_instruction->op1, current_instruction);
+						if(first_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
+							replace_all_variables_after_instruction(first_instruction->assignee, first_instruction->op1, first_instruction);
 						}
 
 						//We changed something
@@ -3330,19 +3346,19 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					 * If we are able to perform this optimization, now is when we will do so. If we are not, then we will just leave
 					 * everything as is for the eventual selector rule to take care of it
 					 */
-					if(variables_valid_shift_optimization(current_instruction->assignee, current_instruction->op1) == TRUE){
+					if(variables_valid_shift_optimization(first_instruction->assignee, first_instruction->op1) == TRUE){
 						//Division is a right shift
-						current_instruction->op = R_SHIFT;
+						first_instruction->op = R_SHIFT;
 						//Update the constant with its log2 value
-						update_constant_with_log2_value(current_instruction->op1_const);
+						update_constant_with_log2_value(first_instruction->op1_const);
 
 						/**
 						 * IMPORTANT - if we have a temp variable here, since we're now using
 						 * a shift, we'll need to wipe this temp var away and instead use the op1
 						 * temp var for everything
 						 */
-						if(current_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
-							replace_all_variables_after_instruction(current_instruction->assignee, current_instruction->op1, current_instruction);
+						if(first_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
+							replace_all_variables_after_instruction(first_instruction->assignee, first_instruction->op1, first_instruction);
 						}
 
 						//We changed something
@@ -3358,8 +3374,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					 *
 					 * This is a little more involved then the way that we handle division so we'll break this out into an inlined function
 					 */
-					if(variables_valid_shift_optimization(current_instruction->assignee, current_instruction->op1) == TRUE){
-	//					optimize_mod_by_power_of_2_into_shift(window, current_instruction);
+					if(variables_valid_shift_optimization(first_instruction->assignee, first_instruction->op1) == TRUE){
+						optimize_mod_by_power_of_2(window);
 
 						printf("FOUND FOR MOD\n\n\n\n\n");
 					}
