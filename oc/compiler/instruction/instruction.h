@@ -48,6 +48,18 @@ typedef enum {
 	GLOBAL_VAR_INITIALIZER_STRING //A string constant
 } global_variable_initializer_type_t;
 
+/**
+ * Are we forcing something to be signed or unsigned
+ * regardless of the assignee type? This is mainly used
+ * for shift operations but I can see it potentially
+ * being useful elsewhere so we'll build this out
+ */
+typedef enum {
+	FORCED_SIGNEDNESS_DONT_CARE=0, //Default case
+	FORCED_UNSIGNED,
+	FORCED_SIGNED
+} forced_signedness_type_t;
+
 
 /**
  * What type of variable is this? Variables
@@ -308,6 +320,8 @@ struct instruction_t{
 		three_addr_var_t* error_assignee;
 		//Store the byte amount that we want to copy by
 		u_int64_t byte_amount_to_copy;
+		//Signedness forcing - used specifically for shifting
+		forced_signedness_type_t forced_signedness;
 	} optional_storage;
 	//Generic parameter list - could be used for phi functions or function calls
 	dynamic_array_t parameters;

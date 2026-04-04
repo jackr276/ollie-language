@@ -1593,6 +1593,10 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 	 *  cycles to run. This is ultimately much faster
 	 */
 	if(is_type_signed(mod_instruction->assignee->type) == TRUE){
+
+
+
+
 		printf("TODO NOT IMPLEMENTED\n");
 		exit(1);
 
@@ -5099,7 +5103,26 @@ static three_addr_var_t* emit_byte_copy_of_variable(three_addr_var_t* source){
  */
 static void handle_left_shift_instruction(instruction_t* instruction){
 	//Is this a signed or unsigned instruction?
-	u_int8_t is_signed = is_type_signed(instruction->assignee->type);
+	u_int8_t is_signed;
+
+	/**
+	 * We have the option to force signedness here. Most of the time
+	 * this will not happen, but if it does we will action
+	 * it here
+	 */
+	switch(instruction->optional_storage.forced_signedness){
+		case FORCED_SIGNEDNESS_DONT_CARE:
+			is_signed = is_type_signed(instruction->assignee->type);
+			break;
+
+		case FORCED_SIGNED:
+			is_signed = TRUE;
+			break;
+		
+		case FORCED_UNSIGNED:
+			is_signed = FALSE;
+			break;
+	}
 
 	//We'll also need the size of the variable
 	variable_size_t size = get_type_size(instruction->assignee->type);
@@ -5141,11 +5164,13 @@ static void handle_left_shift_instruction(instruction_t* instruction){
 	
 	//We can have an immediate value or we can have a register
 	if(instruction->op2 != NULL){
-		//If this is a function parameter, we'll need to emit a copy instruction
-		//here for the eventual precolorer to use. If we don't do this, the precolorer
-		//will clash because it doesn't know whether to use the parameter register or
-		//the %ecx register that shift operands must be in. This is a unique case for shifting
-		//due to a quirk of x86
+		/**
+		 * If this is a function parameter, we'll need to emit a copy instruction
+		 * here for the eventual precolorer to use. If we don't do this, the precolorer
+		 * will clash because it doesn't know whether to use the parameter register or
+		 * the %ecx register that shift operands must be in. This is a unique case for shifting
+		 * due to a quirk of x86
+		 */
 		if(instruction->op2->class_relative_parameter_order > 0){
 			//Move it on over here
 			instruction_t* copy_instruction = emit_move_instruction(emit_temp_var(instruction->op2->type), instruction->op2);
@@ -5172,7 +5197,26 @@ static void handle_left_shift_instruction(instruction_t* instruction){
  */
 static void handle_right_shift_instruction(instruction_t* instruction){
 	//Is this a signed or unsigned instruction?
-	u_int8_t is_signed = is_type_signed(instruction->assignee->type);
+	u_int8_t is_signed;
+
+	/**
+	 * We have the option to force signedness here. Most of the time
+	 * this will not happen, but if it does we will action
+	 * it here
+	 */
+	switch(instruction->optional_storage.forced_signedness){
+		case FORCED_SIGNEDNESS_DONT_CARE:
+			is_signed = is_type_signed(instruction->assignee->type);
+			break;
+
+		case FORCED_SIGNED:
+			is_signed = TRUE;
+			break;
+		
+		case FORCED_UNSIGNED:
+			is_signed = FALSE;
+			break;
+	}
 
 	//We'll also need the size of the variable
 	variable_size_t size = get_type_size(instruction->assignee->type);
@@ -5214,11 +5258,13 @@ static void handle_right_shift_instruction(instruction_t* instruction){
 
 	//We can have an immediate value or we can have a register
 	if(instruction->op2 != NULL){
-		//If this is a function parameter, we'll need to emit a copy instruction
-		//here for the eventual precolorer to use. If we don't do this, the precolorer
-		//will clash because it doesn't know whether to use the parameter register or
-		//the %ecx register that shift operands must be in. This is a unique case for shifting
-		//due to a quirk of x86
+		/**
+		 * If this is a function parameter, we'll need to emit a copy instruction
+		 * here for the eventual precolorer to use. If we don't do this, the precolorer
+		 * will clash because it doesn't know whether to use the parameter register or
+		 * the %ecx register that shift operands must be in. This is a unique case for shifting
+		 * due to a quirk of x86
+		 */
 		if(instruction->op2->class_relative_parameter_order > 0){
 			//Move it on over here
 			instruction_t* copy_instruction = emit_move_instruction(emit_temp_var(instruction->op2->type), instruction->op2);
