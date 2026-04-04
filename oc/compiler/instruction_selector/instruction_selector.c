@@ -6062,62 +6062,46 @@ static void handle_division_instruction(instruction_window_t* window){
 
 
 /**
- * Handle an SSE multiplication instruction. By the time we get here, we already
- * know that we're dealing with an SSE operation. This instruction will generate
- * converting moves if such moves are required
+ * Handle a signed modulus operation
+ *
+ * t3 <- t4 % t5
+ *
+ * Will become:
+ * movl t4, t6 (rax)
+ * cltd
+ * idivl t5
+ * t3 <- t7 (rdx has remainder)
+ *
+ * As such, this will generate additional instructions for us, making it not
+ * a "single instruction" pattern
+ *
+ * NOTE: We guarantee that the instruction we're after is always the first
+ * instruction in the window
  */
-static inline void handle_sse_division_instruction(instruction_t* instruction){
-	//Go based on what the assignee's type is
-	switch(instruction->assignee->variable_size){
-		case SINGLE_PRECISION:
-			instruction->instruction_type = DIVSS;
-			break;
-		case DOUBLE_PRECISION:
-			instruction->instruction_type = DIVSD;
-			break;
-		default:
-			printf("Fatal internal compiler error: invalid assignee size for SSE division instruction\n");
-	}
+static inline void handle_signed_modulus(instruction_window_t* window){
 
-	//Handle any/all converting moves that are going to be needed here
-	if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
-		instruction->op2 = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
-	}
-
-	//The source register is the op1 and the destination is the assignee. There is never a case where we
-	//will have a constant source, it is not possible for sse operations
-	instruction->destination_register = instruction->assignee;
-	instruction->source_register = instruction->op2;
 }
 
 
 /**
- * Handle an SSE multiplication instruction. By the time we get here, we already
- * know that we're dealing with an SSE operation. This instruction will generate
- * converting moves if such moves are required
+ * Handle an unsigned modulus operation
+ *
+ * t3 <- t4 % t5
+ *
+ * Will become:
+ * movl t4, t6 (rax)
+ * xorl %edx
+ * divl t5
+ * t3 <- t7 (rdx has remainder)
+ *
+ * As such, this will generate additional instructions for us, making it not
+ * a "single instruction" pattern
+ *
+ * NOTE: We guarantee that the instruction we're after is always the first
+ * instruction in the window
  */
-static inline void handle_sse_multiplication_instruction(instruction_t* instruction){
-	//Go based on what the assignee's type is
-	switch(instruction->assignee->variable_size){
-		case SINGLE_PRECISION:
-			instruction->instruction_type = MULSS;
-			break;
-		case DOUBLE_PRECISION:
-			instruction->instruction_type = MULSD;
-			break;
-		default:
-			printf("Fatal internal compiler error: invalid assignee size for SSE multiplication instruction\n");
-	}
+static inline void handle_unsigned_modulus(instruction_window_t* window){
 
-	//Handle any/all converting moves that are going to be needed here
-	if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
-		instruction->op2 = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
-	}
-
-	//The source register is the op1 and the destination is the assignee. There is never a case where we
-	//will have a constant source, it is not possible for sse operations
-	instruction->destination_register = instruction->assignee;
-	instruction->source_register = instruction->op2;
 }
 
 
@@ -6143,6 +6127,16 @@ static void handle_modulus_instruction(instruction_window_t* window){
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* modulus_instruction = window->instruction1;
 
+	//Signedness is always based on our assignee
+	u_int8_t is_signed = is_type_signed(modulus_instruction->assignee->type);
+
+	//Dynamic dispatch based on what we need
+	if(is_signed == TRUE){
+		handle_signed_modulus(window);
+	} else {
+		handle_unsigned_modulus(window);
+	}
+	
 	//A temp holder for the final second source variable
 	three_addr_var_t* dividend;
 	three_addr_var_t* divisor;
@@ -6164,8 +6158,6 @@ static void handle_modulus_instruction(instruction_window_t* window){
 		dividend = move_to_rax->destination_register;
 	}
 
-	//Let's determine signedness
-	u_int8_t is_signed = is_type_signed(modulus_instruction->assignee->type);
 
 	/**
 	 * For a signed division, the CXXX instruction will 
@@ -6232,6 +6224,66 @@ static void handle_modulus_instruction(instruction_window_t* window){
 
 	//Reconstruct the window starting at the result movement
 	reconstruct_window(window, result_movement);
+}
+
+
+/**
+ * Handle an SSE multiplication instruction. By the time we get here, we already
+ * know that we're dealing with an SSE operation. This instruction will generate
+ * converting moves if such moves are required
+ */
+static inline void handle_sse_division_instruction(instruction_t* instruction){
+	//Go based on what the assignee's type is
+	switch(instruction->assignee->variable_size){
+		case SINGLE_PRECISION:
+			instruction->instruction_type = DIVSS;
+			break;
+		case DOUBLE_PRECISION:
+			instruction->instruction_type = DIVSD;
+			break;
+		default:
+			printf("Fatal internal compiler error: invalid assignee size for SSE division instruction\n");
+	}
+
+	//Handle any/all converting moves that are going to be needed here
+	if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
+		instruction->op2 = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
+	}
+
+	//The source register is the op1 and the destination is the assignee. There is never a case where we
+	//will have a constant source, it is not possible for sse operations
+	instruction->destination_register = instruction->assignee;
+	instruction->source_register = instruction->op2;
+}
+
+
+/**
+ * Handle an SSE multiplication instruction. By the time we get here, we already
+ * know that we're dealing with an SSE operation. This instruction will generate
+ * converting moves if such moves are required
+ */
+static inline void handle_sse_multiplication_instruction(instruction_t* instruction){
+	//Go based on what the assignee's type is
+	switch(instruction->assignee->variable_size){
+		case SINGLE_PRECISION:
+			instruction->instruction_type = MULSS;
+			break;
+		case DOUBLE_PRECISION:
+			instruction->instruction_type = MULSD;
+			break;
+		default:
+			printf("Fatal internal compiler error: invalid assignee size for SSE multiplication instruction\n");
+	}
+
+	//Handle any/all converting moves that are going to be needed here
+	if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
+		instruction->op2 = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
+	}
+
+	//The source register is the op1 and the destination is the assignee. There is never a case where we
+	//will have a constant source, it is not possible for sse operations
+	instruction->destination_register = instruction->assignee;
+	instruction->source_register = instruction->op2;
 }
 
 
@@ -10237,7 +10289,6 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 
 			//Handle modulus
 			case MOD:	
-				//This will generate more than one instruction
 				handle_modulus_instruction(window);
 				return;
 
