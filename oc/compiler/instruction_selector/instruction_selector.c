@@ -3380,6 +3380,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 						break;
 
+					case MOD:
+						printf("FOUND FOR MOD\n\n\n\n\n");
+						break;
+
 					//Do nothing
 					default:
 						break;
