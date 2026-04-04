@@ -6189,6 +6189,7 @@ static inline void handle_unsigned_modulus(instruction_window_t* window){
 	instruction_t* modulus_instruction = window->instruction1;
 
 	three_addr_var_t* dividend;
+	three_addr_var_t* divisor;
 
 	//If we need to convert, we'll do that here
 	if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op1->type) == TRUE){
@@ -6207,6 +6208,51 @@ static inline void handle_unsigned_modulus(instruction_window_t* window){
 		dividend = move_to_rax->destination_register;
 	}
 
+	/**
+	 * Handle all converting moves/constant assignment moves that we need to here
+	 */
+	if(modulus_instruction->op2 != NULL){
+		//Do we need to do a type conversion? If so, we'll do a converting move here
+		if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op2->type) == TRUE){
+			divisor = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op2, modulus_instruction->assignee->type);
+
+		//Otherwise source 2 is just the op2
+		} else {
+			divisor = modulus_instruction->op2;
+		}
+	
+	//Otherwise we'll need a const assignment
+	} else {
+		//Emit the move
+		instruction_t* constant_assignment = emit_constant_move_instruction(emit_temp_var(modulus_instruction->assignee->type), modulus_instruction->op1_const);
+
+		//This goes right in before the mod
+		insert_instruction_before_given(constant_assignment, modulus_instruction);
+
+		//And this now is our divisor
+		divisor = constant_assignment->destination_register;
+	}
+
+	//Now we should have what we need, so we can emit the division instruction
+	instruction_t* division = emit_div_instruction(modulus_instruction->assignee, divisor, dividend, NULL, FALSE);
+	
+	//Store the remainder register here
+	three_addr_var_t* remainder_register = division->destination_register2;
+
+	//Insert this before the original modulus
+	insert_instruction_before_given(division, modulus_instruction);
+
+	//Once we've done all that, we need one final movement operation
+	instruction_t* result_movement = emit_move_instruction(modulus_instruction->assignee, remainder_register);
+
+	//Insert this after the original modulus
+	insert_instruction_after_given(result_movement, modulus_instruction);
+
+	//Finally we'll delete the old modulus instruction, as we no longer need it
+	delete_statement(modulus_instruction);
+
+	//Reconstruct the window starting at the result movement
+	reconstruct_window(window, result_movement);
 }
 
 
@@ -6241,29 +6287,6 @@ static void handle_modulus_instruction(instruction_window_t* window){
 	} else {
 		handle_unsigned_modulus(window);
 	}
-	
-	//A temp holder for the final second source variable
-	three_addr_var_t* dividend;
-	three_addr_var_t* divisor;
-
-	//If we need to convert, we'll do that here
-	if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op1->type) == TRUE){
-		//Let the helper deal with it
-		dividend = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op1, modulus_instruction->assignee->type);
-
-	//Otherwise this can be moved directly
-	} else {
-		//We first need to move the first operand into RAX
-		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(modulus_instruction->op1->type), modulus_instruction->op1);
-
-		//Insert the move to rax before the multiplication instruction
-		insert_instruction_before_given(move_to_rax, modulus_instruction);
-
-		//This is just the destination register here
-		dividend = move_to_rax->destination_register;
-	}
-
-
 }
 
 
