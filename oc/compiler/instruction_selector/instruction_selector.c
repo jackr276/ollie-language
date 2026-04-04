@@ -11,6 +11,7 @@
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
+#include <iso646.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -1587,7 +1588,11 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 	 *  	11110000 & 0000011 = 00000000
 	 *  5.) Finally undo the bias by subtracting it out
 	 *  	00000000 - 00000011 = 00000011 = -3 
-	 
+	 *
+	 *  The entire point of the bias is to make it so that the bitwise and that we do
+	 *  to perform the modulo does not corrupt our data. Notice how if we have just 
+	 *  done the bitwise AND on -19 we would've gotten positive 5 which is not correct
+	 *
 	 *  Yes this does take one instruction and spawn it into many, but we need to remember
 	 *  that the idivX instruction that we would have been using will sometimes take 50+
 	 *  cycles to run. This is ultimately much faster
@@ -1645,6 +1650,39 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		//Goes right after the first shift
 		insert_instruction_after_given(arithmetic_shift, dividend_assignment);
 
+		/**
+		 * Step 3: Add this bias to the original dividend. This gets us a value that 
+		 * is "safe" to perform our bitwise and on to do the actual modulo
+		 */
+		three_addr_var_t* safe_dividend = emit_temp_var(type);
+
+		//This should eventually become a lea
+		instruction_t* addition = emit_binary_operation_instruction(safe_dividend, mod_instruction->op1, PLUS, bias_temp_var);
+
+		//Add this in right after the shift
+		insert_instruction_after_given(addition, arithmetic_shift);
+
+		/**
+		 * Step 4: Now we can perform the actual bitwise AND that extracts the
+		 * lowest log2(divisor) bits from our new adjusted value
+		 */
+		three_addr_const_t* bitwise_and_constant = emit_direct_integer_or_char_constant(divisor_log2, type);
+
+		//Now the actual AND instruction
+		instruction_t* and_instruction = emit_binary_operation_with_const_instruction(safe_dividend, safe_dividend, SINGLE_AND, bitwise_and_constant);
+
+		//This goes right after the addition
+		insert_instruction_after_given(and_instruction, addition);
+
+		/**
+		 * Step 5: Finally we can now undo the bias that we added in to make this safe by subtracting
+		 * it out. This will actually conclude all of the operations that we need to do for the official
+		 * optimization
+		 */
+		instruction_t* undo_mask = emit_binary_operation_instruction(safe_dividend, safe_dividend, MINUS, bias_temp_var);
+
+		//Add this in right after the and instruction
+		insert_instruction_after_given(undo_mask, and_instruction);
 
 
 		printf("TODO NOT IMPLEMENTED\n");
