@@ -522,6 +522,47 @@ u_int8_t is_constant_node_value_0(generic_ast_node_t* constant_node){
 
 
 /**
+ * Is  a constant node value negative? 
+ *
+ * NOTE: this treats everything as signed
+ */
+u_int8_t is_constant_node_value_negative(generic_ast_node_t* constant_node){
+	//Switch based on the value here
+	switch(constant_node->constant_type){
+		case BYTE_CONST:
+		case BYTE_CONST_FORCE_U:
+			return constant_node->constant_value.signed_byte_value < 0 ? TRUE : FALSE;
+
+		case SHORT_CONST:
+		case SHORT_CONST_FORCE_U:
+			return constant_node->constant_value.signed_short_value < 0 ? TRUE : FALSE;
+
+		case INT_CONST:
+		case INT_CONST_FORCE_U:
+			return constant_node->constant_value.signed_int_value < 0 ? TRUE : FALSE;
+
+		case LONG_CONST:
+		case LONG_CONST_FORCE_U:
+			return constant_node->constant_value.signed_long_value < 0 ? TRUE : FALSE;
+
+		case FLOAT_CONST:
+			return constant_node->constant_value.float_value < 0 ? TRUE : FALSE;
+
+		case DOUBLE_CONST:
+			return constant_node->constant_value.double_value < 0 ? TRUE : FALSE;
+
+		case CHAR_CONST:
+			return constant_node->constant_value.char_value < 0 ? TRUE : FALSE;
+
+		//In normal operation we should never end up here
+		default:
+			printf("Fatal internal compiler error: unrecognized constant type in negative constant checker\n");
+			exit(1);
+	}
+}
+
+
+/**
  * This helper function negates a constant node's value
  */
 void negate_constant_value(generic_ast_node_t* constant_node){

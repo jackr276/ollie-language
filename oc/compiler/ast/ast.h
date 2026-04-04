@@ -208,7 +208,7 @@ u_int8_t is_constant_node_value_0(generic_ast_node_t* constant_node);
 /**
  * Is the value of ast_constant_node negative?
  */
-u_int8_t is_constant_node_value_0(generic_ast_node_t* constant_node);
+u_int8_t is_constant_node_value_negative(generic_ast_node_t* constant_node);
 
 // ================================= Begin in-flight constant simplification subystem ========================================
 /**

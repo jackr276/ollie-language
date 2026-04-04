@@ -4178,44 +4178,45 @@ static generic_ast_node_t* multiplicative_expression(ollie_token_stream_t* token
 		 * If we have a 0 in the right hand child, and we're trying
 		 * to divide or mod, that would cause errors so we will catch it now
 		 */
-		switch(op.tok){
-			/**
-			 * Division we need to block division by 0
-			 */
-			case F_SLASH:
-				if(is_constant_node_value_0(right_child) == TRUE){
-					return print_and_return_error("Attempt to modulo by 0", parser_line_num);
-				}
+		if(right_child_is_constant == TRUE){
+			switch(op.tok){
+				/**
+				 * Division we need to block division by 0
+				 */
+				case F_SLASH:
+					if(is_constant_node_value_0(right_child) == TRUE){
+						return print_and_return_error("Attempt to modulo by 0", parser_line_num);
+					}
 
-				break;
-
-			/**
-			 * For modulo we need to screen out division by 0 *and* division by
-			 * a negative if we're doing a signed modulus. If it's unsigned then
-			 * we don't care
-			 */
-			case MOD:
-				if(is_constant_node_value_0(right_child) == TRUE){
-					return print_and_return_error("Attempt to modulo by 0", parser_line_num);
-				}
+					break;
 
 				/**
-				 * If we are dealing with a signed type *and* the constant node
-				 * value of said signed type is negative, then we will screen
-				 * out modulo with a negative divisor
+				 * For modulo we need to screen out division by 0 *and* division by
+				 * a negative if we're doing a signed modulus. If it's unsigned then
+				 * we don't care
 				 */
-				if(is_type_signed(return_type) == TRUE 
-					&& is_constant_node_value_negative(right_child) == TRUE){
-					return print_and_return_error("Attempt to modulo with a negative divisor", parser_line_num);
-				}
+				case MOD:
+					if(is_constant_node_value_0(right_child) == TRUE){
+						return print_and_return_error("Attempt to modulo by 0", parser_line_num);
+					}
 
-				break;
+					/**
+					 * If we are dealing with a signed type *and* the constant node
+					 * value of said signed type is negative, then we will screen
+					 * out modulo with a negative divisor
+					 */
+					if(is_type_signed(return_type) == TRUE 
+						&& is_constant_node_value_negative(right_child) == TRUE){
+						return print_and_return_error("Attempt to modulo with a negative divisor", parser_line_num);
+					}
 
-			//Anything else do nothing
-			default:
-				break;
+					break;
+
+				//Anything else do nothing
+				default:
+					break;
+			}
 		}
-
 
 		/**
 		 * If we discover that the user is just trying to add/subtract two constants together, then we can do a preemptive
