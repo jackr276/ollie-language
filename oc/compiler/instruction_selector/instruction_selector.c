@@ -6079,6 +6079,27 @@ static void handle_division_instruction(instruction_window_t* window){
  * instruction in the window
  */
 static inline void handle_signed_modulus(instruction_window_t* window){
+	//Firstly, the instruction that we're looking for is the very first one
+	instruction_t* modulus_instruction = window->instruction1;
+
+	three_addr_var_t* dividend;
+
+	//If we need to convert, we'll do that here
+	if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op1->type) == TRUE){
+		//Let the helper deal with it
+		dividend = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op1, modulus_instruction->assignee->type);
+
+	//Otherwise this can be moved directly
+	} else {
+		//We first need to move the first operand into RAX
+		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(modulus_instruction->op1->type), modulus_instruction->op1);
+
+		//Insert the move to rax before the multiplication instruction
+		insert_instruction_before_given(move_to_rax, modulus_instruction);
+
+		//This is just the destination register here
+		dividend = move_to_rax->destination_register;
+	}
 
 }
 
@@ -6101,6 +6122,27 @@ static inline void handle_signed_modulus(instruction_window_t* window){
  * instruction in the window
  */
 static inline void handle_unsigned_modulus(instruction_window_t* window){
+	//Firstly, the instruction that we're looking for is the very first one
+	instruction_t* modulus_instruction = window->instruction1;
+
+	three_addr_var_t* dividend;
+
+	//If we need to convert, we'll do that here
+	if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op1->type) == TRUE){
+		//Let the helper deal with it
+		dividend = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op1, modulus_instruction->assignee->type);
+
+	//Otherwise this can be moved directly
+	} else {
+		//We first need to move the first operand into RAX
+		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(modulus_instruction->op1->type), modulus_instruction->op1);
+
+		//Insert the move to rax before the multiplication instruction
+		insert_instruction_before_given(move_to_rax, modulus_instruction);
+
+		//This is just the destination register here
+		dividend = move_to_rax->destination_register;
+	}
 
 }
 
