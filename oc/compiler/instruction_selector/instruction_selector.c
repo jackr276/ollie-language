@@ -1600,12 +1600,15 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 	if(is_type_signed(mod_instruction->assignee->type) == TRUE){
 		//Extract the actual type that we're using
 		generic_type_t* type = mod_instruction->assignee->type;
-
-		//We'll need to know how many bits we have to store this type
-		u_int32_t num_bits = log2_of_known_power_of_2(type->type_size);
+		
+		//We'll need the number of bits in the type
+		u_int32_t type_size_in_bits = type->type_size * 8;
 
 		//We'll also need the log2 of the divisor
 		u_int32_t divisor_log2 = log2_of_constant(mod_instruction->op1_const);
+
+		//Now we'll compute 2^n - 1 
+		u_int32_t and_mask = (1 << divisor_log2) - 1;
 
 		/**
 		 * Step 0: assign the dividend over to a temp var. We need to preserve
@@ -1623,7 +1626,7 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		 * Step 1: Extract the sign bit, backfilling with either 1's or 0's as we go. Since we are
 		 * looking to backfill we *must* use an arithmetic right shift here
 		 */
- 		three_addr_const_t* num_bits_first_shift = emit_direct_integer_or_char_constant(num_bits - 1, type);
+ 		three_addr_const_t* num_bits_first_shift = emit_direct_integer_or_char_constant(type_size_in_bits - 1, type);
 
 		//Now we need to perform the first shift. We will force this to be signed so that an arithmetic shift is used
 		instruction_t* arithmetic_shift = emit_binary_operation_with_const_instruction(bias_temp_var, bias_temp_var, R_SHIFT, num_bits_first_shift);
@@ -1639,7 +1642,7 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		 * MINUS the log2 of the divisor. This will backfill with zeros so that, if our dividend was
 		 * negative, we will have only the first few bits filled in with ones
 		 */
-		three_addr_const_t* bias_shift_constant = emit_direct_integer_or_char_constant(num_bits - divisor_log2, type);
+		three_addr_const_t* bias_shift_constant = emit_direct_integer_or_char_constant(type_size_in_bits - divisor_log2, type);
 
 		//Now we need to perform the logical right shift
 		instruction_t* logical_shift = emit_binary_operation_with_const_instruction(bias_temp_var, bias_temp_var, R_SHIFT, bias_shift_constant);
@@ -1648,28 +1651,28 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		logical_shift->optional_storage.forced_signedness = FORCED_UNSIGNED;
 
 		//Goes right after the first shift
-		insert_instruction_after_given(arithmetic_shift, dividend_assignment);
+		insert_instruction_after_given(logical_shift, arithmetic_shift);
 
 		/**
 		 * Step 3: Add this bias to the original dividend. This gets us a value that 
 		 * is "safe" to perform our bitwise and on to do the actual modulo
 		 */
-		three_addr_var_t* safe_dividend = emit_temp_var(type);
+		three_addr_var_t* result = emit_temp_var(type);
 
 		//This should eventually become a lea
-		instruction_t* addition = emit_binary_operation_instruction(safe_dividend, mod_instruction->op1, PLUS, bias_temp_var);
+		instruction_t* addition = emit_binary_operation_instruction(result, mod_instruction->op1, PLUS, bias_temp_var);
 
 		//Add this in right after the shift
-		insert_instruction_after_given(addition, arithmetic_shift);
+		insert_instruction_after_given(addition, logical_shift);
 
 		/**
 		 * Step 4: Now we can perform the actual bitwise AND that extracts the
 		 * lowest log2(divisor) bits from our new adjusted value
 		 */
-		three_addr_const_t* bitwise_and_constant = emit_direct_integer_or_char_constant(divisor_log2, type);
+		three_addr_const_t* bitwise_and_constant = emit_direct_integer_or_char_constant(and_mask, type);
 
 		//Now the actual AND instruction
-		instruction_t* and_instruction = emit_binary_operation_with_const_instruction(safe_dividend, safe_dividend, SINGLE_AND, bitwise_and_constant);
+		instruction_t* and_instruction = emit_binary_operation_with_const_instruction(result, result, SINGLE_AND, bitwise_and_constant);
 
 		//This goes right after the addition
 		insert_instruction_after_given(and_instruction, addition);
@@ -1679,15 +1682,25 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		 * it out. This will actually conclude all of the operations that we need to do for the official
 		 * optimization
 		 */
-		instruction_t* undo_mask = emit_binary_operation_instruction(safe_dividend, safe_dividend, MINUS, bias_temp_var);
+		instruction_t* undo_mask = emit_binary_operation_instruction(result, result, MINUS, bias_temp_var);
 
 		//Add this in right after the and instruction
 		insert_instruction_after_given(undo_mask, and_instruction);
 
+		/**
+		 * Final cleanup: move the safe dividend result into the actual assignee temp var from
+		 * the original instruction to maintain consistency
+		 */
+		instruction_t* result_movement = emit_assignment_instruction(mod_instruction->assignee, result);
 
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(1);
+		//Add this in after the undo instruction
+		insert_instruction_after_given(result_movement, undo_mask);
 
+		//Once this is all done the mod instruction is useless
+		delete_statement(mod_instruction);
+
+		//Now rebuild the window around the last thing that we touched
+		reconstruct_window(window, result_movement);
 
 	/**
 	 * For an unsigned modulus operation, we don't need to worry about the sign
