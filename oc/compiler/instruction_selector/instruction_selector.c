@@ -5879,6 +5879,70 @@ static inline void handle_signed_division(instruction_window_t* window){
 		//This is just the destination register here
 		dividend = move_to_rax->destination_register;
 	}
+
+	/**
+	 * For a signed division, the CXXX instruction will 
+	 * have a secondary destination that holds the higher order bits. We will
+	 * capture this if needed here
+	 */
+	three_addr_var_t* higher_order_dividend_bits = NULL;
+
+	//We need to use the CL instruction since we're doing signed division
+	instruction_t* cl_instruction = emit_conversion_instruction(dividend);
+
+	//Capute both the lower and higher order bit fields
+	dividend = cl_instruction->destination_register;
+	higher_order_dividend_bits = cl_instruction->destination_register2;
+
+	//Insert this before the given
+	insert_instruction_before_given(cl_instruction, division_instruction);
+
+	/**
+	 * If we have an op2(dividing two variables), we'll handle all of our converting moves here. We'll
+	 * also account for the case that we have a constant to take care of
+	 */
+	if(division_instruction->op2 != NULL){
+		//Do we need to do a type conversion? If so, we'll do a converting move here
+		if(is_converting_move_required(division_instruction->assignee->type, division_instruction->op2->type) == TRUE){
+			divisor = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op2, division_instruction->assignee->type);
+
+		//Otherwise divisor is just the op2
+		} else {
+			divisor = division_instruction->op2;
+		}
+
+	//Otherwise we have a constant - x86 division doesn't support having these as operands so we'll need a move
+	} else {
+		//Emit the constant move
+		instruction_t* constant_move = emit_constant_move_instruction(emit_temp_var(division_instruction->assignee->type), division_instruction->op1_const);
+
+		//Now we'll insert this before the division instruction
+		insert_instruction_before_given(constant_move, division_instruction);
+
+		//This is the divisor now
+		divisor = constant_move->destination_register;
+	}
+
+	//Now we should have what we need, so we can emit the division instruction
+	instruction_t* division = emit_div_instruction(division_instruction->assignee, divisor, dividend, higher_order_dividend_bits, TRUE);
+
+	//The quotient is the destination register
+	three_addr_var_t* quotient = division->destination_register;
+
+	//Insert this before the division instruction
+	insert_instruction_before_given(division, division_instruction);
+
+	//Once we've done all that, we need one final movement operation
+	instruction_t* result_movement = emit_move_instruction(division_instruction->assignee, quotient);
+
+	//Insert this before the original division instruction
+	insert_instruction_before_given(result_movement, division_instruction);
+
+	//Delete the division instruction
+	delete_statement(division_instruction);
+
+	//Reconstruct the window here
+	reconstruct_window(window, result_movement);
 }
 
 
@@ -5923,59 +5987,6 @@ static inline void handle_unsigned_division(instruction_window_t* window){
 		dividend = move_to_rax->destination_register;
 	}
 
-}
-
-
-/**
- * Handle a division operation
- *
- * This rule simply multiplexes for us into the two specialized rules that
- * we really want to be using
- */
-static void handle_division_instruction(instruction_window_t* window){
-	//Firstly, the instruction that we're looking for is the very first one
-	instruction_t* division_instruction = window->instruction1;
-
-	//We go entirely based on the assignee
-	u_int8_t is_signed = is_type_signed(division_instruction->assignee->type);
-
-	if(is_signed == TRUE){
-		handle_signed_division(window);
-	} else {
-		handle_unsigned_division(window);
-	}
-
-
-
-
-	//A temp holder for the final second source variable
-	three_addr_var_t* dividend;
-	three_addr_var_t* divisor;
-
-
-	//Let's determine signedness
-	u_int8_t is_signed = is_type_signed(division_instruction->assignee->type);
-
-	/**
-	 * For a signed division, the CXXX instruction will 
-	 * have a secondary destination that holds the higher order bits. We will
-	 * capture this if needed here
-	 */
-	three_addr_var_t* higher_order_dividend_bits = NULL;
-
-	//Now, we'll need the appropriate extension instruction *if* we're doing signed division
-	if(is_signed == TRUE){
-		//Emit the cl instruction
-		instruction_t* cl_instruction = emit_conversion_instruction(dividend);
-
-		//Capute both the lower and higher order bit fields
-		dividend = cl_instruction->destination_register;
-		higher_order_dividend_bits = cl_instruction->destination_register2;
-
-		//Insert this before the given
-		insert_instruction_before_given(cl_instruction, division_instruction);
-	}
-
 	/**
 	 * If we have an op2(dividing two variables), we'll handle all of our converting moves here. We'll
 	 * also account for the case that we have a constant to take care of
@@ -6003,7 +6014,9 @@ static void handle_division_instruction(instruction_window_t* window){
 	}
 
 	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(division_instruction->assignee, divisor, dividend, higher_order_dividend_bits, is_signed);
+	//
+	//TODO THIS ONE ALSO HAS HIGHER ORDER BITS
+	instruction_t* division = emit_div_instruction(division_instruction->assignee, divisor, dividend, NULL, FALSE);
 
 	//The quotient is the destination register
 	three_addr_var_t* quotient = division->destination_register;
@@ -6022,6 +6035,29 @@ static void handle_division_instruction(instruction_window_t* window){
 
 	//Reconstruct the window here
 	reconstruct_window(window, result_movement);
+
+}
+
+
+/**
+ * Handle a division operation
+ *
+ * This rule simply multiplexes for us into the two specialized rules that
+ * we really want to be using
+ */
+static void handle_division_instruction(instruction_window_t* window){
+	//Firstly, the instruction that we're looking for is the very first one
+	instruction_t* division_instruction = window->instruction1;
+
+	//We go entirely based on the assignee
+	u_int8_t is_signed = is_type_signed(division_instruction->assignee->type);
+
+	//Dispatch based on what we need here
+	if(is_signed == TRUE){
+		handle_signed_division(window);
+	} else {
+		handle_unsigned_division(window);
+	}
 }
 
 
