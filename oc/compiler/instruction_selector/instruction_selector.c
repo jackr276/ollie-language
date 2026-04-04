@@ -1570,6 +1570,8 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 	instruction_t* mod_instruction = window->instruction1;
 
 	if(is_type_signed(mod_instruction->assignee->type) == TRUE){
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(1);
 
 
 	/**
@@ -1589,10 +1591,26 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 	 * 	So the result is just 1
 	 */
 	} else {
-		three_addr_const_t* divisor = mod_instruction->op1_const;
+		//Get how many bits we need to extract
+		u_int32_t bits_needed = log2_of_constant(mod_instruction->op1_const);
 
-		u_int32_t bits_needed = log2_of_known_power_of_2(divisor->constant_value.unsigned_long_constant);
+		//Now we'll compute 2^n - 1 
+		u_int32_t mask = (1 << bits_needed) - 1;
 
+		//Make this constant the mask now
+		mod_instruction->op1_const->constant_value.unsigned_long_constant = mask;
+
+		//This is now an and instruction
+		mod_instruction->op = SINGLE_AND;
+
+		/**
+		 * IMPORTANT - if we have a temp variable here, since we're now using
+		 * a shift, we'll need to wipe this temp var away and instead use the op1
+		 * temp var for everything
+		 */
+		if(mod_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
+			replace_all_variables_after_instruction(mod_instruction->assignee, mod_instruction->op1, mod_instruction);
+		}
 	}
 }
 
@@ -3443,7 +3461,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					if(variables_valid_shift_optimization(first_instruction->assignee, first_instruction->op1) == TRUE){
 						optimize_mod_by_power_of_2(window);
 
-						printf("FOUND FOR MOD\n\n\n\n\n");
+						//This is a change
+						changed = TRUE;
 					}
 
 					break;
