@@ -6083,6 +6083,7 @@ static inline void handle_signed_modulus(instruction_window_t* window){
 	instruction_t* modulus_instruction = window->instruction1;
 
 	three_addr_var_t* dividend;
+	three_addr_var_t* divisor;
 
 	//If we need to convert, we'll do that here
 	if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op1->type) == TRUE){
@@ -6101,6 +6102,68 @@ static inline void handle_signed_modulus(instruction_window_t* window){
 		dividend = move_to_rax->destination_register;
 	}
 
+	/**
+	 * For a signed division, the CXXX instruction will 
+	 * have a secondary destination that holds the higher order bits. We will
+	 * capture this if needed here
+	 */
+	three_addr_var_t* higher_order_dividend_bits = NULL;
+
+	//Now, we'll need the appropriate extension instruction *if* we're doing signed division
+	instruction_t* cl_instruction = emit_conversion_instruction(dividend);
+
+	//Store both here
+	dividend = cl_instruction->destination_register;
+	higher_order_dividend_bits = cl_instruction->destination_register2;
+
+	//Insert this before the mod instruction
+	insert_instruction_before_given(cl_instruction, modulus_instruction);
+
+	/**
+	 * Handle all converting moves/constant assignment moves that we need to here
+	 */
+	if(modulus_instruction->op2 != NULL){
+		//Do we need to do a type conversion? If so, we'll do a converting move here
+		if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op2->type) == TRUE){
+			divisor = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op2, modulus_instruction->assignee->type);
+
+		//Otherwise source 2 is just the op2
+		} else {
+			divisor = modulus_instruction->op2;
+		}
+	
+	//Otherwise we'll need a const assignment
+	} else {
+		//Emit the move
+		instruction_t* constant_assignment = emit_constant_move_instruction(emit_temp_var(modulus_instruction->assignee->type), modulus_instruction->op1_const);
+
+		//This goes right in before the mod
+		insert_instruction_before_given(constant_assignment, modulus_instruction);
+
+		//And this now is our divisor
+		divisor = constant_assignment->destination_register;
+	}
+
+	//Now we should have what we need, so we can emit the division instruction
+	instruction_t* division = emit_div_instruction(modulus_instruction->assignee, divisor, dividend, higher_order_dividend_bits, TRUE);
+	
+	//Store the remainder register here
+	three_addr_var_t* remainder_register = division->destination_register2;
+
+	//Insert this before the original modulus
+	insert_instruction_before_given(division, modulus_instruction);
+
+	//Once we've done all that, we need one final movement operation
+	instruction_t* result_movement = emit_move_instruction(modulus_instruction->assignee, remainder_register);
+
+	//Insert this after the original modulus
+	insert_instruction_after_given(result_movement, modulus_instruction);
+
+	//Finally we'll delete the old modulus instruction, as we no longer need it
+	delete_statement(modulus_instruction);
+
+	//Reconstruct the window starting at the result movement
+	reconstruct_window(window, result_movement);
 }
 
 
@@ -6201,71 +6264,6 @@ static void handle_modulus_instruction(instruction_window_t* window){
 	}
 
 
-	/**
-	 * For a signed division, the CXXX instruction will 
-	 * have a secondary destination that holds the higher order bits. We will
-	 * capture this if needed here
-	 */
-	three_addr_var_t* higher_order_dividend_bits = NULL;
-
-	//Now, we'll need the appropriate extension instruction *if* we're doing signed division
-	if(is_signed == TRUE){
-		//Emit the cl instruction
-		instruction_t* cl_instruction = emit_conversion_instruction(dividend);
-
-		//Store both here
-		dividend = cl_instruction->destination_register;
-		higher_order_dividend_bits = cl_instruction->destination_register2;
-
-		//Insert this before the mod instruction
-		insert_instruction_before_given(cl_instruction, modulus_instruction);
-	}
-
-	/**
-	 * Handle all converting moves/constant assignment moves that we need to here
-	 */
-	if(modulus_instruction->op2 != NULL){
-		//Do we need to do a type conversion? If so, we'll do a converting move here
-		if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op2->type) == TRUE){
-			divisor = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op2, modulus_instruction->assignee->type);
-
-		//Otherwise source 2 is just the op2
-		} else {
-			divisor = modulus_instruction->op2;
-		}
-	
-	//Otherwise we'll need a const assignment
-	} else {
-		//Emit the move
-		instruction_t* constant_assignment = emit_constant_move_instruction(emit_temp_var(modulus_instruction->assignee->type), modulus_instruction->op1_const);
-
-		//This goes right in before the mod
-		insert_instruction_before_given(constant_assignment, modulus_instruction);
-
-		//And this now is our divisor
-		divisor = constant_assignment->destination_register;
-	}
-
-	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(modulus_instruction->assignee, divisor, dividend, higher_order_dividend_bits, is_signed);
-	
-	//Store the remainder register here
-	three_addr_var_t* remainder_register = division->destination_register2;
-
-	//Insert this before the original modulus
-	insert_instruction_before_given(division, modulus_instruction);
-
-	//Once we've done all that, we need one final movement operation
-	instruction_t* result_movement = emit_move_instruction(modulus_instruction->assignee, remainder_register);
-
-	//Insert this after the original modulus
-	insert_instruction_after_given(result_movement, modulus_instruction);
-
-	//Finally we'll delete the old modulus instruction, as we no longer need it
-	delete_statement(modulus_instruction);
-
-	//Reconstruct the window starting at the result movement
-	reconstruct_window(window, result_movement);
 }
 
 
