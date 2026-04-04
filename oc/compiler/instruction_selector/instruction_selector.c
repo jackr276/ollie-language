@@ -573,6 +573,48 @@ static inline u_int32_t log2_of_known_power_of_2(u_int64_t value){
 
 
 /**
+ * Take the binary log of a constant and return the value. The constant
+ * itself remains unmodified
+ */
+static u_int32_t log2_of_constant(three_addr_const_t* constant){
+	//Switch based on the type
+	switch(constant->const_type){
+		case INT_CONST:
+			return log2_of_known_power_of_2(constant->constant_value.signed_integer_constant);
+
+		case INT_CONST_FORCE_U:
+			return log2_of_known_power_of_2(constant->constant_value.unsigned_integer_constant);
+
+		case LONG_CONST:
+			return log2_of_known_power_of_2(constant->constant_value.signed_long_constant);
+
+		case LONG_CONST_FORCE_U:
+			return log2_of_known_power_of_2(constant->constant_value.unsigned_long_constant);
+
+		case SHORT_CONST:
+			return log2_of_known_power_of_2(constant->constant_value.signed_short_constant);
+
+		case SHORT_CONST_FORCE_U:
+			return log2_of_known_power_of_2(constant->constant_value.unsigned_short_constant);
+
+		case BYTE_CONST:
+			return log2_of_known_power_of_2(constant->constant_value.signed_byte_constant);
+
+		case BYTE_CONST_FORCE_U:
+			return log2_of_known_power_of_2(constant->constant_value.unsigned_byte_constant);
+
+		case CHAR_CONST:
+			return log2_of_known_power_of_2(constant->constant_value.char_constant);
+
+		//We should never get here
+		default:
+			fprintf(stderr, "Fatal internal compiler error: unrecognized constant type found in log2 helper\n");
+			exit(1);
+	}
+}
+
+
+/**
  * Take in a constant and update it with its binary log value
  */
 static void update_constant_with_log2_value(three_addr_const_t* constant){
@@ -1527,7 +1569,31 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 	//Extract the mod instruction
 	instruction_t* mod_instruction = window->instruction1;
 
+	if(is_type_signed(mod_instruction->assignee->type) == TRUE){
 
+
+	/**
+	 * For an unsigned modulus operation, we don't need to worry about the sign
+	 * at all so we can simply use the and trick:
+	 *
+	 *  x % 2^n = x & (2^n - 1) -> Extract the bits in the nth position
+	 *
+	 *  For example:
+	 *
+	 *  5 % 2 -> 5 & 2^1 - 1 = 5 & 1
+	 *
+	 *  5 = 0101
+	 *  1 = 0001
+	 *
+	 *  5 & 1 = 1
+	 * 	So the result is just 1
+	 */
+	} else {
+		three_addr_const_t* divisor = mod_instruction->op1_const;
+
+		u_int32_t bits_needed = log2_of_known_power_of_2(divisor->constant_value.unsigned_long_constant);
+
+	}
 }
 
 
