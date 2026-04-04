@@ -1569,6 +1569,29 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 	//Extract the mod instruction
 	instruction_t* mod_instruction = window->instruction1;
 
+	/**
+	 * For a signed modulus instruction, we need to preserve the sign
+	 * of the dividend. Doing a simple bit mask would not allow for this so
+	 * we'll need to have some more logic to extract the sign
+	 *
+	 * -19 % 4 (say they are BYTEs for simplicity) 
+	 *  -19 = 11101101
+	 *
+	 *  1.) Extract the sign bit by shifting over NUM_BITS - 1
+	 *  	11101101 >> 7 = 11111111(make sure it's arithmetic shift so we backfill the bits)
+	 *  2.) Now convert this into a bias by shifting right logically
+	 *  	11111111 >> 6(NUM_BITS - log2(divisor)) = 00000011(backfills with 0)
+	 *  3.) Now add this bias to the original dividend
+	 *  	11101101 + 00000011 = 11110000(-16)
+	 *  4.) Perform the actual and by NUM_BITS - 1
+	 *  	11110000 & 0000011 = 00000000
+	 *  5.) Finally undo the bias by subtracting it out
+	 *  	00000000 - 00000011 = 00000011 = -3 
+	 
+	 *  Yes this does take one instruction and spawn it into many, but we need to remember
+	 *  that the idivX instruction that we would have been using will sometimes take 50+
+	 *  cycles to run. This is ultimately much faster
+	 */
 	if(is_type_signed(mod_instruction->assignee->type) == TRUE){
 		printf("TODO NOT IMPLEMENTED\n");
 		exit(1);
