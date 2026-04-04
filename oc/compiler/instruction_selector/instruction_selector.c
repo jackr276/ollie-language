@@ -6254,8 +6254,21 @@ static inline void handle_unsigned_modulus(instruction_window_t* window){
 		divisor = constant_assignment->destination_register;
 	}
 
+	/**
+	 * For unsigned division, which is what modulus is, we need to completely 0 out the %rdx register.
+	 * This is in contrast to signed division where we intentionally extend to said register. Here we will
+	 * just clean it out
+	 */
+	three_addr_var_t* cleared_rdx = emit_temp_var(modulus_instruction->assignee->type);
+
+	//Get the instruction out
+	instruction_t* clear_instruction = emit_gp_register_clear_instruction(cleared_rdx);
+
+	//This goes in before the given instruction
+	insert_instruction_before_given(clear_instruction, modulus_instruction);
+
 	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(modulus_instruction->assignee, divisor, dividend, NULL, FALSE);
+	instruction_t* division = emit_div_instruction(modulus_instruction->assignee, divisor, dividend, cleared_rdx, FALSE);
 	
 	//Store the remainder register here
 	three_addr_var_t* remainder_register = division->destination_register2;

@@ -4950,6 +4950,8 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			print_variable(fl, instruction->destination_register, mode);
 			fprintf(fl, "\n");
 
+			break;
+
 		case XORL_CLEAR:
 			fprintf(fl, "xorl ");
 			print_variable(fl, instruction->destination_register, mode);
