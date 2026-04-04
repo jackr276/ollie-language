@@ -4259,9 +4259,30 @@ static inline instruction_t* emit_sse_register_clear_instruction(three_addr_var_
 static inline instruction_t* emit_gp_register_clear_instruction(three_addr_var_t* target){
 	//First allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	switch(target->variable_size){
+		case QUAD_WORD:
+			instruction->instruction_type = XORQ_CLEAR;
+			break;
+
+		case DOUBLE_WORD:
+			instruction->instruction_type = XORL_CLEAR;
+			break;
+		
+		case WORD:
+			instruction->instruction_type = XORW_CLEAR;
+			break;
+
+		case BYTE:
+			instruction->instruction_type = XORB_CLEAR;
+			break;
+
+		//Should be unreachable
+		default:
+			fprintf(stderr, "Fatal internal compiler error, undefined variable type encountered in clear instruction\n");
+			exit(1);
+	}
 	
-	//Set the type
-	instruction->instruction_type = XORQ_CLEAR;
 	instruction->destination_register = target;
 
 	return instruction;

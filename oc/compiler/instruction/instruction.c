@@ -4950,6 +4950,31 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			print_variable(fl, instruction->destination_register, mode);
 			fprintf(fl, "\n");
 
+		case XORL_CLEAR:
+			fprintf(fl, "xorl ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, "\n");
+
+			break;
+
+		case XORW_CLEAR:
+			fprintf(fl, "xorw ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, "\n");
+
+			break;
+
+		case XORB_CLEAR:
+			fprintf(fl, "xorb ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, "\n");
+
 			break;
 
 		//Show a default error message. This is for the Dev's use only
