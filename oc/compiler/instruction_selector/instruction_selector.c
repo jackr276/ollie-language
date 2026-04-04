@@ -1604,7 +1604,12 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		//We'll need the number of bits in the type
 		u_int32_t type_size_in_bits = type->type_size * 8;
 
-		//We'll also need the log2 of the divisor
+		/**
+		 * We'll also need the log2 of the divisor. Another way to think of
+		 * this is - we'll need the number of bits that we need to represent
+		 * the divisor. So for example if we have 8, we need 3 bits, and so
+		 * on
+		 */
 		u_int32_t divisor_log2 = log2_of_constant(mod_instruction->op1_const);
 
 		//Now we'll compute 2^n - 1 

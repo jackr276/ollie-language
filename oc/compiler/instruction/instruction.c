@@ -5751,7 +5751,7 @@ three_addr_const_t* emit_direct_integer_or_char_constant(int64_t value, generic_
 			constant->constant_value.signed_short_constant = value;
 			break;
 		case I8:
-			constant->const_type = SHORT_CONST;
+			constant->const_type = BYTE_CONST;
 			constant->constant_value.signed_byte_constant = value;
 			break;
 		case U32:
