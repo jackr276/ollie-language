@@ -6034,10 +6034,21 @@ static inline void handle_unsigned_division(instruction_window_t* window){
 		divisor = constant_move->destination_register;
 	}
 
+	/**
+	 * For unsigned division, we need to completely 0 out the %rdx register.
+	 * This is in contrast to signed division where we intentionally extend to said register. Here we will
+	 * just clean it out
+	 */
+	three_addr_var_t* cleared_rdx = emit_temp_var(division_instruction->assignee->type);
+
+	//Get the instruction out
+	instruction_t* clear_instruction = emit_gp_register_clear_instruction(cleared_rdx);
+
+	//This goes in before the given instruction
+	insert_instruction_before_given(clear_instruction, division_instruction);
+
 	//Now we should have what we need, so we can emit the division instruction
-	//
-	//TODO THIS ONE ALSO HAS HIGHER ORDER BITS
-	instruction_t* division = emit_div_instruction(division_instruction->assignee, divisor, dividend, NULL, FALSE);
+	instruction_t* division = emit_div_instruction(division_instruction->assignee, divisor, dividend, cleared_rdx, FALSE);
 
 	//The quotient is the destination register
 	three_addr_var_t* quotient = division->destination_register;
