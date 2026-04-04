@@ -8142,7 +8142,7 @@ static inline void handle_not_instruction(instruction_t* instruction){
  * Handle a three address code CLEAR instruction. In reality this is just going to turn into
  * a PXOR_CLEAR instruction on the backend
  */
-static inline void handle_clear_instruction(instruction_t* instruction){
+static inline void handle_pxor_clear_instruction(instruction_t* instruction){
 	//This is a PXOR_CLEAR
 	instruction->instruction_type = PXOR_CLEAR;
 
@@ -10484,7 +10484,7 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 			handle_test_if_not_zero_instruction(window);
 			break;
 		case THREE_ADDR_CODE_CLEAR_STMT:
-			handle_clear_instruction(instruction);
+			handle_pxor_clear_instruction(instruction);
 			break;
 		case THREE_ADDR_CODE_STACK_ALLOCATION_STMT:
 			handle_stack_allocation_statement(instruction);
