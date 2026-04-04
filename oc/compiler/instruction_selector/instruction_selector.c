@@ -5840,8 +5840,6 @@ static void handle_signed_multiplication_instruction(instruction_t* instruction)
 
 
 /**
- * Handle a division operation
- *
  * t4 <- t2 / t3 
  *
  * Will become:
@@ -5855,8 +5853,9 @@ static void handle_signed_multiplication_instruction(instruction_t* instruction)
  *
  * NOTE: We guarantee that the instruction we're after is always the first
  * instruction in the window
+ *
  */
-static void handle_division_instruction(instruction_window_t* window){
+static inline void handle_signed_division(instruction_window_t* window){
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* division_instruction = window->instruction1;
 
@@ -5880,6 +5879,79 @@ static void handle_division_instruction(instruction_window_t* window){
 		//This is just the destination register here
 		dividend = move_to_rax->destination_register;
 	}
+}
+
+
+/**
+ * t4 <- t2 / t3 
+ *
+ * Will become:
+ * movl t2, t5(rax)
+ * xorl %edx MUST CLEAR EDX
+ * idivl t3(divide by t3, we already guarantee this is a temp var(register))
+ * movl t5, t4 (rax has quotient)
+ * 
+ * As such, this will generate additional instructions for us, making it not
+ * a "single instruction" pattern
+ *
+ * NOTE: We guarantee that the instruction we're after is always the first
+ * instruction in the window
+ *
+ */
+static inline void handle_unsigned_division(instruction_window_t* window){
+	//Firstly, the instruction that we're looking for is the very first one
+	instruction_t* division_instruction = window->instruction1;
+
+	//A temp holder for the final second source variable
+	three_addr_var_t* dividend;
+	three_addr_var_t* divisor;
+
+	//If we need to convert, we'll do that here
+	if(is_converting_move_required(division_instruction->assignee->type, division_instruction->op1->type) == TRUE){
+		//Let the helper deal with it
+		dividend = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op1, division_instruction->assignee->type);
+
+	//Otherwise this can be moved directly
+	} else {
+		//We first need to move the first operand into RAX
+		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(division_instruction->op1->type), division_instruction->op1);
+
+		//Insert the move to rax before the multiplication instruction
+		insert_instruction_before_given(move_to_rax, division_instruction);
+
+		//This is just the destination register here
+		dividend = move_to_rax->destination_register;
+	}
+
+}
+
+
+/**
+ * Handle a division operation
+ *
+ * This rule simply multiplexes for us into the two specialized rules that
+ * we really want to be using
+ */
+static void handle_division_instruction(instruction_window_t* window){
+	//Firstly, the instruction that we're looking for is the very first one
+	instruction_t* division_instruction = window->instruction1;
+
+	//We go entirely based on the assignee
+	u_int8_t is_signed = is_type_signed(division_instruction->assignee->type);
+
+	if(is_signed == TRUE){
+		handle_signed_division(window);
+	} else {
+		handle_unsigned_division(window);
+	}
+
+
+
+
+	//A temp holder for the final second source variable
+	three_addr_var_t* dividend;
+	three_addr_var_t* divisor;
+
 
 	//Let's determine signedness
 	u_int8_t is_signed = is_type_signed(division_instruction->assignee->type);
