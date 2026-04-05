@@ -45,6 +45,8 @@ typedef struct macro_symtab_t macro_symtab_t;
 typedef struct symtab_variable_sheaf_t symtab_variable_sheaf_t;
 //The sheafs in the type symtab
 typedef struct symtab_type_sheaf_t symtab_type_sheaf_t;
+//The sheafs(namespaces) in the function symtab
+typedef struct symtab_function_sheaf_t symtab_function_sheaf_t;
 
 //The records in the function symtab
 typedef struct symtab_function_record_t symtab_function_record_t;
@@ -284,6 +286,19 @@ struct symtab_type_sheaf_t{
 	u_int8_t lexical_level;
 };
 
+/**
+ * This structure represents a specific namespace level
+ * of the function symtab
+ */
+struct symtab_function_sheaf_t{
+	//The actual name of this namesapce
+	dynamic_string_t namespace_name;
+	//Link to the prior level
+	symtab_function_sheaf_t* previous_level;
+	//Hash table for the records
+	symtab_function_record_t* records[FUNCTION_KEYSPACE];
+};
+
 
 /**
  * This struct represents the overall collection of the sheafs of symtabs
@@ -314,8 +329,8 @@ struct type_symtab_t{
 
 
 /**
- * This struct represents the macro symtab. Much like the function symtab, 
- * there is only one lexical level, so no sheafs exist here
+ * This struct represents the macro symtab. Macro symtab
+ * only contains one global level
  */
 struct macro_symtab_t{
 	//How many records(names) we can have
@@ -328,20 +343,16 @@ struct macro_symtab_t{
  * As such, there are no "sheafs" like we have for types or variables
  */
 struct function_symtab_t{
-	//How many records(names) we can have
-	symtab_function_record_t* records[FUNCTION_KEYSPACE];
-
+	//A dynamic array of sheafs
+	dynamic_array_t sheafs;
+	//The current sheaf
+	symtab_function_sheaf_t* current;
 	//The adjacency matrix for the call graph
 	u_int8_t* call_graph_matrix;
-
 	//The transitive closure for the call graph
 	u_int8_t* call_graph_transitive_closure;
-
 	//The current function id
 	u_int32_t current_function_id;
-
-	//The level of this particular symtab
-	u_int8_t current_lexical_scope;
 };
 
 
