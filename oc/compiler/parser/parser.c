@@ -13297,6 +13297,10 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 		return print_and_return_error(info, parser_line_num);
 	}
 
+	//Keep a reference to this for later on
+	char* namespace_name = lookahead.lexeme.string;
+
+
 	/**
 	 * We now need to search to make sure that we don't have duplicate values
 	 * here for this namespace declaration. We will search the function symtab
@@ -13308,24 +13312,30 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 	 * in that
 	 */
 
-	//Do we have a namespace named this already?
-	function_namespace_t* namespace = lookup_namespace(function_symtab, lookahead.lexeme.string);
+	//Do we have a namespace named this already underneath the current parent?
+	function_namespace_t* namespace = lookup_namespace_under_parent(function_symtab, namespace_name);
 
 	//If we found one, then we can't do this
 	if(namespace != NULL){
-		sprintf(info, "Namespace \"%s\" has already been declared\n", lookahead.lexeme.string);
+		//Accurate printing based on whether or not we're in the default namespace
+		if(function_symtab->current->is_default == TRUE){
+			sprintf(info, "Namespace \"%s\" has already been declared under the top level namespace", namespace_name);
+		} else {
+			sprintf(info, "Namespace \"%s\" has already been declared under the parent namespace \"%s\"", namespace_name, function_symtab->current->namespace_name.string);
+		}
+
 		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Otherwise, we can create this namespace
-	function_namespace_t* new_namespace = create_namespace_record(function_symtab, lookahead.lexeme.string);
+	function_namespace_t* new_namespace = create_namespace_record(function_symtab, namespace_name);
 
 	//We are now inside of this namespace
-	enter_namespace(new_namespace);
+	enter_namespace(function_symtab, new_namespace);
 
 
 	//Now that we are done we can leave this namespace
-	exit_namespace();
+	exit_namespace(function_symtab);
 
 	printf("TODO NOT DONE\n");
 	exit(1);

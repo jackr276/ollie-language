@@ -1412,6 +1412,27 @@ function_namespace_t* lookup_namespace(function_symtab_t* symtab, char* name){
 
 
 /**
+ * Does a namespace exist one level underneath the parent? This is done if we're looking
+ * to add a new namespace
+ */
+function_namespace_t* lookup_namespace_under_parent(function_symtab_t* symtab, char* name){
+	//Run through the children of the current parent
+	for(u_int32_t i = 0; i < symtab->current->child_namespaces.current_index; i++){
+		//Extract the namespace
+		function_namespace_t* namespace = dynamic_array_get_at(&(symtab->current->child_namespaces), i);
+
+		//If they're a match then we're out
+		if(strcmp(namespace->namespace_name.string, name) == 0){
+			return namespace;
+		}
+	}
+
+	//If we got to here then we found nothing
+	return NULL;
+}
+
+
+/**
  * Lookup a macro in the symtab. This is a simpler lookup then most because
  * there are no nested lexical scopes here, we only need to check one table
  */

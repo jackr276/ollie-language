@@ -536,6 +536,12 @@ symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name)
 function_namespace_t* lookup_namespace(function_symtab_t* symtab, char* name);
 
 /**
+ * Does a namespace exist one level underneath the parent? This is done if we're looking
+ * to add a new namespace
+ */
+function_namespace_t* lookup_namespace_under_parent(function_symtab_t* symtab, char* name);
+
+/**
  * Lookup a variable name in the symtab
  */
 symtab_variable_record_t* lookup_variable(variable_symtab_t* symtab, char* name);
