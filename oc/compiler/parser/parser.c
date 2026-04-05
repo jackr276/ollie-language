@@ -1691,16 +1691,19 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
  * A function call looks for a very specific kind of identifer followed by
  * parenthesis and the appropriate number of parameters for the function, each of
  * the appropriate type
+ *
+ * We will handle the case where we have a qualified function name with :: separators in here
+ * as well. This leads to a bit of complication when parsing the actual name
  * 
  * By the time we get here, we will have already consumed the "@" token
  *
- * BNF Rule: <function-call> ::= @<identifier>({<ternary_expression>}?{, <ternary_expression>}*){<handle-statement>}?
+ * BNF Rule: <function-call> ::= @{<identifier>|<qualified-function-name>}({<ternary_expression>}?{, <ternary_expression>}*){<handle-statement>}?
  */
 static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, side_type_t side){
-	//The current line num
-	u_int32_t current_line = parser_line_num;
 	//The lookahead token
 	lexitem_t lookahead;
+	//Second lookahead
+	lexitem_t lookahead2;
 	//We'll also keep a nicer reference to the function name
 	dynamic_string_t function_name;
 	//A pointer that holds our function call node
@@ -1717,6 +1720,14 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	if(lookahead.tok != IDENT){
 		return print_and_return_error("Non-identifier provided as function call", parser_line_num);
 	}
+
+	//TODO
+	//Do we see the "::" separator here? If so then we need to parse the fully qualified name
+	lookahead2 = get_next_token(token_stream, &parser_line_num);
+
+	push_back_token(token_stream, &parser_line_num);
+
+	//TODO
 
 	//Grab the function name out for convenience
 	function_name = lookahead.lexeme;
@@ -1785,7 +1796,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	} else {
 		sprintf(info, "\"%s\" is not currently defined as a function or function pointer", function_name.string);
 		//Return the error node and get out
-		return print_and_return_error(info, current_line);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Add the inferred type in for convenience as well
@@ -1841,7 +1852,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 
 				//We now have an error of some kind
 				if(current_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-					return print_and_return_error("Bad parameter passed to function call", current_line);
+					return print_and_return_error("Bad parameter passed to function call", parser_line_num);
 				}
 
 				//Let's see if we're even able to assign this here
@@ -1972,7 +1983,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		//If it's not an R_PAREN, then we fail
 		if(lookahead.tok != R_PAREN){
 			sprintf(info, "Function \"%s\" expects 0 parameters. Defined as: %s", function_name.string, function_type->type_name.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, current_line);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			//Print out the actual function record as well
 			num_errors++;
 			//Return the error node
@@ -2053,7 +2064,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	}
 
 	//Add the line number in
-	function_call_node->line_number = current_line;
+	function_call_node->line_number = parser_line_num;
 
 	//Otherwise, if we make it here, we're all good to return the function call node
 	return function_call_node;
