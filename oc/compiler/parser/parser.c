@@ -1774,8 +1774,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 			sprintf(info, "There is no namespace named \"%s\" in the program", lookahead.lexeme.string);
 			return print_and_return_error(info, parser_line_num);
 		}
-		printf("TODO\n\n\n");
-		exit(1);
 
 		/**
 		 * Once we've gotten here we know that the lookahead is a valid namespace
@@ -1796,12 +1794,41 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 
 			//We saw :: again, so we need to check that lookahead is a valid namespace under the current namespace
 			if(lookahead2.tok == COLONCOLON){
+				//Look it up under the parent
+				function_namespace_t* child = lookup_namespace_under_parent(current_namespace, lookahead.lexeme.string);
+
+				//This is a fail case if we found nothing
+				if(child == NULL){
+					sprintf(info, "No namespace named \"%s\" exists under the namespace \"%s\"",
+			 						lookahead.lexeme.string,
+			 						generate_fully_qualified_namespace_name(current_namespace).string);
+					return print_and_return_error(info, parser_line_num);
+				}
+
+				//Otherwise we found something so we'll make that our new current
+				current_namespace = child;
 
 			//Otherwise, we've reached the end so we'll need to lookup the function inside of our given namespace
 			} else {
 				//Push back lookahead2
 				push_back_token(token_stream, &parser_line_num);
 
+				//Flag that this is the function name
+				function_name = lookahead.lexeme;
+
+				//We need to ensure that the lexeme under lookahed is actually a function in our namespace
+				symtab_function_record_t* found_function = lookup_function_in_namesapce(current_namespace, function_name.string);
+
+				//Hard fail case if we end up with this
+				if(found_function == NULL){
+					sprintf(info, "No function named \"%s\" exists under the namespace \"%s\"",
+			 						function_name.string,
+			 						generate_fully_qualified_namespace_name(current_namespace).string);
+					return print_and_return_error(info, parser_line_num);
+				}
+
+				//Otherwise this is our function record
+				function_record = found_function;
 
 				//This is our terminal case
 				break;

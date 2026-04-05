@@ -10768,6 +10768,11 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 				
 				break;
 
+
+			case AST_NODE_TYPE_NAMESPACE_DECLARATION:
+				printf("TODO NOT IMPLEMENTED\n\n");
+				exit(1);
+
 			//Some very weird error if we hit here. Hard exit to avoid dev confusion
 			default:
 				printf("Fatal internal compiler error: Unrecognized node type found in global scope\n");
