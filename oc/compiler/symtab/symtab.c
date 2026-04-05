@@ -81,8 +81,8 @@ function_symtab_t* function_symtab_alloc(){
 	//First create the symtab
 	function_symtab_t* symtab = (function_symtab_t*)calloc(1, sizeof(function_symtab_t));
 
-	//Now the sheafs array
-	symtab->sheafs = dynamic_array_alloc();
+	//Now the namespaces array
+	symtab->namespaces = dynamic_array_alloc();
 
 	//Now let's create the very first sheaf
 	function_namespace_t* default_namespace = calloc(1, sizeof(function_namespace_t));
@@ -96,8 +96,8 @@ function_symtab_t* function_symtab_alloc(){
 	//We'll make the name "$default", something the user couldn't enter
 	dynamic_string_set(&(default_namespace->namespace_name), "$default");
 
-	//Add this into our sheafs
-	dynamic_array_add(&(symtab->sheafs), default_namespace);
+	//Add this into our namespaces 
+	dynamic_array_add(&(symtab->namespaces), default_namespace);
 
 	//The current value is this
 	symtab->current = default_namespace;
@@ -901,6 +901,9 @@ function_namespace_t* create_namespace_record(function_symtab_t* symtab, char* n
 	//Flag the current namespace as this one's parent
 	namespace->parent_namespace = symtab->current;
 
+	//Also add this to our overall array of all namespaces
+	dynamic_array_add(&(symtab->namespaces), namespace);
+	
 	//Now give it back
 	return namespace;
 }
@@ -1419,21 +1422,25 @@ symtab_function_record_t* lookup_function_in_namesapce(function_namespace_t* nam
 /**
  * Lookup a namespace inside of the symtab. Unlike searching for a function there
  * is no hashing to do here, just string comparison
+ *
+ * Yes this is an expensive lookup, but we don't expect to be doing it that
+ * frequently. If it does become too expensive to do, then we will begin to use
+ * hashing
  */
 function_namespace_t* lookup_namespace(function_symtab_t* symtab, char* name){
-	//Run through every sheaf
-	for(u_int32_t i = 0; i < symtab->sheafs.current_index; i++){
+	//Run through every namespace 
+	for(u_int32_t i = 0; i < symtab->namespaces.current_index; i++){
 		//Extract it
-		function_namespace_t* sheaf = dynamic_array_get_at(&(symtab->sheafs), i);
+		function_namespace_t* namespace = dynamic_array_get_at(&(symtab->namespaces), i);
 
 		//Not possible to lookup the default sheaf
-		if(sheaf->is_default == TRUE){
+		if(namespace->is_default == TRUE){
 			continue;
 		}
 
 		//Names match then we're a go
-		if(strcmp(sheaf->namespace_name.string, name) == 0){
-			return sheaf;
+		if(strcmp(namespace->namespace_name.string, name) == 0){
+			return namespace;
 		}
 	}
 
@@ -2201,9 +2208,9 @@ void print_call_graph_adjacency_matrix(FILE* fl, function_symtab_t* function_sym
 	//We need a min priority queue for this
 	min_priority_queue_t min_priority_queue = min_priority_queue_alloc();
 
-	//Run through all of the sheafs
-	for(u_int32_t _ = 0; _ < function_symtab->sheafs.current_index; _++){
-		function_namespace_t* sheaf = dynamic_array_get_at(&(function_symtab->sheafs), _);
+	//Run through all of the namespaces 
+	for(u_int32_t _ = 0; _ < function_symtab->namespaces.current_index; _++){
+		function_namespace_t* sheaf = dynamic_array_get_at(&(function_symtab->namespaces), _);
 
 		//Run through and print all of these out first
 		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
@@ -2329,10 +2336,10 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnin
 	//Create a min priority queue for ordering error messages
 	min_priority_queue_t queue = min_priority_queue_alloc();
 
-	//Run thorugh all of the sheafs
-	for(u_int32_t _ = 0; _ < symtab->sheafs.current_index; _++){
+	//Run thorugh all of the namespaces
+	for(u_int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
 		//Grab the current sheaf to check
-		function_namespace_t* current_sheaf = dynamic_array_get_at(&(symtab->sheafs), _);
+		function_namespace_t* current_sheaf = dynamic_array_get_at(&(symtab->namespaces), _);
 
 		//Now run through the keyspace in this sheaf
 		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
@@ -2526,10 +2533,10 @@ void finalize_function_symtab(function_symtab_t* symtab){
 	symtab->call_graph_matrix = calloc(number_of_functions * number_of_functions, sizeof(u_int8_t));
 
 	/**
-	 * To populate the adjacency matrix, we'll need to run through literally ever function sheaf
+	 * To populate the adjacency matrix, we'll need to run through literally ever function namespace 
 	 */
-	for(u_int32_t _ = 0; _ < symtab->sheafs.current_index; _++){
-		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->sheafs), _);
+	for(u_int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
+		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->namespaces), _);
 
 		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
 			//Totally possible for this to happen
@@ -2582,10 +2589,10 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 	symtab_function_record_t* record;
 	symtab_function_record_t* temp;
 
-	//Run through all of the sheafs
-	for(u_int32_t _ = 0; _ < symtab->sheafs.current_index; _++){
+	//Run through all of the namespaces 
+	for(u_int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
 		//Get the sheaf out
-		sheaf = dynamic_array_get_at(&(symtab->sheafs), _);
+		sheaf = dynamic_array_get_at(&(symtab->namespaces), _);
 
 		//Now go through all records
 		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
@@ -2625,8 +2632,8 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 		free(sheaf);
 	}
 
-	//Deallocate the sheaf array
-	dynamic_array_dealloc(&(symtab->sheafs));
+	//Deallocate the namespace array
+	dynamic_array_dealloc(&(symtab->namespaces));
 
 	//Free the adjacency matrix
 	free(symtab->call_graph_matrix);

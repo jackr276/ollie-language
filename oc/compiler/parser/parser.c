@@ -13646,8 +13646,8 @@ static inline u_int8_t validate_inlined_functions_are_non_recursive(function_sym
 	u_int32_t error_count = 0;
 
 	//Run through every namespace
-	for(u_int32_t _ = 0; _ < symtab->sheafs.current_index; _++){
-		function_namespace_t* sheaf = dynamic_array_get_at(&(symtab->sheafs), _);
+	for(u_int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
+		function_namespace_t* sheaf = dynamic_array_get_at(&(symtab->namespaces), _);
 
 		//Now for every record in the namespace
 		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
@@ -13709,9 +13709,9 @@ static inline void flag_function_for_alignment(function_symtab_t* symtab, symtab
 	//The number of functions is also the current id
 	u_int32_t function_count = symtab->current_function_id;
 
-	//Now run through every other function
-	for(u_int32_t _ = 0; _ < symtab->sheafs.current_index; _++){
-		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->sheafs), _);
+	//Run through every namespace
+	for(u_int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
+		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->namespaces), _);
 
 		//For each record inside of the namespace
 		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
@@ -13765,9 +13765,9 @@ static void flag_functions_that_require_initial_alignment(function_symtab_t* sym
 	/**
 	 * Run through all of the records in the function keyspace
 	 */
-	for(u_int32_t _ = 0; _ < symtab->sheafs.current_index; _++){
+	for(u_int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
 		//Extract the current namespace
-		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->sheafs), _);
+		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->namespaces), _);
 
 		//Now run through everything in that namespace
 		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){

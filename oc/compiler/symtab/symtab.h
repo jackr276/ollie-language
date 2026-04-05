@@ -349,8 +349,8 @@ struct macro_symtab_t{
  * As such, there are no "sheafs" like we have for types or variables
  */
 struct function_symtab_t{
-	//A dynamic array of sheafs
-	dynamic_array_t sheafs;
+	//All of our namespaces
+	dynamic_array_t namespaces;
 	//The current sheaf
 	function_namespace_t* current;
 	//The adjacency matrix for the call graph
