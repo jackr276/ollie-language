@@ -1802,9 +1802,11 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 				//Push back lookahead2
 				push_back_token(token_stream, &parser_line_num);
 
+
+				//This is our terminal case
+				break;
 			}
 		}
-
 	}
 
 	//This is the most common case - that we have a simple, direct function call
@@ -13453,7 +13455,7 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 	 */
 
 	//Do we have a namespace named this already underneath the current parent?
-	function_namespace_t* namespace = lookup_namespace_under_parent(function_symtab, namespace_name);
+	function_namespace_t* namespace = lookup_namespace_under_current(function_symtab, namespace_name);
 
 	//If we found one, then we can't do this
 	if(namespace != NULL){

@@ -545,10 +545,16 @@ symtab_function_record_t* lookup_function_in_namesapce(function_namespace_t* nam
 function_namespace_t* lookup_namespace(function_symtab_t* symtab, char* name);
 
 /**
- * Does a namespace exist one level underneath the parent? This is done if we're looking
+ * Does a namespace exist one level underneath the current parent? This is done if we're looking
  * to add a new namespace
  */
-function_namespace_t* lookup_namespace_under_parent(function_symtab_t* symtab, char* name);
+function_namespace_t* lookup_namespace_under_current(function_symtab_t* symtab, char* name);
+
+/**
+ * Does a namespace exist one level underneath the given parent? This is usually used for searching
+ * up namespaces that were given in qualified names
+ */
+function_namespace_t* lookup_namespace_under_parent(function_namespace_t* parent_namespace, char* name);
 
 /**
  * Lookup a variable name in the symtab
