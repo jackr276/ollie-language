@@ -297,6 +297,8 @@ struct symtab_function_sheaf_t{
 	symtab_function_sheaf_t* previous_level;
 	//Hash table for the records
 	symtab_function_record_t* records[FUNCTION_KEYSPACE];
+	//Is this the default sheaf?
+	u_int8_t is_default;
 };
 
 

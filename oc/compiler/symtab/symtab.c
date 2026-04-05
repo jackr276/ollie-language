@@ -86,6 +86,9 @@ function_symtab_t* function_symtab_alloc(){
 	//Now let's create the very first sheaf
 	symtab_function_sheaf_t* default_namespace = calloc(1, sizeof(symtab_function_sheaf_t));
 
+	//This is the default sheaf
+	default_namespace->is_default = TRUE;
+
 	//Allcoate the namespace name
 	default_namespace->namespace_name = dynamic_string_alloc();
 
