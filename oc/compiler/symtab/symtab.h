@@ -533,6 +533,13 @@ symtab_variable_record_t* initialize_instruction_pointer(type_symtab_t* types);
 symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name);
 
 /**
+ * Lookup a function that needs to be in the given namespace. This will
+ * not do the normal logic where we can crawl up to see if it's in a parent
+ * namespace
+ */
+symtab_function_record_t* lookup_function_in_namesapce(function_namespace_t* namespace_to_search, char* name);
+
+/**
  * Lookup a namespace inside of the symtab.
  */
 function_namespace_t* lookup_namespace(function_symtab_t* symtab, char* name);
