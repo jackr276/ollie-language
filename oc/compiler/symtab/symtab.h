@@ -357,7 +357,8 @@ struct function_symtab_t{
 
 
 /**
- * Initialize a function symtab
+ * Dynamically allocate a function symtab. Note that this allocation
+ * automatically creates the default namespace
  */
 function_symtab_t* function_symtab_alloc();
 

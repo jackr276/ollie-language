@@ -73,12 +73,30 @@ static inline u_int32_t increment_and_get_error_id(type_symtab_t* symtab){
 
 
 /**
- * Dynamically allocate a function symtab
+ * Dynamically allocate a function symtab. Note that this allocation
+ * automatically creates the default namespace
  */
 function_symtab_t* function_symtab_alloc(){
+	//First create the symtab
 	function_symtab_t* symtab = (function_symtab_t*)calloc(1, sizeof(function_symtab_t));
-	//The function symtab's lexical scope is always global
-	symtab->current_lexical_scope = 0;
+
+	//Now the sheafs array
+	symtab->sheafs = dynamic_array_alloc();
+
+	//Now let's create the very first sheaf
+	symtab_function_sheaf_t* default_namespace = calloc(1, sizeof(symtab_function_sheaf_t));
+
+	//Allcoate the namespace name
+	default_namespace->namespace_name = dynamic_string_alloc();
+
+	//We'll make the name "$default", something the user couldn't enter
+	dynamic_string_set(&(default_namespace->namespace_name), "$default");
+
+	//Add this into our sheafs
+	dynamic_array_add(&(symtab->sheafs), default_namespace);
+
+	//The current value is this
+	symtab->current = default_namespace;
 
 	return symtab;
 }
@@ -2272,36 +2290,52 @@ void finalize_function_symtab(function_symtab_t* symtab){
  */
 void function_symtab_dealloc(function_symtab_t* symtab){
 	//For temporary holding
+	symtab_function_sheaf_t* sheaf;
 	symtab_function_record_t* record;
 	symtab_function_record_t* temp;
 
-	//Run through and free all function records
-	for(u_int16_t i = 0; i < FUNCTION_KEYSPACE; i++){
-		record = symtab->records[i];
+	//Run through all of the sheafs
+	for(u_int32_t i = 0; i < symtab->sheafs.current_index; i++){
+		//Get the sheaf out
+		sheaf = dynamic_array_get_at(&(symtab->sheafs), i);
 
-		//We could have chaining here, so run through just in case
-		while(record != NULL){
-			temp = record;
-			record = record->next;
+		//Now go through all records
+		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+			record = sheaf->records[i];
 
-			//Destroy the call graph infrastructure
-			dynamic_set_dealloc(&(temp->called_functions));
+			//We could have chaining here, so run through just in case
+			while(record != NULL){
+				temp = record;
+				record = record->next;
 
-			//Destroy the block storage
-			dynamic_array_dealloc(&(temp->function_blocks));
+				//Destroy the call graph infrastructure
+				dynamic_set_dealloc(&(temp->called_functions));
 
-			//Destroy the parameters
-			dynamic_array_dealloc(&(temp->function_parameters));
+				//Destroy the block storage
+				dynamic_array_dealloc(&(temp->function_blocks));
 
-			//Dealloate the function type
-			type_dealloc(temp->signature);
+				//Destroy the parameters
+				dynamic_array_dealloc(&(temp->function_parameters));
 
-			//Deallocate the data area itself
-			stack_data_area_dealloc(&(temp->local_stack));
+				//Dealloate the function type
+				type_dealloc(temp->signature);
 
-			free(temp);
+				//Deallocate the data area itself
+				stack_data_area_dealloc(&(temp->local_stack));
+
+				free(temp);
+			}
+
+			//Destroy the name
+			dynamic_string_dealloc(&(sheaf->namespace_name));
+
+			//Free the sheaf itself
+			free(sheaf);
 		}
 	}
+
+	//Deallocate the sheaf array
+	dynamic_array_dealloc(&(symtab->sheafs));
 
 	//Free the adjacency matrix
 	free(symtab->call_graph_matrix);
