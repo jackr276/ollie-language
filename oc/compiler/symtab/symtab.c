@@ -897,8 +897,35 @@ function_namespace_t* create_namespace_record(function_symtab_t* symtab, char* n
 	//This namespace is going to be added as the child of the current one
 	dynamic_array_add(&(symtab->current->child_namespaces), namespace);
 
+	//Flag the current namespace as this one's parent
+	namespace->parent_namespace = symtab->current;
+
 	//Now give it back
 	return namespace;
+}
+
+
+/**
+ * Enter into a namespace. This namespace is now the current namespace until exit_namespace()
+ * is called, in which case it goes back to its parent namespace
+ */
+void enter_namespace(function_symtab_t* symtab, function_namespace_t* new_namespace){
+	symtab->current = new_namespace;
+}
+
+
+/**
+ * Exit out of the current namespace by going to its parent
+ */
+void exit_namespace(function_symtab_t* symtab){
+	//This is bad if we're trying to do it
+	if(symtab->current->parent_namespace == NULL){
+		fprintf(stderr, "Fatal internal compiler error: attempt to exit the parent namespace\n");
+		exit(1);
+	}
+
+	//Go back up the chain into this one's parent namespace
+	symtab->current = symtab->current->parent_namespace;
 }
 
 

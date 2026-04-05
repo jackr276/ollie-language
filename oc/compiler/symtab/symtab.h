@@ -458,6 +458,17 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, visibilt
 function_namespace_t* create_namespace_record(function_symtab_t* symtab, char* name);
 
 /**
+ * Enter into a namespace. This namespace is now the current namespace until exit_namespace()
+ * is called, in which case it goes back to its parent namespace
+ */
+void enter_namespace(function_symtab_t* symtab, function_namespace_t* new_namespace);
+
+/**
+ * Exit out of the current namespace by going to its parent
+ */
+void exit_namespace(function_symtab_t* symtab);
+
+/**
  * Create a type record for the symbol table
  */
 symtab_type_record_t* create_type_record(generic_type_t* type);

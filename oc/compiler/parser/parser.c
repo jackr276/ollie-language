@@ -13317,9 +13317,15 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 		return print_and_return_error(info, parser_line_num);
 	}
 
-	//Otherwise, we can create this namespace and increase our namespace scope
-	function_namespace_t* new_namespace = create_nam
+	//Otherwise, we can create this namespace
+	function_namespace_t* new_namespace = create_namespace_record(function_symtab, lookahead.lexeme.string);
 
+	//We are now inside of this namespace
+	enter_namespace(new_namespace);
+
+
+	//Now that we are done we can leave this namespace
+	exit_namespace();
 
 	printf("TODO NOT DONE\n");
 	exit(1);
