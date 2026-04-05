@@ -928,16 +928,20 @@ u_int8_t insert_function(function_symtab_t* symtab, symtab_function_record_t* re
 	record->function_id = symtab->current_function_id;
 	(symtab->current_function_id)++;
 
+	//Grab the current namespace
+	symtab_function_sheaf_t* current = symtab->current;
+
 	//If there's no collision
-	if(symtab->records[record->hash] == NULL){
+	if(current->records[record->hash] == NULL){
 		//Store it and get out
-		symtab->records[record->hash] = record;
+		current->records[record->hash] = record;
+
+		//No collision
 		return 0;
 	}
 	
 	//Otherwise if we get here there was a collision
-	//Grab the head record
-	symtab_function_record_t* cursor = symtab->records[record->hash];
+	symtab_function_record_t* cursor = current->records[record->hash];
 
 	//Get to the very last node
 	while(cursor->next != NULL){
@@ -1285,25 +1289,37 @@ symtab_variable_record_t* initialize_instruction_pointer(type_symtab_t* types){
 
 /**
  * Lookup the record in the symtab that corresponds to the following name.
- * 
- * There is only one lexical scope for functions, so this symtab is quite simple
+ *
+ * Our lookup is always biased to the most local sheaf first, and then up the
+ * chain as we go
  */
 symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name){
 	//Let's grab it's hash
 	u_int64_t h = hash_function(name); 
 
-	//Grab whatever record is at that hash
-	symtab_function_record_t* record_cursor = symtab->records[h];
-		
-	//We could have had collisions so we'll have to hunt here
-	while(record_cursor != NULL){
-		//If we find the right one, then we can get out
-		if(strncmp(record_cursor->func_name.string, name, record_cursor->func_name.current_length) == 0){
-			return record_cursor;
+	//Get a cursor for the namespace
+	symtab_function_sheaf_t* namespace_cursor = symtab->current;
+
+	//Keep crawling our way up until we find it
+	do {
+		//Grab whatever record is at that hash
+		symtab_function_record_t* record_cursor = namespace_cursor->records[h];
+
+		//We could have had collisions so we'll have to hunt here
+		while(record_cursor != NULL){
+			//If we find the right one, then we can get out
+			if(strncmp(record_cursor->func_name.string, name, record_cursor->func_name.current_length) == 0){
+				return record_cursor;
+			}
+			//Advance it if we didn't have the right name
+			record_cursor = record_cursor->next;
 		}
-		//Advance it if we didn't have the right name
-		record_cursor = record_cursor->next;
-	}
+
+		//If we didn't find it then we'll go up the chain by one
+		namespace_cursor = namespace_cursor->previous_level;
+
+	//Keep going so long as we aren't NULL
+	} while(namespace_cursor != NULL);
 
 	//When we make it down here, we found nothing so
 	return NULL;
@@ -2055,59 +2071,64 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnin
 	//Create a min priority queue for ordering error messages
 	min_priority_queue_t queue = min_priority_queue_alloc();
 
-	//Run through all keyspace records
-	for(u_int16_t i = 0; i < FUNCTION_KEYSPACE; i++){
-		record = symtab->records[i];
+	//Run thorugh all of the sheafs
+	for(u_int32_t _ = 0; _ < symtab->sheafs.current_index; _++){
+		//Grab the current sheaf to check
+		symtab_function_sheaf_t* current_sheaf = dynamic_array_get_at(&(symtab->sheafs), _);
 
-		//We could have chaining here, so run through just in case
-		while(record != NULL){
-			//If one of these 3 error conditions is true, we will print a warning
-			if((record->called == 0 && record->defined == 0)
-				|| (record->called == 0 && record->defined == 1)
-				|| (record->called == 1 && record->defined == 0)){
+		//Now run through the keyspace in this sheaf
+		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+			record = current_sheaf->records[i];
 
-				//Enqueue using the line number as priority
-				min_priority_queue_enqueue(&queue, record, record->line_number);
+			//We could have chaining here, so run through just in case
+			while(record != NULL){
+				//If one of these 3 error conditions is true, we will print a warning
+				if((record->called == 0 && record->defined == 0)
+					|| (record->called == 0 && record->defined == 1)
+					|| (record->called == 1 && record->defined == 0)){
+
+					//Enqueue using the line number as priority
+					min_priority_queue_enqueue(&queue, record, record->line_number);
+				}
+
+				//Advance record up
+				record = record->next;
 			}
 
-			//Advance record up
-			record = record->next;
-		}
+			//Now that we have everything loaded into a queue by line number, we will go through
+			//and print each individual error
+			while(min_priority_queue_is_empty(&queue) == FALSE){
+				//Get it off of the queue
+				record = min_priority_queue_dequeue(&queue);
+			
+				if(record->called == FALSE && record->defined == FALSE){
+					//Generate a warning here
+					(*num_warnings)++;
 
-		//Now that we have everything loaded into a queue by line number, we will go through
-		//and print each individual error
-		while(min_priority_queue_is_empty(&queue) == FALSE){
-			//Get it off of the queue
-			record = min_priority_queue_dequeue(&queue);
-		
-			if(record->called == FALSE && record->defined == FALSE){
-				//Generate a warning here
-				(*num_warnings)++;
+					sprintf(info, "Function \"%s\" is never defined and never called. First defined here:", record->func_name.string);
+					PRINT_WARNING(info, record->line_number);
+					//Also print where the function was defined
+					print_function_name(record);
 
-				sprintf(info, "Function \"%s\" is never defined and never called. First defined here:", record->func_name.string);
-				PRINT_WARNING(info, record->line_number);
-				//Also print where the function was defined
-				print_function_name(record);
+				//Only generate here if we have a private function. Public functions may be called from external files
+				} else if(record->called == FALSE && record->defined == TRUE && record->visibility == VISIBILITY_TYPE_PRIVATE){
+					//Generate a warning here
+					(*num_warnings)++;
 
-			//Only generate here if we have a private function. Public functions may be called from external files
-			} else if(record->called == FALSE && record->defined == TRUE && record->visibility == VISIBILITY_TYPE_PRIVATE){
-				//Generate a warning here
-				(*num_warnings)++;
+					sprintf(info, "Function \"%s\" is defined but never called. First defined here:", record->func_name.string);
+					PRINT_WARNING(info, record->line_number);
+					//Also print where the function was defined
+					print_function_name(record);
 
-				sprintf(info, "Function \"%s\" is defined but never called. First defined here:", record->func_name.string);
-				PRINT_WARNING(info, record->line_number);
-				//Also print where the function was defined
-				print_function_name(record);
+				} else if(record->called == 1 && record->defined == 0){
+					//Generate a warning here
+					(*num_warnings)++;
 
-			} else if(record->called == 1 && record->defined == 0){
-				//Generate a warning here
-				(*num_warnings)++;
-
-				sprintf(info, "Function \"%s\" is called but never explicitly defined. First declared here:", record->func_name.string);
-				PRINT_WARNING(info, record->line_number);
-				//Also print where the function was defined
-				print_function_name(record);
-
+					sprintf(info, "Function \"%s\" is called but never explicitly defined. First declared here:", record->func_name.string);
+					PRINT_WARNING(info, record->line_number);
+					//Also print where the function was defined
+					print_function_name(record);
+				}
 			}
 		}
 	}
