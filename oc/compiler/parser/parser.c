@@ -13500,29 +13500,34 @@ static inline void flag_function_for_alignment(function_symtab_t* symtab, symtab
 	//The number of functions is also the current id
 	u_int32_t function_count = symtab->current_function_id;
 
-	//For every other function
-	for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
-		symtab_function_record_t* other = symtab->records[i];
-		
-		//Traverse the linked list in case of collisions
-		while(other != NULL){
-			//No point in comparing if they match
-			if(other != record){
-				/**
-				 * The "other" is the row, and the record is the index, so 
-				 * we need to compute other_index * count + record_index
-				 */
-				u_int32_t index = other->function_id * function_count + flagged_function_index;
+	//Now run through every other function
+	for(u_int32_t _ = 0; _ < symtab->sheafs.current_index; _++){
+		symtab_function_sheaf_t* current_namespace = dynamic_array_get_at(&(symtab->sheafs), _);
 
-				//If this is TRUE then
-				if(symtab->call_graph_transitive_closure[index] == TRUE){
-					//Flag that the other needs initial alignment
-					other->requires_initial_alignment = TRUE;
+		//For each record inside of the namespace
+		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+			symtab_function_record_t* other = current_namespace->records[i];
+			
+			//Traverse the linked list in case of collisions
+			while(other != NULL){
+				//No point in comparing if they match
+				if(other != record){
+					/**
+					 * The "other" is the row, and the record is the index, so 
+					 * we need to compute other_index * count + record_index
+					 */
+					u_int32_t index = other->function_id * function_count + flagged_function_index;
+
+					//If this is TRUE then
+					if(symtab->call_graph_transitive_closure[index] == TRUE){
+						//Flag that the other needs initial alignment
+						other->requires_initial_alignment = TRUE;
+					}
 				}
-			}
 
-			//Bump it up
-			other = other->next;
+				//Bump it up
+				other = other->next;
+			}
 		}
 	}
 }
@@ -13551,17 +13556,23 @@ static void flag_functions_that_require_initial_alignment(function_symtab_t* sym
 	/**
 	 * Run through all of the records in the function keyspace
 	 */
-	for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
-		//Extract it
-		symtab_function_record_t* record = symtab->records[i];
+	for(u_int32_t _ = 0; _ < symtab->sheafs.current_index; _++){
+		//Extract the current namespace
+		symtab_function_sheaf_t* current_namespace = dynamic_array_get_at(&(symtab->sheafs), _);
 
-		//So long as it's not NULL keep drilling
-		while(record != NULL){
-			//Flag it
-			flag_function_for_alignment(symtab, record);
+		//Now run through everything in that namespace
+		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+			//Extract it
+			symtab_function_record_t* record = current_namespace->records[i];
 
-			//Bump it up
-			record = record->next;
+			//So long as it's not NULL keep drilling
+			while(record != NULL){
+				//Flag it
+				flag_function_for_alignment(symtab, record);
+
+				//Bump it up
+				record = record->next;
+			}
 		}
 	}
 }
