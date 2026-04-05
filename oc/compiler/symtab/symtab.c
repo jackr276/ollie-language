@@ -1330,6 +1330,32 @@ symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name)
 
 
 /**
+ * Lookup a namespace inside of the symtab. Unlike searching for a function there
+ * is no hashing to do here, just string comparison
+ */
+symtab_function_sheaf_t* lookup_namespace(function_symtab_t* symtab, char* name){
+	//Run through every sheaf
+	for(u_int32_t i = 0; i < symtab->sheafs.current_index; i++){
+		//Extract it
+		symtab_function_sheaf_t* sheaf = dynamic_array_get_at(&(symtab->sheafs), i);
+
+		//Not possible to lookup the default sheaf
+		if(sheaf->is_default == TRUE){
+			continue;
+		}
+
+		//Names match then we're a go
+		if(strcmp(sheaf->namespace_name.string, name) == 0){
+			return sheaf;
+		}
+	}
+
+	//If we make it all of the way down here, that means that we've found nothing
+	return NULL;
+}
+
+
+/**
  * Lookup a macro in the symtab. This is a simpler lookup then most because
  * there are no nested lexical scopes here, we only need to check one table
  */

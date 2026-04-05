@@ -13300,9 +13300,9 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 	/**
 	 * We now need to search to make sure that we don't have duplicate values
 	 * here for this namespace declaration. We will search the function symtab
-	 * for this
-	 *
-	 * TODO
+	 * for this. It is actually ok for us to have a function namespace 
+	 * that matches the name of something else that isn't another function
+	 * namespace
 	 */
 
 	printf("TODO NOT DONE\n");

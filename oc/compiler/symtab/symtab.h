@@ -512,6 +512,11 @@ symtab_variable_record_t* initialize_instruction_pointer(type_symtab_t* types);
 symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name);
 
 /**
+ * Lookup a namespace inside of the symtab.
+ */
+symtab_function_sheaf_t* lookup_namespace(function_symtab_t* symtab, char* name);
+
+/**
  * Lookup a variable name in the symtab
  */
 symtab_variable_record_t* lookup_variable(variable_symtab_t* symtab, char* name);
