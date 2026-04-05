@@ -13402,9 +13402,12 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 	if(namespace != NULL){
 		//Accurate printing based on whether or not we're in the default namespace
 		if(function_symtab->current->is_default == TRUE){
-			sprintf(info, "Namespace \"%s\" has already been declared under the top level namespace", namespace_name);
+			sprintf(info, "Namespace \"%s\" has already been declared under the top level namespace",
+		   				generate_fully_qualified_namespace_name(namespace).string);
 		} else {
-			sprintf(info, "Namespace \"%s\" has already been declared under the parent namespace \"%s\"", namespace_name, function_symtab->current->namespace_name.string);
+			sprintf(info, "Namespace \"%s\" has already been declared under the parent namespace \"%s\"",
+		   			generate_fully_qualified_namespace_name(namespace).string,
+		   			generate_fully_qualified_namespace_name(function_symtab->current).string);
 		}
 
 		return print_and_return_error(info, parser_line_num);

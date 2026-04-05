@@ -2015,7 +2015,7 @@ dynamic_string_t generate_fully_qualified_namespace_name(function_namespace_t* n
 		cursor = cursor->parent_namespace;
 
 		//Put temp inside of the stack
-		push(&stack, cursor);
+		push(&stack, temp);
 	}
 
 	//Now we'll go through the stack and generate our name that way
@@ -2070,7 +2070,7 @@ dynamic_string_t generate_fully_qualified_function_name(symtab_function_record_t
 		cursor = cursor->parent_namespace;
 
 		//Put temp inside of the stack
-		push(&stack, cursor);
+		push(&stack, temp);
 	}
 
 	//Now we'll go through the stack and generate our name that way
