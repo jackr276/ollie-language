@@ -1715,7 +1715,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 
 	//We have a general error-probably will be quite uncommon
 	if(lookahead.tok != IDENT){
-		return print_and_return_error("Non-identifier provided as funciton call", parser_line_num);
+		return print_and_return_error("Non-identifier provided as function call", parser_line_num);
 	}
 
 	//Grab the function name out for convenience
@@ -1782,7 +1782,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		current_function->requires_initial_alignment = TRUE;
 
 	//This means that they're both NULL. We'll need to throw an error here
-	} else{
+	} else {
 		sprintf(info, "\"%s\" is not currently defined as a function or function pointer", function_name.string);
 		//Return the error node and get out
 		return print_and_return_error(info, current_line);
@@ -13307,11 +13307,9 @@ static generic_ast_node_t* namespace_member(ollie_token_stream_t* token_stream){
 		case NAMESPACE:
 			return namespace_declaration(token_stream);
 	
-		//Type definition
 		case DEFINE:
 			return print_and_return_error("Type definition may not happen inside of a namespace", parser_line_num);
-			
-		//Type aliasing
+
 		case ALIAS:
 			return print_and_return_error("Type aliasing may not happen inside of a namespace", parser_line_num);
 
@@ -13386,6 +13384,9 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 	//Otherwise, we can create this namespace
 	function_namespace_t* new_namespace = create_namespace_record(function_symtab, namespace_name);
 
+	//We're now safe to allocate this ast node
+	generic_ast_node_t* namespace_node = ast_node_alloc(AST_NODE_TYPE_NAMESPACE_DECLARATION, SIDE_TYPE_LEFT);
+
 	//We are now inside of this namespace
 	enter_namespace(function_symtab, new_namespace);
 
@@ -13404,6 +13405,9 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 			return print_and_return_error("Invalid member discovered in namespace", parser_line_num);
 		}
 
+		//Now that we know that it's good we can add it as a child
+		add_child_node(namespace_node, member);
+
 		//Refresh it
 		lookahead = get_next_token(stream, &parser_line_num);
 	}
@@ -13411,12 +13415,12 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 	//Now that we are done we can leave this namespace
 	exit_namespace(function_symtab);
 
-	//Now that we've exited we need to see the closing R_CURLY
+	//Now that we've exited we need to match off of the grouping stack
+	if(pop_token(&grouping_stack).tok != L_CURLY){
+		return print_and_return_error("Mismatched curly braces detected", parser_line_num);
+	}
 
-
-
-	printf("TODO NOT DONE\n");
-	exit(1);
+	return namespace_node;
 }
 
 
