@@ -54,6 +54,7 @@ typedef enum {
 	SINGLE_AND, /* & */
 	SINGLE_OR,
 	COLONEQ, /* := */
+	COLONCOLON, /* :: */
 	PLUSEQ, // +=
 	MINUSEQ, // -=
 	STAREQ, // *=

@@ -104,6 +104,8 @@ char* lexitem_to_string(lexitem_t* lexitem){
 			return "@";
 		case COLONEQ:
 			return ":=";
+		case COLONCOLON:
+			return "::";
 		case DOT:
 			return ".";
 		case POUND:
@@ -401,6 +403,8 @@ char* operator_token_to_string(ollie_token_t token){
 			return "%=";
 		case COLON:
 			return ":";
+		case COLONCOLON:
+			return "::";
 		case CARROT:
 			return "^";
 		case XOREQ:
@@ -903,6 +907,12 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						switch(ch2) {
 							case '=':
 								lex_item.tok = COLONEQ;
+								lex_item.line_num = line_number;
+								add_lexitem_to_stream(stream, lex_item);
+								break;
+
+							case COLON:
+								lex_item.tok = COLONCOLON;
 								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
