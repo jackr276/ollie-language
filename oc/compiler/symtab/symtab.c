@@ -84,7 +84,7 @@ function_symtab_t* function_symtab_alloc(){
 	symtab->sheafs = dynamic_array_alloc();
 
 	//Now let's create the very first sheaf
-	symtab_function_sheaf_t* default_namespace = calloc(1, sizeof(symtab_function_sheaf_t));
+	function_namespace_t* default_namespace = calloc(1, sizeof(function_namespace_t));
 
 	//This is the default sheaf
 	default_namespace->is_default = TRUE;
@@ -872,13 +872,13 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, visibilt
 	return record;
 }
 
-
 /**
- * Create a namespace record and add it to the symtab
+ * Create a namespace record and add it into the symtab. This will create the new namespace as a
+ * child of the current one
  */
-symtab_function_sheaf_t* create_namespace_record(function_symtab_t* symtab, char* name){
+function_namespace_t* create_namespace_record(function_symtab_t* symtab, char* name){
 	//Allocate it
-	symtab_function_sheaf_t* namespace = calloc(1, sizeof(symtab_function_sheaf_t));
+	function_namespace_t* namespace = calloc(1, sizeof(function_namespace_t));
 
 	//It's not the default
 	namespace->is_default = FALSE;
@@ -888,6 +888,14 @@ symtab_function_sheaf_t* create_namespace_record(function_symtab_t* symtab, char
 
 	//Set the name in
 	dynamic_string_set(&(namespace->namespace_name), name);
+
+	//If this needs to be allocated then we will do so
+	if(symtab->current->child_namespaces.internal_array == NULL){
+		symtab->current->child_namespaces = dynamic_array_alloc();
+	}
+
+	//This namespace is going to be added as the child of the current one
+	dynamic_array_add(&(symtab->current->child_namespaces), namespace);
 
 	//Now give it back
 	return namespace;
@@ -953,7 +961,7 @@ u_int8_t insert_function(function_symtab_t* symtab, symtab_function_record_t* re
 	(symtab->current_function_id)++;
 
 	//Grab the current namespace
-	symtab_function_sheaf_t* current = symtab->current;
+	function_namespace_t* current = symtab->current;
 
 	//If there's no collision
 	if(current->records[record->hash] == NULL){
@@ -1322,7 +1330,7 @@ symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name)
 	u_int64_t h = hash_function(name); 
 
 	//Get a cursor for the namespace
-	symtab_function_sheaf_t* namespace_cursor = symtab->current;
+	function_namespace_t* namespace_cursor = symtab->current;
 
 	//Keep crawling our way up until we find it
 	do {
@@ -1340,7 +1348,7 @@ symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name)
 		}
 
 		//If we didn't find it then we'll go up the chain by one
-		namespace_cursor = namespace_cursor->previous_level;
+		namespace_cursor = namespace_cursor->parent_namespace;
 
 	//Keep going so long as we aren't NULL
 	} while(namespace_cursor != NULL);
@@ -1354,11 +1362,11 @@ symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name)
  * Lookup a namespace inside of the symtab. Unlike searching for a function there
  * is no hashing to do here, just string comparison
  */
-symtab_function_sheaf_t* lookup_namespace(function_symtab_t* symtab, char* name){
+function_namespace_t* lookup_namespace(function_symtab_t* symtab, char* name){
 	//Run through every sheaf
 	for(u_int32_t i = 0; i < symtab->sheafs.current_index; i++){
 		//Extract it
-		symtab_function_sheaf_t* sheaf = dynamic_array_get_at(&(symtab->sheafs), i);
+		function_namespace_t* sheaf = dynamic_array_get_at(&(symtab->sheafs), i);
 
 		//Not possible to lookup the default sheaf
 		if(sheaf->is_default == TRUE){
@@ -2000,7 +2008,7 @@ void print_call_graph_adjacency_matrix(FILE* fl, function_symtab_t* function_sym
 
 	//Run through all of the sheafs
 	for(u_int32_t _ = 0; _ < function_symtab->sheafs.current_index; _++){
-		symtab_function_sheaf_t* sheaf = dynamic_array_get_at(&(function_symtab->sheafs), _);
+		function_namespace_t* sheaf = dynamic_array_get_at(&(function_symtab->sheafs), _);
 
 		//Run through and print all of these out first
 		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
@@ -2129,7 +2137,7 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnin
 	//Run thorugh all of the sheafs
 	for(u_int32_t _ = 0; _ < symtab->sheafs.current_index; _++){
 		//Grab the current sheaf to check
-		symtab_function_sheaf_t* current_sheaf = dynamic_array_get_at(&(symtab->sheafs), _);
+		function_namespace_t* current_sheaf = dynamic_array_get_at(&(symtab->sheafs), _);
 
 		//Now run through the keyspace in this sheaf
 		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
@@ -2326,7 +2334,7 @@ void finalize_function_symtab(function_symtab_t* symtab){
 	 * To populate the adjacency matrix, we'll need to run through literally ever function sheaf
 	 */
 	for(u_int32_t _ = 0; _ < symtab->sheafs.current_index; _++){
-		symtab_function_sheaf_t* current_namespace = dynamic_array_get_at(&(symtab->sheafs), _);
+		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->sheafs), _);
 
 		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
 			//Totally possible for this to happen
@@ -2375,7 +2383,7 @@ void finalize_function_symtab(function_symtab_t* symtab){
  */
 void function_symtab_dealloc(function_symtab_t* symtab){
 	//For temporary holding
-	symtab_function_sheaf_t* sheaf;
+	function_namespace_t* sheaf;
 	symtab_function_record_t* record;
 	symtab_function_record_t* temp;
 
@@ -2414,6 +2422,9 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 
 		//Destroy the name
 		dynamic_string_dealloc(&(sheaf->namespace_name));
+
+		//Destroy the array of children
+		dynamic_array_dealloc(&(sheaf->child_namespaces));
 
 		//Free the sheaf itself
 		free(sheaf);

@@ -45,8 +45,8 @@ typedef struct macro_symtab_t macro_symtab_t;
 typedef struct symtab_variable_sheaf_t symtab_variable_sheaf_t;
 //The sheafs in the type symtab
 typedef struct symtab_type_sheaf_t symtab_type_sheaf_t;
-//The sheafs(namespaces) in the function symtab
-typedef struct symtab_function_sheaf_t symtab_function_sheaf_t;
+//The namespaces of our function symtab act like a tree
+typedef struct function_namespace_t function_namespace_t;
 
 //The records in the function symtab
 typedef struct symtab_function_record_t symtab_function_record_t;
@@ -290,11 +290,13 @@ struct symtab_type_sheaf_t{
  * This structure represents a specific namespace level
  * of the function symtab
  */
-struct symtab_function_sheaf_t{
+struct function_namespace_t{
 	//The actual name of this namesapce
 	dynamic_string_t namespace_name;
 	//Link to the prior level
-	symtab_function_sheaf_t* previous_level;
+	function_namespace_t* parent_namespace;
+	//All of the child namespaces that we have
+	dynamic_array_t child_namespaces;
 	//Hash table for the records
 	symtab_function_record_t* records[FUNCTION_KEYSPACE];
 	//Is this the default sheaf?
@@ -348,7 +350,7 @@ struct function_symtab_t{
 	//A dynamic array of sheafs
 	dynamic_array_t sheafs;
 	//The current sheaf
-	symtab_function_sheaf_t* current;
+	function_namespace_t* current;
 	//The adjacency matrix for the call graph
 	u_int8_t* call_graph_matrix;
 	//The transitive closure for the call graph
@@ -450,9 +452,10 @@ void add_function_parameter(type_symtab_t* symtab, symtab_function_record_t* fun
 symtab_function_record_t* create_function_record(dynamic_string_t name, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number);
 
 /**
- * Create a namespace record
+ * Create a namespace record and add it into the symtab. This will create the new namespace as a
+ * child of the current one
  */
-symtab_function_sheaf_t* create_namespace_record(dynamic_string_t* name);
+function_namespace_t* create_namespace_record(function_symtab_t* symtab, char* name);
 
 /**
  * Create a type record for the symbol table
@@ -519,7 +522,7 @@ symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name)
 /**
  * Lookup a namespace inside of the symtab.
  */
-symtab_function_sheaf_t* lookup_namespace(function_symtab_t* symtab, char* name);
+function_namespace_t* lookup_namespace(function_symtab_t* symtab, char* name);
 
 /**
  * Lookup a variable name in the symtab

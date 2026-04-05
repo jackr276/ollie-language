@@ -13309,7 +13309,7 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 	 */
 
 	//Do we have a namespace named this already?
-	symtab_function_sheaf_t* namespace = lookup_namespace(function_symtab, lookahead.lexeme.string);
+	function_namespace_t* namespace = lookup_namespace(function_symtab, lookahead.lexeme.string);
 
 	//If we found one, then we can't do this
 	if(namespace != NULL){
@@ -13318,7 +13318,7 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 	}
 
 	//Otherwise, we can create this namespace and increase our namespace scope
-	symtab_function_sheaf_t* new_namespace = create_nam
+	function_namespace_t* new_namespace = create_nam
 
 
 	printf("TODO NOT DONE\n");
@@ -13459,7 +13459,7 @@ static inline u_int8_t validate_inlined_functions_are_non_recursive(function_sym
 
 	//Run through every namespace
 	for(u_int32_t _ = 0; _ < symtab->sheafs.current_index; _++){
-		symtab_function_sheaf_t* sheaf = dynamic_array_get_at(&(symtab->sheafs), _);
+		function_namespace_t* sheaf = dynamic_array_get_at(&(symtab->sheafs), _);
 
 		//Now for every record in the namespace
 		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
@@ -13523,7 +13523,7 @@ static inline void flag_function_for_alignment(function_symtab_t* symtab, symtab
 
 	//Now run through every other function
 	for(u_int32_t _ = 0; _ < symtab->sheafs.current_index; _++){
-		symtab_function_sheaf_t* current_namespace = dynamic_array_get_at(&(symtab->sheafs), _);
+		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->sheafs), _);
 
 		//For each record inside of the namespace
 		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
@@ -13579,7 +13579,7 @@ static void flag_functions_that_require_initial_alignment(function_symtab_t* sym
 	 */
 	for(u_int32_t _ = 0; _ < symtab->sheafs.current_index; _++){
 		//Extract the current namespace
-		symtab_function_sheaf_t* current_namespace = dynamic_array_get_at(&(symtab->sheafs), _);
+		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->sheafs), _);
 
 		//Now run through everything in that namespace
 		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
