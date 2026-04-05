@@ -2330,9 +2330,9 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 	symtab_function_record_t* temp;
 
 	//Run through all of the sheafs
-	for(u_int32_t i = 0; i < symtab->sheafs.current_index; i++){
+	for(u_int32_t _ = 0; _ < symtab->sheafs.current_index; _++){
 		//Get the sheaf out
-		sheaf = dynamic_array_get_at(&(symtab->sheafs), i);
+		sheaf = dynamic_array_get_at(&(symtab->sheafs), _);
 
 		//Now go through all records
 		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
@@ -2360,13 +2360,13 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 
 				free(temp);
 			}
-
-			//Destroy the name
-			dynamic_string_dealloc(&(sheaf->namespace_name));
-
-			//Free the sheaf itself
-			free(sheaf);
 		}
+
+		//Destroy the name
+		dynamic_string_dealloc(&(sheaf->namespace_name));
+
+		//Free the sheaf itself
+		free(sheaf);
 	}
 
 	//Deallocate the sheaf array
