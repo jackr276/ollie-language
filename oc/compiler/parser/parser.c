@@ -1718,31 +1718,54 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 
 	//We have a general error-probably will be quite uncommon
 	if(lookahead.tok != IDENT){
+		sprintf(info, "Expected identifier after @ but got \"%s\" instead", lexitem_to_string(&lookahead));
+
 		return print_and_return_error("Non-identifier provided as function call", parser_line_num);
 	}
 
-	//TODO
+	//Holders for when our eventual process here shakes out
+	symtab_variable_record_t* function_pointer_variable = NULL;
+	symtab_function_record_t* function_record = NULL;
+
 	//Do we see the "::" separator here? If so then we need to parse the fully qualified name
 	lookahead2 = get_next_token(token_stream, &parser_line_num);
 
-	push_back_token(token_stream, &parser_line_num);
-
-	//TODO
-
-	//Grab the function name out for convenience
-	function_name = lookahead.lexeme;
-
 	/**
+	 * If the lookahead token is *not* a ::, then we are just doing a regular lookup.
 	 * This identifier has the possibility of being a direct function call or a function pointer
 	 * of some kind. To determine which it is, we'll need to look the name up in both symtabs
 	 * and go accordingly
 	 */
-	
-	//Lookup the variable
-	symtab_variable_record_t* function_pointer_variable = lookup_variable(variable_symtab, function_name.string);
+	if(lookahead2.tok != COLONCOLON){
+		//Push it back because we don't need it
+		push_back_token(token_stream, &parser_line_num);
 
-	//Let's now look up the function name in the function symtab
-	symtab_function_record_t* function_record = lookup_function(function_symtab, function_name.string);
+		//Grab the function name out for convenience
+		function_name = lookahead.lexeme;
+
+		//Most common case is we're just calling directly so we'll start there
+		function_record = lookup_function(function_symtab, function_name.string);
+
+		//Only then will we look up the function pointer variable. If that fails, then this is just bad
+		if(function_record == NULL){
+			function_pointer_variable = lookup_variable(variable_symtab, function_name.string);
+
+			//If this is also NULL, then we'll fail out
+			if(function_pointer_variable == NULL){
+				sprintf(info, "\"%s\" is not currently defined as a function or function pointer", function_name.string);
+				return print_and_return_error(info, parser_line_num);
+			}
+		}
+
+	/**
+	 * Otherwise if we did see a ::, then we're doing a fully qualified
+	 * function lookup. If we have seen this then we can guarantee that
+	 * this is not a function pointer
+	 */
+	} else {
+		printf("TODO\n\n\n");
+		exit(1);
+	}
 
 	//This is the most common case - that we have a simple, direct function call
 	if(function_record != NULL){
@@ -1764,8 +1787,8 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		//We'll now note that this was indeed called
 		function_record->called = TRUE;
 
-	//Otherwise if we see this case, then we have an indirect function call to deal with
-	} else if(function_pointer_variable != NULL){
+	//The only way to get here is if the function pointer wasn't NULL
+	} else {
 		//Strip the type away here
 		function_type = dealias_type(function_pointer_variable->type_defined_as);
 
@@ -1791,12 +1814,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		 * initial alignment for this function
 		 */
 		current_function->requires_initial_alignment = TRUE;
-
-	//This means that they're both NULL. We'll need to throw an error here
-	} else {
-		sprintf(info, "\"%s\" is not currently defined as a function or function pointer", function_name.string);
-		//Return the error node and get out
-		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Add the inferred type in for convenience as well
@@ -13425,6 +13442,7 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 	//Seed the lookahead for our search
 	lookahead = get_next_token(stream, &parser_line_num);
 
+	//Keep going so long as we're seeing r curlies
 	while(lookahead.tok != R_CURLY){
 		//Push the token back
 		push_back_token(stream, &parser_line_num);
