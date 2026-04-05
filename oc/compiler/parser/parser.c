@@ -1763,8 +1763,48 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	 * this is not a function pointer
 	 */
 	} else {
+		/**
+		 * Initially we're looking at the very first namespace. We need to just do a blanket search to
+		 * see if anything is here in the entire program 
+		 */
+		function_namespace_t* current_namespace = lookup_namespace(function_symtab, lookahead.lexeme.string);
+
+		//No point in going any further
+		if(current_namespace == NULL){
+			sprintf(info, "There is no namespace named \"%s\" in the program", lookahead.lexeme.string);
+			return print_and_return_error(info, parser_line_num);
+		}
 		printf("TODO\n\n\n");
 		exit(1);
+
+		/**
+		 * Once we've gotten here we know that the lookahead is a valid namespace
+		 * and lookahead2 was ::. We need to keep refreshing both tokens. So long
+		 * as lookahead2 is ::, we need to keep searching for lookahead as a valid
+		 * namespace. Once lookahead2 is not ::, that's how we know we've found our
+		 * function name in lookahead and that is also our terminal condition
+		 */
+		while(TRUE){
+			lookahead = get_next_token(token_stream, &parser_line_num);
+			lookahead2 = get_next_token(token_stream, &parser_line_num);
+
+			//Just a generic parse error here
+			if(lookahead.tok != IDENT){
+				sprintf(info, "Expected identifier after :: but got \"%s\"", lexitem_to_string(&lookahead));
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			//We saw :: again, so we need to check that lookahead is a valid namespace under the current namespace
+			if(lookahead2.tok == COLONCOLON){
+
+			//Otherwise, we've reached the end so we'll need to lookup the function inside of our given namespace
+			} else {
+				//Push back lookahead2
+				push_back_token(token_stream, &parser_line_num);
+
+			}
+		}
+
 	}
 
 	//This is the most common case - that we have a simple, direct function call

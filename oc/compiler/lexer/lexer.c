@@ -911,7 +911,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 
-							case COLON:
+							case ':':
 								lex_item.tok = COLONCOLON;
 								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);

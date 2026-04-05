@@ -1832,9 +1832,11 @@ void print_function_record(symtab_function_record_t* record){
  * This always goes as: source calls target
  */
 void add_function_call(symtab_function_record_t* source, symtab_function_record_t* target){
-	//Add it into the list of functions called by the source. Since we use a set here, we are
-	//guaranteed to never add the function in more than once even if the source function calls
-	//it multiple times in the body
+	/**
+	 * Add it into the list of functions called by the source. Since we use a set here, we are
+	 * guaranteed to never add the function in more than once even if the source function calls
+	 * it multiple times in the body
+	 */
 	dynamic_set_add(&(source->called_functions), target);
 
 	//This function has been called
