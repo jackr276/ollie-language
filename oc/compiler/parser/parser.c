@@ -13280,6 +13280,37 @@ static generic_ast_node_t* global_let_statement(ollie_token_stream_t* token_stre
 
 
 /**
+ * Process the new namespace directive. A new namespace partition itself contains one or
+ * many declaration partitions. Namespaces may not be empty. 
+ *
+ * NOTE: By the time we get here, we've already seen and consumed "namespace"
+ *
+ * BNF Rule: <namespace-partition> ::= namespace <identifier> { <declaration_partition>+ }
+ */
+static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
+	//Refresh the lookahead
+	lexitem_t lookahead = get_next_token(stream, &parser_line_num);
+
+	//If this isn't an identifier, we fail out
+	if(lookahead.tok != IDENT){
+		sprintf(info, "Expected identifier in namespace declaration but found \"%s\"", lexitem_to_string(&lookahead));
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	/**
+	 * We now need to search to make sure that we don't have duplicate values
+	 * here for this namespace declaration. We will search the function symtab
+	 * for this
+	 *
+	 * TODO
+	 */
+
+	printf("TODO NOT DONE\n");
+	exit(1);
+}
+
+
+/**
  * Here we can either have a function definition or a declaration
  *
  * Like all other functions, this function returns a pointer to the 
@@ -13343,6 +13374,9 @@ static generic_ast_node_t* declaration_partition(ollie_token_stream_t* token_str
 
 		case DECLARE:
 			return global_declare_statement(token_stream);
+
+		case NAMESPACE:
+			return namespace_declaration(token_stream);
 
 		default:
 			return print_and_return_error("Invalid/unknown expression type encountered in the top level scope", parser_line_num);
