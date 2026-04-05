@@ -37,7 +37,7 @@ pub fn main(arg:i32, argv:char**) -> i32 {
 	a = x - 0;
 	x = !a;
 	//Modulus
-	x = x % -3;
+	x = x % 3;
 
 	a = (x * -128) + (x - 11);
 	x = x / 8;

@@ -11,6 +11,7 @@
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
+#include <iso646.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -569,6 +570,48 @@ static inline u_int32_t log2_of_known_power_of_2(u_int64_t value){
 	}
 
 	return counter;
+}
+
+
+/**
+ * Take the binary log of a constant and return the value. The constant
+ * itself remains unmodified
+ */
+static u_int32_t log2_of_constant(three_addr_const_t* constant){
+	//Switch based on the type
+	switch(constant->const_type){
+		case INT_CONST:
+			return log2_of_known_power_of_2(constant->constant_value.signed_integer_constant);
+
+		case INT_CONST_FORCE_U:
+			return log2_of_known_power_of_2(constant->constant_value.unsigned_integer_constant);
+
+		case LONG_CONST:
+			return log2_of_known_power_of_2(constant->constant_value.signed_long_constant);
+
+		case LONG_CONST_FORCE_U:
+			return log2_of_known_power_of_2(constant->constant_value.unsigned_long_constant);
+
+		case SHORT_CONST:
+			return log2_of_known_power_of_2(constant->constant_value.signed_short_constant);
+
+		case SHORT_CONST_FORCE_U:
+			return log2_of_known_power_of_2(constant->constant_value.unsigned_short_constant);
+
+		case BYTE_CONST:
+			return log2_of_known_power_of_2(constant->constant_value.signed_byte_constant);
+
+		case BYTE_CONST_FORCE_U:
+			return log2_of_known_power_of_2(constant->constant_value.unsigned_byte_constant);
+
+		case CHAR_CONST:
+			return log2_of_known_power_of_2(constant->constant_value.char_constant);
+
+		//We should never get here
+		default:
+			fprintf(stderr, "Fatal internal compiler error: unrecognized constant type found in log2 helper\n");
+			exit(1);
+	}
 }
 
 
@@ -1513,6 +1556,196 @@ static inline u_int8_t variables_valid_shift_optimization(three_addr_var_t* dest
 }
 
 
+/**
+ * Optimize a modulus by power of 2 instruction into a shift instruction. This works slightly
+ * differently for signed and unsigned operations but the principle is the same. If we are
+ * say modding by 8, if there is going to be a remainder it will be in the first 3 bytes. So,
+ * we can just extract the first 3 bytes using an AND operation and avoid doing any division
+ * entirely
+ *
+ *
+ * NOTE: We assume that instruction1 is the one we are dealing with here
+ */
+static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
+	//Extract the mod instruction
+	instruction_t* mod_instruction = window->instruction1;
+
+	/**
+	 * For a signed modulus instruction, we need to preserve the sign
+	 * of the dividend. Doing a simple bit mask would not allow for this so
+	 * we'll need to have some more logic to extract the sign
+	 *
+	 * -19 % 4 (say they are BYTEs for simplicity) 
+	 *  -19 = 11101101
+	 *
+	 *  1.) Extract the sign bit by shifting over NUM_BITS - 1
+	 *  	11101101 >> 7 = 11111111(make sure it's arithmetic shift so we backfill the bits)
+	 *  2.) Now convert this into a bias by shifting right logically
+	 *  	11111111 >> 6(NUM_BITS - log2(divisor)) = 00000011(backfills with 0)
+	 *  3.) Now add this bias to the original dividend
+	 *  	11101101 + 00000011 = 11110000(-16)
+	 *  4.) Perform the actual and by NUM_BITS - 1
+	 *  	11110000 & 0000011 = 00000000
+	 *  5.) Finally undo the bias by subtracting it out
+	 *  	00000000 - 00000011 = 00000011 = -3 
+	 *
+	 *  The entire point of the bias is to make it so that the bitwise and that we do
+	 *  to perform the modulo does not corrupt our data. Notice how if we have just 
+	 *  done the bitwise AND on -19 we would've gotten positive 5 which is not correct
+	 *
+	 *  Yes this does take one instruction and spawn it into many, but we need to remember
+	 *  that the idivX instruction that we would have been using will sometimes take 50+
+	 *  cycles to run. This is ultimately much faster
+	 */
+	if(is_type_signed(mod_instruction->assignee->type) == TRUE){
+		//Extract the actual type that we're using
+		generic_type_t* type = mod_instruction->assignee->type;
+		
+		//We'll need the number of bits in the type
+		u_int32_t type_size_in_bits = type->type_size * 8;
+
+		/**
+		 * We'll also need the log2 of the divisor. Another way to think of
+		 * this is - we'll need the number of bits that we need to represent
+		 * the divisor. So for example if we have 8, we need 3 bits, and so
+		 * on
+		 */
+		u_int32_t divisor_log2 = log2_of_constant(mod_instruction->op1_const);
+
+		//Now we'll compute 2^n - 1 
+		u_int32_t and_mask = (1 << divisor_log2) - 1;
+
+		/**
+		 * Step 0: assign the dividend over to a temp var. We need to preserve
+		 * op1 for our addition step. This will eventually become our "bias"
+		 */
+		three_addr_var_t* bias_temp_var = emit_temp_var(type);
+
+		//Assign the op1 over
+		instruction_t* dividend_assignment = emit_assignment_instruction(bias_temp_var, mod_instruction->op1);
+
+		//This goes in before the mod instruction
+		insert_instruction_before_given(dividend_assignment, mod_instruction);
+
+		/**
+		 * Step 1: Extract the sign bit, backfilling with either 1's or 0's as we go. Since we are
+		 * looking to backfill we *must* use an arithmetic right shift here
+		 */
+ 		three_addr_const_t* num_bits_first_shift = emit_direct_integer_or_char_constant(type_size_in_bits - 1, type);
+
+		//Now we need to perform the first shift. We will force this to be signed so that an arithmetic shift is used
+		instruction_t* arithmetic_shift = emit_binary_operation_with_const_instruction(bias_temp_var, bias_temp_var, R_SHIFT, num_bits_first_shift);
+
+		//IMPORTANT - flag that we need to force this to be signed
+		arithmetic_shift->optional_storage.forced_signedness = FORCED_SIGNED;
+
+		//This goes in after the dividend
+		insert_instruction_after_given(arithmetic_shift, dividend_assignment);
+
+		/**
+		 * Step 2: Fully convert into our bias by shifting right logically now by our number of bits 
+		 * MINUS the log2 of the divisor. This will backfill with zeros so that, if our dividend was
+		 * negative, we will have only the first few bits filled in with ones
+		 */
+		three_addr_const_t* bias_shift_constant = emit_direct_integer_or_char_constant(type_size_in_bits - divisor_log2, type);
+
+		//Now we need to perform the logical right shift
+		instruction_t* logical_shift = emit_binary_operation_with_const_instruction(bias_temp_var, bias_temp_var, R_SHIFT, bias_shift_constant);
+
+		//IMPORTANT - flag that we need to force this to be unsigned so that it is a logical shift
+		logical_shift->optional_storage.forced_signedness = FORCED_UNSIGNED;
+
+		//Goes right after the first shift
+		insert_instruction_after_given(logical_shift, arithmetic_shift);
+
+		/**
+		 * Step 3: Add this bias to the original dividend. This gets us a value that 
+		 * is "safe" to perform our bitwise and on to do the actual modulo
+		 */
+		three_addr_var_t* result = emit_temp_var(type);
+
+		//This should eventually become a lea
+		instruction_t* addition = emit_binary_operation_instruction(result, mod_instruction->op1, PLUS, bias_temp_var);
+
+		//Add this in right after the shift
+		insert_instruction_after_given(addition, logical_shift);
+
+		/**
+		 * Step 4: Now we can perform the actual bitwise AND that extracts the
+		 * lowest log2(divisor) bits from our new adjusted value
+		 */
+		three_addr_const_t* bitwise_and_constant = emit_direct_integer_or_char_constant(and_mask, type);
+
+		//Now the actual AND instruction
+		instruction_t* and_instruction = emit_binary_operation_with_const_instruction(result, result, SINGLE_AND, bitwise_and_constant);
+
+		//This goes right after the addition
+		insert_instruction_after_given(and_instruction, addition);
+
+		/**
+		 * Step 5: Finally we can now undo the bias that we added in to make this safe by subtracting
+		 * it out. This will actually conclude all of the operations that we need to do for the official
+		 * optimization
+		 */
+		instruction_t* undo_mask = emit_binary_operation_instruction(result, result, MINUS, bias_temp_var);
+
+		//Add this in right after the and instruction
+		insert_instruction_after_given(undo_mask, and_instruction);
+
+		/**
+		 * Final cleanup: move the safe dividend result into the actual assignee temp var from
+		 * the original instruction to maintain consistency
+		 */
+		instruction_t* result_movement = emit_assignment_instruction(mod_instruction->assignee, result);
+
+		//Add this in after the undo instruction
+		insert_instruction_after_given(result_movement, undo_mask);
+
+		//Once this is all done the mod instruction is useless
+		delete_statement(mod_instruction);
+
+		//Now rebuild the window around the last thing that we touched
+		reconstruct_window(window, result_movement);
+
+	/**
+	 * For an unsigned modulus operation, we don't need to worry about the sign
+	 * at all so we can simply use the and trick:
+	 *
+	 *  x % 2^n = x & (2^n - 1) -> Extract the bits in the nth position
+	 *
+	 *  For example:
+	 *
+	 *  5 % 2 -> 5 & 2^1 - 1 = 5 & 1
+	 *
+	 *  5 = 0101
+	 *  1 = 0001
+	 *
+	 *  5 & 1 = 1
+	 * 	So the result is just 1
+	 */
+	} else {
+		//Get how many bits we need to extract
+		u_int32_t bits_needed = log2_of_constant(mod_instruction->op1_const);
+
+		//Now we'll compute 2^n - 1 
+		u_int32_t mask = (1 << bits_needed) - 1;
+
+		//Make this constant the mask now
+		mod_instruction->op1_const->constant_value.unsigned_long_constant = mask;
+
+		//This is now an and instruction
+		mod_instruction->op = SINGLE_AND;
+
+		/**
+		 * IMPORTANT - if we have a temp variable here, since we're now using
+		 * a shift, we'll need to wipe this temp var away and instead use the op1
+		 * temp var for everything
+		 */
+		if(mod_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
+			replace_all_variables_after_instruction(mod_instruction->assignee, mod_instruction->op1, mod_instruction);
+		}
+	}
+}
 
 
 /**
@@ -3144,246 +3377,232 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 *
 	 * These may seem trivial, but this is not so uncommon when we're doing address calculation
 	 */
-
-	//Shove these all into an array for selecting
-	instruction_t* instructions[3] = {window->instruction1, window->instruction2, window->instruction3};
-
 	//The current instruction pointer
-	instruction_t* current_instruction;
+	instruction_t* first_instruction = window->instruction1;
 
-	//If we have a bin op with const statement, we have an opportunity
-	for(u_int16_t i = 0; i < 3; i++){
-		//Grab the current instruction out
-		current_instruction = instructions[i];
+	/**
+	 * We have a chance to do some optimizations if we see a BIN_OP_WITH_CONST. It will
+	 * have been primed for us by the constant folding portion. Now, we'll search and see
+	 * if we're able to simplify some instructions
+	 */
+	if(first_instruction->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
+		//Grab this out for convenience
+		three_addr_const_t* constant = first_instruction->op1_const;
 
-		//Skip if NULL
-		if(current_instruction == NULL){
-			continue;
-		}
-
-		/**
-		 * We have a chance to do some optimizations if we see a BIN_OP_WITH_CONST. It will
-		 * have been primed for us by the constant folding portion. Now, we'll search and see
-		 * if we're able to simplify some instructions
-		 */
-		if(current_instruction->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
-			//If it isn't in the list here, we won't be considering it and as such shouldn't waste time
-			//processing
-			switch(current_instruction->op){
+		//If this is 0, then we can optimize
+		if(is_constant_value_zero(constant) == TRUE){
+			//Switch based on current instruction's op
+			switch(first_instruction->op){
+				//If we made it out of this conditional with the flag being set, we can simplify.
+				//If this is the case, then this just becomes a regular assignment expression
 				case PLUS:
-				case R_SHIFT:
-				case L_SHIFT:
 				case MINUS:
-				case STAR:
-				case F_SLASH:
-				case MOD:
+				case L_SHIFT:
+				case R_SHIFT:
+					//We're just assigning here
+					first_instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+					//Wipe the values out
+					first_instruction->op1_const = NULL;
+
+					//Also scrap the op
+					first_instruction->op = BLANK;
+
+					//We changed something
+					changed = TRUE;
+
 					break;
+
+				case STAR:
+					//Now we're assigning a const
+					first_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+					//The constant is still the same thing(0), let's just wipe out the ops
+					if(first_instruction->op1 != NULL){
+						first_instruction->op1->use_count--;
+						first_instruction->op1 = NULL;
+					}
+
+					//We changed something
+					changed = TRUE;
+
+					break;
+
+				//Just do nothing here
 				default:
-					continue;
+					break;
 			}
 
-			//Grab this out for convenience
-			three_addr_const_t* constant = current_instruction->op1_const;
-
-			//If this is 0, then we can optimize
-			if(is_constant_value_zero(constant) == TRUE){
-				//Switch based on current instruction's op
-				switch(current_instruction->op){
-					//If we made it out of this conditional with the flag being set, we can simplify.
-					//If this is the case, then this just becomes a regular assignment expression
-					case PLUS:
-					case MINUS:
-					case L_SHIFT:
-					case R_SHIFT:
-						//We're just assigning here
-						current_instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
-						//Wipe the values out
-						current_instruction->op1_const = NULL;
-
-						//Also scrap the op
-						current_instruction->op = BLANK;
-
-						//We changed something
-						changed = TRUE;
-
-						break;
-
-					case STAR:
-						//Now we're assigning a const
-						current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-
-						//The constant is still the same thing(0), let's just wipe out the ops
-						if(current_instruction->op1 != NULL){
-							current_instruction->op1->use_count--;
-							current_instruction->op1 = NULL;
-						}
-
-						//We changed something
-						changed = TRUE;
-
-						break;
-
-					//Just do nothing here
-					default:
-						break;
-				}
-
-			/**
-			 * Notice how we do NOT mark any change as true here. This is because, even though yes we
-			 * did change the instructions, the sliding window itself did not change at all. This is
-			 * an important note as if we did mark a change, there are cases where this could
-			 * cause an infinite loop
-			 *
-			 * What if this is a 1? Well if it is, we can transform this statement into an inc or dec statement
-			 * if it's addition or subtraction, or we can turn it into a simple assignment statement if it's multiplication
-			 * or division
-			 */
-			} else if(is_constant_value_one(constant) == TRUE){
-				//Switch based on the op in the current instruction
-				switch(current_instruction->op){
-					/**
-					* If it's an addition statement, turn it into an inc statement
-					*
-				 	* NOTE: for addition and subtraction, since we'll be turning this into inc/dec statements, we'll
-				 	* want to first make sure that the assignees are not temporary variables. If they are temporary variables,
-				 	* then doing this would mess the whole operation up
-				 	*/
-					case PLUS:
-						//If it's temporary, we jump out
-						if(current_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
-							break;
-						}
-
-						//Now turn it into an inc statement
-						current_instruction->statement_type = THREE_ADDR_CODE_INC_STMT;
-						//Wipe the values out
-						current_instruction->op1_const = NULL;
-						current_instruction->op = BLANK;
-						//We changed something
-						changed = TRUE;
-
-						break;
-
-					case MINUS:
-						//If it's temporary, we jump out
-						if(current_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
-							break;
-						}
-
-						//Change what the class is
-						current_instruction->statement_type = THREE_ADDR_CODE_DEC_STMT;
-						//Wipe the values out
-						current_instruction->op1_const = NULL;
-						current_instruction->op = BLANK;
-						//We changed something
-						changed = TRUE;
-
-						break;
-
-					//These are both the same - handle a 1 multiply, 1 divide
-					case STAR:
-					case F_SLASH:
-						//Change it to a regular assignment statement
-						current_instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
-						//Wipe the operator out
-						current_instruction->op1_const = NULL;
-						current_instruction->op = BLANK;
-						//We changed something
-						changed = TRUE;
-
-						break;
-
-					//Modulo by 1 will always result in 0
-					case MOD:
-						//Change it to a regular assignment statement
-						current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-
-						//This is blank
-						current_instruction->op = BLANK;
-
-						//We no longer even need our op1
-						if(current_instruction->op1 != NULL){
-							current_instruction->op1->use_count--;
-							current_instruction->op1 = NULL;
-						}
-
-						//We can modify op1 const to just be 0 now. This is lazy but it
-						//works, we'll just 0 out all 64 bits
-						current_instruction->op1_const->constant_value.signed_long_constant = 0;
-
-						//We changed something
-						changed = TRUE;
-
-					//Just bail out
-					default:
-						break;
-				}
-
-			/**
-			 * What if we have a power of 2 here? For any kind of multiplication or division, this can
-			 * be optimized into a left or right shift if we have a compatible type(not a float) *and*
-			 * the assignee is equal to the variable being multiplied
-			 */
-			} else if(is_constant_power_of_2(constant) == TRUE){
+		/**
+		 * Notice how we do NOT mark any change as true here. This is because, even though yes we
+		 * did change the instructions, the sliding window itself did not change at all. This is
+		 * an important note as if we did mark a change, there are cases where this could
+		 * cause an infinite loop
+		 *
+		 * What if this is a 1? Well if it is, we can transform this statement into an inc or dec statement
+		 * if it's addition or subtraction, or we can turn it into a simple assignment statement if it's multiplication
+		 * or division
+		 */
+		} else if(is_constant_value_one(constant) == TRUE){
+			//Switch based on the op in the current instruction
+			switch(first_instruction->op){
 				/**
-				 * Multiplication and/or division are the only things that could benefit from this
-				 */
-				switch(current_instruction->op){
-					case STAR:
+				* If it's an addition statement, turn it into an inc statement
+				*
+				* NOTE: for addition and subtraction, since we'll be turning this into inc/dec statements, we'll
+				* want to first make sure that the assignees are not temporary variables. If they are temporary variables,
+				* then doing this would mess the whole operation up
+				*/
+				case PLUS:
+					//If it's temporary, we jump out
+					if(first_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
+						break;
+					}
+
+					//Now turn it into an inc statement
+					first_instruction->statement_type = THREE_ADDR_CODE_INC_STMT;
+					//Wipe the values out
+					first_instruction->op1_const = NULL;
+					first_instruction->op = BLANK;
+					//We changed something
+					changed = TRUE;
+
+					break;
+
+				case MINUS:
+					//If it's temporary, we jump out
+					if(first_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
+						break;
+					}
+
+					//Change what the class is
+					first_instruction->statement_type = THREE_ADDR_CODE_DEC_STMT;
+					//Wipe the values out
+					first_instruction->op1_const = NULL;
+					first_instruction->op = BLANK;
+					//We changed something
+					changed = TRUE;
+
+					break;
+
+				//These are both the same - handle a 1 multiply, 1 divide
+				case STAR:
+				case F_SLASH:
+					//Change it to a regular assignment statement
+					first_instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+					//Wipe the operator out
+					first_instruction->op1_const = NULL;
+					first_instruction->op = BLANK;
+					//We changed something
+					changed = TRUE;
+
+					break;
+
+				//Modulo by 1 will always result in 0
+				case MOD:
+					//Change it to a regular assignment statement
+					first_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+					//This is blank
+					first_instruction->op = BLANK;
+
+					//We no longer even need our op1
+					if(first_instruction->op1 != NULL){
+						first_instruction->op1->use_count--;
+						first_instruction->op1 = NULL;
+					}
+
+					//We can modify op1 const to just be 0 now. This is lazy but it
+					//works, we'll just 0 out all 64 bits
+					first_instruction->op1_const->constant_value.signed_long_constant = 0;
+
+					//We changed something
+					changed = TRUE;
+
+				//Just bail out
+				default:
+					break;
+			}
+
+		/**
+		 * What if we have a power of 2 here? For any kind of multiplication or division, this can
+		 * be optimized into a left or right shift if we have a compatible type(not a float) *and*
+		 * the assignee is equal to the variable being multiplied
+		 */
+		} else if(is_constant_power_of_2(constant) == TRUE){
+			/**
+			 * Multiplication and/or division are the only things that could benefit from this
+			 */
+			switch(first_instruction->op){
+				case STAR:
+					/**
+					 * If the assignee and op1 are equal(which they almost always should be) - then we are set to go here. If not then
+					 * we'll just leave this for the eventual helper rule to handle
+					 */
+					if(variables_valid_shift_optimization(first_instruction->assignee, first_instruction->op1) == TRUE){
+						//Multiplication is a left shift
+						first_instruction->op = L_SHIFT;
+						//Update the constant with its log2 value
+						update_constant_with_log2_value(first_instruction->op1_const);
+
 						/**
-						 * If the assignee and op1 are equal(which they almost always should be) - then we are set to go here. If not then
-						 * we'll just leave this for the eventual helper rule to handle
+						 * IMPORTANT - if we a have a temp variable here, since we're now using a shift,
+						 * we'll need to wipe this temp var away and instead use the op1 temp var for everything
 						 */
-						if(variables_valid_shift_optimization(current_instruction->assignee, current_instruction->op1) == TRUE){
-							//Multiplication is a left shift
-							current_instruction->op = L_SHIFT;
-							//Update the constant with its log2 value
-							update_constant_with_log2_value(current_instruction->op1_const);
-
-							/**
-							 * IMPORTANT - if we a have a temp variable here, since we're now using a shift,
-							 * we'll need to wipe this temp var away and instead use the op1 temp var for everything
-							 */
-							if(current_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
-								replace_all_variables_after_instruction(current_instruction->assignee, current_instruction->op1, current_instruction);
-							}
-
-							//We changed something
-							changed = TRUE;
+						if(first_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
+							replace_all_variables_after_instruction(first_instruction->assignee, first_instruction->op1, first_instruction);
 						}
 
-						break;
+						//We changed something
+						changed = TRUE;
+					}
 
-					case F_SLASH:
+					break;
+
+				case F_SLASH:
+					/**
+					 * If we are able to perform this optimization, now is when we will do so. If we are not, then we will just leave
+					 * everything as is for the eventual selector rule to take care of it
+					 */
+					if(variables_valid_shift_optimization(first_instruction->assignee, first_instruction->op1) == TRUE){
+						//Division is a right shift
+						first_instruction->op = R_SHIFT;
+						//Update the constant with its log2 value
+						update_constant_with_log2_value(first_instruction->op1_const);
+
 						/**
-						 * If we are able to perform this optimization, now is when we will do so. If we are not, then we will just leave
-						 * everything as is for the eventual selector rule to take care of it
+						 * IMPORTANT - if we have a temp variable here, since we're now using
+						 * a shift, we'll need to wipe this temp var away and instead use the op1
+						 * temp var for everything
 						 */
-						if(variables_valid_shift_optimization(current_instruction->assignee, current_instruction->op1) == TRUE){
-							//Division is a right shift
-							current_instruction->op = R_SHIFT;
-							//Update the constant with its log2 value
-							update_constant_with_log2_value(current_instruction->op1_const);
-
-							/**
-							 * IMPORTANT - if we have a temp variable here, since we're now using
-							 * a shift, we'll need to wipe this temp var away and instead use the op1
-							 * temp var for everything
-							 */
-							if(current_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
-								replace_all_variables_after_instruction(current_instruction->assignee, current_instruction->op1, current_instruction);
-							}
-
-							//We changed something
-							changed = TRUE;
+						if(first_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
+							replace_all_variables_after_instruction(first_instruction->assignee, first_instruction->op1, first_instruction);
 						}
 
-						break;
+						//We changed something
+						changed = TRUE;
+					}
 
-					//Do nothing
-					default:
-						break;
-				}
+					break;
+
+				case MOD:
+					/**
+					 * If we are able to perform this optimization, now is when we will do so. If we are not, then we will just leave
+					 * everything as is for the eventual selector rule to take care of it
+					 *
+					 * This is a little more involved then the way that we handle division so we'll break this out into an inlined function
+					 */
+					if(variables_valid_shift_optimization(first_instruction->assignee, first_instruction->op1) == TRUE){
+						optimize_mod_by_power_of_2(window);
+
+						//This is a change
+						changed = TRUE;
+					}
+
+					break;
+
+				//Do nothing
+				default:
+					break;
 			}
 		}
 	}
@@ -4255,9 +4474,30 @@ static inline instruction_t* emit_sse_register_clear_instruction(three_addr_var_
 static inline instruction_t* emit_gp_register_clear_instruction(three_addr_var_t* target){
 	//First allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	switch(target->variable_size){
+		case QUAD_WORD:
+			instruction->instruction_type = XORQ_CLEAR;
+			break;
+
+		case DOUBLE_WORD:
+			instruction->instruction_type = XORL_CLEAR;
+			break;
+		
+		case WORD:
+			instruction->instruction_type = XORW_CLEAR;
+			break;
+
+		case BYTE:
+			instruction->instruction_type = XORB_CLEAR;
+			break;
+
+		//Should be unreachable
+		default:
+			fprintf(stderr, "Fatal internal compiler error, undefined variable type encountered in clear instruction\n");
+			exit(1);
+	}
 	
-	//Set the type
-	instruction->instruction_type = XORQ_CLEAR;
 	instruction->destination_register = target;
 
 	return instruction;
@@ -4969,7 +5209,26 @@ static three_addr_var_t* emit_byte_copy_of_variable(three_addr_var_t* source){
  */
 static void handle_left_shift_instruction(instruction_t* instruction){
 	//Is this a signed or unsigned instruction?
-	u_int8_t is_signed = is_type_signed(instruction->assignee->type);
+	u_int8_t is_signed;
+
+	/**
+	 * We have the option to force signedness here. Most of the time
+	 * this will not happen, but if it does we will action
+	 * it here
+	 */
+	switch(instruction->optional_storage.forced_signedness){
+		case FORCED_SIGNEDNESS_DONT_CARE:
+			is_signed = is_type_signed(instruction->assignee->type);
+			break;
+
+		case FORCED_SIGNED:
+			is_signed = TRUE;
+			break;
+		
+		case FORCED_UNSIGNED:
+			is_signed = FALSE;
+			break;
+	}
 
 	//We'll also need the size of the variable
 	variable_size_t size = get_type_size(instruction->assignee->type);
@@ -5011,11 +5270,13 @@ static void handle_left_shift_instruction(instruction_t* instruction){
 	
 	//We can have an immediate value or we can have a register
 	if(instruction->op2 != NULL){
-		//If this is a function parameter, we'll need to emit a copy instruction
-		//here for the eventual precolorer to use. If we don't do this, the precolorer
-		//will clash because it doesn't know whether to use the parameter register or
-		//the %ecx register that shift operands must be in. This is a unique case for shifting
-		//due to a quirk of x86
+		/**
+		 * If this is a function parameter, we'll need to emit a copy instruction
+		 * here for the eventual precolorer to use. If we don't do this, the precolorer
+		 * will clash because it doesn't know whether to use the parameter register or
+		 * the %ecx register that shift operands must be in. This is a unique case for shifting
+		 * due to a quirk of x86
+		 */
 		if(instruction->op2->class_relative_parameter_order > 0){
 			//Move it on over here
 			instruction_t* copy_instruction = emit_move_instruction(emit_temp_var(instruction->op2->type), instruction->op2);
@@ -5042,7 +5303,26 @@ static void handle_left_shift_instruction(instruction_t* instruction){
  */
 static void handle_right_shift_instruction(instruction_t* instruction){
 	//Is this a signed or unsigned instruction?
-	u_int8_t is_signed = is_type_signed(instruction->assignee->type);
+	u_int8_t is_signed;
+
+	/**
+	 * We have the option to force signedness here. Most of the time
+	 * this will not happen, but if it does we will action
+	 * it here
+	 */
+	switch(instruction->optional_storage.forced_signedness){
+		case FORCED_SIGNEDNESS_DONT_CARE:
+			is_signed = is_type_signed(instruction->assignee->type);
+			break;
+
+		case FORCED_SIGNED:
+			is_signed = TRUE;
+			break;
+		
+		case FORCED_UNSIGNED:
+			is_signed = FALSE;
+			break;
+	}
 
 	//We'll also need the size of the variable
 	variable_size_t size = get_type_size(instruction->assignee->type);
@@ -5084,11 +5364,13 @@ static void handle_right_shift_instruction(instruction_t* instruction){
 
 	//We can have an immediate value or we can have a register
 	if(instruction->op2 != NULL){
-		//If this is a function parameter, we'll need to emit a copy instruction
-		//here for the eventual precolorer to use. If we don't do this, the precolorer
-		//will clash because it doesn't know whether to use the parameter register or
-		//the %ecx register that shift operands must be in. This is a unique case for shifting
-		//due to a quirk of x86
+		/**
+		 * If this is a function parameter, we'll need to emit a copy instruction
+		 * here for the eventual precolorer to use. If we don't do this, the precolorer
+		 * will clash because it doesn't know whether to use the parameter register or
+		 * the %ecx register that shift operands must be in. This is a unique case for shifting
+		 * due to a quirk of x86
+		 */
 		if(instruction->op2->class_relative_parameter_order > 0){
 			//Move it on over here
 			instruction_t* copy_instruction = emit_move_instruction(emit_temp_var(instruction->op2->type), instruction->op2);
@@ -5836,8 +6118,6 @@ static void handle_signed_multiplication_instruction(instruction_t* instruction)
 
 
 /**
- * Handle a division operation
- *
  * t4 <- t2 / t3 
  *
  * Will become:
@@ -5851,8 +6131,9 @@ static void handle_signed_multiplication_instruction(instruction_t* instruction)
  *
  * NOTE: We guarantee that the instruction we're after is always the first
  * instruction in the window
+ *
  */
-static void handle_division_instruction(instruction_window_t* window){
+static inline void handle_signed_division(instruction_window_t* window){
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* division_instruction = window->instruction1;
 
@@ -5877,9 +6158,6 @@ static void handle_division_instruction(instruction_window_t* window){
 		dividend = move_to_rax->destination_register;
 	}
 
-	//Let's determine signedness
-	u_int8_t is_signed = is_type_signed(division_instruction->assignee->type);
-
 	/**
 	 * For a signed division, the CXXX instruction will 
 	 * have a secondary destination that holds the higher order bits. We will
@@ -5887,18 +6165,15 @@ static void handle_division_instruction(instruction_window_t* window){
 	 */
 	three_addr_var_t* higher_order_dividend_bits = NULL;
 
-	//Now, we'll need the appropriate extension instruction *if* we're doing signed division
-	if(is_signed == TRUE){
-		//Emit the cl instruction
-		instruction_t* cl_instruction = emit_conversion_instruction(dividend);
+	//We need to use the CL instruction since we're doing signed division
+	instruction_t* cl_instruction = emit_conversion_instruction(dividend);
 
-		//Capute both the lower and higher order bit fields
-		dividend = cl_instruction->destination_register;
-		higher_order_dividend_bits = cl_instruction->destination_register2;
+	//Capute both the lower and higher order bit fields
+	dividend = cl_instruction->destination_register;
+	higher_order_dividend_bits = cl_instruction->destination_register2;
 
-		//Insert this before the given
-		insert_instruction_before_given(cl_instruction, division_instruction);
-	}
+	//Insert this before the given
+	insert_instruction_before_given(cl_instruction, division_instruction);
 
 	/**
 	 * If we have an op2(dividing two variables), we'll handle all of our converting moves here. We'll
@@ -5927,7 +6202,7 @@ static void handle_division_instruction(instruction_window_t* window){
 	}
 
 	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(division_instruction->assignee, divisor, dividend, higher_order_dividend_bits, is_signed);
+	instruction_t* division = emit_div_instruction(division_instruction->assignee, divisor, dividend, higher_order_dividend_bits, TRUE);
 
 	//The quotient is the destination register
 	three_addr_var_t* quotient = division->destination_register;
@@ -5946,6 +6221,374 @@ static void handle_division_instruction(instruction_window_t* window){
 
 	//Reconstruct the window here
 	reconstruct_window(window, result_movement);
+}
+
+
+/**
+ * t4 <- t2 / t3 
+ *
+ * Will become:
+ * movl t2, t5(rax)
+ * xorl %edx MUST CLEAR EDX
+ * idivl t3(divide by t3, we already guarantee this is a temp var(register))
+ * movl t5, t4 (rax has quotient)
+ * 
+ * As such, this will generate additional instructions for us, making it not
+ * a "single instruction" pattern
+ *
+ * NOTE: We guarantee that the instruction we're after is always the first
+ * instruction in the window
+ *
+ */
+static inline void handle_unsigned_division(instruction_window_t* window){
+	//Firstly, the instruction that we're looking for is the very first one
+	instruction_t* division_instruction = window->instruction1;
+
+	//A temp holder for the final second source variable
+	three_addr_var_t* dividend;
+	three_addr_var_t* divisor;
+
+	//If we need to convert, we'll do that here
+	if(is_converting_move_required(division_instruction->assignee->type, division_instruction->op1->type) == TRUE){
+		//Let the helper deal with it
+		dividend = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op1, division_instruction->assignee->type);
+
+	//Otherwise this can be moved directly
+	} else {
+		//We first need to move the first operand into RAX
+		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(division_instruction->op1->type), division_instruction->op1);
+
+		//Insert the move to rax before the multiplication instruction
+		insert_instruction_before_given(move_to_rax, division_instruction);
+
+		//This is just the destination register here
+		dividend = move_to_rax->destination_register;
+	}
+
+	/**
+	 * If we have an op2(dividing two variables), we'll handle all of our converting moves here. We'll
+	 * also account for the case that we have a constant to take care of
+	 */
+	if(division_instruction->op2 != NULL){
+		//Do we need to do a type conversion? If so, we'll do a converting move here
+		if(is_converting_move_required(division_instruction->assignee->type, division_instruction->op2->type) == TRUE){
+			divisor = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op2, division_instruction->assignee->type);
+
+		//Otherwise divisor is just the op2
+		} else {
+			divisor = division_instruction->op2;
+		}
+
+	//Otherwise we have a constant - x86 division doesn't support having these as operands so we'll need a move
+	} else {
+		//Emit the constant move
+		instruction_t* constant_move = emit_constant_move_instruction(emit_temp_var(division_instruction->assignee->type), division_instruction->op1_const);
+
+		//Now we'll insert this before the division instruction
+		insert_instruction_before_given(constant_move, division_instruction);
+
+		//This is the divisor now
+		divisor = constant_move->destination_register;
+	}
+
+	/**
+	 * For unsigned division, we need to completely 0 out the %rdx register.
+	 * This is in contrast to signed division where we intentionally extend to said register. Here we will
+	 * just clean it out
+	 */
+	three_addr_var_t* cleared_rdx = emit_temp_var(division_instruction->assignee->type);
+
+	//Get the instruction out
+	instruction_t* clear_instruction = emit_gp_register_clear_instruction(cleared_rdx);
+
+	//This goes in before the given instruction
+	insert_instruction_before_given(clear_instruction, division_instruction);
+
+	//Now we should have what we need, so we can emit the division instruction
+	instruction_t* division = emit_div_instruction(division_instruction->assignee, divisor, dividend, cleared_rdx, FALSE);
+
+	//The quotient is the destination register
+	three_addr_var_t* quotient = division->destination_register;
+
+	//Insert this before the division instruction
+	insert_instruction_before_given(division, division_instruction);
+
+	//Once we've done all that, we need one final movement operation
+	instruction_t* result_movement = emit_move_instruction(division_instruction->assignee, quotient);
+
+	//Insert this before the original division instruction
+	insert_instruction_before_given(result_movement, division_instruction);
+
+	//Delete the division instruction
+	delete_statement(division_instruction);
+
+	//Reconstruct the window here
+	reconstruct_window(window, result_movement);
+
+}
+
+
+/**
+ * Handle a division operation
+ *
+ * This rule simply multiplexes for us into the two specialized rules that
+ * we really want to be using
+ */
+static void handle_division_instruction(instruction_window_t* window){
+	//Firstly, the instruction that we're looking for is the very first one
+	instruction_t* division_instruction = window->instruction1;
+
+	//We go entirely based on the assignee
+	u_int8_t is_signed = is_type_signed(division_instruction->assignee->type);
+
+	//Dispatch based on what we need here
+	if(is_signed == TRUE){
+		handle_signed_division(window);
+	} else {
+		handle_unsigned_division(window);
+	}
+}
+
+
+/**
+ * Handle a signed modulus operation
+ *
+ * t3 <- t4 % t5
+ *
+ * Will become:
+ * movl t4, t6 (rax)
+ * cltd
+ * idivl t5
+ * t3 <- t7 (rdx has remainder)
+ *
+ * As such, this will generate additional instructions for us, making it not
+ * a "single instruction" pattern
+ *
+ * NOTE: We guarantee that the instruction we're after is always the first
+ * instruction in the window
+ */
+static inline void handle_signed_modulus(instruction_window_t* window){
+	//Firstly, the instruction that we're looking for is the very first one
+	instruction_t* modulus_instruction = window->instruction1;
+
+	three_addr_var_t* dividend;
+	three_addr_var_t* divisor;
+
+	//If we need to convert, we'll do that here
+	if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op1->type) == TRUE){
+		//Let the helper deal with it
+		dividend = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op1, modulus_instruction->assignee->type);
+
+	//Otherwise this can be moved directly
+	} else {
+		//We first need to move the first operand into RAX
+		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(modulus_instruction->op1->type), modulus_instruction->op1);
+
+		//Insert the move to rax before the multiplication instruction
+		insert_instruction_before_given(move_to_rax, modulus_instruction);
+
+		//This is just the destination register here
+		dividend = move_to_rax->destination_register;
+	}
+
+	/**
+	 * For a signed division, the CXXX instruction will 
+	 * have a secondary destination that holds the higher order bits. We will
+	 * capture this if needed here
+	 */
+	three_addr_var_t* higher_order_dividend_bits = NULL;
+
+	//Now, we'll need the appropriate extension instruction *if* we're doing signed division
+	instruction_t* cl_instruction = emit_conversion_instruction(dividend);
+
+	//Store both here
+	dividend = cl_instruction->destination_register;
+	higher_order_dividend_bits = cl_instruction->destination_register2;
+
+	//Insert this before the mod instruction
+	insert_instruction_before_given(cl_instruction, modulus_instruction);
+
+	/**
+	 * Handle all converting moves/constant assignment moves that we need to here
+	 */
+	if(modulus_instruction->op2 != NULL){
+		//Do we need to do a type conversion? If so, we'll do a converting move here
+		if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op2->type) == TRUE){
+			divisor = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op2, modulus_instruction->assignee->type);
+
+		//Otherwise source 2 is just the op2
+		} else {
+			divisor = modulus_instruction->op2;
+		}
+	
+	//Otherwise we'll need a const assignment
+	} else {
+		//Emit the move
+		instruction_t* constant_assignment = emit_constant_move_instruction(emit_temp_var(modulus_instruction->assignee->type), modulus_instruction->op1_const);
+
+		//This goes right in before the mod
+		insert_instruction_before_given(constant_assignment, modulus_instruction);
+
+		//And this now is our divisor
+		divisor = constant_assignment->destination_register;
+	}
+
+	//Now we should have what we need, so we can emit the division instruction
+	instruction_t* division = emit_div_instruction(modulus_instruction->assignee, divisor, dividend, higher_order_dividend_bits, TRUE);
+	
+	//Store the remainder register here
+	three_addr_var_t* remainder_register = division->destination_register2;
+
+	//Insert this before the original modulus
+	insert_instruction_before_given(division, modulus_instruction);
+
+	//Once we've done all that, we need one final movement operation
+	instruction_t* result_movement = emit_move_instruction(modulus_instruction->assignee, remainder_register);
+
+	//Insert this after the original modulus
+	insert_instruction_after_given(result_movement, modulus_instruction);
+
+	//Finally we'll delete the old modulus instruction, as we no longer need it
+	delete_statement(modulus_instruction);
+
+	//Reconstruct the window starting at the result movement
+	reconstruct_window(window, result_movement);
+}
+
+
+/**
+ * Handle an unsigned modulus operation
+ *
+ * t3 <- t4 % t5
+ *
+ * Will become:
+ * movl t4, t6 (rax)
+ * xorl %edx
+ * divl t5
+ * t3 <- t7 (rdx has remainder)
+ *
+ * As such, this will generate additional instructions for us, making it not
+ * a "single instruction" pattern
+ *
+ * NOTE: We guarantee that the instruction we're after is always the first
+ * instruction in the window
+ */
+static inline void handle_unsigned_modulus(instruction_window_t* window){
+	//Firstly, the instruction that we're looking for is the very first one
+	instruction_t* modulus_instruction = window->instruction1;
+
+	three_addr_var_t* dividend;
+	three_addr_var_t* divisor;
+
+	//If we need to convert, we'll do that here
+	if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op1->type) == TRUE){
+		//Let the helper deal with it
+		dividend = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op1, modulus_instruction->assignee->type);
+
+	//Otherwise this can be moved directly
+	} else {
+		//We first need to move the first operand into RAX
+		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(modulus_instruction->op1->type), modulus_instruction->op1);
+
+		//Insert the move to rax before the multiplication instruction
+		insert_instruction_before_given(move_to_rax, modulus_instruction);
+
+		//This is just the destination register here
+		dividend = move_to_rax->destination_register;
+	}
+
+	/**
+	 * Handle all converting moves/constant assignment moves that we need to here
+	 */
+	if(modulus_instruction->op2 != NULL){
+		//Do we need to do a type conversion? If so, we'll do a converting move here
+		if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op2->type) == TRUE){
+			divisor = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op2, modulus_instruction->assignee->type);
+
+		//Otherwise source 2 is just the op2
+		} else {
+			divisor = modulus_instruction->op2;
+		}
+	
+	//Otherwise we'll need a const assignment
+	} else {
+		//Emit the move
+		instruction_t* constant_assignment = emit_constant_move_instruction(emit_temp_var(modulus_instruction->assignee->type), modulus_instruction->op1_const);
+
+		//This goes right in before the mod
+		insert_instruction_before_given(constant_assignment, modulus_instruction);
+
+		//And this now is our divisor
+		divisor = constant_assignment->destination_register;
+	}
+
+	/**
+	 * For unsigned division, which is what modulus is, we need to completely 0 out the %rdx register.
+	 * This is in contrast to signed division where we intentionally extend to said register. Here we will
+	 * just clean it out
+	 */
+	three_addr_var_t* cleared_rdx = emit_temp_var(modulus_instruction->assignee->type);
+
+	//Get the instruction out
+	instruction_t* clear_instruction = emit_gp_register_clear_instruction(cleared_rdx);
+
+	//This goes in before the given instruction
+	insert_instruction_before_given(clear_instruction, modulus_instruction);
+
+	//Now we should have what we need, so we can emit the division instruction
+	instruction_t* division = emit_div_instruction(modulus_instruction->assignee, divisor, dividend, cleared_rdx, FALSE);
+	
+	//Store the remainder register here
+	three_addr_var_t* remainder_register = division->destination_register2;
+
+	//Insert this before the original modulus
+	insert_instruction_before_given(division, modulus_instruction);
+
+	//Once we've done all that, we need one final movement operation
+	instruction_t* result_movement = emit_move_instruction(modulus_instruction->assignee, remainder_register);
+
+	//Insert this after the original modulus
+	insert_instruction_after_given(result_movement, modulus_instruction);
+
+	//Finally we'll delete the old modulus instruction, as we no longer need it
+	delete_statement(modulus_instruction);
+
+	//Reconstruct the window starting at the result movement
+	reconstruct_window(window, result_movement);
+}
+
+
+/**
+ * Handle a modulus(remainder) operation
+ * Handle a division operation
+ *
+ * t3 <- t4 % t5
+ *
+ * Will become:
+ * movl t4, t6 (rax)
+ * cltd
+ * idivl t5
+ * t3 <- t7 (rdx has remainder)
+ *
+ * As such, this will generate additional instructions for us, making it not
+ * a "single instruction" pattern
+ *
+ * NOTE: We guarantee that the instruction we're after is always the first
+ * instruction in the window
+ */
+static void handle_modulus_instruction(instruction_window_t* window){
+	//Firstly, the instruction that we're looking for is the very first one
+	instruction_t* modulus_instruction = window->instruction1;
+
+	//Signedness is always based on our assignee
+	u_int8_t is_signed = is_type_signed(modulus_instruction->assignee->type);
+
+	//Dynamic dispatch based on what we need
+	if(is_signed == TRUE){
+		handle_signed_modulus(window);
+	} else {
+		handle_unsigned_modulus(window);
+	}
 }
 
 
@@ -6006,120 +6649,6 @@ static inline void handle_sse_multiplication_instruction(instruction_t* instruct
 	//will have a constant source, it is not possible for sse operations
 	instruction->destination_register = instruction->assignee;
 	instruction->source_register = instruction->op2;
-}
-
-
-/**
- * Handle a modulus(remainder) operation
- * Handle a division operation
- *
- * t3 <- t4 % t5
- *
- * Will become:
- * movl t4, t6 (rax)
- * cltd
- * idivl t5
- * t3 <- t7 (rdx has remainder)
- *
- * As such, this will generate additional instructions for us, making it not
- * a "single instruction" pattern
- *
- * NOTE: We guarantee that the instruction we're after is always the first
- * instruction in the window
- */
-static void handle_modulus_instruction(instruction_window_t* window){
-	//Firstly, the instruction that we're looking for is the very first one
-	instruction_t* modulus_instruction = window->instruction1;
-
-	//A temp holder for the final second source variable
-	three_addr_var_t* dividend;
-	three_addr_var_t* divisor;
-
-	//If we need to convert, we'll do that here
-	if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op1->type) == TRUE){
-		//Let the helper deal with it
-		dividend = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op1, modulus_instruction->assignee->type);
-
-	//Otherwise this can be moved directly
-	} else {
-		//We first need to move the first operand into RAX
-		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(modulus_instruction->op1->type), modulus_instruction->op1);
-
-		//Insert the move to rax before the multiplication instruction
-		insert_instruction_before_given(move_to_rax, modulus_instruction);
-
-		//This is just the destination register here
-		dividend = move_to_rax->destination_register;
-	}
-
-	//Let's determine signedness
-	u_int8_t is_signed = is_type_signed(modulus_instruction->assignee->type);
-
-	/**
-	 * For a signed division, the CXXX instruction will 
-	 * have a secondary destination that holds the higher order bits. We will
-	 * capture this if needed here
-	 */
-	three_addr_var_t* higher_order_dividend_bits = NULL;
-
-	//Now, we'll need the appropriate extension instruction *if* we're doing signed division
-	if(is_signed == TRUE){
-		//Emit the cl instruction
-		instruction_t* cl_instruction = emit_conversion_instruction(dividend);
-
-		//Store both here
-		dividend = cl_instruction->destination_register;
-		higher_order_dividend_bits = cl_instruction->destination_register2;
-
-		//Insert this before the mod instruction
-		insert_instruction_before_given(cl_instruction, modulus_instruction);
-	}
-
-	/**
-	 * Handle all converting moves/constant assignment moves that we need to here
-	 */
-	if(modulus_instruction->op2 != NULL){
-		//Do we need to do a type conversion? If so, we'll do a converting move here
-		if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op2->type) == TRUE){
-			divisor = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op2, modulus_instruction->assignee->type);
-
-		//Otherwise source 2 is just the op2
-		} else {
-			divisor = modulus_instruction->op2;
-		}
-	
-	//Otherwise we'll need a const assignment
-	} else {
-		//Emit the move
-		instruction_t* constant_assignment = emit_constant_move_instruction(emit_temp_var(modulus_instruction->assignee->type), modulus_instruction->op1_const);
-
-		//This goes right in before the mod
-		insert_instruction_before_given(constant_assignment, modulus_instruction);
-
-		//And this now is our divisor
-		divisor = constant_assignment->destination_register;
-	}
-
-	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(modulus_instruction->assignee, divisor, dividend, higher_order_dividend_bits, is_signed);
-	
-	//Store the remainder register here
-	three_addr_var_t* remainder_register = division->destination_register2;
-
-	//Insert this before the original modulus
-	insert_instruction_before_given(division, modulus_instruction);
-
-	//Once we've done all that, we need one final movement operation
-	instruction_t* result_movement = emit_move_instruction(modulus_instruction->assignee, remainder_register);
-
-	//Insert this after the original modulus
-	insert_instruction_after_given(result_movement, modulus_instruction);
-
-	//Finally we'll delete the old modulus instruction, as we no longer need it
-	delete_statement(modulus_instruction);
-
-	//Reconstruct the window starting at the result movement
-	reconstruct_window(window, result_movement);
 }
 
 
@@ -7915,7 +8444,7 @@ static inline void handle_not_instruction(instruction_t* instruction){
  * Handle a three address code CLEAR instruction. In reality this is just going to turn into
  * a PXOR_CLEAR instruction on the backend
  */
-static inline void handle_clear_instruction(instruction_t* instruction){
+static inline void handle_pxor_clear_instruction(instruction_t* instruction){
 	//This is a PXOR_CLEAR
 	instruction->instruction_type = PXOR_CLEAR;
 
@@ -10125,7 +10654,6 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 
 			//Handle modulus
 			case MOD:	
-				//This will generate more than one instruction
 				handle_modulus_instruction(window);
 				return;
 
@@ -10258,7 +10786,7 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 			handle_test_if_not_zero_instruction(window);
 			break;
 		case THREE_ADDR_CODE_CLEAR_STMT:
-			handle_clear_instruction(instruction);
+			handle_pxor_clear_instruction(instruction);
 			break;
 		case THREE_ADDR_CODE_STACK_ALLOCATION_STMT:
 			handle_stack_allocation_statement(instruction);

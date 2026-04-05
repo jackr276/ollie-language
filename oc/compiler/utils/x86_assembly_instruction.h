@@ -234,7 +234,10 @@ typedef enum{
 	//End conditional moves
 	PXOR, //Packed logical exclusive or
 	PXOR_CLEAR, //Packed logical exclusive or just for clearing
-	XORQ_CLEAR, //XORQ used just for clearing the error register
+	XORQ_CLEAR, //Clear instruction for quad word registers
+	XORL_CLEAR, //Clear instruction for double word registers
+	XORW_CLEAR, //Clear instruction for word registers
+	XORB_CLEAR, //Clear instruction for byte registers
 	PAND, //Packed logical and
 	PANDN, //Packed logical and not
 	POR, //Packed logical or

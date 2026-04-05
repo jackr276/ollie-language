@@ -4952,6 +4952,33 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 			break;
 
+		case XORL_CLEAR:
+			fprintf(fl, "xorl ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, "\n");
+
+			break;
+
+		case XORW_CLEAR:
+			fprintf(fl, "xorw ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, "\n");
+
+			break;
+
+		case XORB_CLEAR:
+			fprintf(fl, "xorb ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, "\n");
+
+			break;
+
 		//Show a default error message. This is for the Dev's use only
 		default:
 			fprintf(fl, "Not yet selected. Statement code is: %d\n", instruction->statement_type);
@@ -5724,7 +5751,7 @@ three_addr_const_t* emit_direct_integer_or_char_constant(int64_t value, generic_
 			constant->constant_value.signed_short_constant = value;
 			break;
 		case I8:
-			constant->const_type = SHORT_CONST;
+			constant->const_type = BYTE_CONST;
 			constant->constant_value.signed_byte_constant = value;
 			break;
 		case U32:
