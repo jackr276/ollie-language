@@ -13441,33 +13441,38 @@ static inline u_int8_t validate_inlined_functions_are_non_recursive(function_sym
 	//Use the error count so that we can do all functions at once
 	u_int32_t error_count = 0;
 
-	//Run through every cell in the symtab
-	for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
-		if(symtab->records[i] == NULL){
-			continue;
-		}
+	//Run through every namespace
+	for(u_int32_t _ = 0; _ < symtab->sheafs.current_index; _++){
+		symtab_function_sheaf_t* sheaf = dynamic_array_get_at(&(symtab->sheafs), _);
 
-		//Otherwise grab out a cursor
-		symtab_function_record_t* cursor = symtab->records[i];
-
-		//Run through any collisions in the hashmap
-		while(cursor != NULL){
-			//We only care if this is inlined(for now)
-			if(cursor->inlined == TRUE){
-				//Is it recursive? use the helper
-				u_int8_t is_recursive = is_function_recursive(symtab, cursor);
-
-				//This is our fail case - we may not have this
-				if(is_recursive == TRUE){
-					sprintf(info, "Function \"%s\" is defined as \"inline\" but is directly or indirectly recursive. Remove the inline keyword", cursor->func_name.string);
-					print_parse_message(MESSAGE_TYPE_ERROR, info, cursor->line_number);
-					num_errors++;
-					error_count++;
-				}
+		//Now for every record in the namespace
+		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+			if(sheaf->records[i] == NULL){
+				continue;
 			}
 
-			//Bump it up
-			cursor = cursor->next;
+			//Otherwise grab out a cursor
+			symtab_function_record_t* cursor = sheaf->records[i];
+
+			//Run through any collisions in the hashmap
+			while(cursor != NULL){
+				//We only care if this is inlined(for now)
+				if(cursor->inlined == TRUE){
+					//Is it recursive? use the helper
+					u_int8_t is_recursive = is_function_recursive(symtab, cursor);
+
+					//This is our fail case - we may not have this
+					if(is_recursive == TRUE){
+						sprintf(info, "Function \"%s\" is defined as \"inline\" but is directly or indirectly recursive. Remove the inline keyword", cursor->func_name.string);
+						print_parse_message(MESSAGE_TYPE_ERROR, info, cursor->line_number);
+						num_errors++;
+						error_count++;
+					}
+				}
+
+				//Bump it up
+				cursor = cursor->next;
+			}
 		}
 	}
 
