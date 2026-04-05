@@ -1948,23 +1948,28 @@ void print_call_graph_adjacency_matrix(FILE* fl, function_symtab_t* function_sym
 	//We need a min priority queue for this
 	min_priority_queue_t min_priority_queue = min_priority_queue_alloc();
 
-	//Run through and print all of these out first
-	for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
-		//Skip ahead
-		if(function_symtab->records[i] == NULL){
-			continue;
-		}
+	//Run through all of the sheafs
+	for(u_int32_t _ = 0; _ < function_symtab->sheafs.current_index; _++){
+		symtab_function_sheaf_t* sheaf = dynamic_array_get_at(&(function_symtab->sheafs), _);
 
-		//Otherwise grab it out
-		symtab_function_record_t* cursor = function_symtab->records[i];
+		//Run through and print all of these out first
+		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+			//Skip ahead
+			if(sheaf->records[i] == NULL){
+				continue;
+			}
 
-		//Crawl the whole thing
-		while(cursor != NULL){
-			//Use the min priority queue to insert based on the function ID
-			min_priority_queue_enqueue(&min_priority_queue, cursor, cursor->function_id);
+			//Otherwise grab it out
+			symtab_function_record_t* cursor = sheaf->records[i];
 
-			//Bump it up
-			cursor = cursor->next;
+			//Crawl the whole thing
+			while(cursor != NULL){
+				//Use the min priority queue to insert based on the function ID
+				min_priority_queue_enqueue(&min_priority_queue, cursor, cursor->function_id);
+
+				//Bump it up
+				cursor = cursor->next;
+			}
 		}
 	}
 
