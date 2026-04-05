@@ -13,6 +13,7 @@
 #include "../ast/ast.h"
 //For error printing
 #include "../utils/queue/min_priority_queue.h"
+#include "../utils/stack/heapstack.h"
 #include "../utils/constants.h"
 
 //The starting offset basis for FNV-1a64
@@ -989,6 +990,9 @@ u_int8_t insert_function(function_symtab_t* symtab, symtab_function_record_t* re
 
 	//Grab the current namespace
 	function_namespace_t* current = symtab->current;
+
+	//Store that this function is in this current namespace
+	record->namespace_contained_in = current;
 
 	//If there's no collision
 	if(current->records[record->hash] == NULL){
@@ -1974,6 +1978,60 @@ void print_function_name(symtab_function_record_t* record){
 	} else {
 		printf("{...\n");
 	}
+}
+
+
+/**
+ * Generate the fully qualified namespace for a given namespace and return it inside of
+ * a freshly allocated dynamic string
+ *
+ * If we are trying to get the fully qualified name on the default namespace, a null dynamic string
+ * is returned
+ */
+dynamic_string_t generate_fully_qualified_namespace_name(function_namespace_t* namespace_record){
+	//Initially it's null
+	dynamic_string_t namespace_name = NULL_DYNAMIC_STRING;
+
+	//If this is the default then get out
+	if(namespace_record->is_default == TRUE){
+		return namespace_name;
+	}
+
+	//Fully allocate the namespace name
+	namespace_name = dynamic_string_alloc();
+
+	//We're going to push everything up onto a stack in backwards order
+	heap_stack_t stack = heap_stack_alloc();
+
+	//Grab a cursor for the namespace record
+	function_namespace_t* cursor = namespace_record;
+
+	//So long as we haven't hit the default
+	while(cursor->is_default == FALSE){
+		//Hold onto this pointer
+		function_namespace_t* temp = cursor;
+
+		//Go up the chain
+		cursor = cursor->parent_namespace;
+
+		//Put temp inside of the stack
+		push(&stack, cursor);
+	}
+
+
+	//Destroy the stack
+	heap_stack_dealloc(&stack);
+
+	return namespace_name;
+}
+
+
+/**
+ * Generate the fully qualified function name for a given function and return it inside of
+ * a freshly allocated dynamic string
+ */
+dynamic_string_t generate_fully_qualified_function_name(symtab_function_record_t* function){
+
 }
 
 

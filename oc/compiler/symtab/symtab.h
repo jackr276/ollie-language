@@ -96,6 +96,8 @@ struct symtab_function_record_t{
 	u_int64_t hash;
 	//In case of collisions, we can chain these records
 	symtab_function_record_t* next;
+	//What namespace is this function in?
+	function_namespace_t* namespace_contained_in;
 	//All of the basic blocks that make up this function
 	dynamic_array_t function_blocks;
 	//The parameters for the function
@@ -632,6 +634,18 @@ void print_function_name(symtab_function_record_t* record);
  * This always goes as: source calls target
  */
 void add_function_call(symtab_function_record_t* source, symtab_function_record_t* target);
+
+/**
+ * Generate the fully qualified namespace for a given namespace and return it inside of
+ * a freshly allocated dynamic string
+ */
+dynamic_string_t generate_fully_qualified_namespace_name(function_namespace_t* namespace_record);
+
+/**
+ * Generate the fully qualified function name for a given function and return it inside of
+ * a freshly allocated dynamic string
+ */
+dynamic_string_t generate_fully_qualified_function_name(symtab_function_record_t* function);
 
 /**
  * A helper method for variable name printing
