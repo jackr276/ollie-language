@@ -13303,7 +13303,23 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 	 * for this. It is actually ok for us to have a function namespace 
 	 * that matches the name of something else that isn't another function
 	 * namespace
+	 *
+	 * We are able to have namespaces that match function names, there is no conflict
+	 * in that
 	 */
+
+	//Do we have a namespace named this already?
+	symtab_function_sheaf_t* namespace = lookup_namespace(function_symtab, lookahead.lexeme.string);
+
+	//If we found one, then we can't do this
+	if(namespace != NULL){
+		sprintf(info, "Namespace \"%s\" has already been declared\n", lookahead.lexeme.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Otherwise, we can create this namespace and increase our namespace scope
+	symtab_function_sheaf_t* new_namespace = create_nam
+
 
 	printf("TODO NOT DONE\n");
 	exit(1);

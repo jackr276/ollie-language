@@ -874,6 +874,27 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, visibilt
 
 
 /**
+ * Create a namespace record and add it to the symtab
+ */
+symtab_function_sheaf_t* create_namespace_record(function_symtab_t* symtab, char* name){
+	//Allocate it
+	symtab_function_sheaf_t* namespace = calloc(1, sizeof(symtab_function_sheaf_t));
+
+	//It's not the default
+	namespace->is_default = FALSE;
+
+	//Allocate the name
+	namespace->namespace_name = dynamic_string_alloc();
+
+	//Set the name in
+	dynamic_string_set(&(namespace->namespace_name), name);
+
+	//Now give it back
+	return namespace;
+}
+
+
+/**
  * Dynamically allocate and create a type record
  *
  * The hash_type function automatically allows us to distinguish between

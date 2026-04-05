@@ -450,6 +450,11 @@ void add_function_parameter(type_symtab_t* symtab, symtab_function_record_t* fun
 symtab_function_record_t* create_function_record(dynamic_string_t name, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number);
 
 /**
+ * Create a namespace record
+ */
+symtab_function_sheaf_t* create_namespace_record(dynamic_string_t* name);
+
+/**
  * Create a type record for the symbol table
  */
 symtab_type_record_t* create_type_record(generic_type_t* type);
