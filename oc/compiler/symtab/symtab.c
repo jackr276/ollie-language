@@ -1397,7 +1397,7 @@ symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name)
  * not do the normal logic where we can crawl up to see if it's in a parent
  * namespace
  */
-symtab_function_record_t* lookup_function_in_namesapce(function_namespace_t* namespace_to_search, char* name){
+symtab_function_record_t* lookup_function_in_namespace(function_namespace_t* namespace_to_search, char* name){
 	//Let's grab it's hash
 	u_int64_t h = hash_function(name); 
 

@@ -1817,7 +1817,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 				function_name = lookahead.lexeme;
 
 				//We need to ensure that the lexeme under lookahed is actually a function in our namespace
-				symtab_function_record_t* found_function = lookup_function_in_namesapce(current_namespace, function_name.string);
+				symtab_function_record_t* found_function = lookup_function_in_namespace(current_namespace, function_name.string);
 
 				//Hard fail case if we end up with this
 				if(found_function == NULL){
@@ -2504,6 +2504,8 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 			}
 
 			//Attempt to find the function in here
+			//TODO UPDATE
+			//
 			symtab_function_record_t* found_func = lookup_function(function_symtab, var_name);
 
 			//Since a function value is constant and never changes, we will classify this record as a constant
@@ -12713,6 +12715,25 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	//Now we need to check for duplicated names. We'll do this for
 	dynamic_string_t function_name = lookahead.lexeme;
 
+	//Try to find it in this namespace
+	symtab_function_record_t* found_function = lookup_function_in_namespace(function_symtab->current, function_name.string);
+
+	//Fail out if found
+	if(found_function != NULL){
+		//Is it in the default namespace here or not?
+		if(function_symtab->current->is_default == TRUE){
+			sprintf(info, "A function with name \"%s\" has already been defined. First defined here:", found_function->func_name.string);
+		} else {
+			sprintf(info, "A function with name \"%s\" has already been defined in the namespace \"%s\". First defined here:",
+		   					found_function->func_name.string,
+		   					generate_fully_qualified_namespace_name(function_symtab->current).string);
+		}
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		print_function_name(found_function);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
 	//Check for duplicated functions
 	if(do_duplicate_functions_exist(function_name.string) == TRUE){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
@@ -13025,11 +13046,18 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	dynamic_string_t function_name = lookahead.lexeme;
 
 	//Now we must perform all of our symtable checks. Parameters may not share names with types, functions or variables
-	symtab_function_record_t* function_record = lookup_function(function_symtab, function_name.string);
+	symtab_function_record_t* function_record = lookup_function_in_namespace(function_symtab->current, function_name.string);
 
 	//Fail out if found and it's already been defined
 	if(function_record != NULL && function_record->defined == TRUE){
-		sprintf(info, "A function with name \"%s\" has already been defined. First defined here:", function_record->func_name.string);
+		//Is it in the default namespace here or not?
+		if(function_symtab->current->is_default == TRUE){
+			sprintf(info, "A function with name \"%s\" has already been defined. First defined here:", function_record->func_name.string);
+		} else {
+			sprintf(info, "A function with name \"%s\" has already been defined in the namespace \"%s\". First defined here:",
+		   					function_record->func_name.string,
+		   					generate_fully_qualified_namespace_name(function_symtab->current).string);
+		}
 		print_parse_message(MESSAGE_TYPE_ERROR, info, current_line);
 		print_function_name(function_record);
 		num_errors++;
