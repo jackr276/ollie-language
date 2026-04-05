@@ -2018,6 +2018,19 @@ dynamic_string_t generate_fully_qualified_namespace_name(function_namespace_t* n
 		push(&stack, cursor);
 	}
 
+	//Now we'll go through the stack and generate our name that way
+	while(heap_stack_is_empty(&stack) == FALSE){
+		//Pop it off of the stack
+		function_namespace_t* record = pop(&stack);
+
+		//Concantenate this to our name
+		dynamic_string_concatenate(&namespace_name, record->namespace_name.string);
+
+		//If we have more to go, add the separators
+		if(peek(&stack) != NULL){
+			dynamic_string_concatenate(&namespace_name, "::");
+		}
+	}
 
 	//Destroy the stack
 	heap_stack_dealloc(&stack);
@@ -2031,7 +2044,54 @@ dynamic_string_t generate_fully_qualified_namespace_name(function_namespace_t* n
  * a freshly allocated dynamic string
  */
 dynamic_string_t generate_fully_qualified_function_name(symtab_function_record_t* function){
+	//What namespace are we in
+	function_namespace_t* namespace_contained_in = function->namespace_contained_in;
 
+	//If the function is in the default namespace there's nothing for us to do
+	if(namespace_contained_in->is_default == TRUE){
+		return clone_dynamic_string(&(function->func_name));
+	}
+
+	//Otherwise we'll need a fresh name here
+	dynamic_string_t qualified_name = dynamic_string_alloc();
+
+	//We're going to push everything up onto a stack in backwards order
+	heap_stack_t stack = heap_stack_alloc();
+
+	//Grab a cursor for the namespace record
+	function_namespace_t* cursor = namespace_contained_in;
+
+	//So long as we haven't hit the default
+	while(cursor->is_default == FALSE){
+		//Hold onto this pointer
+		function_namespace_t* temp = cursor;
+
+		//Go up the chain
+		cursor = cursor->parent_namespace;
+
+		//Put temp inside of the stack
+		push(&stack, cursor);
+	}
+
+	//Now we'll go through the stack and generate our name that way
+	while(heap_stack_is_empty(&stack) == FALSE){
+		//Pop it off of the stack
+		function_namespace_t* record = pop(&stack);
+
+		//Concantenate this to our name
+		dynamic_string_concatenate(&qualified_name, record->namespace_name.string);
+
+		//We need a separator no matter what here
+		dynamic_string_concatenate(&qualified_name, "::");
+	}
+
+	//Destroy the stack
+	heap_stack_dealloc(&stack);
+
+	//Finally we can tack the function name on
+	dynamic_string_concatenate(&qualified_name, function->func_name.string);
+	
+	return qualified_name;
 }
 
 
