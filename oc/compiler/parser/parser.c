@@ -13285,7 +13285,7 @@ static generic_ast_node_t* global_let_statement(ollie_token_stream_t* token_stre
  *
  * NOTE: By the time we get here, we've already seen and consumed "namespace"
  *
- * BNF Rule: <namespace-partition> ::= namespace <identifier> { <declaration_partition>+ }
+ * BNF Rule: <namespace-partition> ::= namespace <identifier> { <namespace_member>+ }
  */
 static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 	//Refresh the lookahead
@@ -13300,6 +13300,16 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 	//Keep a reference to this for later on
 	char* namespace_name = lookahead.lexeme.string;
 
+	//We now need to see an L_CURLY 
+	lookahead = get_next_token(stream, &parser_line_num);
+
+	if(lookahead.tok != L_CURLY){
+		sprintf(info, "Expected { after namespace declaration but instead found \"%s\"", lexitem_to_string(&lookahead));
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Push this onto the stack for matching later
+	push_token(&grouping_stack, lookahead);
 
 	/**
 	 * We now need to search to make sure that we don't have duplicate values
@@ -13333,9 +13343,76 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 	//We are now inside of this namespace
 	enter_namespace(function_symtab, new_namespace);
 
+	//Seed the lookahead for our search
+	lookahead = get_next_token(stream, &parser_line_num);
+
+	while(lookahead.tok != R_CURLY){
+		//Push the token back
+		push_back_token(stream, &parser_line_num);
+
+		//Switch based on the token
+		switch(lookahead.tok){
+			//We can either see the "pub"(public) keyword, "inline keyword" or we can see a straight fn keyword
+			case PUB:
+			case INLINE:
+			case FN:
+				//Put the token back, we'll let the rule handle it
+				push_back_token(token_stream, &parser_line_num);
+
+				//We'll just let the function definition rule handle this. If it fails, 
+				//that will be caught above
+				return function_definition(token_stream);
+		
+			//Type definition
+			case DEFINE:
+				//Call the helper
+				status = definition(token_stream, TRUE);
+
+				//If it's bad, we'll return an error node
+				if(status == FAILURE){
+					return print_and_return_error("Invalid definition statement", parser_line_num);
+				}
+
+				//Otherwise we'll just return null, the caller will know what to do with it
+				return NULL;
+				
+			//Type aliasing
+			case ALIAS:
+				//Call the helper
+				status = alias_statement(token_stream);
+
+				//If it's bad, we'll return an error node
+				if(status == FAILURE){
+					return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+				}
+
+				//Otherwise we'll just return null, the caller will know what to do with it
+				return NULL;
+
+			case LET:
+				return global_let_statement(token_stream);
+
+			case DECLARE:
+				return global_declare_statement(token_stream);
+
+			case NAMESPACE:
+				return namespace_declaration(token_stream);
+
+			default:
+				return print_and_return_error("Invalid/unknown expression type encountered in the top level scope", parser_line_num);
+		}
+
+
+		//Refresh it
+		lookahead = get_next_token(stream, &parser_line_num);
+	}
 
 	//Now that we are done we can leave this namespace
 	exit_namespace(function_symtab);
+
+	//Now that we've exited we need to see the closing R_CURLY
+
+
 
 	printf("TODO NOT DONE\n");
 	exit(1);
