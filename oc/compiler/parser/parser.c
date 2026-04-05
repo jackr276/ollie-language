@@ -90,6 +90,7 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream);
 static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutability_type_t mutability);
 static u_int8_t alias_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_stream);
+static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream);
 static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream, u_int8_t new_variable_scope_required);
 static generic_ast_node_t* statement(ollie_token_stream_t* token_stream);
@@ -13280,6 +13281,51 @@ static generic_ast_node_t* global_let_statement(ollie_token_stream_t* token_stre
 
 
 /**
+ * Process a namespace member. Members for the non-default namespace are more restrictive
+ * than usual. The user may not alias types, define types, or declare variables in a namespace
+ * other than the default one. This may be changed later on but those are the restrictions for
+ * right now
+ *
+ * BNF Rule: <namespace-member> ::= <function-defintion> | <namespace-partition>
+ */
+static generic_ast_node_t* namespace_member(ollie_token_stream_t* token_stream){
+	//The lookahead token
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Switch based on the token
+	switch(lookahead.tok){
+		//We can either see the "pub"(public) keyword, "inline keyword" or we can see a straight fn keyword
+		case PUB:
+		case INLINE:
+		case FN:
+			//Put the token back, we'll let the rule handle it
+			push_back_token(token_stream, &parser_line_num);
+
+			//We'll just let the function definition rule handle this
+			return function_definition(token_stream);
+
+		case NAMESPACE:
+			return namespace_declaration(token_stream);
+	
+		//Type definition
+		case DEFINE:
+			return print_and_return_error("Type definition may not happen inside of a namespace", parser_line_num);
+			
+		//Type aliasing
+		case ALIAS:
+			return print_and_return_error("Type aliasing may not happen inside of a namespace", parser_line_num);
+
+		case LET:
+		case DECLARE:
+			return print_and_return_error("Global variable declaration may not happen inside of a namespace", parser_line_num);
+
+		default:
+			return print_and_return_error("Invalid/unknown expression type encountered in namespace", parser_line_num);
+	}
+}
+
+
+/**
  * Process the new namespace directive. A new namespace partition itself contains one or
  * many declaration partitions. Namespaces may not be empty. 
  *
@@ -13350,58 +13396,13 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 		//Push the token back
 		push_back_token(stream, &parser_line_num);
 
-		//Switch based on the token
-		switch(lookahead.tok){
-			//We can either see the "pub"(public) keyword, "inline keyword" or we can see a straight fn keyword
-			case PUB:
-			case INLINE:
-			case FN:
-				//Put the token back, we'll let the rule handle it
-				push_back_token(token_stream, &parser_line_num);
+		//Process the member
+		generic_ast_node_t* member = namespace_member(stream);
 
-				//We'll just let the function definition rule handle this. If it fails, 
-				//that will be caught above
-				return function_definition(token_stream);
-		
-			//Type definition
-			case DEFINE:
-				//Call the helper
-				status = definition(token_stream, TRUE);
-
-				//If it's bad, we'll return an error node
-				if(status == FAILURE){
-					return print_and_return_error("Invalid definition statement", parser_line_num);
-				}
-
-				//Otherwise we'll just return null, the caller will know what to do with it
-				return NULL;
-				
-			//Type aliasing
-			case ALIAS:
-				//Call the helper
-				status = alias_statement(token_stream);
-
-				//If it's bad, we'll return an error node
-				if(status == FAILURE){
-					return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-				}
-
-				//Otherwise we'll just return null, the caller will know what to do with it
-				return NULL;
-
-			case LET:
-				return global_let_statement(token_stream);
-
-			case DECLARE:
-				return global_declare_statement(token_stream);
-
-			case NAMESPACE:
-				return namespace_declaration(token_stream);
-
-			default:
-				return print_and_return_error("Invalid/unknown expression type encountered in the top level scope", parser_line_num);
+		//Hard fail out here
+		if(member->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			return print_and_return_error("Invalid member discovered in namespace", parser_line_num);
 		}
-
 
 		//Refresh it
 		lookahead = get_next_token(stream, &parser_line_num);
