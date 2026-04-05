@@ -11831,6 +11831,20 @@ static u_int8_t validate_main_function(generic_type_t* type){
 	//If the main function is not public, then we fail
 	if(signature->visibility == VISIBILITY_TYPE_PRIVATE){
 		print_parse_message(MESSAGE_TYPE_ERROR, "The main function must be prefixed with the \"pub\" keyword", parser_line_num);
+		num_errors++;
+		return FALSE;
+	}
+
+	/**
+	 * The name function may not be declared in anything that
+	 * is not the default namespace. So if we see that
+	 * the current namespace is not default, we fail out
+	 */
+	if(function_symtab->current->is_default == FALSE){
+		sprintf(info, "The main function was found declared inside the namespace \"%s\". The main function may only be declared inside of the top level namespace.",
+		  				function_symtab->current->namespace_name.string);
+		num_errors++;
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		return FALSE;
 	}
 
@@ -11854,6 +11868,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
 			if(parameter_type->type_class != TYPE_CLASS_BASIC || parameter_type->basic_type_token != I32){
 				sprintf(info, "The first parameter of the main function must be an i32. Instead given: %s", type->type_name.string);
 				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				num_errors++;
 				return FALSE;
 			}
 
@@ -11864,6 +11879,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
 			if(is_type_string_array(parameter_type) == FALSE){
 				sprintf(info, "The second parameter of the main function must be of type char**. Instead given: %s", type->type_name.string);
 				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				num_errors++;
 				return FALSE;
 			}
 
@@ -11874,6 +11890,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
 		default:
 			sprintf(info, "The main function can have 0 or 2 parameters, but instead was given: %s", type->type_name.string);
 			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			num_errors++;
 			return FALSE;
 	}
 
@@ -11881,6 +11898,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
 	if(signature->return_type->type_class != TYPE_CLASS_BASIC || signature->return_type->basic_type_token != I32){
 		sprintf(info, "The main function must return a value of type i32, instead was given: %s", type->type_name.string);
 		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		num_errors++;
 		return FALSE;
 	}
 
