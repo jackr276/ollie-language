@@ -3241,6 +3241,9 @@ static void print_sse_register_to_register_move(FILE* fl, instruction_t* instruc
 		case MOVAPS:
 			fprintf(fl, "movaps ");
 			break;
+		case MOVUPS:
+			fprintf(fl, "movups ");
+			break;
 		case MOVAPD:
 			fprintf(fl, "movapd ");
 			break;
@@ -3315,6 +3318,9 @@ static void print_sse_register_to_memory_move(FILE* fl, instruction_t* instructi
 		case MOVAPS:
 			fprintf(fl, "movaps ");
 			break;
+		case MOVUPS:
+			fprintf(fl, "movups ");
+			break;
 		case MOVAPD:
 			fprintf(fl, "movapd ");
 			break;
@@ -3384,6 +3390,9 @@ static void print_sse_memory_to_register_move(FILE* fl, instruction_t* instructi
 			break;
 		case MOVAPS:
 			fprintf(fl, "movaps ");
+			break;
+		case MOVUPS:
+			fprintf(fl, "movups ");
 			break;
 		case MOVAPD:
 			fprintf(fl, "movapd ");
@@ -4788,6 +4797,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		// and conversion
 		case MOVAPD:
 		case MOVAPS:
+		case MOVUPS:
 		case MOVSD:
 		case MOVSS:
 		case CVTTSS2SIL:

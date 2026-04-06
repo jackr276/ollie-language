@@ -198,38 +198,6 @@ static inline u_int8_t is_operation_valid_for_op1_assignment_folding(ollie_token
 
 
 /**
- * Is the memory region alignment guaranteed or not? We will discover this by finding 
- * the place where our given memory variable was defined from.
- */
-static inline alignment_type_t is_memory_region_alignment_guarnateed(three_addr_var_t* variable){
-	switch(variable->variable_type){
-		/**
-		 * We know for a fact that our memory addresses on the local stack
-		 * are always going to be aligned
-		 */
-		case VARIABLE_TYPE_MEMORY_ADDRESS:
-			return ALIGNMENT_TYPE_GUARANTEED;
-
-		/**
-		 * Stack param memory addresses, for the sake of safety, are going to be
-		 * assumed to be unaligned
-		 */
-		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-			return ALIGNMENT_TYPE_NOT_GUARANTEED;
-
-		/**
-		 * This may be enhanced in the future, but everything else we
-		 * are going to play it safe and not guarantee the alignment. x86-64
-		 * processors are *nearly* as fast when doing aligned vs. unaligned moves
-		 * anyways
-		 */
-		default:
-			return ALIGNMENT_TYPE_NOT_GUARANTEED;
-	}
-}
-
-
-/**
  * Is a type an unsigned 64 bit type? This is used for type conversions in 
  * the instruction selector
  */
@@ -4017,7 +3985,7 @@ static void simplify(cfg_t* cfg){
  * placed in front of the instruction *if* the destination is an XMM register to maintain
  * this "clean" register idea
  */
-static instruction_type_t select_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t destination_signed, u_int8_t source_clean, alignment_type_t source_alignment, memory_access_type_t memory_access_type){
+static instruction_type_t select_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t destination_signed, u_int8_t source_clean, alignment_type_t alignment, memory_access_type_t memory_access_type){
 	//These two have the same size, we can select easily
 	//and be out of here
 	if(destination_size == source_size){
@@ -4065,7 +4033,7 @@ static instruction_type_t select_move_instruction(variable_size_t destination_si
 						 * to be aligned, then we will use the unaligned
 						 * instruction
 						 */
-						switch(source_alignment){
+						switch(alignment){
 							case ALIGNMENT_TYPE_DONT_CARE:
 							case ALIGNMENT_TYPE_NOT_GUARANTEED:
 								return MOVDQU;
@@ -4073,9 +4041,20 @@ static instruction_type_t select_move_instruction(variable_size_t destination_si
 								return MOVDQA;
 						}
 
-					//Store - we know it's aligned - so we use MOVAPS
 					case WRITE_TO_MEMORY:
-						return MOVAPS;
+						/**
+						 * If we are writing to a guaranteed to be aligned
+						 * chunk of memory, we will use MOVAPS. If we are
+						 * not writing from a guaranteed to be aligned
+						 * region of memory, we will be using MOVUPS
+						 */
+						switch(alignment){
+							case ALIGNMENT_TYPE_DONT_CARE:
+							case ALIGNMENT_TYPE_NOT_GUARANTEED:
+								return MOVUPS;
+							case ALIGNMENT_TYPE_GUARANTEED:
+								return MOVAPS;
+						}
 				}
 
 			default:
@@ -8837,8 +8816,55 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 			exit(1);
 	}
 
+	//Now we need to determine the store instruction's alignment
+	alignment_type_t destination_alignment;
+
+	/**
+	 * If we have a stack pointer variable, we know that it itself
+	 * is 16 byte aligned. We can now go through and use the offset
+	 * if we have one to determine if it is aligned. If the offset
+	 * isn't there then we have to assume it's not
+	 */
+	switch(store_instruction->calculation_mode){
+		case ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST:
+			//If this is the stack pointer then we can guarantee alignmetn
+			if(store_instruction->destination_register == stack_pointer_variable){
+				destination_alignment = ALIGNMENT_TYPE_GUARANTEED;
+			} else {
+				destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+			}
+
+			break;
+
+		//If we're just dealing with the offset we can also use that
+		case ADDRESS_CALCULATION_MODE_OFFSET_ONLY:
+			//If this is the stack pointer we can make guarantees
+			if(store_instruction->address_calc_reg1 == stack_pointer_variable){
+				//Extract the value
+				u_int32_t offset_value = store_instruction->offset->constant_value.signed_integer_constant;
+
+				//If we can mod by 16 then it's aligned, otherwise it's not
+				if(offset_value % 16 == 0){
+					destination_alignment = ALIGNMENT_TYPE_GUARANTEED;
+				} else {
+					destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+				}
+
+			//Otherwise we can't guarantee anything
+			} else {
+				destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+			}
+
+			break;
+
+		//Anything else - we can't guarantee anything
+		default:
+			destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+			break;
+	}
+
 	//Once we've done all the above assignments, we need to determine what our instruction type is. The source here is always clean, we are moving to memory
-	store_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type), TRUE, ALIGNMENT_TYPE_DONT_CARE, WRITE_TO_MEMORY);
+	store_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type), TRUE, destination_alignment, WRITE_TO_MEMORY);
 }
 
 
@@ -8876,7 +8902,51 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 	 * most commonly true when we are doing 16 byte loads during large struct copy operations.
 	 * We will invoke a helper to determine whether or not the source memory region is aligned
 	 */
-	alignment_type_t source_region_alignment = is_memory_region_alignment_guarnateed(load_instruction->op1);
+	alignment_type_t source_region_alignment;
+
+	/**
+	 * If we have a stack pointer variable, we know that it itself
+	 * is 16 byte aligned. We can now go through and use the offset
+	 * if we have one to determine if it is aligned. If the offset
+	 * isn't there then we have to assume it's not
+	 */
+	switch(load_instruction->calculation_mode){
+		case ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE:
+			//If this is the stack pointer then we can guarantee alignment
+			if(load_instruction->source_register == stack_pointer_variable){
+				source_region_alignment = ALIGNMENT_TYPE_GUARANTEED;
+			} else {
+				source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+			}
+
+			break;
+
+		//If we're just dealing with the offset we can also use that
+		case ADDRESS_CALCULATION_MODE_OFFSET_ONLY:
+			//If this is the stack pointer we can make guarantees
+			if(load_instruction->address_calc_reg1 == stack_pointer_variable){
+				//Extract the value
+				u_int32_t offset_value = load_instruction->offset->constant_value.signed_integer_constant;
+
+				//If we can mod by 16 then it's aligned, otherwise it's not
+				if(offset_value % 16 == 0){
+					source_region_alignment = ALIGNMENT_TYPE_GUARANTEED;
+				} else {
+					source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+				}
+
+			//Otherwise we can't guarantee anything
+			} else {
+				source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+			}
+
+			break;
+
+		//Anything else - we can't guarantee anything
+		default:
+			source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+			break;
+	}
 
 	//By default, assume it's the assignee
 	three_addr_var_t* destination_register = load_instruction->assignee;
@@ -9131,9 +9201,6 @@ static void handle_load_instruction(instruction_window_t* window){
 	//The load instruction itself
 	instruction_t* load_instruction = window->instruction1;
 
-	//Invoke the helper to handle the assignee and any edge cases
-	handle_load_instruction_type_and_destination(window);
-
 	/**
 	 * Handle based on what the variable type is
 	 */
@@ -9227,6 +9294,9 @@ static void handle_load_instruction(instruction_window_t* window){
 
 			break;
 	}
+
+	//Invoke the helper to handle the assignee and any edge cases
+	handle_load_instruction_type_and_destination(window);
 }
 
 
@@ -9247,9 +9317,6 @@ static void handle_load_with_constant_offset_instruction(instruction_window_t* w
 
 	//This is the load that we're after
 	instruction_t* load_instruction = window->instruction1;
-
-	//Handle destination assignment based on op1
-	handle_load_instruction_type_and_destination(window);
 
 	/**
 	 * Go based on what kind of base address we are given
@@ -9349,6 +9416,9 @@ static void handle_load_with_constant_offset_instruction(instruction_window_t* w
 
 			break;
 	}
+
+	//Handle destination assignment based on op1
+	handle_load_instruction_type_and_destination(window);
 }
 
 
@@ -9367,9 +9437,6 @@ static void handle_load_with_variable_offset_instruction(instruction_window_t* w
 
 	//As noted above, this is the assumption
 	instruction_t* load_instruction = window->instruction1;
-
-	//Handle the destination assignment
-	handle_load_instruction_type_and_destination(window);
 
 	/**
 	 * Based on what variable type we have here, we will need to handle
@@ -9522,6 +9589,9 @@ static void handle_load_with_variable_offset_instruction(instruction_window_t* w
 
 			break;
 	}
+
+	//Handle destination assignment based on op1
+	handle_load_instruction_type_and_destination(window);
 }
 
 
@@ -9846,9 +9916,6 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 	//For later use
 	symtab_variable_record_t* linked_var;
 
-	//Invoke the helper for our source assignment
-	handle_store_instruction_sources_and_instruction_type(instruction);
-
 	//This is a write regardless
 	instruction->memory_access_type = WRITE_TO_MEMORY;
 
@@ -9947,6 +10014,9 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY; 
 			break;
 	}
+
+	//Invoke the helper for our source assignment
+	handle_store_instruction_sources_and_instruction_type(instruction);
 }
 
 
@@ -9965,9 +10035,6 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 
 	//For later use
 	symtab_variable_record_t* linked_var;
-
-	//Invoke the helper for our source assignment
-	handle_store_instruction_sources_and_instruction_type(instruction);
 
 	//This is a write regardless
 	instruction->memory_access_type = WRITE_TO_MEMORY;
@@ -10118,6 +10185,9 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 
 			break;
 	}
+
+	//Invoke the helper for our source assignment
+	handle_store_instruction_sources_and_instruction_type(instruction);
 }
 
 

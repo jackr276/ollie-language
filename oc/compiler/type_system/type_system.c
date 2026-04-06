@@ -2258,7 +2258,7 @@ void finalize_struct_alignment(generic_type_t* type){
 	}
 
 	/**
-	 * The alignable type size is either: 2, 4 or 8
+	 * The alignable type size is either: 2, 4, 8 or 16
 	 *
 	 * We will add this alignable type size on so that we are guaranteed to be over
 	 * the next highest multiple of said type size
@@ -2266,7 +2266,7 @@ void finalize_struct_alignment(generic_type_t* type){
 	 * Then we will and by the 2's complement of this value to 0 out the lowest bits
 	 * that need to be 0'd out. At most, we will 0 out the bottom 3 bits for 8-byte aligned
 	 */
-	type->type_size = (type->type_size + alignable_type_size) & (-alignable_type_size);
+	type->type_size = (type->type_size + (alignable_type_size - 1)) & (-alignable_type_size);
 }
 
 
