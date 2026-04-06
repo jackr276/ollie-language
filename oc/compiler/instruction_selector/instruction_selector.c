@@ -8851,19 +8851,47 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 	//Now we need to determine the store instruction's alignment
 	alignment_type_t destination_alignment;
 
-	if(store_instruction->assignee == stack_pointer_variable){
+	/**
+	 * If we have a stack pointer variable, we know that it itself
+	 * is 16 byte aligned. We can now go through and use the offset
+	 * if we have one to determine if it is aligned. If the offset
+	 * isn't there then we have to assume it's not
+	 */
+	if(store_instruction->address_calc_reg1 == stack_pointer_variable){
 		if(store_instruction->offset != NULL){
+			//Extract the value
+			u_int32_t offset_value = store_instruction->offset->constant_value.signed_integer_constant;
+
+			//If we can mod by 16 then it's aligned, otherwise it's not
+			if(offset_value % 16 == 0){
+				destination_alignment = ALIGNMENT_TYPE_GUARANTEED;
+			} else {
+				destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+			}
 
 		} else {
-
+			destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
 		}
 
-
-	} else if(store_instruction->assignee == instruction_pointer_variable){
+	/**
+	 * If we have an instruction pointer variable, we know that it itself
+	 * is 16 byte aligned. We can now go through and use the offset
+	 * if we have one to determine if it is aligned. If the offset
+	 * isn't there then we have to assume it's not
+	 */
+	} else if(store_instruction->address_calc_reg1 == instruction_pointer_variable){
 		if(store_instruction->offset != NULL){
+			u_int32_t offset_value = store_instruction->offset->constant_value.signed_integer_constant;
+
+			//If we can mod by 16 then it's aligned, otherwise it's not
+			if(offset_value % 16 == 0){
+				destination_alignment = ALIGNMENT_TYPE_GUARANTEED;
+			} else {
+				destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+			}
 
 		} else {
-
+			destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
 		}
 
 	/**
@@ -8874,11 +8902,8 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 		destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
 	}
 
-
-		is_memory_region_alignment_guarnateed(store_instruction->assignee);
-
 	//Once we've done all the above assignments, we need to determine what our instruction type is. The source here is always clean, we are moving to memory
-	store_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type), TRUE, ALIGNMENT_TYPE_DONT_CARE, WRITE_TO_MEMORY);
+	store_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type), TRUE, destination_alignment, WRITE_TO_MEMORY);
 }
 
 
