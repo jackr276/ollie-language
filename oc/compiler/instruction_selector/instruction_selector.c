@@ -8858,6 +8858,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 	 * isn't there then we have to assume it's not
 	 */
 	if(store_instruction->address_calc_reg1 == stack_pointer_variable){
+		//We have an offset - good to go
 		if(store_instruction->offset != NULL){
 			//Extract the value
 			u_int32_t offset_value = store_instruction->offset->constant_value.signed_integer_constant;
@@ -8869,6 +8870,11 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 				destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
 			}
 
+		//We have no offset *and* no variable offset, so this is also good
+		} else if(store_instruction->address_calc_reg2 == NULL){
+			destination_alignment = ALIGNMENT_TYPE_GUARANTEED;
+
+		//Otherwise we do have a variable offset - nothing we can do here
 		} else {
 			destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
 		}
@@ -8880,6 +8886,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 	 * isn't there then we have to assume it's not
 	 */
 	} else if(store_instruction->address_calc_reg1 == instruction_pointer_variable){
+		//We have an offset - good to go
 		if(store_instruction->offset != NULL){
 			u_int32_t offset_value = store_instruction->offset->constant_value.signed_integer_constant;
 
@@ -8890,6 +8897,11 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 				destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
 			}
 
+		//We have no offset *and* no variable offset, so this is also good
+		} else if(store_instruction->address_calc_reg2 == NULL){
+			destination_alignment = ALIGNMENT_TYPE_GUARANTEED;
+
+		//Otherwise we do have a variable offset - nothing we can do here
 		} else {
 			destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
 		}
