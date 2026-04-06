@@ -198,38 +198,6 @@ static inline u_int8_t is_operation_valid_for_op1_assignment_folding(ollie_token
 
 
 /**
- * Is the memory region alignment guaranteed or not? We will discover this by finding 
- * the place where our given memory variable was defined from.
- */
-static inline alignment_type_t is_memory_region_alignment_guarnateed(three_addr_var_t* variable){
-	switch(variable->variable_type){
-		/**
-		 * We know for a fact that our memory addresses on the local stack
-		 * are always going to be aligned
-		 */
-		case VARIABLE_TYPE_MEMORY_ADDRESS:
-			return ALIGNMENT_TYPE_GUARANTEED;
-
-		/**
-		 * Stack param memory addresses, for the sake of safety, are going to be
-		 * assumed to be unaligned
-		 */
-		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-			return ALIGNMENT_TYPE_NOT_GUARANTEED;
-
-		/**
-		 * This may be enhanced in the future, but everything else we
-		 * are going to play it safe and not guarantee the alignment. x86-64
-		 * processors are *nearly* as fast when doing aligned vs. unaligned moves
-		 * anyways
-		 */
-		default:
-			return ALIGNMENT_TYPE_NOT_GUARANTEED;
-	}
-}
-
-
-/**
  * Is a type an unsigned 64 bit type? This is used for type conversions in 
  * the instruction selector
  */
@@ -9425,9 +9393,6 @@ static void handle_load_with_variable_offset_instruction(instruction_window_t* w
 
 	//As noted above, this is the assumption
 	instruction_t* load_instruction = window->instruction1;
-
-	//Handle the destination assignment
-	handle_load_instruction_type_and_destination(window);
 
 	/**
 	 * Based on what variable type we have here, we will need to handle
