@@ -8850,6 +8850,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 
 	//Now we need to determine the store instruction's alignment
 	alignment_type_t destination_alignment;
+	u_int32_t offset_value;
 
 	/**
 	 * If we have a stack pointer variable, we know that it itself
@@ -8858,52 +8859,28 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 	 * isn't there then we have to assume it's not
 	 */
 	if(store_instruction->address_calc_reg1 == stack_pointer_variable){
-		//We have an offset - good to go
-		if(store_instruction->offset != NULL){
-			//Extract the value
-			u_int32_t offset_value = store_instruction->offset->constant_value.signed_integer_constant;
+		//Based on our calculation mode we can know what's happening
+		switch(store_instruction->calculation_mode){
+			case ADDRESS_CALCULATION_MODE_OFFSET_ONLY:
+				//Extract the value
+				offset_value = store_instruction->offset->constant_value.signed_integer_constant;
 
-			//If we can mod by 16 then it's aligned, otherwise it's not
-			if(offset_value % 16 == 0){
+				//If we can mod by 16 then it's aligned, otherwise it's not
+				if(offset_value % 16 == 0){
+					destination_alignment = ALIGNMENT_TYPE_GUARANTEED;
+				} else {
+					destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+				}
+				
+				break;
+
+			case ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST:
 				destination_alignment = ALIGNMENT_TYPE_GUARANTEED;
-			} else {
+				break;
+
+			default:
 				destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
-			}
-
-		//We have no offset *and* no variable offset, so this is also good
-		} else if(store_instruction->address_calc_reg2 == NULL){
-			destination_alignment = ALIGNMENT_TYPE_GUARANTEED;
-
-		//Otherwise we do have a variable offset - nothing we can do here
-		} else {
-			destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
-		}
-
-	/**
-	 * If we have an instruction pointer variable, we know that it itself
-	 * is 16 byte aligned. We can now go through and use the offset
-	 * if we have one to determine if it is aligned. If the offset
-	 * isn't there then we have to assume it's not
-	 */
-	} else if(store_instruction->address_calc_reg1 == instruction_pointer_variable){
-		//We have an offset - good to go
-		if(store_instruction->offset != NULL){
-			u_int32_t offset_value = store_instruction->offset->constant_value.signed_integer_constant;
-
-			//If we can mod by 16 then it's aligned, otherwise it's not
-			if(offset_value % 16 == 0){
-				destination_alignment = ALIGNMENT_TYPE_GUARANTEED;
-			} else {
-				destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
-			}
-
-		//We have no offset *and* no variable offset, so this is also good
-		} else if(store_instruction->address_calc_reg2 == NULL){
-			destination_alignment = ALIGNMENT_TYPE_GUARANTEED;
-
-		//Otherwise we do have a variable offset - nothing we can do here
-		} else {
-			destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+				break;
 		}
 
 	/**
