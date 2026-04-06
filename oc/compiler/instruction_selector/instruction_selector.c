@@ -8911,7 +8911,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 	 * isn't there then we have to assume it's not
 	 */
 	switch(load_instruction->calculation_mode){
-		case ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST:
+		case ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE:
 			//If this is the stack pointer then we can guarantee alignment
 			if(load_instruction->source_register == stack_pointer_variable){
 				source_region_alignment = ALIGNMENT_TYPE_GUARANTEED;
