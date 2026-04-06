@@ -9189,9 +9189,6 @@ static void handle_load_instruction(instruction_window_t* window){
 	//The load instruction itself
 	instruction_t* load_instruction = window->instruction1;
 
-	//Invoke the helper to handle the assignee and any edge cases
-	handle_load_instruction_type_and_destination(window);
-
 	/**
 	 * Handle based on what the variable type is
 	 */
@@ -9285,6 +9282,9 @@ static void handle_load_instruction(instruction_window_t* window){
 
 			break;
 	}
+
+	//Invoke the helper to handle the assignee and any edge cases
+	handle_load_instruction_type_and_destination(window);
 }
 
 
@@ -9305,9 +9305,6 @@ static void handle_load_with_constant_offset_instruction(instruction_window_t* w
 
 	//This is the load that we're after
 	instruction_t* load_instruction = window->instruction1;
-
-	//Handle destination assignment based on op1
-	handle_load_instruction_type_and_destination(window);
 
 	/**
 	 * Go based on what kind of base address we are given
@@ -9407,6 +9404,9 @@ static void handle_load_with_constant_offset_instruction(instruction_window_t* w
 
 			break;
 	}
+
+	//Handle destination assignment based on op1
+	handle_load_instruction_type_and_destination(window);
 }
 
 
@@ -9580,6 +9580,9 @@ static void handle_load_with_variable_offset_instruction(instruction_window_t* w
 
 			break;
 	}
+
+	//Handle destination assignment based on op1
+	handle_load_instruction_type_and_destination(window);
 }
 
 
