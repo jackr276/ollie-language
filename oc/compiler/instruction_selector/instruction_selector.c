@@ -4017,7 +4017,7 @@ static void simplify(cfg_t* cfg){
  * placed in front of the instruction *if* the destination is an XMM register to maintain
  * this "clean" register idea
  */
-static instruction_type_t select_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t destination_signed, u_int8_t source_clean, alignment_type_t source_alignment, memory_access_type_t memory_access_type){
+static instruction_type_t select_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t destination_signed, u_int8_t source_clean, alignment_type_t alignment, memory_access_type_t memory_access_type){
 	//These two have the same size, we can select easily
 	//and be out of here
 	if(destination_size == source_size){
@@ -4065,7 +4065,7 @@ static instruction_type_t select_move_instruction(variable_size_t destination_si
 						 * to be aligned, then we will use the unaligned
 						 * instruction
 						 */
-						switch(source_alignment){
+						switch(alignment){
 							case ALIGNMENT_TYPE_DONT_CARE:
 							case ALIGNMENT_TYPE_NOT_GUARANTEED:
 								return MOVDQU;
@@ -4073,9 +4073,20 @@ static instruction_type_t select_move_instruction(variable_size_t destination_si
 								return MOVDQA;
 						}
 
-					//Store - we know it's aligned - so we use MOVAPS
 					case WRITE_TO_MEMORY:
-						return MOVAPS;
+						/**
+						 * If we are writing to a guaranteed to be aligned
+						 * chunk of memory, we will use MOVAPS. If we are
+						 * not writing from a guaranteed to be aligned
+						 * region of memory, we will be using MOVUPS
+						 */
+						switch(alignment){
+							case ALIGNMENT_TYPE_DONT_CARE:
+							case ALIGNMENT_TYPE_NOT_GUARANTEED:
+								return MOVUPS;
+							case ALIGNMENT_TYPE_GUARANTEED:
+								return MOVAPS;
+						}
 				}
 
 			default:
