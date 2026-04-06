@@ -9904,9 +9904,6 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 	//For later use
 	symtab_variable_record_t* linked_var;
 
-	//Invoke the helper for our source assignment
-	handle_store_instruction_sources_and_instruction_type(instruction);
-
 	//This is a write regardless
 	instruction->memory_access_type = WRITE_TO_MEMORY;
 
@@ -10005,6 +10002,9 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY; 
 			break;
 	}
+
+	//Invoke the helper for our source assignment
+	handle_store_instruction_sources_and_instruction_type(instruction);
 }
 
 
@@ -10023,9 +10023,6 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 
 	//For later use
 	symtab_variable_record_t* linked_var;
-
-	//Invoke the helper for our source assignment
-	handle_store_instruction_sources_and_instruction_type(instruction);
 
 	//This is a write regardless
 	instruction->memory_access_type = WRITE_TO_MEMORY;
@@ -10176,6 +10173,9 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 
 			break;
 	}
+
+	//Invoke the helper for our source assignment
+	handle_store_instruction_sources_and_instruction_type(instruction);
 }
 
 
