@@ -8850,7 +8850,6 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 
 	//Now we need to determine the store instruction's alignment
 	alignment_type_t destination_alignment;
-	u_int32_t offset_value;
 
 	/**
 	 * If we have a stack pointer variable, we know that it itself
@@ -8858,12 +8857,23 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 	 * if we have one to determine if it is aligned. If the offset
 	 * isn't there then we have to assume it's not
 	 */
-	if(store_instruction->address_calc_reg1 == stack_pointer_variable){
-		//Based on our calculation mode we can know what's happening
-		switch(store_instruction->calculation_mode){
-			case ADDRESS_CALCULATION_MODE_OFFSET_ONLY:
+	switch(store_instruction->calculation_mode){
+		case ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST:
+			//If this is the stack pointer then we can guarantee alignmetn
+			if(store_instruction->destination_register == stack_pointer_variable){
+				destination_alignment = ALIGNMENT_TYPE_GUARANTEED;
+			} else {
+				destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+			}
+
+			break;
+
+		//If we're just dealing with the offset we can also use that
+		case ADDRESS_CALCULATION_MODE_OFFSET_ONLY:
+			//If this is the stack pointer we can make guarantees
+			if(store_instruction->address_calc_reg1 == stack_pointer_variable){
 				//Extract the value
-				offset_value = store_instruction->offset->constant_value.signed_integer_constant;
+				u_int32_t offset_value = store_instruction->offset->constant_value.signed_integer_constant;
 
 				//If we can mod by 16 then it's aligned, otherwise it's not
 				if(offset_value % 16 == 0){
@@ -8871,24 +8881,16 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 				} else {
 					destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
 				}
-				
-				break;
 
-			case ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST:
-				destination_alignment = ALIGNMENT_TYPE_GUARANTEED;
-				break;
-
-			default:
+			//Otherwise we can't guarantee anything
+			} else {
 				destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
-				break;
-		}
+			}
 
-	/**
-	 * Otherwise we've got some variable base address. Unfortunately we can't know
-	 * anything about this variable so we have to assume that it's not aligned
-	 */
-	} else {
-		destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+		//Anything else - we can't guarantee anything
+		default:
+			destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+			break;
 	}
 
 	//Once we've done all the above assignments, we need to determine what our instruction type is. The source here is always clean, we are moving to memory
