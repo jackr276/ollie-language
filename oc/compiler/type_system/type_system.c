@@ -2250,15 +2250,6 @@ void finalize_struct_alignment(generic_type_t* type){
 	}
 
 	/**
-	 * In order to guarantee usability of our copy assignments, we need to have
-	 * an alignable type size of 16. This is because we may end up using copy
-	 * assignment here which relies on 16-byte alignment
-	 */
-	if(type->type_size > 16){
-		alignable_type_size = 16;
-	}
-
-	/**
 	 * If the size is already a multiple of the alignable type size,
 	 * then we can stop here and leave
 	 */
