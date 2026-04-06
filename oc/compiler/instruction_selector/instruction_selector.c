@@ -8902,7 +8902,51 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 	 * most commonly true when we are doing 16 byte loads during large struct copy operations.
 	 * We will invoke a helper to determine whether or not the source memory region is aligned
 	 */
-	alignment_type_t source_region_alignment = is_memory_region_alignment_guarnateed(load_instruction->op1);
+	alignment_type_t source_region_alignment;
+
+	/**
+	 * If we have a stack pointer variable, we know that it itself
+	 * is 16 byte aligned. We can now go through and use the offset
+	 * if we have one to determine if it is aligned. If the offset
+	 * isn't there then we have to assume it's not
+	 */
+	switch(load_instruction->calculation_mode){
+		case ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST:
+			//If this is the stack pointer then we can guarantee alignment
+			if(load_instruction->source_register == stack_pointer_variable){
+				source_region_alignment = ALIGNMENT_TYPE_GUARANTEED;
+			} else {
+				source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+			}
+
+			break;
+
+		//If we're just dealing with the offset we can also use that
+		case ADDRESS_CALCULATION_MODE_OFFSET_ONLY:
+			//If this is the stack pointer we can make guarantees
+			if(load_instruction->address_calc_reg1 == stack_pointer_variable){
+				//Extract the value
+				u_int32_t offset_value = load_instruction->offset->constant_value.signed_integer_constant;
+
+				//If we can mod by 16 then it's aligned, otherwise it's not
+				if(offset_value % 16 == 0){
+					source_region_alignment = ALIGNMENT_TYPE_GUARANTEED;
+				} else {
+					source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+				}
+
+			//Otherwise we can't guarantee anything
+			} else {
+				source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+			}
+
+			break;
+
+		//Anything else - we can't guarantee anything
+		default:
+			source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+			break;
+	}
 
 	//By default, assume it's the assignee
 	three_addr_var_t* destination_register = load_instruction->assignee;
