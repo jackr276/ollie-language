@@ -8887,6 +8887,8 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 				destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
 			}
 
+			break;
+
 		//Anything else - we can't guarantee anything
 		default:
 			destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
