@@ -8848,6 +8848,35 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 			exit(1);
 	}
 
+	//Now we need to determine the store instruction's alignment
+	alignment_type_t destination_alignment;
+
+	if(store_instruction->assignee == stack_pointer_variable){
+		if(store_instruction->offset != NULL){
+
+		} else {
+
+		}
+
+
+	} else if(store_instruction->assignee == instruction_pointer_variable){
+		if(store_instruction->offset != NULL){
+
+		} else {
+
+		}
+
+	/**
+	 * Otherwise we've got some variable base address. Unfortunately we can't know
+	 * anything about this variable so we have to assume that it's not aligned
+	 */
+	} else {
+		destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+	}
+
+
+		is_memory_region_alignment_guarnateed(store_instruction->assignee);
+
 	//Once we've done all the above assignments, we need to determine what our instruction type is. The source here is always clean, we are moving to memory
 	store_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type), TRUE, ALIGNMENT_TYPE_DONT_CARE, WRITE_TO_MEMORY);
 }
