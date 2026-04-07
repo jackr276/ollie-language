@@ -2400,38 +2400,27 @@ static generic_ast_node_t* paramcount_statement(ollie_token_stream_t* token_stre
 static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream, side_type_t side){
 	//For the function call rule if we make it there
 	generic_ast_node_t* func_call;
-
-	//Freeze the current line number
-	u_int32_t current_line = parser_line_num;
-	//Lookahead token
+	//We'll need two lookahead tokens for this
 	lexitem_t lookahead;
+	lexitem_t lookahead2;
 
 	//Grab the next token, we'll multiplex on this
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
 	//Switch based on the token
 	switch(lookahead.tok){
-		//We've seen an ident, so we'll put it back and let
-		//that rule handle it. This identifier will always be 
-		//a variable. It must also be a variable that has been initialized.
-		//We will check that it was initialized here
+		/**
+		 * We've seen an ident, so we'll put it back and let
+		 * that rule handle it. This identifier will always be 
+		 * a variable. It must also be a variable that has been initialized.
+		 * We will check that it was initialized here
+		 */
 		case IDENT:
-			//Put it back
-			push_back_token(token_stream, &parser_line_num);
-
-			//We will let the identifier rule actually grab the ident. In this case
-			//the identifier will be a variable of some sort, that we'll need to check
-			//against the symbol table
-			generic_ast_node_t* ident = identifier(token_stream, side);
-
-			//If there was a failure of some kind, we'll allow it to propogate up
-			if(ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-				//Send the error up the chain
-				return ident;
-			}
+			//Get the second lookahead - we could be seeing a fully qualified name
+			lookahead2 = get_next_token(token_stream, &parser_line_num);
 
 			//Grab this out for convenience
-			char* var_name = ident->string_value.string;
+			char* name = lookahead.lexeme.string;
 
 			//Now we will look this up in the variable symbol table
 			symtab_variable_record_t* found_var = lookup_variable(variable_symtab, var_name);
@@ -2534,7 +2523,7 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 			//this identifier has never been declared as a function, variable or constant.
 			//We'll through an error if this happens
 			sprintf(info, "Variable \"%s\" has not been declared", var_name);
-			return print_and_return_error(info, current_line);
+			return print_and_return_error(info, parser_line_num);
 
 		//If we see any constant
 		case INT_CONST:
@@ -2630,7 +2619,7 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 		//If we get here we fail
 		default:
 			sprintf(info, "Expected identifier, constant or (<expression>), but got %s", lexitem_to_string(&lookahead));
-			return print_and_return_error(info, current_line);
+			return print_and_return_error(info, parser_line_num);
 	}
 }
 
