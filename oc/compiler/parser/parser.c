@@ -13909,6 +13909,9 @@ static void mangle_all_function_names(function_symtab_t* symtab){
 				continue;
 			}
 
+			//Wipe out the temp buffer
+			clear_dynamic_string(&temporary_buffer);
+
 			//Now once we get here we know that the record needs it
 			function_namespace_t* namespace_cursor = record_to_mangle->namespace_contained_in;
 
@@ -13920,6 +13923,30 @@ static void mangle_all_function_names(function_symtab_t* symtab){
 				//Advance up to the parent
 				namespace_cursor = namespace_cursor->parent_namespace;
 			}
+
+			/**
+			 * Now that we have everything loaded into the stack in backwards order, we will
+			 * unwind the stack to create the fully qualified namespace name
+			 */
+			while(heap_stack_is_empty(&namespace_stack) == FALSE){
+				//Get the record off the stack
+				namespace_cursor = pop(&namespace_stack);
+
+				//Concatenate the name
+				dynamic_string_concatenate(&temporary_buffer, namespace_cursor->namespace_name.string);
+
+				//Add the "." to the back
+				dynamic_string_add_char_to_back(&temporary_buffer, dot);
+			}
+
+			//And then once we finally come all the way here we add the function name
+			dynamic_string_concatenate(&temporary_buffer, record_to_mangle->func_name.string);
+
+			/**
+			 * And now we're full circle. We are going to wipe out the old function name and replace it
+			 * with this new function name
+			 */
+			dynamic_string_set(&(record_to_mangle->func_name), temporary_buffer.string);
 		}
 	}
 
