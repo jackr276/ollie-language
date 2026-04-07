@@ -203,6 +203,7 @@ typedef enum{
 	UCOMISS, //Unordered compare of f32
 	UCOMISD, //Unordered compare of f64
 	MOVAPS, //Move aligned packed f32 -> used if we need to clear out the whole thing
+	MOVUPS, //Move unaligned packed f32
 	MOVAPD, //Move aligned packed f64 -> used if we need to clear out the whole thing
 	MOVDQU, //Move unaligned double quad word -> used for memory copying with structs/unions
 	MOVDQA, //Move aligned double quad word -> used for memory copying with structs/unions
