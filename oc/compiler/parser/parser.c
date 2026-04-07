@@ -13880,7 +13880,14 @@ static void flag_functions_that_require_initial_alignment(function_symtab_t* sym
  * have its name transformed into namespace1.namespace2.my_fn
  */
 static void mangle_all_function_names(function_symtab_t* symtab){
+	//We will ge concatenating using the dot
+	const char dot = '.';
 
+	//Allocate a temp buffer for us to use in the mangling - we will reuse it
+	dynamic_string_t temporary_buffer = dynamic_string_alloc();
+
+	//We will use a heap stack to store all of our namespaces
+	heap_stack_t namespace_stack = heap_stack_alloc();
 
 	//Run through all of the given namespaces
 	for(u_int32_t i = 0; i < symtab->namespaces.current_index; i++){
@@ -13891,7 +13898,36 @@ static void mangle_all_function_names(function_symtab_t* symtab){
 		if(current_namespace->is_default == TRUE){
 			continue;
 		}
+
+		//Otherwise run through all of the functions
+		for(u_int32_t j = 0; j < FUNCTION_KEYSPACE; j++){
+			//Grab it out
+			symtab_function_record_t* record_to_mangle = current_namespace->records[j];
+
+			//Remember these are usually largely sparse so this is somewhat frequent
+			if(record_to_mangle == NULL){
+				continue;
+			}
+
+			//Now once we get here we know that the record needs it
+			function_namespace_t* namespace_cursor = record_to_mangle->namespace_contained_in;
+
+			//So long as we don't see the default namespace
+			while(namespace_cursor->is_default == FALSE){
+				//Push it onto the stack
+				push(&namespace_stack, namespace_cursor);
+
+				//Advance up to the parent
+				namespace_cursor = namespace_cursor->parent_namespace;
+			}
+		}
 	}
+
+	//No longer need this
+	dynamic_string_dealloc(&temporary_buffer);
+
+	//Or the stack
+	heap_stack_dealloc(&namespace_stack);
 }
 
 
