@@ -7,8 +7,8 @@
 namespace tester
 {
 	//Declared twice - will fail
-	declare pub fn duplicate() -> i32;
-	declare pub fn duplicate() -> i32;
+	declare fn duplicate() -> i32;
+	declare fn duplicate() -> i32;
 
 	pub fn duplicate() -> f32 {
 		ret 3.33;
