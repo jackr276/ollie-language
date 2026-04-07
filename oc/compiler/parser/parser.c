@@ -1722,7 +1722,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 			if(function_pointer_variable == NULL){
 				//Customize our error message based on the namespace
 				if(function_symtab->current->is_default == TRUE){
-					sprintf(info, "\"%s\" is not currently defined as a function pointer or  function", function_name.string);
+					sprintf(info, "\"%s\" is not currently defined as a function pointer or function. Are you missing namespace qualifiers?", function_name.string);
 				} else {
 					sprintf(info, "\"%s\" is not currently defined as a function pointer or a function in the current namespace \"%s\" or any parent namespace",
 										function_name.string,
