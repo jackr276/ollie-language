@@ -13873,6 +13873,29 @@ static void flag_functions_that_require_initial_alignment(function_symtab_t* sym
 
 
 /**
+ * Mangle all of the function names so that we can guarantee
+ * uniqueness in the final assembly when the time comes
+ *
+ * For example: the function namespace1::namespace2::my_fn() will
+ * have its name transformed into namespace1.namespace2.my_fn
+ */
+static void mangle_all_function_names(function_symtab_t* symtab){
+
+
+	//Run through all of the given namespaces
+	for(u_int32_t i = 0; i < symtab->namespaces.current_index; i++){
+		//Pointer for the current namespace
+		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->namespaces), i);
+
+		//If it's the default namespace then there's nothing to mangle
+		if(current_namespace->is_default == TRUE){
+			continue;
+		}
+	}
+}
+
+
+/**
  * Entry point for our parser. Everything beyond this point will be called in a recursive-descent fashion through
  * static methods
 */
@@ -13971,6 +13994,13 @@ front_end_results_package_t* parse(compiler_options_t* options){
 		check_for_unused_functions(function_symtab, &num_warnings);
 		//Check for any bad variable declarations
 		check_for_var_errors(variable_symtab, &num_warnings);
+
+		/**
+		 * One final thing that we need to do. Functions inside of namespaces
+		 * must have their name "mangled" so that we guarantee uniqueness. Now that
+		 * we're done doing everything here we can go through and mangle all of the names
+		 */
+		mangle_all_function_names(function_symtab);
 	}
 
 	//Package up everything that we need
