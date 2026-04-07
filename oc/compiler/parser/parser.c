@@ -13470,7 +13470,8 @@ static generic_ast_node_t* namespace_member(ollie_token_stream_t* token_stream){
 				case PUB:
 					push_back_token(token_stream, &parser_line_num);
 
-					return function_predeclaration(token_stream, VISIBILITY_TYPE_PUBLIC);
+					//We can just leverage the global declare statement for this
+					return global_declare_statement(token_stream);
 
 				//Means that we're trying to declare a global var
 				default:
@@ -13481,7 +13482,8 @@ static generic_ast_node_t* namespace_member(ollie_token_stream_t* token_stream){
 			return print_and_return_error("Global variable declaration may not happen inside of a namespace", parser_line_num);
 
 		default:
-			return print_and_return_error("Invalid/unknown expression type encountered in namespace", parser_line_num);
+			sprintf(info, "Invalid/unknown expression type encountered in namespace. Saw \"%s\".", lexitem_to_string(&lookahead));
+			return print_and_return_error(info, parser_line_num);
 	}
 }
 
@@ -13568,12 +13570,18 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 		generic_ast_node_t* member = namespace_member(stream);
 
 		//Hard fail out here
-		if(member->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		if(member != NULL 
+			&& member->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			return print_and_return_error("Invalid member discovered in namespace", parser_line_num);
 		}
 
-		//Now that we know that it's good we can add it as a child
-		add_child_node(namespace_node, member);
+		/**
+		 * Now that we know that it's good we can add it as a child. Remember that a function predeclaration
+		 * just returns nothing so we'll need to account for the null case here
+		 */
+		if(member != NULL){
+			add_child_node(namespace_node, member);
+		}
 
 		//Refresh it
 		lookahead = get_next_token(stream, &parser_line_num);
