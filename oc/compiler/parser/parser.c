@@ -2448,6 +2448,17 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 							return print_and_return_error(info, parser_line_num);
 						}
 						
+						//We know that this is valid, so we can allocate the identifier
+						generic_ast_node_t* ident_node = ast_node_alloc(AST_NODE_TYPE_IDENTIFIER, side);
+
+						//Fill out the info we need
+						ident_node->is_assignable = TRUE;
+						ident_node->variable = found_var;
+						ident_node->inferred_type = found_var->type_defined_as;
+
+						//TODO - idk if we need to clone the string value or not - we'll find out
+
+						return ident_node;
 
 					//Otherwise it is an enum. We'll need to allocate a constant for this
 					} else {
@@ -2485,54 +2496,39 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 
 						return enum_member_node;
 					}
-
-
-
-					//Store the inferred type
-					ident->inferred_type = found_var->type_defined_as;
-					//Store the variable that's associated
-					ident->variable = found_var;
-					//Idents are assignable
-					ident->is_assignable = TRUE;
-
-					//Give back the ident node
-					return ident;
 				}
 
-				//Attempt to find the function in here
-				//TODO UPDATE
-				//
-				symtab_function_record_t* found_func = lookup_function(function_symtab, var_name);
+				/**
+				 * Otherwise we had a miss in the variable symtab. Let's now try and find this in the function
+				 * symtab and do the appropriate processing for that
+				 */
+				symtab_function_record_t* found_function = lookup_function(function_symtab, var_name);
 
-				//Since a function value is constant and never changes, we will classify this record as a constant
-				//If it could be found, then we're all set
-				if(found_func != NULL){
-					//We'll change the type of this node from an identifier to a constant
-					ident->ast_node_type = AST_NODE_TYPE_CONSTANT;
+				/**
+				 * Since a function value is constant and never changes, we will classify this record as a constant
+				 * If it could be found, then we're all set
+				 */
+				if(found_function != NULL){
+					//Allocate the function constant node
+					generic_ast_node_t* function_constant = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
 
-					//The type of this value is a function constant
-					ident->constant_type = FUNC_CONST;
+					//This is a function pointer constant. 
+					function_constant->constant_type = FUNC_CONST;
+					function_constant->func_record = found_function;
 
-					//This values type is the function's signature
-					ident->inferred_type = found_func->signature;
+					function_constant->is_assignable = FALSE;
+					function_constant->inferred_type = found_function->signature;
 
-					//Store the function record that we've found
-					ident->func_record = found_func;
-
-					//It is not assignable
-					ident->is_assignable = FALSE;
-
-					//Give it back
-					return ident;
+					return function_constant;
 				}
 
-				//Otherwise, if we reach all the way down to here, then we have an issue as
-				//this identifier has never been declared as a function, variable or constant.
-				//We'll through an error if this happens
+				/**
+				 * Otherwise, if we reach all the way down to here, then we have an issue as
+				 * this identifier has never been declared as a function, variable or constant.
+				 * We'll through an error if this happens
+				 */
 				sprintf(info, "Variable \"%s\" has not been declared", var_name);
 				return print_and_return_error(info, parser_line_num);
-
-
 
 			//Otherwise we're seeing a fully qualified function name for a function pointer
 			} else {
@@ -2540,6 +2536,7 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 				exit(1);
 			}
 
+			break;
 
 		//If we see any constant
 		case INT_CONST:

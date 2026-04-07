@@ -529,6 +529,9 @@ symtab_variable_record_t* initialize_instruction_pointer(type_symtab_t* types);
 
 /**
  * Lookup a function name in the symtab
+ *
+ * Our lookup is always biased to the most local sheaf first, and then up the
+ * chain as we go
  */
 symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name);
 
