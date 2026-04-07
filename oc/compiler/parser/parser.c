@@ -2456,7 +2456,7 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 						ident_node->variable = found_var;
 						ident_node->inferred_type = found_var->type_defined_as;
 
-						//TODO - idk if we need to clone the string value or not - we'll find out
+						ident_node->line_number = parser_line_num;
 
 						return ident_node;
 
@@ -2467,6 +2467,8 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 						//We'll need the enum and inferred types stored
 						enum_member_node->optional_storage.enum_type = found_var->type_defined_as;
 						enum_member_node->inferred_type = found_var->type_defined_as->internal_values.enum_integer_type;
+
+						enum_member_node->line_number = parser_line_num;
 
 						//Constants may not be assigned
 						enum_member_node->is_assignable = FALSE;
@@ -2511,6 +2513,8 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 				if(found_function != NULL){
 					//Allocate the function constant node
 					generic_ast_node_t* function_constant = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
+
+					function_constant->line_number = parser_line_num;
 
 					//This is a function pointer constant. 
 					function_constant->constant_type = FUNC_CONST;
