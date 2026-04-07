@@ -10751,7 +10751,7 @@ static u_int8_t visit_namespace_declaration(cfg_t* cfg, generic_ast_node_t* name
 				break;
 
 			case AST_NODE_TYPE_NAMESPACE_DECLARATION:
-				result = visit_namespace_declaration(cfg, namespace_declaration_node);
+				result = visit_namespace_declaration(cfg, namespace_child);
 
 				//Fail out if bad
 				if(result == FAILURE){
