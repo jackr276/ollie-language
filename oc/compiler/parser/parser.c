@@ -2419,49 +2419,105 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 			//Get the second lookahead - we could be seeing a fully qualified name
 			lookahead2 = get_next_token(token_stream, &parser_line_num);
 
-			//Grab this out for convenience
-			char* name = lookahead.lexeme.string;
+			//If it's not the ::, then we have a regular variable name
+			if(lookahead2.tok != COLONCOLON){
+				//Push it back
+				push_back_token(token_stream, &parser_line_num);
 
-			//Now we will look this up in the variable symbol table
-			symtab_variable_record_t* found_var = lookup_variable(variable_symtab, var_name);
+				//Grab this out for convenience
+				char* var_name = lookahead.lexeme.string;
 
-			//Let's look and see if we have a variable for use here. If we do, then
-			//we're done with this exploration
-			if(found_var != NULL){
-				//If this var is itself an enum member, we need to treat it as a constant
-				if(found_var->membership == ENUM_MEMBER){
+				//Attempt to find the variable first
+				symtab_variable_record_t* found_var = lookup_variable(variable_symtab, var_name);
+
+				/**
+				 * Let's look and see if we have a variable for use here. If we do, then
+				 * we're done with this exploration
+				 */
+				if(found_var != NULL){
+					//Most common case - not an enum
+					if(found_var->membership != ENUM_MEMBER){
+						/**
+						 * If this is the right hand side and our variable is not initialized,
+						 * this is invalid as we are trying to use before initialization
+						 */
+						if(side == SIDE_TYPE_RIGHT 
+							&& is_variable_data_segment_variable(found_var) == FALSE
+							&& found_var->initialized == FALSE){
+							sprintf(info, "Attempt to use variable %s before initialization", found_var->var_name.string);
+							return print_and_return_error(info, parser_line_num);
+						}
+						
+
+					//Otherwise it is an enum. We'll need to allocate a constant for this
+					} else {
+						generic_ast_node_t* enum_member_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
+
+						//We'll need the enum and inferred types stored
+						enum_member_node->optional_storage.enum_type = found_var->type_defined_as;
+						enum_member_node->inferred_type = found_var->type_defined_as->internal_values.enum_integer_type;
+
+						//Constants may not be assigned
+						enum_member_node->is_assignable = FALSE;
+
+						//Store the constant value appropriately
+						switch(enum_member_node->inferred_type->type_size){
+							case 1:
+								enum_member_node->constant_type = BYTE_CONST;
+								enum_member_node->constant_value.signed_byte_value = found_var->enum_member_value;
+								break;
+
+							case 2:
+								enum_member_node->constant_type = SHORT_CONST;
+								enum_member_node->constant_value.signed_short_value = found_var->enum_member_value;
+								break;
+
+							case 4:
+								enum_member_node->constant_type = INT_CONST;
+								enum_member_node->constant_value.signed_int_value = found_var->enum_member_value;
+								break;
+
+							default:
+								enum_member_node->constant_type = LONG_CONST;
+								enum_member_node->constant_value.signed_long_value = found_var->enum_member_value;
+								break;
+						}
+
+						return enum_member_node;
+					}
+
+
+
+					//Store the inferred type
+					ident->inferred_type = found_var->type_defined_as;
+					//Store the variable that's associated
+					ident->variable = found_var;
+					//Idents are assignable
+					ident->is_assignable = TRUE;
+
+					//Give back the ident node
+					return ident;
+				}
+
+				//Attempt to find the function in here
+				//TODO UPDATE
+				//
+				symtab_function_record_t* found_func = lookup_function(function_symtab, var_name);
+
+				//Since a function value is constant and never changes, we will classify this record as a constant
+				//If it could be found, then we're all set
+				if(found_func != NULL){
 					//We'll change the type of this node from an identifier to a constant
 					ident->ast_node_type = AST_NODE_TYPE_CONSTANT;
 
-					//Store the enum type inside of optional storage here
-					ident->optional_storage.enum_type = found_var->type_defined_as;
+					//The type of this value is a function constant
+					ident->constant_type = FUNC_CONST;
 
-					//Extract the enum integer type from here
-					ident->inferred_type = found_var->type_defined_as->internal_values.enum_integer_type;
+					//This values type is the function's signature
+					ident->inferred_type = found_func->signature;
 
-					//Store the constant value appropriately
-					switch(ident->inferred_type->type_size){
-						case 1:
-							ident->constant_type = BYTE_CONST;
-							ident->constant_value.signed_byte_value = found_var->enum_member_value;
-							break;
-
-						case 2:
-							ident->constant_type = SHORT_CONST;
-							ident->constant_value.signed_short_value = found_var->enum_member_value;
-							break;
-
-						case 4:
-							ident->constant_type = INT_CONST;
-							ident->constant_value.signed_int_value = found_var->enum_member_value;
-							break;
-
-						default:
-							ident->constant_type = LONG_CONST;
-							ident->constant_value.signed_long_value = found_var->enum_member_value;
-							break;
-							
-					}
+					//Store the function record that we've found
+					ident->func_record = found_func;
 
 					//It is not assignable
 					ident->is_assignable = FALSE;
@@ -2470,60 +2526,20 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 					return ident;
 				}
 
-				/**
-				 * If this is the right hand side and our variable is not initialized,
-				 * this is invalid as we are trying to use before initialization
-				 */
-				if(side == SIDE_TYPE_RIGHT 
-					&& is_variable_data_segment_variable(found_var) == FALSE
-					&& found_var->initialized == FALSE){
-					sprintf(info, "Attempt to use variable %s before initialization", found_var->var_name.string);
-					return print_and_return_error(info, parser_line_num);
-				}
+				//Otherwise, if we reach all the way down to here, then we have an issue as
+				//this identifier has never been declared as a function, variable or constant.
+				//We'll through an error if this happens
+				sprintf(info, "Variable \"%s\" has not been declared", var_name);
+				return print_and_return_error(info, parser_line_num);
 
-				//Store the inferred type
-				ident->inferred_type = found_var->type_defined_as;
-				//Store the variable that's associated
-				ident->variable = found_var;
-				//Idents are assignable
-				ident->is_assignable = TRUE;
 
-				//Give back the ident node
-				return ident;
+
+			//Otherwise we're seeing a fully qualified function name for a function pointer
+			} else {
+				printf("TODO NOT IMPLEMENTED\n");
+				exit(1);
 			}
 
-			//Attempt to find the function in here
-			//TODO UPDATE
-			//
-			symtab_function_record_t* found_func = lookup_function(function_symtab, var_name);
-
-			//Since a function value is constant and never changes, we will classify this record as a constant
-			//If it could be found, then we're all set
-			if(found_func != NULL){
-				//We'll change the type of this node from an identifier to a constant
-				ident->ast_node_type = AST_NODE_TYPE_CONSTANT;
-
-				//The type of this value is a function constant
-				ident->constant_type = FUNC_CONST;
-
-				//This values type is the function's signature
-				ident->inferred_type = found_func->signature;
-
-				//Store the function record that we've found
-				ident->func_record = found_func;
-
-				//It is not assignable
-				ident->is_assignable = FALSE;
-
-				//Give it back
-				return ident;
-			}
-
-			//Otherwise, if we reach all the way down to here, then we have an issue as
-			//this identifier has never been declared as a function, variable or constant.
-			//We'll through an error if this happens
-			sprintf(info, "Variable \"%s\" has not been declared", var_name);
-			return print_and_return_error(info, parser_line_num);
 
 		//If we see any constant
 		case INT_CONST:
