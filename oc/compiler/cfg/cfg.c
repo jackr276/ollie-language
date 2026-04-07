@@ -8855,9 +8855,8 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					current_block = starting_block;
 				}
 
-				//The second child here should be our conditional
+				//First child is the conditional
 				generic_ast_node_t* cursor = ast_cursor->first_child;
-				cursor = cursor->next_sibling;
 
 				//We'll need to emit the conditional in the current block
 				cfg_result_package_t ret_package = emit_expression(current_block, cursor, TRUE);
@@ -9391,9 +9390,8 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					current_block = starting_block;
 				}
 
-				//The second child here should be our conditional
+				//The first child is our conditional
 				generic_ast_node_t* cursor = ast_cursor->first_child;
-				cursor = cursor->next_sibling;
 
 				//We'll need to emit the conditional in the current block
 				cfg_result_package_t ret_package = emit_expression(current_block, cursor, TRUE);

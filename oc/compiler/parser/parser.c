@@ -689,38 +689,6 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
 
 
 /**
- * We will always return a pointer to the node holding the identifier. Due to the times when
- * this will be called, we can not do any symbol table validation here. 
- *
- * BNF "Rule": <identifier> ::= (<letter> | <digit> | _ | $){(<letter>) | <digit> | _ | $}*
- * Note all actual string parsing and validation is handled by the lexer
- */
-static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream, side_type_t side){
-	//Grab the next token
-	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
-	
-	//If we can't find it that's bad
-	if(lookahead.tok != IDENT){
-		sprintf(info, "String %s is not a valid identifier", lookahead.lexeme.string);
-		return print_and_return_error(info, parser_line_num);
-	}
-
-	//Create the identifier node
-	generic_ast_node_t* ident_node = ast_node_alloc(AST_NODE_TYPE_IDENTIFIER, side); //Add the identifier into the node itself
-	//Idents are assignable
-	ident_node->is_assignable = TRUE;
-	//Clone the string in
-	ident_node->string_value = clone_dynamic_string(&(lookahead.lexeme));
-
-	//Add the line number
-	ident_node->line_number = parser_line_num;
-
-	//Return our reference to the node
-	return ident_node;
-}
-
-
-/**
  * Directly emit an integer constant node. This is used exclusively for the user-defined direct
  * jump, and allows us to make every user-defined jump a direct jump when(1) jump. This greatly
  * simplifies our development processes
@@ -8885,19 +8853,24 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 	//Lookahead token
 	lexitem_t lookahead;
 
-	//Do we contain a defer at any point in here? If so, that is invalid because we could
-	//have the defer block duplicated multiple times. As such, a label would become ambiguous
+	/**
+	 * Do we contain a defer at any point in here? If so, that is invalid because we could
+	 * have the defer block duplicated multiple times. As such, a label would become ambiguous
+	 */
 	if(nesting_stack_contains_level(&nesting_stack, NESTING_DEFER_STATEMENT) == TRUE){
 		return print_and_return_error("Direct jump statements cannot be placed inside of deferred blocks", parser_line_num);
 	}
+	
+	//Refresh the lookahead
+	lookahead = get_next_token(token_stream, &parser_line_num);
 
-	//Once we've made it, we need to see a valid label identifier
-	generic_ast_node_t* label_ident = identifier(token_stream, SIDE_TYPE_LEFT);
-
-	//If this failed, we're done
-	if(label_ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		return print_and_return_error("Invalid label given to jump statement", parser_line_num);
+	//If we didn't see one we fail out
+	if(lookahead.tok != IDENT){
+		return print_and_return_error("Identifier expected after \"jump\" keyword", parser_line_num);
 	}
+
+	//Hang onto the name of the block that we'll be jumping to
+	char* jumping_to_block_name = lookahead.lexeme.string;
 
 	//Holder for the jump statement type
 	generic_ast_node_t* jump_node;
@@ -8910,8 +8883,9 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 		//We know that this will be a conditional jump, so allocate as such
 		jump_node = ast_node_alloc(AST_NODE_TYPE_CONDITIONAL_JUMP_STMT, SIDE_TYPE_LEFT);
 
-		//Add this in as a child node to the statement
-		add_child_node(jump_node, label_ident);
+		//Create space for and store our identifier name
+		jump_node->string_value = dynamic_string_alloc();
+		dynamic_string_set(&(jump_node->string_value), jumping_to_block_name);
 
 		//We now need to see an L_PAREN 
 		lookahead = get_next_token(token_stream, &parser_line_num);
@@ -8962,8 +8936,9 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 		//This is a direct jump so allocate accordingly
 		jump_node = ast_node_alloc(AST_NODE_TYPE_JUMP_STMT, SIDE_TYPE_LEFT);
 
-		//Add this in as a child node to the statement
-		add_child_node(jump_node, label_ident);
+		//Create space for and store our identifier name
+		jump_node->string_value = dynamic_string_alloc();
+		dynamic_string_set(&(jump_node->string_value), jumping_to_block_name);
 	}
 
 	//If we don't see a semicolon we bail
@@ -11838,11 +11813,8 @@ static int8_t check_jump_labels(){
 		//Grab the jump statement
 		current_jump_statement = dequeue(&current_function_jump_statements);
 
-		//Grab the label ident node
-		generic_ast_node_t* label_ident_node = current_jump_statement->first_child;
-
 		//Let's grab out the name for convenience
-		char* name = label_ident_node->string_value.string;
+		char* name = current_jump_statement->string_value.string;
 
 		//We now need to lookup the name in here. We use a special function that allows
 		//us to look deeper into the scopes 
