@@ -13434,6 +13434,8 @@ static generic_ast_node_t* global_let_statement(ollie_token_stream_t* token_stre
 static generic_ast_node_t* namespace_member(ollie_token_stream_t* token_stream){
 	//The lookahead token
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+	//We may need a secong lookahead here
+	lexitem_t lookahead2;
 
 	//Switch based on the token
 	switch(lookahead.tok){
@@ -13456,8 +13458,26 @@ static generic_ast_node_t* namespace_member(ollie_token_stream_t* token_stream){
 		case ALIAS:
 			return print_and_return_error("Type aliasing may not happen inside of a namespace", parser_line_num);
 
-		case LET:
 		case DECLARE:
+			//Let's see if we're dealing with a function predeclaration
+			lookahead2 = get_next_token(token_stream, &parser_line_num);
+
+			//Go based on the second lookeahd
+			switch(lookahead2.tok){
+				//Any of these means that we have a function predeclaration
+				case FN:
+				case INLINE:
+				case PUB:
+					push_back_token(token_stream, &parser_line_num);
+
+					return function_predeclaration(token_stream, VISIBILITY_TYPE_PUBLIC);
+
+				//Means that we're trying to declare a global var
+				default:
+					return print_and_return_error("Global variable declaration may not happen inside of a namespace", parser_line_num);
+			}
+
+		case LET:
 			return print_and_return_error("Global variable declaration may not happen inside of a namespace", parser_line_num);
 
 		default:
