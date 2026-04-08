@@ -6528,6 +6528,9 @@ static u_int8_t struct_definer(ollie_token_stream_t* token_stream){
  * is added later on. The mutability is given to this rule
  *
  * BNF Rule: <union-type-specifier> ::= <type-name>{<type-address-specifier>}*
+ *
+ *
+ * TODO THIS IS NOT UP TO OUR CURRENT TYPE SPECIFIER STANDARD
  */
 static generic_type_t* union_type_specifier(ollie_token_stream_t* token_stream, mutability_type_t mutability){
 	//Lookahead token
