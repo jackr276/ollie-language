@@ -6533,9 +6533,11 @@ static generic_type_t* union_type_specifier(ollie_token_stream_t* token_stream, 
 	//Lookahead token
 	lexitem_t lookahead;
 
-	//Now we'll hand off the rule to the <type-name> function. The type name function will
-	//return a record of the node that the type name has. If the type name function could not
-	//find the name, then it will send back an error that we can handle here
+	/**
+	 * Now we'll hand off the rule to the <type-name> function. The type name function will
+	 * return a record of the node that the type name has. If the type name function could not
+	 * find the name, then it will send back an error that we can handle here
+	 */
 	symtab_type_record_t* type = type_name(token_stream, mutability);
 
 	//We'll just fail here, no need for any error printing
@@ -6544,8 +6546,10 @@ static generic_type_t* union_type_specifier(ollie_token_stream_t* token_stream, 
 		return NULL;
 	}
 
-	//Now once we make it here, we know that we have a name that actually exists in the symtab
-	//The current type record is what we will eventually point our node to
+	/**
+	 * Now once we make it here, we know that we have a name that actually exists in the symtab
+	 * The current type record is what we will eventually point our node to
+	 */
 	symtab_type_record_t* current_type_record = type;
 	
 	//Let's see where we go from here
@@ -6553,7 +6557,6 @@ static generic_type_t* union_type_specifier(ollie_token_stream_t* token_stream, 
 
 	//As long as we are seeing pointer specifiers
 	while(lookahead.tok == STAR){
-		//We keep seeing STARS, so we have a pointer type
 		//Let's create the pointer type. This pointer type will point to the current type
 		generic_type_t* pointer = create_pointer_type(current_type_record->type, parser_line_num, mutability);
 
@@ -6565,13 +6568,15 @@ static generic_type_t* union_type_specifier(ollie_token_stream_t* token_stream, 
 		if(found_pointer == NULL){
 			//Create the type record
 			symtab_type_record_t* created_pointer = create_type_record(pointer);
-			//Insert it into the symbol table
 			insert_type(type_symtab, created_pointer);
+
 			//We'll also set the current type record to be this
 			current_type_record = created_pointer;
+
 		} else {
 			//Otherwise, just set the current type record to be what we found
 			current_type_record = found_pointer;
+
 			//We don't need the other ponter if this is the case
 			type_dealloc(pointer);
 		}
@@ -6636,8 +6641,10 @@ static generic_type_t* union_type_specifier(ollie_token_stream_t* token_stream, 
 			return NULL;
 		}
 
-		//One last thing before we do expensive validation - what if there's no closing bracket? If there's not, this
-		//is an easy fail case 
+		/**
+		 * One last thing before we do expensive validation - what if there's no closing bracket? If there's not, this
+		 * is an easy fail case 
+		 */
 		lookahead = get_next_token(token_stream, &parser_line_num);
 
 		//Fail case here 
@@ -6689,11 +6696,13 @@ static generic_type_t* union_type_specifier(ollie_token_stream_t* token_stream, 
 	//Now we'll go back through and unwind the lightstack
 	while(lightstack_is_empty(&lightstack) == FALSE){
 		//Grab the number of bounds out
-		u_int32_t num_bounds = lightstack_pop(&lightstack);
+		u_int32_t number_of_records = lightstack_pop(&lightstack);
 
-		//If we're trying to create an array out of a type that is not yet fully
-		//defined, we also need to fail out. There exists a special exception here for array types, because we can
-		//initially define them as blank if and only if we're using an initializer
+		/**
+		 * If we're trying to create an array out of a type that is not yet fully
+		 * defined, we also need to fail out. There exists a special exception here for array types, because we can
+		 * initially define them as blank if and only if we're using an initializer
+		 */
 		if(current_type_record->type->type_class != TYPE_CLASS_ARRAY && current_type_record->type->type_complete == FALSE){
 			sprintf(info, "Attempt to use incomplete type %s as an array member. Array member types must be fully defined before use", current_type_record->type->type_name.string);
 			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
@@ -6701,9 +6710,11 @@ static generic_type_t* union_type_specifier(ollie_token_stream_t* token_stream, 
 			return NULL;
 		}
 
-		//If we get here though, we know that this one is good
-		//Lets create the array type
-		generic_type_t* array_type = create_array_type(current_type_record->type, parser_line_num, num_bounds, mutability);
+		/**
+		 * If we get here though, we know that this one is good
+		 * Lets create the array type
+		 */
+		generic_type_t* array_type = create_array_type(current_type_record->type, parser_line_num, number_of_records, mutability);
 
 		//Let's see if we can find this one
 		symtab_type_record_t* found_array = lookup_type(type_symtab, array_type);
@@ -6712,13 +6723,15 @@ static generic_type_t* union_type_specifier(ollie_token_stream_t* token_stream, 
 		if(found_array == NULL){
 			//Create the type record
 			symtab_type_record_t* created_array = create_type_record(array_type);
-			//Insert it into the symbol table
 			insert_type(type_symtab, created_array);
+
 			//We'll also set the current type record to be this
 			current_type_record = created_array;
+
 		} else {
 			//Otherwise, just set the current type record to be what we found
 			current_type_record = found_array;
+
 			//We don't need the other one if this is the case
 			type_dealloc(array_type);
 		}
