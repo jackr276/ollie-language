@@ -689,30 +689,6 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
 
 
 /**
- * Directly emit an integer constant node. This is used exclusively for the user-defined direct
- * jump, and allows us to make every user-defined jump a direct jump when(1) jump. This greatly
- * simplifies our development processes
- */
-static inline generic_ast_node_t* emit_direct_constant(int32_t constant){
-	//Create our constant node
-	generic_ast_node_t* constant_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, SIDE_TYPE_RIGHT);
-	//Add the line number
-	constant_node->line_number = parser_line_num;
-
-	//This is an int_const
-	constant_node->constant_type = INT_CONST;
-	
-	//Just make this one a signed 32 bit integer
-	constant_node->inferred_type = immut_i32;
-
-	//Give it the value
-	constant_node->constant_value.signed_int_value = constant;
-
-	return constant_node;
-}
-
-
-/**
  * Handle a constant. There are 4 main types of constant, all handled by this function. A constant
  * is always the child of some parent node. We will always return the reference to the node
  * created here
