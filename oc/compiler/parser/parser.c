@@ -1698,9 +1698,21 @@ static inline u_int8_t validate_function_access(symtab_function_record_t* functi
 			return SUCCESS;
 		}
 
+		for(u_int32_t i = 0; i < cursor->child_namespaces.current_index; i++){
+			//Extract it
+			function_namespace_t* candidate = dynamic_array_get_at(&(cursor->child_namespaces), i);
 
+			//If this matches the  current namespace - we're done 
+			if(candidate == current_namespace){
+				//Destroy the queue
+				heap_queue_dealloc(&namespace_bfs_queue);
+				return SUCCESS;
+			}
+
+			//Otherwise enqueue it
+			enqueue(&namespace_bfs_queue, candidate);
+		}
 	}
-
 
 	//Scrap the queue
 	heap_queue_dealloc(&namespace_bfs_queue);
@@ -14001,9 +14013,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	assignment_grouping_stack = lex_stack_alloc();
 	//Create a stack for recording our depth/nesting levels
 	nesting_stack = nesting_stack_alloc();
-
-	//We'll need this for validating function calls and function pointers
-	namespace_bfs_queue = heap_queue_alloc();
 
 	/**
 	 * For any/all functions that raise errors, we want to provide helpful messages to the user. The most
