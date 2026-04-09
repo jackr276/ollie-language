@@ -85,7 +85,7 @@ dynamic_string_t clone_dynamic_string(dynamic_string_t* dynamic_string){
  *
  * This function also handles any/all reallocation that we need to do
  */
-void dynamic_string_insert_string_at_index(dynamic_string_t* dynamic_string, char* insertee, u_int32_t index){
+void dynamic_string_insert_string_at_index(dynamic_string_t* dynamic_string, char* insertee, int32_t index){
 	//Fail case that we just bail out for
 	if(index > dynamic_string->current_length){
 		fprintf(stderr, "Attempt to insert at index %d in a string that is only length %d\n", index, dynamic_string->current_length);
@@ -95,21 +95,24 @@ void dynamic_string_insert_string_at_index(dynamic_string_t* dynamic_string, cha
 	//Grab this one's length
 	u_int32_t insertee_length = strlen(insertee);
 
+	//Here's our new length
+	u_int32_t new_length = dynamic_string->current_length + insertee_length;
+
 	/**
 	 * Since we are adding characters here, we need to ensure
 	 * that we have enough space. We will do this check by
 	 * seeing if the current length plus the insertee length
 	 * is greater than our current max
 	 */
-	if(dynamic_string->current_length + insertee_length >= dynamic_string->length){
+	if(new_length >= dynamic_string->length){
 		//Resize strategy here - if we can get away with *2 we will
-		if(dynamic_string->current_length * 2 > dynamic_string->current_length + insertee_length){
+		if(dynamic_string->current_length * 2 > new_length){
 			//Double it
 			dynamic_string->length *= 2;
 
 		} else {
-			//Otherwise just take the current length plus the insertee length
-			dynamic_string->length = dynamic_string->length + insertee_length;
+			//Otherwise we'll go double the new length
+			dynamic_string->length = new_length * 2;
 		}
 
 		dynamic_string->string = realloc(dynamic_string->string, dynamic_string->length);
@@ -120,8 +123,10 @@ void dynamic_string_insert_string_at_index(dynamic_string_t* dynamic_string, cha
 	 * over by the "insertee_length" in order to make room. We'll do this
 	 * up until we hit the index
 	 */
-	for(int32_t i = dynamic_string->current_length - 1; i >= index; i--){
-		dynamic_string->string[i + insertee_length] = dynamic_string->string[i];
+	if(dynamic_string->current_length > 0){
+		for(int32_t i = dynamic_string->current_length; i >= index; i--){
+			dynamic_string->string[i + insertee_length] = dynamic_string->string[i];
+		}
 	}
 
 	//Now update the current length

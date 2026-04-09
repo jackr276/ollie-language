@@ -60,7 +60,7 @@ dynamic_string_t clone_dynamic_string(dynamic_string_t* dynamic_string);
  * index. This function will fail if the index given is greater than the current
  * highest index
  */
-void dynamic_string_insert_string_at_index(dynamic_string_t* dynamic_string, char* insertee, u_int32_t index);
+void dynamic_string_insert_string_at_index(dynamic_string_t* dynamic_string, char* insertee, int32_t index);
 
 /**
  * Set the value of a dynamic string. The function
