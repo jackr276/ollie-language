@@ -1947,6 +1947,10 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
  * 	Array of 55 array pointers i32[5]* -> i32[5]*[55]
  */
 static void insert_bounds_into_type_name(generic_type_t* type, char* bounds_buffer){
+	//For use in our hunt
+	u_int32_t search_index;
+	u_int8_t in_brackets;
+
 	//Go based on what the member type is
 	switch(type->internal_types.member_type->type_class){
 		/**
@@ -1961,7 +1965,57 @@ static void insert_bounds_into_type_name(generic_type_t* type, char* bounds_buff
 			dynamic_string_insert_string_at_index(&(type->type_name), bounds_buffer, type->type_name.current_length);
 			break;
 
+		/**
+		 * For an array type, we are now creating an array of arrays. So, we need to run through
+		 * here and figure out where the very last chunk of array indices are and insert our bounds
+		 * right before there
+		 *
+		 * Example(this is a very forced one to illustrate a point)
+		 * 	 Array of 6 i32[5]*[4]
+		 * 	 				   ^
+		 * 	 				   |
+		 * 	 Final Result: i32[5]*[6][4]
+		 */
 		case TYPE_CLASS_ARRAY:
+			//By default we aren't in brackets
+			in_brackets = FALSE;
+
+			/**
+			 * Strategy: Run through the string backwards until we find 
+			 * a "*", or until we find a character that is not inside of 
+			 * brackets itself
+			 */
+			for(int32_t i = type->type_name.current_length; i >= 0; i--){
+				switch(type->type_name.string[i]){
+					case ']':
+						in_brackets = TRUE;
+						break;
+
+					case '[':
+						in_brackets = FALSE;
+						break;
+
+					/**
+					 * If we're in brackets then this is something totally ordinary, but if
+					 * we're not, we've found what we need
+					 */
+					case '0':
+					case '1':
+					case '2':
+					case '3':
+					case '4':
+					case '5':
+					case '6':
+					case '7':
+					case '8':
+					case '9':
+
+
+				}
+
+			}
+			
+			
 			
 
 		//Our default strategy is just to put it in the back
