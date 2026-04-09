@@ -31,9 +31,9 @@ struct dynamic_string_t {
 	//The string itself
 	char* string;
 	//The current length of the string
-	u_int16_t current_length;
+	u_int32_t current_length;
 	//The length of said string
-	u_int16_t length;
+	u_int32_t length;
 };
 
 
@@ -54,6 +54,13 @@ dynamic_string_t* dynamic_string_heap_alloc();
  * Clone a dynamic string into a new one
  */
 dynamic_string_t clone_dynamic_string(dynamic_string_t* dynamic_string);
+
+/**
+ * Insert a given string *into* an already allocated dynamic string at a given
+ * index. This function will fail if the index given is greater than the current
+ * highest index
+ */
+void dynamic_string_insert_string_at_index(dynamic_string_t* dynamic_string, char* insertee, int32_t index);
 
 /**
  * Set the value of a dynamic string. The function
