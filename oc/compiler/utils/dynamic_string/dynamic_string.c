@@ -115,7 +115,25 @@ void dynamic_string_insert_string_at_index(dynamic_string_t* dynamic_string, cha
 		dynamic_string->string = realloc(dynamic_string->string, dynamic_string->length);
 	}
 
+	/**
+	 * First step: run through the string backwards and shift everything
+	 * over by the "insertee_length" in order to make room. We'll do this
+	 * up until we hit the index
+	 */
+	for(int32_t i = dynamic_string->current_length - 1; i >= index; i--){
+		dynamic_string->string[i + insertee_length] = dynamic_string->string[i];
+	}
 
+	//Now update the current length
+	dynamic_string->current_length += insertee_length;
+
+	/**
+	 * Now our final step is to go through and insert the current string using the space
+	 * that we've just made for it
+	 */
+	for(u_int32_t i = 0; i < insertee_length; i++){
+		dynamic_string->string[index + i] = insertee[i];
+	}
 }
 
 
