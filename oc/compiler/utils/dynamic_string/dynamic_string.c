@@ -6,6 +6,7 @@
 #include "dynamic_string.h"
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <sys/types.h>
 #include "../constants.h"
 
@@ -74,6 +75,70 @@ dynamic_string_t clone_dynamic_string(dynamic_string_t* dynamic_string){
 
 	//And give back the new one
 	return new;
+}
+
+
+/**
+ * Insert a given string *into* an already allocated dynamic string at a given
+ * index. This function will fail if the index given is greater than the current
+ * highest index
+ *
+ * This function also handles any/all reallocation that we need to do
+ */
+void dynamic_string_insert_string_at_index(dynamic_string_t* dynamic_string, char* insertee, int32_t index){
+	//Fail case that we just bail out for
+	if(index > (int32_t)(dynamic_string->current_length)){
+		fprintf(stderr, "Attempt to insert at index %d in a string that is only length %d\n", index, dynamic_string->current_length);
+		exit(1);
+	}
+
+	//Grab this one's length
+	u_int32_t insertee_length = strlen(insertee);
+
+	//Here's our new length
+	u_int32_t new_length = dynamic_string->current_length + insertee_length;
+
+	/**
+	 * Since we are adding characters here, we need to ensure
+	 * that we have enough space. We will do this check by
+	 * seeing if the current length plus the insertee length
+	 * is greater than our current max
+	 */
+	if(new_length >= dynamic_string->length){
+		//Resize strategy here - if we can get away with *2 we will
+		if(dynamic_string->current_length * 2 > new_length){
+			//Double it
+			dynamic_string->length *= 2;
+
+		} else {
+			//Otherwise we'll go double the new length
+			dynamic_string->length = new_length * 2;
+		}
+
+		dynamic_string->string = realloc(dynamic_string->string, dynamic_string->length);
+	}
+
+	/**
+	 * First step: run through the string backwards and shift everything
+	 * over by the "insertee_length" in order to make room. We'll do this
+	 * up until we hit the index
+	 */
+	if(dynamic_string->current_length > 0){
+		for(int32_t i = dynamic_string->current_length; i >= index; i--){
+			dynamic_string->string[i + insertee_length] = dynamic_string->string[i];
+		}
+	}
+
+	//Now update the current length
+	dynamic_string->current_length += insertee_length;
+
+	/**
+	 * Now our final step is to go through and insert the current string using the space
+	 * that we've just made for it
+	 */
+	for(u_int32_t i = 0; i < insertee_length; i++){
+		dynamic_string->string[index + i] = insertee[i];
+	}
 }
 
 

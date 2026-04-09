@@ -113,6 +113,10 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 static inline generic_type_t* handle_elaborative_param_type(generic_type_t* elaborated_type);
 static u_int8_t validate_function_parameter_list(generic_type_t* function_type);
 
+static inline symtab_type_record_t* parse_array_type(ollie_token_stream_t* token_stream, symtab_type_record_t* current_type, lightstack_t* bounds_stack);
+static inline symtab_type_record_t* create_array_type_from_bounds(symtab_type_record_t* base_member_type, lightstack_t* bounds_stack, mutability_type_t mutability);
+static inline symtab_type_record_t* parse_pointer_type(symtab_type_record_t* current_type, mutability_type_t mutability);
+
 /**
  * Simply prints a parse message in a nice formatted way
 */
@@ -6591,199 +6595,124 @@ static generic_type_t* union_type_specifier(ollie_token_stream_t* token_stream, 
 	//Lookahead token
 	lexitem_t lookahead;
 
-	//Now we'll hand off the rule to the <type-name> function. The type name function will
-	//return a record of the node that the type name has. If the type name function could not
-	//find the name, then it will send back an error that we can handle here
+	/**
+	 * Now we'll hand off the rule to the <type-name> function. The type name function will
+	 * return a record of the node that the type name has. If the type name function could not
+	 * find the name, then it will send back an error that we can handle here
+	 */
 	symtab_type_record_t* type = type_name(token_stream, mutability);
 
 	//We'll just fail here, no need for any error printing
 	if(type == NULL){
-		//It's already in error so just NULL out
 		return NULL;
 	}
 
-	//Now once we make it here, we know that we have a name that actually exists in the symtab
-	//The current type record is what we will eventually point our node to
+	//Maintain a reference to the current type
 	symtab_type_record_t* current_type_record = type;
 	
-	//Let's see where we go from here
+	/**
+	 * The lighstack is used for array processing. Whenever we get
+	 * an array type, we need to push the number of bounds onto the lightstack
+	 * This is because dimensional array types are declared backwards. For example,
+	 * an i32[3][4] is an array of 3 i32[4]. We don't know that until we get to the
+	 * very end. To support this, we have a lightstack that we push the bound count onto
+	 * when processing an array and then unwind once done to get the full picture
+	 */
+	lightstack_t bounds_stack = lightstack_initialize();
+
+	/**
+	 * Using a lightstack here because of the way that the type specifiers work
+	 * For example:
+	 * 		i32[5]*
+	 * 	This is really a pointer to an i32[5]
+	 *
+	 * 	i32[5][5]
+	 */
 	lookahead = get_next_token(token_stream, &parser_line_num);
+	while(TRUE){
+		//Only two things that would tell us about an address here, L_BRACKET or STAR
+		switch(lookahead.tok){
+			/**
+			 * To parse an array type, we will utilize our stack based approach where bounds
+			 * are pushed onto the stack and only processed once we stop seeing array types. 
+			 * Unlike the other two cases, since this is also an array type, we will not
+			 * be unwinding the bounds stack before processing here
+			 */
+			case L_BRACKET:
+				//Push this onto the grouping stack
+				push_token(&grouping_stack, lookahead);
 
-	//As long as we are seeing pointer specifiers
-	while(lookahead.tok == STAR){
-		//We keep seeing STARS, so we have a pointer type
-		//Let's create the pointer type. This pointer type will point to the current type
-		generic_type_t* pointer = create_pointer_type(current_type_record->type, parser_line_num, mutability);
+				//Let the helper do the work
+				current_type_record = parse_array_type(token_stream, current_type_record, &bounds_stack);
 
-		//We'll now add it into the type symbol table. If it's already in there, which it very well may be, that's
-		//also not an issue
-		symtab_type_record_t* found_pointer = lookup_type(type_symtab, pointer);
+				//If it failed it'll be NULL, and we'll pass it up the chain
+				if(current_type_record == NULL){
+					return NULL;
+				}
 
-		//If we did not find it, we will add it into the symbol table
-		if(found_pointer == NULL){
-			//Create the type record
-			symtab_type_record_t* created_pointer = create_type_record(pointer);
-			//Insert it into the symbol table
-			insert_type(type_symtab, created_pointer);
-			//We'll also set the current type record to be this
-			current_type_record = created_pointer;
-		} else {
-			//Otherwise, just set the current type record to be what we found
-			current_type_record = found_pointer;
-			//We don't need the other ponter if this is the case
-			type_dealloc(pointer);
-		}
-
-		//Refresh the search, keep hunting
-		lookahead = get_next_token(token_stream, &parser_line_num);
-	}
-
-	//If we don't see an array here, we can just leave now
-	if(lookahead.tok != L_BRACKET){
-		//Put it back
-		push_back_token(token_stream, &parser_line_num);
-
-		//It is not possible to have a void type as a union member
-		if(current_type_record->type == immut_void
-			|| current_type_record->type == mut_void){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Unions may not have members that are void", parser_line_num);
-			num_errors++;
-			return NULL;
-		}
-
-		//We're done here
-		return current_type_record->type;
-	}
-
-	//Otherwise, we know we're in for the array
-	//We'll use a lightstack for the bounds reversal
-	lightstack_t lightstack = lightstack_initialize();
-
-	//As long as we are seeing L_BRACKETS
-	while(lookahead.tok == L_BRACKET){
-		//Scan ahead to see
-		lookahead = get_next_token(token_stream, &parser_line_num);
-
-		//We could just see an empty one here. This tells us that we have 
-		//an empty array initializer. If we do see this, we can break out here
-		if(lookahead.tok == R_BRACKET){
-			//Scan ahead to see
-			lookahead = get_next_token(token_stream, &parser_line_num);
-
-			//This is a special case where we are able to have an unitialized array for the time
-			//being. This only works if we have an array initializer afterwards
-			
-			//We're all set, push this onto the lightstack
-			lightstack_push(&lightstack, 0);
-
-			//Onto the next iteration
-			continue;
-		}
-
-		//Otherwise we need to put this token back
-		push_back_token(token_stream, &parser_line_num);
-
-		//The next thing that we absolutely must see is a constant. If we don't, we're
-		//done here
-		generic_ast_node_t* const_node = constant(token_stream, SIDE_TYPE_LEFT);
-
-		//If it failed, then we're done here
-		if(const_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid constant given in array declaration", parser_line_num);
-			num_errors++;
-			return NULL;
-		}
-
-		//One last thing before we do expensive validation - what if there's no closing bracket? If there's not, this
-		//is an easy fail case 
-		lookahead = get_next_token(token_stream, &parser_line_num);
-
-		//Fail case here 
-		if(lookahead.tok != R_BRACKET){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched brackets in array declaration", parser_line_num);
-			num_errors++;
-			return NULL;
-		}
-
-		//Determine if we have an illegal constant given as the array bounds
-		switch(const_node->constant_type){
-			case FLOAT_CONST:
-			case STR_CONST:
-				print_parse_message(MESSAGE_TYPE_ERROR, "Illegal constant given as array bounds", parser_line_num);
-				num_errors++;
-				return NULL;
-			default:
 				break;
+
+			/**
+			 * Handle a pointer. Unlike stuff with an array, for a pointer all that we
+			 * need to do is create(or find) a pointer type to whatever the type is
+			 * that we've currently constructed
+			 */
+			case STAR:
+				//Process any/all array bounds
+				current_type_record = create_array_type_from_bounds(current_type_record, &bounds_stack, mutability);
+
+				//If this returns NULL then it failed, just kick it back
+				if(current_type_record == NULL){
+					return NULL;
+				}
+
+				//Let the helper deal with the rest
+				current_type_record = parse_pointer_type(current_type_record, mutability);
+
+				//If this returns NULL then it failed, just kick it back
+				if(current_type_record == NULL){
+					return NULL;
+				}
+
+				break;
+
+			/**
+			 * Anything else means that we have seen the end of what we're supposed to be processing.
+			 * We leave the loop and stop doing anything else
+			 */
+			default:
+				//Process any/all array bounds
+				current_type_record = create_array_type_from_bounds(current_type_record, &bounds_stack, mutability);
+
+				//If this returns NULL then it failed, just kick it back
+				if(current_type_record == NULL){
+					return NULL;
+				}
+
+				//Now that we've gotten here we need to push back the residual token
+				push_back_token(token_stream, &parser_line_num);
+
+				//Get out of the loop by jumping out
+				goto loop_end;
 		}
 
-		//The constant value
-		int64_t constant_numeric_value = const_node->constant_value.unsigned_long_value;
-
-		//What if this is a negative or zero?
-		//If it's negative we fail like this
-		if(constant_numeric_value < 0){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Array bounds may not be negative", parser_line_num);
-			num_errors++;
-			return NULL;
-		}
-
-		//If it's zero we fail like this
-		if(constant_numeric_value == 0){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Array bounds may not be zero", parser_line_num);
-			num_errors++;
-			return NULL;
-		}
-
-		//We're all set, push this onto the lightstack
-		lightstack_push(&lightstack, constant_numeric_value);
-
-		//Refresh the search
+		//Refresh the lookahead
 		lookahead = get_next_token(token_stream, &parser_line_num);
 	}
 
-	//Since we made it down here, we need to push the token back
-	push_back_token(token_stream, &parser_line_num);
-
-	//Now we'll go back through and unwind the lightstack
-	while(lightstack_is_empty(&lightstack) == FALSE){
-		//Grab the number of bounds out
-		u_int32_t num_bounds = lightstack_pop(&lightstack);
-
-		//If we're trying to create an array out of a type that is not yet fully
-		//defined, we also need to fail out. There exists a special exception here for array types, because we can
-		//initially define them as blank if and only if we're using an initializer
-		if(current_type_record->type->type_class != TYPE_CLASS_ARRAY && current_type_record->type->type_complete == FALSE){
-			sprintf(info, "Attempt to use incomplete type %s as an array member. Array member types must be fully defined before use", current_type_record->type->type_name.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			num_errors++;
-			return NULL;
-		}
-
-		//If we get here though, we know that this one is good
-		//Lets create the array type
-		generic_type_t* array_type = create_array_type(current_type_record->type, parser_line_num, num_bounds, mutability);
-
-		//Let's see if we can find this one
-		symtab_type_record_t* found_array = lookup_type(type_symtab, array_type);
-
-		//If we did not find it, we will add it into the symbol table
-		if(found_array == NULL){
-			//Create the type record
-			symtab_type_record_t* created_array = create_type_record(array_type);
-			//Insert it into the symbol table
-			insert_type(type_symtab, created_array);
-			//We'll also set the current type record to be this
-			current_type_record = created_array;
-		} else {
-			//Otherwise, just set the current type record to be what we found
-			current_type_record = found_array;
-			//We don't need the other one if this is the case
-			type_dealloc(array_type);
-		}
+loop_end:
+	/**
+	 * This is a very unique case. Internally, the system needs to have
+	 * a "mutable" void type in order to support things like mut void*, etc.. However,
+	 * if the user attempts to do something like fn my_fn() -> mut void, we should
+	 * throw an error here and disallow that. For all the user knows, there is no
+	 * mut void
+	 */
+	if(current_type_record->type == mut_void){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Unions may not have members that are void", parser_line_num);
+		num_errors++;
+		return NULL;
 	}
-
-	//We're done with it, so deallocate
-	lightstack_dealloc(&lightstack);
 
 	//Give back whatever the current type may be
 	return current_type_record->type;

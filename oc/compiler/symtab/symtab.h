@@ -591,11 +591,6 @@ symtab_type_record_t* lookup_type(type_symtab_t* symtab, generic_type_t* type);
 symtab_type_record_t* lookup_pointer_type(type_symtab_t* symtab, generic_type_t* points_to, mutability_type_t mutability);
 
 /**
- * Specifically look for a reference type to the given type in the symtab
- */
-symtab_type_record_t* lookup_reference_type(type_symtab_t* symtab, generic_type_t* references, mutability_type_t mutability);
-
-/**
  * Specifically look for an array type with the given type as a member in the symtab
  */
 symtab_type_record_t* lookup_array_type(type_symtab_t* symtab, generic_type_t* member_type, u_int32_t num_members, mutability_type_t mutability);

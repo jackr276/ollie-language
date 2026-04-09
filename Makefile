@@ -447,6 +447,9 @@ selector_test_non_timed: instruction_selector_test
 string_test: dynamic_string_test
 	$(OUT_LOCAL)/dynamic_string_test
 
+string_test_debug: dynamic_string_testd
+	$(OUT_LOCAL)/dynamic_string_testd
+
 compiler_test: oc
 	@for input in $(inputs); do \
 		output=$$(echo $$input | sed 's|^$(TEST_FILE_DIR)|$(OUTPUTTED_ASSEMBLY_DIR)|' | sed 's|\.ol$$|.s|'); \

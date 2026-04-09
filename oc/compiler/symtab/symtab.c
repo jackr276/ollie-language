@@ -27,6 +27,13 @@
 #define FINALIZER_CONSTANT_2 0xc4ceb9fe1a85ec53ULL
 
 /**
+ * This dynamic string will be used for temporary array type
+ * lookups. This is done to avoid repeated allocations. It will
+ * be allocated/deallocated with the type symtab
+ */
+static dynamic_string_t temporary_array_name;
+
+/**
  * Print a generic warning for the symtab system
  */
 #define PRINT_WARNING(info, line_number) \
@@ -136,6 +143,9 @@ type_symtab_t* type_symtab_alloc(){
 
 	//The initial error id starts at 1. This is because 0 is reserved for NO_ERRORS,
 	symtab->error_id = 1;
+
+	//Allocate the array storage for our temporary lookups
+	temporary_array_name = dynamic_string_alloc();
 
 	return symtab;
 }
@@ -1714,48 +1724,104 @@ symtab_type_record_t* lookup_pointer_type(type_symtab_t* symtab, generic_type_t*
 
 
 /**
- * Specifically look for a reference type to the given type in the symtab
+ * Determine where we need to insert the bounds inside of the array type names itself
+ * 
+ * Some examples:
+ *  Array of 5 i32's -> i32[5]
+ *  Array of 3 i32[4] -> i32[3][4](most common case for us)
+ * 	Array of 5 i32* -> i32*[5]
+ * 	Array of 7 i32*[5] -> i32*[7][5]
+ * 	Array of 55 array pointers i32[5]* -> i32[5]*[55]
  */
-symtab_type_record_t* lookup_reference_type(type_symtab_t* symtab, generic_type_t* references, mutability_type_t mutability){
-	//Grab an array for the type name
-	char type_name[MAX_IDENT_LENGTH];
+static inline void insert_bounds_into_array_type_name(dynamic_string_t* type_name, generic_type_t* member_type, char* bounds_buffer){
+	//For use in our hunt
+	int32_t insertion_index;
+	u_int8_t in_brackets;
 
-	//Get the name in there by a copy
-	strcpy(type_name, references->type_name.string);
+	//Go based on what the member type is
+	switch(member_type->type_class){
+		/**
+		 * These types are all easy - we just need to insert our bounds
+		 * buffer at the very back of the string
+		 */
+		case TYPE_CLASS_BASIC:
+		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_ENUMERATED:
+		case TYPE_CLASS_UNION:
+		case TYPE_CLASS_POINTER:
+			dynamic_string_insert_string_at_index(type_name, bounds_buffer, type_name->current_length);
+			break;
 
-	//Append the reference token to it
-	strcat(type_name, "&");
+		/**
+		 * For an array type, we are now creating an array of arrays. So, we need to run through
+		 * here and figure out where the very last chunk of array indices are and insert our bounds
+		 * right before there
+		 *
+		 * Example(this is a very forced one to illustrate a point)
+		 * 	 Array of 6 i32[5]*[4]
+		 * 	 				   ^
+		 * 	 				   |
+		 * 	 Final Result: i32[5]*[6][4]
+		 */
+		case TYPE_CLASS_ARRAY:
+			//By default we aren't in brackets
+			in_brackets = FALSE;
 
-	//Now get the hash
-	u_int64_t hash = hash_type_name(type_name, mutability);
+			/**
+			 * Strategy: Run through the string backwards until we find 
+			 * a "*", or until we find a character that is not inside of 
+			 * brackets itself
+			 */
+			for(insertion_index = type_name->current_length - 1; insertion_index >= 0; insertion_index--){
+				switch(type_name->string[insertion_index]){
+					case ']':
+						in_brackets = TRUE;
+						break;
 
-	//Grab the current lexical scope. We will search here and down
-	symtab_type_sheaf_t* sheaf_cursor = symtab->current;
-	symtab_type_record_t* record_cursor;
+					case '[':
+						in_brackets = FALSE;
+						break;
 
-	//Go through all of the scopes
-	while(sheaf_cursor != NULL){
-		//Grab the record at the hash
-		record_cursor = sheaf_cursor->records[hash];
-		
-		//We could have had collisions so we'll have to hunt here
-		while(record_cursor != NULL){
-			//If we find the right one, then we can get out
-			if(strncmp(record_cursor->type->type_name.string, type_name, record_cursor->type->type_name.current_length) == 0){
-				//We have a match
-				return record_cursor;
+					/**
+					 * If we're in brackets then this is something totally ordinary, but if
+					 * we're not, we've found what we need
+					 */
+					case '0':
+					case '1':
+					case '2':
+					case '3':
+					case '4':
+					case '5':
+					case '6':
+					case '7':
+					case '8':
+					case '9':
+						//Escape
+						if(in_brackets == FALSE){
+							//Bump this up so we don't corrupt the actual type
+							insertion_index++;
+							goto insertion_step;
+						}
+
+						break;
+
+					default:
+						//Bump this up so we don't corrupt the actual type
+						insertion_index++;
+						goto insertion_step;
+				}
+
 			}
 
-			//Otherwise no match, we advance it
-			record_cursor = record_cursor->next;
-		}
+	insertion_step:
+			dynamic_string_insert_string_at_index(type_name, bounds_buffer, insertion_index);
+			break;
 
-		//Go up to a higher scope
-		sheaf_cursor = sheaf_cursor->previous_level;
+		//Our default strategy is just to put it in the back
+		default:
+			dynamic_string_insert_string_at_index(type_name, bounds_buffer, type_name->current_length);
+			break;
 	}
-
-	//If we get all the way down here and it's a bust, return NULL
-	return NULL;
 }
 
 
@@ -1763,17 +1829,23 @@ symtab_type_record_t* lookup_reference_type(type_symtab_t* symtab, generic_type_
  * Specifically look for an array type with the given type as a member in the symtab
  */
 symtab_type_record_t* lookup_array_type(type_symtab_t* symtab, generic_type_t* member_type, u_int32_t num_members, mutability_type_t mutability){
-	//Grab an array for the type name
-	char type_name[MAX_IDENT_LENGTH];
+	//For holding our array bounds
+	char bounds_buffer[1000];
 
-	//Get the name in there by a copy
-	strcpy(type_name, member_type->type_name.string);
+	//Clear the temporary buffer name
+	clear_dynamic_string(&temporary_array_name);
 
-	//Append the array signifiers to it
-	strcat(type_name, "[]");
+	//Set it to be the type name here
+	dynamic_string_set(&temporary_array_name, member_type->type_name.string);
+
+	//Print the bounds into here
+	sprintf(bounds_buffer, "[%d]", num_members);
+
+	//Let the helper go through and add the bounds to the proper place
+	insert_bounds_into_array_type_name(&temporary_array_name, member_type, bounds_buffer);
 
 	//Now get the hash. We need to be using a special helper for this
-	u_int64_t hash = hash_array_type_name(type_name, num_members, mutability);
+	u_int64_t hash = hash_array_type_name(temporary_array_name.string, num_members, mutability);
 
 	//Grab the current lexical scope. We will search here and down
 	symtab_type_sheaf_t* sheaf_cursor = symtab->current;
@@ -1793,7 +1865,7 @@ symtab_type_record_t* lookup_array_type(type_symtab_t* symtab, generic_type_t* m
 			}
 
 			//If we find the right one, then we can get out
-			if(strncmp(record_cursor->type->type_name.string, type_name, record_cursor->type->type_name.current_length) == 0
+			if(strncmp(record_cursor->type->type_name.string, temporary_array_name.string, record_cursor->type->type_name.current_length) == 0
 				//The member counts also need to match
 				&& record_cursor->type->internal_values.num_members == num_members){
 
@@ -2743,6 +2815,9 @@ void type_symtab_dealloc(type_symtab_t* symtab){
 
 	//Destroy the dynamic array
 	dynamic_array_dealloc(&(symtab->sheafs));
+
+	//Destroy the temporary string storage
+	dynamic_string_dealloc(&temporary_array_name);
 
 	//Finally free the symtab itself
 	free(symtab);
