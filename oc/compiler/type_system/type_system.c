@@ -1985,7 +1985,7 @@ static void insert_bounds_into_type_name(generic_type_t* type, char* bounds_buff
 			 * a "*", or until we find a character that is not inside of 
 			 * brackets itself
 			 */
-			for(insertion_index = type->type_name.current_length; insertion_index >= 0; insertion_index--){
+			for(insertion_index = type->type_name.current_length - 1; insertion_index >= 0; insertion_index--){
 				switch(type->type_name.string[insertion_index]){
 					case ']':
 						in_brackets = TRUE;
@@ -2011,12 +2011,16 @@ static void insert_bounds_into_type_name(generic_type_t* type, char* bounds_buff
 					case '9':
 						//Escape
 						if(in_brackets == FALSE){
+							//Bump this up so we don't corrupt the actual type
+							insertion_index++;
 							goto insertion_step;
 						}
 
 						break;
 
 					default:
+						//Bump this up so we don't corrupt the actual type
+						insertion_index++;
 						goto insertion_step;
 				}
 

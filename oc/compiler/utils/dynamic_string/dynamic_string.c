@@ -87,7 +87,7 @@ dynamic_string_t clone_dynamic_string(dynamic_string_t* dynamic_string){
  */
 void dynamic_string_insert_string_at_index(dynamic_string_t* dynamic_string, char* insertee, int32_t index){
 	//Fail case that we just bail out for
-	if(index > dynamic_string->current_length){
+	if(index > (int32_t)(dynamic_string->current_length)){
 		fprintf(stderr, "Attempt to insert at index %d in a string that is only length %d\n", index, dynamic_string->current_length);
 		exit(1);
 	}
