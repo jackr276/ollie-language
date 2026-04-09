@@ -1937,6 +1937,42 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
 
 
 /**
+ * Determine where we need to insert the bounds inside of the array type names itself
+ * 
+ * Some examples:
+ *  Array of 5 i32's -> i32[5]
+ *  Array of 3 i32[4] -> i32[3][4](most common case for us)
+ * 	Array of 5 i32* -> i32*[5]
+ * 	Array of 7 i32*[5] -> i32*[7][5]
+ * 	Array of 55 array pointers i32[5]* -> i32[5]*[55]
+ */
+static void insert_bounds_into_type_name(generic_type_t* type, char* bounds_buffer){
+	//Go based on what the member type is
+	switch(type->internal_types.member_type->type_class){
+		/**
+		 * These types are all easy - we just need to insert our bounds
+		 * buffer at the very back of the string
+		 */
+		case TYPE_CLASS_BASIC:
+		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_ENUMERATED:
+		case TYPE_CLASS_UNION:
+		case TYPE_CLASS_POINTER:
+			dynamic_string_insert_string_at_index(&(type->type_name), bounds_buffer, type->type_name.current_length);
+			break;
+
+		case TYPE_CLASS_ARRAY:
+			
+
+		//Our default strategy is just to put it in the back
+		default:
+			dynamic_string_insert_string_at_index(&(type->type_name), bounds_buffer, type->type_name.current_length);
+			break;
+	}
+}
+
+
+/**
  * Create an array type dynamically. In order to have an array type, we must also know
  * what type its memebers are and the size of the array
  *
@@ -1970,9 +2006,7 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 	 * or right before the array specifier. Once we've done
 	 * this we'll be able to properly insert our type name
 	 */
-
-	//Add the dimensions in at the end
-	dynamic_string_concatenate(&(type->type_name), "[]");
+	insert_bounds_into_type_name(type, bounds_buffer);
 
 	//Store what it points to
 	type->internal_types.member_type = points_to;

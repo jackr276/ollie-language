@@ -1562,6 +1562,13 @@ symtab_type_record_t* lookup_reference_type(type_symtab_t* symtab, generic_type_
 
 /**
  * Specifically look for an array type with the given type as a member in the symtab
+ *
+ *
+ * TODO WE NEED TO UPDATE
+ *
+ *
+ *
+ *
  */
 symtab_type_record_t* lookup_array_type(type_symtab_t* symtab, generic_type_t* member_type, u_int32_t num_members, mutability_type_t mutability){
 	//Grab an array for the type name
