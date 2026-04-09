@@ -41,6 +41,8 @@ static symtab_function_record_t* current_function = NULL;
 static dynamic_set_t errors_raised_by_current_function;
 //The queue that holds all of our jump statements for a given function
 static heap_queue_t current_function_jump_statements;
+//The queue that is used for when we have to validate namespace parentage
+static heap_queue_t namespace_bfs_queue;
 
 //Our stack for storing variables, etc
 static lex_stack_t grouping_stack;
@@ -1638,6 +1640,11 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 /**
  * If we have been given a qualified name, we need to validate that we are actually
  * able to access this function from the current namespace that we're in
+ *
+ * Rules for function access:
+ * 	1.) If the function is public then every other check is irrelevant, anyone can see it -> SUCCESS
+ * 	2.) If the function is in a predecessor namespace, then it can be accessed -> SUCCESS
+ * 	3.) Anything else is a failure
  */
 static inline u_int8_t validate_function_access(symtab_function_record_t* function_record){
 	//If it's public, then there's nothing to worry about - anyone can see it
@@ -1645,11 +1652,33 @@ static inline u_int8_t validate_function_access(symtab_function_record_t* functi
 		return SUCCESS;
 	}
 
-	//TODO IMPLEMENT
+	/**
+	 * Once we get here we know the function is private. Now this all relies on how
+	 * the namespace structure. Bottom line -> is the namespace that was mentioned
+	 * either this current namespace *or* some other namespace that we have
+	 */
 
-	//Get the namespace that we have here
+	//Get quick access to the function's namespace and the current one
 	function_namespace_t* function_namespace = function_record->namespace_contained_in;
+	function_namespace_t* current_namespace = function_symtab->current;
 
+	//If they're completely equal we're fine
+	if(function_namespace == current_namespace){
+		return SUCCESS;
+	}
+
+	/**
+	 * Key question - is the function's namespace a predecessor
+	 * of the current namespace that we're in? If it is, then
+	 * this access is valid regardless of the visibility of
+	 * the function. If it is *not*, then since we know this
+	 * function is private, we can't do this
+	 *
+	 * This is a classic BFS problem
+	 */
+	function_namespace_t* current = current_namespace;
+	
+	//If we make it to here then we're a failure
 	return FAILURE;
 }
 
@@ -1702,6 +1731,10 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	 * This identifier has the possibility of being a direct function call or a function pointer
 	 * of some kind. To determine which it is, we'll need to look the name up in both symtabs
 	 * and go accordingly
+	 *
+	 * NOTE: if we're looking up a function without a fully qualified name, we just bottom
+	 * line won't be able to find it unless the access is valid. It's for this reason that 
+	 * we don't need to do any validation for a regular lookup
 	 */
 	if(lookahead2.tok != COLONCOLON){
 		//Push it back because we don't need it
@@ -1721,7 +1754,8 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 			if(function_pointer_variable == NULL){
 				//Customize our error message based on the namespace
 				if(function_symtab->current->is_default == TRUE){
-					sprintf(info, "\"%s\" is not currently defined as a function pointer or function. Are you missing namespace qualifiers?", function_name.string);
+					sprintf(info, "\"%s\" is not currently defined as a function pointer or function or is not visible by default from within the current namespace. \
+									Are you missing namespace qualifiers?", function_name.string);
 				} else {
 					sprintf(info, "\"%s\" is not currently defined as a function pointer or a function in the current namespace \"%s\" or any parent namespace",
 										function_name.string,
@@ -13941,6 +13975,9 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	//Create a stack for recording our depth/nesting levels
 	nesting_stack = nesting_stack_alloc();
 
+	//We'll need this for validating function calls and function pointers
+	namespace_bfs_queue = heap_queue_alloc();
+
 	/**
 	 * For any/all functions that raise errors, we want to provide helpful messages to the user. The most
 	 * important of these messages is extra errors in the raises clause that are never used. To support
@@ -14009,6 +14046,9 @@ front_end_results_package_t* parse(compiler_options_t* options){
 
 	//We're done with the errors too
 	dynamic_set_dealloc(&errors_raised_by_current_function);
+
+	//We no longer need this queue
+	heap_queue_dealloc(&namespace_bfs_queue);
 
 	//Give back the overall result
 	return results;
