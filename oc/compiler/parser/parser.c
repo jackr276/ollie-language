@@ -1636,6 +1636,66 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 
 
 /**
+ * Is the predecessor candidate a predecessor of the given namespace? We will use a BFS on the namespace tree
+ * *starting* with the predecessor candidate to find out. If we are able to find the given namespace during our
+ * search, then we have a success. Otherwise we have a failure
+ */
+static inline u_int8_t is_namespace_predecessor_of_given(function_namespace_t* predecessor_candidate, function_namespace_t* given){
+	/**
+	 * Key question - is the function's namespace a predecessor
+	 * of the current namespace that we're in? If it is, then
+	 * this access is valid regardless of the visibility of
+	 * the function. If it is *not*, then since we know this
+	 * function is private, we can't do this
+	 *
+	 * This is a classic BFS problem. We'll start off by seeding with
+	 * the function namespace. If we can BFS our way down the tree
+	 * and eventually find the current namespace, then the function is
+	 * inside of a predecessor namespace and this access is valid
+	 */
+	//We'll need a queue for the BFS
+	heap_queue_t namespace_bfs_queue = heap_queue_alloc();
+
+	//Add the function namespace as our seed
+	enqueue(&namespace_bfs_queue, predecessor_candidate);
+
+	//So long as we have items in the queue
+	while(queue_is_empty(&namespace_bfs_queue) == FALSE){
+		//Pop the first one off of the queue
+		function_namespace_t* cursor = dequeue(&namespace_bfs_queue);
+
+		//Condition - if it's equal to our current one get out
+		if(cursor == given){
+			//Destroy the queue
+			heap_queue_dealloc(&namespace_bfs_queue);
+			return SUCCESS;
+		}
+
+		for(u_int32_t i = 0; i < cursor->child_namespaces.current_index; i++){
+			//Extract it
+			function_namespace_t* candidate = dynamic_array_get_at(&(cursor->child_namespaces), i);
+
+			//If this matches the  current namespace - we're done 
+			if(candidate == given){
+				//Destroy the queue
+				heap_queue_dealloc(&namespace_bfs_queue);
+				return SUCCESS;
+			}
+
+			//Otherwise enqueue it
+			enqueue(&namespace_bfs_queue, candidate);
+		}
+	}
+
+	//Scrap the queue
+	heap_queue_dealloc(&namespace_bfs_queue);
+
+	//If we made it all the way down here, we have a failure
+	return FAILURE;
+}
+
+
+/**
  * If we have been given a qualified name, we need to validate that we are actually
  * able to access this function from the current namespace that we're in
  *
@@ -1669,56 +1729,28 @@ static inline u_int8_t validate_function_access(symtab_function_record_t* functi
 	}
 
 	/**
-	 * Key question - is the function's namespace a predecessor
-	 * of the current namespace that we're in? If it is, then
-	 * this access is valid regardless of the visibility of
-	 * the function. If it is *not*, then since we know this
-	 * function is private, we can't do this
-	 *
-	 * This is a classic BFS problem. We'll start off by seeding with
-	 * the function namespace. If we can BFS our way down the tree
-	 * and eventually find the current namespace, then the function is
-	 * inside of a predecessor namespace and this access is valid
+	 * Is the current namespace a descendant of the function's namespace? If so then
+	 * we are able to access a private function(just think about how lexical scoping
+	 * works). Otherwise, we are invalid
 	 */
-	//We'll need a queue for the BFS
-	heap_queue_t namespace_bfs_queue = heap_queue_alloc();
+	if(is_namespace_predecessor_of_given(function_namespace, current_namespace) == TRUE){
+		return SUCCESS;
 
-	//Add the function namespace as our seed
-	enqueue(&namespace_bfs_queue, function_namespace);
+	} else {
+		if(current_namespace->is_default == TRUE){
+			sprintf(info, "Private function \"%s\" is not accessible in the current namespace",
+							generate_fully_qualified_function_name(function_record).string);
 
-	//So long as we have items in the queue
-	while(queue_is_empty(&namespace_bfs_queue) == FALSE){
-		//Pop the first one off of the queue
-		function_namespace_t* cursor = dequeue(&namespace_bfs_queue);
-
-		//Condition - if it's equal to our current one get out
-		if(cursor == current_namespace){
-			//Destroy the queue
-			heap_queue_dealloc(&namespace_bfs_queue);
-			return SUCCESS;
+		} else {
+			sprintf(info, "Private function \"%s\" is not accessible in the current namespace \"%s\"",
+							generate_fully_qualified_function_name(function_record).string,
+							generate_fully_qualified_namespace_name(current_namespace).string);
 		}
 
-		for(u_int32_t i = 0; i < cursor->child_namespaces.current_index; i++){
-			//Extract it
-			function_namespace_t* candidate = dynamic_array_get_at(&(cursor->child_namespaces), i);
-
-			//If this matches the  current namespace - we're done 
-			if(candidate == current_namespace){
-				//Destroy the queue
-				heap_queue_dealloc(&namespace_bfs_queue);
-				return SUCCESS;
-			}
-
-			//Otherwise enqueue it
-			enqueue(&namespace_bfs_queue, candidate);
-		}
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		num_errors++;
+		return FAILURE;
 	}
-
-	//Scrap the queue
-	heap_queue_dealloc(&namespace_bfs_queue);
-	
-	//If we make it to here then we're a failure
-	return FAILURE;
 }
 
 
@@ -1882,7 +1914,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 				 * We now need to validate that we can actually access this function from the current
 				 * namespace. There is a helper that takes care of all of this, we just need to invoke it
 				 */
-				if(validate_function_access(function_record) == FALSE){
+				if(validate_function_access(function_record) == FAILURE){
 					sprintf(info, "Invalid attempt to access function \"%s\"",
 			 				generate_fully_qualified_function_name(function_record).string);
 					return print_and_return_error(info, parser_line_num);
