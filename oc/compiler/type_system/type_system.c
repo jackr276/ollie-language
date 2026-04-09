@@ -1948,7 +1948,7 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
  */
 static void insert_bounds_into_type_name(generic_type_t* type, char* bounds_buffer){
 	//For use in our hunt
-	u_int32_t search_index;
+	int32_t insertion_index;
 	u_int8_t in_brackets;
 
 	//Go based on what the member type is
@@ -1985,8 +1985,8 @@ static void insert_bounds_into_type_name(generic_type_t* type, char* bounds_buff
 			 * a "*", or until we find a character that is not inside of 
 			 * brackets itself
 			 */
-			for(int32_t i = type->type_name.current_length; i >= 0; i--){
-				switch(type->type_name.string[i]){
+			for(insertion_index = type->type_name.current_length; insertion_index >= 0; insertion_index--){
+				switch(type->type_name.string[insertion_index]){
 					case ']':
 						in_brackets = TRUE;
 						break;
@@ -2009,14 +2009,22 @@ static void insert_bounds_into_type_name(generic_type_t* type, char* bounds_buff
 					case '7':
 					case '8':
 					case '9':
+						//Escape
+						if(in_brackets == FALSE){
+							goto insertion_step;
+						}
 
+						break;
 
+					default:
+						goto insertion_step;
 				}
 
 			}
-			
-			
-			
+
+	insertion_step:
+			dynamic_string_insert_string_at_index(&(type->type_name), bounds_buffer, insertion_index);
+			break;
 
 		//Our default strategy is just to put it in the back
 		default:
@@ -2051,20 +2059,10 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 	//Clone the string
 	type->type_name = clone_dynamic_string(&(points_to->type_name));
 
-	//Write out our members string
-	snprintf(bounds_buffer, 1000, "[%d]", num_members);
-
-	/**
-	 * We know need to crawl through the type name and find
-	 * the index either at the end of the pointer types(*) 
-	 * or right before the array specifier. Once we've done
-	 * this we'll be able to properly insert our type name
-	 */
-	insert_bounds_into_type_name(type, bounds_buffer);
 
 	//Store what it points to
 	type->internal_types.member_type = points_to;
-	
+
 	//Store the number of members
 	type->internal_values.num_members = num_members;
 
@@ -2075,6 +2073,22 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 	if(type->type_size != 0){
 		type->type_complete = TRUE;
 	}
+
+	//Only if we have more than 0 members
+	if(num_members != 0){
+		//Write out our members string
+		snprintf(bounds_buffer, 1000, "[%d]", num_members);
+	} else {
+		snprintf(bounds_buffer, 1000, "[]");
+	}
+	
+	/**
+	 * We know need to crawl through the type name and find
+	 * the index either at the end of the pointer types(*) 
+	 * or right before the array specifier. Once we've done
+	 * this we'll be able to properly insert our type name
+	 */
+	insert_bounds_into_type_name(type, bounds_buffer);
 
 	/**
 	 * What does this type look like in memory? If an array type contains
