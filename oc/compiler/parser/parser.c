@@ -41,8 +41,6 @@ static symtab_function_record_t* current_function = NULL;
 static dynamic_set_t errors_raised_by_current_function;
 //The queue that holds all of our jump statements for a given function
 static heap_queue_t current_function_jump_statements;
-//The queue that is used for when we have to validate namespace parentage
-static heap_queue_t namespace_bfs_queue;
 
 //Our stack for storing variables, etc
 static lex_stack_t grouping_stack;
@@ -1662,7 +1660,10 @@ static inline u_int8_t validate_function_access(symtab_function_record_t* functi
 	function_namespace_t* function_namespace = function_record->namespace_contained_in;
 	function_namespace_t* current_namespace = function_symtab->current;
 
-	//If they're completely equal we're fine
+	/**
+	 * Easy performance enhancement - skip the whole BFS allocation
+	 * if they'er the same
+	 */
 	if(function_namespace == current_namespace){
 		return SUCCESS;
 	}
@@ -1674,9 +1675,35 @@ static inline u_int8_t validate_function_access(symtab_function_record_t* functi
 	 * the function. If it is *not*, then since we know this
 	 * function is private, we can't do this
 	 *
-	 * This is a classic BFS problem
+	 * This is a classic BFS problem. We'll start off by seeding with
+	 * the function namespace. If we can BFS our way down the tree
+	 * and eventually find the current namespace, then the function is
+	 * inside of a predecessor namespace and this access is valid
 	 */
-	function_namespace_t* current = current_namespace;
+	//We'll need a queue for the BFS
+	heap_queue_t namespace_bfs_queue = heap_queue_alloc();
+
+	//Add the function namespace as our seed
+	enqueue(&namespace_bfs_queue, function_namespace);
+
+	//So long as we have items in the queue
+	while(queue_is_empty(&namespace_bfs_queue) == FALSE){
+		//Pop the first one off of the queue
+		function_namespace_t* cursor = dequeue(&namespace_bfs_queue);
+
+		//Condition - if it's equal to our current one get out
+		if(cursor == current_namespace){
+			//Destroy the queue
+			heap_queue_dealloc(&namespace_bfs_queue);
+			return SUCCESS;
+		}
+
+
+	}
+
+
+	//Scrap the queue
+	heap_queue_dealloc(&namespace_bfs_queue);
 	
 	//If we make it to here then we're a failure
 	return FAILURE;
@@ -14046,9 +14073,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 
 	//We're done with the errors too
 	dynamic_set_dealloc(&errors_raised_by_current_function);
-
-	//We no longer need this queue
-	heap_queue_dealloc(&namespace_bfs_queue);
 
 	//Give back the overall result
 	return results;
