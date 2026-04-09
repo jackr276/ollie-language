@@ -1946,7 +1946,7 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
  * 	Array of 7 i32*[5] -> i32*[7][5]
  * 	Array of 55 array pointers i32[5]* -> i32[5]*[55]
  */
-static void insert_bounds_into_type_name(generic_type_t* type, char* bounds_buffer){
+static inline void insert_bounds_into_type_name(generic_type_t* type, char* bounds_buffer){
 	//For use in our hunt
 	int32_t insertion_index;
 	u_int8_t in_brackets;

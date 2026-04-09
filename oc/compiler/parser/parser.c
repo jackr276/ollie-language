@@ -8049,6 +8049,108 @@ static inline symtab_type_record_t* parse_array_type(ollie_token_stream_t* token
 
 
 /**
+ * Determine where we need to insert the bounds inside of the array type names itself
+ * 
+ * Some examples:
+ *  Array of 5 i32's -> i32[5]
+ *  Array of 3 i32[4] -> i32[3][4](most common case for us)
+ * 	Array of 5 i32* -> i32*[5]
+ * 	Array of 7 i32*[5] -> i32*[7][5]
+ * 	Array of 55 array pointers i32[5]* -> i32[5]*[55]
+ */
+static inline void insert_bounds_into_type_name(generic_type_t* type, char* bounds_buffer){
+	//For use in our hunt
+	int32_t insertion_index;
+	u_int8_t in_brackets;
+
+	//Go based on what the member type is
+	switch(type->internal_types.member_type->type_class){
+		/**
+		 * These types are all easy - we just need to insert our bounds
+		 * buffer at the very back of the string
+		 */
+		case TYPE_CLASS_BASIC:
+		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_ENUMERATED:
+		case TYPE_CLASS_UNION:
+		case TYPE_CLASS_POINTER:
+			dynamic_string_insert_string_at_index(&(type->type_name), bounds_buffer, type->type_name.current_length);
+			break;
+
+		/**
+		 * For an array type, we are now creating an array of arrays. So, we need to run through
+		 * here and figure out where the very last chunk of array indices are and insert our bounds
+		 * right before there
+		 *
+		 * Example(this is a very forced one to illustrate a point)
+		 * 	 Array of 6 i32[5]*[4]
+		 * 	 				   ^
+		 * 	 				   |
+		 * 	 Final Result: i32[5]*[6][4]
+		 */
+		case TYPE_CLASS_ARRAY:
+			//By default we aren't in brackets
+			in_brackets = FALSE;
+
+			/**
+			 * Strategy: Run through the string backwards until we find 
+			 * a "*", or until we find a character that is not inside of 
+			 * brackets itself
+			 */
+			for(insertion_index = type->type_name.current_length - 1; insertion_index >= 0; insertion_index--){
+				switch(type->type_name.string[insertion_index]){
+					case ']':
+						in_brackets = TRUE;
+						break;
+
+					case '[':
+						in_brackets = FALSE;
+						break;
+
+					/**
+					 * If we're in brackets then this is something totally ordinary, but if
+					 * we're not, we've found what we need
+					 */
+					case '0':
+					case '1':
+					case '2':
+					case '3':
+					case '4':
+					case '5':
+					case '6':
+					case '7':
+					case '8':
+					case '9':
+						//Escape
+						if(in_brackets == FALSE){
+							//Bump this up so we don't corrupt the actual type
+							insertion_index++;
+							goto insertion_step;
+						}
+
+						break;
+
+					default:
+						//Bump this up so we don't corrupt the actual type
+						insertion_index++;
+						goto insertion_step;
+				}
+
+			}
+
+	insertion_step:
+			dynamic_string_insert_string_at_index(&(type->type_name), bounds_buffer, insertion_index);
+			break;
+
+		//Our default strategy is just to put it in the back
+		default:
+			dynamic_string_insert_string_at_index(&(type->type_name), bounds_buffer, type->type_name.current_length);
+			break;
+	}
+}
+
+
+/**
  * We will get to this function once we've stopped seeing the [] tokens in our type definition. The purpose of this rule
  * is to go through and unwind the stack that we've made using all of the array bounds. For example:
  * 		i32[3][4]
@@ -8066,6 +8168,9 @@ static inline symtab_type_record_t* create_array_type_from_bounds(symtab_type_re
 	while(lightstack_is_empty(bounds_stack) == FALSE){
 		//Get the number of members out of here
 		u_int32_t num_members = lightstack_pop(bounds_stack);
+
+		symtab_type_record_t* found_array_type = lookup_array_type(type_symtab_t *symtab, generic_type_t *member_type, u_int32_t num_members, mutability_type_t mutability)
+
 
 		//If we have more than 0 members, we're creating a fully fledged array type
 		if(num_members > 0){
