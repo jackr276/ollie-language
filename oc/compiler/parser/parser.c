@@ -1636,6 +1636,25 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 
 
 /**
+ * If we have been given a qualified name, we need to validate that we are actually
+ * able to access this function from the current namespace that we're in
+ */
+static inline u_int8_t validate_function_access(symtab_function_record_t* function_record){
+	//If it's public, then there's nothing to worry about - anyone can see it
+	if(function_record->visibility == VISIBILITY_TYPE_PUBLIC){
+		return SUCCESS;
+	}
+
+	//TODO IMPLEMENT
+
+	//Get the namespace that we have here
+	function_namespace_t* function_namespace = function_record->namespace_contained_in;
+
+	return FAILURE;
+}
+
+
+/**
  * A function call looks for a very specific kind of identifer followed by
  * parenthesis and the appropriate number of parameters for the function, each of
  * the appropriate type
@@ -1785,6 +1804,16 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 
 				//Otherwise this is our function record
 				function_record = found_function;
+
+				/**
+				 * We now need to validate that we can actually access this function from the current
+				 * namespace. There is a helper that takes care of all of this, we just need to invoke it
+				 */
+				if(validate_function_access(function_record) == FALSE){
+					sprintf(info, "Invalid attempt to access function \"%s\"",
+			 				generate_fully_qualified_function_name(function_record).string);
+					return print_and_return_error(info, parser_line_num);
+				}
 
 				//This is our terminal case
 				break;
