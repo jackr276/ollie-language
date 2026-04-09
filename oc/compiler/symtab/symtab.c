@@ -1670,8 +1670,6 @@ symtab_type_record_t* lookup_array_type(type_symtab_t* symtab, generic_type_t* m
 				//The member counts also need to match
 				&& record_cursor->type->internal_values.num_members == num_members){
 
-				printf("MATCH\n\n\n\n\n");
-
 				//We have a match
 				return record_cursor;
 			}
