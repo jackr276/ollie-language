@@ -6,6 +6,7 @@
 #include "dynamic_string.h"
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <sys/types.h>
 #include "../constants.h"
 
@@ -74,6 +75,47 @@ dynamic_string_t clone_dynamic_string(dynamic_string_t* dynamic_string){
 
 	//And give back the new one
 	return new;
+}
+
+
+/**
+ * Insert a given string *into* an already allocated dynamic string at a given
+ * index. This function will fail if the index given is greater than the current
+ * highest index
+ *
+ * This function also handles any/all reallocation that we need to do
+ */
+void dynamic_string_insert_string_at_index(dynamic_string_t* dynamic_string, char* insertee, u_int32_t index){
+	//Fail case that we just bail out for
+	if(index > dynamic_string->current_length){
+		fprintf(stderr, "Attempt to insert at index %d in a string that is only length %d\n", index, dynamic_string->current_length);
+		exit(1);
+	}
+
+	//Grab this one's length
+	u_int32_t insertee_length = strlen(insertee);
+
+	/**
+	 * Since we are adding characters here, we need to ensure
+	 * that we have enough space. We will do this check by
+	 * seeing if the current length plus the insertee length
+	 * is greater than our current max
+	 */
+	if(dynamic_string->current_length + insertee_length >= dynamic_string->length){
+		//Resize strategy here - if we can get away with *2 we will
+		if(dynamic_string->current_length * 2 > dynamic_string->current_length + insertee_length){
+			//Double it
+			dynamic_string->length *= 2;
+
+		} else {
+			//Otherwise just take the current length plus the insertee length
+			dynamic_string->length = dynamic_string->length + insertee_length;
+		}
+
+		dynamic_string->string = realloc(dynamic_string->string, dynamic_string->length);
+	}
+
+
 }
 
 
