@@ -139,9 +139,10 @@ int main(){
 
 	printf("%s\n", string3.string);
 
-	//Destroy them both
+	//Destroy them all
 	dynamic_string_dealloc(&string);
 	dynamic_string_dealloc(&string2);
+	dynamic_string_dealloc(&string3);
 
 	printf("=========== Testing insert functionality ============\n");
 	string = dynamic_string_alloc();
@@ -161,4 +162,12 @@ int main(){
 	printf("String post insertion at index 0: %s\n", string.string);
 	assert(strcmp("Test: Hello big world", string.string) == 0);
 
+	//Now let's insert at the very end
+	dynamic_string_insert_string_at_index(&string, " my name is Jack.", 21);
+	
+	printf("String post insertion at index 21: %s\n", string.string);
+	assert(strcmp("Test: Hello big world my name is Jack.", string.string) == 0);
+
+	//Now destroy the string
+	dynamic_string_dealloc(&string);
 }
