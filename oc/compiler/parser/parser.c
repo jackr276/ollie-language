@@ -2692,8 +2692,29 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 					}
 				}
 
-				printf("TODO NOT IMPLEMENTED\n");
-				exit(1);
+				/**
+				 * We now need to validate that we can actually access this function from the current
+				 * namespace. There is a helper that takes care of all of this, we just need to invoke it
+				 */
+				if(validate_function_access(found_function) == FAILURE){
+					sprintf(info, "Invalid attempt to access function \"%s\"",
+			 				generate_fully_qualified_function_name(found_function).string);
+					return print_and_return_error(info, parser_line_num);
+				}
+
+				/**
+				 * And now that we've determined that all of this is above board, we can finally
+				 * return our function constant node and be done
+				 */
+				generic_ast_node_t* function_constant = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
+
+				//Package up everything that we'll need
+				function_constant->is_assignable = FALSE;
+				function_constant->inferred_type = found_function->signature;
+				function_constant->constant_type = FUNC_CONST;
+				function_constant->func_record = found_function;
+
+				return function_constant;
 			}
 
 			break;
