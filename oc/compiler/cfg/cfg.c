@@ -8855,9 +8855,8 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					current_block = starting_block;
 				}
 
-				//The second child here should be our conditional
+				//First child is the conditional
 				generic_ast_node_t* cursor = ast_cursor->first_child;
-				cursor = cursor->next_sibling;
 
 				//We'll need to emit the conditional in the current block
 				cfg_result_package_t ret_package = emit_expression(current_block, cursor, TRUE);
@@ -9391,9 +9390,8 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					current_block = starting_block;
 				}
 
-				//The second child here should be our conditional
+				//The first child is our conditional
 				generic_ast_node_t* cursor = ast_cursor->first_child;
-				cursor = cursor->next_sibling;
 
 				//We'll need to emit the conditional in the current block
 				cfg_result_package_t ret_package = emit_expression(current_block, cursor, TRUE);
@@ -10725,6 +10723,52 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 
 
 /**
+ * Run through a namespace declaration and output all of its members. The members
+ * that it could have are function defintions or more namespace decalarations, making
+ * this rule recursive
+ */
+static u_int8_t visit_namespace_declaration(cfg_t* cfg, generic_ast_node_t* namespace_declaration_node){
+	//Grab a cursor to traverse
+	generic_ast_node_t* namespace_child = namespace_declaration_node->first_child;
+	//For our function definitions
+	basic_block_t* block;
+
+	//So long as we still have children
+	while(namespace_child != NULL){
+		switch(namespace_child->ast_node_type){
+			case AST_NODE_TYPE_FUNC_DEF:
+				block = visit_function_definition(cfg, namespace_child);
+
+				//-1 block id means it failed(very rare)
+				if(block->block_id == -1){
+					return FAILURE;
+				}
+				
+				break;
+
+			case AST_NODE_TYPE_NAMESPACE_DECLARATION:
+				if(visit_namespace_declaration(cfg, namespace_child) == FAILURE){
+					return FAILURE;
+				}
+
+				break;
+				
+			//Some very weird error if we hit here. Hard exit to avoid dev confusion
+			default:
+				fprintf(stderr, "Fatal internal compiler error: Unrecognized node type found in namespace scope\n");
+				exit(1);
+		}
+
+		//Bump it up
+		namespace_child = namespace_child->next_sibling;
+	}
+
+	//It worked so give back success
+	return SUCCESS;
+}
+
+
+/**
  * Visit the prog node for our CFG. This rule will simply multiplex to all other rules
  * between functions, let statements and declaration statements
  */
@@ -10733,6 +10777,8 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 	generic_ast_node_t* ast_cursor = prog_node->first_child;
 	//Generic block holder
 	basic_block_t* block;
+	//Did we succeed or not?
+	u_int8_t success = TRUE;
 
 	//So long as the AST cursor is not null
 	while(ast_cursor != NULL){
@@ -10765,7 +10811,15 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 			//Finally, we could see a declaration
 			case AST_NODE_TYPE_DECL_STMT:
 				visit_global_declare_statement(ast_cursor);
-				
+				break;
+
+			case AST_NODE_TYPE_NAMESPACE_DECLARATION:
+				success = visit_namespace_declaration(cfg, ast_cursor);
+
+				if(success == FAILURE){
+					return FAILURE;
+				}
+
 				break;
 
 			//Some very weird error if we hit here. Hard exit to avoid dev confusion
@@ -10780,7 +10834,7 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 	}
 
 	//Return true because it worked
-	return TRUE;
+	return SUCCESS;
 }
 
 

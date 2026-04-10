@@ -90,6 +90,7 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream);
 static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutability_type_t mutability);
 static u_int8_t alias_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_stream);
+static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream);
 static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream, u_int8_t new_variable_scope_required);
 static generic_ast_node_t* statement(ollie_token_stream_t* token_stream);
@@ -688,62 +689,6 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
 
 	//Give back the final node
 	return return_node;
-}
-
-
-/**
- * We will always return a pointer to the node holding the identifier. Due to the times when
- * this will be called, we can not do any symbol table validation here. 
- *
- * BNF "Rule": <identifier> ::= (<letter> | <digit> | _ | $){(<letter>) | <digit> | _ | $}*
- * Note all actual string parsing and validation is handled by the lexer
- */
-static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream, side_type_t side){
-	//Grab the next token
-	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
-	
-	//If we can't find it that's bad
-	if(lookahead.tok != IDENT){
-		sprintf(info, "String %s is not a valid identifier", lookahead.lexeme.string);
-		return print_and_return_error(info, parser_line_num);
-	}
-
-	//Create the identifier node
-	generic_ast_node_t* ident_node = ast_node_alloc(AST_NODE_TYPE_IDENTIFIER, side); //Add the identifier into the node itself
-	//Idents are assignable
-	ident_node->is_assignable = TRUE;
-	//Clone the string in
-	ident_node->string_value = clone_dynamic_string(&(lookahead.lexeme));
-
-	//Add the line number
-	ident_node->line_number = parser_line_num;
-
-	//Return our reference to the node
-	return ident_node;
-}
-
-
-/**
- * Directly emit an integer constant node. This is used exclusively for the user-defined direct
- * jump, and allows us to make every user-defined jump a direct jump when(1) jump. This greatly
- * simplifies our development processes
- */
-static inline generic_ast_node_t* emit_direct_constant(int32_t constant){
-	//Create our constant node
-	generic_ast_node_t* constant_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, SIDE_TYPE_RIGHT);
-	//Add the line number
-	constant_node->line_number = parser_line_num;
-
-	//This is an int_const
-	constant_node->constant_type = INT_CONST;
-	
-	//Just make this one a signed 32 bit integer
-	constant_node->inferred_type = immut_i32;
-
-	//Give it the value
-	constant_node->constant_value.signed_int_value = constant;
-
-	return constant_node;
 }
 
 
@@ -1691,19 +1636,141 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 
 
 /**
+ * Is the predecessor candidate a predecessor of the given namespace? We will use a BFS on the namespace tree
+ * *starting* with the predecessor candidate to find out. If we are able to find the given namespace during our
+ * search, then we have a success. Otherwise we have a failure
+ */
+static inline u_int8_t is_namespace_predecessor_of_given(function_namespace_t* predecessor_candidate, function_namespace_t* given){
+	/**
+	 * Key question - is the function's namespace a predecessor
+	 * of the current namespace that we're in? If it is, then
+	 * this access is valid regardless of the visibility of
+	 * the function. If it is *not*, then since we know this
+	 * function is private, we can't do this
+	 *
+	 * This is a classic BFS problem. We'll start off by seeding with
+	 * the function namespace. If we can BFS our way down the tree
+	 * and eventually find the current namespace, then the function is
+	 * inside of a predecessor namespace and this access is valid
+	 */
+	//We'll need a queue for the BFS
+	heap_queue_t namespace_bfs_queue = heap_queue_alloc();
+
+	//Add the function namespace as our seed
+	enqueue(&namespace_bfs_queue, predecessor_candidate);
+
+	//So long as we have items in the queue
+	while(queue_is_empty(&namespace_bfs_queue) == FALSE){
+		//Pop the first one off of the queue
+		function_namespace_t* cursor = dequeue(&namespace_bfs_queue);
+
+		//Condition - if it's equal to our current one get out
+		if(cursor == given){
+			//Destroy the queue
+			heap_queue_dealloc(&namespace_bfs_queue);
+			return SUCCESS;
+		}
+
+		for(u_int32_t i = 0; i < cursor->child_namespaces.current_index; i++){
+			//Extract it
+			function_namespace_t* candidate = dynamic_array_get_at(&(cursor->child_namespaces), i);
+
+			//If this matches the  current namespace - we're done 
+			if(candidate == given){
+				//Destroy the queue
+				heap_queue_dealloc(&namespace_bfs_queue);
+				return SUCCESS;
+			}
+
+			//Otherwise enqueue it
+			enqueue(&namespace_bfs_queue, candidate);
+		}
+	}
+
+	//Scrap the queue
+	heap_queue_dealloc(&namespace_bfs_queue);
+
+	//If we made it all the way down here, we have a failure
+	return FAILURE;
+}
+
+
+/**
+ * If we have been given a qualified name, we need to validate that we are actually
+ * able to access this function from the current namespace that we're in
+ *
+ * Rules for function access:
+ * 	1.) If the function is public then every other check is irrelevant, anyone can see it -> SUCCESS
+ * 	2.) If the function is in a predecessor namespace, then it can be accessed -> SUCCESS
+ * 	3.) Anything else is a failure
+ */
+static inline u_int8_t validate_function_access(symtab_function_record_t* function_record){
+	//If it's public, then there's nothing to worry about - anyone can see it
+	if(function_record->visibility == VISIBILITY_TYPE_PUBLIC){
+		return SUCCESS;
+	}
+
+	/**
+	 * Once we get here we know the function is private. Now this all relies on how
+	 * the namespace structure. Bottom line -> is the namespace that was mentioned
+	 * either this current namespace *or* some other namespace that we have
+	 */
+
+	//Get quick access to the function's namespace and the current one
+	function_namespace_t* function_namespace = function_record->namespace_contained_in;
+	function_namespace_t* current_namespace = function_symtab->current;
+
+	/**
+	 * Easy performance enhancement - skip the whole BFS allocation
+	 * if they'er the same
+	 */
+	if(function_namespace == current_namespace){
+		return SUCCESS;
+	}
+
+	/**
+	 * Is the current namespace a descendant of the function's namespace? If so then
+	 * we are able to access a private function(just think about how lexical scoping
+	 * works). Otherwise, we are invalid
+	 */
+	if(is_namespace_predecessor_of_given(function_namespace, current_namespace) == TRUE){
+		return SUCCESS;
+
+	} else {
+		if(current_namespace->is_default == TRUE){
+			sprintf(info, "Private function \"%s\" is not accessible in the current namespace",
+							generate_fully_qualified_function_name(function_record).string);
+
+		} else {
+			sprintf(info, "Private function \"%s\" is not accessible in the current namespace \"%s\"",
+							generate_fully_qualified_function_name(function_record).string,
+							generate_fully_qualified_namespace_name(current_namespace).string);
+		}
+
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+}
+
+
+/**
  * A function call looks for a very specific kind of identifer followed by
  * parenthesis and the appropriate number of parameters for the function, each of
  * the appropriate type
+ *
+ * We will handle the case where we have a qualified function name with :: separators in here
+ * as well. This leads to a bit of complication when parsing the actual name
  * 
  * By the time we get here, we will have already consumed the "@" token
  *
- * BNF Rule: <function-call> ::= @<identifier>({<ternary_expression>}?{, <ternary_expression>}*){<handle-statement>}?
+ * BNF Rule: <function-call> ::= @{<identifier>|<qualified-function-name>}({<ternary_expression>}?{, <ternary_expression>}*){<handle-statement>}?
  */
 static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, side_type_t side){
-	//The current line num
-	u_int32_t current_line = parser_line_num;
 	//The lookahead token
 	lexitem_t lookahead;
+	//Second lookahead
+	lexitem_t lookahead2;
 	//We'll also keep a nicer reference to the function name
 	dynamic_string_t function_name;
 	//A pointer that holds our function call node
@@ -1718,23 +1785,146 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 
 	//We have a general error-probably will be quite uncommon
 	if(lookahead.tok != IDENT){
-		return print_and_return_error("Non-identifier provided as funciton call", parser_line_num);
+		sprintf(info, "Expected identifier after @ but got \"%s\" instead", lexitem_to_string(&lookahead));
+
+		return print_and_return_error("Non-identifier provided as function call", parser_line_num);
 	}
 
-	//Grab the function name out for convenience
-	function_name = lookahead.lexeme;
+	//Holders for when our eventual process here shakes out
+	symtab_variable_record_t* function_pointer_variable = NULL;
+	symtab_function_record_t* function_record = NULL;
+
+	//Do we see the "::" separator here? If so then we need to parse the fully qualified name
+	lookahead2 = get_next_token(token_stream, &parser_line_num);
 
 	/**
+	 * If the lookahead token is *not* a ::, then we are just doing a regular lookup.
 	 * This identifier has the possibility of being a direct function call or a function pointer
 	 * of some kind. To determine which it is, we'll need to look the name up in both symtabs
 	 * and go accordingly
+	 *
+	 * NOTE: if we're looking up a function without a fully qualified name, we just bottom
+	 * line won't be able to find it unless the access is valid. It's for this reason that 
+	 * we don't need to do any validation for a regular lookup
 	 */
-	
-	//Lookup the variable
-	symtab_variable_record_t* function_pointer_variable = lookup_variable(variable_symtab, function_name.string);
+	if(lookahead2.tok != COLONCOLON){
+		//Push it back because we don't need it
+		push_back_token(token_stream, &parser_line_num);
 
-	//Let's now look up the function name in the function symtab
-	symtab_function_record_t* function_record = lookup_function(function_symtab, function_name.string);
+		//Grab the function name out for convenience
+		function_name = lookahead.lexeme;
+
+		//Most common case is we're just calling directly so we'll start there
+		function_record = lookup_function(function_symtab, function_name.string);
+
+		//Only then will we look up the function pointer variable. If that fails, then this is just bad
+		if(function_record == NULL){
+			function_pointer_variable = lookup_variable(variable_symtab, function_name.string);
+
+			//If this is also NULL, then we'll fail out
+			if(function_pointer_variable == NULL){
+				//Customize our error message based on the namespace
+				if(function_symtab->current->is_default == TRUE){
+					sprintf(info, "\"%s\" is not currently defined as a function pointer or function or is not visible by default from within the current namespace. \
+									Are you missing namespace qualifiers?", function_name.string);
+				} else {
+					sprintf(info, "\"%s\" is not currently defined as a function pointer or a function in the current namespace \"%s\" or any parent namespace",
+										function_name.string,
+										generate_fully_qualified_namespace_name(function_symtab->current).string);
+				}
+
+				return print_and_return_error(info, parser_line_num);
+			}
+		}
+
+	/**
+	 * Otherwise if we did see a ::, then we're doing a fully qualified
+	 * function lookup. If we have seen this then we can guarantee that
+	 * this is not a function pointer
+	 */
+	} else {
+		/**
+		 * Initially we're looking at the very first namespace. We need to just do a blanket search to
+		 * see if anything is here in the entire program 
+		 */
+		function_namespace_t* current_namespace = lookup_namespace(function_symtab, lookahead.lexeme.string);
+
+		//No point in going any further
+		if(current_namespace == NULL){
+			sprintf(info, "There is no namespace named \"%s\" in the program", lookahead.lexeme.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		/**
+		 * Once we've gotten here we know that the lookahead is a valid namespace
+		 * and lookahead2 was ::. We need to keep refreshing both tokens. So long
+		 * as lookahead2 is ::, we need to keep searching for lookahead as a valid
+		 * namespace. Once lookahead2 is not ::, that's how we know we've found our
+		 * function name in lookahead and that is also our terminal condition
+		 */
+		while(TRUE){
+			lookahead = get_next_token(token_stream, &parser_line_num);
+			lookahead2 = get_next_token(token_stream, &parser_line_num);
+
+			//Just a generic parse error here
+			if(lookahead.tok != IDENT){
+				sprintf(info, "Expected identifier after :: but got \"%s\"", lexitem_to_string(&lookahead));
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			//We saw :: again, so we need to check that lookahead is a valid namespace under the current namespace
+			if(lookahead2.tok == COLONCOLON){
+				//Look it up under the parent
+				function_namespace_t* child = lookup_namespace_under_parent(current_namespace, lookahead.lexeme.string);
+
+				//This is a fail case if we found nothing
+				if(child == NULL){
+					sprintf(info, "No namespace named \"%s\" exists under the namespace \"%s\"",
+			 						lookahead.lexeme.string,
+			 						generate_fully_qualified_namespace_name(current_namespace).string);
+					return print_and_return_error(info, parser_line_num);
+				}
+
+				//Otherwise we found something so we'll make that our new current
+				current_namespace = child;
+
+			//Otherwise, we've reached the end so we'll need to lookup the function inside of our given namespace
+			} else {
+				//Push back lookahead2
+				push_back_token(token_stream, &parser_line_num);
+
+				//Flag that this is the function name
+				function_name = lookahead.lexeme;
+
+				//We need to ensure that the lexeme under lookahed is actually a function in our namespace
+				symtab_function_record_t* found_function = lookup_function_in_namespace(current_namespace, function_name.string);
+
+				//Hard fail case if we end up with this
+				if(found_function == NULL){
+					sprintf(info, "No function named \"%s\" exists under the namespace \"%s\"",
+			 						function_name.string,
+			 						generate_fully_qualified_namespace_name(current_namespace).string);
+					return print_and_return_error(info, parser_line_num);
+				}
+
+				//Otherwise this is our function record
+				function_record = found_function;
+
+				/**
+				 * We now need to validate that we can actually access this function from the current
+				 * namespace. There is a helper that takes care of all of this, we just need to invoke it
+				 */
+				if(validate_function_access(function_record) == FAILURE){
+					sprintf(info, "Invalid attempt to access function \"%s\"",
+			 				generate_fully_qualified_function_name(function_record).string);
+					return print_and_return_error(info, parser_line_num);
+				}
+
+				//This is our terminal case
+				break;
+			}
+		}
+	}
 
 	//This is the most common case - that we have a simple, direct function call
 	if(function_record != NULL){
@@ -1756,8 +1946,8 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		//We'll now note that this was indeed called
 		function_record->called = TRUE;
 
-	//Otherwise if we see this case, then we have an indirect function call to deal with
-	} else if(function_pointer_variable != NULL){
+	//The only way to get here is if the function pointer wasn't NULL
+	} else {
 		//Strip the type away here
 		function_type = dealias_type(function_pointer_variable->type_defined_as);
 
@@ -1783,12 +1973,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		 * initial alignment for this function
 		 */
 		current_function->requires_initial_alignment = TRUE;
-
-	//This means that they're both NULL. We'll need to throw an error here
-	} else{
-		sprintf(info, "\"%s\" is not currently defined as a function or function pointer", function_name.string);
-		//Return the error node and get out
-		return print_and_return_error(info, current_line);
 	}
 
 	//Add the inferred type in for convenience as well
@@ -1844,7 +2028,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 
 				//We now have an error of some kind
 				if(current_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-					return print_and_return_error("Bad parameter passed to function call", current_line);
+					return print_and_return_error("Bad parameter passed to function call", parser_line_num);
 				}
 
 				//Let's see if we're even able to assign this here
@@ -1975,7 +2159,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		//If it's not an R_PAREN, then we fail
 		if(lookahead.tok != R_PAREN){
 			sprintf(info, "Function \"%s\" expects 0 parameters. Defined as: %s", function_name.string, function_type->type_name.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, current_line);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			//Print out the actual function record as well
 			num_errors++;
 			//Return the error node
@@ -2056,7 +2240,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	}
 
 	//Add the line number in
-	function_call_node->line_number = current_line;
+	function_call_node->line_number = parser_line_num;
 
 	//Otherwise, if we make it here, we're all good to return the function call node
 	return function_call_node;
@@ -2306,139 +2490,234 @@ static generic_ast_node_t* paramcount_statement(ollie_token_stream_t* token_stre
 static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream, side_type_t side){
 	//For the function call rule if we make it there
 	generic_ast_node_t* func_call;
-
-	//Freeze the current line number
-	u_int32_t current_line = parser_line_num;
-	//Lookahead token
+	//We'll need two lookahead tokens for this
 	lexitem_t lookahead;
+	lexitem_t lookahead2;
 
 	//Grab the next token, we'll multiplex on this
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
 	//Switch based on the token
 	switch(lookahead.tok){
-		//We've seen an ident, so we'll put it back and let
-		//that rule handle it. This identifier will always be 
-		//a variable. It must also be a variable that has been initialized.
-		//We will check that it was initialized here
+		/**
+		 * We've seen an ident, so we'll put it back and let
+		 * that rule handle it. This identifier will always be 
+		 * a variable. It must also be a variable that has been initialized.
+		 * We will check that it was initialized here
+		 */
 		case IDENT:
-			//Put it back
-			push_back_token(token_stream, &parser_line_num);
+			//Get the second lookahead - we could be seeing a fully qualified name
+			lookahead2 = get_next_token(token_stream, &parser_line_num);
 
-			//We will let the identifier rule actually grab the ident. In this case
-			//the identifier will be a variable of some sort, that we'll need to check
-			//against the symbol table
-			generic_ast_node_t* ident = identifier(token_stream, side);
+			//If it's not the ::, then we have a regular variable name
+			if(lookahead2.tok != COLONCOLON){
+				//Push it back
+				push_back_token(token_stream, &parser_line_num);
 
-			//If there was a failure of some kind, we'll allow it to propogate up
-			if(ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-				//Send the error up the chain
-				return ident;
-			}
+				//Grab this out for convenience
+				char* var_name = lookahead.lexeme.string;
 
-			//Grab this out for convenience
-			char* var_name = ident->string_value.string;
+				//Attempt to find the variable first
+				symtab_variable_record_t* found_var = lookup_variable(variable_symtab, var_name);
 
-			//Now we will look this up in the variable symbol table
-			symtab_variable_record_t* found_var = lookup_variable(variable_symtab, var_name);
+				/**
+				 * Let's look and see if we have a variable for use here. If we do, then
+				 * we're done with this exploration
+				 */
+				if(found_var != NULL){
+					//Most common case - not an enum
+					if(found_var->membership != ENUM_MEMBER){
+						/**
+						 * If this is the right hand side and our variable is not initialized,
+						 * this is invalid as we are trying to use before initialization
+						 */
+						if(side == SIDE_TYPE_RIGHT 
+							&& is_variable_data_segment_variable(found_var) == FALSE
+							&& found_var->initialized == FALSE){
+							sprintf(info, "Attempt to use variable %s before initialization", found_var->var_name.string);
+							return print_and_return_error(info, parser_line_num);
+						}
+						
+						//We know that this is valid, so we can allocate the identifier
+						generic_ast_node_t* ident_node = ast_node_alloc(AST_NODE_TYPE_IDENTIFIER, side);
 
-			//Let's look and see if we have a variable for use here. If we do, then
-			//we're done with this exploration
-			if(found_var != NULL){
-				//If this var is itself an enum member, we need to treat it as a constant
-				if(found_var->membership == ENUM_MEMBER){
-					//We'll change the type of this node from an identifier to a constant
-					ident->ast_node_type = AST_NODE_TYPE_CONSTANT;
+						//Fill out the info we need
+						ident_node->is_assignable = TRUE;
+						ident_node->variable = found_var;
+						ident_node->inferred_type = found_var->type_defined_as;
 
-					//Store the enum type inside of optional storage here
-					ident->optional_storage.enum_type = found_var->type_defined_as;
+						ident_node->line_number = parser_line_num;
 
-					//Extract the enum integer type from here
-					ident->inferred_type = found_var->type_defined_as->internal_values.enum_integer_type;
+						return ident_node;
 
-					//Store the constant value appropriately
-					switch(ident->inferred_type->type_size){
-						case 1:
-							ident->constant_type = BYTE_CONST;
-							ident->constant_value.signed_byte_value = found_var->enum_member_value;
-							break;
+					//Otherwise it is an enum. We'll need to allocate a constant for this
+					} else {
+						generic_ast_node_t* enum_member_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
 
-						case 2:
-							ident->constant_type = SHORT_CONST;
-							ident->constant_value.signed_short_value = found_var->enum_member_value;
-							break;
+						//We'll need the enum and inferred types stored
+						enum_member_node->optional_storage.enum_type = found_var->type_defined_as;
+						enum_member_node->inferred_type = found_var->type_defined_as->internal_values.enum_integer_type;
 
-						case 4:
-							ident->constant_type = INT_CONST;
-							ident->constant_value.signed_int_value = found_var->enum_member_value;
-							break;
+						enum_member_node->line_number = parser_line_num;
 
-						default:
-							ident->constant_type = LONG_CONST;
-							ident->constant_value.signed_long_value = found_var->enum_member_value;
-							break;
-							
+						//Constants may not be assigned
+						enum_member_node->is_assignable = FALSE;
+
+						//Store the constant value appropriately
+						switch(enum_member_node->inferred_type->type_size){
+							case 1:
+								enum_member_node->constant_type = BYTE_CONST;
+								enum_member_node->constant_value.signed_byte_value = found_var->enum_member_value;
+								break;
+
+							case 2:
+								enum_member_node->constant_type = SHORT_CONST;
+								enum_member_node->constant_value.signed_short_value = found_var->enum_member_value;
+								break;
+
+							case 4:
+								enum_member_node->constant_type = INT_CONST;
+								enum_member_node->constant_value.signed_int_value = found_var->enum_member_value;
+								break;
+
+							default:
+								enum_member_node->constant_type = LONG_CONST;
+								enum_member_node->constant_value.signed_long_value = found_var->enum_member_value;
+								break;
+						}
+
+						return enum_member_node;
 					}
-
-					//It is not assignable
-					ident->is_assignable = FALSE;
-
-					//Give it back
-					return ident;
 				}
 
 				/**
-				 * If this is the right hand side and our variable is not initialized,
-				 * this is invalid as we are trying to use before initialization
+				 * Otherwise we had a miss in the variable symtab. Let's now try and find this in the function
+				 * symtab and do the appropriate processing for that
 				 */
-				if(side == SIDE_TYPE_RIGHT 
-					&& is_variable_data_segment_variable(found_var) == FALSE
-					&& found_var->initialized == FALSE){
-					sprintf(info, "Attempt to use variable %s before initialization", found_var->var_name.string);
+				symtab_function_record_t* found_function = lookup_function(function_symtab, var_name);
+
+				/**
+				 * Since a function value is constant and never changes, we will classify this record as a constant
+				 * If it could be found, then we're all set
+				 */
+				if(found_function != NULL){
+					//Allocate the function constant node
+					generic_ast_node_t* function_constant = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
+
+					function_constant->line_number = parser_line_num;
+
+					//This is a function pointer constant. 
+					function_constant->constant_type = FUNC_CONST;
+					function_constant->func_record = found_function;
+
+					function_constant->is_assignable = FALSE;
+					function_constant->inferred_type = found_function->signature;
+
+					return function_constant;
+				}
+
+				/**
+				 * Otherwise, if we reach all the way down to here, then we have an issue as
+				 * this identifier has never been declared as a function, variable or constant.
+				 * We'll through an error if this happens
+				 */
+				sprintf(info, "Variable \"%s\" has not been declared", var_name);
+				return print_and_return_error(info, parser_line_num);
+
+			//Otherwise we're seeing a fully qualified function name for a function pointer
+			} else {
+				//Our holder for the found function
+				symtab_function_record_t* found_function;
+
+				//Lookup the first namespace in lookahead(we know it's an ident)
+				function_namespace_t* namespace_cursor = lookup_namespace(function_symtab, lookahead.lexeme.string);
+
+				//We couldn't find it so fail out
+				if(namespace_cursor == NULL){
+					sprintf(info, "No namespace named \"%s\" has yet been declared", lookahead.lexeme.string);
 					return print_and_return_error(info, parser_line_num);
 				}
 
-				//Store the inferred type
-				ident->inferred_type = found_var->type_defined_as;
-				//Store the variable that's associated
-				ident->variable = found_var;
-				//Idents are assignable
-				ident->is_assignable = TRUE;
+				/**
+				 * Algorithm for this: loop through so long as lookahead is an identifier
+				 * and lookahead2 is ::. We keep switching the namespace to whatever
+				 * the lookahead token is. We do this until the lookahead2 token
+				 * is no longer :: and at that point we do the function lookup
+				 */
+				while(TRUE){
+					//Refresh both lookahead tokens
+					lookahead = get_next_token(token_stream, &parser_line_num);
+					lookahead2 = get_next_token(token_stream, &parser_line_num);
 
-				//Give back the ident node
-				return ident;
+					//Some weird input here so we fail out
+					if(lookahead.tok != IDENT){
+						sprintf(info, "Expected identifier after :: but got \"%s\" instead", lexitem_to_string(&lookahead));
+						return print_and_return_error(info, parser_line_num);
+					}
+
+					//If we see :: we have another namespace to hit
+					if(lookahead2.tok == COLONCOLON){
+						//Lookup the next namespace
+						function_namespace_t* child_namespace = lookup_namespace_under_parent(namespace_cursor, lookahead.lexeme.string);
+
+						//If this is NULL then we didn't find it
+						if(child_namespace == NULL){
+							sprintf(info, "No namespace named \"%s\" exists under the parent namespace \"%s\"",	
+			   								lookahead.lexeme.string,
+			   								generate_fully_qualified_namespace_name(namespace_cursor).string);
+							return print_and_return_error(info, parser_line_num);
+						}
+
+						//Otherwise this now is the current namespace and we keep going
+						namespace_cursor = child_namespace;
+
+					//Otherwise this is our terminal case
+					} else {
+						//Push back whatever lookahead2 was
+						push_back_token(token_stream, &parser_line_num);
+
+						//We should be able to find the function now if we look it up
+						found_function = lookup_function_in_namespace(namespace_cursor, lookahead.lexeme.string);
+
+						//We didn't find it, bail out
+						if(found_function == NULL){
+							sprintf(info, "No function named \"%s\" exists under the namespace \"%s\"",
+			   								lookahead.lexeme.string,
+			   								generate_fully_qualified_namespace_name(namespace_cursor).string);
+							return print_and_return_error(info, parser_line_num);
+						}
+
+						//Otherwise we have found it so we can break out of here
+						break;
+					}
+				}
+
+				/**
+				 * We now need to validate that we can actually access this function from the current
+				 * namespace. There is a helper that takes care of all of this, we just need to invoke it
+				 */
+				if(validate_function_access(found_function) == FAILURE){
+					sprintf(info, "Invalid attempt to access function \"%s\"",
+			 				generate_fully_qualified_function_name(found_function).string);
+					return print_and_return_error(info, parser_line_num);
+				}
+
+				/**
+				 * And now that we've determined that all of this is above board, we can finally
+				 * return our function constant node and be done
+				 */
+				generic_ast_node_t* function_constant = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
+
+				//Package up everything that we'll need
+				function_constant->is_assignable = FALSE;
+				function_constant->inferred_type = found_function->signature;
+				function_constant->constant_type = FUNC_CONST;
+				function_constant->func_record = found_function;
+
+				return function_constant;
 			}
 
-			//Attempt to find the function in here
-			symtab_function_record_t* found_func = lookup_function(function_symtab, var_name);
-
-			//Since a function value is constant and never changes, we will classify this record as a constant
-			//If it could be found, then we're all set
-			if(found_func != NULL){
-				//We'll change the type of this node from an identifier to a constant
-				ident->ast_node_type = AST_NODE_TYPE_CONSTANT;
-
-				//The type of this value is a function constant
-				ident->constant_type = FUNC_CONST;
-
-				//This values type is the function's signature
-				ident->inferred_type = found_func->signature;
-
-				//Store the function record that we've found
-				ident->func_record = found_func;
-
-				//It is not assignable
-				ident->is_assignable = FALSE;
-
-				//Give it back
-				return ident;
-			}
-
-			//Otherwise, if we reach all the way down to here, then we have an issue as
-			//this identifier has never been declared as a function, variable or constant.
-			//We'll through an error if this happens
-			sprintf(info, "Variable \"%s\" has not been declared", var_name);
-			return print_and_return_error(info, current_line);
+			break;
 
 		//If we see any constant
 		case INT_CONST:
@@ -2534,7 +2813,7 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 		//If we get here we fail
 		default:
 			sprintf(info, "Expected identifier, constant or (<expression>), but got %s", lexitem_to_string(&lookahead));
-			return print_and_return_error(info, current_line);
+			return print_and_return_error(info, parser_line_num);
 	}
 }
 
@@ -8708,19 +8987,24 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 	//Lookahead token
 	lexitem_t lookahead;
 
-	//Do we contain a defer at any point in here? If so, that is invalid because we could
-	//have the defer block duplicated multiple times. As such, a label would become ambiguous
+	/**
+	 * Do we contain a defer at any point in here? If so, that is invalid because we could
+	 * have the defer block duplicated multiple times. As such, a label would become ambiguous
+	 */
 	if(nesting_stack_contains_level(&nesting_stack, NESTING_DEFER_STATEMENT) == TRUE){
 		return print_and_return_error("Direct jump statements cannot be placed inside of deferred blocks", parser_line_num);
 	}
+	
+	//Refresh the lookahead
+	lookahead = get_next_token(token_stream, &parser_line_num);
 
-	//Once we've made it, we need to see a valid label identifier
-	generic_ast_node_t* label_ident = identifier(token_stream, SIDE_TYPE_LEFT);
-
-	//If this failed, we're done
-	if(label_ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		return print_and_return_error("Invalid label given to jump statement", parser_line_num);
+	//If we didn't see one we fail out
+	if(lookahead.tok != IDENT){
+		return print_and_return_error("Identifier expected after \"jump\" keyword", parser_line_num);
 	}
+
+	//Hang onto the name of the block that we'll be jumping to
+	char* jumping_to_block_name = lookahead.lexeme.string;
 
 	//Holder for the jump statement type
 	generic_ast_node_t* jump_node;
@@ -8733,8 +9017,9 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 		//We know that this will be a conditional jump, so allocate as such
 		jump_node = ast_node_alloc(AST_NODE_TYPE_CONDITIONAL_JUMP_STMT, SIDE_TYPE_LEFT);
 
-		//Add this in as a child node to the statement
-		add_child_node(jump_node, label_ident);
+		//Create space for and store our identifier name
+		jump_node->string_value = dynamic_string_alloc();
+		dynamic_string_set(&(jump_node->string_value), jumping_to_block_name);
 
 		//We now need to see an L_PAREN 
 		lookahead = get_next_token(token_stream, &parser_line_num);
@@ -8785,8 +9070,9 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 		//This is a direct jump so allocate accordingly
 		jump_node = ast_node_alloc(AST_NODE_TYPE_JUMP_STMT, SIDE_TYPE_LEFT);
 
-		//Add this in as a child node to the statement
-		add_child_node(jump_node, label_ident);
+		//Create space for and store our identifier name
+		jump_node->string_value = dynamic_string_alloc();
+		dynamic_string_set(&(jump_node->string_value), jumping_to_block_name);
 	}
 
 	//If we don't see a semicolon we bail
@@ -11661,11 +11947,8 @@ static int8_t check_jump_labels(){
 		//Grab the jump statement
 		current_jump_statement = dequeue(&current_function_jump_statements);
 
-		//Grab the label ident node
-		generic_ast_node_t* label_ident_node = current_jump_statement->first_child;
-
 		//Let's grab out the name for convenience
-		char* name = label_ident_node->string_value.string;
+		char* name = current_jump_statement->string_value.string;
 
 		//We now need to lookup the name in here. We use a special function that allows
 		//us to look deeper into the scopes 
@@ -11759,6 +12042,20 @@ static u_int8_t validate_main_function(generic_type_t* type){
 	//If the main function is not public, then we fail
 	if(signature->visibility == VISIBILITY_TYPE_PRIVATE){
 		print_parse_message(MESSAGE_TYPE_ERROR, "The main function must be prefixed with the \"pub\" keyword", parser_line_num);
+		num_errors++;
+		return FALSE;
+	}
+
+	/**
+	 * The name function may not be declared in anything that
+	 * is not the default namespace. So if we see that
+	 * the current namespace is not default, we fail out
+	 */
+	if(function_symtab->current->is_default == FALSE){
+		sprintf(info, "The main function was found declared inside the namespace \"%s\". The main function may only be declared inside of the top level namespace.",
+		  				function_symtab->current->namespace_name.string);
+		num_errors++;
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		return FALSE;
 	}
 
@@ -11782,6 +12079,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
 			if(parameter_type->type_class != TYPE_CLASS_BASIC || parameter_type->basic_type_token != I32){
 				sprintf(info, "The first parameter of the main function must be an i32. Instead given: %s", type->type_name.string);
 				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				num_errors++;
 				return FALSE;
 			}
 
@@ -11792,6 +12090,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
 			if(is_type_string_array(parameter_type) == FALSE){
 				sprintf(info, "The second parameter of the main function must be of type char**. Instead given: %s", type->type_name.string);
 				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				num_errors++;
 				return FALSE;
 			}
 
@@ -11802,6 +12101,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
 		default:
 			sprintf(info, "The main function can have 0 or 2 parameters, but instead was given: %s", type->type_name.string);
 			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			num_errors++;
 			return FALSE;
 	}
 
@@ -11809,6 +12109,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
 	if(signature->return_type->type_class != TYPE_CLASS_BASIC || signature->return_type->basic_type_token != I32){
 		sprintf(info, "The main function must return a value of type i32, instead was given: %s", type->type_name.string);
 		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		num_errors++;
 		return FALSE;
 	}
 
@@ -12526,6 +12827,25 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	//Now we need to check for duplicated names. We'll do this for
 	dynamic_string_t function_name = lookahead.lexeme;
 
+	//Try to find it in this namespace
+	symtab_function_record_t* found_function = lookup_function_in_namespace(function_symtab->current, function_name.string);
+
+	//Fail out if found
+	if(found_function != NULL){
+		//Is it in the default namespace here or not?
+		if(function_symtab->current->is_default == TRUE){
+			sprintf(info, "A function with name \"%s\" has already been defined. First defined here:", found_function->func_name.string);
+		} else {
+			sprintf(info, "A function with name \"%s\" has already been defined in the namespace \"%s\". First defined here:",
+		   					found_function->func_name.string,
+		   					generate_fully_qualified_namespace_name(function_symtab->current).string);
+		}
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		print_function_name(found_function);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
 	//Check for duplicated functions
 	if(do_duplicate_functions_exist(function_name.string) == TRUE){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
@@ -12838,11 +13158,18 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	dynamic_string_t function_name = lookahead.lexeme;
 
 	//Now we must perform all of our symtable checks. Parameters may not share names with types, functions or variables
-	symtab_function_record_t* function_record = lookup_function(function_symtab, function_name.string);
+	symtab_function_record_t* function_record = lookup_function_in_namespace(function_symtab->current, function_name.string);
 
 	//Fail out if found and it's already been defined
 	if(function_record != NULL && function_record->defined == TRUE){
-		sprintf(info, "A function with name \"%s\" has already been defined. First defined here:", function_record->func_name.string);
+		//Is it in the default namespace here or not?
+		if(function_symtab->current->is_default == TRUE){
+			sprintf(info, "A function with name \"%s\" has already been defined. First defined here:", function_record->func_name.string);
+		} else {
+			sprintf(info, "A function with name \"%s\" has already been defined in the namespace \"%s\". First defined here:",
+		   					function_record->func_name.string,
+		   					generate_fully_qualified_namespace_name(function_symtab->current).string);
+		}
 		print_parse_message(MESSAGE_TYPE_ERROR, info, current_line);
 		print_function_name(function_record);
 		num_errors++;
@@ -13209,6 +13536,182 @@ static generic_ast_node_t* global_let_statement(ollie_token_stream_t* token_stre
 
 
 /**
+ * Process a namespace member. Members for the non-default namespace are more restrictive
+ * than usual. The user may not alias types, define types, or declare variables in a namespace
+ * other than the default one. This may be changed later on but those are the restrictions for
+ * right now
+ *
+ * BNF Rule: <namespace-member> ::= <function-defintion> | <namespace-partition>
+ */
+static generic_ast_node_t* namespace_member(ollie_token_stream_t* token_stream){
+	//The lookahead token
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+	//We may need a secong lookahead here
+	lexitem_t lookahead2;
+
+	//Switch based on the token
+	switch(lookahead.tok){
+		//We can either see the "pub"(public) keyword, "inline keyword" or we can see a straight fn keyword
+		case PUB:
+		case INLINE:
+		case FN:
+			//Put the token back, we'll let the rule handle it
+			push_back_token(token_stream, &parser_line_num);
+
+			//We'll just let the function definition rule handle this
+			return function_definition(token_stream);
+
+		case NAMESPACE:
+			return namespace_declaration(token_stream);
+	
+		case DEFINE:
+			return print_and_return_error("Type definition may not happen inside of a namespace", parser_line_num);
+
+		case ALIAS:
+			return print_and_return_error("Type aliasing may not happen inside of a namespace", parser_line_num);
+
+		case DECLARE:
+			//Let's see if we're dealing with a function predeclaration
+			lookahead2 = get_next_token(token_stream, &parser_line_num);
+
+			//Go based on the second lookeahd
+			switch(lookahead2.tok){
+				//Any of these means that we have a function predeclaration
+				case FN:
+				case INLINE:
+				case PUB:
+					push_back_token(token_stream, &parser_line_num);
+
+					//We can just leverage the global declare statement for this
+					return global_declare_statement(token_stream);
+
+				//Means that we're trying to declare a global var
+				default:
+					return print_and_return_error("Global variable declaration may not happen inside of a namespace", parser_line_num);
+			}
+
+		case LET:
+			return print_and_return_error("Global variable declaration may not happen inside of a namespace", parser_line_num);
+
+		default:
+			sprintf(info, "Invalid/unknown expression type encountered in namespace. Saw \"%s\".", lexitem_to_string(&lookahead));
+			return print_and_return_error(info, parser_line_num);
+	}
+}
+
+
+/**
+ * Process the new namespace directive. A new namespace partition itself contains one or
+ * many declaration partitions. Namespaces may not be empty. 
+ *
+ * NOTE: By the time we get here, we've already seen and consumed "namespace"
+ *
+ * BNF Rule: <namespace-partition> ::= namespace <identifier> { <namespace_member>+ }
+ */
+static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
+	//Refresh the lookahead
+	lexitem_t lookahead = get_next_token(stream, &parser_line_num);
+
+	//If this isn't an identifier, we fail out
+	if(lookahead.tok != IDENT){
+		sprintf(info, "Expected identifier in namespace declaration but found \"%s\"", lexitem_to_string(&lookahead));
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Keep a reference to this for later on
+	char* namespace_name = lookahead.lexeme.string;
+
+	//We now need to see an L_CURLY 
+	lookahead = get_next_token(stream, &parser_line_num);
+
+	if(lookahead.tok != L_CURLY){
+		sprintf(info, "Expected { after namespace declaration but instead found \"%s\"", lexitem_to_string(&lookahead));
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Push this onto the stack for matching later
+	push_token(&grouping_stack, lookahead);
+
+	/**
+	 * We now need to search to make sure that we don't have duplicate values
+	 * here for this namespace declaration. We will search the function symtab
+	 * for this. It is actually ok for us to have a function namespace 
+	 * that matches the name of something else that isn't another function
+	 * namespace
+	 *
+	 * We are able to have namespaces that match function names, there is no conflict
+	 * in that
+	 */
+
+	//Do we have a namespace named this already underneath the current parent?
+	function_namespace_t* namespace = lookup_namespace_under_current(function_symtab, namespace_name);
+
+	//If we found one, then we can't do this
+	if(namespace != NULL){
+		//Accurate printing based on whether or not we're in the default namespace
+		if(function_symtab->current->is_default == TRUE){
+			sprintf(info, "Namespace \"%s\" has already been declared under the top level namespace",
+		   				generate_fully_qualified_namespace_name(namespace).string);
+		} else {
+			sprintf(info, "Namespace \"%s\" has already been declared under the parent namespace \"%s\"",
+		   			generate_fully_qualified_namespace_name(namespace).string,
+		   			generate_fully_qualified_namespace_name(function_symtab->current).string);
+		}
+
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Otherwise, we can create this namespace
+	function_namespace_t* new_namespace = create_namespace_record(function_symtab, namespace_name);
+
+	//We're now safe to allocate this ast node
+	generic_ast_node_t* namespace_node = ast_node_alloc(AST_NODE_TYPE_NAMESPACE_DECLARATION, SIDE_TYPE_LEFT);
+
+	//We are now inside of this namespace
+	enter_namespace(function_symtab, new_namespace);
+
+	//Seed the lookahead for our search
+	lookahead = get_next_token(stream, &parser_line_num);
+
+	//Keep going so long as we're seeing r curlies
+	while(lookahead.tok != R_CURLY){
+		//Push the token back
+		push_back_token(stream, &parser_line_num);
+
+		//Process the member
+		generic_ast_node_t* member = namespace_member(stream);
+
+		//Hard fail out here
+		if(member != NULL 
+			&& member->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			return print_and_return_error("Invalid member discovered in namespace", parser_line_num);
+		}
+
+		/**
+		 * Now that we know that it's good we can add it as a child. Remember that a function predeclaration
+		 * just returns nothing so we'll need to account for the null case here
+		 */
+		if(member != NULL){
+			add_child_node(namespace_node, member);
+		}
+
+		//Refresh it
+		lookahead = get_next_token(stream, &parser_line_num);
+	}
+
+	//Now that we are done we can leave this namespace
+	exit_namespace(function_symtab);
+
+	//Now that we've exited we need to match off of the grouping stack
+	if(pop_token(&grouping_stack).tok != L_CURLY){
+		return print_and_return_error("Mismatched curly braces detected", parser_line_num);
+	}
+
+	return namespace_node;
+}
+
+
+/**
  * Here we can either have a function definition or a declaration
  *
  * Like all other functions, this function returns a pointer to the 
@@ -13273,6 +13776,9 @@ static generic_ast_node_t* declaration_partition(ollie_token_stream_t* token_str
 		case DECLARE:
 			return global_declare_statement(token_stream);
 
+		case NAMESPACE:
+			return namespace_declaration(token_stream);
+
 		default:
 			return print_and_return_error("Invalid/unknown expression type encountered in the top level scope", parser_line_num);
 	}
@@ -13336,33 +13842,38 @@ static inline u_int8_t validate_inlined_functions_are_non_recursive(function_sym
 	//Use the error count so that we can do all functions at once
 	u_int32_t error_count = 0;
 
-	//Run through every cell in the symtab
-	for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
-		if(symtab->records[i] == NULL){
-			continue;
-		}
+	//Run through every namespace
+	for(u_int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
+		function_namespace_t* sheaf = dynamic_array_get_at(&(symtab->namespaces), _);
 
-		//Otherwise grab out a cursor
-		symtab_function_record_t* cursor = symtab->records[i];
-
-		//Run through any collisions in the hashmap
-		while(cursor != NULL){
-			//We only care if this is inlined(for now)
-			if(cursor->inlined == TRUE){
-				//Is it recursive? use the helper
-				u_int8_t is_recursive = is_function_recursive(symtab, cursor);
-
-				//This is our fail case - we may not have this
-				if(is_recursive == TRUE){
-					sprintf(info, "Function \"%s\" is defined as \"inline\" but is directly or indirectly recursive. Remove the inline keyword", cursor->func_name.string);
-					print_parse_message(MESSAGE_TYPE_ERROR, info, cursor->line_number);
-					num_errors++;
-					error_count++;
-				}
+		//Now for every record in the namespace
+		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+			if(sheaf->records[i] == NULL){
+				continue;
 			}
 
-			//Bump it up
-			cursor = cursor->next;
+			//Otherwise grab out a cursor
+			symtab_function_record_t* cursor = sheaf->records[i];
+
+			//Run through any collisions in the hashmap
+			while(cursor != NULL){
+				//We only care if this is inlined(for now)
+				if(cursor->inlined == TRUE){
+					//Is it recursive? use the helper
+					u_int8_t is_recursive = is_function_recursive(symtab, cursor);
+
+					//This is our fail case - we may not have this
+					if(is_recursive == TRUE){
+						sprintf(info, "Function \"%s\" is defined as \"inline\" but is directly or indirectly recursive. Remove the inline keyword", cursor->func_name.string);
+						print_parse_message(MESSAGE_TYPE_ERROR, info, cursor->line_number);
+						num_errors++;
+						error_count++;
+					}
+				}
+
+				//Bump it up
+				cursor = cursor->next;
+			}
 		}
 	}
 
@@ -13395,29 +13906,34 @@ static inline void flag_function_for_alignment(function_symtab_t* symtab, symtab
 	//The number of functions is also the current id
 	u_int32_t function_count = symtab->current_function_id;
 
-	//For every other function
-	for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
-		symtab_function_record_t* other = symtab->records[i];
-		
-		//Traverse the linked list in case of collisions
-		while(other != NULL){
-			//No point in comparing if they match
-			if(other != record){
-				/**
-				 * The "other" is the row, and the record is the index, so 
-				 * we need to compute other_index * count + record_index
-				 */
-				u_int32_t index = other->function_id * function_count + flagged_function_index;
+	//Run through every namespace
+	for(u_int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
+		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->namespaces), _);
 
-				//If this is TRUE then
-				if(symtab->call_graph_transitive_closure[index] == TRUE){
-					//Flag that the other needs initial alignment
-					other->requires_initial_alignment = TRUE;
+		//For each record inside of the namespace
+		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+			symtab_function_record_t* other = current_namespace->records[i];
+			
+			//Traverse the linked list in case of collisions
+			while(other != NULL){
+				//No point in comparing if they match
+				if(other != record){
+					/**
+					 * The "other" is the row, and the record is the index, so 
+					 * we need to compute other_index * count + record_index
+					 */
+					u_int32_t index = other->function_id * function_count + flagged_function_index;
+
+					//If this is TRUE then
+					if(symtab->call_graph_transitive_closure[index] == TRUE){
+						//Flag that the other needs initial alignment
+						other->requires_initial_alignment = TRUE;
+					}
 				}
-			}
 
-			//Bump it up
-			other = other->next;
+				//Bump it up
+				other = other->next;
+			}
 		}
 	}
 }
@@ -13446,19 +13962,111 @@ static void flag_functions_that_require_initial_alignment(function_symtab_t* sym
 	/**
 	 * Run through all of the records in the function keyspace
 	 */
-	for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
-		//Extract it
-		symtab_function_record_t* record = symtab->records[i];
+	for(u_int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
+		//Extract the current namespace
+		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->namespaces), _);
 
-		//So long as it's not NULL keep drilling
-		while(record != NULL){
-			//Flag it
-			flag_function_for_alignment(symtab, record);
+		//Now run through everything in that namespace
+		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+			//Extract it
+			symtab_function_record_t* record = current_namespace->records[i];
 
-			//Bump it up
-			record = record->next;
+			//So long as it's not NULL keep drilling
+			while(record != NULL){
+				//Flag it
+				flag_function_for_alignment(symtab, record);
+
+				//Bump it up
+				record = record->next;
+			}
 		}
 	}
+}
+
+
+/**
+ * Mangle all of the function names so that we can guarantee
+ * uniqueness in the final assembly when the time comes
+ *
+ * For example: the function namespace1::namespace2::my_fn() will
+ * have its name transformed into namespace1.namespace2.my_fn
+ */
+static void mangle_all_function_names(function_symtab_t* symtab){
+	//We will ge concatenating using the dot
+	const char dot = '.';
+
+	//Allocate a temp buffer for us to use in the mangling - we will reuse it
+	dynamic_string_t temporary_buffer = dynamic_string_alloc();
+
+	//We will use a heap stack to store all of our namespaces
+	heap_stack_t namespace_stack = heap_stack_alloc();
+
+	//Run through all of the given namespaces
+	for(u_int32_t i = 0; i < symtab->namespaces.current_index; i++){
+		//Pointer for the current namespace
+		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->namespaces), i);
+
+		//If it's the default namespace then there's nothing to mangle
+		if(current_namespace->is_default == TRUE){
+			continue;
+		}
+
+		//Otherwise run through all of the functions
+		for(u_int32_t j = 0; j < FUNCTION_KEYSPACE; j++){
+			//Grab it out
+			symtab_function_record_t* record_to_mangle = current_namespace->records[j];
+
+			//Remember these are usually largely sparse so this is somewhat frequent
+			if(record_to_mangle == NULL){
+				continue;
+			}
+
+			//Wipe out the temp buffer
+			clear_dynamic_string(&temporary_buffer);
+
+			//Now once we get here we know that the record needs it
+			function_namespace_t* namespace_cursor = record_to_mangle->namespace_contained_in;
+
+			//So long as we don't see the default namespace
+			while(namespace_cursor->is_default == FALSE){
+				//Push it onto the stack
+				push(&namespace_stack, namespace_cursor);
+
+				//Advance up to the parent
+				namespace_cursor = namespace_cursor->parent_namespace;
+			}
+
+			/**
+			 * Now that we have everything loaded into the stack in backwards order, we will
+			 * unwind the stack to create the fully qualified namespace name
+			 */
+			while(heap_stack_is_empty(&namespace_stack) == FALSE){
+				//Get the record off the stack
+				namespace_cursor = pop(&namespace_stack);
+
+				//Concatenate the name
+				dynamic_string_concatenate(&temporary_buffer, namespace_cursor->namespace_name.string);
+
+				//Add the "." to the back
+				dynamic_string_add_char_to_back(&temporary_buffer, dot);
+			}
+
+			//And then once we finally come all the way here we add the function name
+			dynamic_string_concatenate(&temporary_buffer, record_to_mangle->func_name.string);
+
+			/**
+			 * And now we're full circle. We are going to wipe out the old function name and replace it
+			 * with this new function name
+			 */
+			dynamic_string_set(&(record_to_mangle->func_name), temporary_buffer.string);
+		}
+	}
+
+	//No longer need this
+	dynamic_string_dealloc(&temporary_buffer);
+
+	//Or the stack
+	heap_stack_dealloc(&namespace_stack);
 }
 
 
@@ -13561,6 +14169,13 @@ front_end_results_package_t* parse(compiler_options_t* options){
 		check_for_unused_functions(function_symtab, &num_warnings);
 		//Check for any bad variable declarations
 		check_for_var_errors(variable_symtab, &num_warnings);
+
+		/**
+		 * One final thing that we need to do. Functions inside of namespaces
+		 * must have their name "mangled" so that we guarantee uniqueness. Now that
+		 * we're done doing everything here we can go through and mangle all of the names
+		 */
+		mangle_all_function_names(function_symtab);
 	}
 
 	//Package up everything that we need

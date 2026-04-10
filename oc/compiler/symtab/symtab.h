@@ -45,6 +45,8 @@ typedef struct macro_symtab_t macro_symtab_t;
 typedef struct symtab_variable_sheaf_t symtab_variable_sheaf_t;
 //The sheafs in the type symtab
 typedef struct symtab_type_sheaf_t symtab_type_sheaf_t;
+//The namespaces of our function symtab act like a tree
+typedef struct function_namespace_t function_namespace_t;
 
 //The records in the function symtab
 typedef struct symtab_function_record_t symtab_function_record_t;
@@ -94,6 +96,8 @@ struct symtab_function_record_t{
 	u_int64_t hash;
 	//In case of collisions, we can chain these records
 	symtab_function_record_t* next;
+	//What namespace is this function in?
+	function_namespace_t* namespace_contained_in;
 	//All of the basic blocks that make up this function
 	dynamic_array_t function_blocks;
 	//The parameters for the function
@@ -284,6 +288,23 @@ struct symtab_type_sheaf_t{
 	u_int8_t lexical_level;
 };
 
+/**
+ * This structure represents a specific namespace level
+ * of the function symtab
+ */
+struct function_namespace_t{
+	//The actual name of this namesapce
+	dynamic_string_t namespace_name;
+	//Link to the prior level
+	function_namespace_t* parent_namespace;
+	//All of the child namespaces that we have
+	dynamic_array_t child_namespaces;
+	//Hash table for the records
+	symtab_function_record_t* records[FUNCTION_KEYSPACE];
+	//Is this the default sheaf?
+	u_int8_t is_default;
+};
+
 
 /**
  * This struct represents the overall collection of the sheafs of symtabs
@@ -314,8 +335,8 @@ struct type_symtab_t{
 
 
 /**
- * This struct represents the macro symtab. Much like the function symtab, 
- * there is only one lexical level, so no sheafs exist here
+ * This struct represents the macro symtab. Macro symtab
+ * only contains one global level
  */
 struct macro_symtab_t{
 	//How many records(names) we can have
@@ -328,25 +349,22 @@ struct macro_symtab_t{
  * As such, there are no "sheafs" like we have for types or variables
  */
 struct function_symtab_t{
-	//How many records(names) we can have
-	symtab_function_record_t* records[FUNCTION_KEYSPACE];
-
+	//All of our namespaces
+	dynamic_array_t namespaces;
+	//The current sheaf
+	function_namespace_t* current;
 	//The adjacency matrix for the call graph
 	u_int8_t* call_graph_matrix;
-
 	//The transitive closure for the call graph
 	u_int8_t* call_graph_transitive_closure;
-
 	//The current function id
 	u_int32_t current_function_id;
-
-	//The level of this particular symtab
-	u_int8_t current_lexical_scope;
 };
 
 
 /**
- * Initialize a function symtab
+ * Dynamically allocate a function symtab. Note that this allocation
+ * automatically creates the default namespace
  */
 function_symtab_t* function_symtab_alloc();
 
@@ -436,6 +454,23 @@ void add_function_parameter(type_symtab_t* symtab, symtab_function_record_t* fun
 symtab_function_record_t* create_function_record(dynamic_string_t name, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number);
 
 /**
+ * Create a namespace record and add it into the symtab. This will create the new namespace as a
+ * child of the current one
+ */
+function_namespace_t* create_namespace_record(function_symtab_t* symtab, char* name);
+
+/**
+ * Enter into a namespace. This namespace is now the current namespace until exit_namespace()
+ * is called, in which case it goes back to its parent namespace
+ */
+void enter_namespace(function_symtab_t* symtab, function_namespace_t* new_namespace);
+
+/**
+ * Exit out of the current namespace by going to its parent
+ */
+void exit_namespace(function_symtab_t* symtab);
+
+/**
  * Create a type record for the symbol table
  */
 symtab_type_record_t* create_type_record(generic_type_t* type);
@@ -494,8 +529,35 @@ symtab_variable_record_t* initialize_instruction_pointer(type_symtab_t* types);
 
 /**
  * Lookup a function name in the symtab
+ *
+ * Our lookup is always biased to the most local sheaf first, and then up the
+ * chain as we go
  */
 symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name);
+
+/**
+ * Lookup a function that needs to be in the given namespace. This will
+ * not do the normal logic where we can crawl up to see if it's in a parent
+ * namespace
+ */
+symtab_function_record_t* lookup_function_in_namespace(function_namespace_t* namespace_to_search, char* name);
+
+/**
+ * Lookup a namespace inside of the symtab.
+ */
+function_namespace_t* lookup_namespace(function_symtab_t* symtab, char* name);
+
+/**
+ * Does a namespace exist one level underneath the current parent? This is done if we're looking
+ * to add a new namespace
+ */
+function_namespace_t* lookup_namespace_under_current(function_symtab_t* symtab, char* name);
+
+/**
+ * Does a namespace exist one level underneath the given parent? This is usually used for searching
+ * up namespaces that were given in qualified names
+ */
+function_namespace_t* lookup_namespace_under_parent(function_namespace_t* parent_namespace, char* name);
 
 /**
  * Lookup a variable name in the symtab
@@ -583,6 +645,18 @@ void print_function_name(symtab_function_record_t* record);
  * This always goes as: source calls target
  */
 void add_function_call(symtab_function_record_t* source, symtab_function_record_t* target);
+
+/**
+ * Generate the fully qualified namespace for a given namespace and return it inside of
+ * a freshly allocated dynamic string
+ */
+dynamic_string_t generate_fully_qualified_namespace_name(function_namespace_t* namespace_record);
+
+/**
+ * Generate the fully qualified function name for a given function and return it inside of
+ * a freshly allocated dynamic string
+ */
+dynamic_string_t generate_fully_qualified_function_name(symtab_function_record_t* function);
 
 /**
  * A helper method for variable name printing

@@ -54,6 +54,7 @@ typedef enum {
 	SINGLE_AND, /* & */
 	SINGLE_OR,
 	COLONEQ, /* := */
+	COLONCOLON, /* :: */
 	PLUSEQ, // +=
 	MINUSEQ, // -=
 	STAREQ, // *=
@@ -145,6 +146,7 @@ typedef enum {
 	FALSE_CONST,
 	STATIC, //For static variables
 	INLINE,
+	NAMESPACE,
 	MACRO_PARAM, //The special macro param token is used to show that we are a parameter
 	STACK_PASSED_PARAM_OFFSET, //Special constant type that will display the stack offset of a passed param
 } ollie_token_t;

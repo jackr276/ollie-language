@@ -22,7 +22,7 @@
 #include "../utils/constants.h"
 
 //Total number of keywords
-#define KEYWORD_COUNT 56
+#define KEYWORD_COUNT 57
 
 //We will use this to keep track of what the current lexer state is
 typedef enum {
@@ -48,14 +48,15 @@ static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, ERROR, R
 					U8, I8, U16, I16, U32, I32, U64, I64, F32, F64, CHAR, DEFINE, ENUM, STATIC,
 					REGISTER, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
 					STRUCT, HANDLE, IGNORE, AS, ALIAS, SIZEOF, DEFER, MUT, ASM, IDLE, PUB, UNION, BOOL,
-				    PARAMS, PARAMCOUNT, TRUE_CONST, FALSE_CONST, INLINE, MACRO, ENDMACRO};
+				    PARAMS, PARAMCOUNT, TRUE_CONST, FALSE_CONST, INLINE, MACRO, ENDMACRO, NAMESPACE};
 
 //Direct one to one mapping
 static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", "error", "raise", "raises", "ret", "jump",
 						  "u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "f32", "f64", "char", "define", "enum",
 						  "static", "register", "void", "typesize", "let", "declare", "when", "case", "default", "switch",
 						  "break", "continue", "struct", "handle", "ignore", "as", "alias", "sizeof", "defer", "mut", "asm",
-						  "idle", "pub", "union", "bool", "params", "paramcount", "true", "false", "inline", "$macro", "$endmacro"};
+						  "idle", "pub", "union", "bool", "params", "paramcount", "true", "false", "inline", "$macro", "$endmacro",
+						  "namespace"};
 
 /* ============================================= GLOBAL VARIABLES  ============================================ */
 
@@ -103,6 +104,8 @@ char* lexitem_to_string(lexitem_t* lexitem){
 			return "@";
 		case COLONEQ:
 			return ":=";
+		case COLONCOLON:
+			return "::";
 		case DOT:
 			return ".";
 		case POUND:
@@ -400,6 +403,8 @@ char* operator_token_to_string(ollie_token_t token){
 			return "%=";
 		case COLON:
 			return ":";
+		case COLONCOLON:
+			return "::";
 		case CARROT:
 			return "^";
 		case XOREQ:
@@ -902,6 +907,12 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						switch(ch2) {
 							case '=':
 								lex_item.tok = COLONEQ;
+								lex_item.line_num = line_number;
+								add_lexitem_to_stream(stream, lex_item);
+								break;
+
+							case ':':
+								lex_item.tok = COLONCOLON;
 								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;

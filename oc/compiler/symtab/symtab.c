@@ -13,6 +13,7 @@
 #include "../ast/ast.h"
 //For error printing
 #include "../utils/queue/min_priority_queue.h"
+#include "../utils/stack/heapstack.h"
 #include "../utils/constants.h"
 
 //The starting offset basis for FNV-1a64
@@ -80,12 +81,33 @@ static inline u_int32_t increment_and_get_error_id(type_symtab_t* symtab){
 
 
 /**
- * Dynamically allocate a function symtab
+ * Dynamically allocate a function symtab. Note that this allocation
+ * automatically creates the default namespace
  */
 function_symtab_t* function_symtab_alloc(){
+	//First create the symtab
 	function_symtab_t* symtab = (function_symtab_t*)calloc(1, sizeof(function_symtab_t));
-	//The function symtab's lexical scope is always global
-	symtab->current_lexical_scope = 0;
+
+	//Now the namespaces array
+	symtab->namespaces = dynamic_array_alloc();
+
+	//Now let's create the very first sheaf
+	function_namespace_t* default_namespace = calloc(1, sizeof(function_namespace_t));
+
+	//This is the default sheaf
+	default_namespace->is_default = TRUE;
+
+	//Allcoate the namespace name
+	default_namespace->namespace_name = dynamic_string_alloc();
+
+	//We'll make the name "$default", something the user couldn't enter
+	dynamic_string_set(&(default_namespace->namespace_name), "$default");
+
+	//Add this into our namespaces 
+	dynamic_array_add(&(symtab->namespaces), default_namespace);
+
+	//The current value is this
+	symtab->current = default_namespace;
 
 	return symtab;
 }
@@ -861,6 +883,65 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, visibilt
 	return record;
 }
 
+/**
+ * Create a namespace record and add it into the symtab. This will create the new namespace as a
+ * child of the current one
+ */
+function_namespace_t* create_namespace_record(function_symtab_t* symtab, char* name){
+	//Allocate it
+	function_namespace_t* namespace = calloc(1, sizeof(function_namespace_t));
+
+	//It's not the default
+	namespace->is_default = FALSE;
+
+	//Allocate the name
+	namespace->namespace_name = dynamic_string_alloc();
+
+	//Set the name in
+	dynamic_string_set(&(namespace->namespace_name), name);
+
+	//If this needs to be allocated then we will do so
+	if(symtab->current->child_namespaces.internal_array == NULL){
+		symtab->current->child_namespaces = dynamic_array_alloc();
+	}
+
+	//This namespace is going to be added as the child of the current one
+	dynamic_array_add(&(symtab->current->child_namespaces), namespace);
+
+	//Flag the current namespace as this one's parent
+	namespace->parent_namespace = symtab->current;
+
+	//Also add this to our overall array of all namespaces
+	dynamic_array_add(&(symtab->namespaces), namespace);
+	
+	//Now give it back
+	return namespace;
+}
+
+
+/**
+ * Enter into a namespace. This namespace is now the current namespace until exit_namespace()
+ * is called, in which case it goes back to its parent namespace
+ */
+void enter_namespace(function_symtab_t* symtab, function_namespace_t* new_namespace){
+	symtab->current = new_namespace;
+}
+
+
+/**
+ * Exit out of the current namespace by going to its parent
+ */
+void exit_namespace(function_symtab_t* symtab){
+	//This is bad if we're trying to do it
+	if(symtab->current->parent_namespace == NULL){
+		fprintf(stderr, "Fatal internal compiler error: attempt to exit the parent namespace\n");
+		exit(1);
+	}
+
+	//Go back up the chain into this one's parent namespace
+	symtab->current = symtab->current->parent_namespace;
+}
+
 
 /**
  * Dynamically allocate and create a type record
@@ -920,16 +1001,23 @@ u_int8_t insert_function(function_symtab_t* symtab, symtab_function_record_t* re
 	record->function_id = symtab->current_function_id;
 	(symtab->current_function_id)++;
 
+	//Grab the current namespace
+	function_namespace_t* current = symtab->current;
+
+	//Store that this function is in this current namespace
+	record->namespace_contained_in = current;
+
 	//If there's no collision
-	if(symtab->records[record->hash] == NULL){
+	if(current->records[record->hash] == NULL){
 		//Store it and get out
-		symtab->records[record->hash] = record;
+		current->records[record->hash] = record;
+
+		//No collision
 		return 0;
 	}
 	
 	//Otherwise if we get here there was a collision
-	//Grab the head record
-	symtab_function_record_t* cursor = symtab->records[record->hash];
+	symtab_function_record_t* cursor = current->records[record->hash];
 
 	//Get to the very last node
 	while(cursor->next != NULL){
@@ -1277,16 +1365,55 @@ symtab_variable_record_t* initialize_instruction_pointer(type_symtab_t* types){
 
 /**
  * Lookup the record in the symtab that corresponds to the following name.
- * 
- * There is only one lexical scope for functions, so this symtab is quite simple
+ *
+ * Our lookup is always biased to the most local sheaf first, and then up the
+ * chain as we go
  */
 symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name){
 	//Let's grab it's hash
 	u_int64_t h = hash_function(name); 
 
+	//Get a cursor for the namespace
+	function_namespace_t* namespace_cursor = symtab->current;
+
+	//Keep crawling our way up until we find it
+	do {
+		//Grab whatever record is at that hash
+		symtab_function_record_t* record_cursor = namespace_cursor->records[h];
+
+		//We could have had collisions so we'll have to hunt here
+		while(record_cursor != NULL){
+			//If we find the right one, then we can get out
+			if(strncmp(record_cursor->func_name.string, name, record_cursor->func_name.current_length) == 0){
+				return record_cursor;
+			}
+			//Advance it if we didn't have the right name
+			record_cursor = record_cursor->next;
+		}
+
+		//If we didn't find it then we'll go up the chain by one
+		namespace_cursor = namespace_cursor->parent_namespace;
+
+	//Keep going so long as we aren't NULL
+	} while(namespace_cursor != NULL);
+
+	//When we make it down here, we found nothing so
+	return NULL;
+}
+
+
+/**
+ * Lookup a function that needs to be in the given namespace. This will
+ * not do the normal logic where we can crawl up to see if it's in a parent
+ * namespace
+ */
+symtab_function_record_t* lookup_function_in_namespace(function_namespace_t* namespace_to_search, char* name){
+	//Let's grab it's hash
+	u_int64_t h = hash_function(name); 
+
 	//Grab whatever record is at that hash
-	symtab_function_record_t* record_cursor = symtab->records[h];
-		
+	symtab_function_record_t* record_cursor = namespace_to_search->records[h];
+
 	//We could have had collisions so we'll have to hunt here
 	while(record_cursor != NULL){
 		//If we find the right one, then we can get out
@@ -1298,6 +1425,78 @@ symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name)
 	}
 
 	//When we make it down here, we found nothing so
+	return NULL;
+}
+
+
+/**
+ * Lookup a namespace inside of the symtab. Unlike searching for a function there
+ * is no hashing to do here, just string comparison
+ *
+ * Yes this is an expensive lookup, but we don't expect to be doing it that
+ * frequently. If it does become too expensive to do, then we will begin to use
+ * hashing
+ */
+function_namespace_t* lookup_namespace(function_symtab_t* symtab, char* name){
+	//Run through every namespace 
+	for(u_int32_t i = 0; i < symtab->namespaces.current_index; i++){
+		//Extract it
+		function_namespace_t* namespace = dynamic_array_get_at(&(symtab->namespaces), i);
+
+		//Not possible to lookup the default sheaf
+		if(namespace->is_default == TRUE){
+			continue;
+		}
+
+		//Names match then we're a go
+		if(strcmp(namespace->namespace_name.string, name) == 0){
+			return namespace;
+		}
+	}
+
+	//If we make it all of the way down here, that means that we've found nothing
+	return NULL;
+}
+
+
+/**
+ * Does a namespace exist one level underneath the parent? This is done if we're looking
+ * to add a new namespace
+ */
+function_namespace_t* lookup_namespace_under_current(function_symtab_t* symtab, char* name){
+	//Run through the children of the current parent
+	for(u_int32_t i = 0; i < symtab->current->child_namespaces.current_index; i++){
+		//Extract the namespace
+		function_namespace_t* namespace = dynamic_array_get_at(&(symtab->current->child_namespaces), i);
+
+		//If they're a match then we're out
+		if(strcmp(namespace->namespace_name.string, name) == 0){
+			return namespace;
+		}
+	}
+
+	//If we got to here then we found nothing
+	return NULL;
+}
+
+
+/**
+ * Does a namespace exist one level underneath the given parent? This is usually used for searching
+ * up namespaces that were given in qualified names
+ */
+function_namespace_t* lookup_namespace_under_parent(function_namespace_t* parent_namespace, char* name){
+	//Run through the children of the current parent
+	for(u_int32_t i = 0; i < parent_namespace->child_namespaces.current_index; i++){
+		//Extract the namespace
+		function_namespace_t* namespace = dynamic_array_get_at(&(parent_namespace->child_namespaces), i);
+
+		//If they're a match then we're out
+		if(strcmp(namespace->namespace_name.string, name) == 0){
+			return namespace;
+		}
+	}
+
+	//If we got to here then we found nothing
 	return NULL;
 }
 
@@ -1760,9 +1959,11 @@ void print_function_record(symtab_function_record_t* record){
  * This always goes as: source calls target
  */
 void add_function_call(symtab_function_record_t* source, symtab_function_record_t* target){
-	//Add it into the list of functions called by the source. Since we use a set here, we are
-	//guaranteed to never add the function in more than once even if the source function calls
-	//it multiple times in the body
+	/**
+	 * Add it into the list of functions called by the source. Since we use a set here, we are
+	 * guaranteed to never add the function in more than once even if the source function calls
+	 * it multiple times in the body
+	 */
 	dynamic_set_add(&(source->called_functions), target);
 
 	//This function has been called
@@ -1910,6 +2111,120 @@ void print_function_name(symtab_function_record_t* record){
 
 
 /**
+ * Generate the fully qualified namespace for a given namespace and return it inside of
+ * a freshly allocated dynamic string
+ *
+ * If we are trying to get the fully qualified name on the default namespace, a null dynamic string
+ * is returned
+ */
+dynamic_string_t generate_fully_qualified_namespace_name(function_namespace_t* namespace_record){
+	//Initially it's null
+	dynamic_string_t namespace_name = NULL_DYNAMIC_STRING;
+
+	//If this is the default then get out
+	if(namespace_record->is_default == TRUE){
+		return namespace_name;
+	}
+
+	//Fully allocate the namespace name
+	namespace_name = dynamic_string_alloc();
+
+	//We're going to push everything up onto a stack in backwards order
+	heap_stack_t stack = heap_stack_alloc();
+
+	//Grab a cursor for the namespace record
+	function_namespace_t* cursor = namespace_record;
+
+	//So long as we haven't hit the default
+	while(cursor->is_default == FALSE){
+		//Hold onto this pointer
+		function_namespace_t* temp = cursor;
+
+		//Go up the chain
+		cursor = cursor->parent_namespace;
+
+		//Put temp inside of the stack
+		push(&stack, temp);
+	}
+
+	//Now we'll go through the stack and generate our name that way
+	while(heap_stack_is_empty(&stack) == FALSE){
+		//Pop it off of the stack
+		function_namespace_t* record = pop(&stack);
+
+		//Concantenate this to our name
+		dynamic_string_concatenate(&namespace_name, record->namespace_name.string);
+
+		//If we have more to go, add the separators
+		if(peek(&stack) != NULL){
+			dynamic_string_concatenate(&namespace_name, "::");
+		}
+	}
+
+	//Destroy the stack
+	heap_stack_dealloc(&stack);
+
+	return namespace_name;
+}
+
+
+/**
+ * Generate the fully qualified function name for a given function and return it inside of
+ * a freshly allocated dynamic string
+ */
+dynamic_string_t generate_fully_qualified_function_name(symtab_function_record_t* function){
+	//What namespace are we in
+	function_namespace_t* namespace_contained_in = function->namespace_contained_in;
+
+	//If the function is in the default namespace there's nothing for us to do
+	if(namespace_contained_in->is_default == TRUE){
+		return clone_dynamic_string(&(function->func_name));
+	}
+
+	//Otherwise we'll need a fresh name here
+	dynamic_string_t qualified_name = dynamic_string_alloc();
+
+	//We're going to push everything up onto a stack in backwards order
+	heap_stack_t stack = heap_stack_alloc();
+
+	//Grab a cursor for the namespace record
+	function_namespace_t* cursor = namespace_contained_in;
+
+	//So long as we haven't hit the default
+	while(cursor->is_default == FALSE){
+		//Hold onto this pointer
+		function_namespace_t* temp = cursor;
+
+		//Go up the chain
+		cursor = cursor->parent_namespace;
+
+		//Put temp inside of the stack
+		push(&stack, temp);
+	}
+
+	//Now we'll go through the stack and generate our name that way
+	while(heap_stack_is_empty(&stack) == FALSE){
+		//Pop it off of the stack
+		function_namespace_t* record = pop(&stack);
+
+		//Concantenate this to our name
+		dynamic_string_concatenate(&qualified_name, record->namespace_name.string);
+
+		//We need a separator no matter what here
+		dynamic_string_concatenate(&qualified_name, "::");
+	}
+
+	//Destroy the stack
+	heap_stack_dealloc(&stack);
+
+	//Finally we can tack the function name on
+	dynamic_string_concatenate(&qualified_name, function->func_name.string);
+	
+	return qualified_name;
+}
+
+
+/**
  * Print a variable name out in a stylized way
  * Intended for error messages
  */
@@ -1986,23 +2301,28 @@ void print_call_graph_adjacency_matrix(FILE* fl, function_symtab_t* function_sym
 	//We need a min priority queue for this
 	min_priority_queue_t min_priority_queue = min_priority_queue_alloc();
 
-	//Run through and print all of these out first
-	for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
-		//Skip ahead
-		if(function_symtab->records[i] == NULL){
-			continue;
-		}
+	//Run through all of the namespaces 
+	for(u_int32_t _ = 0; _ < function_symtab->namespaces.current_index; _++){
+		function_namespace_t* sheaf = dynamic_array_get_at(&(function_symtab->namespaces), _);
 
-		//Otherwise grab it out
-		symtab_function_record_t* cursor = function_symtab->records[i];
+		//Run through and print all of these out first
+		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+			//Skip ahead
+			if(sheaf->records[i] == NULL){
+				continue;
+			}
 
-		//Crawl the whole thing
-		while(cursor != NULL){
-			//Use the min priority queue to insert based on the function ID
-			min_priority_queue_enqueue(&min_priority_queue, cursor, cursor->function_id);
+			//Otherwise grab it out
+			symtab_function_record_t* cursor = sheaf->records[i];
 
-			//Bump it up
-			cursor = cursor->next;
+			//Crawl the whole thing
+			while(cursor != NULL){
+				//Use the min priority queue to insert based on the function ID
+				min_priority_queue_enqueue(&min_priority_queue, cursor, cursor->function_id);
+
+				//Bump it up
+				cursor = cursor->next;
+			}
 		}
 	}
 
@@ -2109,59 +2429,64 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnin
 	//Create a min priority queue for ordering error messages
 	min_priority_queue_t queue = min_priority_queue_alloc();
 
-	//Run through all keyspace records
-	for(u_int16_t i = 0; i < FUNCTION_KEYSPACE; i++){
-		record = symtab->records[i];
+	//Run thorugh all of the namespaces
+	for(u_int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
+		//Grab the current sheaf to check
+		function_namespace_t* current_sheaf = dynamic_array_get_at(&(symtab->namespaces), _);
 
-		//We could have chaining here, so run through just in case
-		while(record != NULL){
-			//If one of these 3 error conditions is true, we will print a warning
-			if((record->called == 0 && record->defined == 0)
-				|| (record->called == 0 && record->defined == 1)
-				|| (record->called == 1 && record->defined == 0)){
+		//Now run through the keyspace in this sheaf
+		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+			record = current_sheaf->records[i];
 
-				//Enqueue using the line number as priority
-				min_priority_queue_enqueue(&queue, record, record->line_number);
+			//We could have chaining here, so run through just in case
+			while(record != NULL){
+				//If one of these 3 error conditions is true, we will print a warning
+				if((record->called == 0 && record->defined == 0)
+					|| (record->called == 0 && record->defined == 1)
+					|| (record->called == 1 && record->defined == 0)){
+
+					//Enqueue using the line number as priority
+					min_priority_queue_enqueue(&queue, record, record->line_number);
+				}
+
+				//Advance record up
+				record = record->next;
 			}
 
-			//Advance record up
-			record = record->next;
-		}
+			//Now that we have everything loaded into a queue by line number, we will go through
+			//and print each individual error
+			while(min_priority_queue_is_empty(&queue) == FALSE){
+				//Get it off of the queue
+				record = min_priority_queue_dequeue(&queue);
+			
+				if(record->called == FALSE && record->defined == FALSE){
+					//Generate a warning here
+					(*num_warnings)++;
 
-		//Now that we have everything loaded into a queue by line number, we will go through
-		//and print each individual error
-		while(min_priority_queue_is_empty(&queue) == FALSE){
-			//Get it off of the queue
-			record = min_priority_queue_dequeue(&queue);
-		
-			if(record->called == FALSE && record->defined == FALSE){
-				//Generate a warning here
-				(*num_warnings)++;
+					sprintf(info, "Function \"%s\" is never defined and never called. First defined here:", record->func_name.string);
+					PRINT_WARNING(info, record->line_number);
+					//Also print where the function was defined
+					print_function_name(record);
 
-				sprintf(info, "Function \"%s\" is never defined and never called. First defined here:", record->func_name.string);
-				PRINT_WARNING(info, record->line_number);
-				//Also print where the function was defined
-				print_function_name(record);
+				//Only generate here if we have a private function. Public functions may be called from external files
+				} else if(record->called == FALSE && record->defined == TRUE && record->visibility == VISIBILITY_TYPE_PRIVATE){
+					//Generate a warning here
+					(*num_warnings)++;
 
-			//Only generate here if we have a private function. Public functions may be called from external files
-			} else if(record->called == FALSE && record->defined == TRUE && record->visibility == VISIBILITY_TYPE_PRIVATE){
-				//Generate a warning here
-				(*num_warnings)++;
+					sprintf(info, "Function \"%s\" is defined but never called. First defined here:", record->func_name.string);
+					PRINT_WARNING(info, record->line_number);
+					//Also print where the function was defined
+					print_function_name(record);
 
-				sprintf(info, "Function \"%s\" is defined but never called. First defined here:", record->func_name.string);
-				PRINT_WARNING(info, record->line_number);
-				//Also print where the function was defined
-				print_function_name(record);
+				} else if(record->called == 1 && record->defined == 0){
+					//Generate a warning here
+					(*num_warnings)++;
 
-			} else if(record->called == 1 && record->defined == 0){
-				//Generate a warning here
-				(*num_warnings)++;
-
-				sprintf(info, "Function \"%s\" is called but never explicitly defined. First declared here:", record->func_name.string);
-				PRINT_WARNING(info, record->line_number);
-				//Also print where the function was defined
-				print_function_name(record);
-
+					sprintf(info, "Function \"%s\" is called but never explicitly defined. First declared here:", record->func_name.string);
+					PRINT_WARNING(info, record->line_number);
+					//Also print where the function was defined
+					print_function_name(record);
+				}
 			}
 		}
 	}
@@ -2294,43 +2619,52 @@ void finalize_function_symtab(function_symtab_t* symtab){
 	//Extract the number of functions
 	u_int32_t number_of_functions = symtab->current_function_id;
 
-	//Now that we have all of the possible functions added in, we need to create the
-	//overall adjacency matrix for all of these functions
+	/**
+	 * Now that we have all of the possible functions added in, we need to create the
+	 * overall adjacency matrix for all of these functions
+	 */
 	symtab->call_graph_matrix = calloc(number_of_functions * number_of_functions, sizeof(u_int8_t));
 
-	//We will now go through and populate the adjacency matrix. We need to run through the entire
-	//hashmap to do this
-	for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
-		//Totally possible for this to happen
-		if(symtab->records[i] == NULL){
-			continue;
-		}
+	/**
+	 * To populate the adjacency matrix, we'll need to run through literally ever function namespace 
+	 */
+	for(u_int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
+		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->namespaces), _);
 
-		//Otherwise, we actually have a space that is populated so we need to
-		//populate here. Remember, every record is a linked list so we need
-		//to explore all of the nodes
-		symtab_function_record_t* cursor = symtab->records[i];
-
-		//So long as the cursor is not NULL
-		while(cursor != NULL){
-			//Grab the cursor's unique function ID
-			u_int32_t cursor_id = cursor->function_id;
-
-			//Run through all of the functions that this function
-			//itself calls
-			for(u_int16_t j = 0; j < cursor->called_functions.current_index; j++){
-				//Extract it
-				symtab_function_record_t* called_function = dynamic_set_get_at(&(cursor->called_functions), j);
-
-				//Now let's get his ID
-				u_int32_t called_function_id = called_function->function_id;
-
-				//Insert this call into the adjacency matrix
-				symtab->call_graph_matrix[cursor_id * number_of_functions + called_function_id] = TRUE;
+		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+			//Totally possible for this to happen
+			if(current_namespace->records[i] == NULL){
+				continue;
 			}
 
-			//Bump it up to the next one
-			cursor = cursor->next;
+			/**
+			 * Otherwise, we actually have a space that is populated so we need to
+			 * populate here. Remember, every record is a linked list so we need
+			 * to explore all of the nodes
+			 */
+			symtab_function_record_t* cursor = current_namespace->records[i];
+
+			//So long as the cursor is not NULL
+			while(cursor != NULL){
+				//Grab the cursor's unique function ID
+				u_int32_t cursor_id = cursor->function_id;
+
+				//Run through all of the functions that this function
+				//itself calls
+				for(u_int16_t j = 0; j < cursor->called_functions.current_index; j++){
+					//Extract it
+					symtab_function_record_t* called_function = dynamic_set_get_at(&(cursor->called_functions), j);
+
+					//Now let's get his ID
+					u_int32_t called_function_id = called_function->function_id;
+
+					//Insert this call into the adjacency matrix
+					symtab->call_graph_matrix[cursor_id * number_of_functions + called_function_id] = TRUE;
+				}
+
+				//Bump it up to the next one
+				cursor = cursor->next;
+			}
 		}
 	}
 
@@ -2344,36 +2678,55 @@ void finalize_function_symtab(function_symtab_t* symtab){
  */
 void function_symtab_dealloc(function_symtab_t* symtab){
 	//For temporary holding
+	function_namespace_t* sheaf;
 	symtab_function_record_t* record;
 	symtab_function_record_t* temp;
 
-	//Run through and free all function records
-	for(u_int16_t i = 0; i < FUNCTION_KEYSPACE; i++){
-		record = symtab->records[i];
+	//Run through all of the namespaces 
+	for(u_int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
+		//Get the sheaf out
+		sheaf = dynamic_array_get_at(&(symtab->namespaces), _);
 
-		//We could have chaining here, so run through just in case
-		while(record != NULL){
-			temp = record;
-			record = record->next;
+		//Now go through all records
+		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+			record = sheaf->records[i];
 
-			//Destroy the call graph infrastructure
-			dynamic_set_dealloc(&(temp->called_functions));
+			//We could have chaining here, so run through just in case
+			while(record != NULL){
+				temp = record;
+				record = record->next;
 
-			//Destroy the block storage
-			dynamic_array_dealloc(&(temp->function_blocks));
+				//Destroy the call graph infrastructure
+				dynamic_set_dealloc(&(temp->called_functions));
 
-			//Destroy the parameters
-			dynamic_array_dealloc(&(temp->function_parameters));
+				//Destroy the block storage
+				dynamic_array_dealloc(&(temp->function_blocks));
 
-			//Dealloate the function type
-			type_dealloc(temp->signature);
+				//Destroy the parameters
+				dynamic_array_dealloc(&(temp->function_parameters));
 
-			//Deallocate the data area itself
-			stack_data_area_dealloc(&(temp->local_stack));
+				//Dealloate the function type
+				type_dealloc(temp->signature);
 
-			free(temp);
+				//Deallocate the data area itself
+				stack_data_area_dealloc(&(temp->local_stack));
+
+				free(temp);
+			}
 		}
+
+		//Destroy the name
+		dynamic_string_dealloc(&(sheaf->namespace_name));
+
+		//Destroy the array of children
+		dynamic_array_dealloc(&(sheaf->child_namespaces));
+
+		//Free the sheaf itself
+		free(sheaf);
 	}
+
+	//Deallocate the namespace array
+	dynamic_array_dealloc(&(symtab->namespaces));
 
 	//Free the adjacency matrix
 	free(symtab->call_graph_matrix);

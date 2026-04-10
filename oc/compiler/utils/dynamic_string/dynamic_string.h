@@ -20,6 +20,7 @@ typedef struct dynamic_string_t dynamic_string_t;
 		dynamic_string.current_length = 0;\
 		dynamic_string.length = 0;\
 
+#define NULL_DYNAMIC_STRING {NULL, 0, 0}
 //============================== Public Utility Macros ===============================
 
 

@@ -14,6 +14,7 @@
 #include <sys/types.h>
 //For multithreading
 #include <pthread.h>
+#include <time.h>
 //For any needed constants
 #include "../utils/constants.h"
 
@@ -175,6 +176,9 @@ int main(int argc, char** argv){
 		exit(1);
 	}
 
+	//Start the time
+	clock_t start_time = clock();
+
 	//Run through everything in the given directory
 	struct dirent* directory_entry;
 
@@ -226,7 +230,13 @@ int main(int argc, char** argv){
 	//Get rid of all these threads
 	free(threads);
 
+	//Record the final time
+	clock_t stop_time = clock();
+	double time_taken = (double)(stop_time - start_time) / CLOCKS_PER_SEC;
+
 	printf("\n\n\n\n\n\n================================ Ollie Memory Check Summary =================================== \n");
+	printf("FILES TESTED: %d\n", total_test_files);
+	printf("CPU TIME ELAPSED: %.4f seconds\n", time_taken);
 	printf("TOTAL ERRORS: %d\n", total_errors);
 	printf("TOTAL ERROR FILES: %d\n", number_of_error_files);
 
