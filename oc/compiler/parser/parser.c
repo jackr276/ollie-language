@@ -2626,6 +2626,9 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 
 			//Otherwise we're seeing a fully qualified function name for a function pointer
 			} else {
+				//Our holder for the found function
+				symtab_function_record_t* found_function;
+
 				//Lookup the first namespace in lookahead(we know it's an ident)
 				function_namespace_t* namespace_cursor = lookup_namespace(function_symtab, lookahead.lexeme.string);
 
@@ -2673,11 +2676,21 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 						//Push back whatever lookahead2 was
 						push_back_token(token_stream, &parser_line_num);
 
+						//We should be able to find the function now if we look it up
+						found_function = lookup_function_in_namespace(namespace_cursor, lookahead.lexeme.string);
 
+						//We didn't find it, bail out
+						if(found_function == NULL){
+							sprintf(info, "No function named \"%s\" exists under the namespace \"%s\"",
+			   								lookahead.lexeme.string,
+			   								generate_fully_qualified_namespace_name(namespace_cursor).string);
+							return print_and_return_error(info, parser_line_num);
+						}
+
+						//Otherwise we have found it so we can break out of here
+						break;
 					}
 				}
-
-
 
 				printf("TODO NOT IMPLEMENTED\n");
 				exit(1);
