@@ -2634,7 +2634,7 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 
 				//We couldn't find it so fail out
 				if(namespace_cursor == NULL){
-					sprintf(info, "No namespace named \"%s\" has yet been declared\n", lookahead.lexeme.string);
+					sprintf(info, "No namespace named \"%s\" has yet been declared", lookahead.lexeme.string);
 					return print_and_return_error(info, parser_line_num);
 				}
 
