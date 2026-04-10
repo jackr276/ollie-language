@@ -2635,10 +2635,6 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 					return print_and_return_error(info, parser_line_num);
 				}
 
-				//Now we can refresh both lookahead tokens
-				lookahead = get_next_token(token_stream, &parser_line_num);
-				lookahead2 = get_next_token(token_stream, &parser_line_num);
-
 				/**
 				 * Algorithm for this: loop through so long as lookahead is an identifier
 				 * and lookahead2 is ::. We keep switching the namespace to whatever
@@ -2646,7 +2642,39 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 				 * is no longer :: and at that point we do the function lookup
 				 */
 				while(TRUE){
+					//Refresh both lookahead tokens
+					lookahead = get_next_token(token_stream, &parser_line_num);
+					lookahead2 = get_next_token(token_stream, &parser_line_num);
 
+					//Some weird input here so we fail out
+					if(lookahead.tok != IDENT){
+						sprintf(info, "Expected identifier after :: but got \"%s\" instead", lexitem_to_string(&lookahead));
+						return print_and_return_error(info, parser_line_num);
+					}
+
+					//If we see :: we have another namespace to hit
+					if(lookahead2.tok == COLONCOLON){
+						//Lookup the next namespace
+						function_namespace_t* child_namespace = lookup_namespace_under_parent(namespace_cursor, lookahead.lexeme.string);
+
+						//If this is NULL then we didn't find it
+						if(child_namespace == NULL){
+							sprintf(info, "No namespace named \"%s\" exists under the parent namespace \"%s\"",	
+			   								lookahead.lexeme.string,
+			   								generate_fully_qualified_namespace_name(namespace_cursor).string);
+							return print_and_return_error(info, parser_line_num);
+						}
+
+						//Otherwise this now is the current namespace and we keep going
+						namespace_cursor = child_namespace;
+
+					//Otherwise this is our terminal case
+					} else {
+						//Push back whatever lookahead2 was
+						push_back_token(token_stream, &parser_line_num);
+
+
+					}
 				}
 
 
