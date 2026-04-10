@@ -10732,8 +10732,6 @@ static u_int8_t visit_namespace_declaration(cfg_t* cfg, generic_ast_node_t* name
 	generic_ast_node_t* namespace_child = namespace_declaration_node->first_child;
 	//For our function definitions
 	basic_block_t* block;
-	//For holding namespace results
-	u_int8_t result;
 
 	//So long as we still have children
 	while(namespace_child != NULL){
@@ -10749,10 +10747,7 @@ static u_int8_t visit_namespace_declaration(cfg_t* cfg, generic_ast_node_t* name
 				break;
 
 			case AST_NODE_TYPE_NAMESPACE_DECLARATION:
-				result = visit_namespace_declaration(cfg, namespace_child);
-
-				//Fail out if bad
-				if(result == FAILURE){
+				if(visit_namespace_declaration(cfg, namespace_child) == FAILURE){
 					return FAILURE;
 				}
 
@@ -10760,7 +10755,7 @@ static u_int8_t visit_namespace_declaration(cfg_t* cfg, generic_ast_node_t* name
 				
 			//Some very weird error if we hit here. Hard exit to avoid dev confusion
 			default:
-				printf("Fatal internal compiler error: Unrecognized node type found in namespace scope\n");
+				fprintf(stderr, "Fatal internal compiler error: Unrecognized node type found in namespace scope\n");
 				exit(1);
 		}
 
