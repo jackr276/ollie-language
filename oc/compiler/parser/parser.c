@@ -2626,6 +2626,31 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 
 			//Otherwise we're seeing a fully qualified function name for a function pointer
 			} else {
+				//Lookup the first namespace in lookahead(we know it's an ident)
+				function_namespace_t* namespace_cursor = lookup_namespace(function_symtab, lookahead.lexeme.string);
+
+				//We couldn't find it so fail out
+				if(namespace_cursor == NULL){
+					sprintf(info, "No namespace named \"%s\" has yet been declared\n", lookahead.lexeme.string);
+					return print_and_return_error(info, parser_line_num);
+				}
+
+				//Now we can refresh both lookahead tokens
+				lookahead = get_next_token(token_stream, &parser_line_num);
+				lookahead2 = get_next_token(token_stream, &parser_line_num);
+
+				/**
+				 * Algorithm for this: loop through so long as lookahead is an identifier
+				 * and lookahead2 is ::. We keep switching the namespace to whatever
+				 * the lookahead token is. We do this until the lookahead2 token
+				 * is no longer :: and at that point we do the function lookup
+				 */
+				while(TRUE){
+
+				}
+
+
+
 				printf("TODO NOT IMPLEMENTED\n");
 				exit(1);
 			}
