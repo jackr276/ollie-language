@@ -5,13 +5,15 @@
  * Conceptually, a circular queue can wrap around itself to avoid the need to shift. We maintain the
  * index of the front and we can always calculate the rear by doing rear = (front + num_elements) % size
  *
-*/
+ * This queue will dynamically resize as needed, but only upwards. We will never downsize the queue
+ * as this is just wasteful. A couple dozen extra bytes allocated is fine so long as it saves us the trouble
+ * of reallocating
+ */
 
 #include "heap_queue.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/types.h>
-//For the TRUE and FALSE constants
 #include "../constants.h"
 
 /**
@@ -84,30 +86,28 @@ void enqueue(heap_queue_t* heap_queue, void* data){
 /**
  * Dequeue from the queue(take from the head)
  *
- * Returns NULL if there was an error or empty queue
-*/
+ * Algorithm for a circular queue:
+ * 
+ * data = queue->underlying[front_index]
+ * front_index = (front_index + 1) % capacity
+ * num_elements--
+ */
 void* dequeue(heap_queue_t* heap_queue){
-	//Let's just check to save ourselves here
-	if(heap_queue == NULL || heap_queue->head == NULL){
-		return NULL;
-	}
+	//Grab the data out first
+	void* data = heap_queue->data[heap_queue->front];
 
-	//Grab a reference to the head
-	heap_queue_node_t* head = heap_queue->head;
+	/**
+	 * Recompute the front by adding 1 and then using the capacity to perform
+	 * our wrap around procedure. This is important to ensure that we aren't
+	 * overrunning the bounds of our buffer and is how this queue gets the
+	 * circular name
+	 */
+	heap_queue->front = (heap_queue->front + 1) % heap_queue->capacity;
 
-	//Grab the data
-	void* data = head->data;
-	
-	//Advance this up now
-	heap_queue->head = head->next;
+	//Size went done
+	heap_queue->num_elements--;
 
-	//Free the old head
-	free(head);
-
-	//We've one less node now
-	heap_queue->num_nodes--;
-
-	//And give back the data
+	//And give back their data
 	return data;
 }
 
