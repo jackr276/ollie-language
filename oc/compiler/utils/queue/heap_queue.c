@@ -13,6 +13,7 @@
 #include "heap_queue.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/types.h>
 #include "../constants.h"
 
@@ -109,6 +110,20 @@ void* dequeue(heap_queue_t* heap_queue){
 
 	//And give back their data
 	return data;
+}
+
+
+/**
+ * Completely wipe the existing memory of the heap queue. This is
+ * done if we wish to reuse it
+ */
+void heap_queue_clear(heap_queue_t* heap_queue){
+	//Wipe out these two values
+	heap_queue->front = 0;
+	heap_queue->num_elements = 0;
+
+	//Wipe out the entire pointer array
+	memset(heap_queue->data, NULL, heap_queue->capacity * sizeof(void*));
 }
 
 

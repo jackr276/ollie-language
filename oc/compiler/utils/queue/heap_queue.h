@@ -41,13 +41,6 @@ struct heap_queue_t{
 heap_queue_t heap_queue_alloc();
 
 /**
- * Deallocate an entire heap queue structure
- *
- * NOTE: Only the nodes are freed, not the underlying data
- */
-void heap_queue_dealloc(heap_queue_t* heap_queue);
-
-/**
  * Enqueue a node into the queue
  */
 void enqueue(heap_queue_t* heap_queue, void* data);
@@ -63,5 +56,18 @@ void* dequeue(heap_queue_t* heap_queue);
  * Determine if the queue is empty
  */
 u_int8_t queue_is_empty(heap_queue_t* heap_queue);
+
+/**
+ * Completely wipe the existing memory of the heap queue. This is
+ * done if we wish to reuse it
+ */
+void heap_queue_clear(heap_queue_t* heap_queue);
+
+/**
+ * Deallocate an entire heap queue structure
+ *
+ * NOTE: Only the nodes are freed, not the underlying data
+ */
+void heap_queue_dealloc(heap_queue_t* heap_queue);
 
 #endif /* HEAP_QUEUE_H */
