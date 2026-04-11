@@ -9,8 +9,15 @@
 
 #include <sys/types.h>
 
+/**
+ * The capacity starts off at 16 and is doubled every time, meaning
+ * that we've always got a power of 2 as our queue size
+ */
+#define HEAP_QUEUE_DEFAULT_CAPACITY 16
+
 //The overall structure itself
 typedef struct heap_queue_t heap_queue_t;
+
 
 /**
  * The heap queue uses a circular queue data structure. To maintain this
@@ -22,8 +29,8 @@ struct heap_queue_t{
 	//Rear index
 	int32_t front;
 	//How many elements are there in the queue
-	u_int32_t size;
-	//Maximum capacity
+	u_int32_t num_elements;
+	//Maximum capacity(this is what is resized)
 	u_int32_t capacity;
 };
 

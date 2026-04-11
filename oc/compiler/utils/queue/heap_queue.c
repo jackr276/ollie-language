@@ -15,39 +15,22 @@
  * heap structure will be allocated to the stack
  */
 heap_queue_t heap_queue_alloc(){
-	//First we allocate it
+	//Stack allocate the queue
 	heap_queue_t queue;
 
-	//We currently have nothing
-	queue.num_nodes = 0;
+	//Initially no elements
+	queue.num_elements = 0;
 
-	//These are both initially NULL
-	queue.head = NULL;
-	queue.tail = NULL;
+	//Use the default capacity
+	queue.capacity = HEAP_QUEUE_DEFAULT_CAPACITY;
 
-	//And we're done, just return it
+	//Dynamically allocate the underlying array
+	queue.data = calloc(queue.capacity, sizeof(void*));
+
+	//Initially the front is at -1
+	queue.front = -1;
+
 	return queue;
-}
-
-
-/**
- * Deallocate an entire heap queue structure
- *
- * NOTE: Only the nodes are freed, not the underlying data
- */
-void heap_queue_dealloc(heap_queue_t* heap_queue){
-	//Grab a cursor to use
-	heap_queue_node_t* cursor = heap_queue->head;
-	heap_queue_node_t* temp;
-
-	//We run through the whole list freeing node by node
-	while(cursor != NULL){
-		temp = cursor;
-		//Advance cursor
-		cursor = cursor->next;
-		//Free this
-		free(temp);
-	}
 }
 
 
@@ -118,4 +101,18 @@ void* dequeue(heap_queue_t* heap_queue){
  */
 u_int8_t queue_is_empty(heap_queue_t* heap_queue){
 	return heap_queue->num_nodes == 0 ? TRUE : FALSE;
+}
+
+
+/**
+ * Deallocate the heap queue data structure
+ */
+void heap_queue_dealloc(heap_queue_t* heap_queue){
+	//Free the data
+	free(heap_queue->data);
+
+	//Reset everything else
+	heap_queue->front = -1;
+	heap_queue->capacity = 0;
+	heap_queue->num_elements = 0;
 }
