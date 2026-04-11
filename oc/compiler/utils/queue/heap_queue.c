@@ -34,8 +34,8 @@ heap_queue_t heap_queue_alloc(){
 	//Dynamically allocate the underlying array
 	queue.data = calloc(queue.capacity, sizeof(void*));
 
-	//Front being -1 is a flag that we're 0
-	queue.front = -1;
+	//Front is just the front of the array
+	queue.front = 0;
 
 	return queue;
 }
@@ -168,7 +168,7 @@ void heap_queue_clear(heap_queue_t* heap_queue){
 	heap_queue->num_elements = 0;
 
 	//Wipe out the entire pointer array
-	memset(heap_queue->data, NULL, heap_queue->capacity * sizeof(void*));
+	memset(heap_queue->data, 0, heap_queue->capacity * sizeof(void*));
 }
 
 
