@@ -1,13 +1,20 @@
 /**
  * Author: Jack Robbins
  *
- * Implementation file for the heap allocated queue datastructure util
-*/
+ * Implementation file for the heap allocated queue data structure. We use a circular queue for this.
+ * Conceptually, a circular queue can wrap around itself to avoid the need to shift. We maintain the
+ * index of the front and we can always calculate the rear by doing rear = (front + num_elements) % size
+ *
+ * This queue will dynamically resize as needed, but only upwards. We will never downsize the queue
+ * as this is just wasteful. A couple dozen extra bytes allocated is fine so long as it saves us the trouble
+ * of reallocating
+ */
 
 #include "heap_queue.h"
 #include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
 #include <sys/types.h>
-//For the TRUE and FALSE constants
 #include "../constants.h"
 
 /**
@@ -15,107 +22,173 @@
  * heap structure will be allocated to the stack
  */
 heap_queue_t heap_queue_alloc(){
-	//First we allocate it
+	//Stack allocate the queue
 	heap_queue_t queue;
 
-	//We currently have nothing
-	queue.num_nodes = 0;
+	//Initially no elements
+	queue.num_elements = 0;
 
-	//These are both initially NULL
-	queue.head = NULL;
-	queue.tail = NULL;
+	//Use the default capacity
+	queue.capacity = HEAP_QUEUE_DEFAULT_CAPACITY;
 
-	//And we're done, just return it
+	//Dynamically allocate the underlying array
+	queue.data = calloc(queue.capacity, sizeof(void*));
+
+	//Front is just the front of the array
+	queue.front = 0;
+
 	return queue;
 }
 
 
 /**
- * Deallocate an entire heap queue structure
+ * Dynamically resize the heap queue as needed. This is not
+ * as simple as many other data structures because we need to copy the
+ * data in the correct order
  *
- * NOTE: Only the nodes are freed, not the underlying data
+ * Procedure resize:
+ * 	new_capacity = old_capacity * 2
+ * 	new_data = allocate new data
+ *
+ * 	for i in range num_elements:
+ *  	int index = (front + i) % old_capacity
+ *  	new_data[i] = old_data[index]
+ *
+ * 	front = 0
+ *  capacity = new_capacity
+ *  data = new_data
  */
-void heap_queue_dealloc(heap_queue_t* heap_queue){
-	//Grab a cursor to use
-	heap_queue_node_t* cursor = heap_queue->head;
-	heap_queue_node_t* temp;
+static inline void resize(heap_queue_t* queue){
+	//New capacity is double the old one(maintain powers of 2)
+	u_int32_t new_capacity = queue->capacity * 2;
+	//Allocate a fresh array
+	void** new_data = calloc(new_capacity, sizeof(void*));
 
-	//We run through the whole list freeing node by node
-	while(cursor != NULL){
-		temp = cursor;
-		//Advance cursor
-		cursor = cursor->next;
-		//Free this
-		free(temp);
+	/**
+	 * Copy over each element in the correct order starting at the
+	 * front index of the old queue
+	 */
+	for(u_int32_t i = 0; i < queue->num_elements; i++){
+	 	//Get the index of the "i"th element the old way
+	 	int32_t index = (queue->front + i) % queue->capacity;
+
+		//Now new_data[i] = this old data. It will be in the right order
+		new_data[i] = queue->data[index];
 	}
+
+	//Destroy the old buffer
+	free(queue->data);
+
+	//Front is at 0 after our copy
+	queue->front = 0;
+	//Capacity is new
+	queue->capacity = new_capacity;
+	//Data is new now too
+	queue->data = new_data;
 }
 
 
 /**
- * Enqueue a node into the queue
+ * Enqueue a node into the queue.
+ * Algorithm for circular queue enqueue:
+ *
+ * 	if capacity == num_elements:
+ * 		resize
+ *
+ * 	int rear = (front + num_elements) % capacity
+ * 	queue->data[rear] = new_data
+ * 	num_elements++
  */
 void enqueue(heap_queue_t* heap_queue, void* data){
-	//If the data is NULL, we just don't add anything
-	if(data == NULL || heap_queue == NULL){
-		return;
+	//Fail out if this happens
+	if(data == NULL){
+		fprintf(stderr, "Attempt to insert NULL into a heap queue");
+		exit(1);
 	}
 
-	//To enqueue, we first need a new node
-	heap_queue_node_t* node = calloc(1, sizeof(heap_queue_node_t));
-
-	//This node stores our data
-	node->data = data;
-	
-	//Special case -- this is the very first node
-	if(heap_queue->head == NULL){
-		heap_queue->head = node;
-		heap_queue->tail = node;
-	//Otherwise, we have to add to the end
-	} else {
-		//Add this in
-		heap_queue->tail->next = node;
-		//He now is the tail
-		heap_queue->tail = node;
+	/**
+	 * Dynamic resize condition - we will overflow the queue if we do this
+	 * so we need to resize
+	 */
+	if(heap_queue->num_elements == heap_queue->capacity){
+		resize(heap_queue);
 	}
 
-	//We have one more node, so
-	heap_queue->num_nodes++;
+	/**
+	 * Calculate the rear index by doing (front + element_count) % capacity. This will wrap
+	 * us around the front of the array by doing %capacity which is where the circular name
+	 * comes from
+	 */
+	int32_t rear_index = (heap_queue->front + heap_queue->num_elements) % heap_queue->capacity;
+
+	//Store the pointer at the new index
+	heap_queue->data[rear_index] = data;
+
+	//Bump the size for the next go around
+	heap_queue->num_elements++;
 }
 
 
 /**
  * Dequeue from the queue(take from the head)
  *
- * Returns NULL if there was an error or empty queue
-*/
+ * Algorithm for a circular queue:
+ * 
+ * data = queue->underlying[front_index]
+ * front_index = (front_index + 1) % capacity
+ * num_elements--
+ */
 void* dequeue(heap_queue_t* heap_queue){
-	//Let's just check to save ourselves here
-	if(heap_queue == NULL || heap_queue->head == NULL){
-		return NULL;
-	}
+	//Grab the data out first
+	void* data = heap_queue->data[heap_queue->front];
 
-	//Grab a reference to the head
-	heap_queue_node_t* head = heap_queue->head;
+	/**
+	 * Recompute the front by adding 1 and then using the capacity to perform
+	 * our wrap around procedure. This is important to ensure that we aren't
+	 * overrunning the bounds of our buffer and is how this queue gets the
+	 * circular name
+	 */
+	heap_queue->front = (heap_queue->front + 1) % heap_queue->capacity;
 
-	//Grab the data
-	void* data = head->data;
-	
-	//Advance this up now
-	heap_queue->head = head->next;
+	//Size went done
+	heap_queue->num_elements--;
 
-	//Free the old head
-	free(head);
-
-	//We've one less node now
-	heap_queue->num_nodes--;
-
-	//And give back the data
+	//And give back their data
 	return data;
 }
 
+
 /**
- * Determine if the heap is empty
+ * Completely wipe the existing memory of the heap queue. This is
+ * done if we wish to reuse it
+ */
+void heap_queue_clear(heap_queue_t* heap_queue){
+	//Wipe out these two values
+	heap_queue->front = 0;
+	heap_queue->num_elements = 0;
+
+	//Wipe out the entire pointer array
+	memset(heap_queue->data, 0, heap_queue->capacity * sizeof(void*));
+}
+
+
+/**
+ * Determine if the queue is empty
  */
 u_int8_t queue_is_empty(heap_queue_t* heap_queue){
-	return heap_queue->num_nodes == 0 ? TRUE : FALSE;
+	return heap_queue->num_elements == 0 ? TRUE : FALSE;
+}
+
+
+/**
+ * Deallocate the heap queue data structure
+ */
+void heap_queue_dealloc(heap_queue_t* heap_queue){
+	//Free the data
+	free(heap_queue->data);
+
+	//Reset everything else
+	heap_queue->front = -1;
+	heap_queue->capacity = 0;
+	heap_queue->num_elements = 0;
 }
