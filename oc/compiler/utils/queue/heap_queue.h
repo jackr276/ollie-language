@@ -11,25 +11,21 @@
 
 //The overall structure itself
 typedef struct heap_queue_t heap_queue_t;
-//A struct for each heapqueue node
-typedef struct heap_queue_node_t heap_queue_node_t;
 
-//The overall heap struct
+/**
+ * The heap queue uses a circular queue data structure. To maintain this
+ * we'll need the data itself, a front index value, a capacity and a size
+ */
 struct heap_queue_t{
-	//The head and tail
-	heap_queue_node_t* head;
-	heap_queue_node_t* tail;
-	u_int32_t num_nodes;
-};
-
-//Heap queue node struct
-struct heap_queue_node_t{
-	//The next node
-	heap_queue_node_t* next;
-	//The data that we store
+	//Data array
 	void* data;
+	//Rear index
+	int32_t front;
+	//How many elements are there in the queue
+	u_int32_t size;
+	//Maximum capacity
+	u_int32_t capacity;
 };
-
 
 /**
  * Allocate a heap queue structure. The overall
