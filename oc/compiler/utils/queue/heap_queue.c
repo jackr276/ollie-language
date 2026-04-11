@@ -1,7 +1,10 @@
 /**
  * Author: Jack Robbins
  *
- * Implementation file for the heap allocated queue datastructure util
+ * Implementation file for the heap allocated queue data structure. We use a circular queue for this.
+ * Conceptually, a circular queue can wrap around itself to avoid the need to shift. We maintain the
+ * index of the front and we can always calculate the rear by doing rear = (front + num_elements) % size
+ *
 */
 
 #include "heap_queue.h"
@@ -36,7 +39,15 @@ heap_queue_t heap_queue_alloc(){
 
 
 /**
- * Enqueue a node into the queue
+ * Enqueue a node into the queue.
+ * Algorithm for circular queue enqueue:
+ *
+ * 	if capacity == num_elements:
+ * 		resize
+ *
+ * 	int rear = (front + num_elements) % capacity
+ * 	queue->data[rear] = new_data
+ * 	num_elements++
  */
 void enqueue(heap_queue_t* heap_queue, void* data){
 	//Fail out if this happens
@@ -52,9 +63,21 @@ void enqueue(heap_queue_t* heap_queue, void* data){
 	 * TODO RESIZE ISN'T so simple
 	 */
 	if(heap_queue->num_elements == heap_queue->capacity){
+		//TODO
 	}
 
+	/**
+	 * Calculate the rear index by doing (front + element_count) % capacity. This will wrap
+	 * us around the front of the array by doing %capacity which is where the circular name
+	 * comes from
+	 */
+	int32_t rear_index = (heap_queue->front + heap_queue->num_elements) % heap_queue->capacity;
 
+	//Store the pointer at the new index
+	heap_queue->data[rear_index] = data;
+
+	//Bump the size for the next go around
+	heap_queue->num_elements++;
 }
 
 

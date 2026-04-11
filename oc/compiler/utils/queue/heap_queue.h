@@ -25,7 +25,7 @@ typedef struct heap_queue_t heap_queue_t;
  */
 struct heap_queue_t{
 	//Data array
-	void* data;
+	void** data;
 	//Rear index
 	int32_t front;
 	//How many elements are there in the queue
