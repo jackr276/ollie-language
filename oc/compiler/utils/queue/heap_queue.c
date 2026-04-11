@@ -6,6 +6,7 @@
 
 #include "heap_queue.h"
 #include <stdlib.h>
+#include <stdio.h>
 #include <sys/types.h>
 //For the TRUE and FALSE constants
 #include "../constants.h"
@@ -27,7 +28,7 @@ heap_queue_t heap_queue_alloc(){
 	//Dynamically allocate the underlying array
 	queue.data = calloc(queue.capacity, sizeof(void*));
 
-	//Initially the front is at -1
+	//Front being -1 is a flag that we're 0
 	queue.front = -1;
 
 	return queue;
@@ -38,31 +39,22 @@ heap_queue_t heap_queue_alloc(){
  * Enqueue a node into the queue
  */
 void enqueue(heap_queue_t* heap_queue, void* data){
-	//If the data is NULL, we just don't add anything
-	if(data == NULL || heap_queue == NULL){
-		return;
+	//Fail out if this happens
+	if(data == NULL){
+		fprintf(stderr, "Attempt to insert NULL into a heap queue");
+		exit(1);
 	}
 
-	//To enqueue, we first need a new node
-	heap_queue_node_t* node = calloc(1, sizeof(heap_queue_node_t));
-
-	//This node stores our data
-	node->data = data;
-	
-	//Special case -- this is the very first node
-	if(heap_queue->head == NULL){
-		heap_queue->head = node;
-		heap_queue->tail = node;
-	//Otherwise, we have to add to the end
-	} else {
-		//Add this in
-		heap_queue->tail->next = node;
-		//He now is the tail
-		heap_queue->tail = node;
+	/**
+	 * Dynamic resize condition - we will overflow the queue if we do this
+	 * so we need to resize
+	 *
+	 * TODO RESIZE ISN'T so simple
+	 */
+	if(heap_queue->num_elements == heap_queue->capacity){
 	}
 
-	//We have one more node, so
-	heap_queue->num_nodes++;
+
 }
 
 
@@ -96,11 +88,12 @@ void* dequeue(heap_queue_t* heap_queue){
 	return data;
 }
 
+
 /**
- * Determine if the heap is empty
+ * Determine if the queue is empty
  */
 u_int8_t queue_is_empty(heap_queue_t* heap_queue){
-	return heap_queue->num_nodes == 0 ? TRUE : FALSE;
+	return heap_queue->num_elements == 0 ? TRUE : FALSE;
 }
 
 

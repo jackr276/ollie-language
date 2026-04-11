@@ -60,7 +60,7 @@ void enqueue(heap_queue_t* heap_queue, void* data);
 void* dequeue(heap_queue_t* heap_queue);
 
 /**
- * Determine if the heap is empty. Returns 1 if empty, 0 if not
+ * Determine if the queue is empty
  */
 u_int8_t queue_is_empty(heap_queue_t* heap_queue);
 
