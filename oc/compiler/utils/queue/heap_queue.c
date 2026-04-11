@@ -42,6 +42,53 @@ heap_queue_t heap_queue_alloc(){
 
 
 /**
+ * Dynamically resize the heap queue as needed. This is not
+ * as simple as many other data structures because we need to copy the
+ * data in the correct order
+ *
+ * Procedure resize:
+ * 	new_capacity = old_capacity * 2
+ * 	new_data = allocate new data
+ *
+ * 	for i in range num_elements:
+ *  	int index = (front + i) % old_capacity
+ *  	new_data[i] = old_data[index]
+ *
+ * 	front = 0
+ *  capacity = new_capacity
+ *  data = new_data
+ */
+static inline void resize(heap_queue_t* queue){
+	//New capacity is double the old one(maintain powers of 2)
+	u_int32_t new_capacity = queue->capacity * 2;
+	//Allocate a fresh array
+	void** new_data = calloc(new_capacity, sizeof(void*));
+
+	/**
+	 * Copy over each element in the correct order starting at the
+	 * front index of the old queue
+	 */
+	for(u_int32_t i = 0; i < queue->num_elements; i++){
+	 	//Get the index of the "i"th element the old way
+	 	int32_t index = (queue->front + i) % queue->capacity;
+
+		//Now new_data[i] = this old data. It will be in the right order
+		new_data[i] = queue->data[index];
+	}
+
+	//Destroy the old buffer
+	free(queue->data);
+
+	//Front is at 0 after our copy
+	queue->front = 0;
+	//Capacity is new
+	queue->capacity = new_capacity;
+	//Data is new now too
+	queue->data = new_data;
+}
+
+
+/**
  * Enqueue a node into the queue.
  * Algorithm for circular queue enqueue:
  *
@@ -62,11 +109,9 @@ void enqueue(heap_queue_t* heap_queue, void* data){
 	/**
 	 * Dynamic resize condition - we will overflow the queue if we do this
 	 * so we need to resize
-	 *
-	 * TODO RESIZE ISN'T so simple
 	 */
 	if(heap_queue->num_elements == heap_queue->capacity){
-		//TODO
+		resize(heap_queue);
 	}
 
 	/**
