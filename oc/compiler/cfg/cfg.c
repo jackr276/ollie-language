@@ -5200,9 +5200,10 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	basic_block_t* current_block = basic_block;
 	
 	//Any other declaration that we'll need
-	generic_type_t* left_hand_type;
-	three_addr_var_t* op1;
-	three_addr_var_t* op2;
+	three_addr_var_t* op1 = NULL;
+	three_addr_var_t* op2 = NULL;
+	//Optional op1_const
+	three_addr_const_t* op1_const = NULL;
 	three_addr_var_t* assignee;
 
 	/**
@@ -5231,150 +5232,43 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	//Update the block pointer
 	current_block = right_side.final_block;
 
+	//The op1 is the left side's assingee
+	op1 = left_side.assignee;
 
-
-	//Store the left hand type for our type comparison later
-	left_hand_type = cursor->inferred_type;
-	
-
-	//Update the current block
-	current_block = left_side.final_block;
-
-	//Advance up here
-	cursor = cursor->next_sibling;
-
-	//Then grab the right hand temp
-	cfg_result_package_t right_side = emit_binary_expression(current_block, cursor);
-
-	//Update the current block
-	current_block = right_side.final_block;
-
-	//If this is temporary *or* a type conversion is needed, we'll do some reassigning here
-	if(left_side.assignee->variable_type != VARIABLE_TYPE_TEMP){
-		//emit the temp assignment
-		instruction_t* left_side_temp_assignment = emit_assignment_instruction(emit_temp_var(left_hand_type), left_side.assignee);
-
-		//Add it into here
-		add_statement(current_block, left_side_temp_assignment);
-
-		//Grab the assignee out
-		op1 = left_side_temp_assignment->assignee;
-
-	//Otherwise the left hand temp assignee is just fine for us
+	/**
+	 * As for op2, there is a chance that we actually have a constant assignment in the op2
+	 * slot. Let's investigate to see if it is actually in there
+	 */
+	if(right_side.final_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
+		op1_const = right_side.final_block->exit_statement->op1_const;
 	} else {
-		op1 = left_side.assignee;
+		op2 = right_side.assignee;
 	}
 
-	//Grab this out for convenience
-	op2 = right_side.assignee;
+	//The assignee is always the same type as the expression
+	assignee = emit_temp_var(logical_or_expr->inferred_type);
 
-	//Let's see what binary operator that we have
-	ollie_token_t binary_operator = logical_or_expr->binary_operator;
-	//Store this binary operator
-	package.operator = binary_operator;
+	//Here's the final statement
+	instruction_t* binary_operation;
 
-	//Switch based on whatever operator that we have
-	switch(binary_operator){
-		/**
-		 * Because of the way that logical operator short circuiting works, we
-		 * will require a temp assignment for op2 if we don't have one
-		 */
-		case DOUBLE_OR:
-		case DOUBLE_AND:
-			//If this is not temporary, emit the temp assignment
-			if(op2->variable_type != VARIABLE_TYPE_TEMP){
-				instruction_t* right_side_assignment = emit_assignment_instruction(emit_temp_var(op2->type), op2);
-
-				//Add to the block
-				add_statement(current_block, right_side_assignment);
-
-				//Be sure to reassign what op2 is
-				op2 = right_side_assignment->assignee;
-			}
-
-			//Emit an assignee based on the inferred type
-			assignee = emit_temp_var(logical_or_expr->inferred_type);
-			break;
-
-		/**
-		 * These will all have a dummy assignee - we'll need to emit that
-		 * here
-		 */
-		case L_THAN:
-		case G_THAN:
-		case G_THAN_OR_EQ:
-		case L_THAN_OR_EQ:
-		case NOT_EQUALS:
-		case DOUBLE_EQUALS:
-			//Emit an assignee based on the inferred type
-			assignee = emit_temp_var(logical_or_expr->inferred_type);
-			break;
-
-		case F_SLASH:
-		case MOD:
-			/**
-			 * If op1/op2 are *not* floating point values, and one of them is going to 
-			 * be signed(meaning that we're forced to use idivX), we really should have a separate assignee
-			 * here because we are going to need to go through a long and complex process in the instruction
-			 * selector that will result in us assiging to a destination anyways. It is for this reason
-			 * that we do not need to share op1/assignee, and can instead make the assignee a temp var
-			 */
-			if(IS_FLOATING_POINT(op1->type) == FALSE 
-				&& IS_FLOATING_POINT(op2->type) == FALSE
-				&& is_type_signed(logical_or_expr->inferred_type) == TRUE){
-
-				//Emit the temp var for this case
-				assignee = emit_temp_var(logical_or_expr->inferred_type);
-
-			//Otherwise we're like everything else
-			} else {
-				assignee = op1;
-			}
-
-			break;
-
-		case STAR:
-			/**
-			 * If op1/op2 are *not* floating point values and one of them is going to be *unsigned*
-			 * meaning we have to use mulX, then we can se the assignee to be a temporary variable
-			 * instead of being the same as op1. In the instruction selector, we will need to do
-			 * a serious rewrite using this assignee anyways, so there's no point in having it be the 
-			 * same as op1
-			 */
-			if(IS_FLOATING_POINT(op1->type) == FALSE
-				&& IS_FLOATING_POINT(op2->type) == FALSE
-				//Specifially needs to be unsigned
-				&& is_type_signed(logical_or_expr->inferred_type) == FALSE){
-
-				//This is a temp var assignee
-				assignee = emit_temp_var(logical_or_expr->inferred_type);
-
-			//Otherwise just like everywhere else this is op1
-			} else {
-				assignee = op1;
-			}
-
-			break;
-
-		//We use the default strategy - op1 is also the assignee
-		default:
-			assignee = op1;
-			break;
+	/**
+	 * If we don't have an op1_const, we will spit out a binary operation. If we do
+	 * have an op1_const, then it will be a bin_op_with_const instruction
+	 */
+	if(op1_const == NULL){
+		binary_operation = emit_binary_operation_instruction(assignee, op1, logical_or_expr->binary_operator, op2);
+	} else {
+		binary_operation = emit_binary_operation_with_const_instruction(assignee, op1, logical_or_expr->binary_operator, op1_const);
 	}
-	
-	//Add the assignee here
-	package.assignee = assignee;
-	
-	//Emit the binary operator expression using our helper
-	instruction_t* binary_operation = emit_binary_operation_instruction(assignee, op1, binary_operator, op2);
 
-	//Add this statement to the block
+	//Throw this into the current block
 	add_statement(current_block, binary_operation);
 
-	//Flag what the final block is here
+	//Package up and return
 	package.final_block = current_block;
+	package.assignee = binary_operation->assignee;
+	package.operator = logical_or_expr->binary_operator;	
 
-	//Return the temp variable that we assigned to
 	return package;
 }
 
@@ -5382,6 +5276,8 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 /**
  * Handle an assignment expression and all of the required bookkeeping that comes 
  * with it
+ *
+ * TODO BIN OP HANDLING
  */
 static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_block, generic_ast_node_t* parent_node){
 	//Final return package here - this will be updated as we go
