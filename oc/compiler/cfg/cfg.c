@@ -5188,8 +5188,9 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
  * unary expression
  *
  * We need to convert these into straight line binary expression code(two operands, one operator) each.
- * For each binary expression, we compute
  *
+ * We will not be handling the quirks of the x86 arithmetic operations inside of this block. Rather we will
+ * just be emitting the straight values and letting everything else deal with that
  */
 static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr){
 	//The return package here
@@ -5198,28 +5199,43 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	//Current block may change as time goes on, so we'll use the term current block up here to refer to it
 	basic_block_t* current_block = basic_block;
 	
-	//Store the left and right hand types
+	//Any other declaration that we'll need
 	generic_type_t* left_hand_type;
-	//Temporary holders for our operands
 	three_addr_var_t* op1;
 	three_addr_var_t* op2;
-	//Our assignee - this can change dynamically based on the kind of operator
 	three_addr_var_t* assignee;
 
-	//Have we hit the so-called "root level" here? If we have, then we're just going to pass this
-	//down to another rule
+	/**
+	 * Base case - we call out to the unary expression emitter from here and
+	 * leave the rule
+	 */
 	if(logical_or_expr->ast_node_type != AST_NODE_TYPE_BINARY_EXPR){
-		return emit_unary_expression(current_block, logical_or_expr);
+		return emit_unary_expression(basic_block, logical_or_expr);
 	}
 
-	//Grab a cursor to the children
-	generic_ast_node_t* cursor = logical_or_expr->first_child;
+	/**
+	 * Keep track of the cursor here. We will traverse in order
+	 * and emit the left and right hand sides of the expression first
+	 */
+	generic_ast_node_t* expression_cursor = logical_or_expr->first_child;
+
+	//Left first
+	cfg_result_package_t left_side = emit_binary_expression(current_block, expression_cursor);
+
+	//Advance it and update the block pointer
+	expression_cursor = expression_cursor->next_sibling;
+	current_block = left_side.final_block;
+
+	//Then the right
+	cfg_result_package_t right_side = emit_binary_expression(current_block, expression_cursor);
+	//Update the block pointer
+	current_block = right_side.final_block;
+
+
 
 	//Store the left hand type for our type comparison later
 	left_hand_type = cursor->inferred_type;
 	
-	//Emit the binary expression on the left first
-	cfg_result_package_t left_side = emit_binary_expression(current_block, cursor);
 
 	//Update the current block
 	current_block = left_side.final_block;
@@ -5259,8 +5275,10 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 	//Switch based on whatever operator that we have
 	switch(binary_operator){
-		//Because of the way that logical operator short circuiting works, we
-		//will require a temp assignment for op2 if we don't have one
+		/**
+		 * Because of the way that logical operator short circuiting works, we
+		 * will require a temp assignment for op2 if we don't have one
+		 */
 		case DOUBLE_OR:
 		case DOUBLE_AND:
 			//If this is not temporary, emit the temp assignment
@@ -5278,6 +5296,10 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 			assignee = emit_temp_var(logical_or_expr->inferred_type);
 			break;
 
+		/**
+		 * These will all have a dummy assignee - we'll need to emit that
+		 * here
+		 */
 		case L_THAN:
 		case G_THAN:
 		case G_THAN_OR_EQ:
