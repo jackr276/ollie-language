@@ -32,7 +32,6 @@ typedef struct temporary_variable_mapping_t{
 	u_int32_t source_temp_var_id;
 	//The replacement variable
 	three_addr_var_t* replacement_var;
-
 } temporary_variable_mapping_t;
 
 
@@ -2778,8 +2777,53 @@ static inline void get_value_name(three_addr_var_t* variable, dynamic_string_t* 
  * order
  *
  * NOTE: this function is recursive
+ *
+ * Algorithm Dominator Value Numbering Traversal(block b):
+ * 	for each phi node in b:
+ * 		if phi node is redundant then:
+ * 			remove it
+ * 			continue
+ *
+ * 		set the value number as the assigned var name
+ * 		add phi node to hash table
+ *
+ * 	for each assignment i:
+ * 		get value numbers for each operand
+ * 		if the expression(Ti) has been computed before:
+ * 			replace the operation i with a copy from Ti
+ * 			associate the value number with Ti
+ * 		else:
+ * 			insert a new value number into the table at the hash key location
+ * 			record that new value number for Ti
+ *
+ * 	for each successor c of block b:
+ * 		replace all phi node operands in c that were computed in this block with their value
+ *
+ * 	for each child c of block b in the dominator tree
+ * 		Dominator Value Numbering Traversal(b)
  */
 static void global_value_number_block(basic_block_t* block){
+	/**
+	 * 	for each phi node in b:
+	 * 		if phi node is redundant then:
+	 * 			remove it
+	 * 			continue
+	 *
+	 * 		set the value number as the assigned var name
+	 * 		add phi node to hash table
+	 *
+	 * 	For a phi node to be redundant, all of the values inside of
+	 * 	it have to be the exact same
+	 */
+	instruction_t* cursor = block->leader_statement;
+
+	//So long as we see phi functions
+	while(cursor != NULL && cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
+
+		//Bump it up
+		cursor = cursor->next_statement;
+	}
+
 
 
 	/**
