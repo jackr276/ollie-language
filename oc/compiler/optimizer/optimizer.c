@@ -2700,6 +2700,42 @@ static void optimize_short_circuit_logic(symtab_function_record_t* function, dyn
 
 
 /**
+ * Get the value name for a given variable and *concatenate* it into
+ * a given dynamic string. It is a assumed that the string has been
+ * allocated by the caller
+ */
+static inline void get_value_name(three_addr_var_t* variable, dynamic_string_t* output){
+	//Allocate a temporary buffer for this
+	char buffer[1000];
+
+	//Handle each variable type accordingly
+	//
+	//
+	//TODO
+	switch(variable->variable_type){
+		case VARIABLE_TYPE_TEMP:
+			break;
+
+		case VARIABLE_TYPE_NON_TEMP:
+			break;
+
+
+		case VARIABLE_TYPE_MEMORY_ADDRESS:
+			break;
+
+		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+			break;
+
+		case VARIABLE_TYPE_LOCAL_CONSTANT:
+			break;
+
+		case VARIABLE_TYPE_FUNCTION_ADDRESS:
+			break;
+	}
+}
+
+
+/**
  * Perform the value numbering algorithm for one block. This algorithm
  * naturally reproduces itself in a recursive manner by traversing the dominator tree.
  * Traversing a dominator tree will naturally traverse the function in reverse post

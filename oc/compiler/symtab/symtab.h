@@ -191,7 +191,7 @@ struct symtab_variable_record_t{
 	//The current generation of the variable - FOR SSA in CFG
 	u_int16_t current_generation;
 	//The lexical level of it
-	int16_t lexical_level;
+	u_int32_t lexical_level;
 	//Current generation level(for SSA)
 	u_int16_t counter;
 	//What is the struct offset for this variable
@@ -234,7 +234,7 @@ struct symtab_type_record_t{
 	//THe link number
 	u_int32_t line_number;
 	//The lexical level of it
-	int16_t lexical_level;
+	u_int32_t lexical_level;
 };
 
 
@@ -272,7 +272,7 @@ struct symtab_variable_sheaf_t{
 	//How many records(names) we can have
 	symtab_variable_record_t* records[VARIABLE_KEYSPACE];
 	//The level of this particular symtab
-	u_int8_t lexical_level;
+	u_int32_t lexical_level;
 };
 
 
@@ -285,7 +285,7 @@ struct symtab_type_sheaf_t{
 	//The hash table for our records
 	symtab_type_record_t* records[TYPE_KEYSPACE];
 	//The lexical level of this sheaf
-	u_int8_t lexical_level;
+	u_int32_t lexical_level;
 };
 
 /**
@@ -315,7 +315,7 @@ struct variable_symtab_t{
 	//The current symtab sheaf
 	symtab_variable_sheaf_t* current;
 	//The current lexical scope
-	u_int16_t current_lexical_scope;
+	u_int32_t current_lexical_scope;
 };
 
 
