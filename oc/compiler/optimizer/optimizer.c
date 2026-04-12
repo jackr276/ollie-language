@@ -2741,7 +2741,7 @@ static void global_value_number_block(basic_block_t* block){
  * 			replace the operation i with a copy from Ti
  * 			associate the value number with Ti
  * 		else:
- * 			insert a new value number intot he table at the hash key location
+ * 			insert a new value number into the table at the hash key location
  * 			record that new value number for Ti
  *
  * 	for each successor c of block b:

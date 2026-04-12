@@ -192,8 +192,6 @@ struct three_addr_var_t{
 		symtab_function_record_t* rip_relative_function;
 
 	} associated_memory_region;
-	//What is the value number of this instruction
-	u_int32_t value_number;
 	//What is the ssa generation level?
 	u_int32_t ssa_generation;
 	//What's the temp var number
