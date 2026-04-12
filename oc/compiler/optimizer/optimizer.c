@@ -2790,6 +2790,48 @@ static inline void get_value_name(three_addr_var_t* variable, dynamic_string_t* 
 	}
 }
 
+/**
+ * Is the given phi function redundant? A phi function is redundant
+ * if *all* of the variables inside of the phi function have ended
+ * up becoming the same via the GVN pass. This is easy to check
+ * because we just need to compare the phi function's first parameter
+ * against all of the others. If they all match, then it is redundant
+ * and we will convert it into an assignment
+ *
+ * Return TRUE if it was redundant, FALSE if not. If it was redundant then
+ * we will have transformed this into an assignment
+ */
+static inline u_int8_t convert_phi_function_if_redundant(instruction_t* phi_function){
+	//Extract the parameters
+	dynamic_array_t* parameters = &(phi_function->parameters);
+
+	//Grab the first parameter
+	three_addr_var_t* first_parameter = dynamic_array_get_at(parameters, 0);
+
+	//Now run through every other parameter and compare
+	for(u_int32_t i = 1; i < parameters->current_index; i++){
+		three_addr_var_t* compare_to_param = dynamic_array_get_at(parameters, i);
+
+		//If these aren't equal then we fail out
+		if(variables_equal(first_parameter, compare_to_param, FALSE) == FALSE){
+			return FALSE;
+		}
+	}
+
+	/**
+	 * If we survived to down here then the phi function is redundant. We will replace
+	 * this phi function with a regular copy assignment now
+	 */
+	phi_function->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+	phi_function->op1 = first_parameter;
+
+	//Deallocate the parameters array
+	dynamic_array_dealloc(&(phi_function->parameters));
+
+	//This was redundant
+	return TRUE;
+}
+
 
 /**
  * Perform the value numbering algorithm for one block. This algorithm
@@ -2827,11 +2869,11 @@ static void global_value_number_block(value_numbering_table_t* table, basic_bloc
 	/**
 	 * 	for each phi node in b:
 	 * 		if phi node is redundant then:
-	 * 			remove it
+	 * 			convert it to an assignment
 	 * 			continue
 	 *
 	 * 		set the value number as the assigned var name
-	 * 		add phi node to hash table
+	 * 		add phi instruction to hash table
 	 *
 	 * 	For a phi node to be redundant, all of the values inside of
 	 * 	it have to be the exact same
@@ -2840,6 +2882,7 @@ static void global_value_number_block(value_numbering_table_t* table, basic_bloc
 
 	//So long as we see phi functions
 	while(cursor != NULL && cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
+		if(is_phi)
 
 		//Bump it up
 		cursor = cursor->next_statement;
