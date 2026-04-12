@@ -9,8 +9,13 @@
 
 #include <sys/types.h>
 
+//Link to instruction for the three addr var
+#include "../../instruction/instruction.h"
+
 //Predeclare the value numbering table struct
 typedef struct value_numbering_table_t value_numbering_table_t;
+//The individual nodes within the value numbering table
+typedef struct value_numbering_node_t value_numbering_node_t;
 
 /**
  * The hash table struct contains everything that we need to keep
@@ -18,9 +23,26 @@ typedef struct value_numbering_table_t value_numbering_table_t;
  * itself
  */
 struct value_numbering_table_t {
-	void** internal_array;
+	//Array of value numbering nodes
+	value_numbering_node_t* table;
 	//How large is the internal array for the hash table
 	u_int32_t keyspace;
+};
+
+
+/**
+ * The value numbering node is an attempt to minimize our
+ * allocations. We have the surface level table which is a flat
+ * data structure for all of these nodes. However if we have a collision
+ * and have to go downwards, we will dynamically allocate more of these
+ */
+struct value_numbering_node_t {
+	//The hash of the node
+	u_int32_t hash;
+	//What variable is the result value stored in?
+	three_addr_var_t* result_value;
+
+	//TODO ADD THE TEXTUAL STRING
 };
 
 
