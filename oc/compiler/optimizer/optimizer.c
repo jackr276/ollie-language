@@ -2823,7 +2823,7 @@ static inline void get_value_name(three_addr_var_t* variable, dynamic_string_t* 
  * 	for each child c of block b in the dominator tree
  * 		Dominator Value Numbering Traversal(b)
  */
-static void global_value_number_block(basic_block_t* block){
+static void global_value_number_block(value_numbering_table_t* table, basic_block_t* block){
 	/**
 	 * 	for each phi node in b:
 	 * 		if phi node is redundant then:
@@ -2855,8 +2855,8 @@ static void global_value_number_block(basic_block_t* block){
 		//Extract the dominator chid
 		basic_block_t* dominator_child = dynamic_array_get_at(&(block->dominator_children), i);
 
-		//Invoke our algorithm on it
-		global_value_number_block(dominator_child);
+		//Recursively explore this one next
+		global_value_number_block(table, dominator_child);
 	}
 }
 
@@ -2867,7 +2867,7 @@ static void global_value_number_block(basic_block_t* block){
  * This is a very rough estimate, it's just designed to help us
  * avoid allocating tons of space
  */
-static inline u_int32_t estimate_function_numbering_keyspace(dynamic_array_t* function_blocks){
+static inline u_int32_t estimate_value_numbering_keyspace_for_function(dynamic_array_t* function_blocks){
 	//Initially we have nothing
 	u_int32_t keyspace = 0;
 
@@ -2927,15 +2927,23 @@ static inline u_int32_t estimate_function_numbering_keyspace(dynamic_array_t* fu
  * For right now, we will limit the value numbering to non-constant operations. In the future we will probably
  * expand this to include constants as well
  */
-static void global_value_numbering_pass(symtab_function_record_t* function, basic_block_t* function_entry_block){
-	//We will need a hash table to do this
-	value_numbering_table_t numbering_table = value_numbering_table_alloc();
+static void global_value_numbering_pass(symtab_function_record_t* function, basic_block_t* function_entry_block, dynamic_array_t* function_blocks){
+	//Estimate the keyspace first
+	u_int32_t keyspace = estimate_value_numbering_keyspace_for_function(function_blocks);
+
+	//If we are below the threshold, we'll skip this function as it almost certainly isn't worth it
+	if(keyspace <= INSTRUCTION_NUMBER_THRESHOLD){
+		return;
+	}
+
+	//Otherwise we can allocate our hash table
+	value_numbering_table_t numbering_table = value_numbering_table_alloc(keyspace);
 	
-
-
 	//Invoke the value numberer with the function entry block as our starting point
-	global_value_number_block(function_entry_block);
-	
+	global_value_number_block(&numbering_table, function_entry_block);
+
+	//Destroy the table once down
+	value_numbering_table_dealloc(&numbering_table);
 }
 
 
@@ -3424,7 +3432,7 @@ cfg_t* optimize(cfg_t* cfg){
 		 * remove any redundant calculations. This is done after mark and sweep because we don't want
 		 * to be doing this operations for values that end up being useless anyways
 		 */
-		global_value_numbering_pass(current_function, function_entry_block);
+		global_value_numbering_pass(current_function, function_entry_block, current_function_blocks);
 
 		/**
 		 * PASS 4: always true/false optimization
