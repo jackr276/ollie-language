@@ -349,6 +349,8 @@ struct instruction_t{
 	//The actual operator, stored as a token for size requirements. We will
 	//also use this in determining floating point comparsions
 	ollie_token_t op;
+	//What is the value number of this instruction
+	u_int32_t value_number;
 	//Is this operation critical?
 	u_int8_t mark;
 	//Is this a regular or inverse branch

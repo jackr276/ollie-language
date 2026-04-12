@@ -3177,6 +3177,14 @@ cfg_t* optimize(cfg_t* cfg){
 		optimize_short_circuit_logic(current_function, current_function_blocks);
 
 		/**
+		 * PASS XX: function global value numbering pass
+		 * Now that we've marked and swept everything, we will use global value numbering within the function to
+		 * remove any redundant calculations. This is done after mark and sweep because we don't want
+		 * to be doing this operations for values that end up being useless anyways
+		 */
+
+
+		/**
 		 * PASS 4: always true/false optimization
 		 * Now that we've broken up and logical and/or logic, we can go through and see if there are any
 		 * branches that we can eliminate due to their conditions being always true/false. An example
