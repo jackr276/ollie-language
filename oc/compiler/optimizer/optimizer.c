@@ -891,11 +891,13 @@ static basic_block_t* nearest_marked_postdominator(dynamic_array_t* function_blo
 		//Mark this for later
 		candidate->visited = TRUE;
 
-		//Now let's check for our criterion.
-		//We want:
-		//	it to be in the postdominator set
-		//	it to have a mark
-		//	it to not equal itself
+		/**
+		 * Now let's check for our criterion.
+		 * We want:
+		 *	it to be in the postdominator set
+		 *	it to have a mark
+		 *	it to not equal itself
+		 */
 		if(dynamic_array_contains(&(B->postdominator_set), candidate) != NOT_FOUND
 		  && candidate->contains_mark == TRUE && B != candidate){
 			//We've found it, so we're done
@@ -2698,6 +2700,40 @@ static void optimize_short_circuit_logic(symtab_function_record_t* function, dyn
 
 
 /**
+ * Perform a global value numbering pass to determine if there are any redundant computations. This relies on
+ * everything being in SSA form which OIR uses by default. We will also need the dominator tree and the ability
+ * to traverse in reverse post order. We will be using the SSA names as the value numbers themselves inside of our
+ * contextual strings
+ *
+ * Algorithm Dominator Value Numbering Traversal(block b):
+ * 	for each phi node in b:
+ * 		set the value number as the assigned var name
+ * 		add phi node to hash table
+ *
+ * 	for each assignment i:
+ * 		get value numbers for each operand
+ * 		if the expression(Ti) has been computed before:
+ * 			replace the operation i with a copy from Ti
+ * 			associate the value number with Ti
+ * 		else:
+ * 			insert a new value number intot he table at the hash key location
+ * 			record that new value number for Ti
+ *
+ * 	for each successor c of block b:
+ * 		replace all phi node operands in c that were computed in this block with their value
+ *
+ * 	for each child c of block b in the dominator tree
+ * 		Dominator Value Numbering Traversal(b)
+ * 		
+ *
+ * 		
+ *
+ */
+static void global_value_numbering_pass(symtab_function_record_t* function, dynamic_array_t* function_blocks){
+}
+
+
+/**
  * Is a given conditional always true or always false? We will need
  * to trace up the block to find out. If we are unable to
  * find out, that is ok, we just return false and assume
@@ -3182,7 +3218,7 @@ cfg_t* optimize(cfg_t* cfg){
 		 * remove any redundant calculations. This is done after mark and sweep because we don't want
 		 * to be doing this operations for values that end up being useless anyways
 		 */
-
+		global_value_numbering_pass(current_function, current_function_blocks);
 
 		/**
 		 * PASS 4: always true/false optimization

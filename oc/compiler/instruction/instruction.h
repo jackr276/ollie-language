@@ -192,7 +192,8 @@ struct three_addr_var_t{
 		symtab_function_record_t* rip_relative_function;
 
 	} associated_memory_region;
-
+	//What is the value number of this instruction
+	u_int32_t value_number;
 	//What is the ssa generation level?
 	u_int32_t ssa_generation;
 	//What's the temp var number
@@ -349,8 +350,6 @@ struct instruction_t{
 	//The actual operator, stored as a token for size requirements. We will
 	//also use this in determining floating point comparsions
 	ollie_token_t op;
-	//What is the value number of this instruction
-	u_int32_t value_number;
 	//Is this operation critical?
 	u_int8_t mark;
 	//Is this a regular or inverse branch
