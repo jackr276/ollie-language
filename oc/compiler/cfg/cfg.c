@@ -181,6 +181,24 @@ static inline u_int8_t is_variable_data_segment_variable(symtab_variable_record_
 
 
 /**
+ * Is the given three address code statement a binary operation?
+ */
+static inline u_int8_t is_binary_operation(instruction_t* statement){
+	if(statement == NULL){
+		return FALSE;
+	}
+
+	switch(statement->statement_type){
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Do the values on the left and right hand side of the expression require a copy assignment? This is 
  * going to be true if we have structs or unions on both sides of the equation
  */
@@ -5276,8 +5294,6 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 /**
  * Handle an assignment expression and all of the required bookkeeping that comes 
  * with it
- *
- * TODO BIN OP HANDLING
  */
 static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_block, generic_ast_node_t* parent_node){
 	//Final return package here - this will be updated as we go
@@ -10498,11 +10514,21 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 	 * emit a store operation
 	 */
 	} else if(let_variable->linked_var == NULL || let_variable->linked_var->stack_variable == FALSE){
-		//The actual statement is the assignment of right to left
-		instruction_t* assignment_statement = emit_assignment_instruction(let_variable, final_op1);
+		//If it's not a binary operation then we'll just assign over
+		if(is_binary_operation(current_block->exit_statement) == FALSE){
+			//The actual statement is the assignment of right to left
+			instruction_t* assignment_statement = emit_assignment_instruction(let_variable, final_op1);
 
-		//Finally we'll add this into the overall block
-		add_statement(current_block, assignment_statement);
+			//Finally we'll add this into the overall block
+			add_statement(current_block, assignment_statement);
+
+		//If it is then we can just hijack the statement and replace it's variable with ours
+		} else {
+			instruction_t* binary_operation = current_block->exit_statement;
+
+			//Just replace it with our variable
+			binary_operation->assignee = let_variable;
+		}
 			
 	/**
 	 * Otherwise, we'll need to emit a store operation here

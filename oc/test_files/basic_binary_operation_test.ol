@@ -9,6 +9,9 @@ pub fn main() -> i32 {
 	let y:i32 = 4;
 
 	let z:i32 = x + y;
+	
+	//Verify that this does turn into a bin_op_with_const
+	let aa:i32 = z + 5;
 
-	ret z;
+	ret z + aa;
 }
