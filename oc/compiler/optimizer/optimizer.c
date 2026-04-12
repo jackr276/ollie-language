@@ -2700,14 +2700,28 @@ static void optimize_short_circuit_logic(symtab_function_record_t* function, dyn
 
 
 /**
- *
+ * Perform the value numbering algorithm for one block. This algorithm
+ * naturally reproduces itself in a recursive manner by traversing the dominator tree.
+ * Traversing a dominator tree will naturally traverse the function in reverse post
+ * order
  *
  * NOTE: this function is recursive
  */
-static void global_value_number_block(){
+static void global_value_number_block(basic_block_t* block){
 
+
+	/**
+	 * For each child c of the block in the *dominator* tree, we will
+	 * invoke this same algorithm recursively
+	 */
+	for(u_int32_t i = 0; i < block->dominator_children.current_index; i++){
+		//Extract the dominator chid
+		basic_block_t* dominator_child = dynamic_array_get_at(&(block->dominator_children), i);
+
+		//Invoke our algorithm on it
+		global_value_number_block(dominator_child);
+	}
 }
-
 
 
 /**
@@ -2746,6 +2760,9 @@ static void global_value_number_block(){
 static void global_value_numbering_pass(symtab_function_record_t* function, basic_block_t* function_entry_block){
 
 
+	//Invoke the value numberer with the function entry block as our starting point
+	global_value_number_block(function_entry_block);
+	
 }
 
 
