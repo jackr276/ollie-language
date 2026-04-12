@@ -7,6 +7,7 @@
 #include "optimizer.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
+#include "../utils/value_numbering_table/value_numbering_table.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -2736,21 +2737,34 @@ static inline void get_value_name(three_addr_var_t* variable, dynamic_string_t* 
 
 		/**
 		 * For a memory address, we will just print this
-		 * out as MEM<<lexical_scope>_<name>_<ssa_generation>>
+		 * out as M<<lexical_scope>_<name>_<ssa_generation>>
 		 * if we have a variable name. If not then we'll just be printing
 		 * out the temp var number
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
 			if(variable_record != NULL){
-				sprintf(buffer, "MEM<%d_%s_%d>", variable_record->lexical_scope_id, variable_record->var_name.string, variable->ssa_generation);
+				sprintf(buffer, "M<%d_%s_%d>", variable_record->lexical_scope_id, variable_record->var_name.string, variable->ssa_generation);
 			} else {
-				sprintf(buffer, "MEM<t%d>", variable->temp_var_number);
+				sprintf(buffer, "M<t%d>", variable->temp_var_number);
 			}
 
+			dynamic_string_concatenate(output, buffer);
 			break;
 
+		/**
+		 * For a stack memory address, we will just print this
+		 * out as SM<<scope>_<name>_<ssa_generation>> if we have a
+		 * variable name. If not then we will be using the temp 
+		 * variable number
+		 */
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-			//TODO
+			if(variable_record != NULL){
+				sprintf(buffer, "SM<%d_%s_%d>", variable_record->lexical_scope_id, variable_record->var_name.string, variable->ssa_generation);
+			} else {
+				sprintf(buffer, "SM<t%d>", variable->temp_var_number);
+			}
+
+			dynamic_string_concatenate(output, buffer);
 			break;
 
 		/**
@@ -2763,9 +2777,17 @@ static inline void get_value_name(three_addr_var_t* variable, dynamic_string_t* 
 
 			break;
 
+		/**
+		 * Function addresses just output the name of the underlying function
+		 */
 		case VARIABLE_TYPE_FUNCTION_ADDRESS:
-			//TODO
+			sprintf(buffer, "%s", variable->associated_memory_region.rip_relative_function->func_name.string);
+			dynamic_string_concatenate(output, buffer);
 			break;
+
+		default:
+			fprintf(stderr, "Fatal internal compiler error: unrecognized variable type detected in value name generator\n");
+			exit(1);
 	}
 }
 
@@ -2874,6 +2896,8 @@ static void global_value_number_block(basic_block_t* block){
  * expand this to include constants as well
  */
 static void global_value_numbering_pass(symtab_function_record_t* function, basic_block_t* function_entry_block){
+	//We will need a hash table to do this
+	
 
 
 	//Invoke the value numberer with the function entry block as our starting point
