@@ -188,12 +188,9 @@ void initialize_variable_scope(variable_symtab_t* symtab){
 
 	//Add it to the array
 	dynamic_array_add(&(symtab->sheafs), current);
-	
-	//Increment(down the chain)
-	symtab->current_lexical_scope++;
 
-	//Store this here
-	current->lexical_level = symtab->current_lexical_scope;
+	//Get the unique ID for this lexical scpoe
+	current->lexical_scope_id = increment_and_get_variable_lexical_scope();
 
 	//Now we'll link back to the previous one level
 	current->previous_level = symtab->current;
@@ -213,11 +210,8 @@ void initialize_type_scope(type_symtab_t* symtab){
 	//Add this into the dynamic array
 	dynamic_array_add(&(symtab->sheafs), current);
 
-	//Increment(down the chain)
-	symtab->current_lexical_scope++;
-
-	//Store this here
-	current->lexical_level = symtab->current_lexical_scope;
+	//Get the unique ID for this lexical scpoe
+	current->lexical_scope_id = increment_and_get_type_lexical_scope();
 
 	//Now we'll link back to the previous one level
 	current->previous_level = symtab->current;
@@ -234,9 +228,6 @@ void initialize_type_scope(type_symtab_t* symtab){
 void finalize_variable_scope(variable_symtab_t* symtab){
 	//Back out of this one as it's finalized
 	symtab->current = symtab->current->previous_level;
-
-	//Go back up one
-	symtab->current_lexical_scope--;
 }
 
 
@@ -247,9 +238,6 @@ void finalize_variable_scope(variable_symtab_t* symtab){
 void finalize_type_scope(type_symtab_t* symtab){
 	//Back out of this one as it's finalized
 	symtab->current = symtab->current->previous_level;
-
-	//Go back up one
-	symtab->current_lexical_scope--;
 }
 
 
@@ -1089,8 +1077,8 @@ u_int8_t insert_macro(macro_symtab_t* symtab, symtab_macro_record_t* record){
  * this record exists in the table
  */
 u_int8_t insert_variable(variable_symtab_t* symtab, symtab_variable_record_t* record){
-	//While we're at it store this
-	record->lexical_level = symtab->current_lexical_scope;
+	//Store the lexical scope it
+	record->lexical_scope_id =  symtab->current->lexical_scope_id;
 
 	//No collision here, just store and get out
 	if(symtab->current->records[record->hash] == NULL){
@@ -1124,6 +1112,9 @@ u_int8_t insert_variable(variable_symtab_t* symtab, symtab_variable_record_t* re
  * this record exists in the table
  */
 u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record){
+	//Store the lexical scope it
+	record->lexical_scope_id =  symtab->current->lexical_scope_id;
+
 	/**
 	 * If we have an error type, we need to keep track of what the error id for this
 	 * type is. This is done so we can uniquely identify errors down the road
@@ -1133,9 +1124,6 @@ u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record){
 		//Update it internally here
 		record->type->internal_types.error_type_id = increment_and_get_error_id(symtab);
 	}
-
-	//While we're at it store this
-	record->lexical_level = symtab->current_lexical_scope;
 
 	//No collision here, just store and get out
 	if(symtab->current->records[record->hash] == NULL){
@@ -2002,7 +1990,7 @@ void print_variable_record(symtab_variable_record_t* record){
 	printf("Record: {\n");
 	printf("Name: %s,\n", record->var_name.string);
 	printf("Hash: %ld,\n", record->hash);
-	printf("Lexical Level: %d,\n", record->lexical_level);
+	printf("Lexical Level: %d,\n", record->lexical_scope_id);
 	printf("}\n");
 }
 
@@ -2020,7 +2008,7 @@ void print_type_record(symtab_type_record_t* record){
 	printf("Record: {\n");
 	printf("Name: %s,\n", record->type->type_name.string);
 	printf("Hash: %ld,\n", record->hash);
-	printf("Lexical Level: %d,\n", record->lexical_level);
+	printf("Lexical Level: %d,\n", record->lexical_scope_id);
 
 	//If we have an error type print the error type ID
 	if(record->type->type_class == TYPE_CLASS_ERROR){

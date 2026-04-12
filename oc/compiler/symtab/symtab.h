@@ -177,6 +177,8 @@ struct symtab_variable_record_t{
 	symtab_variable_record_t* alias;
 	//The associate region that this variable is stored in
 	stack_region_t* stack_region;
+	//What is the ID of the lexical scope that this variable is in?
+	u_int32_t lexical_scope_id;
 	//The line number
 	u_int32_t line_number;
 	/**
@@ -190,8 +192,6 @@ struct symtab_variable_record_t{
 	int32_t enum_member_value;
 	//The current generation of the variable - FOR SSA in CFG
 	u_int16_t current_generation;
-	//The lexical level of it
-	u_int32_t lexical_level;
 	//Current generation level(for SSA)
 	u_int16_t counter;
 	//What is the struct offset for this variable
@@ -233,8 +233,8 @@ struct symtab_type_record_t{
 	generic_type_t* type;
 	//THe link number
 	u_int32_t line_number;
-	//The lexical level of it
-	u_int32_t lexical_level;
+	//What is the ID of the lexical scope that this variable is in?
+	u_int32_t lexical_scope_id;
 };
 
 
