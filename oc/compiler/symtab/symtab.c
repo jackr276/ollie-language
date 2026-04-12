@@ -33,6 +33,10 @@
  */
 static dynamic_string_t temporary_array_name;
 
+//Maintain both variable and type lexical scoping IDs
+static u_int32_t variable_lexical_scope_id = 0;
+static u_int32_t type_lexical_scope_id = 0;
+
 /**
  * Print a generic warning for the symtab system
  */
@@ -81,6 +85,22 @@ static inline u_int32_t increment_and_get_error_id(type_symtab_t* symtab){
 
 
 /**
+ * Increment and get the current lexical scope for the variable
+ */
+static inline u_int32_t increment_and_get_variable_lexical_scope(){
+	return variable_lexical_scope_id++;
+}
+
+
+/**
+ * Increment and get the current lexical scope for the type 
+ */
+static inline u_int32_t increment_and_get_type_lexical_scope(){
+	return type_lexical_scope_id++;
+}
+
+
+/**
  * Dynamically allocate a function symtab. Note that this allocation
  * automatically creates the default namespace
  */
@@ -121,7 +141,6 @@ variable_symtab_t* variable_symtab_alloc(){
 	//We also need to allocate the sheafs array
 	symtab->sheafs = dynamic_array_alloc();
 
-	symtab->current_lexical_scope = 0;
 	//Nothing has been initialized yet
 	symtab->current = NULL;
 
@@ -137,7 +156,6 @@ type_symtab_t* type_symtab_alloc(){
 	//We also need to allocate the sheafs array
 	symtab->sheafs = dynamic_array_alloc();
 
-	symtab->current_lexical_scope = 0;
 	//Nothing has been initialized yet
 	symtab->current = NULL;
 

@@ -2709,13 +2709,22 @@ static inline void get_value_name(three_addr_var_t* variable, dynamic_string_t* 
 	char buffer[1000];
 
 	//Handle each variable type accordingly
-	//
-	//
-	//TODO
 	switch(variable->variable_type){
+		/**
+		 * Temporary variables just output as t<number>
+		 */
 		case VARIABLE_TYPE_TEMP:
+			sprintf(buffer, "t%d", variable->temp_var_number);
+			dynamic_string_concatenate(output, buffer);
 			break;
 
+		/**
+		 * For non temporaries we will use:
+		 * 	<lexical_scope>_name_<ssa_generation)
+		 *
+		 * 	This will guarantee uniqueness even if we have
+		 * 	colliding
+		 */
 		case VARIABLE_TYPE_NON_TEMP:
 			break;
 
