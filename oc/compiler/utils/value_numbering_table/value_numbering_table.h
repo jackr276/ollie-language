@@ -37,12 +37,12 @@ struct value_numbering_table_t {
  * and have to go downwards, we will dynamically allocate more of these
  */
 struct value_numbering_node_t {
-	//The hash of the node
-	u_int32_t hash;
+	//The textual string that we use as the key
+	dynamic_string_t textual_string;
 	//What variable is the result value stored in?
 	three_addr_var_t* result_value;
-
-	//TODO ADD THE TEXTUAL STRING
+	//If we have collisions, this is the next pointer
+	value_numbering_node_t* next;
 };
 
 
