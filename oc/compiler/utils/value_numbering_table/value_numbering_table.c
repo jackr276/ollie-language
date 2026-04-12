@@ -73,6 +73,31 @@ value_numbering_table_t value_numbering_table_alloc(u_int32_t keyspace){
 
 
 /**
+ * Add a given value into the hash table. Note that once this happens the memory for the dynamic string
+ * is owned by this hash table 
+ */
+void add_value_number_expression(value_numbering_table_t* table, three_addr_var_t* result, dynamic_string_t textual_string){
+	//First we'll need to hash this
+	u_int64_t textual_string_hash = hash(textual_string.string, table->keyspace);
+
+}
+
+
+/**
+ * Lookup a value number expression based on the textual string. This returns the three_addr_var_t that holds the result if it
+ * was found, or NULL if it was not
+ */
+three_addr_var_t* lookup_value_number_expression(value_numbering_table_t* table, dynamic_string_t* textual_string){
+	//First we'll need to hash this
+	u_int64_t textual_string_hash = hash(textual_string->string, table->keyspace);
+
+
+	//TODO
+	return NULL;
+}
+
+
+/**
  * Deallocate the internal storage for the hash table
  */
 void value_numbering_table_dealloc(value_numbering_table_t* table){
