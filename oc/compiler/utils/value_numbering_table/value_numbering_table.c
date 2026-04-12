@@ -31,9 +31,9 @@
  *
  * 	return key
 */
-static inline u_int64_t hash(char* textual_string, u_int32_t keyspace){
+static inline u_int64_t hash(char* textual_key, u_int32_t keyspace){
 	//Char pointer for the name
-	char* cursor = textual_string;
+	char* cursor = textual_key;
 
 	//The hash we have
 	u_int64_t hash = OFFSET_BASIS;
@@ -76,21 +76,21 @@ value_numbering_table_t value_numbering_table_alloc(u_int32_t keyspace){
  * Add a given value into the hash table. Note that once this happens the memory for the dynamic string
  * is owned by this hash table 
  */
-void add_value_number_expression(value_numbering_table_t* table, three_addr_var_t* result, dynamic_string_t textual_string){
+void add_value_number_expression(value_numbering_table_t* table, three_addr_var_t* result, dynamic_string_t textual_key){
 	//First we'll need to hash this
-	u_int64_t textual_string_hash = hash(textual_string.string, table->keyspace);
+	u_int64_t textual_key_hash = hash(textual_key.string, table->keyspace);
 
 	//Allocate the fresh node here and populate it
 	value_numbering_node_t* new_node = calloc(1, sizeof(value_numbering_node_t));
 	new_node->result_value = result;
-	new_node->textual_string = textual_string;
+	new_node->textual_key = textual_key;
 
 	//Grab a pointer to the current value
-	value_numbering_node_t* cursor = table->table[textual_string_hash];
+	value_numbering_node_t* cursor = table->table[textual_key_hash];
 
 	//If there's no collision then we can just add as is
 	if(cursor == NULL){
-		table->table[textual_string_hash] = new_node;
+		table->table[textual_key_hash] = new_node;
 		return;
 	}
 
@@ -109,17 +109,17 @@ void add_value_number_expression(value_numbering_table_t* table, three_addr_var_
  * Lookup a value number expression based on the textual string. This returns the three_addr_var_t that holds the result if it
  * was found, or NULL if it was not
  */
-three_addr_var_t* lookup_value_number_expression(value_numbering_table_t* table, dynamic_string_t* textual_string){
+three_addr_var_t* lookup_value_number_expression(value_numbering_table_t* table, dynamic_string_t* textual_key){
 	//First we'll need to hash this
-	u_int64_t textual_string_hash = hash(textual_string->string, table->keyspace);
+	u_int64_t textual_key_hash = hash(textual_key->string, table->keyspace);
 
 	//Grab a cursor to the node
-	value_numbering_node_t* cursor = table->table[textual_string_hash];
+	value_numbering_node_t* cursor = table->table[textual_key_hash];
 
 	//So long as we have values occupied
 	while(cursor != NULL){
 		//If we have an exact match then we're good
-		if(strcmp(cursor->textual_string.string, textual_string->string) == 0){
+		if(strcmp(cursor->textual_key.string, textual_key->string) == 0){
 			return cursor->result_value;
 		}
 
@@ -153,7 +153,7 @@ void value_numbering_table_dealloc(value_numbering_table_t* table){
 			value_numbering_node_t* temp = node;
 
 			//Deallocate the string if we even have one
-			dynamic_string_dealloc(&(node->textual_string));
+			dynamic_string_dealloc(&(node->textual_key));
 
 			//Bump up the cursor pointer
 			node = node->next;

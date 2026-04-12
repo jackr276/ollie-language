@@ -44,7 +44,7 @@ struct value_numbering_table_t {
  */
 struct value_numbering_node_t {
 	//The textual string that we use as the key
-	dynamic_string_t textual_string;
+	dynamic_string_t textual_key;
 	//What variable is the result value stored in?
 	three_addr_var_t* result_value;
 	//If we have collisions, this is the next pointer

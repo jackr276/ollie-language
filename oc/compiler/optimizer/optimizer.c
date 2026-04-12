@@ -2834,6 +2834,32 @@ static inline u_int8_t convert_phi_function_if_redundant(instruction_t* phi_func
 
 
 /**
+ * Generate the key for a given instruction. The key for a given
+ * instruction consists of the instruction type converted to a char *and*
+ * the variables that are inside of it. We are given an allocated
+ * dynamic string as the key for this function and we will populate it
+ */
+static inline void generate_value_name_key_for_instruction(instruction_t* instruction, dynamic_string_t* textual_key){
+	//Based on the instruction type we generate different keys
+	switch(instruction->instruction_type){
+		case THREE_ADDR_CODE_PHI_FUNC:
+			dynamic_string_concatenate(textual_key, "PHI");
+
+			//Concatenate the variable name of each of the parameters onto the end
+			for(u_int32_t i = 0; i < instruction->parameters.current_index; i++){
+				get_value_name(dynamic_array_get_at(&(instruction->parameters), i), textual_key);
+			}
+
+			break;
+
+		//TODO NOT IN YET
+		default:
+			break;
+	}
+}
+
+
+/**
  * Perform the value numbering algorithm for one block. This algorithm
  * naturally reproduces itself in a recursive manner by traversing the dominator tree.
  * Traversing a dominator tree will naturally traverse the function in reverse post
@@ -2882,7 +2908,18 @@ static void global_value_number_block(value_numbering_table_t* table, basic_bloc
 
 	//So long as we see phi functions
 	while(cursor != NULL && cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
-		if(is_phi)
+		//It's redundant so we continue out
+		if(convert_phi_function_if_redundant(cursor) == TRUE){
+			cursor = cursor->next_statement;
+			continue;
+		}
+		
+		/**
+		 * Otherwise we will need to save this value inside of the hash table. We
+		 * will generate the value name for it and save it inside. We need to do
+		 * this so that we have a trail of where it came from
+		 */
+
 
 		//Bump it up
 		cursor = cursor->next_statement;
