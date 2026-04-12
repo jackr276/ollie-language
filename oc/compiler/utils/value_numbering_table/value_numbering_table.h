@@ -9,6 +9,13 @@
 
 #include <sys/types.h>
 
+/**
+ * We define that, if we have 10 instructions or less, it's not worth
+ * us doing this entire process anyway. This will exclude most tiny
+ * functions from the value numbering run which is a good efficiency boost
+ */
+#define INSTRUCTION_NUMBER_THRESHOLD 10
+
 //Link to instruction for the three addr var
 #include "../../instruction/instruction.h"
 

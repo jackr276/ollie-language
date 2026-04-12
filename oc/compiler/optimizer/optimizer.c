@@ -20,7 +20,6 @@ static three_addr_var_t* instruction_pointer_variable;
 //A pointer to the cfg
 static cfg_t* cfg_reference;
 
-
 /**
  * We are going to need to maintain a mapping of temporary
  * variables to replacement variables. Remember that the SSA 
@@ -2863,6 +2862,39 @@ static void global_value_number_block(basic_block_t* block){
 
 
 /**
+ * Estimate the keyspace that we'll need for a given function
+ * by tallying up the number of instructions that the function contains.
+ * This is a very rough estimate, it's just designed to help us
+ * avoid allocating tons of space
+ */
+static inline u_int32_t estimate_function_numbering_keyspace(dynamic_array_t* function_blocks){
+	//Initially we have nothing
+	u_int32_t keyspace = 0;
+
+	//Run through every block in the function
+	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* function_block = dynamic_array_get_at(function_blocks, i);
+
+		//Tally up the total instructions
+		keyspace += function_block->number_of_instructions;
+	}
+
+	/**
+	 * If we find that we have less than a certain
+	 * number of instructions, we'll do nothing because
+	 * we expect to not be value numbering here. However
+	 * if we exceed the threshold, we will double the
+	 * keyspace to try and cut done on collisions
+	 */
+	if(keyspace <= INSTRUCTION_NUMBER_THRESHOLD){
+		return keyspace;
+	} else {
+		return keyspace * 2;
+	}
+}
+
+
+/**
  * Perform a global value numbering pass to determine if there are any redundant computations. This relies on
  * everything being in SSA form which OIR uses by default. We will also need the dominator tree and the ability
  * to traverse in reverse post order. We will be using the SSA names as the value numbers themselves inside of our
@@ -2897,6 +2929,7 @@ static void global_value_number_block(basic_block_t* block){
  */
 static void global_value_numbering_pass(symtab_function_record_t* function, basic_block_t* function_entry_block){
 	//We will need a hash table to do this
+	value_numbering_table_t numbering_table = value_numbering_table_alloc();
 	
 
 
