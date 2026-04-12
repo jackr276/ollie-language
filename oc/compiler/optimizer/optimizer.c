@@ -2700,6 +2700,17 @@ static void optimize_short_circuit_logic(symtab_function_record_t* function, dyn
 
 
 /**
+ *
+ *
+ * NOTE: this function is recursive
+ */
+static void global_value_number_block(){
+
+}
+
+
+
+/**
  * Perform a global value numbering pass to determine if there are any redundant computations. This relies on
  * everything being in SSA form which OIR uses by default. We will also need the dominator tree and the ability
  * to traverse in reverse post order. We will be using the SSA names as the value numbers themselves inside of our
@@ -2724,12 +2735,17 @@ static void optimize_short_circuit_logic(symtab_function_record_t* function, dyn
  *
  * 	for each child c of block b in the dominator tree
  * 		Dominator Value Numbering Traversal(b)
- * 		
  *
- * 		
+ * We will be using the full SSA variable names as their given value numbers inside of this algorithm. For temporary
+ * variables, their temp var number(which is guaranteed unique across the entire program) will be used as the value
+ * number. This should avoid any/all collisions that we may face
  *
+ * For right now, we will limit the value numbering to non-constant operations. In the future we will probably
+ * expand this to include constants as well
  */
-static void global_value_numbering_pass(symtab_function_record_t* function, dynamic_array_t* function_blocks){
+static void global_value_numbering_pass(symtab_function_record_t* function, basic_block_t* function_entry_block){
+
+
 }
 
 
@@ -3218,7 +3234,7 @@ cfg_t* optimize(cfg_t* cfg){
 		 * remove any redundant calculations. This is done after mark and sweep because we don't want
 		 * to be doing this operations for values that end up being useless anyways
 		 */
-		global_value_numbering_pass(current_function, current_function_blocks);
+		global_value_numbering_pass(current_function, function_entry_block);
 
 		/**
 		 * PASS 4: always true/false optimization
