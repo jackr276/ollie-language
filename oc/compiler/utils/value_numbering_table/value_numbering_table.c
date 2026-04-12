@@ -80,6 +80,37 @@ void add_value_number_expression(value_numbering_table_t* table, three_addr_var_
 	//First we'll need to hash this
 	u_int64_t textual_string_hash = hash(textual_string.string, table->keyspace);
 
+	//Grab a pointer to the current value
+	value_numbering_node_t* current = &(table->table[textual_string_hash]);
+
+	/**
+	 * If the initial value here is not NULL, we will not need to perform
+	 * any dynamic allocation and we can just add as is
+	 */
+	if(table->table[textual_string_hash].result_value == NULL){
+		//Populate
+		table->table[textual_string_hash].result_value = result;
+		table->table[textual_string_hash].textual_string = textual_string;
+		table->table[textual_string_hash].next = NULL;
+		
+		//We're done so leave
+		return;
+	}
+
+	//Otherwise we'll need to drill down here
+	while(current->next != NULL){
+		current = current->next;
+	}
+
+	//Once we get here we know that current->next is NULL, so we can create our result
+	value_numbering_node_t* new_node = calloc(1, sizeof(value_numbering_node_t));
+
+	//Populate with all of our values
+	new_node->result_value = result;
+	new_node->textual_string = textual_string;
+
+	//Connect this to the chain
+	current->next = new_node;
 }
 
 
