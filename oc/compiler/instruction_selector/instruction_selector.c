@@ -174,30 +174,6 @@ static inline basic_block_t* does_block_end_in_jump(basic_block_t* block){
 
 
 /**
- * Helper function to determine if an operator is can be constant folded
- */
-static inline u_int8_t is_operation_valid_for_op1_assignment_folding(ollie_token_t op){
-	switch(op){
-		case G_THAN:
-		case L_THAN:
-		case G_THAN_OR_EQ:
-		case L_THAN_OR_EQ:
-		case DOUBLE_EQUALS:
-		case NOT_EQUALS:
-		/**
-		 * Note that this is valid only for logical and. Logical or
-		 * requires the use of the "orX" instruction, which does modify
-		 * its assignee unlike logical and
-		 */
-		case DOUBLE_AND:
-			return TRUE;
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
  * Is a type an unsigned 64 bit type? This is used for type conversions in 
  * the instruction selector
  */
@@ -2174,53 +2150,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			reconstruct_window(window, load);
 				
 			//Regardless of what happened, we did see a change here
-			changed = TRUE;
-		}
-	}
-
-	/**
-	 * ==================== Op1 Assignment Folding for expressions ======================
-	 * If we have expressions like:
-	 *   t3 <- x_0
-	 *   t4 <- y_0
-	 *   t5 <- t3 && t4
-	 *
-	 *  We need to recognize opportunities for assignment folding. And ideal optimization would transform
-	 *  this into:
-	 *   
-	 *   t5 <- x_0 && y_0
-	 *
-	 *   This rule will do the first part of that
-	 *
-	 *  We will seek to do that in this optimization
-	 *
-	 *
-	 *  Note that this is just for op1 assignment folding. It is generall much more restrictive
-	 *  because so many operations overwrite their op1(think add, subtract), and those would therefore
-	 *  be *invalid* for this
-	 */
-	//Check first with 1 and 2. We need a binary operation that has a comparison operator in it
-	if(is_instruction_binary_operation(window->instruction2) == TRUE
-		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		&& is_operation_valid_for_op1_assignment_folding(window->instruction2->op) == TRUE){
-
-		//Is the variable in instruction 1 temporary *and* the same one that we're using in instruction1? Let's check.
-		if(window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP 
-			//Make sure that this is the only use
-			&& window->instruction1->assignee->use_count <= 1
-			&& window->instruction1->op1->variable_type != VARIABLE_TYPE_TEMP
-			&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
-
-			//Set these two to be equal
-			window->instruction2->op1 = window->instruction1->op1;
-
-			//We can now delete the very first statement
-			delete_statement(window->instruction1);
-
-			//Reconstruct the window with instruction2 as the seed
-			reconstruct_window(window, window->instruction2);
-
-			//This does count as a change
 			changed = TRUE;
 		}
 	}
