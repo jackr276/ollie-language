@@ -5257,8 +5257,9 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	 * As for op2, there is a chance that we actually have a constant assignment in the op2
 	 * slot. Let's investigate to see if it is actually in there
 	 */
-	if(right_side.final_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
-		op1_const = right_side.final_block->exit_statement->op1_const;
+	if(current_block->exit_statement != NULL 
+		&& current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
+		op1_const = current_block->exit_statement->op1_const;
 	} else {
 		op2 = right_side.assignee;
 	}
@@ -5577,7 +5578,6 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			break;
 	
 		case AST_NODE_TYPE_BINARY_EXPR:
-			//Emit the binary expression node
 			result_package = emit_binary_expression(basic_block, expr_node);
 			break;
 
