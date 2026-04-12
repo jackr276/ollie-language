@@ -24,17 +24,16 @@ typedef struct value_numbering_node_t value_numbering_node_t;
  */
 struct value_numbering_table_t {
 	//Array of value numbering nodes
-	value_numbering_node_t* table;
+	value_numbering_node_t** table;
 	//How large is the internal array for the hash table
 	u_int32_t keyspace;
 };
 
 
 /**
- * The value numbering node is an attempt to minimize our
- * allocations. We have the surface level table which is a flat
- * data structure for all of these nodes. However if we have a collision
- * and have to go downwards, we will dynamically allocate more of these
+ * Value numbering node exists to store the textual string
+ * and the result value. It also holds a next pointer should
+ * we need to traverse
  */
 struct value_numbering_node_t {
 	//The textual string that we use as the key

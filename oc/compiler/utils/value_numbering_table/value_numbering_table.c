@@ -80,37 +80,28 @@ void add_value_number_expression(value_numbering_table_t* table, three_addr_var_
 	//First we'll need to hash this
 	u_int64_t textual_string_hash = hash(textual_string.string, table->keyspace);
 
-	//Grab a pointer to the current value
-	value_numbering_node_t* current = &(table->table[textual_string_hash]);
+	//Allocate the fresh node here and populate it
+	value_numbering_node_t* new_node = calloc(1, sizeof(value_numbering_node_t));
+	new_node->result_value = result;
+	new_node->textual_string = textual_string;
 
-	/**
-	 * If the initial value here is not NULL, we will not need to perform
-	 * any dynamic allocation and we can just add as is
-	 */
-	if(table->table[textual_string_hash].result_value == NULL){
-		//Populate
-		table->table[textual_string_hash].result_value = result;
-		table->table[textual_string_hash].textual_string = textual_string;
-		table->table[textual_string_hash].next = NULL;
-		
-		//We're done so leave
+	//Grab a pointer to the current value
+	value_numbering_node_t* cursor = table->table[textual_string_hash];
+
+	//If there's no collision then we can just add as is
+	if(cursor == NULL){
+		table->table[textual_string_hash] = new_node;
 		return;
 	}
 
 	//Otherwise we'll need to drill down here
-	while(current->next != NULL){
-		current = current->next;
+	while(cursor->next != NULL){
+		//Bump it up
+		cursor = cursor->next;
 	}
 
-	//Once we get here we know that current->next is NULL, so we can create our result
-	value_numbering_node_t* new_node = calloc(1, sizeof(value_numbering_node_t));
-
-	//Populate with all of our values
-	new_node->result_value = result;
-	new_node->textual_string = textual_string;
-
 	//Connect this to the chain
-	current->next = new_node;
+	cursor->next = new_node;
 }
 
 
@@ -122,8 +113,21 @@ three_addr_var_t* lookup_value_number_expression(value_numbering_table_t* table,
 	//First we'll need to hash this
 	u_int64_t textual_string_hash = hash(textual_string->string, table->keyspace);
 
+	//Grab a cursor to the node
+	value_numbering_node_t* cursor = table->table[textual_string_hash];
 
-	//TODO
+	//So long as we have values occupied
+	while(cursor != NULL){
+		//If we have an exact match then we're good
+		if(strcmp(cursor->textual_string.string, textual_string->string) == 0){
+			return cursor->result_value;
+		}
+
+		//Bump it 
+		cursor = cursor->next;
+	}
+
+	//If we made it down here then we found nothing
 	return NULL;
 }
 
@@ -141,13 +145,7 @@ void value_numbering_table_dealloc(value_numbering_table_t* table){
 	//Run through everything
 	for(u_int32_t i = 0; i < table->keyspace; i++){
 		//Extract the node
-		value_numbering_node_t* node = &(table->table[i]);
-
-		//Deallocate the string if we even have one
-		dynamic_string_dealloc(&(node->textual_string));
-
-		//Advance to the next pointer
-		node = node->next;
+		value_numbering_node_t* node = table->table[i];
 
 		//Since we're now in the second node, this one was dynamically allocated
 		while(node != NULL){
