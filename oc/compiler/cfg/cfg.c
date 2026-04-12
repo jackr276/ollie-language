@@ -5475,14 +5475,24 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	 * so a regular assignment will work just fine
 	 */
 	} else {
-		//Finally we'll struct the whole thing
-		instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
+		/**
+		 * If this is not a binary operation, then we will just copy it over. If it is, then we will
+		 * use that binary operation for our own purposes here with the left hand var
+		 */
+		if(is_binary_operation(last_instruction) == FALSE){
+			//Finally we'll struct the whole thing
+			instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
 
-		//Copy this over if there is one
-		left_hand_var->associated_memory_region.stack_region = final_op1->associated_memory_region.stack_region;
-		
-		//Now add thi statement in here
-		add_statement(current_block, final_assignment);
+			//Copy this over if there is one
+			left_hand_var->associated_memory_region.stack_region = final_op1->associated_memory_region.stack_region;
+			
+			//Now add thi statement in here
+			add_statement(current_block, final_assignment);
+
+		} else {
+			//Just replace this
+			last_instruction->assignee = left_hand_var;
+		}
 	}
 
 	//Now pack the return value here
