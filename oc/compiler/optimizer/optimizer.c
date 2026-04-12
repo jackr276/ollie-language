@@ -2707,6 +2707,8 @@ static void optimize_short_circuit_logic(symtab_function_record_t* function, dyn
 static inline void get_value_name(three_addr_var_t* variable, dynamic_string_t* output){
 	//Allocate a temporary buffer for this
 	char buffer[1000];
+	//Holder for the variable record
+	symtab_variable_record_t* variable_record = variable->linked_var;
 
 	//Handle each variable type accordingly
 	switch(variable->variable_type){
@@ -2716,29 +2718,54 @@ static inline void get_value_name(three_addr_var_t* variable, dynamic_string_t* 
 		case VARIABLE_TYPE_TEMP:
 			sprintf(buffer, "t%d", variable->temp_var_number);
 			dynamic_string_concatenate(output, buffer);
+
 			break;
 
 		/**
 		 * For non temporaries we will use:
-		 * 	<lexical_scope>_name_<ssa_generation)
+		 * 	<lexical_scope>_name_<ssa_generation>
 		 *
 		 * 	This will guarantee uniqueness even if we have
 		 * 	colliding
 		 */
 		case VARIABLE_TYPE_NON_TEMP:
+			//Store the variable record
+			sprintf(buffer, "%d_%s_%d", variable_record->lexical_scope_id, variable_record->var_name.string, variable->ssa_generation);
+			dynamic_string_concatenate(output, buffer);
+
 			break;
 
-
+		/**
+		 * For a memory address, we will just print this
+		 * out as MEM<<lexical_scope>_<name>_<ssa_generation>>
+		 * if we have a variable name. If not then we'll just be printing
+		 * out the temp var number
+		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
+			if(variable_record != NULL){
+				sprintf(buffer, "MEM<%d_%s_%d>", variable_record->lexical_scope_id, variable_record->var_name.string, variable->ssa_generation);
+			} else {
+				sprintf(buffer, "MEM<t%d>", variable->temp_var_number);
+			}
+
 			break;
 
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+			//TODO
 			break;
 
+		/**
+		 * Local constants are already unique so we can just print them
+		 * out as is
+		 */
 		case VARIABLE_TYPE_LOCAL_CONSTANT:
+			sprintf(buffer, ".LC%d", variable->associated_memory_region.local_constant->local_constant_id);
+			dynamic_string_concatenate(output, buffer);
+
 			break;
 
 		case VARIABLE_TYPE_FUNCTION_ADDRESS:
+			//TODO
 			break;
 	}
 }
