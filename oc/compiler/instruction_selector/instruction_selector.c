@@ -11,8 +11,6 @@
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
-#include <iso646.h>
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -5827,79 +5825,45 @@ static void handle_addition_instruction(instruction_window_t* window){
 		original_addition->op2 = create_and_insert_converting_move_instruction(original_addition, original_addition->op2, destination_type);
 	}
 
+	/**
+	 * If these two are equal, then we have something like x1 <- x0 + 2. This can simply be
+	 * turned into addl $2, x_1
+	 */
+	if(variables_equal_no_ssa(original_addition->assignee, original_addition->op1, FALSE) == TRUE){
+		//Get the appropriate add instuction
+		original_addition->instruction_type = select_add_instruction(size);
 
+		original_addition->destination_register = original_addition->assignee;
 
-	//Grab the add instruction that we want
-	instruction->instruction_type = select_add_instruction(size);
-
-	//We'll just need to set the source immediate and destination register
-	instruction->destination_register = instruction->assignee;
-
-	//If we have a register value, we add that
-	if(instruction->op2 != NULL){
-		//Do we need a type conversion? If so, we'll do that here
-		if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
-			//Let the helper function deal with this
-			instruction->source_register = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
-
-		//Otherwise we'll just do this
+		//Assign the source or the source immediate based on which we need
+		if(original_addition->op2 != NULL){
+			original_addition->source_register = original_addition->op2;
 		} else {
-			instruction->source_register = instruction->op2;
+			original_addition->source_immediate = original_addition->op1_const;
 		}
 
+	/**
+	 * Otherwise they're not equal. For most other binary operations we'd
+	 * need to force it to work at this point. However since this is addition
+	 * we can use a lea instead
+	 */
 	} else {
-		//Otherwise grab the immediate source
-		instruction->source_immediate = instruction->op1_const;
-	}
-}
+		//Get the lea that we need
+		original_addition->instruction_type = select_lea_instruction(size);
 
+		//These two are the same regardless
+		original_addition->destination_register = original_addition->assignee;
+		original_addition->address_calc_reg1 = original_addition->op1;
+		
+		//Based on the constant status we do it one way or the other
+		if(original_addition->statement_type == THREE_ADDR_CODE_BIN_OP_STMT){
+			original_addition->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+			original_addition->address_calc_reg2 = original_addition->op2;
 
-/**
- * Handle the case where we have different assignee and op1 values
- * 
- * CASE 2:
- * t25 <- t15 + t17
- * leal (t15, t17), t25
- */
-static void handle_addition_instruction_lea_modification(instruction_t* instruction){
-	//Determines what instruction to use
-	variable_size_t size = get_type_size(instruction->assignee->type);
-
-	//Now we'll get the appropriate lea instruction
-	instruction->instruction_type = select_lea_instruction(size);
-
-	//We always know what the destination register will be
-	instruction->destination_register = instruction->assignee;
-
-	//We always have this
-	instruction->address_calc_reg1 = instruction->op1;
-
-	//Now, we'll need to set the appropriate address calculation mode based
-	//on what we're given
-	//If we have op2, we'll have 2 registers
-	if(instruction->statement_type == THREE_ADDR_CODE_BIN_OP_STMT){
-		//2 registers in this case
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
-
-		//Extract for analysis
-		three_addr_var_t* addresss_calc_reg2 = instruction->op2;
-
-		//Does this adhere to the same type as reg1? It must, so if it does not we will force it
-		//to 
-		if(is_converting_move_required(instruction->address_calc_reg1->type, addresss_calc_reg2->type) == TRUE){
-			//Let the helper deal with it
-			addresss_calc_reg2 = create_and_insert_converting_move_instruction(instruction, addresss_calc_reg2, instruction->address_calc_reg1->type);
+		} else {
+			original_addition->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+			original_addition->offset = original_addition->op1_const;
 		}
-
-		//Whether or not a type conversion happened, we can assign this here
-		instruction->address_calc_reg2 = addresss_calc_reg2;
-
-	//Otherise it's just an offset(bin_op_with_const)
-	} else {
-		//We'll just have an offset here
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
-		//This is definitely not 0 if we're here
-		instruction->offset = instruction->op1_const;
 	}
 }
 
