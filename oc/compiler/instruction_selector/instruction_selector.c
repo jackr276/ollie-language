@@ -6005,9 +6005,12 @@ static void handle_addition_instruction(instruction_window_t* window){
 	/**
 	 * Otherwise they're not equal. For most other binary operations we'd
 	 * need to force it to work at this point. However since this is addition
-	 * we can use a lea instead *if* we have valid types
+	 * we can use a lea instead *if* we have valid types *and* we have a non
+	 * temp variable here. If we have a temp destination, then there is
+	 * no benefit from an instruction count perspective to doing this
 	 */
-	} else if(is_type_valid_for_addition_to_lea_conversion(size) == TRUE){
+	} else if(is_type_valid_for_addition_to_lea_conversion(size) == TRUE
+				&& original_addition->assignee->variable_type != VARIABLE_TYPE_TEMP){
 		//Get the lea that we need
 		original_addition->instruction_type = select_lea_instruction(size);
 

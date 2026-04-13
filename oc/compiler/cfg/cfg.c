@@ -5229,7 +5229,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	 * leave the rule
 	 */
 	if(logical_or_expr->ast_node_type != AST_NODE_TYPE_BINARY_EXPR){
-		return emit_unary_expression(basic_block, logical_or_expr);
+		return emit_unary_expression(current_block, logical_or_expr);
 	}
 
 	/**
