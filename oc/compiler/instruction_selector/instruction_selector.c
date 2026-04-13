@@ -6847,6 +6847,578 @@ static inline void handle_sse_multiplication_instruction(instruction_t* instruct
 
 
 /**
+ * Emit a conditional move instruction based on the op we're given. This is done in order to increase versatility of this
+ * helper function and reduce the need for extra code
+ *
+ * The op's are one-to-one mappings for relational ops only. We're kind of hijacking the token system here but it will work
+ */
+static inline instruction_t* emit_cmovX_instruction(three_addr_var_t* destination_variable, three_addr_var_t* source, ollie_token_t op){
+	//First we allocate
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Go based on what op we've got. This is not going to support everything and it
+	//really doesn't need to
+	switch(op){
+		case NOT_EQUALS:
+			instruction->instruction_type = CMOVNE;
+			break;
+
+		case EQUALS:
+			instruction->instruction_type = CMOVE;
+			break;
+			
+		case G_THAN:
+			instruction->instruction_type = CMOVG;
+			break;
+
+		case G_THAN_OR_EQ:
+			instruction->instruction_type = CMOVGE;
+			break;
+
+		case L_THAN:
+			instruction->instruction_type = CMOVL;
+			break;
+
+		case L_THAN_OR_EQ:
+			instruction->instruction_type = CMOVLE;
+			break;
+
+		default:
+			printf("Fatal internal compiler error: Unknown op passed in for CMOVX selector. Review source code to see tokens supported\n");
+			exit(1);
+	}
+
+	//Assign these two over
+	instruction->source_register = source;
+	instruction->destination_register = destination_variable;
+
+	//And give it back
+	return instruction;
+}
+
+
+/**
+ * Emit a direct floating point comparison instruction(ucomiss, ucomisd, comiss, or comisd) 
+ *
+ * The caller has the option to use ordered/unordered instructions
+ */
+static inline instruction_t* emit_float_comparison_instruction(three_addr_var_t* source_register, three_addr_var_t* source_register2, u_int8_t use_unordered){
+	//Allocate the instruction
+	instruction_t* comparison_instruction = calloc(1, sizeof(instruction_t));
+
+	//Run through the values here
+	if(use_unordered == FALSE){
+		switch(source_register->variable_size){
+			case SINGLE_PRECISION:
+				comparison_instruction->instruction_type = COMISS;
+				break;
+
+			case DOUBLE_PRECISION:
+				comparison_instruction->instruction_type = COMISD;
+				break;
+
+			//This should never happen
+			default:
+				printf("Fatal internal compiler error: attempt to use a non-float variable for float instruction\n");
+				exit(1);
+		}
+
+	} else {
+		switch(source_register->variable_size){
+			case SINGLE_PRECISION:
+				comparison_instruction->instruction_type = UCOMISS;
+				break;
+
+			case DOUBLE_PRECISION:
+				comparison_instruction->instruction_type = UCOMISD;
+				break;
+
+			//This should never happen
+			default:
+				printf("Fatal internal compiler error: attempt to use a non-float variable for float instruction\n");
+				exit(1);
+		}
+	}
+
+	//Add in both registers
+	comparison_instruction->source_register = source_register;
+	comparison_instruction->source_register2 = source_register2;
+
+	//Emit a dummy temp var in the assignee for tracking reasons. This will not
+	//be used anywhere else
+	comparison_instruction->assignee = emit_temp_var(u8);
+
+	//Give the instruction back
+	return comparison_instruction;
+}
+
+
+/**
+ * Emit a test instruction directly - bypassing the instruction selection step
+ *
+ * Test instructions inherently have no assignee as they don't modify registers
+ *
+ * NOTE: This may only be used DURING the process of register selection
+ */
+static inline instruction_t* emit_direct_test_instruction(three_addr_var_t* op1, three_addr_var_t* op2){
+	//First we'll allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//We'll need the size to select the appropriate instruction
+	variable_size_t size = get_type_size(op1->type);
+
+	//Select the size appropriately
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = TESTQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = TESTL;
+			break;
+		case WORD:
+			instruction->instruction_type = TESTW;
+			break;
+		case BYTE:
+			instruction->instruction_type = TESTB;
+			break;
+		default:
+			break;
+	}
+
+	//Then we'll set op1 and op2 to be the source registers
+	instruction->source_register = op1;
+	instruction->source_register2 = op2;
+
+	//And now we'll give it back
+	return instruction;
+}
+
+
+/**
+ * Handle a logical OR instruction
+ * 
+ * ** General purpose case **
+ *
+ * t32 <- t32 || t19
+ *
+ * Will become:
+ *
+ * orq t19, t32 <---------- bitwise or
+ * setne t33 <------------ if it isn't 0, we eval to TRUE(1)
+ * movzx t33, t32  <-------------- move this into the result
+ *
+ * ** Floating point case **
+ * t32(int) <- t33(float) || t34(float)
+ *
+ * movl $1, t37 	 <--- Load up a 1 because cmovX can't have immediate values
+ * pxor t35, t35  	 <--- Get a value that's 0, we'll use it for comparing
+ * ucomiss t35, t33  <--- Compare t33 against 0
+ * setp t36			 <--- Set the parity flag. If t33 was NaN, in Ollie, that counts as not 0
+ * cmovne t37, t36   <--- Conditionally move t37 into t36 if the ZF isn't set
+ * ucomiss t35, t34  <--- Compare t34 against 0
+ * setp t38			 <--- If t34 was NaN, set this as true because NaN != 0
+ * cmovne t37, t38   <--- Move the 1 into our result *if* ZF isn't set
+ * orl t36, t38	 	 <--- Finally *or* the two results
+ * t32 <- t38 		 <--- Assign the result over
+ *
+ * Our final logical and result is in t38
+ *
+ * NOTE: We guarantee that the first instruction in the window is the one that
+ * we're after in this case
+ */
+static void handle_logical_or_instruction(instruction_window_t* window){
+	//Grab it out for convenience
+	instruction_t* logical_or = window->instruction1;
+
+	//Is this a floating point operation or not? This will determine how we handle things
+	u_int8_t is_floating_point = IS_FLOATING_POINT(logical_or->op1->type);
+
+	//Most common case - we are doing GP logical or
+	if(is_floating_point == FALSE){
+		//Save the after instruction
+		instruction_t* after_logical_or = window->instruction2;
+
+		//Let's first emit the or instruction
+		instruction_t* or_instruction = emit_or_instruction(logical_or->op1, logical_or->op2);
+
+		//Now we need the setne instruction
+		instruction_t* setne_instruction = emit_setne_instruction(emit_temp_var(u8), logical_or->op1);
+
+		//Flag that thsi relies on the above or instruction
+		setne_instruction->op1 = logical_or->op1;
+
+		//Now we can delete the old logical or instruction
+		delete_statement(logical_or);
+
+		//First insert the or instruction
+		insert_instruction_before_given(or_instruction, after_logical_or);
+
+		//Then we need the setne
+		insert_instruction_before_given(setne_instruction, after_logical_or);
+
+		//Emit and insert our final move. Note that this function will handle
+		instruction_t* move_instruction = emit_and_insert_move_instruction(logical_or->assignee, setne_instruction->destination_register, after_logical_or, INSERTION_ORDER_BEFORE);
+
+		//Reconstruct the window starting at the movzbl
+		reconstruct_window(window, move_instruction);
+
+	//Otherwise we are dealing with the floating point case
+	} else {
+		//Hold onto what the floating point type is
+		generic_type_t* operand_type = logical_or->op1->type;
+
+		/**
+		 * For all of our holders here, we have a unique case. We need the op1/op2
+		 * results to be 1 byte for the setp instructions, and we'll need our
+		 * cmovX holders to be at least 2 bytes. We will achieve this by using
+		 * variable copying here. Whatever our end variable size is it does 
+		 * not matter to us
+		 */
+		three_addr_var_t* op1_result = emit_temp_var(u8);
+		three_addr_var_t* op2_result = emit_temp_var(u8);
+
+		//We'll also need holders for the result of the op1/op2 CMOVNE instructions
+		three_addr_var_t* op1_cmovne_result = emit_var_copy(op1_result);
+		three_addr_var_t* op2_cmovne_result = emit_var_copy(op2_result);
+
+		//Make the size a u32 
+		op1_cmovne_result->type = u32;
+		op2_cmovne_result->type = u32;
+
+		//This is a "DOUBLE_WORD" sized variable for compliance reasons with the conditional move's limitations
+		op1_cmovne_result->variable_size = DOUBLE_WORD;
+		op2_cmovne_result->variable_size = DOUBLE_WORD;
+
+		//We'll need something to hold onto the one for us
+		three_addr_var_t* one_temporary_holder = emit_temp_var(u32);
+
+		//We'll also need a variable that's been 0'd out to compare with
+		three_addr_var_t* zeroed_out_variable = emit_temp_var(operand_type);
+
+		//The first thing that we need is an assignment to 1
+		instruction_t* assign_one = emit_constant_move_instruction(one_temporary_holder, emit_direct_integer_or_char_constant(1, one_temporary_holder->type));
+
+		//This goes in after the logical and
+		insert_instruction_after_given(assign_one, logical_or);
+
+		//Emit the PXOR instruction to get 0
+		instruction_t* clear_instruction = emit_sse_register_clear_instruction(zeroed_out_variable);
+
+		//We'll put this right after the logical and
+		insert_instruction_after_given(clear_instruction, assign_one);
+		
+		//Now compare the op1 against 0 using FP comparison
+		instruction_t* op1_comparison = emit_float_comparison_instruction(logical_or->op1, zeroed_out_variable, TRUE);
+
+		//This goes right after the clear instruction
+		insert_instruction_after_given(op1_comparison, clear_instruction);
+
+		//Following that, we'll need our setp instruction
+		instruction_t* op1_setp = emit_setp_instruction(op1_result, op1_comparison->assignee);
+
+		//Throw this in after the comparison
+		insert_instruction_after_given(op1_setp, op1_comparison);
+
+		//Following this, we'll need our conditional move to take place
+		instruction_t* op1_conditional_move = emit_cmovX_instruction(op1_cmovne_result, one_temporary_holder, NOT_EQUALS);
+
+		//This goes in after the setP
+		insert_instruction_after_given(op1_conditional_move, op1_setp);
+		
+		//Now compare the op2 against 0 using FP comparison
+		instruction_t* op2_comparison = emit_float_comparison_instruction(logical_or->op2, zeroed_out_variable, TRUE);
+
+		//This goes right after the op1 conditional move 
+		insert_instruction_after_given(op2_comparison, op1_conditional_move);
+
+		//Following that, we'll need our setp instruction
+		instruction_t* op2_setp = emit_setp_instruction(op2_result, op2_comparison->assignee);
+
+		//Throw this in after the comparison for op2
+		insert_instruction_after_given(op2_setp, op2_comparison);
+
+		//Following this, we'll need our conditional move to take place
+		instruction_t* op2_conditional_move = emit_cmovX_instruction(op2_cmovne_result, one_temporary_holder, NOT_EQUALS);
+
+		//This goes in after the setP
+		insert_instruction_after_given(op2_conditional_move, op2_setp);
+
+		//Emit the loigcal or, the final result is in the op1_setp
+		instruction_t* final_or = emit_or_instruction(op1_setp->destination_register, op2_setp->destination_register);
+
+		//This goes after the conditional move
+		insert_instruction_after_given(final_or, op2_conditional_move);
+
+		//And we need one final assignment into the destination
+		instruction_t* final_assignment = emit_and_insert_move_instruction(logical_or->assignee, final_or->destination_register, final_or, INSERTION_ORDER_AFTER);
+
+		//And after all of that, the logical or is now useless to us so we will scrap it
+		delete_statement(logical_or);
+
+		//Reconstruct the window starting at the final move
+		reconstruct_window(window, final_assignment);
+	}
+}
+
+
+/**
+ * Handle a logical and instruction
+ *
+ *
+ * ** General Purpose case **
+ *
+ * t32 <- t32 && t19
+ *
+ * This will translate to:
+ * testq t32, t32 <----- is this 0?
+ * setne t33 <----------- if it's not make this one
+ * testq t19, 19 <------- Is this 0?
+ * setne t34 <------------ If it's not, make it a one
+ * andq t33, t34 <---------- let's see if they're both 0, both 1, etc
+ * movzx t34, t32 <---------- store t34 with the result
+ *
+ * Since this will spawn multiple instructions, it will be invoked from the multiple instruction
+ * pattern selector
+ * 
+ * ** Floating point case **
+ * t32(int) <- t33(float) && t34(float)
+ *
+ * movl $1, t37 	 <--- Load up a 1 because cmovX can't have immediate values
+ * pxor t35, t35  	 <--- Get a value that's 0, we'll use it for comparing
+ * ucomiss t35, t33  <--- Compare t33 against 0
+ * setp t36			 <--- Set the parity flag. If t33 was NaN, in Ollie, that counts as not 0
+ * cmovne t37, t36   <--- Conditionally move t37 into t36 if the ZF isn't set
+ * ucomiss t35, t34  <--- Compare t34 against 0
+ * setp t38			 <--- If t34 was NaN, set this as true because NaN != 0
+ * cmovne t37, t38   <--- Move the 1 into our result *if* ZF isn't set
+ * andl t36, t38	 <--- Finally *and* the two results
+ * t32 <- t38 		 <--- Assign the result over
+ *
+ * Our final logical and result is in t38
+ * 
+ * NOTE: We guarantee that the first instruction in the window is the one that we're after
+ * in this case
+ */
+static void handle_logical_and_instruction(instruction_window_t* window){
+	//Grab it out for convenience
+	instruction_t* logical_and = window->instruction1;
+
+	//Is this a floating point logical and or not?
+	u_int8_t is_floating_point = IS_FLOATING_POINT(logical_and->op1->type);
+
+	//If this is not a floating point operation(most common)
+	if(is_floating_point == FALSE){
+		//These operands - did they already come from a setX instruction
+		//or not? An example would be if we're doing something like x > y && y < z.
+		u_int8_t op1_came_from_setX = FALSE;
+		u_int8_t op2_came_from_setX = FALSE;
+
+		//Store the result variable for both of our test paths
+		three_addr_var_t* op1_result;
+		three_addr_var_t* op2_result;
+
+		//Preserve this for ourselves
+		instruction_t* after_logical_and = logical_and->next_statement;
+
+		//Grab a cursor to see where the operands came from
+		instruction_t* cursor = logical_and->previous_statement;
+
+		/**
+		 * Crawl back through the block to try and see if we can tell
+		 * where these all came from. Worst case we need to crawl the whole
+		 * block, which isn't bad because these blocks aren't enormous 99.9% of
+		 * the time
+		 */
+		while(cursor != NULL){
+			//Did we find where op1 got assigned?. If so, check to see
+			//if the operation that made it generated a truthful byte value(0 or 1)
+			//or not
+			if(variables_equal(logical_and->op1, cursor->assignee, FALSE)){
+				if(does_operator_generate_truthful_byte_value(cursor->op) == TRUE){
+					op1_came_from_setX = TRUE;
+				}
+
+			//Give op2 the exact same treatment
+			} else if(variables_equal(logical_and->op2, cursor->assignee, FALSE)){
+				if(does_operator_generate_truthful_byte_value(cursor->op) == TRUE){
+					op2_came_from_setX = TRUE;
+				}
+			}
+
+			//Push it back
+			cursor = cursor->previous_statement;
+		}
+
+		//We expect that it *not* being from
+		//setX is the most likely case
+		if(op1_came_from_setX == FALSE){
+			//Let's first emit our test instruction
+			instruction_t* test_instruction = emit_direct_test_instruction(logical_and->op1, logical_and->op1);
+
+			//Emit a var to hold the result of op1
+			op1_result = emit_temp_var(u8);
+
+			//Now we'll need a setne(not zero) instruction that will the op1 result
+			instruction_t* set_instruction = emit_setne_instruction(op1_result, logical_and->op1);
+
+			//IMPORTANT - flag that this depends on the source register
+			set_instruction->op1 = test_instruction->source_register;
+
+			//Insert these in order. The test comes first, then the set(relies on the flags from test)
+			insert_instruction_before_given(test_instruction, after_logical_and);
+			insert_instruction_before_given(set_instruction, after_logical_and);
+
+		} else {
+			//If we make it here, we know that op1 already came from a setX instruction. So, we can just
+			//assign here and be done
+			op1_result = emit_var_copy(logical_and->op1);
+			//We will emit a type-coerced version of our value
+			op1_result->type = u8;
+			op1_result->variable_size = get_type_size(u8);
+		}
+
+		//We expect that it *not* being from
+		//setX is the most likely case
+		if(op2_came_from_setX == FALSE){
+			//Test the 2 together
+			instruction_t* test_instruction = emit_direct_test_instruction(logical_and->op2, logical_and->op2);
+
+			//Emit a var to hold the result of op2
+			op2_result = emit_temp_var(u8);
+
+			//Set if it's not zero
+			instruction_t* set_instruction = emit_setne_instruction(op2_result, logical_and->op1);
+
+			//IMPORTANT - flag that this depends on the source register
+			set_instruction->op1 = test_instruction->source_register;
+
+			//Insert these in order. The test comes first, then the set(relies on the flags from test)
+			insert_instruction_before_given(test_instruction, after_logical_and);
+			insert_instruction_before_given(set_instruction, after_logical_and);
+		} else {
+			//If we make it here, we know that op2 already came from a setX instruction. So, we can just
+			//assign here and be done
+			op2_result = emit_var_copy(logical_and->op2);
+			//We will emit a type-coerced version of our value
+			op2_result->type = u8;
+			op2_result->variable_size = get_type_size(u8);
+		}
+
+		//Now we'll need to ANDx these two values together to see if they're both 1
+		instruction_t* and_inst = emit_and_instruction(op1_result, op2_result);
+
+		//Now insert these in order. First comes the and instruction, then the final move
+		insert_instruction_before_given(and_inst, after_logical_and);
+
+		//Now emit our final move. Let the helper do this in case we have converitng moves
+		instruction_t* move_instruction = emit_and_insert_move_instruction(logical_and->assignee, and_inst->destination_register, after_logical_and, INSERTION_ORDER_BEFORE);
+
+		//We no longer need the logical and statement
+		delete_statement(logical_and);
+
+		//Reconstruct the window starting at the final move
+		reconstruct_window(window, move_instruction);
+
+	//Otherwise we are specifically doing a floating point logical and
+	} else {
+		//Hold onto what the floating point type is
+		generic_type_t* operand_type = logical_and->op1->type;
+
+		/**
+		 * For all of our holders here, we have a unique case. We need the op1/op2
+		 * results to be 1 byte for the setp instructions, and we'll need our
+		 * cmovX holders to be at least 2 bytes. We will achieve this by using
+		 * variable copying here. Whatever our end variable size is it does 
+		 * not matter to us
+		 */
+		three_addr_var_t* op1_result = emit_temp_var(u8);
+		three_addr_var_t* op2_result = emit_temp_var(u8);
+
+		//We'll also need holders for the result of the op1/op2 CMOVNE instructions
+		three_addr_var_t* op1_cmovne_result = emit_var_copy(op1_result);
+		three_addr_var_t* op2_cmovne_result = emit_var_copy(op2_result);
+
+		//Make the size a u32
+		op1_cmovne_result->type = u32;
+		op2_cmovne_result->type = u32;
+
+		//This is a "DOUBLE_WORD" sized variable for compliance reasons with the conditional move's limitations
+		op1_cmovne_result->variable_size = DOUBLE_WORD;
+		op2_cmovne_result->variable_size = DOUBLE_WORD;
+
+		//We'll need something to hold onto the one for us
+		three_addr_var_t* one_temporary_holder = emit_temp_var(u32);
+
+		//We'll also need a variable that's been 0'd out to compare with
+		three_addr_var_t* zeroed_out_variable = emit_temp_var(operand_type);
+
+		//The first thing that we need is an assignment to 1
+		instruction_t* assign_one = emit_constant_move_instruction(one_temporary_holder, emit_direct_integer_or_char_constant(1, one_temporary_holder->type));
+
+		//This goes in after the logical and
+		insert_instruction_after_given(assign_one, logical_and);
+
+		//Emit the PXOR instruction to get 0
+		instruction_t* clear_instruction = emit_sse_register_clear_instruction(zeroed_out_variable);
+
+		//We'll put this right after the logical and
+		insert_instruction_after_given(clear_instruction, assign_one);
+		
+		//Now compare the op1 against 0 using FP comparison
+		instruction_t* op1_comparison = emit_float_comparison_instruction(logical_and->op1, zeroed_out_variable, TRUE);
+
+		//This goes right after the clear instruction
+		insert_instruction_after_given(op1_comparison, clear_instruction);
+
+		//Following that, we'll need our setp instruction
+		instruction_t* op1_setp = emit_setp_instruction(op1_result, op1_comparison->assignee);
+
+		//Throw this in after the comparison
+		insert_instruction_after_given(op1_setp, op1_comparison);
+
+		//Following this, we'll need our conditional move to take place
+		instruction_t* op1_conditional_move = emit_cmovX_instruction(op1_cmovne_result, one_temporary_holder, NOT_EQUALS);
+
+		//This goes in after the setP
+		insert_instruction_after_given(op1_conditional_move, op1_setp);
+		
+		//Now compare the op2 against 0 using FP comparison
+		instruction_t* op2_comparison = emit_float_comparison_instruction(logical_and->op2, zeroed_out_variable, TRUE);
+
+		//This goes right after the op1 conditional move 
+		insert_instruction_after_given(op2_comparison, op1_conditional_move);
+
+		//Following that, we'll need our setp instruction
+		instruction_t* op2_setp = emit_setp_instruction(op2_result, op2_comparison->assignee);
+
+		//Throw this in after the comparison for op2
+		insert_instruction_after_given(op2_setp, op2_comparison);
+
+		//Following this, we'll need our conditional move to take place
+		instruction_t* op2_conditional_move = emit_cmovX_instruction(op2_cmovne_result, one_temporary_holder, NOT_EQUALS);
+
+		//This goes in after the setP
+		insert_instruction_after_given(op2_conditional_move, op2_setp);
+
+		//Emit the loigcal and, the final result is in the op1_setp
+		instruction_t* final_and = emit_and_instruction(op1_setp->destination_register, op2_setp->destination_register);
+
+		//This goes after the conditional move
+		insert_instruction_after_given(final_and, op2_conditional_move);
+
+		//And we need one final assignment into the destination
+		instruction_t* final_assignment = emit_and_insert_move_instruction(logical_and->assignee, final_and->destination_register, final_and, INSERTION_ORDER_AFTER);
+
+		//And after all of that, the logical and is now useless to us so we will scrap it
+		delete_statement(logical_and);
+
+		//Reconstruct the window starting at the final move
+		reconstruct_window(window, final_assignment);
+	}
+}
+
+
+/**
  * We can translate a bin op statement a few different ways based on the operand
  *
  * Since binary operations in OIR may be something like: x_1 = z_0 + y_0, we will
@@ -6880,6 +7452,14 @@ static inline void handle_binary_operation_instruction(instruction_window_t* win
 
 		case R_SHIFT:
 			handle_right_shift_instruction(window);
+			break;
+
+		case DOUBLE_AND:
+			handle_logical_and_instruction(window);
+			break;
+
+		case DOUBLE_OR:
+			handle_logical_or_instruction(window);
 			break;
 
 		case SINGLE_OR:
@@ -7511,154 +8091,6 @@ static inline void handle_indirect_function_call(instruction_t* instruction){
 
 
 /**
- * Emit a conditional move instruction based on the op we're given. This is done in order to increase versatility of this
- * helper function and reduce the need for extra code
- *
- * The op's are one-to-one mappings for relational ops only. We're kind of hijacking the token system here but it will work
- */
-static inline instruction_t* emit_cmovX_instruction(three_addr_var_t* destination_variable, three_addr_var_t* source, ollie_token_t op){
-	//First we allocate
-	instruction_t* instruction = calloc(1, sizeof(instruction_t));
-
-	//Go based on what op we've got. This is not going to support everything and it
-	//really doesn't need to
-	switch(op){
-		case NOT_EQUALS:
-			instruction->instruction_type = CMOVNE;
-			break;
-
-		case EQUALS:
-			instruction->instruction_type = CMOVE;
-			break;
-			
-		case G_THAN:
-			instruction->instruction_type = CMOVG;
-			break;
-
-		case G_THAN_OR_EQ:
-			instruction->instruction_type = CMOVGE;
-			break;
-
-		case L_THAN:
-			instruction->instruction_type = CMOVL;
-			break;
-
-		case L_THAN_OR_EQ:
-			instruction->instruction_type = CMOVLE;
-			break;
-
-		default:
-			printf("Fatal internal compiler error: Unknown op passed in for CMOVX selector. Review source code to see tokens supported\n");
-			exit(1);
-	}
-
-	//Assign these two over
-	instruction->source_register = source;
-	instruction->destination_register = destination_variable;
-
-	//And give it back
-	return instruction;
-}
-
-
-/**
- * Emit a direct floating point comparison instruction(ucomiss, ucomisd, comiss, or comisd) 
- *
- * The caller has the option to use ordered/unordered instructions
- */
-static inline instruction_t* emit_float_comparison_instruction(three_addr_var_t* source_register, three_addr_var_t* source_register2, u_int8_t use_unordered){
-	//Allocate the instruction
-	instruction_t* comparison_instruction = calloc(1, sizeof(instruction_t));
-
-	//Run through the values here
-	if(use_unordered == FALSE){
-		switch(source_register->variable_size){
-			case SINGLE_PRECISION:
-				comparison_instruction->instruction_type = COMISS;
-				break;
-
-			case DOUBLE_PRECISION:
-				comparison_instruction->instruction_type = COMISD;
-				break;
-
-			//This should never happen
-			default:
-				printf("Fatal internal compiler error: attempt to use a non-float variable for float instruction\n");
-				exit(1);
-		}
-
-	} else {
-		switch(source_register->variable_size){
-			case SINGLE_PRECISION:
-				comparison_instruction->instruction_type = UCOMISS;
-				break;
-
-			case DOUBLE_PRECISION:
-				comparison_instruction->instruction_type = UCOMISD;
-				break;
-
-			//This should never happen
-			default:
-				printf("Fatal internal compiler error: attempt to use a non-float variable for float instruction\n");
-				exit(1);
-		}
-	}
-
-	//Add in both registers
-	comparison_instruction->source_register = source_register;
-	comparison_instruction->source_register2 = source_register2;
-
-	//Emit a dummy temp var in the assignee for tracking reasons. This will not
-	//be used anywhere else
-	comparison_instruction->assignee = emit_temp_var(u8);
-
-	//Give the instruction back
-	return comparison_instruction;
-}
-
-
-/**
- * Emit a test instruction directly - bypassing the instruction selection step
- *
- * Test instructions inherently have no assignee as they don't modify registers
- *
- * NOTE: This may only be used DURING the process of register selection
- */
-static inline instruction_t* emit_direct_test_instruction(three_addr_var_t* op1, three_addr_var_t* op2){
-	//First we'll allocate it
-	instruction_t* instruction = calloc(1, sizeof(instruction_t));
-
-	//We'll need the size to select the appropriate instruction
-	variable_size_t size = get_type_size(op1->type);
-
-	//Select the size appropriately
-	switch(size){
-		case QUAD_WORD:
-			instruction->instruction_type = TESTQ;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = TESTL;
-			break;
-		case WORD:
-			instruction->instruction_type = TESTW;
-			break;
-		case BYTE:
-			instruction->instruction_type = TESTB;
-			break;
-		default:
-			break;
-	}
-
-	//Then we'll set op1 and op2 to be the source registers
-	instruction->source_register = op1;
-	instruction->source_register2 = op2;
-
-	//And now we'll give it back
-	return instruction;
-}
-
-
-/**
  *	//=========================== Logical Notting =============================
  * Although it may not seem like it, logical not is actually a multiple instruction
  * pattern. Note that logical not can take different forms for GP and SSE registers.
@@ -7902,428 +8334,6 @@ static inline void handle_setne_instruction(instruction_t* instruction){
 	//Just set the type and register
 	instruction->instruction_type = SETNE;
 	instruction->destination_register = instruction->assignee;
-}
-
-
-/**
- * Handle a logical OR instruction
- * 
- * ** General purpose case **
- *
- * t32 <- t32 || t19
- *
- * Will become:
- *
- * orq t19, t32 <---------- bitwise or
- * setne t33 <------------ if it isn't 0, we eval to TRUE(1)
- * movzx t33, t32  <-------------- move this into the result
- *
- * ** Floating point case **
- * t32(int) <- t33(float) || t34(float)
- *
- * movl $1, t37 	 <--- Load up a 1 because cmovX can't have immediate values
- * pxor t35, t35  	 <--- Get a value that's 0, we'll use it for comparing
- * ucomiss t35, t33  <--- Compare t33 against 0
- * setp t36			 <--- Set the parity flag. If t33 was NaN, in Ollie, that counts as not 0
- * cmovne t37, t36   <--- Conditionally move t37 into t36 if the ZF isn't set
- * ucomiss t35, t34  <--- Compare t34 against 0
- * setp t38			 <--- If t34 was NaN, set this as true because NaN != 0
- * cmovne t37, t38   <--- Move the 1 into our result *if* ZF isn't set
- * orl t36, t38	 	 <--- Finally *or* the two results
- * t32 <- t38 		 <--- Assign the result over
- *
- * Our final logical and result is in t38
- *
- * NOTE: We guarantee that the first instruction in the window is the one that
- * we're after in this case
- */
-static void handle_logical_or_instruction(instruction_window_t* window){
-	//Grab it out for convenience
-	instruction_t* logical_or = window->instruction1;
-
-	//Is this a floating point operation or not? This will determine how we handle things
-	u_int8_t is_floating_point = IS_FLOATING_POINT(logical_or->op1->type);
-
-	//Most common case - we are doing GP logical or
-	if(is_floating_point == FALSE){
-		//Save the after instruction
-		instruction_t* after_logical_or = window->instruction2;
-
-		//Let's first emit the or instruction
-		instruction_t* or_instruction = emit_or_instruction(logical_or->op1, logical_or->op2);
-
-		//Now we need the setne instruction
-		instruction_t* setne_instruction = emit_setne_instruction(emit_temp_var(u8), logical_or->op1);
-
-		//Flag that thsi relies on the above or instruction
-		setne_instruction->op1 = logical_or->op1;
-
-		//Now we can delete the old logical or instruction
-		delete_statement(logical_or);
-
-		//First insert the or instruction
-		insert_instruction_before_given(or_instruction, after_logical_or);
-
-		//Then we need the setne
-		insert_instruction_before_given(setne_instruction, after_logical_or);
-
-		//Emit and insert our final move. Note that this function will handle
-		instruction_t* move_instruction = emit_and_insert_move_instruction(logical_or->assignee, setne_instruction->destination_register, after_logical_or, INSERTION_ORDER_BEFORE);
-
-		//Reconstruct the window starting at the movzbl
-		reconstruct_window(window, move_instruction);
-
-	//Otherwise we are dealing with the floating point case
-	} else {
-		//Hold onto what the floating point type is
-		generic_type_t* operand_type = logical_or->op1->type;
-
-		/**
-		 * For all of our holders here, we have a unique case. We need the op1/op2
-		 * results to be 1 byte for the setp instructions, and we'll need our
-		 * cmovX holders to be at least 2 bytes. We will achieve this by using
-		 * variable copying here. Whatever our end variable size is it does 
-		 * not matter to us
-		 */
-		three_addr_var_t* op1_result = emit_temp_var(u8);
-		three_addr_var_t* op2_result = emit_temp_var(u8);
-
-		//We'll also need holders for the result of the op1/op2 CMOVNE instructions
-		three_addr_var_t* op1_cmovne_result = emit_var_copy(op1_result);
-		three_addr_var_t* op2_cmovne_result = emit_var_copy(op2_result);
-
-		//Make the size a u32 
-		op1_cmovne_result->type = u32;
-		op2_cmovne_result->type = u32;
-
-		//This is a "DOUBLE_WORD" sized variable for compliance reasons with the conditional move's limitations
-		op1_cmovne_result->variable_size = DOUBLE_WORD;
-		op2_cmovne_result->variable_size = DOUBLE_WORD;
-
-		//We'll need something to hold onto the one for us
-		three_addr_var_t* one_temporary_holder = emit_temp_var(u32);
-
-		//We'll also need a variable that's been 0'd out to compare with
-		three_addr_var_t* zeroed_out_variable = emit_temp_var(operand_type);
-
-		//The first thing that we need is an assignment to 1
-		instruction_t* assign_one = emit_constant_move_instruction(one_temporary_holder, emit_direct_integer_or_char_constant(1, one_temporary_holder->type));
-
-		//This goes in after the logical and
-		insert_instruction_after_given(assign_one, logical_or);
-
-		//Emit the PXOR instruction to get 0
-		instruction_t* clear_instruction = emit_sse_register_clear_instruction(zeroed_out_variable);
-
-		//We'll put this right after the logical and
-		insert_instruction_after_given(clear_instruction, assign_one);
-		
-		//Now compare the op1 against 0 using FP comparison
-		instruction_t* op1_comparison = emit_float_comparison_instruction(logical_or->op1, zeroed_out_variable, TRUE);
-
-		//This goes right after the clear instruction
-		insert_instruction_after_given(op1_comparison, clear_instruction);
-
-		//Following that, we'll need our setp instruction
-		instruction_t* op1_setp = emit_setp_instruction(op1_result, op1_comparison->assignee);
-
-		//Throw this in after the comparison
-		insert_instruction_after_given(op1_setp, op1_comparison);
-
-		//Following this, we'll need our conditional move to take place
-		instruction_t* op1_conditional_move = emit_cmovX_instruction(op1_cmovne_result, one_temporary_holder, NOT_EQUALS);
-
-		//This goes in after the setP
-		insert_instruction_after_given(op1_conditional_move, op1_setp);
-		
-		//Now compare the op2 against 0 using FP comparison
-		instruction_t* op2_comparison = emit_float_comparison_instruction(logical_or->op2, zeroed_out_variable, TRUE);
-
-		//This goes right after the op1 conditional move 
-		insert_instruction_after_given(op2_comparison, op1_conditional_move);
-
-		//Following that, we'll need our setp instruction
-		instruction_t* op2_setp = emit_setp_instruction(op2_result, op2_comparison->assignee);
-
-		//Throw this in after the comparison for op2
-		insert_instruction_after_given(op2_setp, op2_comparison);
-
-		//Following this, we'll need our conditional move to take place
-		instruction_t* op2_conditional_move = emit_cmovX_instruction(op2_cmovne_result, one_temporary_holder, NOT_EQUALS);
-
-		//This goes in after the setP
-		insert_instruction_after_given(op2_conditional_move, op2_setp);
-
-		//Emit the loigcal or, the final result is in the op1_setp
-		instruction_t* final_or = emit_or_instruction(op1_setp->destination_register, op2_setp->destination_register);
-
-		//This goes after the conditional move
-		insert_instruction_after_given(final_or, op2_conditional_move);
-
-		//And we need one final assignment into the destination
-		instruction_t* final_assignment = emit_and_insert_move_instruction(logical_or->assignee, final_or->destination_register, final_or, INSERTION_ORDER_AFTER);
-
-		//And after all of that, the logical or is now useless to us so we will scrap it
-		delete_statement(logical_or);
-
-		//Reconstruct the window starting at the final move
-		reconstruct_window(window, final_assignment);
-	}
-}
-
-
-/**
- * Handle a logical and instruction
- *
- *
- * ** General Purpose case **
- *
- * t32 <- t32 && t19
- *
- * This will translate to:
- * testq t32, t32 <----- is this 0?
- * setne t33 <----------- if it's not make this one
- * testq t19, 19 <------- Is this 0?
- * setne t34 <------------ If it's not, make it a one
- * andq t33, t34 <---------- let's see if they're both 0, both 1, etc
- * movzx t34, t32 <---------- store t34 with the result
- *
- * Since this will spawn multiple instructions, it will be invoked from the multiple instruction
- * pattern selector
- * 
- * ** Floating point case **
- * t32(int) <- t33(float) && t34(float)
- *
- * movl $1, t37 	 <--- Load up a 1 because cmovX can't have immediate values
- * pxor t35, t35  	 <--- Get a value that's 0, we'll use it for comparing
- * ucomiss t35, t33  <--- Compare t33 against 0
- * setp t36			 <--- Set the parity flag. If t33 was NaN, in Ollie, that counts as not 0
- * cmovne t37, t36   <--- Conditionally move t37 into t36 if the ZF isn't set
- * ucomiss t35, t34  <--- Compare t34 against 0
- * setp t38			 <--- If t34 was NaN, set this as true because NaN != 0
- * cmovne t37, t38   <--- Move the 1 into our result *if* ZF isn't set
- * andl t36, t38	 <--- Finally *and* the two results
- * t32 <- t38 		 <--- Assign the result over
- *
- * Our final logical and result is in t38
- * 
- * NOTE: We guarantee that the first instruction in the window is the one that we're after
- * in this case
- */
-static void handle_logical_and_instruction(instruction_window_t* window){
-	//Grab it out for convenience
-	instruction_t* logical_and = window->instruction1;
-
-	//Is this a floating point logical and or not?
-	u_int8_t is_floating_point = IS_FLOATING_POINT(logical_and->op1->type);
-
-	//If this is not a floating point operation(most common)
-	if(is_floating_point == FALSE){
-		//These operands - did they already come from a setX instruction
-		//or not? An example would be if we're doing something like x > y && y < z.
-		u_int8_t op1_came_from_setX = FALSE;
-		u_int8_t op2_came_from_setX = FALSE;
-
-		//Store the result variable for both of our test paths
-		three_addr_var_t* op1_result;
-		three_addr_var_t* op2_result;
-
-		//Preserve this for ourselves
-		instruction_t* after_logical_and = logical_and->next_statement;
-
-		//Grab a cursor to see where the operands came from
-		instruction_t* cursor = logical_and->previous_statement;
-
-		//Crawl back through the block to try and see if we can tell
-		//where these all came from. Worst case we need to crawl the whole
-		//block, which isn't bad because these blocks aren't enormous 99.9% of
-		//the time
-		while(cursor != NULL){
-			//Did we find where op1 got assigned?. If so, check to see
-			//if the operation that made it generated a truthful byte value(0 or 1)
-			//or not
-			if(variables_equal(logical_and->op1, cursor->assignee, FALSE)){
-				if(does_operator_generate_truthful_byte_value(cursor->op) == TRUE){
-					op1_came_from_setX = TRUE;
-				}
-
-			//Give op2 the exact same treatment
-			} else if(variables_equal(logical_and->op2, cursor->assignee, FALSE)){
-				if(does_operator_generate_truthful_byte_value(cursor->op) == TRUE){
-					op2_came_from_setX = TRUE;
-				}
-			}
-
-			//Push it back
-			cursor = cursor->previous_statement;
-		}
-
-		//We expect that it *not* being from
-		//setX is the most likely case
-		if(op1_came_from_setX == FALSE){
-			//Let's first emit our test instruction
-			instruction_t* test_instruction = emit_direct_test_instruction(logical_and->op1, logical_and->op1);
-
-			//Emit a var to hold the result of op1
-			op1_result = emit_temp_var(u8);
-
-			//Now we'll need a setne(not zero) instruction that will the op1 result
-			instruction_t* set_instruction = emit_setne_instruction(op1_result, logical_and->op1);
-
-			//IMPORTANT - flag that this depends on the source register
-			set_instruction->op1 = test_instruction->source_register;
-
-			//Insert these in order. The test comes first, then the set(relies on the flags from test)
-			insert_instruction_before_given(test_instruction, after_logical_and);
-			insert_instruction_before_given(set_instruction, after_logical_and);
-
-		} else {
-			//If we make it here, we know that op1 already came from a setX instruction. So, we can just
-			//assign here and be done
-			op1_result = emit_var_copy(logical_and->op1);
-			//We will emit a type-coerced version of our value
-			op1_result->type = u8;
-			op1_result->variable_size = get_type_size(u8);
-		}
-
-		//We expect that it *not* being from
-		//setX is the most likely case
-		if(op2_came_from_setX == FALSE){
-			//Test the 2 together
-			instruction_t* test_instruction = emit_direct_test_instruction(logical_and->op2, logical_and->op2);
-
-			//Emit a var to hold the result of op2
-			op2_result = emit_temp_var(u8);
-
-			//Set if it's not zero
-			instruction_t* set_instruction = emit_setne_instruction(op2_result, logical_and->op1);
-
-			//IMPORTANT - flag that this depends on the source register
-			set_instruction->op1 = test_instruction->source_register;
-
-			//Insert these in order. The test comes first, then the set(relies on the flags from test)
-			insert_instruction_before_given(test_instruction, after_logical_and);
-			insert_instruction_before_given(set_instruction, after_logical_and);
-		} else {
-			//If we make it here, we know that op2 already came from a setX instruction. So, we can just
-			//assign here and be done
-			op2_result = emit_var_copy(logical_and->op2);
-			//We will emit a type-coerced version of our value
-			op2_result->type = u8;
-			op2_result->variable_size = get_type_size(u8);
-		}
-
-		//Now we'll need to ANDx these two values together to see if they're both 1
-		instruction_t* and_inst = emit_and_instruction(op1_result, op2_result);
-
-		//Now insert these in order. First comes the and instruction, then the final move
-		insert_instruction_before_given(and_inst, after_logical_and);
-
-		//Now emit our final move. Let the helper do this in case we have converitng moves
-		instruction_t* move_instruction = emit_and_insert_move_instruction(logical_and->assignee, and_inst->destination_register, after_logical_and, INSERTION_ORDER_BEFORE);
-
-		//We no longer need the logical and statement
-		delete_statement(logical_and);
-
-		//Reconstruct the window starting at the final move
-		reconstruct_window(window, move_instruction);
-
-	//Otherwise we are specifically doing a floating point logical and
-	} else {
-		//Hold onto what the floating point type is
-		generic_type_t* operand_type = logical_and->op1->type;
-
-		/**
-		 * For all of our holders here, we have a unique case. We need the op1/op2
-		 * results to be 1 byte for the setp instructions, and we'll need our
-		 * cmovX holders to be at least 2 bytes. We will achieve this by using
-		 * variable copying here. Whatever our end variable size is it does 
-		 * not matter to us
-		 */
-		three_addr_var_t* op1_result = emit_temp_var(u8);
-		three_addr_var_t* op2_result = emit_temp_var(u8);
-
-		//We'll also need holders for the result of the op1/op2 CMOVNE instructions
-		three_addr_var_t* op1_cmovne_result = emit_var_copy(op1_result);
-		three_addr_var_t* op2_cmovne_result = emit_var_copy(op2_result);
-
-		//Make the size a u32
-		op1_cmovne_result->type = u32;
-		op2_cmovne_result->type = u32;
-
-		//This is a "DOUBLE_WORD" sized variable for compliance reasons with the conditional move's limitations
-		op1_cmovne_result->variable_size = DOUBLE_WORD;
-		op2_cmovne_result->variable_size = DOUBLE_WORD;
-
-		//We'll need something to hold onto the one for us
-		three_addr_var_t* one_temporary_holder = emit_temp_var(u32);
-
-		//We'll also need a variable that's been 0'd out to compare with
-		three_addr_var_t* zeroed_out_variable = emit_temp_var(operand_type);
-
-		//The first thing that we need is an assignment to 1
-		instruction_t* assign_one = emit_constant_move_instruction(one_temporary_holder, emit_direct_integer_or_char_constant(1, one_temporary_holder->type));
-
-		//This goes in after the logical and
-		insert_instruction_after_given(assign_one, logical_and);
-
-		//Emit the PXOR instruction to get 0
-		instruction_t* clear_instruction = emit_sse_register_clear_instruction(zeroed_out_variable);
-
-		//We'll put this right after the logical and
-		insert_instruction_after_given(clear_instruction, assign_one);
-		
-		//Now compare the op1 against 0 using FP comparison
-		instruction_t* op1_comparison = emit_float_comparison_instruction(logical_and->op1, zeroed_out_variable, TRUE);
-
-		//This goes right after the clear instruction
-		insert_instruction_after_given(op1_comparison, clear_instruction);
-
-		//Following that, we'll need our setp instruction
-		instruction_t* op1_setp = emit_setp_instruction(op1_result, op1_comparison->assignee);
-
-		//Throw this in after the comparison
-		insert_instruction_after_given(op1_setp, op1_comparison);
-
-		//Following this, we'll need our conditional move to take place
-		instruction_t* op1_conditional_move = emit_cmovX_instruction(op1_cmovne_result, one_temporary_holder, NOT_EQUALS);
-
-		//This goes in after the setP
-		insert_instruction_after_given(op1_conditional_move, op1_setp);
-		
-		//Now compare the op2 against 0 using FP comparison
-		instruction_t* op2_comparison = emit_float_comparison_instruction(logical_and->op2, zeroed_out_variable, TRUE);
-
-		//This goes right after the op1 conditional move 
-		insert_instruction_after_given(op2_comparison, op1_conditional_move);
-
-		//Following that, we'll need our setp instruction
-		instruction_t* op2_setp = emit_setp_instruction(op2_result, op2_comparison->assignee);
-
-		//Throw this in after the comparison for op2
-		insert_instruction_after_given(op2_setp, op2_comparison);
-
-		//Following this, we'll need our conditional move to take place
-		instruction_t* op2_conditional_move = emit_cmovX_instruction(op2_cmovne_result, one_temporary_holder, NOT_EQUALS);
-
-		//This goes in after the setP
-		insert_instruction_after_given(op2_conditional_move, op2_setp);
-
-		//Emit the loigcal and, the final result is in the op1_setp
-		instruction_t* final_and = emit_and_instruction(op1_setp->destination_register, op2_setp->destination_register);
-
-		//This goes after the conditional move
-		insert_instruction_after_given(final_and, op2_conditional_move);
-
-		//And we need one final assignment into the destination
-		instruction_t* final_assignment = emit_and_insert_move_instruction(logical_and->assignee, final_and->destination_register, final_and, INSERTION_ORDER_AFTER);
-
-		//And after all of that, the logical and is now useless to us so we will scrap it
-		delete_statement(logical_and);
-
-		//Reconstruct the window starting at the final move
-		reconstruct_window(window, final_assignment);
-	}
 }
 
 
