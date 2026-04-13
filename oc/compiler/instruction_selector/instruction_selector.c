@@ -5469,49 +5469,120 @@ static void handle_right_shift_instruction(instruction_window_t* window){
 
 
 /**
- * Handle a bitwise inclusive or operation
+ * Select the appropriate inclusive or instruction based on size
  */
-static void handle_bitwise_inclusive_or_instruction(instruction_t* instruction){
-	//We need to know what size we're dealing with
-	variable_size_t size = get_type_size(instruction->assignee->type);
-
-
-
+static inline instruction_type_t select_bitwise_inclusive_or_instruction(variable_size_t size){
 	switch(size){
 		case QUAD_WORD:
-			instruction->instruction_type = ORQ;
-			break;
+			return ORQ;
+
 		case DOUBLE_WORD:
-			instruction->instruction_type = ORL;
-			break;
+			return ORL;
+
 		case WORD:
-			instruction->instruction_type = ORW;
-			break;
+			return ORW;
+
 		case BYTE:
-			instruction->instruction_type = ORB;
-			break;
+			return ORB;
+
 		default:
 			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in or instruction\n");
 			exit(1);
 	}
+}
 
-	//And we always have a destination register
-	instruction->destination_register = instruction->assignee;
 
-	//We can have an immediate value or we can have a register
-	if(instruction->op2 != NULL){
-		//If we need to convert, we'll do that here
-		if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
-			instruction->source_register = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
+/**
+ * Handle a bitwise inclusive or operation
+ */
+static void handle_bitwise_inclusive_or_instruction(instruction_window_t* window){
+	//Grab out the first one
+	instruction_t* bitwise_or = window->instruction1;
 
-		//Otherwise it's a direct translation
+	//This is the type that everything is targeting
+	generic_type_t* destination_type = bitwise_or->assignee->type;
+
+	//Determine what our size is off the bat
+	variable_size_t size = get_type_size(destination_type);
+
+	/**
+	 * Does op1 need an expanding/converting move? If so we will do that right now
+	 * and create it
+	 */
+	if(is_converting_move_required(destination_type, bitwise_or->op1->type) == TRUE){
+		bitwise_or->op1 = create_and_insert_converting_move_instruction(bitwise_or, bitwise_or->op1, destination_type);
+	}
+
+	/**
+	 * What about op2(if we even have op2)
+	 */
+	if(bitwise_or->op2 != NULL
+		&& is_converting_move_required(destination_type, bitwise_or->op2->type) == TRUE){
+		bitwise_or->op2 = create_and_insert_converting_move_instruction(bitwise_or, bitwise_or->op2, destination_type);
+	}
+
+	//We are going to be using a bitwise and instruction regardless so let's get it now
+	bitwise_or->instruction_type = select_bitwise_inclusive_or_instruction(size);
+
+	/**
+	 * If we already have the setup we need where op1 and the assignee are the same variable,
+	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
+	 * to make all of this work
+	 */
+	if(variables_equal_no_ssa(bitwise_or->assignee, bitwise_or->op1, FALSE) == TRUE){
+		//Destination is just the assignee
+		bitwise_or->destination_register = bitwise_or->assignee;
+
+		//Assign the source or the source immediate based on which we need
+		if(bitwise_or->op2 != NULL){
+			bitwise_or->source_register = bitwise_or->op2;
 		} else {
-			instruction->source_register = instruction->op2;
+			bitwise_or->source_immediate = bitwise_or->op1_const;
 		}
 
-	//Otherwise we have an immediate source
+		//Rebuild around the instruction
+		reconstruct_window(window, bitwise_or);
+
+	/**
+	 * Otherwise we've got something like:
+	 * 	t4 <- t3 & 2
+	 *
+	 * 	We'll need to make it so that the assignee and the op1 are the same. We'd do something
+	 * 	like
+	 * 	
+	 * 	t3 <- t3 & 2
+	 * 	t4 <- t3
+	 */
 	} else {
-		instruction->source_immediate = instruction->op1_const;
+		//If this is not temp then we need it to be so we'll move it into being so
+		if(bitwise_or->op1->variable_type != VARIABLE_TYPE_TEMP){
+			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), bitwise_or->op1);
+
+			//Put this before the instruction
+			insert_instruction_before_given(temp_assigment, bitwise_or);
+
+			//This now is op1
+			bitwise_or->op1 = temp_assigment->destination_register;
+		}
+
+		//The destination register is op1
+		bitwise_or->destination_register = bitwise_or->op1;
+
+		//Assign the source or the source immediate based on which we need
+		if(bitwise_or->op2 != NULL){
+			bitwise_or->source_register = bitwise_or->op2;
+		} else {
+			bitwise_or->source_immediate = bitwise_or->op1_const;
+		}
+
+		//Move the destination register into the actual assignee now
+		instruction_t* assignment_instruction = emit_move_instruction(bitwise_or->assignee, bitwise_or->destination_register);
+
+		//This goes in *after* the bitwise or
+		insert_instruction_after_given(assignment_instruction, bitwise_or);
+
+		//Rebuild the whole window around this
+		reconstruct_window(window, assignment_instruction);
 	}
 }
 
@@ -7539,8 +7610,7 @@ static inline void handle_binary_operation_instruction(instruction_window_t* win
 			break;
 
 		case SINGLE_OR:
-			//TODO
-			handle_bitwise_inclusive_or_instruction(instruction);
+			handle_bitwise_inclusive_or_instruction(window);
 			break;
 
 		case SINGLE_AND:
@@ -7559,7 +7629,7 @@ static inline void handle_binary_operation_instruction(instruction_window_t* win
 		case G_THAN_OR_EQ:
 		case L_THAN:
 		case L_THAN_OR_EQ:
-			//TODO
+			//TODO I think this is correct but double check
 			handle_cmp_instruction(window);
 			break;
 
