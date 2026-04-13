@@ -5749,33 +5749,98 @@ static void handle_cmp_instruction(instruction_window_t* window){
 
 
 /**
- * Handle a subtraction operation
+ * Handle a subtraction operation. This may generate extra instructions
+ * depending on whether or not we have a setup where op1 and the assignee
+ * are the same variable or not
  */
-static void handle_subtraction_instruction(instruction_t* instruction){
+static void handle_subtraction_instruction(instruction_window_t* window){
+	//Grab out the first one
+	instruction_t* subtraction_instruction = window->instruction1;
+
+	//This is the type that everything is targeting
+	generic_type_t* destination_type = subtraction_instruction->assignee->type;
+
 	//Determine what our size is off the bat
-	variable_size_t size = get_type_size(instruction->assignee->type);
+	variable_size_t size = get_type_size(destination_type);
 
-	//Select the appropriate level of minus instruction
-	instruction->instruction_type = select_sub_instruction(size);
+	/**
+	 * Does op1 need an expanding/converting move? If so we will do that right now
+	 * and create it
+	 */
+	if(is_converting_move_required(destination_type, subtraction_instruction->op1->type) == TRUE){
+		subtraction_instruction->op1 = create_and_insert_converting_move_instruction(subtraction_instruction, subtraction_instruction->op1, destination_type);
+	}
 
-	//Again we just need the source and dest registers
-	instruction->destination_register = instruction->assignee;
+	/**
+	 * What about op2(if we even have op2)
+	 */
+	if(subtraction_instruction->op2 != NULL
+		&& is_converting_move_required(destination_type, subtraction_instruction->op2->type) == TRUE){
+		subtraction_instruction->op2 = create_and_insert_converting_move_instruction(subtraction_instruction, subtraction_instruction->op2, destination_type);
+	}
 
-	//If we have a register value, we add that
-	if(instruction->op2 != NULL){
-		//Do we need any kind of type conversion here? If so we'll do that now
-		if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
-			//If this is needed, we'll let the helper do it
-			instruction->source_register = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
+	//We are going to be using a subtraction instruction regardless so let's get it now
+	subtraction_instruction->instruction_type = select_sub_instruction(size);
 
-		//Otherwise let this deal with it
+	/**
+	 * If we already have the setup we need where op1 and the assignee are the same variable,
+	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
+	 * to make all of this work
+	 */
+	if(variables_equal_no_ssa(subtraction_instruction->assignee, subtraction_instruction->op1, FALSE) == TRUE){
+		//Destination is just the assignee
+		subtraction_instruction->destination_register = subtraction_instruction->assignee;
+
+		//Assign the source or the source immediate based on which we need
+		if(subtraction_instruction->op2 != NULL){
+			subtraction_instruction->source_register = subtraction_instruction->op2;
 		} else {
-			instruction->source_register = instruction->op2;
+			subtraction_instruction->source_immediate = subtraction_instruction->op1_const;
 		}
 
+		//Rebuild around the subtraction instruction
+		reconstruct_window(window, subtraction_instruction);
+
+	/**
+	 * Otherwise we've got something like:
+	 * 	t4 <- t3 + 2
+	 *
+	 * 	We'll need to make it so that the assignee and the op1 are the same. We'd do something
+	 * 	like
+	 * 	
+	 * 	t3 <- t3 + 2
+	 * 	t4 <- t3
+	 */
 	} else {
-		//Otherwise grab the immediate source
-		instruction->source_immediate = instruction->op1_const;
+		//If this is not temp then we need it to be so we'll move it into being so
+		if(subtraction_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), subtraction_instruction->op1);
+
+			//Put this before the instruction
+			insert_instruction_before_given(temp_assigment, subtraction_instruction);
+
+			//This now is op1
+			subtraction_instruction->op1 = temp_assigment->assignee;
+		}
+
+		//The destination register is op1
+		subtraction_instruction->destination_register = subtraction_instruction->op1;
+
+		//Assign the source or the source immediate based on which we need
+		if(subtraction_instruction->op2 != NULL){
+			subtraction_instruction->source_register = subtraction_instruction->op2;
+		} else {
+			subtraction_instruction->source_immediate = subtraction_instruction->op1_const;
+		}
+
+		//Move to the assignee from op1
+		instruction_t* assignment_instruction = emit_move_instruction(subtraction_instruction->assignee, subtraction_instruction->op1);
+
+		//This goes in *after* the subtraction
+		insert_instruction_after_given(assignment_instruction, subtraction_instruction);
+
+		//Rebuild the whole window around this
+		reconstruct_window(window, subtraction_instruction);
 	}
 }
 
@@ -5865,6 +5930,9 @@ static void handle_addition_instruction(instruction_window_t* window){
 			original_addition->offset = original_addition->op1_const;
 		}
 	}
+
+	//Rebuilt the entire window around this
+	reconstruct_window(window, original_addition);
 }
 
 
@@ -6583,7 +6651,6 @@ static inline void handle_binary_operation_instruction(instruction_window_t* win
 			break;
 
 		case MINUS:
-			//Let the helper do it
 			handle_subtraction_instruction(instruction);
 			break;
 
