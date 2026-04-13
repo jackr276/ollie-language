@@ -2055,6 +2055,10 @@ static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* f
  * t8 <- 1
  * t7 <- t7 != t8 <------- If this is true, jump to if
  * cbranch_ne .L12 else .L13
+ *
+ * We will need to account for the possibility that the values inside of the statements are not
+ * temp vars at all. If this is the case, then we'll need to modify the way that we handle our short 
+ * circuiting
  */
 static void optimize_logical_or_branch_logic(symtab_function_record_t* function, instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
 	//Grab out the block that we're using
@@ -2074,23 +2078,41 @@ static void optimize_logical_or_branch_logic(symtab_function_record_t* function,
 	three_addr_var_t* op1 = short_circuit_statment->op1;
 	three_addr_var_t* op2 = short_circuit_statment->op2;
 
-	//The cursor for our first half
-	instruction_t* first_half_cursor = short_circuit_statment->previous_statement;
+	//Grab the first and second half cursors now
+	instruction_t* first_half_cursor = NULL;
+	instruction_t* second_half_cursor = NULL;
+	
+	/**
+	 * If and only if we have a temp var, we will try to find out where this came from
+	 */
+	if(op1->variable_type == VARIABLE_TYPE_TEMP){
+		//Start off at the very last area
+		first_half_cursor = short_circuit_statment->previous_statement;
 
-	//Trace our way up to where op1 was assigned
-	while(variables_equal(op1, first_half_cursor->assignee, FALSE) == FALSE){
-		//Keep advancing backward
-		first_half_cursor = first_half_cursor->previous_statement;
+		//Trace our way up to where op1 was assigned
+		while(variables_equal(op1, first_half_cursor->assignee, FALSE) == FALSE){
+			first_half_cursor = first_half_cursor->previous_statement;
+		}
 	}
 
-	//The cursor for our second half
-	instruction_t* second_half_cursor = short_circuit_statment->previous_statement;
+	/**
+	 * Same deal for op2, we only do this if we have a temp var here
+	 */
+	if(op2->variable_type == VARIABLE_TYPE_TEMP){
+		//Start off at the prior statement
+		second_half_cursor = short_circuit_statment->previous_statement;
 
-	//Trace our way up to where op2 was assigned
-	while(variables_equal(op2, second_half_cursor->assignee, FALSE) == FALSE){
-		//Keep advancing backward
-		second_half_cursor = second_half_cursor->previous_statement;
+		//Trace our way up to where op2 was assigned
+		while(variables_equal(op2, second_half_cursor->assignee, FALSE) == FALSE){
+			second_half_cursor = second_half_cursor->previous_statement;
+		}
 	}
+
+	/**
+	 * There are 4 possiblities here:
+	 * 	1.) first_half_cursor != NULL && second_half_cursor != NULL -> bisect block normally
+	 * 	2.) first_half_cursor != NULL && second_half_cursor == NULL -> 
+	 */
 
 	//Now we've found where we need to effectively split the block into 2 pieces
 	//Everything after this op1 assignment needs to be removed from this block
