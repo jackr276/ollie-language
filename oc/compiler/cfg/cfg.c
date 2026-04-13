@@ -5250,22 +5250,78 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	//Update the block pointer
 	current_block = right_side.final_block;
 
-	//The op1 is the left side's assingee
-	op1 = left_side.assignee;
-
-	/**
-	 * As for op2, there is a chance that we actually have a constant assignment in the op2
-	 * slot. Let's investigate to see if it is actually in there
-	 */
-	if(current_block->exit_statement != NULL 
-		&& current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
-		op1_const = current_block->exit_statement->op1_const;
-	} else {
-		op2 = right_side.assignee;
-	}
-
 	//The assignee is always the same type as the expression
 	assignee = emit_temp_var(logical_or_expr->inferred_type);
+
+	/**
+	 * Logical or/and expression mandate that we have
+	 * temp assignments for the short circuit optimizer. It is
+	 * much simpler to have temp assignments here as opposed
+	 * to parsing the 4 combinations of op1/op2 being non-temp.
+	 * As such if we see either of these ops we will take
+	 * steps to ensure that they are temp vars
+	 */
+	switch(logical_or_expr->binary_operator){
+		case DOUBLE_AND:
+		case DOUBLE_OR:
+			/**
+			 * If the left side is not a temp var, we will emit a temp variable,
+			 * we will emit a temp assignment to compensate
+			 */
+			if(left_side.assignee->variable_type != VARIABLE_TYPE_TEMP){
+				//Emit the instruction
+				instruction_t* left_side_temp_assignment = emit_assignment_instruction(emit_temp_var(left_side.assignee->type), left_side.assignee);
+
+				//Throw it into the block
+				add_statement(current_block, left_side_temp_assignment);
+
+				//Add this in here
+				op1 = left_side_temp_assignment->assignee; 
+
+			//Otherwise just grab out what we have
+			} else {
+				op1 = left_side.assignee;
+			}
+
+			/**
+			 * Same treatment for the right. If it's not a temp var then we will make it one
+		 	 */
+			if(right_side.assignee->variable_type != VARIABLE_TYPE_TEMP){
+				//Emit the instruction
+				instruction_t* right_side_temp_assignment = emit_assignment_instruction(emit_temp_var(right_side.assignee->type), right_side.assignee);
+
+				//Throw it into the block
+				add_statement(current_block, right_side_temp_assignment);
+
+				//Add this in here
+				op2 = right_side_temp_assignment->assignee; 
+
+			//Otherwise just grab out what we have
+			} else {
+				op2 = right_side.assignee;
+			}
+
+			break;
+
+		//Otherwise default rules are in effect
+		default:
+			//The op1 is the left side's assingee
+			op1 = left_side.assignee;
+
+			/**
+			 * As for op2, there is a chance that we actually have a constant assignment in the op2
+			 * slot. Let's investigate to see if it is actually in there
+			 */
+			if(current_block->exit_statement != NULL 
+				&& current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
+				op1_const = current_block->exit_statement->op1_const;
+
+			} else {
+				op2 = right_side.assignee;
+			}
+				
+			break;
+	}
 
 	//Here's the final statement
 	instruction_t* binary_operation;
