@@ -11,6 +11,7 @@
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
+#include <iso646.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -5920,6 +5921,9 @@ static void handle_addition_instruction(instruction_window_t* window){
 			original_addition->source_immediate = original_addition->op1_const;
 		}
 
+		//Rebuilt the entire window around this
+		reconstruct_window(window, original_addition);
+
 	/**
 	 * Otherwise they're not equal. For most other binary operations we'd
 	 * need to force it to work at this point. However since this is addition
@@ -5943,12 +5947,53 @@ static void handle_addition_instruction(instruction_window_t* window){
 			original_addition->offset = original_addition->op1_const;
 		}
 
-	} else {
-		printf("CANT USE LEA HERE\n");
-	}
+		//Rebuilt the entire window around this
+		reconstruct_window(window, original_addition);
 
-	//Rebuilt the entire window around this
-	reconstruct_window(window, original_addition);
+	/**
+	 * Otherwise we've got something like:
+	 * 	t4 <- t3 + 2
+	 *
+	 * 	We'll need to make it so that the assignee and the op1 are the same. We'd do something
+	 * 	like
+	 * 	
+	 * 	t3 <- t3 + 2
+	 * 	t4 <- t3
+	 */
+	} else {
+		//Get the appropriate add instuction
+		original_addition->instruction_type = select_add_instruction(size);
+
+		//If this is not temp then we need it to be so we'll move it into being so
+		if(original_addition->op1->variable_type != VARIABLE_TYPE_TEMP){
+			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), original_addition->op1);
+
+			//Put this before the instruction
+			insert_instruction_before_given(temp_assigment, original_addition);
+
+			//This now is op1
+			original_addition->op1 = temp_assigment->destination_register;
+		}
+
+		//The destination register is op1
+		original_addition->destination_register = original_addition->op1;
+
+		//Assign the source or the source immediate based on which we need
+		if(original_addition->op2 != NULL){
+			original_addition->source_register = original_addition->op2;
+		} else {
+			original_addition->source_immediate = original_addition->op1_const;
+		}
+
+		//Move the destination register into the actual assignee now
+		instruction_t* assignment_instruction = emit_move_instruction(original_addition->assignee, original_addition->destination_register);
+
+		//This goes in *after* the subtraction
+		insert_instruction_after_given(assignment_instruction, original_addition);
+
+		//Rebuild the whole window around this
+		reconstruct_window(window, assignment_instruction);
+	}
 }
 
 
