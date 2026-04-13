@@ -5125,10 +5125,55 @@ static three_addr_var_t* emit_byte_copy_of_variable(three_addr_var_t* source){
 
 
 /**
+ * Select the appropriate left shift instruction based on the size and signedness
+ */
+static inline instruction_type_t select_left_shift_instruction(variable_size_t size, u_int8_t is_signed){
+	switch (size) {
+		case BYTE:
+			if(is_signed == TRUE){
+				return SALB;
+			} else {
+				return SHLB;
+			}
+
+		case WORD:
+			if(is_signed == TRUE){
+				return SALW;
+			} else {
+				return SHLW;
+			}
+
+		case DOUBLE_WORD:
+			if(is_signed == TRUE){
+				return SALL;
+			} else {
+				return SHLL;
+			}
+
+		default:
+			if(is_signed == TRUE){
+				return SALQ;
+			} else {
+				return SHLQ;
+			}
+	}
+}
+
+
+/**
  * Handle a left shift operation. In doing a left shift, we account
  * for the possibility that we have a signed value
  */
-static void handle_left_shift_instruction(instruction_t* instruction){
+static void handle_left_shift_instruction(instruction_window_t* window){
+	//Get the actual left shift
+	instruction_t* left_shift_instruction = window->instruction1;
+
+	//This is the type that everything is targeting
+	generic_type_t* destination_type = left_shift_instruction->assignee->type;
+
+	//Determine what our size is off the bat
+	variable_size_t size = get_type_size(destination_type);
+
 	//Is this a signed or unsigned instruction?
 	u_int8_t is_signed;
 
@@ -5137,9 +5182,9 @@ static void handle_left_shift_instruction(instruction_t* instruction){
 	 * this will not happen, but if it does we will action
 	 * it here
 	 */
-	switch(instruction->optional_storage.forced_signedness){
+	switch(left_shift_instruction->optional_storage.forced_signedness){
 		case FORCED_SIGNEDNESS_DONT_CARE:
-			is_signed = is_type_signed(instruction->assignee->type);
+			is_signed = is_type_signed(destination_type);
 			break;
 
 		case FORCED_SIGNED:
@@ -5151,46 +5196,21 @@ static void handle_left_shift_instruction(instruction_t* instruction){
 			break;
 	}
 
-	//We'll also need the size of the variable
-	variable_size_t size = get_type_size(instruction->assignee->type);
-
-	switch (size) {
-		case BYTE:
-			if(is_signed == TRUE){
-				instruction->instruction_type = SALB;
-			} else {
-				instruction->instruction_type = SHLB;
-			}
-			break;
-		case WORD:
-			if(is_signed == TRUE){
-				instruction->instruction_type = SALW;
-			} else {
-				instruction->instruction_type = SHLW;
-			}
-			break;
-		case DOUBLE_WORD:
-			if(is_signed == TRUE){
-				instruction->instruction_type = SALL;
-			} else {
-				instruction->instruction_type = SHLL;
-			}
-			break;
-		//Everything else falls here
-		default:
-			if(is_signed == TRUE){
-				instruction->instruction_type = SALQ;
-			} else {
-				instruction->instruction_type = SHLQ;
-			}
-			break;		
+	/**
+	 * Does op1 need an expanding/converting move? If so we will do that right now
+	 * and create it. We will skip out on op2 because that is going to become
+	 * a byte anyway
+	 */
+	if(is_converting_move_required(destination_type, left_shift_instruction->op1->type) == TRUE){
+		left_shift_instruction->op1 = create_and_insert_converting_move_instruction(left_shift_instruction, left_shift_instruction->op1, destination_type);
 	}
 
-	//Now we'll move over the operands
-	instruction->destination_register = instruction->assignee;
-	
-	//We can have an immediate value or we can have a register
-	if(instruction->op2 != NULL){
+	/**
+	 * For a shift instruction's second operand, we are only allowed to use the
+	 * byte version of the regsiter for it. We will account for all of those
+	 * possibilities here
+	 */
+	if(left_shift_instruction->op2 != NULL){
 		/**
 		 * If this is a function parameter, we'll need to emit a copy instruction
 		 * here for the eventual precolorer to use. If we don't do this, the precolorer
@@ -5198,23 +5218,28 @@ static void handle_left_shift_instruction(instruction_t* instruction){
 		 * the %ecx register that shift operands must be in. This is a unique case for shifting
 		 * due to a quirk of x86
 		 */
-		if(instruction->op2->class_relative_parameter_order > 0){
+		if(left_shift_instruction->op2->class_relative_parameter_order > 0){
 			//Move it on over here
-			instruction_t* copy_instruction = emit_move_instruction(emit_temp_var(instruction->op2->type), instruction->op2);
+			instruction_t* copy_instruction = emit_move_instruction(emit_temp_var(left_shift_instruction->op2->type), left_shift_instruction->op2);
 			//Add this instruction to our block
-			insert_instruction_before_given(copy_instruction, instruction);
+			insert_instruction_before_given(copy_instruction, left_shift_instruction);
 
 			//Now our op2 is really this one's assignee
-			instruction->op2 = copy_instruction->destination_register;
+			left_shift_instruction->op2 = copy_instruction->destination_register;
 		}
 	
 		//We will always emit the byte copy version of the source register here
-		instruction->source_register = emit_byte_copy_of_variable(instruction->op2);
-
-	//Otherwise we have an immediate source
-	} else {
-		instruction->source_immediate = instruction->op1_const;
+		left_shift_instruction->op2 = emit_byte_copy_of_variable(left_shift_instruction->op2);
 	}
+
+	//Go ahead and select it now
+	left_shift_instruction->instruction_type = select_left_shift_instruction(size, is_signed);
+
+	/**
+	 * Now if op1 and the assignee line up, we are good. Otherwise we will
+	 * need to make them align and insert some actual instructions
+	 */
+	
 }
 
 
