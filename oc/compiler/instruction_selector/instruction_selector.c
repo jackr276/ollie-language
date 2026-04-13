@@ -4997,7 +4997,7 @@ static instruction_t* emit_div_instruction(three_addr_var_t* assignee, three_add
  * A very simple helper function that selects the right add instruction based
  * solely on variable size. Done to avoid code duplication
  */
-static instruction_type_t select_add_instruction(variable_size_t size){
+static inline instruction_type_t select_add_instruction(variable_size_t size){
 	//Go based on size
 	switch(size){
 		case BYTE:
@@ -5023,10 +5023,8 @@ static instruction_type_t select_add_instruction(variable_size_t size){
  * A very simple helper function that selects the right lea instruction based
  * solely on variable size. Done to avoid code duplication
  */
-static instruction_type_t select_lea_instruction(variable_size_t size){
-	//Go based on size
+static inline instruction_type_t select_lea_instruction(variable_size_t size){
 	switch(size){
-		case BYTE:
 		case WORD:
 			return LEAW;
 		case DOUBLE_WORD:
@@ -5039,12 +5037,27 @@ static instruction_type_t select_lea_instruction(variable_size_t size){
 	}
 }
 
+/**
+ * Is a type size valid for the addition to lea optimization? Not all types are so this
+ * is an important check to make
+ */
+static inline u_int8_t is_type_valid_for_addition_to_lea_conversion(variable_size_t size){
+	switch(size){
+		case WORD:
+		case DOUBLE_WORD:
+		case QUAD_WORD:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
 
 /**
  * A very simple helper function that selects the right add instruction based
  * solely on variable size. Done to avoid code duplication
  */
-static instruction_type_t select_sub_instruction(variable_size_t size){
+static inline instruction_type_t select_sub_instruction(variable_size_t size){
 	//Go based on size
 	switch(size){
 		case BYTE:
@@ -5840,7 +5853,7 @@ static void handle_subtraction_instruction(instruction_window_t* window){
 		insert_instruction_after_given(assignment_instruction, subtraction_instruction);
 
 		//Rebuild the whole window around this
-		reconstruct_window(window, subtraction_instruction);
+		reconstruct_window(window, assignment_instruction);
 	}
 }
 
@@ -5910,9 +5923,9 @@ static void handle_addition_instruction(instruction_window_t* window){
 	/**
 	 * Otherwise they're not equal. For most other binary operations we'd
 	 * need to force it to work at this point. However since this is addition
-	 * we can use a lea instead
+	 * we can use a lea instead *if* we have valid types
 	 */
-	} else {
+	} else if(is_type_valid_for_addition_to_lea_conversion(size) == TRUE){
 		//Get the lea that we need
 		original_addition->instruction_type = select_lea_instruction(size);
 
@@ -5929,6 +5942,9 @@ static void handle_addition_instruction(instruction_window_t* window){
 			original_addition->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 			original_addition->offset = original_addition->op1_const;
 		}
+
+	} else {
+		printf("CANT USE LEA HERE\n");
 	}
 
 	//Rebuilt the entire window around this
@@ -6654,22 +6670,18 @@ static inline void handle_binary_operation_instruction(instruction_window_t* win
 			handle_subtraction_instruction(window);
 			break;
 
-		//Hanlde a left shift instruction
 		case L_SHIFT:
 			handle_left_shift_instruction(instruction);
 			break;
 
-		//Handle a right shift operation
 		case R_SHIFT:
 			handle_right_shift_instruction(instruction);
 			break;
 
-		//Handle the (|) operator
 		case SINGLE_OR:
 			handle_bitwise_inclusive_or_instruction(instruction);
 			break;
 
-		//Handle the (&) operator in a binary operation context
 		case SINGLE_AND:
 			handle_bitwise_and_instruction(instruction);
 			break;
