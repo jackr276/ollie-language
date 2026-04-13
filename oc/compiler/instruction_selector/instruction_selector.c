@@ -5475,6 +5475,8 @@ static void handle_bitwise_inclusive_or_instruction(instruction_t* instruction){
 	//We need to know what size we're dealing with
 	variable_size_t size = get_type_size(instruction->assignee->type);
 
+
+
 	switch(size){
 		case QUAD_WORD:
 			instruction->instruction_type = ORQ;
@@ -5515,47 +5517,120 @@ static void handle_bitwise_inclusive_or_instruction(instruction_t* instruction){
 
 
 /**
- * Handle a bitwise and operation
+ * Select the appropriate bitwise and instruction based on size
  */
-static void handle_bitwise_and_instruction(instruction_t* instruction){
-	//We need to know what size we're dealing with
-	variable_size_t size = get_type_size(instruction->assignee->type);
-
+static inline instruction_type_t select_bitwise_and_instruction(variable_size_t size){
 	switch(size){
 		case QUAD_WORD:
-			instruction->instruction_type = ANDQ;
-			break;
+			return ANDQ;
+
 		case DOUBLE_WORD:
-			instruction->instruction_type = ANDL;
-			break;
+			return ANDL;
+
 		case WORD:
-			instruction->instruction_type = ANDW;
-			break;
+			return ANDW;
+
 		case BYTE:
-			instruction->instruction_type = ANDB;
-			break;
+			return ANDB;
+
 		default:
 			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in and instruction\n");
 			exit(1);
 	}
+}
 
-	//And we always have a destination register
-	instruction->destination_register = instruction->assignee;
 
-	//We can have an immediate value or we can have a register
-	if(instruction->op2 != NULL){
-		//If we need to convert, we'll do that here
-		if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
-			instruction->source_register = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
+/**
+ * Handle a bitwise and operation
+ */
+static void handle_bitwise_and_instruction(instruction_window_t* window){
+	//Grab out the first one
+	instruction_t* bitwise_and = window->instruction1;
 
-		//Otherwise it's a direct translation
+	//This is the type that everything is targeting
+	generic_type_t* destination_type = bitwise_and->assignee->type;
+
+	//Determine what our size is off the bat
+	variable_size_t size = get_type_size(destination_type);
+
+	/**
+	 * Does op1 need an expanding/converting move? If so we will do that right now
+	 * and create it
+	 */
+	if(is_converting_move_required(destination_type, bitwise_and->op1->type) == TRUE){
+		bitwise_and->op1 = create_and_insert_converting_move_instruction(bitwise_and, bitwise_and->op1, destination_type);
+	}
+
+	/**
+	 * What about op2(if we even have op2)
+	 */
+	if(bitwise_and->op2 != NULL
+		&& is_converting_move_required(destination_type, bitwise_and->op2->type) == TRUE){
+		bitwise_and->op2 = create_and_insert_converting_move_instruction(bitwise_and, bitwise_and->op2, destination_type);
+	}
+
+	//We are going to be using a bitwise and instruction regardless so let's get it now
+	bitwise_and->instruction_type = select_bitwise_and_instruction(size);
+
+	/**
+	 * If we already have the setup we need where op1 and the assignee are the same variable,
+	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
+	 * to make all of this work
+	 */
+	if(variables_equal_no_ssa(bitwise_and->assignee, bitwise_and->op1, FALSE) == TRUE){
+		//Destination is just the assignee
+		bitwise_and->destination_register = bitwise_and->assignee;
+
+		//Assign the source or the source immediate based on which we need
+		if(bitwise_and->op2 != NULL){
+			bitwise_and->source_register = bitwise_and->op2;
 		} else {
-			instruction->source_register = instruction->op2;
+			bitwise_and->source_immediate = bitwise_and->op1_const;
 		}
 
-	//Otherwise we have an immediate source
+		//Rebuild around the instruction
+		reconstruct_window(window, bitwise_and);
+
+	/**
+	 * Otherwise we've got something like:
+	 * 	t4 <- t3 & 2
+	 *
+	 * 	We'll need to make it so that the assignee and the op1 are the same. We'd do something
+	 * 	like
+	 * 	
+	 * 	t3 <- t3 & 2
+	 * 	t4 <- t3
+	 */
 	} else {
-		instruction->source_immediate = instruction->op1_const;
+		//If this is not temp then we need it to be so we'll move it into being so
+		if(bitwise_and->op1->variable_type != VARIABLE_TYPE_TEMP){
+			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), bitwise_and->op1);
+
+			//Put this before the instruction
+			insert_instruction_before_given(temp_assigment, bitwise_and);
+
+			//This now is op1
+			bitwise_and->op1 = temp_assigment->destination_register;
+		}
+
+		//The destination register is op1
+		bitwise_and->destination_register = bitwise_and->op1;
+
+		//Assign the source or the source immediate based on which we need
+		if(bitwise_and->op2 != NULL){
+			bitwise_and->source_register = bitwise_and->op2;
+		} else {
+			bitwise_and->source_immediate = bitwise_and->op1_const;
+		}
+
+		//Move the destination register into the actual assignee now
+		instruction_t* assignment_instruction = emit_move_instruction(bitwise_and->assignee, bitwise_and->destination_register);
+
+		//This goes in *after* the subtraction
+		insert_instruction_after_given(assignment_instruction, bitwise_and);
+
+		//Rebuild the whole window around this
+		reconstruct_window(window, assignment_instruction);
 	}
 }
 
@@ -7463,14 +7538,16 @@ static inline void handle_binary_operation_instruction(instruction_window_t* win
 			break;
 
 		case SINGLE_OR:
+			//TODO
 			handle_bitwise_inclusive_or_instruction(instruction);
 			break;
 
 		case SINGLE_AND:
-			handle_bitwise_and_instruction(instruction);
+			handle_bitwise_and_instruction(window);
 			break;
 
 		case CARROT:
+			//TODO
 			handle_bitwise_exclusive_or_instruction(instruction);
 			break;
 
@@ -7481,7 +7558,7 @@ static inline void handle_binary_operation_instruction(instruction_window_t* win
 		case G_THAN_OR_EQ:
 		case L_THAN:
 		case L_THAN_OR_EQ:
-			//Let the helper do it. This will modify the window
+			//TODO
 			handle_cmp_instruction(window);
 			break;
 
