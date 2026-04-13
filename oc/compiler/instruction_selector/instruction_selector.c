@@ -5820,7 +5820,7 @@ static void handle_subtraction_instruction(instruction_window_t* window){
 			insert_instruction_before_given(temp_assigment, subtraction_instruction);
 
 			//This now is op1
-			subtraction_instruction->op1 = temp_assigment->assignee;
+			subtraction_instruction->op1 = temp_assigment->destination_register;
 		}
 
 		//The destination register is op1
@@ -5833,8 +5833,8 @@ static void handle_subtraction_instruction(instruction_window_t* window){
 			subtraction_instruction->source_immediate = subtraction_instruction->op1_const;
 		}
 
-		//Move to the assignee from op1
-		instruction_t* assignment_instruction = emit_move_instruction(subtraction_instruction->assignee, subtraction_instruction->op1);
+		//Move the destination register into the actual assignee now
+		instruction_t* assignment_instruction = emit_move_instruction(subtraction_instruction->assignee, subtraction_instruction->destination_register);
 
 		//This goes in *after* the subtraction
 		insert_instruction_after_given(assignment_instruction, subtraction_instruction);
@@ -6651,7 +6651,7 @@ static inline void handle_binary_operation_instruction(instruction_window_t* win
 			break;
 
 		case MINUS:
-			handle_subtraction_instruction(instruction);
+			handle_subtraction_instruction(window);
 			break;
 
 		//Hanlde a left shift instruction
