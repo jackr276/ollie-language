@@ -5297,10 +5297,55 @@ static void handle_left_shift_instruction(instruction_window_t* window){
 
 
 /**
+ * Select the appropriate right shift instruction based on the size and signedness
+ */
+static inline instruction_type_t select_right_shift_instruction(variable_size_t size, u_int8_t is_signed){
+	switch (size) {
+		case BYTE:
+			if(is_signed == TRUE){
+				return SARB;
+			} else {
+				return SHRB;
+			}
+
+		case WORD:
+			if(is_signed == TRUE){
+				return SARW;
+			} else {
+				return SHRW;
+			}
+
+		case DOUBLE_WORD:
+			if(is_signed == TRUE){
+				return SARL;
+			} else {
+				return SHRL;
+			}
+
+		default:
+			if(is_signed == TRUE){
+				return SARQ;
+			} else {
+				return SHRQ;
+			}
+	}
+}
+
+
+/**
  * Handle a right shift operation. This helper will determine if we
  * need an arithmetic or a logical right shift dependant on the operation
  */
-static void handle_right_shift_instruction(instruction_t* instruction){
+static void handle_right_shift_instruction(instruction_window_t* window){
+	//Get the actual right shift
+	instruction_t* right_shift_instruction = window->instruction1;
+
+	//This is the type that everything is targeting
+	generic_type_t* destination_type = right_shift_instruction->assignee->type;
+
+	//Determine what our size is off the bat
+	variable_size_t size = get_type_size(destination_type);
+
 	//Is this a signed or unsigned instruction?
 	u_int8_t is_signed;
 
@@ -5309,9 +5354,9 @@ static void handle_right_shift_instruction(instruction_t* instruction){
 	 * this will not happen, but if it does we will action
 	 * it here
 	 */
-	switch(instruction->optional_storage.forced_signedness){
+	switch(right_shift_instruction->optional_storage.forced_signedness){
 		case FORCED_SIGNEDNESS_DONT_CARE:
-			is_signed = is_type_signed(instruction->assignee->type);
+			is_signed = is_type_signed(destination_type);
 			break;
 
 		case FORCED_SIGNED:
@@ -5323,46 +5368,21 @@ static void handle_right_shift_instruction(instruction_t* instruction){
 			break;
 	}
 
-	//We'll also need the size of the variable
-	variable_size_t size = get_type_size(instruction->assignee->type);
-
-	switch (size) {
-		case BYTE:
-			if(is_signed == TRUE){
-				instruction->instruction_type = SARB;
-			} else {
-				instruction->instruction_type = SHRB;
-			}
-			break;
-		case WORD:
-			if(is_signed == TRUE){
-				instruction->instruction_type = SARW;
-			} else {
-				instruction->instruction_type = SHRW;
-			}
-			break;
-		case DOUBLE_WORD:
-			if(is_signed == TRUE){
-				instruction->instruction_type = SARL;
-			} else {
-				instruction->instruction_type = SHRL;
-			}
-			break;
-		//Everything else falls here
-		default:
-			if(is_signed == TRUE){
-				instruction->instruction_type = SARQ;
-			} else {
-				instruction->instruction_type = SHRQ;
-			}
-			break;		
+	/**
+	 * Does op1 need an expanding/converting move? If so we will do that right now
+	 * and create it. We will skip out on op2 because that is going to become
+	 * a byte anyway
+	 */
+	if(is_converting_move_required(destination_type, right_shift_instruction->op1->type) == TRUE){
+		right_shift_instruction->op1 = create_and_insert_converting_move_instruction(right_shift_instruction, right_shift_instruction->op1, destination_type);
 	}
 
-	//Now we'll move over the operands
-	instruction->destination_register = instruction->assignee;
-
-	//We can have an immediate value or we can have a register
-	if(instruction->op2 != NULL){
+	/**
+	 * For a shift instruction's second operand, we are only allowed to use the
+	 * byte version of the regsiter for it. We will account for all of those
+	 * possibilities here
+	 */
+	if(right_shift_instruction->op2 != NULL){
 		/**
 		 * If this is a function parameter, we'll need to emit a copy instruction
 		 * here for the eventual precolorer to use. If we don't do this, the precolorer
@@ -5370,22 +5390,80 @@ static void handle_right_shift_instruction(instruction_t* instruction){
 		 * the %ecx register that shift operands must be in. This is a unique case for shifting
 		 * due to a quirk of x86
 		 */
-		if(instruction->op2->class_relative_parameter_order > 0){
+		if(right_shift_instruction->op2->class_relative_parameter_order > 0){
 			//Move it on over here
-			instruction_t* copy_instruction = emit_move_instruction(emit_temp_var(instruction->op2->type), instruction->op2);
+			instruction_t* copy_instruction = emit_move_instruction(emit_temp_var(right_shift_instruction->op2->type), right_shift_instruction->op2);
 			//Add this instruction to our block
-			insert_instruction_before_given(copy_instruction, instruction);
+			insert_instruction_before_given(copy_instruction, right_shift_instruction);
 
 			//Now our op2 is really this one's assignee
-			instruction->op2 = copy_instruction->destination_register;
+			right_shift_instruction->op2 = copy_instruction->destination_register;
+		}
+	
+		//We will always emit the byte copy version of the source register here
+		right_shift_instruction->op2 = emit_byte_copy_of_variable(right_shift_instruction->op2);
+	}
+
+	//Go ahead and select it now
+	right_shift_instruction->instruction_type = select_right_shift_instruction(size, is_signed);
+
+	/**
+	 * Now if op1 and the assignee line up, we are good. Otherwise we will
+	 * need to make them align and insert some actual instructions
+	 */
+	if(variables_equal_no_ssa(right_shift_instruction->assignee, right_shift_instruction->op1, FALSE) == TRUE){
+		//Destination is the assignee
+		right_shift_instruction->destination_register = right_shift_instruction->assignee;
+
+		//Assign the source or the source immediate based on which we need
+		if(right_shift_instruction->op2 != NULL){
+			right_shift_instruction->source_register = right_shift_instruction->op2;
+		} else {
+			right_shift_instruction->source_immediate = right_shift_instruction->op1_const;
 		}
 
-		//We will always emit the byte copy version of the source register here
-		instruction->source_register = emit_byte_copy_of_variable(instruction->op2);
+		//Rebuild around the subtraction instruction
+		reconstruct_window(window, right_shift_instruction);
 
-	//Otherwise we have an immediate source
+	/**
+	 * If we get to here then we've got something like
+	 *  a_0 <- b_1 << 2
+	 *
+	 *  We'll need to rewrite it like
+	 *  t3 <- b1
+	 *  t3 <- t3 << 2
+	 *  a_0 <- t3
+	 */
 	} else {
-		instruction->source_immediate = instruction->op1_const;
+		//If this is not temp then we need it to be so we'll move it into being so
+		if(right_shift_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), right_shift_instruction->op1);
+
+			//Put this before the instruction
+			insert_instruction_before_given(temp_assigment, right_shift_instruction);
+
+			//This now is op1
+			right_shift_instruction->op1 = temp_assigment->destination_register;
+		}
+
+		//The destination register is op1
+		right_shift_instruction->destination_register = right_shift_instruction->op1;
+
+		//Assign the source or the source immediate based on which we need
+		if(right_shift_instruction->op2 != NULL){
+			right_shift_instruction->source_register = right_shift_instruction->op2;
+		} else {
+			right_shift_instruction->source_immediate = right_shift_instruction->op1_const;
+		}
+
+		//Move the destination register into the actual assignee now
+		instruction_t* assignment_instruction = emit_move_instruction(right_shift_instruction->assignee, right_shift_instruction->destination_register);
+
+		//This goes in *after* the right shift 
+		insert_instruction_after_given(assignment_instruction, right_shift_instruction);
+
+		//Rebuild the whole window around this
+		reconstruct_window(window, assignment_instruction);
 	}
 }
 
@@ -6801,7 +6879,7 @@ static inline void handle_binary_operation_instruction(instruction_window_t* win
 			break;
 
 		case R_SHIFT:
-			handle_right_shift_instruction(instruction);
+			handle_right_shift_instruction(window);
 			break;
 
 		case SINGLE_OR:
