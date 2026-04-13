@@ -5239,7 +5239,60 @@ static void handle_left_shift_instruction(instruction_window_t* window){
 	 * Now if op1 and the assignee line up, we are good. Otherwise we will
 	 * need to make them align and insert some actual instructions
 	 */
-	
+	if(variables_equal_no_ssa(left_shift_instruction->assignee, left_shift_instruction->op1, FALSE) == TRUE){
+		//Destination is the assignee
+		left_shift_instruction->destination_register = left_shift_instruction->assignee;
+
+		//Assign the source or the source immediate based on which we need
+		if(left_shift_instruction->op2 != NULL){
+			left_shift_instruction->source_register = left_shift_instruction->op2;
+		} else {
+			left_shift_instruction->source_immediate = left_shift_instruction->op1_const;
+		}
+
+		//Rebuild around the subtraction instruction
+		reconstruct_window(window, left_shift_instruction);
+
+	/**
+	 * If we get to here then we've got something like
+	 *  a_0 <- b_1 << 2
+	 *
+	 *  We'll need to rewrite it like
+	 *  t3 <- b1
+	 *  t3 <- t3 << 2
+	 *  a_0 <- t3
+	 */
+	} else {
+		//If this is not temp then we need it to be so we'll move it into being so
+		if(left_shift_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), left_shift_instruction->op1);
+
+			//Put this before the instruction
+			insert_instruction_before_given(temp_assigment, left_shift_instruction);
+
+			//This now is op1
+			left_shift_instruction->op1 = temp_assigment->destination_register;
+		}
+
+		//The destination register is op1
+		left_shift_instruction->destination_register = left_shift_instruction->op1;
+
+		//Assign the source or the source immediate based on which we need
+		if(left_shift_instruction->op2 != NULL){
+			left_shift_instruction->source_register = left_shift_instruction->op2;
+		} else {
+			left_shift_instruction->source_immediate = left_shift_instruction->op1_const;
+		}
+
+		//Move the destination register into the actual assignee now
+		instruction_t* assignment_instruction = emit_move_instruction(left_shift_instruction->assignee, left_shift_instruction->destination_register);
+
+		//This goes in *after* the left shift 
+		insert_instruction_after_given(assignment_instruction, left_shift_instruction);
+
+		//Rebuild the whole window around this
+		reconstruct_window(window, assignment_instruction);
+	}
 }
 
 
@@ -6741,7 +6794,7 @@ static inline void handle_binary_operation_instruction(instruction_window_t* win
 			break;
 
 		case L_SHIFT:
-			handle_left_shift_instruction(instruction);
+			handle_left_shift_instruction(window);
 			break;
 
 		case R_SHIFT:
