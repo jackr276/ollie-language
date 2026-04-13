@@ -12,6 +12,7 @@
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
 #include <iso646.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -5790,10 +5791,43 @@ static void handle_subtraction_instruction(instruction_t* instruction){
  * CASE 1:
  * t23 <- t23 + 34
  * addl $34, t23
+ *
+ * CASE 2:
+ * 	t23 <- t22 + 34
+ * 	leal 34(t22), t23
+ *
+ * This avoids us having to add instructions and is a nice little efficiency boost
+ *
+ * NOTE: this may be a bin_op_with_const or a regular bin_op. We need to be
+ * able to handle both cases
  */
-static void handle_addition_instruction(instruction_t* instruction){
+static void handle_addition_instruction(instruction_window_t* window){
+	//Grab out the first one
+	instruction_t* original_addition = window->instruction1;
+
+	//This is the type that everything is targeting
+	generic_type_t* destination_type = original_addition->assignee->type;
+
 	//Determine what our size is off the bat
-	variable_size_t size = get_type_size(instruction->assignee->type);
+	variable_size_t size = get_type_size(destination_type);
+
+	/**
+	 * Does op1 need an expanding/converting move? If so we will do that right now
+	 * and create it
+	 */
+	if(is_converting_move_required(destination_type, original_addition->op1->type) == TRUE){
+		original_addition->op1 = create_and_insert_converting_move_instruction(original_addition, original_addition->op1, destination_type);
+	}
+
+	/**
+	 * What about op2(if we even have op2)
+	 */
+	if(original_addition->op2 != NULL
+		&& is_converting_move_required(destination_type, original_addition->op2->type) == TRUE){
+		original_addition->op2 = create_and_insert_converting_move_instruction(original_addition, original_addition->op2, destination_type);
+	}
+
+
 
 	//Grab the add instruction that we want
 	instruction->instruction_type = select_add_instruction(size);
@@ -6563,6 +6597,15 @@ static inline void handle_sse_multiplication_instruction(instruction_t* instruct
 /**
  * We can translate a bin op statement a few different ways based on the operand
  *
+ * Since binary operations in OIR may be something like: x_1 = z_0 + y_0, we will
+ * first need to *expand* them into something like:
+ * 	t4 <- z_0
+ * 	t4 <- t4 + y_0
+ * 	x_1 <- t4
+ *
+ * This will need to be done on a case by case basis that all relies on what the 
+ * binary operation is that we're doing
+ *
  * NOTE: We always assume that instruction 1 is the one that we're after
  */
 static inline void handle_binary_operation_instruction(instruction_window_t* window){
@@ -6571,31 +6614,8 @@ static inline void handle_binary_operation_instruction(instruction_window_t* win
 
 	//Go based on what we have as the operation
 	switch(instruction->op){
-		/**
-		 * 2 options here
-		 *
-		 * CASE 1:
-		 * t23 <- t23 + 34
-		 * addl $34, t23
-		 *
-		 * OR
-		 *
-		 * CASE 2:
-		 * t25 <- t15 + t17
-		 * leal t25, (t15, t17)
-		 */
 		case PLUS:
-			//This is our first case. Of course ignore SSA here
-			if(variables_equal_no_ssa(instruction->assignee, instruction->op1, FALSE) == TRUE){
-				//Let the helper do it
-				handle_addition_instruction(instruction);
-
-			//Otherwise we need to handle case 2
-			} else {
-				//Let this different version do it
-				handle_addition_instruction_lea_modification(instruction);
-			}
-
+			handle_addition_instruction(window);
 			break;
 
 		case MINUS:
@@ -10624,6 +10644,7 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 	}
 
 	//We could see logical and/logical or
+	/*
 	if(is_instruction_binary_operation(window->instruction1) == TRUE){
 		switch(window->instruction1->op){
 			//Handle the logical and case
@@ -10685,6 +10706,7 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 				break;
 		}
 	}
+	*/
 
 	//The instruction that we have here is the window's instruction 1
 	instruction_t* instruction = window->instruction1;
