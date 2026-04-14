@@ -6754,6 +6754,8 @@ static inline instruction_t* emit_movd_instruction(three_addr_var_t* general_pur
  * that flag setting is needed
  *
  * NOTE: we always assume that instruction1 in the window is our target
+ *
+ * TODO BROKEN used_by_branch_only is
  */
 static void handle_cmp_instruction(instruction_window_t* window){
 	instruction_t* instruction = window->instruction1;
@@ -6777,43 +6779,66 @@ static void handle_cmp_instruction(instruction_window_t* window){
 	//For the right hand type, we only care if op2 isn't NULL. Constants won't affect us here
 	generic_type_t* right_hand_type = instruction->op2 != NULL ? instruction->op2->type : left_hand_type;
 
-	//Grab a cursor to the next statement
-	instruction_t* cursor = instruction->next_statement;
+	/**
+	 * If the assignee is a temp var then we can't be sure if it's only used
+	 * by a branch or if this is eventually expected to be assigned somewhere
+	 */
+	if(instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
+		//Grab a cursor to the next statement
+		instruction_t* cursor = instruction->next_statement;
 
-	//So long as the cursor is not NULL, keep crawling
-	while(cursor != NULL){
-		//This is the case that we're after. If we find that the branch relies
-		//on this, then we can just get out
-		if(variables_equal(cursor->op1, instruction->assignee, FALSE) == TRUE){
-			//This means that we are *not* exclusively used by a branch
-			if(cursor->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
+		//So long as the cursor is not NULL, keep crawling
+		while(cursor != NULL){
+			/**
+			 * This is the case that we're after. If we find that the branch relies
+			 * on this, then we can just get out
+			 */
+			if(variables_equal(cursor->op1, instruction->assignee, FALSE) == TRUE){
+				//This means that we are *not* exclusively used by a branch
+				if(cursor->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
+					used_by_branch_only = FALSE;
+					break;
+				}
+
+				/**
+				 * Otherwise logically speaking we do have a branch
+				 * statement here. As such, if it's a floating point
+				 * branch we'll need to flag that
+				 */
+				if(is_floating_point == TRUE){
+					cursor->relies_on_fp_comparison = TRUE;
+				}
+
+			/**
+			 * We could also be used by op2. If this is the case, then it's definitely not just
+			 * being used by a branch
+			 */
+			} else if (variables_equal(cursor->op2, instruction->assignee, FALSE) == TRUE){
+				/**
+				 * Branches never have dependencies stored in op2. As such if we see this,
+				 * it's an automatic false
+				 */
 				used_by_branch_only = FALSE;
 				break;
 			}
 
-			//Otherwise logically speaking we do have a branch
-			//statement here. As such, if it's a floating point
-			//branch we'll need to flag that
-			if(is_floating_point == TRUE){
-				cursor->relies_on_fp_comparison = TRUE;
-			}
+			/**
+			 * If we get to the end and it's not used by a branch, that is fine. The only
+			 * thing that we care about in this crawl is whether or not the above statement
+			 * was used by a branch instruction. If it was, then all of the extra setX
+			 * is unnecessary. If it wasn't then we need to be adding those extra steps
+			 */
 
-		//We could also be used by op2. If this is the case, then it's definitely not just
-		//being used by a branch
-		} else if (variables_equal(cursor->op2, instruction->assignee, FALSE) == TRUE){
-			//Branches never have dependencies stored in op2. As such if we see this,
-			//it's an automatic false
-			used_by_branch_only = FALSE;
-			break;
+			//Advance the cursor up
+			cursor = cursor->next_statement;
 		}
 
-		//If we get to the end and it's not used by a branch, that is fine. The only
-		//thing that we care about in this crawl is whether or not the above statement
-		//was used by a branch instruction. If it was, then all of the extra setX
-		//is unnecessary. If it wasn't then we need to be adding those extra steps
-
-		//Advance the cursor up
-		cursor = cursor->next_statement;
+	/**
+	 * If the assignee is non-temp then we can be sure that this is not just
+	 * used by a branch and is instead used as a variable assignment
+	 */
+	} else {
+		used_by_branch_only = FALSE;
 	}
 
 	//Handle any/all converting moves that are going to be needed here
