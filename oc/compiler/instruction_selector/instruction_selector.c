@@ -2967,88 +2967,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
-
-	/**
-	 * =================== Adjacent assignment statement folding ====================
-	 * If we have a binary operation or a bin op with const statement followed by an
-	 * assignment of that result to a non-temporary variable, we have an opportunity
-	 * to simplify. This would lead nicely into the following optimizations below
-	 *
-	 * Example: 
-	 * t12 <- a_2 + 0x1
-	 * a_3 <- t12
-	 * could become
-	 * a_3 <- a_2 + 0x1
-	 */
-
-
-
-	//TODO DUBIOUS THAT THIS DOES ANYTHING NOW
-
-	//If the first instruction is a binary operation and the immediately following instruction is an assignment
-	//operation, this is a potential match
-	if(is_instruction_binary_operation(window->instruction1) == TRUE
-		&& window->instruction2 != NULL
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT){
-		//For convenience/memory ease
-		instruction_t* first = window->instruction1;
-		instruction_t* second = window->instruction2;
-
-		//If we have a temporary start variable, a non temp end variable, and the variables
-		//match in the corresponding spots, we have our opportunity
-		if(first->assignee->variable_type == VARIABLE_TYPE_TEMP && second->assignee->variable_type != VARIABLE_TYPE_TEMP 
-			&& variables_equal(first->assignee, second->op1, FALSE) == TRUE
-			//Special no-ssa comparison, we expect that the ssa would be different due to assignment levels
-			&& variables_equal_no_ssa(second->assignee, first->op1, FALSE) == TRUE){
-
-			//TODO DETERMINE
-			//printf("HERE\n\n\n\n\n");
-
-			//We will now take the second variables assignee to be the first statements assignee
-			first->assignee = second->assignee;
-
-			//That's really all we need to do for the first one. Now, we need to delete the second
-			//statement entirely
-			delete_statement(second);
-
-			//We'll reconstruct the window here, the first is still the first
-			reconstruct_window(window, first);
-
-			//Regardless of what happened here, we did change the window so we'll set the flag
-			changed = TRUE;
-
-		//We could also have a scenario like this that will apply only to logical combination(&& and ||) operators.
-		/**
-		 * t33 <- t34 && t35
-		 * x_0 <- t33
-		 *
-		 * Because of the way that we handle logical and, we can actuall eliminate the second assignment
-		 * with no issue
-		 * x_0 <- t34 && t35
-		 *
-		 * NOTE: This does not work for logical or, due to the way we handle logical OR
-		 */
-		} else if(first->op == DOUBLE_AND
-				&& first->assignee->variable_type == VARIABLE_TYPE_TEMP 
-				&& variables_equal(first->assignee, second->op1, FALSE) == TRUE){
-
-			//printf("HERE AND\n\n\n\n\n");
-
-			//Set these to be equal
-			first->assignee = second->assignee;
-
-			//We can now scrap the second statement
-			delete_statement(second);
-
-			//We'll reconstruct the window here, the first is still the first
-			reconstruct_window(window, first);
-
-			//This counts as a change
-			changed = TRUE;
-		}
-	}
-
-
 	/**
 	 * ==================== On-the-fly logical and/or ========================
 	 * t27 <- 5
@@ -7932,7 +7850,6 @@ static inline void handle_binary_operation_instruction(instruction_window_t* win
 		case G_THAN_OR_EQ:
 		case L_THAN:
 		case L_THAN_OR_EQ:
-			//TODO I think this is correct but double check
 			handle_cmp_instruction(window);
 			break;
 
