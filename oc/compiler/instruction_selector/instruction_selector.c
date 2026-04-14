@@ -6243,8 +6243,8 @@ static void handle_signed_multiplication_instruction(instruction_window_t* windo
 		multiplication_instruction->op2 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->op2, destination_type);
 	}
 
-	//We are going to be using a bitwise and instruction regardless so let's get it now
-	multiplication_instruction->instruction_type = select_bitwise_inclusive_or_instruction(size);
+	//We are going to be using a signed imull instruction regardless so let's get it now
+	multiplication_instruction->instruction_type = select_signed_multiplication_instruction(size);
 
 	/**
 	 * If we already have the setup we need where op1 and the assignee are the same variable,

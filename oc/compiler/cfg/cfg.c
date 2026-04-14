@@ -5310,10 +5310,12 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 			/**
 			 * As for op2, there is a chance that we actually have a constant assignment in the op2
-			 * slot. Let's investigate to see if it is actually in there
+			 * slot. This only works if the variables are completely equal. If they are not then
+			 * this is a false positive which is possible
 			 */
 			if(current_block->exit_statement != NULL 
-				&& current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
+				&& current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
+				&& variables_equal(right_side.assignee, current_block->exit_statement->assignee, FALSE) == TRUE){
 				op1_const = current_block->exit_statement->op1_const;
 
 			} else {
