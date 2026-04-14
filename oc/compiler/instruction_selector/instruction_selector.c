@@ -2156,69 +2156,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 
 	/**
-	 * -------------------- Arithmetic expressions with assignee the same as op1 ---------------------
-	 *  There will be times where we generate arithmetic expressions like this:
-	 *
-	 * 	t19 <- a_3
-	 * 	t20 <- t19 + y_0
-	 * 	a_4 <- t20
-	 *
-	 *  Since a_4 and a_3 are the same variable(register), this is an ideal candidate to be compressed
-	 *  like
-	 *
-	 *  a_4 <- a_3 + y_0
-	 *
-	 * This 3-instruction large optimizaion will look for this
-	 */
-	//If the first statement is an assignmehnt statement, and the second statement is a binary operation,
-	//and the third statement is an assignment statement, we have our chance to optimize
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		&& is_instruction_binary_operation(window->instruction2) == TRUE
-		&& window->instruction3 != NULL
-		&& window->instruction3->statement_type == THREE_ADDR_CODE_ASSN_STMT){
-
-		//Grab these out for convenience
-		instruction_t* first = window->instruction1;
-		instruction_t* second = window->instruction2;
-		instruction_t* third = window->instruction3;
-
-		//We still need further checks to see if this is indeed the pattern above. If
-		//we survive all of these checks, we know that we're set to optimize
-		if(first->assignee->variable_type == VARIABLE_TYPE_TEMP 
-			&& third->assignee->variable_type != VARIABLE_TYPE_TEMP
-			&& first->assignee->use_count <= 2 
-			&& variables_equal_no_ssa(first->op1, third->assignee, FALSE) == TRUE
-	 		&& variables_equal(first->assignee, second->op1, FALSE) == TRUE
-	 		&& variables_equal(second->assignee, third->op1, FALSE) == TRUE){
-			/*
-
-			printf("WE ARE COMPRESSING\n");
-
-			//Manage our use state here
-			replace_variable(second->op1, first->op1);
-
-			//The second op1 will now become the first op1
-			second->op1 = first->op1;
-
-			//And the second's assignee will now be the third's assignee
-			second->assignee = third->assignee;
-
-			//Following this, all we need to do is delete and rearrange
-			delete_statement(first);
-			delete_statement(third);
-
-			//Reconstruct the window with second as the new instruction1
-			reconstruct_window(window, second);
-
-			//Regardless of what happened, we did change the window, so we'll
-			//update this
-			changed = TRUE;
-			*/
-		}
-	}
-
-
-	/**
 	 * --------------------- Folding constant assingments in LEA statements with ----------------------
 	 *  In cases where we have a lea statement that uses a constant which is assigned to a temporary
 	 *  variable right before it, we should eliminate that unnecessary assingment by folding that constant
