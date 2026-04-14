@@ -6601,35 +6601,107 @@ static void handle_unsigned_division(instruction_window_t* window){
 
 
 /**
+ * Select an appropriate SSE division instruction based on size
+ */
+static inline instruction_type_t select_sse_division_instruction(variable_size_t size){
+	switch(size){
+		case SINGLE_PRECISION:
+			return DIVSS;
+
+		case DOUBLE_PRECISION:
+			return DIVSD;
+
+		default:
+			fprintf(stderr, "Fatal internal compiler error: invalid assignee size for SSE division instruction\n");
+			exit(1);
+	}
+}
+
+
+/**
  * Handle an SSE multiplication instruction. By the time we get here, we already
  * know that we're dealing with an SSE operation. This instruction will generate
  * converting moves if such moves are required
- *
- *
- * TODO NEEDS TO BE FIXED
  */
 static void handle_sse_division_instruction(instruction_window_t* window){
-	//Go based on what the assignee's type is
-	switch(instruction->assignee->variable_size){
-		case SINGLE_PRECISION:
-			instruction->instruction_type = DIVSS;
-			break;
-		case DOUBLE_PRECISION:
-			instruction->instruction_type = DIVSD;
-			break;
-		default:
-			printf("Fatal internal compiler error: invalid assignee size for SSE division instruction\n");
+	//Grab out the first one
+	instruction_t* division_instruction = window->instruction1;
+
+	//This is the type that everything is targeting
+	generic_type_t* destination_type = division_instruction->assignee->type;
+
+	//Determine what our size is off the bat
+	variable_size_t size = get_type_size(destination_type);
+
+	/**
+	 * Does op1 need an expanding/converting move? If so we will do that right now
+	 * and create it
+	 */
+	if(is_converting_move_required(destination_type, division_instruction->op1->type) == TRUE){
+		division_instruction->op1 = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op1, destination_type);
 	}
 
-	//Handle any/all converting moves that are going to be needed here
-	if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
-		instruction->op2 = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
+	/**
+	 * Do the same for op2. Note that we are guaranteed an op2 here becuase this is a floating point multiplication
+	 */
+	if(is_converting_move_required(destination_type, division_instruction->op2->type) == TRUE){
+		division_instruction->op2 = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op2, destination_type);
 	}
 
-	//The source register is the op1 and the destination is the assignee. There is never a case where we
-	//will have a constant source, it is not possible for sse operations
-	instruction->destination_register = instruction->assignee;
-	instruction->source_register = instruction->op2;
+	//We are going to be using a divsX instruction regardless so let's get it now
+	division_instruction->instruction_type = select_sse_division_instruction(size);
+
+	/**
+	 * If we already have the setup we need where op1 and the assignee are the same variable,
+	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
+	 * to make all of this work
+	 */
+	if(variables_equal_no_ssa(division_instruction->assignee, division_instruction->op1, TRUE) == TRUE){
+		//Destination is just the assignee
+		division_instruction->destination_register = division_instruction->assignee;
+		//This is always op2
+		division_instruction->source_register = division_instruction->op2;
+
+		//Rebuild around the instruction
+		reconstruct_window(window, division_instruction);
+
+	/**
+	 * Otherwise we've got something like:
+	 * 	t4 <- t3 / 2
+	 *
+	 * 	We'll need to make it so that the assignee and the op1 are the same. We'd do something
+	 * 	like
+	 * 	
+	 * 	t3 <- t3 / 2
+	 * 	t4 <- t3
+	 */
+	} else {
+		//If this is not temp then we need it to be so we'll move it into being so
+		if(division_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), division_instruction->op1);
+
+			//Put this before the instruction
+			insert_instruction_before_given(temp_assigment, division_instruction);
+
+			//This now is op1
+			division_instruction->op1 = temp_assigment->destination_register;
+		}
+
+		//The destination register is op1
+		division_instruction->destination_register = division_instruction->op1;
+
+		//This is always the source register
+		division_instruction->source_register = division_instruction->op2;
+
+		//Move the destination register into the actual assignee now
+		instruction_t* assignment_instruction = emit_move_instruction(division_instruction->assignee, division_instruction->destination_register);
+
+		//This goes in *after* the multiplication
+		insert_instruction_after_given(assignment_instruction, division_instruction);
+
+		//Rebuild the whole window around this
+		reconstruct_window(window, assignment_instruction);
+	}
 }
 
 
@@ -11278,50 +11350,6 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		combine_lea_with_variable_offset_store_instruction(window, window->instruction1, window->instruction2);
 		return;
 	}
-
-	//We could see logical and/logical or
-	/*
-	if(is_instruction_binary_operation(window->instruction1) == TRUE){
-		switch(window->instruction1->op){
-			//Handle the logical and case
-			case DOUBLE_AND:
-				handle_logical_and_instruction(window);
-				return;
-
-			//Handle logical or
-			case DOUBLE_OR:
-				handle_logical_or_instruction(window);
-				return;
-
-			//Handle division
-			case F_SLASH:
-				switch(window->instruction1->assignee->type->basic_type_token){
-					case F32:
-					case F64:
-						handle_sse_division_instruction(window->instruction1);
-						break;
-
-					default:
-						handle_division_instruction(window);
-						break;
-				}
-
-				return;
-
-			//Handle modulus
-			case MOD:	
-				handle_modulus_instruction(window);
-				return;
-
-			//If we have a multiplication *and* it's unsigned, we go here
-			case STAR:
-				return;
-
-			default:
-				break;
-		}
-	}
-	*/
 
 	//The instruction that we have here is the window's instruction 1
 	instruction_t* instruction = window->instruction1;
