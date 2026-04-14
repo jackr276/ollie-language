@@ -6077,6 +6077,30 @@ static inline void handle_modulus_instruction(instruction_window_t* window){
 
 
 /**
+ * Select an unsigned multiplication instruction based on the given size
+ */
+static inline instruction_type_t select_unsigned_mulitplication_instruction(variable_size_t size){
+	switch (size) {
+		case BYTE:
+			return MULB;
+
+		case WORD:
+			return MULW;
+
+		case DOUBLE_WORD:
+			return MULL;
+
+		case QUAD_WORD:
+			return MULQ;
+
+		default:
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in multiplication instruction\n");
+			exit(1);
+	}
+}
+
+
+/**
  * Handle an unsigned multiplication operation
  *
  * Because of the extra instructions that this will generate, this will count as
@@ -6086,9 +6110,6 @@ static inline void handle_modulus_instruction(instruction_window_t* window){
  *
  * mov $3, %rax <- Source is always in RAX
  * mull %rcx -> result in rax
- *
- *
- * TODO UPDATE
  *
  * NOTE: this is always the first instruction in the instruction window
 */
@@ -6144,26 +6165,8 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 		source = multiplication_instruction->op1;
 	}
 
-	
-	//We determine the instruction that we need based on signedness and size
-	switch (size) {
-		case BYTE:
-			multiplication_instruction->instruction_type = MULB;
-			break;
-		case WORD:
-			multiplication_instruction->instruction_type = MULW;
-			break;
-		case DOUBLE_WORD:
-			multiplication_instruction->instruction_type = MULL;
-			break;
-		case QUAD_WORD:
-			multiplication_instruction->instruction_type = MULQ;
-			break;
-		//Everything else falls here
-		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in multiplication instruction\n");
-			exit(1);
-	}
+	//Select the actual instruction
+	multiplication_instruction->instruction_type = select_unsigned_mulitplication_instruction(size);
 
 	//This is the case where we have two source registers
 	multiplication_instruction->source_register = source;
@@ -6185,32 +6188,40 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 
 
 /**
- * Handle a multiplication operation
+ * Select a signed multiplication based on a size
+ */
+static inline instruction_type_t select_signed_multiplication_instruction(variable_size_t size){
+	switch (size) {
+		case BYTE:
+			return IMULB;
+
+		case WORD:
+			return IMULW;
+
+		case DOUBLE_WORD:
+			return IMULL;
+
+		case QUAD_WORD:
+			return IMULQ;
+
+		default:
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in multiplication instruction\n");
+			exit(1);
+	}
+
+}
+
+
+/**
+ * Handle a signed multiplication operation
  *
  * A multiplication operation can be different based on size and sign
  *
  * TODO UPDATE
  */
-static void handle_signed_multiplication_instruction(instruction_t* instruction){
+static void handle_signed_multiplication_instruction(instruction_window_t* window){
 	//We'll need to know the variables size
 	variable_size_t size = get_type_size(instruction->assignee->type);
-
-	//We determine the instruction that we need based on signedness and size
-	switch (size) {
-		case BYTE:
-			instruction->instruction_type = IMULB;
-			break;
-		case WORD:
-			instruction->instruction_type = IMULW;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = IMULL;
-			break;
-		//Everything else falls here
-		default:
-			instruction->instruction_type = IMULQ;
-			break;
-	}
 
 	//Following this, we'll set the assignee and source
 	instruction->destination_register = instruction->assignee;
@@ -6236,24 +6247,31 @@ static void handle_signed_multiplication_instruction(instruction_t* instruction)
 
 
 /**
+ * Select an SSE multiplication instruction based on the size
+ */
+static inline instruction_type_t select_sse_multiplication_instruction(variable_size_t size){
+	switch(size){
+		case SINGLE_PRECISION:
+			return MULSS;
+
+		case DOUBLE_PRECISION:
+			return MULSD;
+
+		default:
+			printf("Fatal internal compiler error: invalid assignee size for SSE multiplication instruction\n");
+	}
+}
+
+
+/**
  * Handle an SSE multiplication instruction. By the time we get here, we already
  * know that we're dealing with an SSE operation. This instruction will generate
  * converting moves if such moves are required
  *
  * TODO NOT RIGHT
  */
-static inline void handle_sse_multiplication_instruction(instruction_t* instruction){
+static void handle_sse_multiplication_instruction(instruction_window_t* window){
 	//Go based on what the assignee's type is
-	switch(instruction->assignee->variable_size){
-		case SINGLE_PRECISION:
-			instruction->instruction_type = MULSS;
-			break;
-		case DOUBLE_PRECISION:
-			instruction->instruction_type = MULSD;
-			break;
-		default:
-			printf("Fatal internal compiler error: invalid assignee size for SSE multiplication instruction\n");
-	}
 
 	//Handle any/all converting moves that are going to be needed here
 	if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
