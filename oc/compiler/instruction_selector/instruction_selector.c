@@ -6216,32 +6216,95 @@ static inline instruction_type_t select_signed_multiplication_instruction(variab
  * Handle a signed multiplication operation
  *
  * A multiplication operation can be different based on size and sign
- *
- * TODO UPDATE
  */
 static void handle_signed_multiplication_instruction(instruction_window_t* window){
-	//We'll need to know the variables size
-	variable_size_t size = get_type_size(instruction->assignee->type);
+	//Grab out the first one
+	instruction_t* multiplication_instruction = window->instruction1;
 
-	//Following this, we'll set the assignee and source
-	instruction->destination_register = instruction->assignee;
+	//This is the type that everything is targeting
+	generic_type_t* destination_type = multiplication_instruction->assignee->type;
 
-	//Are we using an immediate or register?
-	if(instruction->op2 != NULL){
-		//Do we need a type conversion here?
-		if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
-			//Let the helper deal with it
-			instruction->source_register = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
+	//Determine what our size is off the bat
+	variable_size_t size = get_type_size(destination_type);
 
-		//Otherwise assign directly
+	/**
+	 * Does op1 need an expanding/converting move? If so we will do that right now
+	 * and create it
+	 */
+	if(is_converting_move_required(destination_type, multiplication_instruction->op1->type) == TRUE){
+		multiplication_instruction->op1 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->op1, destination_type);
+	}
+
+	/**
+	 * What about op2(if we even have op2)
+	 */
+	if(multiplication_instruction->op2 != NULL
+		&& is_converting_move_required(destination_type, multiplication_instruction->op2->type) == TRUE){
+		multiplication_instruction->op2 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->op2, destination_type);
+	}
+
+	//We are going to be using a bitwise and instruction regardless so let's get it now
+	multiplication_instruction->instruction_type = select_bitwise_inclusive_or_instruction(size);
+
+	/**
+	 * If we already have the setup we need where op1 and the assignee are the same variable,
+	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
+	 * to make all of this work
+	 */
+	if(variables_equal_no_ssa(multiplication_instruction->assignee, multiplication_instruction->op1, FALSE) == TRUE){
+		//Destination is just the assignee
+		multiplication_instruction->destination_register = multiplication_instruction->assignee;
+
+		//Assign the source or the source immediate based on which we need
+		if(multiplication_instruction->op2 != NULL){
+			multiplication_instruction->source_register = multiplication_instruction->op2;
 		} else {
-			//This is the case where we have a source register
-			instruction->source_register = instruction->op2;
+			multiplication_instruction->source_immediate = multiplication_instruction->op1_const;
 		}
-		
+
+		//Rebuild around the instruction
+		reconstruct_window(window, multiplication_instruction);
+
+	/**
+	 * Otherwise we've got something like:
+	 * 	t4 <- t3 * 2
+	 *
+	 * 	We'll need to make it so that the assignee and the op1 are the same. We'd do something
+	 * 	like
+	 * 	
+	 * 	t3 <- t3 * 2
+	 * 	t4 <- t3
+	 */
 	} else {
-		//In this case we'll have an immediate source
-		instruction->source_immediate = instruction->op1_const;
+		//If this is not temp then we need it to be so we'll move it into being so
+		if(multiplication_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), multiplication_instruction->op1);
+
+			//Put this before the instruction
+			insert_instruction_before_given(temp_assigment, multiplication_instruction);
+
+			//This now is op1
+			multiplication_instruction->op1 = temp_assigment->destination_register;
+		}
+
+		//The destination register is op1
+		multiplication_instruction->destination_register = multiplication_instruction->op1;
+
+		//Assign the source or the source immediate based on which we need
+		if(multiplication_instruction->op2 != NULL){
+			multiplication_instruction->source_register = multiplication_instruction->op2;
+		} else {
+			multiplication_instruction->source_immediate = multiplication_instruction->op1_const;
+		}
+
+		//Move the destination register into the actual assignee now
+		instruction_t* assignment_instruction = emit_move_instruction(multiplication_instruction->assignee, multiplication_instruction->destination_register);
+
+		//This goes in *after* the multiplication
+		insert_instruction_after_given(assignment_instruction, multiplication_instruction);
+
+		//Rebuild the whole window around this
+		reconstruct_window(window, assignment_instruction);
 	}
 }
 
@@ -7760,7 +7823,7 @@ static inline void handle_binary_operation_instruction(instruction_window_t* win
 			break;
 
 		case STAR:
-			//TODO
+			handle_multiplication_instruction(window);
 			break;
 
 		//All of these instructions require us to use the CMP or CMPQ command
