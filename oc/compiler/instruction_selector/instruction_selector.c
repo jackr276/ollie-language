@@ -6321,7 +6321,8 @@ static inline instruction_type_t select_sse_multiplication_instruction(variable_
 			return MULSD;
 
 		default:
-			printf("Fatal internal compiler error: invalid assignee size for SSE multiplication instruction\n");
+			fprintf(stderr, "Fatal internal compiler error: invalid assignee size for SSE multiplication instruction\n");
+			exit(1);
 	}
 }
 
@@ -6331,20 +6332,87 @@ static inline instruction_type_t select_sse_multiplication_instruction(variable_
  * know that we're dealing with an SSE operation. This instruction will generate
  * converting moves if such moves are required
  *
- * TODO NOT RIGHT
+ * NOTE: SSE multiplication instructions never contain constants
  */
 static void handle_sse_multiplication_instruction(instruction_window_t* window){
-	//Go based on what the assignee's type is
+	//Grab out the first one
+	instruction_t* multiplication_instruction = window->instruction1;
 
-	//Handle any/all converting moves that are going to be needed here
-	if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
-		instruction->op2 = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
+	//This is the type that everything is targeting
+	generic_type_t* destination_type = multiplication_instruction->assignee->type;
+
+	//Determine what our size is off the bat
+	variable_size_t size = get_type_size(destination_type);
+
+	/**
+	 * Does op1 need an expanding/converting move? If so we will do that right now
+	 * and create it
+	 */
+	if(is_converting_move_required(destination_type, multiplication_instruction->op1->type) == TRUE){
+		multiplication_instruction->op1 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->op1, destination_type);
 	}
 
-	//The source register is the op1 and the destination is the assignee. There is never a case where we
-	//will have a constant source, it is not possible for sse operations
-	instruction->destination_register = instruction->assignee;
-	instruction->source_register = instruction->op2;
+	/**
+	 * Do the same for op2. Note that we are guaranteed an op2 here becuase this is a floating point multiplication
+	 */
+	if(is_converting_move_required(destination_type, multiplication_instruction->op2->type) == TRUE){
+		multiplication_instruction->op2 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->op2, destination_type);
+	}
+
+	//We are going to be using a mulsX instruction regardless so let's get it now
+	multiplication_instruction->instruction_type = select_sse_multiplication_instruction(size);
+
+	/**
+	 * If we already have the setup we need where op1 and the assignee are the same variable,
+	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
+	 * to make all of this work
+	 */
+	if(variables_equal_no_ssa(multiplication_instruction->assignee, multiplication_instruction->op1, FALSE) == TRUE){
+		//Destination is just the assignee
+		multiplication_instruction->destination_register = multiplication_instruction->assignee;
+		//This is always op2
+		multiplication_instruction->source_register = multiplication_instruction->op2;
+
+		//Rebuild around the instruction
+		reconstruct_window(window, multiplication_instruction);
+
+	/**
+	 * Otherwise we've got something like:
+	 * 	t4 <- t3 * 2
+	 *
+	 * 	We'll need to make it so that the assignee and the op1 are the same. We'd do something
+	 * 	like
+	 * 	
+	 * 	t3 <- t3 * 2
+	 * 	t4 <- t3
+	 */
+	} else {
+		//If this is not temp then we need it to be so we'll move it into being so
+		if(multiplication_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), multiplication_instruction->op1);
+
+			//Put this before the instruction
+			insert_instruction_before_given(temp_assigment, multiplication_instruction);
+
+			//This now is op1
+			multiplication_instruction->op1 = temp_assigment->destination_register;
+		}
+
+		//The destination register is op1
+		multiplication_instruction->destination_register = multiplication_instruction->op1;
+
+		//This is always the source register
+		multiplication_instruction->source_register = multiplication_instruction->op2;
+
+		//Move the destination register into the actual assignee now
+		instruction_t* assignment_instruction = emit_move_instruction(multiplication_instruction->assignee, multiplication_instruction->destination_register);
+
+		//This goes in *after* the multiplication
+		insert_instruction_after_given(assignment_instruction, multiplication_instruction);
+
+		//Rebuild the whole window around this
+		reconstruct_window(window, assignment_instruction);
+	}
 }
 
 
@@ -6354,13 +6422,11 @@ static void handle_sse_multiplication_instruction(instruction_window_t* window){
  */
 static inline void handle_multiplication_instruction(instruction_window_t* window){
 	switch(window->instruction1->assignee->type->basic_type_token){
-		//Floating point instruction, let the helper deal with it
 		case F32:
 		case F64:
 			handle_sse_multiplication_instruction(window);
 			break;
 
-		//Signed mult, so we let the signed rule handle it
 		case I8:
 		case I16:
 		case I32:
@@ -6368,7 +6434,6 @@ static inline void handle_multiplication_instruction(instruction_window_t* windo
 			handle_signed_multiplication_instruction(window);
 			break;
 
-		//Everything else counts as unsigned
 		default:
 			handle_unsigned_multiplication_instruction(window);
 			break;
