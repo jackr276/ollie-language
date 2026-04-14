@@ -2880,6 +2880,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 *
 	 * We can instead combine this to be
 	 * store t7[4] <- t5
+	 *
+	 * TODO BROKEN -> look at pointer_math.ol
 	 */
 	if(window->instruction2 != NULL
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_STATEMENT){
@@ -2894,9 +2896,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					//This is now a load with variable offset
 					window->instruction2->statement_type = THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET;
 
-					//Copy these both over
-					window->instruction2->assignee = window->instruction1->assignee;
-					window->instruction2->op1 = window->instruction1->op1;
+					//The assignee is now the old op1
+					window->instruction2->assignee = window->instruction1->op1;
+					//And op1 is now the old op2
+					window->instruction2->op1 = window->instruction1->op2;
 
 					//Now scrap instruction 1
 					delete_statement(window->instruction1);
@@ -2920,8 +2923,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					//This is now a load with contant offset
 					window->instruction2->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
 
-					//Copy these both over
-					window->instruction2->assignee = window->instruction1->assignee;
+					//The assignee is now the old op1
+					window->instruction2->assignee = window->instruction1->op1;
+					//And the offset is the old constant
 					window->instruction2->offset = window->instruction1->op1_const;
 
 					//If we have a minus, we'll just convert to a negative
@@ -3038,6 +3042,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * a_3 <- a_2 + 0x1
 	 */
 
+
+
+	//TODO DUBIOUS THAT THIS DOES ANYTHING NOW
+
 	//If the first instruction is a binary operation and the immediately following instruction is an assignment
 	//operation, this is a potential match
 	if(is_instruction_binary_operation(window->instruction1) == TRUE
@@ -3053,6 +3061,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			&& variables_equal(first->assignee, second->op1, FALSE) == TRUE
 			//Special no-ssa comparison, we expect that the ssa would be different due to assignment levels
 			&& variables_equal_no_ssa(second->assignee, first->op1, FALSE) == TRUE){
+
+			//TODO DETERMINE
+			//printf("HERE\n\n\n\n\n");
 
 			//We will now take the second variables assignee to be the first statements assignee
 			first->assignee = second->assignee;
