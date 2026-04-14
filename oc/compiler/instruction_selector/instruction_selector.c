@@ -5191,7 +5191,7 @@ static void handle_left_shift_instruction(instruction_window_t* window){
 	 * Now if op1 and the assignee line up, we are good. Otherwise we will
 	 * need to make them align and insert some actual instructions
 	 */
-	if(variables_equal_no_ssa(left_shift_instruction->assignee, left_shift_instruction->op1, FALSE) == TRUE){
+	if(variables_equal_no_ssa(left_shift_instruction->assignee, left_shift_instruction->op1, TRUE) == TRUE){
 		//Destination is the assignee
 		left_shift_instruction->destination_register = left_shift_instruction->assignee;
 
@@ -5363,7 +5363,7 @@ static void handle_right_shift_instruction(instruction_window_t* window){
 	 * Now if op1 and the assignee line up, we are good. Otherwise we will
 	 * need to make them align and insert some actual instructions
 	 */
-	if(variables_equal_no_ssa(right_shift_instruction->assignee, right_shift_instruction->op1, FALSE) == TRUE){
+	if(variables_equal_no_ssa(right_shift_instruction->assignee, right_shift_instruction->op1, TRUE) == TRUE){
 		//Destination is the assignee
 		right_shift_instruction->destination_register = right_shift_instruction->assignee;
 
@@ -5481,7 +5481,7 @@ static void handle_bitwise_inclusive_or_instruction(instruction_window_t* window
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(bitwise_or->assignee, bitwise_or->op1, FALSE) == TRUE){
+	if(variables_equal_no_ssa(bitwise_or->assignee, bitwise_or->op1, TRUE) == TRUE){
 		//Destination is just the assignee
 		bitwise_or->destination_register = bitwise_or->assignee;
 
@@ -5600,7 +5600,7 @@ static void handle_bitwise_and_instruction(instruction_window_t* window){
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(bitwise_and->assignee, bitwise_and->op1, FALSE) == TRUE){
+	if(variables_equal_no_ssa(bitwise_and->assignee, bitwise_and->op1, TRUE) == TRUE){
 		//Destination is just the assignee
 		bitwise_and->destination_register = bitwise_and->assignee;
 
@@ -5719,7 +5719,7 @@ static void handle_bitwise_exclusive_or_instruction(instruction_window_t* window
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(bitwise_xor->assignee, bitwise_xor->op1, FALSE) == TRUE){
+	if(variables_equal_no_ssa(bitwise_xor->assignee, bitwise_xor->op1, TRUE) == TRUE){
 		//Destination is just the assignee
 		bitwise_xor->destination_register = bitwise_xor->assignee;
 
@@ -6194,7 +6194,7 @@ static void handle_signed_multiplication_instruction(instruction_window_t* windo
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(multiplication_instruction->assignee, multiplication_instruction->op1, FALSE) == TRUE){
+	if(variables_equal_no_ssa(multiplication_instruction->assignee, multiplication_instruction->op1, TRUE) == TRUE){
 		//Destination is just the assignee
 		multiplication_instruction->destination_register = multiplication_instruction->assignee;
 
@@ -6310,7 +6310,7 @@ static void handle_sse_multiplication_instruction(instruction_window_t* window){
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(multiplication_instruction->assignee, multiplication_instruction->op1, FALSE) == TRUE){
+	if(variables_equal_no_ssa(multiplication_instruction->assignee, multiplication_instruction->op1, TRUE) == TRUE){
 		//Destination is just the assignee
 		multiplication_instruction->destination_register = multiplication_instruction->assignee;
 		//This is always op2
@@ -6735,7 +6735,7 @@ static void handle_subtraction_instruction(instruction_window_t* window){
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(subtraction_instruction->assignee, subtraction_instruction->op1, FALSE) == TRUE){
+	if(variables_equal_no_ssa(subtraction_instruction->assignee, subtraction_instruction->op1, TRUE) == TRUE){
 		//Destination is just the assignee
 		subtraction_instruction->destination_register = subtraction_instruction->assignee;
 
@@ -6841,10 +6841,6 @@ static void handle_addition_instruction(instruction_window_t* window){
 	/**
 	 * If these two are equal, then we have something like x1 <- x0 + 2. This can simply be
 	 * turned into addl $2, x_1
-	 *
-	 *
-	 *
-	 * TODO EVERYONE NEEDS TO IGNORE INDIRECTION
 	 */
 	if(variables_equal_no_ssa(original_addition->assignee, original_addition->op1, TRUE) == TRUE){
 		//Get the appropriate add instuction
