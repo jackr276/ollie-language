@@ -1491,7 +1491,7 @@ static inline void replace_all_variables_after_instruction(three_addr_var_t* tar
 static inline u_int8_t variables_valid_shift_optimization(three_addr_var_t* destination, three_addr_var_t* source){
 	//If this is the case then we go
 	if(destination->variable_type == VARIABLE_TYPE_NON_TEMP){
-		return variables_equal_no_ssa(destination, source, FALSE);
+		return variables_equal_no_ssa(destination, source, TRUE);
 
 	//If they're the same type then this works
 	} else {
@@ -3386,6 +3386,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					/**
 					 * If the assignee and op1 are equal(which they almost always should be) - then we are set to go here. If not then
 					 * we'll just leave this for the eventual helper rule to handle
+					 *
+					 *
+					 * TODO THIS IS NOW TOTALLY INVALID
 					 */
 					if(variables_valid_shift_optimization(first_instruction->assignee, first_instruction->op1) == TRUE){
 						//Multiplication is a left shift
@@ -3411,6 +3414,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					/**
 					 * If we are able to perform this optimization, now is when we will do so. If we are not, then we will just leave
 					 * everything as is for the eventual selector rule to take care of it
+					 *
+					 *
+					 * TODO THIS IS NOW TOTALLY INVALID
 					 */
 					if(variables_valid_shift_optimization(first_instruction->assignee, first_instruction->op1) == TRUE){
 						//Division is a right shift
@@ -6385,6 +6391,278 @@ static inline void handle_multiplication_instruction(instruction_window_t* windo
 
 
 /**
+ * t4 <- t2 / t3 
+ *
+ * Will become:
+ * movl t2, t5(rax)
+ * cltd
+ * idivl t3(divide by t3, we already guarantee this is a temp var(register))
+ * movl t5, t4 (rax has quotient)
+ * 
+ * As such, this will generate additional instructions for us, making it not
+ * a "single instruction" pattern
+ *
+ * NOTE: We guarantee that the instruction we're after is always the first
+ * instruction in the window
+ *
+ */
+static void handle_signed_division(instruction_window_t* window){
+	//Firstly, the instruction that we're looking for is the very first one
+	instruction_t* division_instruction = window->instruction1;
+
+	//A temp holder for the final second source variable
+	three_addr_var_t* dividend;
+	three_addr_var_t* divisor;
+
+	//If we need to convert, we'll do that here
+	if(is_converting_move_required(division_instruction->assignee->type, division_instruction->op1->type) == TRUE){
+		//Let the helper deal with it
+		dividend = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op1, division_instruction->assignee->type);
+
+	//Otherwise this can be moved directly
+	} else {
+		//We first need to move the first operand into RAX
+		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(division_instruction->op1->type), division_instruction->op1);
+
+		//Insert the move to rax before the multiplication instruction
+		insert_instruction_before_given(move_to_rax, division_instruction);
+
+		//This is just the destination register here
+		dividend = move_to_rax->destination_register;
+	}
+
+	/**
+	 * For a signed division, the CXXX instruction will 
+	 * have a secondary destination that holds the higher order bits. We will
+	 * capture this if needed here
+	 */
+	three_addr_var_t* higher_order_dividend_bits = NULL;
+
+	//We need to use the CL instruction since we're doing signed division
+	instruction_t* cl_instruction = emit_conversion_instruction(dividend);
+
+	//Capute both the lower and higher order bit fields
+	dividend = cl_instruction->destination_register;
+	higher_order_dividend_bits = cl_instruction->destination_register2;
+
+	//Insert this before the given
+	insert_instruction_before_given(cl_instruction, division_instruction);
+
+	/**
+	 * If we have an op2(dividing two variables), we'll handle all of our converting moves here. We'll
+	 * also account for the case that we have a constant to take care of
+	 */
+	if(division_instruction->op2 != NULL){
+		//Do we need to do a type conversion? If so, we'll do a converting move here
+		if(is_converting_move_required(division_instruction->assignee->type, division_instruction->op2->type) == TRUE){
+			divisor = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op2, division_instruction->assignee->type);
+
+		//Otherwise divisor is just the op2
+		} else {
+			divisor = division_instruction->op2;
+		}
+
+	//Otherwise we have a constant - x86 division doesn't support having these as operands so we'll need a move
+	} else {
+		//Emit the constant move
+		instruction_t* constant_move = emit_constant_move_instruction(emit_temp_var(division_instruction->assignee->type), division_instruction->op1_const);
+
+		//Now we'll insert this before the division instruction
+		insert_instruction_before_given(constant_move, division_instruction);
+
+		//This is the divisor now
+		divisor = constant_move->destination_register;
+	}
+
+	//Now we should have what we need, so we can emit the division instruction
+	instruction_t* division = emit_div_instruction(division_instruction->assignee, divisor, dividend, higher_order_dividend_bits, TRUE);
+
+	//The quotient is the destination register
+	three_addr_var_t* quotient = division->destination_register;
+
+	//Insert this before the division instruction
+	insert_instruction_before_given(division, division_instruction);
+
+	//Once we've done all that, we need one final movement operation
+	instruction_t* result_movement = emit_move_instruction(division_instruction->assignee, quotient);
+
+	//Insert this before the original division instruction
+	insert_instruction_before_given(result_movement, division_instruction);
+
+	//Delete the division instruction
+	delete_statement(division_instruction);
+
+	//Reconstruct the window here
+	reconstruct_window(window, result_movement);
+}
+
+
+/**
+ * t4 <- t2 / t3 
+ *
+ * Will become:
+ * movl t2, t5(rax)
+ * xorl %edx MUST CLEAR EDX
+ * idivl t3(divide by t3, we already guarantee this is a temp var(register))
+ * movl t5, t4 (rax has quotient)
+ * 
+ * As such, this will generate additional instructions for us, making it not
+ * a "single instruction" pattern
+ *
+ * NOTE: We guarantee that the instruction we're after is always the first
+ * instruction in the window
+ */
+static void handle_unsigned_division(instruction_window_t* window){
+	//Firstly, the instruction that we're looking for is the very first one
+	instruction_t* division_instruction = window->instruction1;
+
+	//A temp holder for the final second source variable
+	three_addr_var_t* dividend;
+	three_addr_var_t* divisor;
+
+	//If we need to convert, we'll do that here
+	if(is_converting_move_required(division_instruction->assignee->type, division_instruction->op1->type) == TRUE){
+		//Let the helper deal with it
+		dividend = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op1, division_instruction->assignee->type);
+
+	//Otherwise this can be moved directly
+	} else {
+		//We first need to move the first operand into RAX
+		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(division_instruction->op1->type), division_instruction->op1);
+
+		//Insert the move to rax before the multiplication instruction
+		insert_instruction_before_given(move_to_rax, division_instruction);
+
+		//This is just the destination register here
+		dividend = move_to_rax->destination_register;
+	}
+
+	/**
+	 * If we have an op2(dividing two variables), we'll handle all of our converting moves here. We'll
+	 * also account for the case that we have a constant to take care of
+	 */
+	if(division_instruction->op2 != NULL){
+		//Do we need to do a type conversion? If so, we'll do a converting move here
+		if(is_converting_move_required(division_instruction->assignee->type, division_instruction->op2->type) == TRUE){
+			divisor = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op2, division_instruction->assignee->type);
+
+		//Otherwise divisor is just the op2
+		} else {
+			divisor = division_instruction->op2;
+		}
+
+	//Otherwise we have a constant - x86 division doesn't support having these as operands so we'll need a move
+	} else {
+		//Emit the constant move
+		instruction_t* constant_move = emit_constant_move_instruction(emit_temp_var(division_instruction->assignee->type), division_instruction->op1_const);
+
+		//Now we'll insert this before the division instruction
+		insert_instruction_before_given(constant_move, division_instruction);
+
+		//This is the divisor now
+		divisor = constant_move->destination_register;
+	}
+
+	/**
+	 * For unsigned division, we need to completely 0 out the %rdx register.
+	 * This is in contrast to signed division where we intentionally extend to said register. Here we will
+	 * just clean it out
+	 */
+	three_addr_var_t* cleared_rdx = emit_temp_var(division_instruction->assignee->type);
+
+	//Get the instruction out
+	instruction_t* clear_instruction = emit_gp_register_clear_instruction(cleared_rdx);
+
+	//This goes in before the given instruction
+	insert_instruction_before_given(clear_instruction, division_instruction);
+
+	//Now we should have what we need, so we can emit the division instruction
+	instruction_t* division = emit_div_instruction(division_instruction->assignee, divisor, dividend, cleared_rdx, FALSE);
+
+	//The quotient is the destination register
+	three_addr_var_t* quotient = division->destination_register;
+
+	//Insert this before the division instruction
+	insert_instruction_before_given(division, division_instruction);
+
+	//Once we've done all that, we need one final movement operation
+	instruction_t* result_movement = emit_move_instruction(division_instruction->assignee, quotient);
+
+	//Insert this before the original division instruction
+	insert_instruction_before_given(result_movement, division_instruction);
+
+	//Delete the division instruction
+	delete_statement(division_instruction);
+
+	//Reconstruct the window here
+	reconstruct_window(window, result_movement);
+
+}
+
+
+/**
+ * Handle an SSE multiplication instruction. By the time we get here, we already
+ * know that we're dealing with an SSE operation. This instruction will generate
+ * converting moves if such moves are required
+ *
+ *
+ * TODO NEEDS TO BE FIXED
+ */
+static void handle_sse_division_instruction(instruction_window_t* window){
+	//Go based on what the assignee's type is
+	switch(instruction->assignee->variable_size){
+		case SINGLE_PRECISION:
+			instruction->instruction_type = DIVSS;
+			break;
+		case DOUBLE_PRECISION:
+			instruction->instruction_type = DIVSD;
+			break;
+		default:
+			printf("Fatal internal compiler error: invalid assignee size for SSE division instruction\n");
+	}
+
+	//Handle any/all converting moves that are going to be needed here
+	if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
+		instruction->op2 = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
+	}
+
+	//The source register is the op1 and the destination is the assignee. There is never a case where we
+	//will have a constant source, it is not possible for sse operations
+	instruction->destination_register = instruction->assignee;
+	instruction->source_register = instruction->op2;
+}
+
+
+/**
+ * Handle a division operation
+ *
+ * This rule simply multiplexes for us into the two specialized rules that
+ * we really want to be using
+ */
+static inline void handle_division_instruction(instruction_window_t* window){
+	instruction_t* division_instruction = window->instruction1;
+
+	/**
+	 * To dispatch properly here - if we don't have a floating point
+	 * division instruction, we split via signedness. Otherwise we just let
+	 * the float rule deal with it
+	 */
+	if(IS_FLOATING_POINT(division_instruction->assignee->type) == FALSE){
+		u_int8_t is_signed = is_type_signed(division_instruction->assignee->type);
+
+		if(is_signed == TRUE){
+			handle_signed_division(window);
+		} else {
+			handle_unsigned_division(window);
+		}
+
+	} else {
+		handle_sse_division_instruction(window);
+	}
+}
+
+
+/**
  * Select the appropriate set type given the circumstances, including the operand and the signedness
  */
 static inline instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_signed){
@@ -6932,269 +7210,6 @@ static void handle_addition_instruction(instruction_window_t* window){
 		//Rebuild the whole window around this
 		reconstruct_window(window, assignment_instruction);
 	}
-}
-
-
-/**
- * t4 <- t2 / t3 
- *
- * Will become:
- * movl t2, t5(rax)
- * cltd
- * idivl t3(divide by t3, we already guarantee this is a temp var(register))
- * movl t5, t4 (rax has quotient)
- * 
- * As such, this will generate additional instructions for us, making it not
- * a "single instruction" pattern
- *
- * NOTE: We guarantee that the instruction we're after is always the first
- * instruction in the window
- *
- */
-static inline void handle_signed_division(instruction_window_t* window){
-	//Firstly, the instruction that we're looking for is the very first one
-	instruction_t* division_instruction = window->instruction1;
-
-	//A temp holder for the final second source variable
-	three_addr_var_t* dividend;
-	three_addr_var_t* divisor;
-
-	//If we need to convert, we'll do that here
-	if(is_converting_move_required(division_instruction->assignee->type, division_instruction->op1->type) == TRUE){
-		//Let the helper deal with it
-		dividend = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op1, division_instruction->assignee->type);
-
-	//Otherwise this can be moved directly
-	} else {
-		//We first need to move the first operand into RAX
-		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(division_instruction->op1->type), division_instruction->op1);
-
-		//Insert the move to rax before the multiplication instruction
-		insert_instruction_before_given(move_to_rax, division_instruction);
-
-		//This is just the destination register here
-		dividend = move_to_rax->destination_register;
-	}
-
-	/**
-	 * For a signed division, the CXXX instruction will 
-	 * have a secondary destination that holds the higher order bits. We will
-	 * capture this if needed here
-	 */
-	three_addr_var_t* higher_order_dividend_bits = NULL;
-
-	//We need to use the CL instruction since we're doing signed division
-	instruction_t* cl_instruction = emit_conversion_instruction(dividend);
-
-	//Capute both the lower and higher order bit fields
-	dividend = cl_instruction->destination_register;
-	higher_order_dividend_bits = cl_instruction->destination_register2;
-
-	//Insert this before the given
-	insert_instruction_before_given(cl_instruction, division_instruction);
-
-	/**
-	 * If we have an op2(dividing two variables), we'll handle all of our converting moves here. We'll
-	 * also account for the case that we have a constant to take care of
-	 */
-	if(division_instruction->op2 != NULL){
-		//Do we need to do a type conversion? If so, we'll do a converting move here
-		if(is_converting_move_required(division_instruction->assignee->type, division_instruction->op2->type) == TRUE){
-			divisor = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op2, division_instruction->assignee->type);
-
-		//Otherwise divisor is just the op2
-		} else {
-			divisor = division_instruction->op2;
-		}
-
-	//Otherwise we have a constant - x86 division doesn't support having these as operands so we'll need a move
-	} else {
-		//Emit the constant move
-		instruction_t* constant_move = emit_constant_move_instruction(emit_temp_var(division_instruction->assignee->type), division_instruction->op1_const);
-
-		//Now we'll insert this before the division instruction
-		insert_instruction_before_given(constant_move, division_instruction);
-
-		//This is the divisor now
-		divisor = constant_move->destination_register;
-	}
-
-	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(division_instruction->assignee, divisor, dividend, higher_order_dividend_bits, TRUE);
-
-	//The quotient is the destination register
-	three_addr_var_t* quotient = division->destination_register;
-
-	//Insert this before the division instruction
-	insert_instruction_before_given(division, division_instruction);
-
-	//Once we've done all that, we need one final movement operation
-	instruction_t* result_movement = emit_move_instruction(division_instruction->assignee, quotient);
-
-	//Insert this before the original division instruction
-	insert_instruction_before_given(result_movement, division_instruction);
-
-	//Delete the division instruction
-	delete_statement(division_instruction);
-
-	//Reconstruct the window here
-	reconstruct_window(window, result_movement);
-}
-
-
-/**
- * t4 <- t2 / t3 
- *
- * Will become:
- * movl t2, t5(rax)
- * xorl %edx MUST CLEAR EDX
- * idivl t3(divide by t3, we already guarantee this is a temp var(register))
- * movl t5, t4 (rax has quotient)
- * 
- * As such, this will generate additional instructions for us, making it not
- * a "single instruction" pattern
- *
- * NOTE: We guarantee that the instruction we're after is always the first
- * instruction in the window
- *
- */
-static inline void handle_unsigned_division(instruction_window_t* window){
-	//Firstly, the instruction that we're looking for is the very first one
-	instruction_t* division_instruction = window->instruction1;
-
-	//A temp holder for the final second source variable
-	three_addr_var_t* dividend;
-	three_addr_var_t* divisor;
-
-	//If we need to convert, we'll do that here
-	if(is_converting_move_required(division_instruction->assignee->type, division_instruction->op1->type) == TRUE){
-		//Let the helper deal with it
-		dividend = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op1, division_instruction->assignee->type);
-
-	//Otherwise this can be moved directly
-	} else {
-		//We first need to move the first operand into RAX
-		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(division_instruction->op1->type), division_instruction->op1);
-
-		//Insert the move to rax before the multiplication instruction
-		insert_instruction_before_given(move_to_rax, division_instruction);
-
-		//This is just the destination register here
-		dividend = move_to_rax->destination_register;
-	}
-
-	/**
-	 * If we have an op2(dividing two variables), we'll handle all of our converting moves here. We'll
-	 * also account for the case that we have a constant to take care of
-	 */
-	if(division_instruction->op2 != NULL){
-		//Do we need to do a type conversion? If so, we'll do a converting move here
-		if(is_converting_move_required(division_instruction->assignee->type, division_instruction->op2->type) == TRUE){
-			divisor = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op2, division_instruction->assignee->type);
-
-		//Otherwise divisor is just the op2
-		} else {
-			divisor = division_instruction->op2;
-		}
-
-	//Otherwise we have a constant - x86 division doesn't support having these as operands so we'll need a move
-	} else {
-		//Emit the constant move
-		instruction_t* constant_move = emit_constant_move_instruction(emit_temp_var(division_instruction->assignee->type), division_instruction->op1_const);
-
-		//Now we'll insert this before the division instruction
-		insert_instruction_before_given(constant_move, division_instruction);
-
-		//This is the divisor now
-		divisor = constant_move->destination_register;
-	}
-
-	/**
-	 * For unsigned division, we need to completely 0 out the %rdx register.
-	 * This is in contrast to signed division where we intentionally extend to said register. Here we will
-	 * just clean it out
-	 */
-	three_addr_var_t* cleared_rdx = emit_temp_var(division_instruction->assignee->type);
-
-	//Get the instruction out
-	instruction_t* clear_instruction = emit_gp_register_clear_instruction(cleared_rdx);
-
-	//This goes in before the given instruction
-	insert_instruction_before_given(clear_instruction, division_instruction);
-
-	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(division_instruction->assignee, divisor, dividend, cleared_rdx, FALSE);
-
-	//The quotient is the destination register
-	three_addr_var_t* quotient = division->destination_register;
-
-	//Insert this before the division instruction
-	insert_instruction_before_given(division, division_instruction);
-
-	//Once we've done all that, we need one final movement operation
-	instruction_t* result_movement = emit_move_instruction(division_instruction->assignee, quotient);
-
-	//Insert this before the original division instruction
-	insert_instruction_before_given(result_movement, division_instruction);
-
-	//Delete the division instruction
-	delete_statement(division_instruction);
-
-	//Reconstruct the window here
-	reconstruct_window(window, result_movement);
-
-}
-
-
-/**
- * Handle a division operation
- *
- * This rule simply multiplexes for us into the two specialized rules that
- * we really want to be using
- */
-static void handle_division_instruction(instruction_window_t* window){
-	//Firstly, the instruction that we're looking for is the very first one
-	instruction_t* division_instruction = window->instruction1;
-
-	//We go entirely based on the assignee
-	u_int8_t is_signed = is_type_signed(division_instruction->assignee->type);
-
-	//Dispatch based on what we need here
-	if(is_signed == TRUE){
-		handle_signed_division(window);
-	} else {
-		handle_unsigned_division(window);
-	}
-}
-
-
-/**
- * Handle an SSE multiplication instruction. By the time we get here, we already
- * know that we're dealing with an SSE operation. This instruction will generate
- * converting moves if such moves are required
- */
-static inline void handle_sse_division_instruction(instruction_t* instruction){
-	//Go based on what the assignee's type is
-	switch(instruction->assignee->variable_size){
-		case SINGLE_PRECISION:
-			instruction->instruction_type = DIVSS;
-			break;
-		case DOUBLE_PRECISION:
-			instruction->instruction_type = DIVSD;
-			break;
-		default:
-			printf("Fatal internal compiler error: invalid assignee size for SSE division instruction\n");
-	}
-
-	//Handle any/all converting moves that are going to be needed here
-	if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
-		instruction->op2 = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
-	}
-
-	//The source register is the op1 and the destination is the assignee. There is never a case where we
-	//will have a constant source, it is not possible for sse operations
-	instruction->destination_register = instruction->assignee;
-	instruction->source_register = instruction->op2;
 }
 
 
@@ -7832,6 +7847,10 @@ static inline void handle_binary_operation_instruction(instruction_window_t* win
 
 		case STAR:
 			handle_multiplication_instruction(window);
+			break;
+
+		case F_SLASH:
+			handle_division_instruction(window);
 			break;
 
 		//All of these instructions require us to use the CMP or CMPQ command
