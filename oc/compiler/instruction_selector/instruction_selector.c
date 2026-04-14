@@ -1507,6 +1507,16 @@ static inline u_int8_t variables_valid_shift_optimization(three_addr_var_t* dest
  * we can just extract the first 3 bytes using an AND operation and avoid doing any division
  * entirely
  *
+ * Two scenarios:
+ *
+ * Case 1:
+ * 	x_1 <- x_0 % 4
+ *
+ *
+ * Case 2:
+ * 	x_1 <- y_0 % 4
+ *
+ * We consider both cases to be valid and we handle both of them accordingly
  *
  * NOTE: We assume that instruction1 is the one we are dealing with here
  */
@@ -1674,19 +1684,64 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		//Now we'll compute 2^n - 1 
 		u_int32_t mask = (1 << bits_needed) - 1;
 
-		//Make this constant the mask now
-		mod_instruction->op1_const->constant_value.unsigned_long_constant = mask;
+		/**
+		 * If we have a situation where the two variables are equal, we can just convert the
+		 * entire thing into an *AND* operation
+		 *
+		 * x_1 <- x_0 % 4
+		 * Turns into 
+		 * x_1 <- x_0 & 1
+		 */
+		if(variables_equal_no_ssa(mod_instruction->assignee, mod_instruction->op1, TRUE) == TRUE){
+			//Make this constant the mask now
+			mod_instruction->op1_const->constant_value.unsigned_long_constant = mask;
 
-		//This is now an and instruction
-		mod_instruction->op = SINGLE_AND;
+			//This is now an and instruction
+			mod_instruction->op = SINGLE_AND;
 
 		/**
-		 * IMPORTANT - if we have a temp variable here, since we're now using
-		 * a shift, we'll need to wipe this temp var away and instead use the op1
-		 * temp var for everything
+		 * Otherwise we are dealing with a temp var here, so we're going to need
+		 * to do a little bit of extra work to handle everything
 		 */
-		if(mod_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
-			replace_all_variables_after_instruction(mod_instruction->assignee, mod_instruction->op1, mod_instruction);
+		} else {
+			/**
+			 * If this is not temp, then we're going to need to insert a move
+			 * instruction to avoid altering it
+			 */
+			if(mod_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+				//Emit the move
+				instruction_t* move_instruction = emit_assignment_instruction(emit_temp_var(mod_instruction->op1->type), mod_instruction->op1);
+
+				//Add it in right beforehand
+				insert_instruction_before_given(move_instruction, mod_instruction);
+
+				//This is now the op1
+				mod_instruction->op1 = move_instruction->assignee;
+			}
+
+			//Grab out what the final assignee will be
+			three_addr_var_t* final_assignee = mod_instruction->assignee;
+
+			/**
+			 * We can now turn our mod instruction into an and instruction, but we'll
+			 * need to swap out the assignee for the op1
+			 */
+			mod_instruction->assignee = emit_var_copy(mod_instruction->op1);
+
+			//Store the mask
+			mod_instruction->op1_const->constant_value.unsigned_long_constant = mask;
+
+			//Force this to be a single_and
+			mod_instruction->op = SINGLE_AND;
+
+			//Now at the end, we'll just emit a final assignment over to the given assignee
+			instruction_t* final_assignment = emit_assignment_instruction(final_assignee, mod_instruction->assignee); 
+
+			//Put this after the given
+			insert_instruction_after_given(final_assignment, mod_instruction);
+
+			//Rebuild the window around the new one
+			reconstruct_window(window, final_assignment);
 		}
 	}
 }
@@ -3357,19 +3412,15 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 					break;
 
+				/**
+				 * This is going to be valid no matter what. We will let the helper handle
+				 * it. The helper will account for the different scenarios that we may have
+				 */
 				case MOD:
-					/**
-					 * If we are able to perform this optimization, now is when we will do so. If we are not, then we will just leave
-					 * everything as is for the eventual selector rule to take care of it
-					 *
-					 * This is a little more involved then the way that we handle division so we'll break this out into an inlined function
-					 */
-					if(variables_valid_shift_optimization(first_instruction->assignee, first_instruction->op1) == TRUE){
-						optimize_mod_by_power_of_2(window);
+					optimize_mod_by_power_of_2(window);
 
-						//This is a change
-						changed = TRUE;
-					}
+					//This is a change
+					changed = TRUE;
 
 					break;
 
