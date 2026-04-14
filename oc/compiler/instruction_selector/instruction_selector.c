@@ -1618,8 +1618,8 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		 */
 		three_addr_var_t* result = emit_temp_var(type);
 
-		//This should eventually become a lea
-		instruction_t* addition = emit_binary_operation_instruction(result, mod_instruction->op1, PLUS, bias_temp_var);
+		//Emit a lea so that we end up with
+		instruction_t* addition = emit_lea_operands_only(result, mod_instruction->op1, bias_temp_var);
 
 		//Add this in right after the shift
 		insert_instruction_after_given(addition, logical_shift);
