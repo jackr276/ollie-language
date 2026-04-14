@@ -2190,6 +2190,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			&& variables_equal_no_ssa(first->op1, third->assignee, FALSE) == TRUE
 	 		&& variables_equal(first->assignee, second->op1, FALSE) == TRUE
 	 		&& variables_equal(second->assignee, third->op1, FALSE) == TRUE){
+			/*
+
+			printf("WE ARE COMPRESSING\n");
 
 			//Manage our use state here
 			replace_variable(second->op1, first->op1);
@@ -2210,6 +2213,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			//Regardless of what happened, we did change the window, so we'll
 			//update this
 			changed = TRUE;
+			*/
 		}
 	}
 
@@ -3090,6 +3094,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		} else if(first->op == DOUBLE_AND
 				&& first->assignee->variable_type == VARIABLE_TYPE_TEMP 
 				&& variables_equal(first->assignee, second->op1, FALSE) == TRUE){
+
+			//printf("HERE AND\n\n\n\n\n");
 
 			//Set these to be equal
 			first->assignee = second->assignee;
@@ -6898,8 +6904,12 @@ static void handle_addition_instruction(instruction_window_t* window){
 	/**
 	 * If these two are equal, then we have something like x1 <- x0 + 2. This can simply be
 	 * turned into addl $2, x_1
+	 *
+	 *
+	 *
+	 * TODO EVERYONE NEEDS TO IGNORE INDIRECTION
 	 */
-	if(variables_equal_no_ssa(original_addition->assignee, original_addition->op1, FALSE) == TRUE){
+	if(variables_equal_no_ssa(original_addition->assignee, original_addition->op1, TRUE) == TRUE){
 		//Get the appropriate add instuction
 		original_addition->instruction_type = select_add_instruction(size);
 

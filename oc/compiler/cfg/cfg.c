@@ -2866,34 +2866,24 @@ static inline void rename_all_variables(cfg_t* cfg){
 
 /**
  * Emit a pointer arithmetic statement that can arise from either a ++ or -- on a pointer
+ *
+ * my_ptr++ will become my_ptr = my_ptr + ____
  */
 static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, ollie_token_t operator, three_addr_var_t* assignee){
 	//Emit the constant size
 	three_addr_const_t* constant = emit_direct_integer_or_char_constant(assignee->type->internal_types.points_to->type_size, u64);
 
-	//We need this temp assignment for bookkeeping reasons
-	instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
-
-	//Add this to the block
-	add_statement(basic_block, temp_assignment);
-
 	//Decide what the op is
 	ollie_token_t op = operator == PLUSPLUS ? PLUS : MINUS;
 
 	//We need to emit a temp assignment for the assignee
-	instruction_t* operation = emit_binary_operation_with_const_instruction(emit_temp_var(assignee->type), temp_assignment->assignee, op, constant);
+	instruction_t* operation = emit_binary_operation_with_const_instruction(assignee, emit_var_copy(assignee), op, constant);
 
 	//Add this to the block
 	add_statement(basic_block, operation);
 
-	//We need one final assignment
-	instruction_t* final_assignment = emit_assignment_instruction(emit_var_copy(assignee), operation->assignee);
-
-	//And add this one in
-	add_statement(basic_block, final_assignment);
-
 	//Give back the assignee
-	return final_assignment->assignee;
+	return assignee;
 }
 
 
