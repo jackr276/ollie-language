@@ -6060,7 +6060,7 @@ static inline void handle_unsigned_modulus(instruction_window_t* window){
  * NOTE: We guarantee that the instruction we're after is always the first
  * instruction in the window
  */
-static void handle_modulus_instruction(instruction_window_t* window){
+static inline void handle_modulus_instruction(instruction_window_t* window){
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* modulus_instruction = window->instruction1;
 
@@ -6072,6 +6072,225 @@ static void handle_modulus_instruction(instruction_window_t* window){
 		handle_signed_modulus(window);
 	} else {
 		handle_unsigned_modulus(window);
+	}
+}
+
+
+/**
+ * Handle an unsigned multiplication operation
+ *
+ * Because of the extra instructions that this will generate, this will count as
+ * a multiple instruction selection pattern
+ *
+ * x <- a * 2;
+ *
+ * mov $3, %rax <- Source is always in RAX
+ * mull %rcx -> result in rax
+ *
+ *
+ * TODO UPDATE
+ *
+ * NOTE: this is always the first instruction in the instruction window
+*/
+static void handle_unsigned_multiplication_instruction(instruction_window_t* window){
+	//Instruction 1 is the multiplication instruction
+	instruction_t* multiplication_instruction = window->instruction1;
+
+	//We'll need to know the variables size
+	variable_size_t size = get_type_size(multiplication_instruction->assignee->type);
+
+	//A temp holder for the final second source variable
+	three_addr_var_t* source;
+	three_addr_var_t* source2;
+
+	//If we have a BIN_OP with const statement, we need to 
+	if(multiplication_instruction->statement_type == THREE_ADDR_CODE_BIN_OP_STMT){
+		//If we need to convert, we'll do that here
+		if(is_converting_move_required(multiplication_instruction->assignee->type, multiplication_instruction->op2->type) == TRUE){
+			//Let the helper deal with it
+			source2 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->op2, multiplication_instruction->assignee->type);
+
+		//Otherwise this can be moved directly
+		} else {
+			//We first need to move the first operand into RAX
+			instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(multiplication_instruction->op2->type), multiplication_instruction->op2);
+
+			//Insert the move to rax before the multiplication instruction
+			insert_instruction_before_given(move_to_rax, multiplication_instruction);
+
+			//This is just the destination register here
+			source2 = move_to_rax->destination_register;
+		}
+
+	//Otherwise, we have a BIN_OP_WITH_CONST statement. We're actually going to need a temp assignment for the second operand(the constant)
+	//here for this to work
+	} else {
+		//Emit the move instruction here
+		instruction_t* move_to_rax = emit_constant_move_instruction(emit_temp_var(multiplication_instruction->assignee->type), multiplication_instruction->op1_const);
+
+		//Put it before our multiplication
+		insert_instruction_before_given(move_to_rax, multiplication_instruction);
+
+		//Our source2 now is this
+		source2 = move_to_rax->destination_register;
+	}
+
+	//Let's also check is any conversions are needed for the first source register
+	if(is_converting_move_required(multiplication_instruction->assignee->type, multiplication_instruction->op1->type) == TRUE){
+		source = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->op1, multiplication_instruction->assignee->type);
+
+	//Otherwise we'll just assign this to be op1
+	} else {
+		source = multiplication_instruction->op1;
+	}
+
+	
+	//We determine the instruction that we need based on signedness and size
+	switch (size) {
+		case BYTE:
+			multiplication_instruction->instruction_type = MULB;
+			break;
+		case WORD:
+			multiplication_instruction->instruction_type = MULW;
+			break;
+		case DOUBLE_WORD:
+			multiplication_instruction->instruction_type = MULL;
+			break;
+		case QUAD_WORD:
+			multiplication_instruction->instruction_type = MULQ;
+			break;
+		//Everything else falls here
+		default:
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in multiplication instruction\n");
+			exit(1);
+	}
+
+	//This is the case where we have two source registers
+	multiplication_instruction->source_register = source;
+	//The other source register is in RAX
+	multiplication_instruction->source_register2 = source2;
+
+	//This is the assignee, we just don't see it
+	multiplication_instruction->destination_register = emit_temp_var(multiplication_instruction->assignee->type);
+
+	//Once we've done all that, we need one final movement operation
+	instruction_t* result_movement = emit_move_instruction(multiplication_instruction->assignee, multiplication_instruction->destination_register);
+
+	//Insert the result movement instruction to be after the multiplication operation
+	insert_instruction_after_given(result_movement, multiplication_instruction);
+
+	//We now need to reset the window here
+	reconstruct_window(window, result_movement);
+}
+
+
+/**
+ * Handle a multiplication operation
+ *
+ * A multiplication operation can be different based on size and sign
+ *
+ * TODO UPDATE
+ */
+static void handle_signed_multiplication_instruction(instruction_t* instruction){
+	//We'll need to know the variables size
+	variable_size_t size = get_type_size(instruction->assignee->type);
+
+	//We determine the instruction that we need based on signedness and size
+	switch (size) {
+		case BYTE:
+			instruction->instruction_type = IMULB;
+			break;
+		case WORD:
+			instruction->instruction_type = IMULW;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = IMULL;
+			break;
+		//Everything else falls here
+		default:
+			instruction->instruction_type = IMULQ;
+			break;
+	}
+
+	//Following this, we'll set the assignee and source
+	instruction->destination_register = instruction->assignee;
+
+	//Are we using an immediate or register?
+	if(instruction->op2 != NULL){
+		//Do we need a type conversion here?
+		if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
+			//Let the helper deal with it
+			instruction->source_register = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
+
+		//Otherwise assign directly
+		} else {
+			//This is the case where we have a source register
+			instruction->source_register = instruction->op2;
+		}
+		
+	} else {
+		//In this case we'll have an immediate source
+		instruction->source_immediate = instruction->op1_const;
+	}
+}
+
+
+/**
+ * Handle an SSE multiplication instruction. By the time we get here, we already
+ * know that we're dealing with an SSE operation. This instruction will generate
+ * converting moves if such moves are required
+ *
+ * TODO NOT RIGHT
+ */
+static inline void handle_sse_multiplication_instruction(instruction_t* instruction){
+	//Go based on what the assignee's type is
+	switch(instruction->assignee->variable_size){
+		case SINGLE_PRECISION:
+			instruction->instruction_type = MULSS;
+			break;
+		case DOUBLE_PRECISION:
+			instruction->instruction_type = MULSD;
+			break;
+		default:
+			printf("Fatal internal compiler error: invalid assignee size for SSE multiplication instruction\n");
+	}
+
+	//Handle any/all converting moves that are going to be needed here
+	if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
+		instruction->op2 = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
+	}
+
+	//The source register is the op1 and the destination is the assignee. There is never a case where we
+	//will have a constant source, it is not possible for sse operations
+	instruction->destination_register = instruction->assignee;
+	instruction->source_register = instruction->op2;
+}
+
+
+/**
+ * Handle a multiplication operation. This rule acts as a multiplexor into the
+ * actual processing rules based on type
+ */
+static inline void handle_multiplication_instruction(instruction_window_t* window){
+	switch(window->instruction1->assignee->type->basic_type_token){
+		//Floating point instruction, let the helper deal with it
+		case F32:
+		case F64:
+			handle_sse_multiplication_instruction(window);
+			break;
+
+		//Signed mult, so we let the signed rule handle it
+		case I8:
+		case I16:
+		case I32:
+		case I64:
+			handle_signed_multiplication_instruction(window);
+			break;
+
+		//Everything else counts as unsigned
+		default:
+			handle_unsigned_multiplication_instruction(window);
+			break;
 	}
 }
 
@@ -6628,161 +6847,6 @@ static void handle_addition_instruction(instruction_window_t* window){
 
 
 /**
- * Handle an unsigned multiplication operation
- *
- * Because of the extra instructions that this will generate, this will count as
- * a multiple instruction selection pattern
- *
- * x <- a * 2;
- *
- * mov $3, %rax <- Source is always in RAX
- * mull %rcx -> result in rax
- *
- *
- * NOTE: this is always the first instruction in the instruction window
-*/
-static void handle_unsigned_multiplication_instruction(instruction_window_t* window){
-	//Instruction 1 is the multiplication instruction
-	instruction_t* multiplication_instruction = window->instruction1;
-
-	//We'll need to know the variables size
-	variable_size_t size = get_type_size(multiplication_instruction->assignee->type);
-
-	//A temp holder for the final second source variable
-	three_addr_var_t* source;
-	three_addr_var_t* source2;
-
-	//If we have a BIN_OP with const statement, we need to 
-	if(multiplication_instruction->statement_type == THREE_ADDR_CODE_BIN_OP_STMT){
-		//If we need to convert, we'll do that here
-		if(is_converting_move_required(multiplication_instruction->assignee->type, multiplication_instruction->op2->type) == TRUE){
-			//Let the helper deal with it
-			source2 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->op2, multiplication_instruction->assignee->type);
-
-		//Otherwise this can be moved directly
-		} else {
-			//We first need to move the first operand into RAX
-			instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(multiplication_instruction->op2->type), multiplication_instruction->op2);
-
-			//Insert the move to rax before the multiplication instruction
-			insert_instruction_before_given(move_to_rax, multiplication_instruction);
-
-			//This is just the destination register here
-			source2 = move_to_rax->destination_register;
-		}
-
-	//Otherwise, we have a BIN_OP_WITH_CONST statement. We're actually going to need a temp assignment for the second operand(the constant)
-	//here for this to work
-	} else {
-		//Emit the move instruction here
-		instruction_t* move_to_rax = emit_constant_move_instruction(emit_temp_var(multiplication_instruction->assignee->type), multiplication_instruction->op1_const);
-
-		//Put it before our multiplication
-		insert_instruction_before_given(move_to_rax, multiplication_instruction);
-
-		//Our source2 now is this
-		source2 = move_to_rax->destination_register;
-	}
-
-	//Let's also check is any conversions are needed for the first source register
-	if(is_converting_move_required(multiplication_instruction->assignee->type, multiplication_instruction->op1->type) == TRUE){
-		source = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->op1, multiplication_instruction->assignee->type);
-
-	//Otherwise we'll just assign this to be op1
-	} else {
-		source = multiplication_instruction->op1;
-	}
-
-	
-	//We determine the instruction that we need based on signedness and size
-	switch (size) {
-		case BYTE:
-			multiplication_instruction->instruction_type = MULB;
-			break;
-		case WORD:
-			multiplication_instruction->instruction_type = MULW;
-			break;
-		case DOUBLE_WORD:
-			multiplication_instruction->instruction_type = MULL;
-			break;
-		case QUAD_WORD:
-			multiplication_instruction->instruction_type = MULQ;
-			break;
-		//Everything else falls here
-		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in multiplication instruction\n");
-			exit(1);
-	}
-
-	//This is the case where we have two source registers
-	multiplication_instruction->source_register = source;
-	//The other source register is in RAX
-	multiplication_instruction->source_register2 = source2;
-
-	//This is the assignee, we just don't see it
-	multiplication_instruction->destination_register = emit_temp_var(multiplication_instruction->assignee->type);
-
-	//Once we've done all that, we need one final movement operation
-	instruction_t* result_movement = emit_move_instruction(multiplication_instruction->assignee, multiplication_instruction->destination_register);
-
-	//Insert the result movement instruction to be after the multiplication operation
-	insert_instruction_after_given(result_movement, multiplication_instruction);
-
-	//We now need to reset the window here
-	reconstruct_window(window, result_movement);
-}
-
-
-/**
- * Handle a multiplication operation
- *
- * A multiplication operation can be different based on size and sign
- */
-static void handle_signed_multiplication_instruction(instruction_t* instruction){
-	//We'll need to know the variables size
-	variable_size_t size = get_type_size(instruction->assignee->type);
-
-	//We determine the instruction that we need based on signedness and size
-	switch (size) {
-		case BYTE:
-			instruction->instruction_type = IMULB;
-			break;
-		case WORD:
-			instruction->instruction_type = IMULW;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = IMULL;
-			break;
-		//Everything else falls here
-		default:
-			instruction->instruction_type = IMULQ;
-			break;
-	}
-
-	//Following this, we'll set the assignee and source
-	instruction->destination_register = instruction->assignee;
-
-	//Are we using an immediate or register?
-	if(instruction->op2 != NULL){
-		//Do we need a type conversion here?
-		if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
-			//Let the helper deal with it
-			instruction->source_register = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
-
-		//Otherwise assign directly
-		} else {
-			//This is the case where we have a source register
-			instruction->source_register = instruction->op2;
-		}
-		
-	} else {
-		//In this case we'll have an immediate source
-		instruction->source_immediate = instruction->op1_const;
-	}
-}
-
-
-/**
  * t4 <- t2 / t3 
  *
  * Will become:
@@ -7031,36 +7095,6 @@ static inline void handle_sse_division_instruction(instruction_t* instruction){
 			break;
 		default:
 			printf("Fatal internal compiler error: invalid assignee size for SSE division instruction\n");
-	}
-
-	//Handle any/all converting moves that are going to be needed here
-	if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
-		instruction->op2 = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
-	}
-
-	//The source register is the op1 and the destination is the assignee. There is never a case where we
-	//will have a constant source, it is not possible for sse operations
-	instruction->destination_register = instruction->assignee;
-	instruction->source_register = instruction->op2;
-}
-
-
-/**
- * Handle an SSE multiplication instruction. By the time we get here, we already
- * know that we're dealing with an SSE operation. This instruction will generate
- * converting moves if such moves are required
- */
-static inline void handle_sse_multiplication_instruction(instruction_t* instruction){
-	//Go based on what the assignee's type is
-	switch(instruction->assignee->variable_size){
-		case SINGLE_PRECISION:
-			instruction->instruction_type = MULSS;
-			break;
-		case DOUBLE_PRECISION:
-			instruction->instruction_type = MULSD;
-			break;
-		default:
-			printf("Fatal internal compiler error: invalid assignee size for SSE multiplication instruction\n");
 	}
 
 	//Handle any/all converting moves that are going to be needed here
@@ -7705,6 +7739,10 @@ static inline void handle_binary_operation_instruction(instruction_window_t* win
 
 		case MOD:
 			handle_modulus_instruction(window);
+			break;
+
+		case STAR:
+			//TODO
 			break;
 
 		//All of these instructions require us to use the CMP or CMPQ command
@@ -11169,27 +11207,6 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 
 			//If we have a multiplication *and* it's unsigned, we go here
 			case STAR:
-				switch(window->instruction1->assignee->type->basic_type_token){
-					//Floating point instruction, let the helper deal with it
-					case F32:
-					case F64:
-						handle_sse_multiplication_instruction(window->instruction1);
-						break;
-
-					//Signed mult, so we let the signed rule handle it
-					case I8:
-					case I16:
-					case I32:
-					case I64:
-						handle_signed_multiplication_instruction(window->instruction1);
-						break;
-
-					//Everything else counts as unsigned
-					default:
-						handle_unsigned_multiplication_instruction(window);
-						break;
-				}
-
 				return;
 
 			default:
