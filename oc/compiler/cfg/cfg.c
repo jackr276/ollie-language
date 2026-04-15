@@ -5328,6 +5328,15 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 		binary_operation = emit_binary_operation_with_const_instruction(assignee, op1, logical_or_expr->binary_operator, op1_const);
 	}
 
+	/**
+	 * IMPORTANT: we will store the result type inside of the binary operation itself
+	 * for down the road. This is because we may compress the instruction and end
+	 * up with something like u32 = i32 * i32. Even though the result is a u32, the
+	 * RHS should still be doing signed multiplication in this example. This field
+	 * will help us with that
+	 */
+	binary_operation->type_storage.result_type = logical_or_expr->inferred_type;
+
 	//Throw this into the current block
 	add_statement(current_block, binary_operation);
 
