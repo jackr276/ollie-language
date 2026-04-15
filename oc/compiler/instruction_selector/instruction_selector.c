@@ -11,7 +11,6 @@
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
-#include <iso646.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -5096,7 +5095,7 @@ static void handle_left_shift_instruction(instruction_window_t* window){
 	instruction_t* left_shift_instruction = window->instruction1;
 
 	//This is the type that everything is targeting
-	generic_type_t* destination_type = left_shift_instruction->assignee->type;
+	generic_type_t* destination_type = left_shift_instruction->type_storage.result_type;
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -5268,7 +5267,7 @@ static void handle_right_shift_instruction(instruction_window_t* window){
 	instruction_t* right_shift_instruction = window->instruction1;
 
 	//This is the type that everything is targeting
-	generic_type_t* destination_type = right_shift_instruction->assignee->type;
+	generic_type_t* destination_type = right_shift_instruction->type_storage.result_type;
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -5427,7 +5426,7 @@ static void handle_bitwise_inclusive_or_instruction(instruction_window_t* window
 	instruction_t* bitwise_or = window->instruction1;
 
 	//This is the type that everything is targeting
-	generic_type_t* destination_type = bitwise_or->assignee->type;
+	generic_type_t* destination_type = bitwise_or->type_storage.result_type;
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -5546,7 +5545,7 @@ static void handle_bitwise_and_instruction(instruction_window_t* window){
 	instruction_t* bitwise_and = window->instruction1;
 
 	//This is the type that everything is targeting
-	generic_type_t* destination_type = bitwise_and->assignee->type;
+	generic_type_t* destination_type = bitwise_and->type_storage.result_type;
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -5665,7 +5664,7 @@ static void handle_bitwise_exclusive_or_instruction(instruction_window_t* window
 	instruction_t* bitwise_xor = window->instruction1;
 
 	//This is the type that everything is targeting
-	generic_type_t* destination_type = bitwise_xor->assignee->type;
+	generic_type_t* destination_type = bitwise_xor->type_storage.result_type;
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -5776,10 +5775,12 @@ static inline void handle_signed_modulus(instruction_window_t* window){
 	three_addr_var_t* dividend;
 	three_addr_var_t* divisor;
 
+	generic_type_t* result_type = modulus_instruction->type_storage.result_type;
+
 	//If we need to convert, we'll do that here
-	if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op1->type) == TRUE){
+	if(is_converting_move_required(result_type, modulus_instruction->op1->type) == TRUE){
 		//Let the helper deal with it
-		dividend = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op1, modulus_instruction->assignee->type);
+		dividend = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op1, result_type);
 
 	//Otherwise this can be moved directly
 	} else {
@@ -5815,8 +5816,8 @@ static inline void handle_signed_modulus(instruction_window_t* window){
 	 */
 	if(modulus_instruction->op2 != NULL){
 		//Do we need to do a type conversion? If so, we'll do a converting move here
-		if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op2->type) == TRUE){
-			divisor = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op2, modulus_instruction->assignee->type);
+		if(is_converting_move_required(result_type, modulus_instruction->op2->type) == TRUE){
+			divisor = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op2, result_type);
 
 		//Otherwise source 2 is just the op2
 		} else {
@@ -5879,13 +5880,16 @@ static inline void handle_unsigned_modulus(instruction_window_t* window){
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* modulus_instruction = window->instruction1;
 
+	//Grab the result type out
+	generic_type_t* result_type = modulus_instruction->type_storage.result_type;
+
 	three_addr_var_t* dividend;
 	three_addr_var_t* divisor;
 
 	//If we need to convert, we'll do that here
-	if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op1->type) == TRUE){
+	if(is_converting_move_required(result_type, modulus_instruction->op1->type) == TRUE){
 		//Let the helper deal with it
-		dividend = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op1, modulus_instruction->assignee->type);
+		dividend = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op1, result_type);
 
 	//Otherwise this can be moved directly
 	} else {
@@ -5904,8 +5908,8 @@ static inline void handle_unsigned_modulus(instruction_window_t* window){
 	 */
 	if(modulus_instruction->op2 != NULL){
 		//Do we need to do a type conversion? If so, we'll do a converting move here
-		if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op2->type) == TRUE){
-			divisor = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op2, modulus_instruction->assignee->type);
+		if(is_converting_move_required(result_type, modulus_instruction->op2->type) == TRUE){
+			divisor = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op2, result_type);
 
 		//Otherwise source 2 is just the op2
 		} else {
@@ -5915,7 +5919,7 @@ static inline void handle_unsigned_modulus(instruction_window_t* window){
 	//Otherwise we'll need a const assignment
 	} else {
 		//Emit the move
-		instruction_t* constant_assignment = emit_constant_move_instruction(emit_temp_var(modulus_instruction->assignee->type), modulus_instruction->op1_const);
+		instruction_t* constant_assignment = emit_constant_move_instruction(emit_temp_var(result_type), modulus_instruction->op1_const);
 
 		//This goes right in before the mod
 		insert_instruction_before_given(constant_assignment, modulus_instruction);
@@ -5983,7 +5987,7 @@ static inline void handle_modulus_instruction(instruction_window_t* window){
 	instruction_t* modulus_instruction = window->instruction1;
 
 	//Signedness is always based on our assignee
-	u_int8_t is_signed = is_type_signed(modulus_instruction->assignee->type);
+	u_int8_t is_signed = is_type_signed(modulus_instruction->type_storage.result_type);
 
 	//Dynamic dispatch based on what we need
 	if(is_signed == TRUE){
@@ -7048,7 +7052,7 @@ static void handle_subtraction_instruction(instruction_window_t* window){
 	instruction_t* subtraction_instruction = window->instruction1;
 
 	//This is the type that everything is targeting
-	generic_type_t* destination_type = subtraction_instruction->assignee->type;
+	generic_type_t* destination_type = subtraction_instruction->type_storage.result_type;
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -7159,7 +7163,7 @@ static void handle_addition_instruction(instruction_window_t* window){
 	instruction_t* original_addition = window->instruction1;
 
 	//This is the type that everything is targeting
-	generic_type_t* destination_type = original_addition->assignee->type;
+	generic_type_t* destination_type = original_addition->type_storage.result_type;
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -7461,9 +7465,11 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 	//Grab it out for convenience
 	instruction_t* logical_or = window->instruction1;
 
+	//Get the result type out
+	generic_type_t* result_type = logical_or->type_storage.result_type;
+
 	//Is this a floating point operation or not? This will determine how we handle things
-	//TODO BROKEN
-	u_int8_t is_floating_point = IS_FLOATING_POINT(logical_or->op1->type);
+	u_int8_t is_floating_point = IS_FLOATING_POINT(result_type);
 
 	//Most common case - we are doing GP logical or
 	if(is_floating_point == FALSE){
@@ -7635,10 +7641,11 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 	//Grab it out for convenience
 	instruction_t* logical_and = window->instruction1;
 
+	//Get the result type out
+	generic_type_t* result_type = logical_and->type_storage.result_type;
+
 	//Is this a floating point logical and or not?
-	//
-	////TODO BROKEN
-	u_int8_t is_floating_point = IS_FLOATING_POINT(logical_and->op1->type);
+	u_int8_t is_floating_point = IS_FLOATING_POINT(result_type);
 
 	//If this is not a floating point operation(most common)
 	if(is_floating_point == FALSE){
@@ -7912,6 +7919,7 @@ static inline void handle_binary_operation_instruction(instruction_window_t* win
 			handle_modulus_instruction(window);
 			break;
 
+			//TODO NOT DONE BELOW HERE
 		case STAR:
 			handle_multiplication_instruction(window);
 			break;
