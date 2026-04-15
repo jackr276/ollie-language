@@ -13,7 +13,6 @@
 */
 
 #include "cfg.h"
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -5214,6 +5213,9 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	three_addr_const_t* op1_const = NULL;
 	three_addr_var_t* assignee;
 
+	//What is the final result type?
+	generic_type_t* final_result_type = logical_or_expr->inferred_type;
+
 	/**
 	 * Base case - we call out to the unary expression emitter from here and
 	 * leave the rule
@@ -5290,6 +5292,14 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 			} else {
 				op2 = right_side.assignee;
 			}
+			
+			/**
+			 * IMPORTANT - for operations like these, our final result type is always a boolean. However,
+			 * for the actual operation, we may have floats, ints, etc. To stop this from causing problems,
+			 * we will just use the type off of op1 for our final result type here inside of the instruction
+			 * itself
+			 */
+			final_result_type = op1->type;
 
 			break;
 
@@ -5335,7 +5345,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	 * RHS should still be doing signed multiplication in this example. This field
 	 * will help us with that
 	 */
-	binary_operation->type_storage.result_type = logical_or_expr->inferred_type;
+	binary_operation->type_storage.result_type = final_result_type;
 
 	//Throw this into the current block
 	add_statement(current_block, binary_operation);
