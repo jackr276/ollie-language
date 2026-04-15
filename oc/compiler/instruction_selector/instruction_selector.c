@@ -4922,32 +4922,6 @@ static instruction_t* emit_div_instruction(three_addr_var_t* assignee, three_add
 
 
 /**
- * A very simple helper function that selects the right add instruction based
- * solely on variable size. Done to avoid code duplication
- */
-static inline instruction_type_t select_add_instruction(variable_size_t size){
-	//Go based on size
-	switch(size){
-		case BYTE:
-			return ADDB;
-		case WORD:
-			return ADDW;
-		case DOUBLE_WORD:
-			return ADDL;
-		case QUAD_WORD:
-			return ADDQ;
-		case SINGLE_PRECISION:
-			return ADDSS;
-		case DOUBLE_PRECISION:
-			return ADDSD;
-		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in add instruction\n");
-			exit(1);
-	}
-}
-
-
-/**
  * A very simple helper function that selects the right lea instruction based
  * solely on variable size. Done to avoid code duplication
  */
@@ -4971,7 +4945,6 @@ static inline instruction_type_t select_lea_instruction(variable_size_t size){
  */
 static inline u_int8_t is_type_valid_for_addition_to_lea_conversion(variable_size_t size){
 	switch(size){
-		case WORD:
 		case DOUBLE_WORD:
 		case QUAD_WORD:
 			return TRUE;
@@ -6891,6 +6864,9 @@ static inline instruction_t* emit_movd_instruction(three_addr_var_t* general_pur
  * that flag setting is needed
  *
  * NOTE: we always assume that instruction1 in the window is our target
+ *
+ *
+ * TODO NEEDS TEH SAME THING AS && AND ||
  */
 static void handle_cmp_instruction(instruction_window_t* window){
 	instruction_t* instruction = window->instruction1;
@@ -7227,6 +7203,32 @@ static void handle_subtraction_instruction(instruction_window_t* window){
 
 		//Rebuild the whole window around this
 		reconstruct_window(window, assignment_instruction);
+	}
+}
+
+
+/**
+ * A very simple helper function that selects the right add instruction based
+ * solely on variable size. Done to avoid code duplication
+ */
+static inline instruction_type_t select_add_instruction(variable_size_t size){
+	//Go based on size
+	switch(size){
+		case BYTE:
+			return ADDB;
+		case WORD:
+			return ADDW;
+		case DOUBLE_WORD:
+			return ADDL;
+		case QUAD_WORD:
+			return ADDQ;
+		case SINGLE_PRECISION:
+			return ADDSS;
+		case DOUBLE_PRECISION:
+			return ADDSD;
+		default:
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in add instruction\n");
+			exit(1);
 	}
 }
 

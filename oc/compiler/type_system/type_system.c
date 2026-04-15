@@ -1327,6 +1327,9 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 		/**
 		 * Relational operators will apply normal conversion rules. If we have
 		 * a pointer, we will coerce the other integer to a u64
+		 *
+		 *
+		 * TODO NEEDS THE EXACT SAME TREATMENT
 		 */
 		case G_THAN:
 		case G_THAN_OR_EQ:

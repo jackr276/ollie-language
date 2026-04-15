@@ -4620,6 +4620,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			break;
 
 		//Handle lea printing
+		case LEAW:
 		case LEAL:
 		case LEAQ:
 			//Invoke the helper
