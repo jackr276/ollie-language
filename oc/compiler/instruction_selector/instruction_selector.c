@@ -7583,6 +7583,20 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 	//Is this a floating point operation or not? This will determine how we handle things
 	u_int8_t is_floating_point = IS_FLOATING_POINT(destination_type);
 
+	/**
+	 * Create and insert converting moves if it is required for op1
+	 */
+	if(is_converting_move_required(destination_type, logical_or->op1->type) == TRUE){
+		logical_or->op1 = create_and_insert_converting_move_instruction(logical_or, logical_or->op1, destination_type);
+	}
+
+	/**
+	 * Create and insert converting moves if it is required for op2
+	 */
+	if(is_converting_move_required(destination_type, logical_or->op2->type) == TRUE){
+		logical_or->op2 = create_and_insert_converting_move_instruction(logical_or, logical_or->op2, destination_type);
+	}
+
 	//Most common case - we are doing GP logical or
 	if(is_floating_point == FALSE){
 		//Save the after instruction
@@ -7764,6 +7778,20 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		destination_type = logical_and->type_storage.result_type;
 	} else {
 		destination_type = logical_and->assignee->type;
+	}
+
+	/**
+	 * Create and insert converting moves if it is required for op1
+	 */
+	if(is_converting_move_required(destination_type, logical_and->op1->type) == TRUE){
+		logical_and->op1 = create_and_insert_converting_move_instruction(logical_and, logical_and->op1, destination_type);
+	}
+
+	/**
+	 * Create and insert converting moves if it is required for op2
+	 */
+	if(is_converting_move_required(destination_type, logical_and->op2->type) == TRUE){
+		logical_and->op2 = create_and_insert_converting_move_instruction(logical_and, logical_and->op2, destination_type);
 	}
 
 	//Is this a floating point logical and or not?
