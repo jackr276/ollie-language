@@ -5094,8 +5094,18 @@ static void handle_left_shift_instruction(instruction_window_t* window){
 	//Get the actual left shift
 	instruction_t* left_shift_instruction = window->instruction1;
 
-	//This is the type that everything is targeting
-	generic_type_t* destination_type = left_shift_instruction->type_storage.result_type;
+	//The destination type
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(left_shift_instruction->type_storage.result_type != NULL){
+		destination_type = left_shift_instruction->type_storage.result_type;
+	} else {
+		destination_type = left_shift_instruction->assignee->type;
+	}
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -5266,8 +5276,18 @@ static void handle_right_shift_instruction(instruction_window_t* window){
 	//Get the actual right shift
 	instruction_t* right_shift_instruction = window->instruction1;
 
-	//This is the type that everything is targeting
-	generic_type_t* destination_type = right_shift_instruction->type_storage.result_type;
+	//The destination type
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(right_shift_instruction->type_storage.result_type != NULL){
+		destination_type = right_shift_instruction->type_storage.result_type;
+	} else {
+		destination_type = right_shift_instruction->assignee->type;
+	}
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -7051,8 +7071,18 @@ static void handle_subtraction_instruction(instruction_window_t* window){
 	//Grab out the first one
 	instruction_t* subtraction_instruction = window->instruction1;
 
-	//This is the type that everything is targeting
-	generic_type_t* destination_type = subtraction_instruction->type_storage.result_type;
+	//The destination type
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(subtraction_instruction->type_storage.result_type != NULL){
+		destination_type = subtraction_instruction->type_storage.result_type;
+	} else {
+		destination_type = subtraction_instruction->assignee->type;
+	}
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -7162,8 +7192,18 @@ static void handle_addition_instruction(instruction_window_t* window){
 	//Grab out the first one
 	instruction_t* original_addition = window->instruction1;
 
-	//This is the type that everything is targeting
-	generic_type_t* destination_type = original_addition->type_storage.result_type;
+	//The destination type
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(original_addition->type_storage.result_type != NULL){
+		destination_type = original_addition->type_storage.result_type;
+	} else {
+		destination_type = original_addition->assignee->type;
+	}
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -7465,11 +7505,21 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 	//Grab it out for convenience
 	instruction_t* logical_or = window->instruction1;
 
-	//Get the result type out
-	generic_type_t* result_type = logical_or->type_storage.result_type;
+	//The destination type
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(logical_or->type_storage.result_type != NULL){
+		destination_type = logical_or->type_storage.result_type;
+	} else {
+		destination_type = logical_or->assignee->type;
+	}
 
 	//Is this a floating point operation or not? This will determine how we handle things
-	u_int8_t is_floating_point = IS_FLOATING_POINT(result_type);
+	u_int8_t is_floating_point = IS_FLOATING_POINT(destination_type);
 
 	//Most common case - we are doing GP logical or
 	if(is_floating_point == FALSE){
@@ -7641,11 +7691,21 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 	//Grab it out for convenience
 	instruction_t* logical_and = window->instruction1;
 
-	//Get the result type out
-	generic_type_t* result_type = logical_and->type_storage.result_type;
+	//The destination type
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(logical_and->type_storage.result_type != NULL){
+		destination_type = logical_and->type_storage.result_type;
+	} else {
+		destination_type = logical_and->assignee->type;
+	}
 
 	//Is this a floating point logical and or not?
-	u_int8_t is_floating_point = IS_FLOATING_POINT(result_type);
+	u_int8_t is_floating_point = IS_FLOATING_POINT(destination_type);
 
 	//If this is not a floating point operation(most common)
 	if(is_floating_point == FALSE){
