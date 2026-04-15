@@ -331,9 +331,22 @@ struct instruction_t{
 	//else is our alternative
 	void* if_block;
 	void* else_block;
-	//What is the type of the memory that we are trying to access? This is done
-	//to maintain separation from the base addresses and the memory that we're using
-	generic_type_t* memory_read_write_type;
+	/**
+	 * Optional storage for a type. The union is for readability and intentionality, 
+	 * we know that it's not really needed
+	 */
+	union {
+		/**
+		 * What is the type of the memory that we are trying to access? This is done
+		 * to maintain separation from the base addresses and the memory that we're using
+		 */
+		generic_type_t* memory_read_write_type;
+		/**
+		 * What is the result type of a computation? For various reasons the result type
+		 * of a computation may actually be different as compared to a final type
+		 */
+		generic_type_t* result_type;
+	} type_storage;
 	//For lea multiplication
 	u_int64_t lea_multiplier;
 	//The function called

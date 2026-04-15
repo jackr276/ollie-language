@@ -5406,7 +5406,7 @@ instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* 
 	stmt->op1 = op1;
 
 	//Important - add the type that we expect to be writing to in memory
-	stmt->memory_read_write_type = memory_write_type;
+	stmt->type_storage.memory_read_write_type = memory_write_type;
 
 	//And that's it, we'll now just give it back
 	return stmt;
@@ -5436,7 +5436,7 @@ instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_ad
 	stmt->op2 = storee;
 
 	//Important - add the type that we expect to be writing to in memory
-	stmt->memory_read_write_type = memory_write_type;
+	stmt->type_storage.memory_read_write_type = memory_write_type;
 
 	//And give it back
 	return stmt;
@@ -5466,7 +5466,7 @@ instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_ad
 	stmt->op2 = storee;
 
 	//Important - add the type that we expect to be writing to in memory
-	stmt->memory_read_write_type = memory_write_type;
+	stmt->type_storage.memory_read_write_type = memory_write_type;
 
 	//And give it back
 	return stmt;
@@ -5496,7 +5496,7 @@ instruction_t* emit_store_const_with_constant_offset_ir_code(three_addr_var_t* b
 	stmt->op1_const = storee;
 
 	//Important - add the type that we expect to be writing to in memory
-	stmt->memory_read_write_type = memory_write_type;
+	stmt->type_storage.memory_read_write_type = memory_write_type;
 
 	//And give it back
 	return stmt;
@@ -5517,7 +5517,7 @@ instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* o
 	stmt->op1 = op1;
 
 	//Important - store the type that we expect to be getting out of memory
-	stmt->memory_read_write_type = memory_read_type;
+	stmt->type_storage.memory_read_write_type = memory_read_type;
 	
 	//And that's it, we'll now just give it back
 	return stmt;
@@ -5543,7 +5543,7 @@ instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee
 	stmt->op2 = offset;
 
 	//Important - store the type that we expect to be getting out of memory
-	stmt->memory_read_write_type = memory_read_type;
+	stmt->type_storage.memory_read_write_type = memory_read_type;
 
 	//And give it back
 	return stmt;
@@ -5569,7 +5569,7 @@ instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee
 	stmt->offset = offset;
 
 	//Important - store the type that we expect to be getting out of memory
-	stmt->memory_read_write_type = memory_read_type;
+	stmt->type_storage.memory_read_write_type = memory_read_type;
 
 	//And give it back
 	return stmt;

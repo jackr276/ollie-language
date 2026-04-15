@@ -9154,7 +9154,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 	instruction_t* pxor_instruction;
 
 	//The destination type is always stored in the instruction itself
-	generic_type_t* destination_type = store_instruction->memory_read_write_type;
+	generic_type_t* destination_type = store_instruction->type_storage.memory_read_write_type;
 
 	//The source type will be assigned later
 	generic_type_t* source_type;
@@ -9627,7 +9627,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 	three_addr_var_t* destination_register = load_instruction->assignee;
 
 	//This is always the memory region type
-	generic_type_t* memory_region_type = load_instruction->memory_read_write_type;
+	generic_type_t* memory_region_type = load_instruction->type_storage.memory_read_write_type;
 
 	/**
 	 * Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
