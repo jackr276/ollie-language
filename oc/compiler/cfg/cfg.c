@@ -5299,7 +5299,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 			 * we will just use the type off of op1 for our final result type here inside of the instruction
 			 * itself
 			 */
-			final_result_type = op1->type;
+			final_result_type = get_operand_type_for_logical_operation(type_symtab, op1->type, op2->type);
 
 			break;
 
