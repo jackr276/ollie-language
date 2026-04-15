@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <sys/select.h>
 #include <sys/types.h>
+#include <threads.h>
 
 //We'll need this a lot, so we may as well have it here
 static generic_type_t* double_quad_word;
@@ -5445,8 +5446,18 @@ static void handle_bitwise_inclusive_or_instruction(instruction_window_t* window
 	//Grab out the first one
 	instruction_t* bitwise_or = window->instruction1;
 
-	//This is the type that everything is targeting
-	generic_type_t* destination_type = bitwise_or->type_storage.result_type;
+	//The destination type
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(bitwise_or->type_storage.result_type != NULL){
+		destination_type = bitwise_or->type_storage.result_type;
+	} else {
+		destination_type = bitwise_or->assignee->type;
+	}
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -5564,8 +5575,18 @@ static void handle_bitwise_and_instruction(instruction_window_t* window){
 	//Grab out the first one
 	instruction_t* bitwise_and = window->instruction1;
 
-	//This is the type that everything is targeting
-	generic_type_t* destination_type = bitwise_and->type_storage.result_type;
+	//The destination type
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(bitwise_and->type_storage.result_type != NULL){
+		destination_type = bitwise_and->type_storage.result_type;
+	} else {
+		destination_type = bitwise_and->assignee->type;
+	}
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -5683,8 +5704,18 @@ static void handle_bitwise_exclusive_or_instruction(instruction_window_t* window
 	//Grab out the first one
 	instruction_t* bitwise_xor = window->instruction1;
 
-	//This is the type that everything is targeting
-	generic_type_t* destination_type = bitwise_xor->type_storage.result_type;
+	//The destination type
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(bitwise_xor->type_storage.result_type != NULL){
+		destination_type = bitwise_xor->type_storage.result_type;
+	} else {
+		destination_type = bitwise_xor->assignee->type;
+	}
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -5795,7 +5826,18 @@ static inline void handle_signed_modulus(instruction_window_t* window){
 	three_addr_var_t* dividend;
 	three_addr_var_t* divisor;
 
-	generic_type_t* result_type = modulus_instruction->type_storage.result_type;
+	//The destination type
+	generic_type_t* result_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(modulus_instruction->type_storage.result_type != NULL){
+		result_type = modulus_instruction->type_storage.result_type;
+	} else {
+		result_type = modulus_instruction->assignee->type;
+	}
 
 	//If we need to convert, we'll do that here
 	if(is_converting_move_required(result_type, modulus_instruction->op1->type) == TRUE){
@@ -5900,8 +5942,18 @@ static inline void handle_unsigned_modulus(instruction_window_t* window){
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* modulus_instruction = window->instruction1;
 
-	//Grab the result type out
-	generic_type_t* result_type = modulus_instruction->type_storage.result_type;
+	//The destination type
+	generic_type_t* result_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(modulus_instruction->type_storage.result_type != NULL){
+		result_type = modulus_instruction->type_storage.result_type;
+	} else {
+		result_type = modulus_instruction->assignee->type;
+	}
 
 	three_addr_var_t* dividend;
 	three_addr_var_t* divisor;
@@ -6006,8 +6058,18 @@ static inline void handle_modulus_instruction(instruction_window_t* window){
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* modulus_instruction = window->instruction1;
 
-	//Signedness is always based on our assignee
-	u_int8_t is_signed = is_type_signed(modulus_instruction->type_storage.result_type);
+	//Is the type signed
+	u_int8_t is_signed;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(modulus_instruction->type_storage.result_type != NULL){
+		 is_signed = is_type_signed(modulus_instruction->type_storage.result_type);
+	} else {
+		is_signed = is_type_signed(modulus_instruction->assignee->type);
+	}
 
 	//Dynamic dispatch based on what we need
 	if(is_signed == TRUE){
