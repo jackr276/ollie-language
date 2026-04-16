@@ -5316,10 +5316,27 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 		case NOT_EQUALS:
 			//The assignees are the same
 			op1 = left_side.assignee;
-			op2 = right_side.assignee;
 
-			//Now use the helper to get the final result type
-			final_result_type = get_operand_type_for_relational_operation(type_symtab, op1->type, op2->type);
+			/*
+			 * As for op2, there is a chance that we actually have a constant assignment in the op2
+			 * slot. This only works if the variables are completely equal. If they are not then
+			 * this is a false positive which is possible
+			 */
+			if(current_block->exit_statement != NULL 
+				&& current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
+				&& variables_equal(right_side.assignee, current_block->exit_statement->assignee, FALSE) == TRUE){
+				//Just assign the constant over
+				op1_const = current_block->exit_statement->op1_const;
+
+				//Now use the helper to get the reuslt
+				final_result_type = get_operand_type_for_relational_operation(type_symtab, op1->type, op1_const->type);
+
+			} else {
+				op2 = right_side.assignee;
+
+				//Now use the helper to get the final result type
+				final_result_type = get_operand_type_for_relational_operation(type_symtab, op1->type, op2->type);
+			}
 
 			break;
 
