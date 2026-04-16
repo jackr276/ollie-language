@@ -4596,6 +4596,23 @@ static inline three_addr_var_t* create_and_insert_converting_move_instruction(in
 
 
 /**
+ * For floating point destinations after conversion, we need to completely "0" out the destination
+ * register before the conversion. We will check this here and insert it only if need be
+ */
+static inline void insert_pxor_clear_if_needed(instruction_t* move_instruction){
+	if(is_integer_to_sse_conversion_instruction(move_instruction->instruction_type) == TRUE){
+		/**
+		 * We need to completely zero out the destination register here, so we will emit a pxor to do
+		 * just that. The destination register is our final output
+		 */
+		instruction_t* pxor_instruction = emit_sse_register_clear_instruction(move_instruction->destination_register);
+
+		//Get this in right before the move instruction
+		insert_instruction_before_given(pxor_instruction, move_instruction);
+	}
+}
+
+/**
  * Emit a conversion instruction for division preparation
  *
  * We use this during the process of emitting division instructions
@@ -6169,24 +6186,11 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	//Once we've done all that, we need one final movement operation
 	instruction_t* result_movement = emit_move_instruction(multiplication_instruction->assignee, multiplication_instruction->destination_register);
 
-	/**
-	 * For floating point destinations after conversion, we need to completely "0" out the destination
-	 * register before the conversion. We will check this here and insert it only if need be
-	 */
-	if(is_integer_to_sse_conversion_instruction(move_instruction->instruction_type) == TRUE){
-		/**
-		 * We need to completely zero out the destination register here, so we will emit a pxor to do
-		 * just that
-		 */
-		instruction_t* pxor_instruction = emit_sse_register_clear_instruction(final_destination);
-
-		//Get this in right before the move instruction
-		insert_instruction_before_given(pxor_instruction, move_instruction);
-	}
-
-
 	//Insert the result movement instruction to be after the multiplication operation
 	insert_instruction_after_given(result_movement, multiplication_instruction);
+
+	//Insert a pxor clear if need be
+	insert_pxor_clear_if_needed(result_movement);
 
 	//We now need to reset the window here
 	reconstruct_window(window, result_movement);
@@ -6447,6 +6451,9 @@ static void handle_sse_multiplication_instruction(instruction_window_t* window){
  * actual processing rules based on type
  */
 static inline void handle_multiplication_instruction(instruction_window_t* window){
+
+	generic_type_t* result_type = window->instruction1
+
 	switch(window->instruction1->assignee->type->basic_type_token){
 		case F32:
 		case F64:
@@ -7403,20 +7410,8 @@ static void handle_addition_instruction(instruction_window_t* window){
 			//This goes right after the addition
 			insert_instruction_after_given(move_instruction, original_addition);
 
-			/**
-			 * For floating point destinations after conversion, we need to completely "0" out the destination
-			 * register before the conversion. We will check this here and insert it only if need be
-			 */
-			if(is_integer_to_sse_conversion_instruction(move_instruction->instruction_type) == TRUE){
-				/**
-				 * We need to completely zero out the destination register here, so we will emit a pxor to do
-				 * just that
-				 */
-				instruction_t* pxor_instruction = emit_sse_register_clear_instruction(final_destination);
-
-				//Get this in right before the move instruction
-				insert_instruction_before_given(pxor_instruction, move_instruction);
-			}
+			//Let the helper deal with the pxor clear
+			insert_pxor_clear_if_needed(move_instruction);
 
 			//Rebuild everything around is
 			reconstruct_window(window, move_instruction);
