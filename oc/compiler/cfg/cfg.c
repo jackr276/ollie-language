@@ -5303,6 +5303,26 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 			break;
 
+		/**
+		 * For all other relational operators, we do not need to do the temp assignment
+		 * but we do need to get the operand type since the result type will always be
+		 * a boolean which is not enough to decide what our true types are
+		 */
+		case L_THAN:
+		case L_THAN_OR_EQ:
+		case G_THAN:
+		case G_THAN_OR_EQ:
+		case EQUALS:
+		case NOT_EQUALS:
+			//The assignees are the same
+			op1 = left_side.assignee;
+			op2 = right_side.assignee;
+
+			//Now use the helper to get the final result type
+			final_result_type = get_operand_type_for_relational_operation(type_symtab, op1->type, op2->type);
+
+			break;
+
 		//Otherwise default rules are in effect
 		default:
 			//The op1 is the left side's assingee

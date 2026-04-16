@@ -395,6 +395,12 @@ generic_type_t* create_function_pointer_type(visibilty_type_t visibility, u_int8
 generic_type_t* get_operand_type_for_logical_operation(void* symtab, generic_type_t* type_a, generic_type_t* type_b);
 
 /**
+ * Compute the operand type for a relational operation. We perform floating point
+ * coercion here. j
+ */
+generic_type_t* get_operand_type_for_relational_operation(void* symtab, generic_type_t* type_a, generic_type_t* type_b);
+
+/**
  * Add a function's parameter in
  */
 void add_parameter_to_function_type(generic_type_t* function_type, generic_type_t* parameter);
