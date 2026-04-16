@@ -6451,10 +6451,22 @@ static void handle_sse_multiplication_instruction(instruction_window_t* window){
  * actual processing rules based on type
  */
 static inline void handle_multiplication_instruction(instruction_window_t* window){
+	//We'll need to extract what our result actually is
+	instruction_t* multiplication_instruction = window->instruction1;
 
-	generic_type_t* result_type = window->instruction1
+	generic_type_t* result_type = NULL;
 
-	switch(window->instruction1->assignee->type->basic_type_token){
+	/**
+	 * If the result type is here, we'll use that. Otherwise we will default
+	 * to the assignee type
+	 */
+	if(multiplication_instruction->type_storage.result_type != NULL){
+		result_type = multiplication_instruction->type_storage.result_type;
+	} else {
+		result_type = multiplication_instruction->assignee->type;
+	}
+
+	switch(result_type->basic_type_token){
 		case F32:
 		case F64:
 			handle_sse_multiplication_instruction(window);
