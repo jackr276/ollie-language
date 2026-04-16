@@ -3447,6 +3447,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * are not equal. These usually arise in address calculation scenarios
 	 *
 	 * We will check all three instructions to see how far we can go
+	 *
+	 *
+	 * TODO REWORK THIS/REMOVE IT WHEN DONE WITH THE ACTUAL FIX
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction1->op == STAR
@@ -6984,6 +6987,8 @@ static inline instruction_t* emit_movd_instruction(three_addr_var_t* general_pur
  * that flag setting is needed
  *
  * NOTE: we always assume that instruction1 in the window is our target
+ *
+ * TODO TAKES PRIORITY
  *
  *
  * TODO NEEDS TEH SAME THING AS && AND ||
