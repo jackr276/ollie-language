@@ -7321,8 +7321,7 @@ static void handle_addition_instruction(instruction_window_t* window){
 		//Get the lea that we need
 		original_addition->instruction_type = select_lea_instruction(size);
 
-		//These two are the same regardless
-		original_addition->destination_register = original_addition->assignee;
+		//Address calc 1 is always op1
 		original_addition->address_calc_reg1 = original_addition->op1;
 		
 		//Based on the constant status we do it one way or the other
@@ -7335,8 +7334,51 @@ static void handle_addition_instruction(instruction_window_t* window){
 			original_addition->offset = original_addition->op1_const;
 		}
 
-		//Rebuilt the entire window around this
-		reconstruct_window(window, original_addition);
+		/**
+		 * If we require a converting move between the original assignee and this one, we will need
+		 * to use a temp var as the actual assignee and insert that here
+		 */
+		if(is_converting_move_required(original_addition->assignee->type, destination_type) == TRUE){
+			//We'll need a temp var for this
+			three_addr_var_t* temp_destination = emit_temp_var(destination_type);
+
+			//The fianl destination actually comes from the instruction
+			three_addr_var_t* final_destination = original_addition->assignee;
+
+			//This is what the lea will point to
+			original_addition->assignee = temp_destination;
+
+			//Now we can emit the move
+			instruction_t* move_instruction = emit_move_instruction(final_destination, temp_destination);
+
+			//This goes right after the addition
+			insert_instruction_after_given(move_instruction, original_addition);
+
+			/**
+			 * For floating point destinations after conversion, we need to completely "0" out the destination
+			 * register before the conversion. We will check this here and insert it only if need be
+			 */
+			if(is_integer_to_sse_conversion_instruction(move_instruction->instruction_type) == TRUE){
+				/**
+				 * We need to completely zero out the destination register here, so we will emit a pxor to do
+				 * just that
+				 */
+				instruction_t* pxor_instruction = emit_sse_register_clear_instruction(final_destination);
+
+				//Get this in right before the move instruction
+				insert_instruction_before_given(pxor_instruction, move_instruction);
+			}
+
+			//Rebuild everything around is
+			reconstruct_window(window, move_instruction);
+
+		} else {
+			//We can just use the assignee directly
+			original_addition->destination_register = original_addition->assignee;
+
+			//Rebuilt the entire window around this
+			reconstruct_window(window, original_addition);
+		}
 
 	/**
 	 * Otherwise we've got something like:
