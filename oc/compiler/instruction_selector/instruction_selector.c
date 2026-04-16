@@ -29,6 +29,8 @@ static generic_type_t* u16;
 static generic_type_t* i16;
 static generic_type_t* u8;
 
+static inline three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type);
+
 //A holder for the stack pointer
 static three_addr_var_t* stack_pointer_variable;
 //A holder for the instruction pointer
@@ -1507,17 +1509,40 @@ static inline u_int8_t variables_valid_shift_optimization(three_addr_var_t* dest
  * Case 1:
  * 	x_1 <- x_0 / 2
  *
- * 	Easy case, just make into x_1 <- x_0 << 2
+ * 	Easy case, just make into x_1 <- x_0 >> 1 
  *
  * Case 2:
  * 	y_1 <- x_0 / 2
  *
  * 	If this is the case then:
  * 		t34 <- x_0
- * 		t34 <- t34 / 2
+ * 		t34 <- t34 >> 1 
  * 		y_1 <- t34
+ *
+ * NOTE: It is assumed that instruction1 is the one we're using
  */
-static inline void convert_power_of_2_division_into_right_shift(instruction_t* instruction){
+static inline void convert_power_of_2_division_into_right_shift(instruction_window_t* window){
+	instruction_t* target_instruction = window->instruction1;
+
+	//The operand type is needed here
+	generic_type_t* operand_type;
+
+	/**
+	 * If we're given a target type, use that. Otherwise, we're using the op1 type
+	 */
+	if(target_instruction->type_storage.result_type != NULL){
+		operand_type = target_instruction->type_storage.result_type;
+	} else {
+		operand_type = target_instruction->op1->type;
+	}
+
+	/**
+	 * If we need any conversions now is going to be the time
+	 */
+	if(is_converting_move_required(operand_type, target_instruction->op1->type) == TRUE){
+		target_instruction->op1 = create_and_insert_converting_move_instruction(target_instruction, target_instruction->op1, operand_type);
+	}
+
 
 }
 
@@ -3411,7 +3436,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 				case F_SLASH:
 					//Let the helper deal with this
-					convert_power_of_2_division_into_right_shift(first_instruction);
+					convert_power_of_2_division_into_right_shift(window);
 
 					//This is a change
 					changed = TRUE;
@@ -8244,7 +8269,6 @@ static inline void handle_binary_operation_instruction(instruction_window_t* win
 			handle_modulus_instruction(window);
 			break;
 
-			//TODO NOT DONE BELOW HERE
 		case STAR:
 			handle_multiplication_instruction(window);
 			break;
