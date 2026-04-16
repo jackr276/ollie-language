@@ -1500,6 +1500,23 @@ static inline u_int8_t variables_valid_shift_optimization(three_addr_var_t* dest
 }
 
 
+/**
+ * We will be handling cases where we can convert a power of 2 division into a right 
+ * shift operation. Once we get here we are doing this 100%, there is no going back
+ *
+ * Case 1:
+ * 	x_1 <- x_0 / 2
+ *
+ * 	Easy case, just make into x_1 <- x_0 << 2
+ *
+ * Case 2:
+ * 	y_1 <- x_0 / 2
+ *
+ * 	If this is the case then:
+ * 		t34 <- x_0
+ * 		t34 <- t34 / 2
+ * 		y_1 <- t34
+ */
 static inline void convert_power_of_2_division_into_right_shift(instruction_t* instruction){
 
 }
