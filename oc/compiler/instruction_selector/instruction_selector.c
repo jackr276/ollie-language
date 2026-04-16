@@ -5888,7 +5888,7 @@ static inline void handle_signed_modulus(instruction_window_t* window){
 	}
 
 	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(modulus_instruction->assignee, divisor, dividend, higher_order_dividend_bits, TRUE);
+	instruction_t* division = emit_div_instruction(result_type, divisor, dividend, higher_order_dividend_bits, TRUE);
 	
 	//Store the remainder register here
 	three_addr_var_t* remainder_register = division->destination_register2;
@@ -6003,7 +6003,7 @@ static inline void handle_unsigned_modulus(instruction_window_t* window){
 	insert_instruction_before_given(clear_instruction, modulus_instruction);
 
 	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(modulus_instruction->assignee, divisor, dividend, cleared_rdx, FALSE);
+	instruction_t* division = emit_div_instruction(result_type, divisor, dividend, cleared_rdx, FALSE);
 	
 	//Store the remainder register here
 	three_addr_var_t* remainder_register = division->destination_register2;
@@ -6583,7 +6583,7 @@ static void handle_signed_division(instruction_window_t* window){
 	}
 
 	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(division_instruction->assignee, divisor, dividend, higher_order_dividend_bits, TRUE);
+	instruction_t* division = emit_div_instruction(destination_type, divisor, dividend, higher_order_dividend_bits, TRUE);
 
 	//The quotient is the destination register
 	three_addr_var_t* quotient = division->destination_register;
@@ -6631,10 +6631,23 @@ static void handle_unsigned_division(instruction_window_t* window){
 	three_addr_var_t* dividend;
 	three_addr_var_t* divisor;
 
+	//The destination type
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(division_instruction->type_storage.result_type != NULL){
+		destination_type = division_instruction->type_storage.result_type;
+	} else {
+		destination_type = division_instruction->assignee->type;
+	}
+
 	//If we need to convert, we'll do that here
-	if(is_converting_move_required(division_instruction->assignee->type, division_instruction->op1->type) == TRUE){
+	if(is_converting_move_required(destination_type, division_instruction->op1->type) == TRUE){
 		//Let the helper deal with it
-		dividend = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op1, division_instruction->assignee->type);
+		dividend = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op1, destination_type);
 
 	//Otherwise this can be moved directly
 	} else {
@@ -6654,8 +6667,8 @@ static void handle_unsigned_division(instruction_window_t* window){
 	 */
 	if(division_instruction->op2 != NULL){
 		//Do we need to do a type conversion? If so, we'll do a converting move here
-		if(is_converting_move_required(division_instruction->assignee->type, division_instruction->op2->type) == TRUE){
-			divisor = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op2, division_instruction->assignee->type);
+		if(is_converting_move_required(destination_type, division_instruction->op2->type) == TRUE){
+			divisor = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op2, destination_type);
 
 		//Otherwise divisor is just the op2
 		} else {
@@ -6665,7 +6678,7 @@ static void handle_unsigned_division(instruction_window_t* window){
 	//Otherwise we have a constant - x86 division doesn't support having these as operands so we'll need a move
 	} else {
 		//Emit the constant move
-		instruction_t* constant_move = emit_constant_move_instruction(emit_temp_var(division_instruction->assignee->type), division_instruction->op1_const);
+		instruction_t* constant_move = emit_constant_move_instruction(emit_temp_var(destination_type), division_instruction->op1_const);
 
 		//Now we'll insert this before the division instruction
 		insert_instruction_before_given(constant_move, division_instruction);
@@ -6679,7 +6692,7 @@ static void handle_unsigned_division(instruction_window_t* window){
 	 * This is in contrast to signed division where we intentionally extend to said register. Here we will
 	 * just clean it out
 	 */
-	three_addr_var_t* cleared_rdx = emit_temp_var(division_instruction->assignee->type);
+	three_addr_var_t* cleared_rdx = emit_temp_var(destination_type);
 
 	//Get the instruction out
 	instruction_t* clear_instruction = emit_gp_register_clear_instruction(cleared_rdx);
@@ -6688,7 +6701,7 @@ static void handle_unsigned_division(instruction_window_t* window){
 	insert_instruction_before_given(clear_instruction, division_instruction);
 
 	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(division_instruction->assignee, divisor, dividend, cleared_rdx, FALSE);
+	instruction_t* division = emit_div_instruction(destination_type, divisor, dividend, cleared_rdx, FALSE);
 
 	//The quotient is the destination register
 	three_addr_var_t* quotient = division->destination_register;
@@ -6701,6 +6714,9 @@ static void handle_unsigned_division(instruction_window_t* window){
 
 	//Insert this before the original division instruction
 	insert_instruction_before_given(result_movement, division_instruction);
+
+	//Add in the clear instruction if need be
+	insert_pxor_clear_if_needed(result_movement);
 
 	//Delete the division instruction
 	delete_statement(division_instruction);
@@ -6739,7 +6755,17 @@ static void handle_sse_division_instruction(instruction_window_t* window){
 	instruction_t* division_instruction = window->instruction1;
 
 	//This is the type that everything is targeting
-	generic_type_t* destination_type = division_instruction->assignee->type;
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(division_instruction->type_storage.result_type != NULL){
+		destination_type = division_instruction->type_storage.result_type;
+	} else {
+		destination_type = division_instruction->assignee->type;
+	}
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
