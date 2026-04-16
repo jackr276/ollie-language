@@ -6987,11 +6987,6 @@ static inline instruction_t* emit_movd_instruction(three_addr_var_t* general_pur
  * that flag setting is needed
  *
  * NOTE: we always assume that instruction1 in the window is our target
- *
- * TODO TAKES PRIORITY
- *
- *
- * TODO NEEDS TEH SAME THING AS && AND ||
  */
 static void handle_cmp_instruction(instruction_window_t* window){
 	instruction_t* instruction = window->instruction1;
@@ -7003,18 +6998,35 @@ static void handle_cmp_instruction(instruction_window_t* window){
 	 */
 	u_int8_t used_by_branch_only = TRUE;
 
+	//Store the result type
+	generic_type_t* operator_type;
+
+	/**
+	 * If we have an operator type use that, otherwise we can find it out on the fly
+	 */
+	if(instruction->type_storage.result_type != NULL){
+		operator_type = instruction->type_storage.result_type;
+	} else {
+		/**
+		 * If we have 2 operands, we will find what they both go into. Otherwise
+		 * if we have a const we're just defaulting to the non-const
+		 */
+		if(instruction->op2 != NULL){
+			operator_type = get_operand_type_for_logical_operation(cfg_reference->type_symtab, instruction->op1->type, instruction->op2->type);
+		} else {
+			operator_type = instruction->op1->type;
+		}
+	}
+
 	//Determine what our size is off the bat
-	variable_size_t size = get_type_size(instruction->op1->type);
+	variable_size_t size = get_type_size(operator_type);
 
 	//Get the signedness and the floating point status
-	u_int8_t type_signed = is_type_signed(instruction->assignee->type);
-	u_int8_t is_floating_point = (size == SINGLE_PRECISION || size == DOUBLE_PRECISION) ? TRUE : FALSE;
-	
-	//Extract these for convenience
-	generic_type_t* left_hand_type = instruction->op1->type;
-	//For the right hand type, we only care if op2 isn't NULL. Constants won't affect us here
-	generic_type_t* right_hand_type = instruction->op2 != NULL ? instruction->op2->type : left_hand_type;
+	u_int8_t type_signed = is_type_signed(operator_type);
 
+	//Store where or not it's a floating point type
+	u_int8_t is_floating_point = IS_FLOATING_POINT(operator_type);
+	
 	/**
 	 * If the assignee is a temp var then we can't be sure if it's only used
 	 * by a branch or if this is eventually expected to be assigned somewhere
@@ -7078,13 +7090,13 @@ static void handle_cmp_instruction(instruction_window_t* window){
 	}
 
 	//Handle any/all converting moves that are going to be needed here
-	if(is_converting_move_required(right_hand_type, instruction->op1->type) == TRUE){
-		instruction->op1 = create_and_insert_converting_move_instruction(instruction, instruction->op1, right_hand_type);
+	if(is_converting_move_required(operator_type, instruction->op1->type) == TRUE){
+		instruction->op1 = create_and_insert_converting_move_instruction(instruction, instruction->op1, operator_type);
 	}
 
 	//Same for op2, except this could be null
-	if(instruction->op2 != NULL && is_converting_move_required(left_hand_type, instruction->op2->type) == TRUE){
-		instruction->op2 = create_and_insert_converting_move_instruction(instruction, instruction->op2, left_hand_type);
+	if(instruction->op2 != NULL && is_converting_move_required(operator_type, instruction->op2->type) == TRUE){
+		instruction->op2 = create_and_insert_converting_move_instruction(instruction, instruction->op2, operator_type);
 	}
 
 	//If this is only used by a branch(which is the most common type to have), we will

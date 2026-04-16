@@ -5312,7 +5312,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 		case L_THAN_OR_EQ:
 		case G_THAN:
 		case G_THAN_OR_EQ:
-		case EQUALS:
+		case DOUBLE_EQUALS:
 		case NOT_EQUALS:
 			//The assignees are the same
 			op1 = left_side.assignee;
@@ -5328,8 +5328,8 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 				//Just assign the constant over
 				op1_const = current_block->exit_statement->op1_const;
 
-				//Now use the helper to get the reuslt
-				final_result_type = get_operand_type_for_relational_operation(type_symtab, op1->type, op1_const->type);
+				//We default to op1 for a constant
+				final_result_type = op1->type;
 
 			} else {
 				op2 = right_side.assignee;
