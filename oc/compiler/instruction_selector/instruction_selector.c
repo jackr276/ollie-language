@@ -6094,8 +6094,21 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	//Instruction 1 is the multiplication instruction
 	instruction_t* multiplication_instruction = window->instruction1;
 
+	//The destination type
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(multiplication_instruction->type_storage.result_type != NULL){
+		destination_type = multiplication_instruction->type_storage.result_type;
+	} else {
+		destination_type = multiplication_instruction->assignee->type;
+	}
+
 	//We'll need to know the variables size
-	variable_size_t size = get_type_size(multiplication_instruction->assignee->type);
+	variable_size_t size = get_type_size(destination_type);
 
 	//A temp holder for the final second source variable
 	three_addr_var_t* source;
@@ -6104,9 +6117,9 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	//If we have a BIN_OP with const statement, we need to 
 	if(multiplication_instruction->statement_type == THREE_ADDR_CODE_BIN_OP_STMT){
 		//If we need to convert, we'll do that here
-		if(is_converting_move_required(multiplication_instruction->assignee->type, multiplication_instruction->op2->type) == TRUE){
+		if(is_converting_move_required(destination_type, multiplication_instruction->op2->type) == TRUE){
 			//Let the helper deal with it
-			source2 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->op2, multiplication_instruction->assignee->type);
+			source2 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->op2, destination_type);
 
 		//Otherwise this can be moved directly
 		} else {
@@ -6124,7 +6137,7 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	//here for this to work
 	} else {
 		//Emit the move instruction here
-		instruction_t* move_to_rax = emit_constant_move_instruction(emit_temp_var(multiplication_instruction->assignee->type), multiplication_instruction->op1_const);
+		instruction_t* move_to_rax = emit_constant_move_instruction(emit_temp_var(destination_type), multiplication_instruction->op1_const);
 
 		//Put it before our multiplication
 		insert_instruction_before_given(move_to_rax, multiplication_instruction);
@@ -6134,7 +6147,7 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	}
 
 	//Let's also check is any conversions are needed for the first source register
-	if(is_converting_move_required(multiplication_instruction->assignee->type, multiplication_instruction->op1->type) == TRUE){
+	if(is_converting_move_required(destination_type, multiplication_instruction->op1->type) == TRUE){
 		source = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->op1, multiplication_instruction->assignee->type);
 
 	//Otherwise we'll just assign this to be op1
@@ -6151,10 +6164,26 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	multiplication_instruction->source_register2 = source2;
 
 	//This is the assignee, we just don't see it
-	multiplication_instruction->destination_register = emit_temp_var(multiplication_instruction->assignee->type);
+	multiplication_instruction->destination_register = emit_temp_var(destination_type);
 
 	//Once we've done all that, we need one final movement operation
 	instruction_t* result_movement = emit_move_instruction(multiplication_instruction->assignee, multiplication_instruction->destination_register);
+
+	/**
+	 * For floating point destinations after conversion, we need to completely "0" out the destination
+	 * register before the conversion. We will check this here and insert it only if need be
+	 */
+	if(is_integer_to_sse_conversion_instruction(move_instruction->instruction_type) == TRUE){
+		/**
+		 * We need to completely zero out the destination register here, so we will emit a pxor to do
+		 * just that
+		 */
+		instruction_t* pxor_instruction = emit_sse_register_clear_instruction(final_destination);
+
+		//Get this in right before the move instruction
+		insert_instruction_before_given(pxor_instruction, move_instruction);
+	}
+
 
 	//Insert the result movement instruction to be after the multiplication operation
 	insert_instruction_after_given(result_movement, multiplication_instruction);
@@ -6198,8 +6227,18 @@ static void handle_signed_multiplication_instruction(instruction_window_t* windo
 	//Grab out the first one
 	instruction_t* multiplication_instruction = window->instruction1;
 
-	//This is the type that everything is targeting
-	generic_type_t* destination_type = multiplication_instruction->assignee->type;
+	//The actual destination type that we are after
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(multiplication_instruction->type_storage.result_type != NULL){
+		destination_type = multiplication_instruction->type_storage.result_type;
+	} else {
+		destination_type = multiplication_instruction->assignee->type;
+	}
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -6315,8 +6354,18 @@ static void handle_sse_multiplication_instruction(instruction_window_t* window){
 	//Grab out the first one
 	instruction_t* multiplication_instruction = window->instruction1;
 
-	//This is the type that everything is targeting
-	generic_type_t* destination_type = multiplication_instruction->assignee->type;
+	//The destination type
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(multiplication_instruction->type_storage.result_type != NULL){
+		destination_type = multiplication_instruction->type_storage.result_type;
+	} else {
+		destination_type = multiplication_instruction->assignee->type;
+	}
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
