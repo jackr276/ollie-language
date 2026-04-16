@@ -1486,68 +1486,6 @@ static inline void replace_all_variables_after_instruction(three_addr_var_t* tar
 
 
 /**
- * Are variables valid for the division shift operation? They are if
- * they're both non-temp and equal *or* they're both temporary. If they're both temporary
- * we can fold one into the other
- */
-static inline u_int8_t variables_valid_shift_optimization(three_addr_var_t* destination, three_addr_var_t* source){
-	//If this is the case then we go
-	if(destination->variable_type == VARIABLE_TYPE_NON_TEMP){
-		return variables_equal_no_ssa(destination, source, TRUE);
-
-	//If they're the same type then this works
-	} else {
-		return destination->type == source->type ? TRUE : FALSE;
-	}
-}
-
-
-/**
- * We will be handling cases where we can convert a power of 2 division into a right 
- * shift operation. Once we get here we are doing this 100%, there is no going back
- *
- * Case 1:
- * 	x_1 <- x_0 / 2
- *
- * 	Easy case, just make into x_1 <- x_0 >> 1 
- *
- * Case 2:
- * 	y_1 <- x_0 / 2
- *
- * 	If this is the case then:
- * 		t34 <- x_0
- * 		t34 <- t34 >> 1 
- * 		y_1 <- t34
- *
- * NOTE: It is assumed that instruction1 is the one we're using
- */
-static inline void convert_power_of_2_division_into_right_shift(instruction_window_t* window){
-	instruction_t* target_instruction = window->instruction1;
-
-	//The operand type is needed here
-	generic_type_t* operand_type;
-
-	/**
-	 * If we're given a target type, use that. Otherwise, we're using the op1 type
-	 */
-	if(target_instruction->type_storage.result_type != NULL){
-		operand_type = target_instruction->type_storage.result_type;
-	} else {
-		operand_type = target_instruction->op1->type;
-	}
-
-	/**
-	 * If we need any conversions now is going to be the time
-	 */
-	if(is_converting_move_required(operand_type, target_instruction->op1->type) == TRUE){
-		target_instruction->op1 = create_and_insert_converting_move_instruction(target_instruction, target_instruction->op1, operand_type);
-	}
-
-
-}
-
-
-/**
  * Optimize a modulus by power of 2 instruction into a shift instruction. This works slightly
  * differently for signed and unsigned operations but the principle is the same. If we are
  * say modding by 8, if there is going to be a remainder it will be in the first 3 bytes. So,
@@ -3406,37 +3344,30 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * Multiplication and/or division are the only things that could benefit from this
 			 */
 			switch(first_instruction->op){
+				/**
+				 * Due to the way that we now handle shift instructions, we should just be
+				 * able to turn this into a shift and left the actual instruction converter
+				 * handle it afterwards. All we'll need to do is update the constant and the
+				 * instruction type
+				 */
 				case STAR:
-					/**
-					 * If the assignee and op1 are equal(which they almost always should be) - then we are set to go here. If not then
-					 * we'll just leave this for the eventual helper rule to handle
-					 *
-					 *
-					 * TODO THIS IS NOW TOTALLY INVALID
-					 */
-					if(variables_valid_shift_optimization(first_instruction->assignee, first_instruction->op1) == TRUE){
-						//Multiplication is a left shift
-						first_instruction->op = L_SHIFT;
-						//Update the constant with its log2 value
-						update_constant_with_log2_value(first_instruction->op1_const);
+					first_instruction->op = L_SHIFT;
+					update_constant_with_log2_value(first_instruction->op1_const);
 
-						/**
-						 * IMPORTANT - if we a have a temp variable here, since we're now using a shift,
-						 * we'll need to wipe this temp var away and instead use the op1 temp var for everything
-						 */
-						if(first_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
-							replace_all_variables_after_instruction(first_instruction->assignee, first_instruction->op1, first_instruction);
-						}
-
-						//We changed something
-						changed = TRUE;
-					}
+					//This is a change
+					changed = TRUE;
 
 					break;
 
+				/**
+				 * Due to the way that we now handle shift instructions, we should just be
+				 * able to turn this into a shift and left the actual instruction converter
+				 * handle it afterwards. All we'll need to do is update the constant and the
+				 * instruction type
+				 */
 				case F_SLASH:
-					//Let the helper deal with this
-					convert_power_of_2_division_into_right_shift(window);
+					first_instruction->op = R_SHIFT;
+					update_constant_with_log2_value(first_instruction->op1_const);
 
 					//This is a change
 					changed = TRUE;
