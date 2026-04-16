@@ -3275,8 +3275,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				* then doing this would mess the whole operation up
 				*/
 				case PLUS:
-					//If it's temporary, we jump out
-					if(first_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
+					/**
+					 * If we don't have something like x_1 = x_0 + 1, we can't be doing this so we'll leave
+					 */
+					if(variables_equal_no_ssa(first_instruction->assignee, first_instruction->op1, TRUE) == FALSE){
 						break;
 					}
 
@@ -3291,8 +3293,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					break;
 
 				case MINUS:
-					//If it's temporary, we jump out
-					if(first_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
+					/**
+					 * If we don't have something like x_1 = x_0 - 1, we can't be doing this so we'll leave
+					 */
+					if(variables_equal_no_ssa(first_instruction->assignee, first_instruction->op1, TRUE) == FALSE){
 						break;
 					}
 
