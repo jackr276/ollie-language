@@ -7346,7 +7346,7 @@ static void handle_addition_instruction(instruction_window_t* window){
 			three_addr_var_t* final_destination = original_addition->assignee;
 
 			//This is what the lea will point to
-			original_addition->assignee = temp_destination;
+			original_addition->destination_register = temp_destination;
 
 			//Now we can emit the move
 			instruction_t* move_instruction = emit_move_instruction(final_destination, temp_destination);
