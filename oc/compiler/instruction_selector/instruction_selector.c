@@ -4874,12 +4874,11 @@ static instruction_t* emit_or_instruction(three_addr_var_t* destination, three_a
  * Division instructions have no destination that need be written out. They only have two sources - a direct
  * source and an implicit source
  */
-static instruction_t* emit_div_instruction(three_addr_var_t* assignee, three_addr_var_t* divisor, three_addr_var_t* dividend, three_addr_var_t* higher_order_dividend_bits, u_int8_t is_signed){
+static instruction_t* emit_div_instruction(generic_type_t* destination_type, three_addr_var_t* divisor, three_addr_var_t* dividend, three_addr_var_t* higher_order_dividend_bits, u_int8_t is_signed){
 	//First we'll allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
-	//We set the size based on the destination 
-	variable_size_t size = get_type_size(assignee->type);
+	variable_size_t size = get_type_size(destination_type);
 
 	//Now we'll decide this based on size and signedness
 	switch (size) {
@@ -4929,9 +4928,9 @@ static instruction_t* emit_div_instruction(three_addr_var_t* assignee, three_add
 	instruction->address_calc_reg1 = higher_order_dividend_bits;
 
 	//Quotient register
-	instruction->destination_register = emit_temp_var(assignee->type);
+	instruction->destination_register = emit_temp_var(destination_type);
 	//Remainder register
-	instruction->destination_register2 = emit_temp_var(assignee->type);
+	instruction->destination_register2 = emit_temp_var(destination_type);
 
 	//And now we'll give it back
 	return instruction;
@@ -6510,10 +6509,23 @@ static void handle_signed_division(instruction_window_t* window){
 	three_addr_var_t* dividend;
 	three_addr_var_t* divisor;
 
+	//The destination type
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(division_instruction->type_storage.result_type != NULL){
+		destination_type = division_instruction->type_storage.result_type;
+	} else {
+		destination_type = division_instruction->assignee->type;
+	}
+
 	//If we need to convert, we'll do that here
-	if(is_converting_move_required(division_instruction->assignee->type, division_instruction->op1->type) == TRUE){
+	if(is_converting_move_required(destination_type, division_instruction->op1->type) == TRUE){
 		//Let the helper deal with it
-		dividend = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op1, division_instruction->assignee->type);
+		dividend = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op1, destination_type);
 
 	//Otherwise this can be moved directly
 	} else {
@@ -6550,8 +6562,8 @@ static void handle_signed_division(instruction_window_t* window){
 	 */
 	if(division_instruction->op2 != NULL){
 		//Do we need to do a type conversion? If so, we'll do a converting move here
-		if(is_converting_move_required(division_instruction->assignee->type, division_instruction->op2->type) == TRUE){
-			divisor = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op2, division_instruction->assignee->type);
+		if(is_converting_move_required(destination_type, division_instruction->op2->type) == TRUE){
+			divisor = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op2, destination_type);
 
 		//Otherwise divisor is just the op2
 		} else {
@@ -6561,7 +6573,7 @@ static void handle_signed_division(instruction_window_t* window){
 	//Otherwise we have a constant - x86 division doesn't support having these as operands so we'll need a move
 	} else {
 		//Emit the constant move
-		instruction_t* constant_move = emit_constant_move_instruction(emit_temp_var(division_instruction->assignee->type), division_instruction->op1_const);
+		instruction_t* constant_move = emit_constant_move_instruction(emit_temp_var(destination_type), division_instruction->op1_const);
 
 		//Now we'll insert this before the division instruction
 		insert_instruction_before_given(constant_move, division_instruction);
@@ -6584,6 +6596,9 @@ static void handle_signed_division(instruction_window_t* window){
 
 	//Insert this before the original division instruction
 	insert_instruction_before_given(result_movement, division_instruction);
+
+	//Add this in if it's needed
+	insert_pxor_clear_if_needed(result_movement);
 
 	//Delete the division instruction
 	delete_statement(division_instruction);
@@ -6809,14 +6824,25 @@ static void handle_sse_division_instruction(instruction_window_t* window){
  */
 static inline void handle_division_instruction(instruction_window_t* window){
 	instruction_t* division_instruction = window->instruction1;
+	generic_type_t* destination_type = NULL;
+
+	/**
+	 * If we are given a result type we *always* use that. Otherwise
+	 * we default to the assignee
+	 */
+	if(division_instruction->type_storage.result_type != NULL){
+		destination_type = division_instruction->type_storage.result_type;
+	} else {
+		destination_type = division_instruction->assignee->type;
+	}
 
 	/**
 	 * To dispatch properly here - if we don't have a floating point
 	 * division instruction, we split via signedness. Otherwise we just let
 	 * the float rule deal with it
 	 */
-	if(IS_FLOATING_POINT(division_instruction->assignee->type) == FALSE){
-		u_int8_t is_signed = is_type_signed(division_instruction->assignee->type);
+	if(IS_FLOATING_POINT(destination_type) == FALSE){
+		u_int8_t is_signed = is_type_signed(destination_type);
 
 		if(is_signed == TRUE){
 			handle_signed_division(window);
