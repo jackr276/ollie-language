@@ -2241,6 +2241,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& (window->instruction1->op == STAR || window->instruction1->op == PLUS)
 		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
+		&& window->instruction2->op == PLUS
 		&& variables_equal(window->instruction2->op2, window->instruction1->assignee, TRUE) == TRUE) {
 
 		//Extract for convenience
@@ -2329,6 +2330,49 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					break;
 			}
 		}
+	}
+
+
+	/**
+	 * ------------------ Converting adjacent binary operations into LEA statements
+	 * If we have two adjacent binary operations where one is a bin_op_with_const
+	 * and one is a plain bin_op, there may be chances for us to convert them
+	 * into lea statements
+	 *
+	 * Example:
+	 * t20 <- t19 + t18
+	 * t21 <- t20 + 4
+	 *
+	 * Can become
+	 * t21 <- 4(t19, t18)
+	 */
+	if(window->instruction2 != NULL
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_STMT 
+		&& window->instruction1->op == PLUS
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction2->op == PLUS
+		&& variables_equal(window->instruction2->op1, window->instruction1->assignee, TRUE) == TRUE) {
+
+		//Extract for convenience
+		instruction_t* binary_operation = window->instruction1;
+		instruction_t* constant_operation = window->instruction2;
+
+		//Grab the result type out
+		generic_type_t* result_type;
+
+		//If we can find it great, otherwise just use op1
+		if(binary_operation->type_storage.result_type != NULL){
+			result_type = binary_operation->type_storage.result_type;
+		} else {
+			result_type = binary_operation->op1->type;
+		}
+
+		if(is_type_lea_compatible(result_type) == TRUE){
+			printf("HERE\n\n");
+			print_instruction_window_three_address_code(window);
+		}
+
 	}
 
 
