@@ -2894,17 +2894,68 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 					//Clear it out
 					lea_statement->lea_statement_type = OIR_LEA_TYPE_NONE;
+
+					//0 this out
+					lea_statement->lea_multiplier = 0;
 				}
 
 				break;
 
+			/**
+			 * We have something like
+			 * 	t3 <- lea 4(, x, 1)
+			 *
+			 * 	We can convert it into t3 <- x + 4
+			 */
 			case OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE:
+				if(lea_statement->lea_multiplier == 1){
+					//Convert it here
+					lea_statement->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
 
+					//Clear this too
+					lea_statement->lea_statement_type = OIR_LEA_TYPE_NONE;
+
+					//Zero this out
+					lea_statement->lea_multiplier = 0;
+				}
+
+				break;
+
+			/**
+			 * We have something like
+			 * 	t3 <- lea (x, y, 1)
+			 *
+			 * 	Just turn it into 
+			 * 	t3 <- lea (x, y)
+			 */
 			case OIR_LEA_TYPE_REGISTERS_AND_SCALE:
+				if(lea_statement->lea_multiplier == 1){
+					//Convert the lea type
+					lea_statement->lea_statement_type = OIR_LEA_TYPE_REGISTERS_ONLY;
 
+					//Wipe this out
+					lea_statement->lea_multiplier = 0;
+				}
+				
+				break;
 
+			/**
+			 * We have something like
+			 * 	t3 <- lea 4(x, y, 1)
+			 *
+			 * 	Just turn it into 
+			 * 	t3 <- lea 4(x, y)
+			 */
 			case OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE:
+				if(lea_statement->lea_multiplier == 1){
+					//Convert the type
+					lea_statement->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_OFFSET;
 
+					//0 this out
+					lea_statement->lea_multiplier = 0;
+				}
+
+				break;
 
 			/**
 			 * Doesn't have a scale otherwise, so we are going to 
