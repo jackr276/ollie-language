@@ -22,7 +22,7 @@ fn modulus() -> u32 {
 	let y:mut i32 = z >> 5;
 
 	//Modulus
-	y = y % x;
+	y = y % <i32>x;
 
 	ret x + y;
 }

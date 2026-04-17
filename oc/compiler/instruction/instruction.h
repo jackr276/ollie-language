@@ -330,9 +330,22 @@ struct instruction_t{
 	//else is our alternative
 	void* if_block;
 	void* else_block;
-	//What is the type of the memory that we are trying to access? This is done
-	//to maintain separation from the base addresses and the memory that we're using
-	generic_type_t* memory_read_write_type;
+	/**
+	 * Optional storage for a type. The union is for readability and intentionality, 
+	 * we know that it's not really needed
+	 */
+	union {
+		/**
+		 * What is the type of the memory that we are trying to access? This is done
+		 * to maintain separation from the base addresses and the memory that we're using
+		 */
+		generic_type_t* memory_read_write_type;
+		/**
+		 * What is the result type of a computation? For various reasons the result type
+		 * of a computation may actually be different as compared to a final type
+		 */
+		generic_type_t* result_type;
+	} type_storage;
 	//For lea multiplication
 	u_int64_t lea_multiplier;
 	//The function called
@@ -619,6 +632,11 @@ instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, thre
  * Emit a lea statement that is used for rip relative calculations
  */
 instruction_t* emit_lea_rip_relative_constant(three_addr_var_t* assignee, three_addr_var_t* local_constant_variable, three_addr_var_t* instruction_pointer);
+
+/**
+ * Emit a lea with the index and scale only
+ */
+instruction_t* emit_lea_index_and_scale_only(three_addr_var_t* assignee, three_addr_var_t* offset, u_int64_t scale);
 
 /**
  * Emit an indirect jump calculation that includes a block label in three address code form

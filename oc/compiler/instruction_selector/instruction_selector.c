@@ -11,11 +11,11 @@
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
-#include <iso646.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
 #include <sys/types.h>
+#include <threads.h>
 
 //We'll need this a lot, so we may as well have it here
 static generic_type_t* double_quad_word;
@@ -28,6 +28,8 @@ static generic_type_t* i32;
 static generic_type_t* u16;
 static generic_type_t* i16;
 static generic_type_t* u8;
+
+static inline three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type);
 
 //A holder for the stack pointer
 static three_addr_var_t* stack_pointer_variable;
@@ -174,30 +176,6 @@ static inline basic_block_t* does_block_end_in_jump(basic_block_t* block){
 
 
 /**
- * Helper function to determine if an operator is can be constant folded
- */
-static inline u_int8_t is_operation_valid_for_op1_assignment_folding(ollie_token_t op){
-	switch(op){
-		case G_THAN:
-		case L_THAN:
-		case G_THAN_OR_EQ:
-		case L_THAN_OR_EQ:
-		case DOUBLE_EQUALS:
-		case NOT_EQUALS:
-		/**
-		 * Note that this is valid only for logical and. Logical or
-		 * requires the use of the "orX" instruction, which does modify
-		 * its assignee unlike logical and
-		 */
-		case DOUBLE_AND:
-			return TRUE;
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
  * Is a type an unsigned 64 bit type? This is used for type conversions in 
  * the instruction selector
  */
@@ -220,6 +198,32 @@ static inline u_int8_t is_type_unsigned_64_bit(generic_type_t* type){
 			return FALSE; 
 
 		//By default fail out
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Is a type lea compatible? Types are only lea compatible if they
+ * are 32 or 64 bit integers. Everything else is not compatible
+ */
+static inline u_int8_t is_type_lea_compatible(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_BASIC:
+			switch(type->basic_type_token){
+				case U32:
+				case I32:
+				case I64:
+				case U64:
+					return TRUE;
+				default:
+					return FALSE;
+			}
+
+		case TYPE_CLASS_POINTER:
+			return TRUE;
+
 		default:
 			return FALSE;
 	}
@@ -1508,29 +1512,22 @@ static inline void replace_all_variables_after_instruction(three_addr_var_t* tar
 
 
 /**
- * Are variables valid for the division shift operation? They are if
- * they're both non-temp and equal *or* they're both temporary. If they're both temporary
- * we can fold one into the other
- */
-static inline u_int8_t variables_valid_shift_optimization(three_addr_var_t* destination, three_addr_var_t* source){
-	//If this is the case then we go
-	if(destination->variable_type == VARIABLE_TYPE_NON_TEMP){
-		return variables_equal_no_ssa(destination, source, FALSE);
-
-	//If they're the same type then this works
-	} else {
-		return destination->type == source->type ? TRUE : FALSE;
-	}
-}
-
-
-/**
  * Optimize a modulus by power of 2 instruction into a shift instruction. This works slightly
  * differently for signed and unsigned operations but the principle is the same. If we are
  * say modding by 8, if there is going to be a remainder it will be in the first 3 bytes. So,
  * we can just extract the first 3 bytes using an AND operation and avoid doing any division
  * entirely
  *
+ * Two scenarios:
+ *
+ * Case 1:
+ * 	x_1 <- x_0 % 4
+ *
+ *
+ * Case 2:
+ * 	x_1 <- y_0 % 4
+ *
+ * We consider both cases to be valid and we handle both of them accordingly
  *
  * NOTE: We assume that instruction1 is the one we are dealing with here
  */
@@ -1632,8 +1629,8 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		 */
 		three_addr_var_t* result = emit_temp_var(type);
 
-		//This should eventually become a lea
-		instruction_t* addition = emit_binary_operation_instruction(result, mod_instruction->op1, PLUS, bias_temp_var);
+		//Emit a lea so that we end up with
+		instruction_t* addition = emit_lea_operands_only(result, mod_instruction->op1, bias_temp_var);
 
 		//Add this in right after the shift
 		insert_instruction_after_given(addition, logical_shift);
@@ -1698,19 +1695,64 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		//Now we'll compute 2^n - 1 
 		u_int32_t mask = (1 << bits_needed) - 1;
 
-		//Make this constant the mask now
-		mod_instruction->op1_const->constant_value.unsigned_long_constant = mask;
+		/**
+		 * If we have a situation where the two variables are equal, we can just convert the
+		 * entire thing into an *AND* operation
+		 *
+		 * x_1 <- x_0 % 4
+		 * Turns into 
+		 * x_1 <- x_0 & 1
+		 */
+		if(variables_equal_no_ssa(mod_instruction->assignee, mod_instruction->op1, TRUE) == TRUE){
+			//Make this constant the mask now
+			mod_instruction->op1_const->constant_value.unsigned_long_constant = mask;
 
-		//This is now an and instruction
-		mod_instruction->op = SINGLE_AND;
+			//This is now an and instruction
+			mod_instruction->op = SINGLE_AND;
 
 		/**
-		 * IMPORTANT - if we have a temp variable here, since we're now using
-		 * a shift, we'll need to wipe this temp var away and instead use the op1
-		 * temp var for everything
+		 * Otherwise we are dealing with a temp var here, so we're going to need
+		 * to do a little bit of extra work to handle everything
 		 */
-		if(mod_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
-			replace_all_variables_after_instruction(mod_instruction->assignee, mod_instruction->op1, mod_instruction);
+		} else {
+			/**
+			 * If this is not temp, then we're going to need to insert a move
+			 * instruction to avoid altering it
+			 */
+			if(mod_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+				//Emit the move
+				instruction_t* move_instruction = emit_assignment_instruction(emit_temp_var(mod_instruction->op1->type), mod_instruction->op1);
+
+				//Add it in right beforehand
+				insert_instruction_before_given(move_instruction, mod_instruction);
+
+				//This is now the op1
+				mod_instruction->op1 = move_instruction->assignee;
+			}
+
+			//Grab out what the final assignee will be
+			three_addr_var_t* final_assignee = mod_instruction->assignee;
+
+			/**
+			 * We can now turn our mod instruction into an and instruction, but we'll
+			 * need to swap out the assignee for the op1
+			 */
+			mod_instruction->assignee = emit_var_copy(mod_instruction->op1);
+
+			//Store the mask
+			mod_instruction->op1_const->constant_value.unsigned_long_constant = mask;
+
+			//Force this to be a single_and
+			mod_instruction->op = SINGLE_AND;
+
+			//Now at the end, we'll just emit a final assignment over to the given assignee
+			instruction_t* final_assignment = emit_assignment_instruction(final_assignee, mod_instruction->assignee); 
+
+			//Put this after the given
+			insert_instruction_after_given(final_assignment, mod_instruction);
+
+			//Rebuild the window around the new one
+			reconstruct_window(window, final_assignment);
 		}
 	}
 }
@@ -1725,9 +1767,11 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	//By default, we didn't change anything
 	u_int8_t changed = FALSE;
 
-	//Let's perform some quick checks. If we see a window where the first instruction
-	//is NULL or the second one is NULL, there's nothing we can do. We'll just leave in this
-	//case
+	/**
+	 * Let's perform some quick checks. If we see a window where the first instruction
+	 * is NULL or the second one is NULL, there's nothing we can do. We'll just leave in this
+	 * case
+	 */
 	if(window->instruction1 == NULL || window->instruction2 == NULL){
 		return changed;
 	}
@@ -2178,108 +2222,175 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
+
 	/**
-	 * ==================== Op1 Assignment Folding for expressions ======================
-	 * If we have expressions like:
-	 *   t3 <- x_0
-	 *   t4 <- y_0
-	 *   t5 <- t3 && t4
+	 * ------------------ Converting adjacent binary operations into LEA statements
+	 * If we have two adjacent binary operations where one is a bin_op_with_const
+	 * and one is a plain bin_op, there may be chances for us to convert them
+	 * into lea statements
 	 *
-	 *  We need to recognize opportunities for assignment folding. And ideal optimization would transform
-	 *  this into:
-	 *   
-	 *   t5 <- x_0 && y_0
+	 * Example:
+	 * t21 <- ^t8_0 * 4
+	 * t22 <- t19 + 21
 	 *
-	 *   This rule will do the first part of that
-	 *
-	 *  We will seek to do that in this optimization
-	 *
-	 *
-	 *  Note that this is just for op1 assignment folding. It is generall much more restrictive
-	 *  because so many operations overwrite their op1(think add, subtract), and those would therefore
-	 *  be *invalid* for this
+	 * Can become
+	 * t22 <- (t19, ^t8_0, 4)
 	 */
-	//Check first with 1 and 2. We need a binary operation that has a comparison operator in it
-	if(is_instruction_binary_operation(window->instruction2) == TRUE
-		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		&& is_operation_valid_for_op1_assignment_folding(window->instruction2->op) == TRUE){
+	if(window->instruction2 != NULL
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& (window->instruction1->op == STAR || window->instruction1->op == PLUS)
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
+		&& window->instruction2->op == PLUS
+		&& variables_equal(window->instruction2->op2, window->instruction1->assignee, TRUE) == TRUE) {
 
-		//Is the variable in instruction 1 temporary *and* the same one that we're using in instruction1? Let's check.
-		if(window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP 
-			//Make sure that this is the only use
-			&& window->instruction1->assignee->use_count <= 1
-			&& window->instruction1->op1->variable_type != VARIABLE_TYPE_TEMP
-			&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
+		//Extract for convenience
+		instruction_t* constant_operation = window->instruction1;
+		instruction_t* binary_operation = window->instruction2;
 
-			//Set these two to be equal
-			window->instruction2->op1 = window->instruction1->op1;
+		//Grab the result type out
+		generic_type_t* result_type;
 
-			//We can now delete the very first statement
-			delete_statement(window->instruction1);
+		//If we can find it great, otherwise just use op1
+		if(binary_operation->type_storage.result_type != NULL){
+			result_type = binary_operation->type_storage.result_type;
+		} else {
+			result_type = binary_operation->op1->type;
+		}
 
-			//Reconstruct the window with instruction2 as the seed
-			reconstruct_window(window, window->instruction2);
+		/**
+		 * If the type here is actually compatible, then we can do this
+		 */
+		if(is_type_lea_compatible(result_type) == TRUE){
+			switch(constant_operation->op){
+				/**
+				 * For the case of a plus:
+				 * 	t21 <- t20 + 8
+				 * 	t22 <- t19 + t21
+				 *
+				 * 	t22 <- 8(t19, t20)
+				 */
+				case PLUS:
+					//Convert instruction2 into a lea
+					binary_operation->statement_type = THREE_ADDR_CODE_LEA_STMT;
+					binary_operation->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_OFFSET;
 
-			//This does count as a change
-			changed = TRUE;
+					//The op2 now becomes the op1
+					binary_operation->op2 = constant_operation->op1;
+
+					//Store the constant over as well
+					binary_operation->op1_const = constant_operation->op1_const;
+					
+					//Once this is done we can scrap the first instruction
+					delete_statement(constant_operation);
+
+					//Rebuild the window around the binary operation
+					reconstruct_window(window, binary_operation);
+
+					//This is a change
+					changed = TRUE;
+					break;
+
+				/**
+				 * For the case of a *:
+				 * 	t21 <- t20 * 8
+				 * 	t22 <- t19 + t21
+				 *
+				 * 	t22 <- (t19, t20, 8)
+				 */
+				case STAR:
+					//We need to make sure that we have a compatible power of 2, otherwise this will all break down
+					if(is_constant_lea_compatible_power_of_2(constant_operation->op1_const) == FALSE){
+						break;
+					}
+
+					//Convert instruction2 into a lea
+					binary_operation->statement_type = THREE_ADDR_CODE_LEA_STMT;
+					binary_operation->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_SCALE;
+
+					//The op2 now becomes the op1
+					binary_operation->op2 = constant_operation->op1;
+
+					//Store the constant over as well
+					binary_operation->lea_multiplier = constant_operation->op1_const->constant_value.signed_long_constant;
+					
+					//Once this is done we can scrap the first instruction
+					delete_statement(constant_operation);
+
+					//Rebuild the window around the binary operation
+					reconstruct_window(window, binary_operation);
+
+					//This is a change
+					changed = TRUE;
+
+					break;
+
+				//By default do nothing
+				default:
+					break;
+			}
 		}
 	}
 
 
 	/**
-	 * -------------------- Arithmetic expressions with assignee the same as op1 ---------------------
-	 *  There will be times where we generate arithmetic expressions like this:
+	 * ------------------ Converting adjacent binary operations into LEA statements
+	 * If we have two adjacent binary operations where one is a bin_op_with_const
+	 * and one is a plain bin_op, there may be chances for us to convert them
+	 * into lea statements
 	 *
-	 * 	t19 <- a_3
-	 * 	t20 <- t19 + y_0
-	 * 	a_4 <- t20
+	 * Example:
+	 * t20 <- t19 + t18
+	 * t21 <- t20 + 4
 	 *
-	 *  Since a_4 and a_3 are the same variable(register), this is an ideal candidate to be compressed
-	 *  like
-	 *
-	 *  a_4 <- a_3 + y_0
-	 *
-	 * This 3-instruction large optimizaion will look for this
+	 * Can become
+	 * t21 <- 4(t19, t18)
 	 */
-	//If the first statement is an assignmehnt statement, and the second statement is a binary operation,
-	//and the third statement is an assignment statement, we have our chance to optimize
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		&& is_instruction_binary_operation(window->instruction2) == TRUE
-		&& window->instruction3 != NULL
-		&& window->instruction3->statement_type == THREE_ADDR_CODE_ASSN_STMT){
+	if(window->instruction2 != NULL
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_STMT 
+		&& window->instruction1->op == PLUS
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction2->op == PLUS
+		&& variables_equal(window->instruction2->op1, window->instruction1->assignee, TRUE) == TRUE) {
 
-		//Grab these out for convenience
-		instruction_t* first = window->instruction1;
-		instruction_t* second = window->instruction2;
-		instruction_t* third = window->instruction3;
+		//Extract for convenience
+		instruction_t* binary_operation = window->instruction1;
+		instruction_t* constant_operation = window->instruction2;
 
-		//We still need further checks to see if this is indeed the pattern above. If
-		//we survive all of these checks, we know that we're set to optimize
-		if(first->assignee->variable_type == VARIABLE_TYPE_TEMP 
-			&& third->assignee->variable_type != VARIABLE_TYPE_TEMP
-			&& first->assignee->use_count <= 2 
-			&& variables_equal_no_ssa(first->op1, third->assignee, FALSE) == TRUE
-	 		&& variables_equal(first->assignee, second->op1, FALSE) == TRUE
-	 		&& variables_equal(second->assignee, third->op1, FALSE) == TRUE){
+		//Grab the result type out
+		generic_type_t* result_type;
 
-			//Manage our use state here
-			replace_variable(second->op1, first->op1);
+		//If we can find it great, otherwise just use op1
+		if(binary_operation->type_storage.result_type != NULL){
+			result_type = binary_operation->type_storage.result_type;
+		} else {
+			result_type = binary_operation->op1->type;
+		}
 
-			//The second op1 will now become the first op1
-			second->op1 = first->op1;
+		/**
+		 * If we are lea compatible, we will convert
+		 * from two disparate binary operations into
+		 * one lea with an offset and two registers
+		 */
+		if(is_type_lea_compatible(result_type) == TRUE){
+			//We'll work on the second one
+			constant_operation->statement_type = THREE_ADDR_CODE_LEA_STMT;
 
-			//And the second's assignee will now be the third's assignee
-			second->assignee = third->assignee;
+			//This is a register and offset lea type
+			constant_operation->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_OFFSET;
 
-			//Following this, all we need to do is delete and rearrange
-			delete_statement(first);
-			delete_statement(third);
+			//Copy over both operands from here
+			constant_operation->op1 = binary_operation->op1;
+			constant_operation->op2 = binary_operation->op2;
 
-			//Reconstruct the window with second as the new instruction1
-			reconstruct_window(window, second);
+			//Delete the old binary operation
+			delete_statement(binary_operation);
 
-			//Regardless of what happened, we did change the window, so we'll
-			//update this
+			//Rebuilt the window around the constant operation
+			reconstruct_window(window, constant_operation);
+
+			//This is a change
 			changed = TRUE;
 		}
 	}
@@ -2941,6 +3052,104 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
+
+	/**
+	 * ====================== Simplifying lea's internally =======================
+	 * We may end up with cases where lea statements have multipliers that are 1. If
+	 * this is the case, we'll want to remediate those
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT){
+		//Grab it out
+		instruction_t* lea_statement = window->instruction1;
+
+		switch(lea_statement->lea_statement_type){
+			/**
+			 * We have something like: 
+			 * 	t3 <- lea (, x, 1)
+			 *
+			 * 	We just convert it into t3 <- x
+			 *
+			 * We should already be set here with the assignee and all
+			 */
+			case OIR_LEA_TYPE_INDEX_AND_SCALE:
+				if(lea_statement->lea_multiplier == 1){
+					//Convert it over
+					lea_statement->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+
+					//Clear it out
+					lea_statement->lea_statement_type = OIR_LEA_TYPE_NONE;
+
+					//0 this out
+					lea_statement->lea_multiplier = 0;
+				}
+
+				break;
+
+			/**
+			 * We have something like
+			 * 	t3 <- lea 4(, x, 1)
+			 *
+			 * 	We can convert it into t3 <- x + 4
+			 */
+			case OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE:
+				if(lea_statement->lea_multiplier == 1){
+					//Convert it here
+					lea_statement->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+
+					//Clear this too
+					lea_statement->lea_statement_type = OIR_LEA_TYPE_NONE;
+
+					//Zero this out
+					lea_statement->lea_multiplier = 0;
+				}
+
+				break;
+
+			/**
+			 * We have something like
+			 * 	t3 <- lea (x, y, 1)
+			 *
+			 * 	Just turn it into 
+			 * 	t3 <- lea (x, y)
+			 */
+			case OIR_LEA_TYPE_REGISTERS_AND_SCALE:
+				if(lea_statement->lea_multiplier == 1){
+					//Convert the lea type
+					lea_statement->lea_statement_type = OIR_LEA_TYPE_REGISTERS_ONLY;
+
+					//Wipe this out
+					lea_statement->lea_multiplier = 0;
+				}
+				
+				break;
+
+			/**
+			 * We have something like
+			 * 	t3 <- lea 4(x, y, 1)
+			 *
+			 * 	Just turn it into 
+			 * 	t3 <- lea 4(x, y)
+			 */
+			case OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE:
+				if(lea_statement->lea_multiplier == 1){
+					//Convert the type
+					lea_statement->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_OFFSET;
+
+					//0 this out
+					lea_statement->lea_multiplier = 0;
+				}
+
+				break;
+
+			/**
+			 * Doesn't have a scale otherwise, so we are going to 
+			 * do nothing
+			 */
+			default:
+				break;
+		}
+	}
+
 	/**
 	 * ====================== Combining stores and operations =============
 	 *
@@ -2965,9 +3174,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					//This is now a load with variable offset
 					window->instruction2->statement_type = THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET;
 
-					//Copy these both over
-					window->instruction2->assignee = window->instruction1->assignee;
-					window->instruction2->op1 = window->instruction1->op1;
+					//The assignee is now the old op1
+					window->instruction2->assignee = window->instruction1->op1;
+					//And op1 is now the old op2
+					window->instruction2->op1 = window->instruction1->op2;
 
 					//Now scrap instruction 1
 					delete_statement(window->instruction1);
@@ -2991,8 +3201,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					//This is now a load with contant offset
 					window->instruction2->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
 
-					//Copy these both over
-					window->instruction2->assignee = window->instruction1->assignee;
+					//The assignee is now the old op1
+					window->instruction2->assignee = window->instruction1->op1;
+					//And the offset is the old constant
 					window->instruction2->offset = window->instruction1->op1_const;
 
 					//If we have a minus, we'll just convert to a negative
@@ -3094,79 +3305,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				break;
 		}
 	}
-
-
-	/**
-	 * =================== Adjacent assignment statement folding ====================
-	 * If we have a binary operation or a bin op with const statement followed by an
-	 * assignment of that result to a non-temporary variable, we have an opportunity
-	 * to simplify. This would lead nicely into the following optimizations below
-	 *
-	 * Example: 
-	 * t12 <- a_2 + 0x1
-	 * a_3 <- t12
-	 * could become
-	 * a_3 <- a_2 + 0x1
-	 */
-
-	//If the first instruction is a binary operation and the immediately following instruction is an assignment
-	//operation, this is a potential match
-	if(is_instruction_binary_operation(window->instruction1) == TRUE
-		&& window->instruction2 != NULL
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT){
-		//For convenience/memory ease
-		instruction_t* first = window->instruction1;
-		instruction_t* second = window->instruction2;
-
-		//If we have a temporary start variable, a non temp end variable, and the variables
-		//match in the corresponding spots, we have our opportunity
-		if(first->assignee->variable_type == VARIABLE_TYPE_TEMP && second->assignee->variable_type != VARIABLE_TYPE_TEMP 
-			&& variables_equal(first->assignee, second->op1, FALSE) == TRUE
-			//Special no-ssa comparison, we expect that the ssa would be different due to assignment levels
-			&& variables_equal_no_ssa(second->assignee, first->op1, FALSE) == TRUE){
-
-			//We will now take the second variables assignee to be the first statements assignee
-			first->assignee = second->assignee;
-
-			//That's really all we need to do for the first one. Now, we need to delete the second
-			//statement entirely
-			delete_statement(second);
-
-			//We'll reconstruct the window here, the first is still the first
-			reconstruct_window(window, first);
-
-			//Regardless of what happened here, we did change the window so we'll set the flag
-			changed = TRUE;
-
-		//We could also have a scenario like this that will apply only to logical combination(&& and ||) operators.
-		/**
-		 * t33 <- t34 && t35
-		 * x_0 <- t33
-		 *
-		 * Because of the way that we handle logical and, we can actuall eliminate the second assignment
-		 * with no issue
-		 * x_0 <- t34 && t35
-		 *
-		 * NOTE: This does not work for logical or, due to the way we handle logical OR
-		 */
-		} else if(first->op == DOUBLE_AND
-				&& first->assignee->variable_type == VARIABLE_TYPE_TEMP 
-				&& variables_equal(first->assignee, second->op1, FALSE) == TRUE){
-
-			//Set these to be equal
-			first->assignee = second->assignee;
-
-			//We can now scrap the second statement
-			delete_statement(second);
-
-			//We'll reconstruct the window here, the first is still the first
-			reconstruct_window(window, first);
-
-			//This counts as a change
-			changed = TRUE;
-		}
-	}
-
 
 	/**
 	 * ==================== On-the-fly logical and/or ========================
@@ -3421,8 +3559,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				* then doing this would mess the whole operation up
 				*/
 				case PLUS:
-					//If it's temporary, we jump out
-					if(first_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
+					/**
+					 * If we don't have something like x_1 = x_0 + 1, we can't be doing this so we'll leave
+					 */
+					if(variables_equal_no_ssa(first_instruction->assignee, first_instruction->op1, TRUE) == FALSE){
 						break;
 					}
 
@@ -3437,8 +3577,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					break;
 
 				case MINUS:
-					//If it's temporary, we jump out
-					if(first_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
+					/**
+					 * If we don't have something like x_1 = x_0 - 1, we can't be doing this so we'll leave
+					 */
+					if(variables_equal_no_ssa(first_instruction->assignee, first_instruction->op1, TRUE) == FALSE){
 						break;
 					}
 
@@ -3501,70 +3643,45 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * Multiplication and/or division are the only things that could benefit from this
 			 */
 			switch(first_instruction->op){
+				/**
+				 * Due to the way that we now handle shift instructions, we should just be
+				 * able to turn this into a shift and left the actual instruction converter
+				 * handle it afterwards. All we'll need to do is update the constant and the
+				 * instruction type
+				 */
 				case STAR:
-					/**
-					 * If the assignee and op1 are equal(which they almost always should be) - then we are set to go here. If not then
-					 * we'll just leave this for the eventual helper rule to handle
-					 */
-					if(variables_valid_shift_optimization(first_instruction->assignee, first_instruction->op1) == TRUE){
-						//Multiplication is a left shift
-						first_instruction->op = L_SHIFT;
-						//Update the constant with its log2 value
-						update_constant_with_log2_value(first_instruction->op1_const);
+					first_instruction->op = L_SHIFT;
+					update_constant_with_log2_value(first_instruction->op1_const);
 
-						/**
-						 * IMPORTANT - if we a have a temp variable here, since we're now using a shift,
-						 * we'll need to wipe this temp var away and instead use the op1 temp var for everything
-						 */
-						if(first_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
-							replace_all_variables_after_instruction(first_instruction->assignee, first_instruction->op1, first_instruction);
-						}
-
-						//We changed something
-						changed = TRUE;
-					}
+					//This is a change
+					changed = TRUE;
 
 					break;
 
+				/**
+				 * Due to the way that we now handle shift instructions, we should just be
+				 * able to turn this into a shift and left the actual instruction converter
+				 * handle it afterwards. All we'll need to do is update the constant and the
+				 * instruction type
+				 */
 				case F_SLASH:
-					/**
-					 * If we are able to perform this optimization, now is when we will do so. If we are not, then we will just leave
-					 * everything as is for the eventual selector rule to take care of it
-					 */
-					if(variables_valid_shift_optimization(first_instruction->assignee, first_instruction->op1) == TRUE){
-						//Division is a right shift
-						first_instruction->op = R_SHIFT;
-						//Update the constant with its log2 value
-						update_constant_with_log2_value(first_instruction->op1_const);
+					first_instruction->op = R_SHIFT;
+					update_constant_with_log2_value(first_instruction->op1_const);
 
-						/**
-						 * IMPORTANT - if we have a temp variable here, since we're now using
-						 * a shift, we'll need to wipe this temp var away and instead use the op1
-						 * temp var for everything
-						 */
-						if(first_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
-							replace_all_variables_after_instruction(first_instruction->assignee, first_instruction->op1, first_instruction);
-						}
-
-						//We changed something
-						changed = TRUE;
-					}
+					//This is a change
+					changed = TRUE;
 
 					break;
 
+				/**
+				 * This is going to be valid no matter what. We will let the helper handle
+				 * it. The helper will account for the different scenarios that we may have
+				 */
 				case MOD:
-					/**
-					 * If we are able to perform this optimization, now is when we will do so. If we are not, then we will just leave
-					 * everything as is for the eventual selector rule to take care of it
-					 *
-					 * This is a little more involved then the way that we handle division so we'll break this out into an inlined function
-					 */
-					if(variables_valid_shift_optimization(first_instruction->assignee, first_instruction->op1) == TRUE){
-						optimize_mod_by_power_of_2(window);
+					optimize_mod_by_power_of_2(window);
 
-						//This is a change
-						changed = TRUE;
-					}
+					//This is a change
+					changed = TRUE;
 
 					break;
 
@@ -3573,81 +3690,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					break;
 			}
 		}
-	}
-
-
-	/**
-	 * ====================== Translating multiplications into leas if compatible ================
-	 * NOTE: we only want to be doing stuff like this after we've turned eligible multiplication statements
-	 * into left/right shift operations. Otherwise we're just wasting our time doing this when there is a
-	 * slightly superior optimization
-	 *
-	 * If we have something like:
-	 * 	t27 <- t26 * 8
-	 *
-	 * Since 8 is a power of 2, we are actually able to translate this into a lea. We want to
-	 * do this because lea instructions, when multiplying, generate fewer instructions than
-	 * actually doing multiplication. This is reserved for cases where the assignee and op1
-	 * are not equal. These usually arise in address calculation scenarios
-	 *
-	 * We will check all three instructions to see how far we can go
-	 */
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& window->instruction1->op == STAR
- 		//Must be: 1, 2, 4, 8 for lea
-		&& is_constant_lea_compatible_power_of_2(window->instruction1->op1_const) == TRUE
-		&& variables_equal(window->instruction1->assignee, window->instruction1->op1, FALSE) == FALSE){
-		
-		//Extract the instruction for convenience
-		instruction_t* instruction = window->instruction1;
-
-		//Go based on the lea multiplier here
-		switch(instruction->op1_const->constant_value.signed_long_constant){
-			//Special case, we can knock out the whole expression. This will just become
-			//an assign const with 0
-			case 0:
-				//This is now an assign const(<value> * 0 = 0)
-				instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-
-				//Wipe out anything that isn't the 0
-				instruction->op1 = NULL;
-				instruction->op = BLANK;
-
-				break;
-
-			//Similar special case here, but now we have something that's an assignment statement itself
-			case 1:
-				//This is now a regular assignment (<value> * 1 = <value>)
-				instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
-
-				//Wipe out the op and constant
-				instruction->op1_const = NULL;
-				instruction->op = BLANK;
-
-				break;
-
-			//Otherwise for any other cases, we're just turning this into a lea statement
-			default:
-				//This is now a lea statement
-				instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-
-				//The lea type will be scale and index
-				instruction->lea_statement_type = OIR_LEA_TYPE_INDEX_AND_SCALE;
-				
-				//Knock out the op
-				instruction->op = BLANK;
-
-				//Copy over from the constant to the lea multiplier
-				instruction->lea_multiplier = instruction->op1_const->constant_value.signed_long_constant;
-
-				//We can now null out the constant
-				instruction->op1_const = NULL;
-				
-				break;
-		}
-
-		//This counts as a change
-		changed = TRUE;
 	}
 
 
@@ -4740,6 +4782,23 @@ static inline three_addr_var_t* create_and_insert_converting_move_instruction(in
 
 
 /**
+ * For floating point destinations after conversion, we need to completely "0" out the destination
+ * register before the conversion. We will check this here and insert it only if need be
+ */
+static inline void insert_pxor_clear_if_needed(instruction_t* move_instruction){
+	if(is_integer_to_sse_conversion_instruction(move_instruction->instruction_type) == TRUE){
+		/**
+		 * We need to completely zero out the destination register here, so we will emit a pxor to do
+		 * just that. The destination register is our final output
+		 */
+		instruction_t* pxor_instruction = emit_sse_register_clear_instruction(move_instruction->destination_register);
+
+		//Get this in right before the move instruction
+		insert_instruction_before_given(pxor_instruction, move_instruction);
+	}
+}
+
+/**
  * Emit a conversion instruction for division preparation
  *
  * We use this during the process of emitting division instructions
@@ -5001,12 +5060,11 @@ static instruction_t* emit_or_instruction(three_addr_var_t* destination, three_a
  * Division instructions have no destination that need be written out. They only have two sources - a direct
  * source and an implicit source
  */
-static instruction_t* emit_div_instruction(three_addr_var_t* assignee, three_addr_var_t* divisor, three_addr_var_t* dividend, three_addr_var_t* higher_order_dividend_bits, u_int8_t is_signed){
+static instruction_t* emit_div_instruction(generic_type_t* destination_type, three_addr_var_t* divisor, three_addr_var_t* dividend, three_addr_var_t* higher_order_dividend_bits, u_int8_t is_signed){
 	//First we'll allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
-	//We set the size based on the destination 
-	variable_size_t size = get_type_size(assignee->type);
+	variable_size_t size = get_type_size(destination_type);
 
 	//Now we'll decide this based on size and signedness
 	switch (size) {
@@ -5056,9 +5114,9 @@ static instruction_t* emit_div_instruction(three_addr_var_t* assignee, three_add
 	instruction->address_calc_reg1 = higher_order_dividend_bits;
 
 	//Quotient register
-	instruction->destination_register = emit_temp_var(assignee->type);
+	instruction->destination_register = emit_temp_var(destination_type);
 	//Remainder register
-	instruction->destination_register2 = emit_temp_var(assignee->type);
+	instruction->destination_register2 = emit_temp_var(destination_type);
 
 	//And now we'll give it back
 	return instruction;
@@ -5066,39 +5124,11 @@ static instruction_t* emit_div_instruction(three_addr_var_t* assignee, three_add
 
 
 /**
- * A very simple helper function that selects the right add instruction based
- * solely on variable size. Done to avoid code duplication
- */
-static instruction_type_t select_add_instruction(variable_size_t size){
-	//Go based on size
-	switch(size){
-		case BYTE:
-			return ADDB;
-		case WORD:
-			return ADDW;
-		case DOUBLE_WORD:
-			return ADDL;
-		case QUAD_WORD:
-			return ADDQ;
-		case SINGLE_PRECISION:
-			return ADDSS;
-		case DOUBLE_PRECISION:
-			return ADDSD;
-		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in add instruction\n");
-			exit(1);
-	}
-}
-
-
-/**
  * A very simple helper function that selects the right lea instruction based
  * solely on variable size. Done to avoid code duplication
  */
-static instruction_type_t select_lea_instruction(variable_size_t size){
-	//Go based on size
+static inline instruction_type_t select_lea_instruction(variable_size_t size){
 	switch(size){
-		case BYTE:
 		case WORD:
 			return LEAW;
 		case DOUBLE_WORD:
@@ -5111,12 +5141,26 @@ static instruction_type_t select_lea_instruction(variable_size_t size){
 	}
 }
 
+/**
+ * Is a type size valid for the addition to lea optimization? Not all types are so this
+ * is an important check to make
+ */
+static inline u_int8_t is_type_valid_for_addition_to_lea_conversion(variable_size_t size){
+	switch(size){
+		case DOUBLE_WORD:
+		case QUAD_WORD:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
 
 /**
  * A very simple helper function that selects the right add instruction based
  * solely on variable size. Done to avoid code duplication
  */
-static instruction_type_t select_sub_instruction(variable_size_t size){
+static inline instruction_type_t select_sub_instruction(variable_size_t size){
 	//Go based on size
 	switch(size){
 		case BYTE:
@@ -5183,10 +5227,65 @@ static three_addr_var_t* emit_byte_copy_of_variable(three_addr_var_t* source){
 
 
 /**
+ * Select the appropriate left shift instruction based on the size and signedness
+ */
+static inline instruction_type_t select_left_shift_instruction(variable_size_t size, u_int8_t is_signed){
+	switch (size) {
+		case BYTE:
+			if(is_signed == TRUE){
+				return SALB;
+			} else {
+				return SHLB;
+			}
+
+		case WORD:
+			if(is_signed == TRUE){
+				return SALW;
+			} else {
+				return SHLW;
+			}
+
+		case DOUBLE_WORD:
+			if(is_signed == TRUE){
+				return SALL;
+			} else {
+				return SHLL;
+			}
+
+		default:
+			if(is_signed == TRUE){
+				return SALQ;
+			} else {
+				return SHLQ;
+			}
+	}
+}
+
+
+/**
  * Handle a left shift operation. In doing a left shift, we account
  * for the possibility that we have a signed value
  */
-static void handle_left_shift_instruction(instruction_t* instruction){
+static void handle_left_shift_instruction(instruction_window_t* window){
+	//Get the actual left shift
+	instruction_t* left_shift_instruction = window->instruction1;
+
+	//The destination type
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(left_shift_instruction->type_storage.result_type != NULL){
+		destination_type = left_shift_instruction->type_storage.result_type;
+	} else {
+		destination_type = left_shift_instruction->assignee->type;
+	}
+
+	//Determine what our size is off the bat
+	variable_size_t size = get_type_size(destination_type);
+
 	//Is this a signed or unsigned instruction?
 	u_int8_t is_signed;
 
@@ -5195,9 +5294,9 @@ static void handle_left_shift_instruction(instruction_t* instruction){
 	 * this will not happen, but if it does we will action
 	 * it here
 	 */
-	switch(instruction->optional_storage.forced_signedness){
+	switch(left_shift_instruction->optional_storage.forced_signedness){
 		case FORCED_SIGNEDNESS_DONT_CARE:
-			is_signed = is_type_signed(instruction->assignee->type);
+			is_signed = is_type_signed(destination_type);
 			break;
 
 		case FORCED_SIGNED:
@@ -5209,46 +5308,21 @@ static void handle_left_shift_instruction(instruction_t* instruction){
 			break;
 	}
 
-	//We'll also need the size of the variable
-	variable_size_t size = get_type_size(instruction->assignee->type);
-
-	switch (size) {
-		case BYTE:
-			if(is_signed == TRUE){
-				instruction->instruction_type = SALB;
-			} else {
-				instruction->instruction_type = SHLB;
-			}
-			break;
-		case WORD:
-			if(is_signed == TRUE){
-				instruction->instruction_type = SALW;
-			} else {
-				instruction->instruction_type = SHLW;
-			}
-			break;
-		case DOUBLE_WORD:
-			if(is_signed == TRUE){
-				instruction->instruction_type = SALL;
-			} else {
-				instruction->instruction_type = SHLL;
-			}
-			break;
-		//Everything else falls here
-		default:
-			if(is_signed == TRUE){
-				instruction->instruction_type = SALQ;
-			} else {
-				instruction->instruction_type = SHLQ;
-			}
-			break;		
+	/**
+	 * Does op1 need an expanding/converting move? If so we will do that right now
+	 * and create it. We will skip out on op2 because that is going to become
+	 * a byte anyway
+	 */
+	if(is_converting_move_required(destination_type, left_shift_instruction->op1->type) == TRUE){
+		left_shift_instruction->op1 = create_and_insert_converting_move_instruction(left_shift_instruction, left_shift_instruction->op1, destination_type);
 	}
 
-	//Now we'll move over the operands
-	instruction->destination_register = instruction->assignee;
-	
-	//We can have an immediate value or we can have a register
-	if(instruction->op2 != NULL){
+	/**
+	 * For a shift instruction's second operand, we are only allowed to use the
+	 * byte version of the regsiter for it. We will account for all of those
+	 * possibilities here
+	 */
+	if(left_shift_instruction->op2 != NULL){
 		/**
 		 * If this is a function parameter, we'll need to emit a copy instruction
 		 * here for the eventual precolorer to use. If we don't do this, the precolorer
@@ -5256,22 +5330,119 @@ static void handle_left_shift_instruction(instruction_t* instruction){
 		 * the %ecx register that shift operands must be in. This is a unique case for shifting
 		 * due to a quirk of x86
 		 */
-		if(instruction->op2->class_relative_parameter_order > 0){
+		if(left_shift_instruction->op2->class_relative_parameter_order > 0){
 			//Move it on over here
-			instruction_t* copy_instruction = emit_move_instruction(emit_temp_var(instruction->op2->type), instruction->op2);
+			instruction_t* copy_instruction = emit_move_instruction(emit_temp_var(left_shift_instruction->op2->type), left_shift_instruction->op2);
 			//Add this instruction to our block
-			insert_instruction_before_given(copy_instruction, instruction);
+			insert_instruction_before_given(copy_instruction, left_shift_instruction);
 
 			//Now our op2 is really this one's assignee
-			instruction->op2 = copy_instruction->destination_register;
+			left_shift_instruction->op2 = copy_instruction->destination_register;
 		}
 	
 		//We will always emit the byte copy version of the source register here
-		instruction->source_register = emit_byte_copy_of_variable(instruction->op2);
+		left_shift_instruction->op2 = emit_byte_copy_of_variable(left_shift_instruction->op2);
+	}
 
-	//Otherwise we have an immediate source
+	//Go ahead and select it now
+	left_shift_instruction->instruction_type = select_left_shift_instruction(size, is_signed);
+
+	/**
+	 * Now if op1 and the assignee line up, we are good. Otherwise we will
+	 * need to make them align and insert some actual instructions
+	 */
+	if(variables_equal_no_ssa(left_shift_instruction->assignee, left_shift_instruction->op1, TRUE) == TRUE){
+		//Destination is the assignee
+		left_shift_instruction->destination_register = left_shift_instruction->assignee;
+
+		//Assign the source or the source immediate based on which we need
+		if(left_shift_instruction->op2 != NULL){
+			left_shift_instruction->source_register = left_shift_instruction->op2;
+		} else {
+			left_shift_instruction->source_immediate = left_shift_instruction->op1_const;
+		}
+
+		//Rebuild around the subtraction instruction
+		reconstruct_window(window, left_shift_instruction);
+
+	/**
+	 * If we get to here then we've got something like
+	 *  a_0 <- b_1 << 2
+	 *
+	 *  We'll need to rewrite it like
+	 *  t3 <- b1
+	 *  t3 <- t3 << 2
+	 *  a_0 <- t3
+	 */
 	} else {
-		instruction->source_immediate = instruction->op1_const;
+		//If this is not temp then we need it to be so we'll move it into being so
+		if(left_shift_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), left_shift_instruction->op1);
+
+			//Put this before the instruction
+			insert_instruction_before_given(temp_assigment, left_shift_instruction);
+
+			//This now is op1
+			left_shift_instruction->op1 = temp_assigment->destination_register;
+		}
+
+		//The destination register is op1
+		left_shift_instruction->destination_register = left_shift_instruction->op1;
+
+		//Assign the source or the source immediate based on which we need
+		if(left_shift_instruction->op2 != NULL){
+			left_shift_instruction->source_register = left_shift_instruction->op2;
+		} else {
+			left_shift_instruction->source_immediate = left_shift_instruction->op1_const;
+		}
+
+		//Move the destination register into the actual assignee now
+		instruction_t* assignment_instruction = emit_move_instruction(left_shift_instruction->assignee, left_shift_instruction->destination_register);
+
+		//This goes in *after* the left shift 
+		insert_instruction_after_given(assignment_instruction, left_shift_instruction);
+		
+		//Let the helper deal with the pxor clear
+		insert_pxor_clear_if_needed(assignment_instruction);
+
+		//Rebuild the whole window around this
+		reconstruct_window(window, assignment_instruction);
+	}
+}
+
+
+/**
+ * Select the appropriate right shift instruction based on the size and signedness
+ */
+static inline instruction_type_t select_right_shift_instruction(variable_size_t size, u_int8_t is_signed){
+	switch (size) {
+		case BYTE:
+			if(is_signed == TRUE){
+				return SARB;
+			} else {
+				return SHRB;
+			}
+
+		case WORD:
+			if(is_signed == TRUE){
+				return SARW;
+			} else {
+				return SHRW;
+			}
+
+		case DOUBLE_WORD:
+			if(is_signed == TRUE){
+				return SARL;
+			} else {
+				return SHRL;
+			}
+
+		default:
+			if(is_signed == TRUE){
+				return SARQ;
+			} else {
+				return SHRQ;
+			}
 	}
 }
 
@@ -5280,7 +5451,26 @@ static void handle_left_shift_instruction(instruction_t* instruction){
  * Handle a right shift operation. This helper will determine if we
  * need an arithmetic or a logical right shift dependant on the operation
  */
-static void handle_right_shift_instruction(instruction_t* instruction){
+static void handle_right_shift_instruction(instruction_window_t* window){
+	//Get the actual right shift
+	instruction_t* right_shift_instruction = window->instruction1;
+
+	//The destination type
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(right_shift_instruction->type_storage.result_type != NULL){
+		destination_type = right_shift_instruction->type_storage.result_type;
+	} else {
+		destination_type = right_shift_instruction->assignee->type;
+	}
+
+	//Determine what our size is off the bat
+	variable_size_t size = get_type_size(destination_type);
+
 	//Is this a signed or unsigned instruction?
 	u_int8_t is_signed;
 
@@ -5289,9 +5479,9 @@ static void handle_right_shift_instruction(instruction_t* instruction){
 	 * this will not happen, but if it does we will action
 	 * it here
 	 */
-	switch(instruction->optional_storage.forced_signedness){
+	switch(right_shift_instruction->optional_storage.forced_signedness){
 		case FORCED_SIGNEDNESS_DONT_CARE:
-			is_signed = is_type_signed(instruction->assignee->type);
+			is_signed = is_type_signed(destination_type);
 			break;
 
 		case FORCED_SIGNED:
@@ -5303,46 +5493,21 @@ static void handle_right_shift_instruction(instruction_t* instruction){
 			break;
 	}
 
-	//We'll also need the size of the variable
-	variable_size_t size = get_type_size(instruction->assignee->type);
-
-	switch (size) {
-		case BYTE:
-			if(is_signed == TRUE){
-				instruction->instruction_type = SARB;
-			} else {
-				instruction->instruction_type = SHRB;
-			}
-			break;
-		case WORD:
-			if(is_signed == TRUE){
-				instruction->instruction_type = SARW;
-			} else {
-				instruction->instruction_type = SHRW;
-			}
-			break;
-		case DOUBLE_WORD:
-			if(is_signed == TRUE){
-				instruction->instruction_type = SARL;
-			} else {
-				instruction->instruction_type = SHRL;
-			}
-			break;
-		//Everything else falls here
-		default:
-			if(is_signed == TRUE){
-				instruction->instruction_type = SARQ;
-			} else {
-				instruction->instruction_type = SHRQ;
-			}
-			break;		
+	/**
+	 * Does op1 need an expanding/converting move? If so we will do that right now
+	 * and create it. We will skip out on op2 because that is going to become
+	 * a byte anyway
+	 */
+	if(is_converting_move_required(destination_type, right_shift_instruction->op1->type) == TRUE){
+		right_shift_instruction->op1 = create_and_insert_converting_move_instruction(right_shift_instruction, right_shift_instruction->op1, destination_type);
 	}
 
-	//Now we'll move over the operands
-	instruction->destination_register = instruction->assignee;
-
-	//We can have an immediate value or we can have a register
-	if(instruction->op2 != NULL){
+	/**
+	 * For a shift instruction's second operand, we are only allowed to use the
+	 * byte version of the regsiter for it. We will account for all of those
+	 * possibilities here
+	 */
+	if(right_shift_instruction->op2 != NULL){
 		/**
 		 * If this is a function parameter, we'll need to emit a copy instruction
 		 * here for the eventual precolorer to use. If we don't do this, the precolorer
@@ -5350,22 +5515,107 @@ static void handle_right_shift_instruction(instruction_t* instruction){
 		 * the %ecx register that shift operands must be in. This is a unique case for shifting
 		 * due to a quirk of x86
 		 */
-		if(instruction->op2->class_relative_parameter_order > 0){
+		if(right_shift_instruction->op2->class_relative_parameter_order > 0){
 			//Move it on over here
-			instruction_t* copy_instruction = emit_move_instruction(emit_temp_var(instruction->op2->type), instruction->op2);
+			instruction_t* copy_instruction = emit_move_instruction(emit_temp_var(right_shift_instruction->op2->type), right_shift_instruction->op2);
 			//Add this instruction to our block
-			insert_instruction_before_given(copy_instruction, instruction);
+			insert_instruction_before_given(copy_instruction, right_shift_instruction);
 
 			//Now our op2 is really this one's assignee
-			instruction->op2 = copy_instruction->destination_register;
+			right_shift_instruction->op2 = copy_instruction->destination_register;
+		}
+	
+		//We will always emit the byte copy version of the source register here
+		right_shift_instruction->op2 = emit_byte_copy_of_variable(right_shift_instruction->op2);
+	}
+
+	//Go ahead and select it now
+	right_shift_instruction->instruction_type = select_right_shift_instruction(size, is_signed);
+
+	/**
+	 * Now if op1 and the assignee line up, we are good. Otherwise we will
+	 * need to make them align and insert some actual instructions
+	 */
+	if(variables_equal_no_ssa(right_shift_instruction->assignee, right_shift_instruction->op1, TRUE) == TRUE){
+		//Destination is the assignee
+		right_shift_instruction->destination_register = right_shift_instruction->assignee;
+
+		//Assign the source or the source immediate based on which we need
+		if(right_shift_instruction->op2 != NULL){
+			right_shift_instruction->source_register = right_shift_instruction->op2;
+		} else {
+			right_shift_instruction->source_immediate = right_shift_instruction->op1_const;
 		}
 
-		//We will always emit the byte copy version of the source register here
-		instruction->source_register = emit_byte_copy_of_variable(instruction->op2);
+		//Rebuild around the subtraction instruction
+		reconstruct_window(window, right_shift_instruction);
 
-	//Otherwise we have an immediate source
+	/**
+	 * If we get to here then we've got something like
+	 *  a_0 <- b_1 << 2
+	 *
+	 *  We'll need to rewrite it like
+	 *  t3 <- b1
+	 *  t3 <- t3 << 2
+	 *  a_0 <- t3
+	 */
 	} else {
-		instruction->source_immediate = instruction->op1_const;
+		//If this is not temp then we need it to be so we'll move it into being so
+		if(right_shift_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), right_shift_instruction->op1);
+
+			//Put this before the instruction
+			insert_instruction_before_given(temp_assigment, right_shift_instruction);
+
+			//This now is op1
+			right_shift_instruction->op1 = temp_assigment->destination_register;
+		}
+
+		//The destination register is op1
+		right_shift_instruction->destination_register = right_shift_instruction->op1;
+
+		//Assign the source or the source immediate based on which we need
+		if(right_shift_instruction->op2 != NULL){
+			right_shift_instruction->source_register = right_shift_instruction->op2;
+		} else {
+			right_shift_instruction->source_immediate = right_shift_instruction->op1_const;
+		}
+
+		//Move the destination register into the actual assignee now
+		instruction_t* assignment_instruction = emit_move_instruction(right_shift_instruction->assignee, right_shift_instruction->destination_register);
+
+		//This goes in *after* the right shift 
+		insert_instruction_after_given(assignment_instruction, right_shift_instruction);
+
+		//Let the helper deal with the pxor clear
+		insert_pxor_clear_if_needed(assignment_instruction);
+
+		//Rebuild the whole window around this
+		reconstruct_window(window, assignment_instruction);
+	}
+}
+
+
+/**
+ * Select the appropriate inclusive or instruction based on size
+ */
+static inline instruction_type_t select_bitwise_inclusive_or_instruction(variable_size_t size){
+	switch(size){
+		case QUAD_WORD:
+			return ORQ;
+
+		case DOUBLE_WORD:
+			return ORL;
+
+		case WORD:
+			return ORW;
+
+		case BYTE:
+			return ORB;
+
+		default:
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in or instruction\n");
+			exit(1);
 	}
 }
 
@@ -5373,45 +5623,131 @@ static void handle_right_shift_instruction(instruction_t* instruction){
 /**
  * Handle a bitwise inclusive or operation
  */
-static void handle_bitwise_inclusive_or_instruction(instruction_t* instruction){
-	//We need to know what size we're dealing with
-	variable_size_t size = get_type_size(instruction->assignee->type);
+static void handle_bitwise_inclusive_or_instruction(instruction_window_t* window){
+	//Grab out the first one
+	instruction_t* bitwise_or = window->instruction1;
 
-	switch(size){
-		case QUAD_WORD:
-			instruction->instruction_type = ORQ;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = ORL;
-			break;
-		case WORD:
-			instruction->instruction_type = ORW;
-			break;
-		case BYTE:
-			instruction->instruction_type = ORB;
-			break;
-		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in or instruction\n");
-			exit(1);
+	//The destination type
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(bitwise_or->type_storage.result_type != NULL){
+		destination_type = bitwise_or->type_storage.result_type;
+	} else {
+		destination_type = bitwise_or->assignee->type;
 	}
 
-	//And we always have a destination register
-	instruction->destination_register = instruction->assignee;
+	//Determine what our size is off the bat
+	variable_size_t size = get_type_size(destination_type);
 
-	//We can have an immediate value or we can have a register
-	if(instruction->op2 != NULL){
-		//If we need to convert, we'll do that here
-		if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
-			instruction->source_register = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
+	/**
+	 * Does op1 need an expanding/converting move? If so we will do that right now
+	 * and create it
+	 */
+	if(is_converting_move_required(destination_type, bitwise_or->op1->type) == TRUE){
+		bitwise_or->op1 = create_and_insert_converting_move_instruction(bitwise_or, bitwise_or->op1, destination_type);
+	}
 
-		//Otherwise it's a direct translation
+	/**
+	 * What about op2(if we even have op2)
+	 */
+	if(bitwise_or->op2 != NULL
+		&& is_converting_move_required(destination_type, bitwise_or->op2->type) == TRUE){
+		bitwise_or->op2 = create_and_insert_converting_move_instruction(bitwise_or, bitwise_or->op2, destination_type);
+	}
+
+	//We are going to be using a bitwise and instruction regardless so let's get it now
+	bitwise_or->instruction_type = select_bitwise_inclusive_or_instruction(size);
+
+	/**
+	 * If we already have the setup we need where op1 and the assignee are the same variable,
+	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
+	 * to make all of this work
+	 */
+	if(variables_equal_no_ssa(bitwise_or->assignee, bitwise_or->op1, TRUE) == TRUE){
+		//Destination is just the assignee
+		bitwise_or->destination_register = bitwise_or->assignee;
+
+		//Assign the source or the source immediate based on which we need
+		if(bitwise_or->op2 != NULL){
+			bitwise_or->source_register = bitwise_or->op2;
 		} else {
-			instruction->source_register = instruction->op2;
+			bitwise_or->source_immediate = bitwise_or->op1_const;
 		}
 
-	//Otherwise we have an immediate source
+		//Rebuild around the instruction
+		reconstruct_window(window, bitwise_or);
+
+	/**
+	 * Otherwise we've got something like:
+	 * 	t4 <- t3 & 2
+	 *
+	 * 	We'll need to make it so that the assignee and the op1 are the same. We'd do something
+	 * 	like
+	 * 	
+	 * 	t3 <- t3 & 2
+	 * 	t4 <- t3
+	 */
 	} else {
-		instruction->source_immediate = instruction->op1_const;
+		//If this is not temp then we need it to be so we'll move it into being so
+		if(bitwise_or->op1->variable_type != VARIABLE_TYPE_TEMP){
+			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), bitwise_or->op1);
+
+			//Put this before the instruction
+			insert_instruction_before_given(temp_assigment, bitwise_or);
+
+			//This now is op1
+			bitwise_or->op1 = temp_assigment->destination_register;
+		}
+
+		//The destination register is op1
+		bitwise_or->destination_register = bitwise_or->op1;
+
+		//Assign the source or the source immediate based on which we need
+		if(bitwise_or->op2 != NULL){
+			bitwise_or->source_register = bitwise_or->op2;
+		} else {
+			bitwise_or->source_immediate = bitwise_or->op1_const;
+		}
+
+		//Move the destination register into the actual assignee now
+		instruction_t* assignment_instruction = emit_move_instruction(bitwise_or->assignee, bitwise_or->destination_register);
+
+		//This goes in *after* the bitwise or
+		insert_instruction_after_given(assignment_instruction, bitwise_or);
+
+		//Let the helper deal with the pxor clear
+		insert_pxor_clear_if_needed(assignment_instruction);
+
+		//Rebuild the whole window around this
+		reconstruct_window(window, assignment_instruction);
+	}
+}
+
+
+/**
+ * Select the appropriate bitwise and instruction based on size
+ */
+static inline instruction_type_t select_bitwise_and_instruction(variable_size_t size){
+	switch(size){
+		case QUAD_WORD:
+			return ANDQ;
+
+		case DOUBLE_WORD:
+			return ANDL;
+
+		case WORD:
+			return ANDW;
+
+		case BYTE:
+			return ANDB;
+
+		default:
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in and instruction\n");
+			exit(1);
 	}
 }
 
@@ -5419,91 +5755,1330 @@ static void handle_bitwise_inclusive_or_instruction(instruction_t* instruction){
 /**
  * Handle a bitwise and operation
  */
-static void handle_bitwise_and_instruction(instruction_t* instruction){
-	//We need to know what size we're dealing with
-	variable_size_t size = get_type_size(instruction->assignee->type);
+static void handle_bitwise_and_instruction(instruction_window_t* window){
+	//Grab out the first one
+	instruction_t* bitwise_and = window->instruction1;
 
-	switch(size){
-		case QUAD_WORD:
-			instruction->instruction_type = ANDQ;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = ANDL;
-			break;
-		case WORD:
-			instruction->instruction_type = ANDW;
-			break;
-		case BYTE:
-			instruction->instruction_type = ANDB;
-			break;
-		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in and instruction\n");
-			exit(1);
+	//The destination type
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(bitwise_and->type_storage.result_type != NULL){
+		destination_type = bitwise_and->type_storage.result_type;
+	} else {
+		destination_type = bitwise_and->assignee->type;
 	}
 
-	//And we always have a destination register
-	instruction->destination_register = instruction->assignee;
+	//Determine what our size is off the bat
+	variable_size_t size = get_type_size(destination_type);
 
-	//We can have an immediate value or we can have a register
-	if(instruction->op2 != NULL){
-		//If we need to convert, we'll do that here
-		if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
-			instruction->source_register = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
+	/**
+	 * Does op1 need an expanding/converting move? If so we will do that right now
+	 * and create it
+	 */
+	if(is_converting_move_required(destination_type, bitwise_and->op1->type) == TRUE){
+		bitwise_and->op1 = create_and_insert_converting_move_instruction(bitwise_and, bitwise_and->op1, destination_type);
+	}
 
-		//Otherwise it's a direct translation
+	/**
+	 * What about op2(if we even have op2)
+	 */
+	if(bitwise_and->op2 != NULL
+		&& is_converting_move_required(destination_type, bitwise_and->op2->type) == TRUE){
+		bitwise_and->op2 = create_and_insert_converting_move_instruction(bitwise_and, bitwise_and->op2, destination_type);
+	}
+
+	//We are going to be using a bitwise and instruction regardless so let's get it now
+	bitwise_and->instruction_type = select_bitwise_and_instruction(size);
+
+	/**
+	 * If we already have the setup we need where op1 and the assignee are the same variable,
+	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
+	 * to make all of this work
+	 */
+	if(variables_equal_no_ssa(bitwise_and->assignee, bitwise_and->op1, TRUE) == TRUE){
+		//Destination is just the assignee
+		bitwise_and->destination_register = bitwise_and->assignee;
+
+		//Assign the source or the source immediate based on which we need
+		if(bitwise_and->op2 != NULL){
+			bitwise_and->source_register = bitwise_and->op2;
 		} else {
-			instruction->source_register = instruction->op2;
+			bitwise_and->source_immediate = bitwise_and->op1_const;
 		}
 
-	//Otherwise we have an immediate source
+		//Rebuild around the instruction
+		reconstruct_window(window, bitwise_and);
+
+	/**
+	 * Otherwise we've got something like:
+	 * 	t4 <- t3 & 2
+	 *
+	 * 	We'll need to make it so that the assignee and the op1 are the same. We'd do something
+	 * 	like
+	 * 	
+	 * 	t3 <- t3 & 2
+	 * 	t4 <- t3
+	 */
 	} else {
-		instruction->source_immediate = instruction->op1_const;
+		//If this is not temp then we need it to be so we'll move it into being so
+		if(bitwise_and->op1->variable_type != VARIABLE_TYPE_TEMP){
+			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), bitwise_and->op1);
+
+			//Put this before the instruction
+			insert_instruction_before_given(temp_assigment, bitwise_and);
+
+			//This now is op1
+			bitwise_and->op1 = temp_assigment->destination_register;
+		}
+
+		//The destination register is op1
+		bitwise_and->destination_register = bitwise_and->op1;
+
+		//Assign the source or the source immediate based on which we need
+		if(bitwise_and->op2 != NULL){
+			bitwise_and->source_register = bitwise_and->op2;
+		} else {
+			bitwise_and->source_immediate = bitwise_and->op1_const;
+		}
+
+		//Move the destination register into the actual assignee now
+		instruction_t* assignment_instruction = emit_move_instruction(bitwise_and->assignee, bitwise_and->destination_register);
+
+		//This goes in *after* the subtraction
+		insert_instruction_after_given(assignment_instruction, bitwise_and);
+
+		//Let the helper deal with the pxor clear
+		insert_pxor_clear_if_needed(assignment_instruction);
+
+		//Rebuild the whole window around this
+		reconstruct_window(window, assignment_instruction);
 	}
 }
 
 
 /**
- * Handle a bitwise exclusive or operation
+ * Select the appropriate bitwise xor operation
  */
-static void handle_bitwise_exclusive_or_instruction(instruction_t* instruction){
-	//We need to know what size we're dealing with
-	variable_size_t size = get_type_size(instruction->assignee->type);
-
+static inline instruction_type_t select_bitwise_xor_instruction(variable_size_t size){
 	switch(size){
 		case QUAD_WORD:
-			instruction->instruction_type = XORQ;
-			break;
+			return XORQ;
+
 		case DOUBLE_WORD:
-			instruction->instruction_type = XORL;
-			break;
+			return XORL;
+
 		case WORD:
-			instruction->instruction_type = XORW;
-			break;
+			return XORW;
+
 		case BYTE:
-			instruction->instruction_type = XORB;
-			break;
+			return XORB;
+
 		default:
 			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in xor instruction\n");
 			exit(1);
 	}
-	
-	//And we always have a destination register
-	instruction->destination_register = instruction->assignee;
+} 
 
-	//We can have an immediate value or we can have a register
-	if(instruction->op2 != NULL){
-		//If we need to convert, we'll do that here
-		if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
-			instruction->source_register = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
 
-		//Otherwise it's a direct translation
+/**
+ * Handle a bitwise exclusive or operation
+ */
+static void handle_bitwise_exclusive_or_instruction(instruction_window_t* window){
+	//Grab out the first one
+	instruction_t* bitwise_xor = window->instruction1;
+
+	//The destination type
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(bitwise_xor->type_storage.result_type != NULL){
+		destination_type = bitwise_xor->type_storage.result_type;
+	} else {
+		destination_type = bitwise_xor->assignee->type;
+	}
+
+	//Determine what our size is off the bat
+	variable_size_t size = get_type_size(destination_type);
+
+	/**
+	 * Does op1 need an expanding/converting move? If so we will do that right now
+	 * and create it
+	 */
+	if(is_converting_move_required(destination_type, bitwise_xor->op1->type) == TRUE){
+		bitwise_xor->op1 = create_and_insert_converting_move_instruction(bitwise_xor, bitwise_xor->op1, destination_type);
+	}
+
+	/**
+	 * What about op2(if we even have op2)
+	 */
+	if(bitwise_xor->op2 != NULL
+		&& is_converting_move_required(destination_type, bitwise_xor->op2->type) == TRUE){
+		bitwise_xor->op2 = create_and_insert_converting_move_instruction(bitwise_xor, bitwise_xor->op2, destination_type);
+	}
+
+	//We are going to be using a bitwise xor instruction regardless so let's get it now
+	bitwise_xor->instruction_type = select_bitwise_xor_instruction(size);
+
+	/**
+	 * If we already have the setup we need where op1 and the assignee are the same variable,
+	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
+	 * to make all of this work
+	 */
+	if(variables_equal_no_ssa(bitwise_xor->assignee, bitwise_xor->op1, TRUE) == TRUE){
+		//Destination is just the assignee
+		bitwise_xor->destination_register = bitwise_xor->assignee;
+
+		//Assign the source or the source immediate based on which we need
+		if(bitwise_xor->op2 != NULL){
+			bitwise_xor->source_register = bitwise_xor->op2;
 		} else {
-			instruction->source_register = instruction->op2;
+			bitwise_xor->source_immediate = bitwise_xor->op1_const;
 		}
 
-	//Otherwise we have an immediate source
+		//Rebuild around the instruction
+		reconstruct_window(window, bitwise_xor);
+
+	/**
+	 * Otherwise we've got something like:
+	 * 	t4 <- t3 & 2
+	 *
+	 * 	We'll need to make it so that the assignee and the op1 are the same. We'd do something
+	 * 	like
+	 * 	
+	 * 	t3 <- t3 & 2
+	 * 	t4 <- t3
+	 */
 	} else {
-		instruction->source_immediate = instruction->op1_const;
+		//If this is not temp then we need it to be so we'll move it into being so
+		if(bitwise_xor->op1->variable_type != VARIABLE_TYPE_TEMP){
+			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), bitwise_xor->op1);
+
+			//Put this before the instruction
+			insert_instruction_before_given(temp_assigment, bitwise_xor);
+
+			//This now is op1
+			bitwise_xor->op1 = temp_assigment->destination_register;
+		}
+
+		//The destination register is op1
+		bitwise_xor->destination_register = bitwise_xor->op1;
+
+		//Assign the source or the source immediate based on which we need
+		if(bitwise_xor->op2 != NULL){
+			bitwise_xor->source_register = bitwise_xor->op2;
+		} else {
+			bitwise_xor->source_immediate = bitwise_xor->op1_const;
+		}
+
+		//Move the destination register into the actual assignee now
+		instruction_t* assignment_instruction = emit_move_instruction(bitwise_xor->assignee, bitwise_xor->destination_register);
+
+		//This goes in *after* the subtraction
+		insert_instruction_after_given(assignment_instruction, bitwise_xor);
+
+		//Let the helper deal with the pxor clear
+		insert_pxor_clear_if_needed(assignment_instruction);
+
+		//Rebuild the whole window around this
+		reconstruct_window(window, assignment_instruction);
+	}
+}
+
+
+/**
+ * Handle a signed modulus operation
+ *
+ * t3 <- t4 % t5
+ *
+ * Will become:
+ * movl t4, t6 (rax)
+ * cltd
+ * idivl t5
+ * t3 <- t7 (rdx has remainder)
+ *
+ * As such, this will generate additional instructions for us, making it not
+ * a "single instruction" pattern
+ *
+ * NOTE: We guarantee that the instruction we're after is always the first
+ * instruction in the window
+ */
+static inline void handle_signed_modulus(instruction_window_t* window){
+	//Firstly, the instruction that we're looking for is the very first one
+	instruction_t* modulus_instruction = window->instruction1;
+
+	three_addr_var_t* dividend;
+	three_addr_var_t* divisor;
+
+	//The destination type
+	generic_type_t* result_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(modulus_instruction->type_storage.result_type != NULL){
+		result_type = modulus_instruction->type_storage.result_type;
+	} else {
+		result_type = modulus_instruction->assignee->type;
+	}
+
+	//If we need to convert, we'll do that here
+	if(is_converting_move_required(result_type, modulus_instruction->op1->type) == TRUE){
+		//Let the helper deal with it
+		dividend = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op1, result_type);
+
+	//Otherwise this can be moved directly
+	} else {
+		//We first need to move the first operand into RAX
+		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(modulus_instruction->op1->type), modulus_instruction->op1);
+
+		//Insert the move to rax before the multiplication instruction
+		insert_instruction_before_given(move_to_rax, modulus_instruction);
+
+		//This is just the destination register here
+		dividend = move_to_rax->destination_register;
+	}
+
+	/**
+	 * For a signed division, the CXXX instruction will 
+	 * have a secondary destination that holds the higher order bits. We will
+	 * capture this if needed here
+	 */
+	three_addr_var_t* higher_order_dividend_bits = NULL;
+
+	//Now, we'll need the appropriate extension instruction *if* we're doing signed division
+	instruction_t* cl_instruction = emit_conversion_instruction(dividend);
+
+	//Store both here
+	dividend = cl_instruction->destination_register;
+	higher_order_dividend_bits = cl_instruction->destination_register2;
+
+	//Insert this before the mod instruction
+	insert_instruction_before_given(cl_instruction, modulus_instruction);
+
+	/**
+	 * Handle all converting moves/constant assignment moves that we need to here
+	 */
+	if(modulus_instruction->op2 != NULL){
+		//Do we need to do a type conversion? If so, we'll do a converting move here
+		if(is_converting_move_required(result_type, modulus_instruction->op2->type) == TRUE){
+			divisor = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op2, result_type);
+
+		//Otherwise source 2 is just the op2
+		} else {
+			divisor = modulus_instruction->op2;
+		}
+	
+	//Otherwise we'll need a const assignment
+	} else {
+		//Emit the move
+		instruction_t* constant_assignment = emit_constant_move_instruction(emit_temp_var(modulus_instruction->assignee->type), modulus_instruction->op1_const);
+
+		//This goes right in before the mod
+		insert_instruction_before_given(constant_assignment, modulus_instruction);
+
+		//And this now is our divisor
+		divisor = constant_assignment->destination_register;
+	}
+
+	//Now we should have what we need, so we can emit the division instruction
+	instruction_t* division = emit_div_instruction(result_type, divisor, dividend, higher_order_dividend_bits, TRUE);
+	
+	//Store the remainder register here
+	three_addr_var_t* remainder_register = division->destination_register2;
+
+	//Insert this before the original modulus
+	insert_instruction_before_given(division, modulus_instruction);
+
+	//Once we've done all that, we need one final movement operation
+	instruction_t* result_movement = emit_move_instruction(modulus_instruction->assignee, remainder_register);
+
+	//Insert this after the original modulus
+	insert_instruction_after_given(result_movement, modulus_instruction);
+
+	//Finally we'll delete the old modulus instruction, as we no longer need it
+	delete_statement(modulus_instruction);
+
+	//Reconstruct the window starting at the result movement
+	reconstruct_window(window, result_movement);
+}
+
+
+/**
+ * Handle an unsigned modulus operation
+ *
+ * t3 <- t4 % t5
+ *
+ * Will become:
+ * movl t4, t6 (rax)
+ * xorl %edx
+ * divl t5
+ * t3 <- t7 (rdx has remainder)
+ *
+ * As such, this will generate additional instructions for us, making it not
+ * a "single instruction" pattern
+ *
+ * NOTE: We guarantee that the instruction we're after is always the first
+ * instruction in the window
+ */
+static inline void handle_unsigned_modulus(instruction_window_t* window){
+	//Firstly, the instruction that we're looking for is the very first one
+	instruction_t* modulus_instruction = window->instruction1;
+
+	//The destination type
+	generic_type_t* result_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(modulus_instruction->type_storage.result_type != NULL){
+		result_type = modulus_instruction->type_storage.result_type;
+	} else {
+		result_type = modulus_instruction->assignee->type;
+	}
+
+	three_addr_var_t* dividend;
+	three_addr_var_t* divisor;
+
+	//If we need to convert, we'll do that here
+	if(is_converting_move_required(result_type, modulus_instruction->op1->type) == TRUE){
+		//Let the helper deal with it
+		dividend = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op1, result_type);
+
+	//Otherwise this can be moved directly
+	} else {
+		//We first need to move the first operand into RAX
+		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(modulus_instruction->op1->type), modulus_instruction->op1);
+
+		//Insert the move to rax before the multiplication instruction
+		insert_instruction_before_given(move_to_rax, modulus_instruction);
+
+		//This is just the destination register here
+		dividend = move_to_rax->destination_register;
+	}
+
+	/**
+	 * Handle all converting moves/constant assignment moves that we need to here
+	 */
+	if(modulus_instruction->op2 != NULL){
+		//Do we need to do a type conversion? If so, we'll do a converting move here
+		if(is_converting_move_required(result_type, modulus_instruction->op2->type) == TRUE){
+			divisor = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op2, result_type);
+
+		//Otherwise source 2 is just the op2
+		} else {
+			divisor = modulus_instruction->op2;
+		}
+	
+	//Otherwise we'll need a const assignment
+	} else {
+		//Emit the move
+		instruction_t* constant_assignment = emit_constant_move_instruction(emit_temp_var(result_type), modulus_instruction->op1_const);
+
+		//This goes right in before the mod
+		insert_instruction_before_given(constant_assignment, modulus_instruction);
+
+		//And this now is our divisor
+		divisor = constant_assignment->destination_register;
+	}
+
+	/**
+	 * For unsigned division, which is what modulus is, we need to completely 0 out the %rdx register.
+	 * This is in contrast to signed division where we intentionally extend to said register. Here we will
+	 * just clean it out
+	 */
+	three_addr_var_t* cleared_rdx = emit_temp_var(modulus_instruction->assignee->type);
+
+	//Get the instruction out
+	instruction_t* clear_instruction = emit_gp_register_clear_instruction(cleared_rdx);
+
+	//This goes in before the given instruction
+	insert_instruction_before_given(clear_instruction, modulus_instruction);
+
+	//Now we should have what we need, so we can emit the division instruction
+	instruction_t* division = emit_div_instruction(result_type, divisor, dividend, cleared_rdx, FALSE);
+	
+	//Store the remainder register here
+	three_addr_var_t* remainder_register = division->destination_register2;
+
+	//Insert this before the original modulus
+	insert_instruction_before_given(division, modulus_instruction);
+
+	//Once we've done all that, we need one final movement operation
+	instruction_t* result_movement = emit_move_instruction(modulus_instruction->assignee, remainder_register);
+
+	//Insert this after the original modulus
+	insert_instruction_after_given(result_movement, modulus_instruction);
+
+	//Finally we'll delete the old modulus instruction, as we no longer need it
+	delete_statement(modulus_instruction);
+
+	//Reconstruct the window starting at the result movement
+	reconstruct_window(window, result_movement);
+}
+
+
+/**
+ * Handle a modulus(remainder) operation
+ * Handle a division operation
+ *
+ * t3 <- t4 % t5
+ *
+ * Will become:
+ * movl t4, t6 (rax)
+ * cltd
+ * idivl t5
+ * t3 <- t7 (rdx has remainder)
+ *
+ * As such, this will generate additional instructions for us, making it not
+ * a "single instruction" pattern
+ *
+ * NOTE: We guarantee that the instruction we're after is always the first
+ * instruction in the window
+ */
+static inline void handle_modulus_instruction(instruction_window_t* window){
+	//Firstly, the instruction that we're looking for is the very first one
+	instruction_t* modulus_instruction = window->instruction1;
+
+	//Is the type signed
+	u_int8_t is_signed;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(modulus_instruction->type_storage.result_type != NULL){
+		 is_signed = is_type_signed(modulus_instruction->type_storage.result_type);
+	} else {
+		is_signed = is_type_signed(modulus_instruction->assignee->type);
+	}
+
+	//Dynamic dispatch based on what we need
+	if(is_signed == TRUE){
+		handle_signed_modulus(window);
+	} else {
+		handle_unsigned_modulus(window);
+	}
+}
+
+
+/**
+ * Select an unsigned multiplication instruction based on the given size
+ */
+static inline instruction_type_t select_unsigned_mulitplication_instruction(variable_size_t size){
+	switch (size) {
+		case BYTE:
+			return MULB;
+
+		case WORD:
+			return MULW;
+
+		case DOUBLE_WORD:
+			return MULL;
+
+		case QUAD_WORD:
+			return MULQ;
+
+		default:
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in multiplication instruction\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Handle an unsigned multiplication operation
+ *
+ * Because of the extra instructions that this will generate, this will count as
+ * a multiple instruction selection pattern
+ *
+ * x <- a * 2;
+ *
+ * mov $3, %rax <- Source is always in RAX
+ * mull %rcx -> result in rax
+ *
+ * NOTE: this is always the first instruction in the instruction window
+*/
+static void handle_unsigned_multiplication_instruction(instruction_window_t* window){
+	//Instruction 1 is the multiplication instruction
+	instruction_t* multiplication_instruction = window->instruction1;
+
+	//The destination type
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(multiplication_instruction->type_storage.result_type != NULL){
+		destination_type = multiplication_instruction->type_storage.result_type;
+	} else {
+		destination_type = multiplication_instruction->assignee->type;
+	}
+
+	//We'll need to know the variables size
+	variable_size_t size = get_type_size(destination_type);
+
+	//A temp holder for the final second source variable
+	three_addr_var_t* source;
+	three_addr_var_t* source2;
+
+	//If we have a BIN_OP with const statement, we need to 
+	if(multiplication_instruction->statement_type == THREE_ADDR_CODE_BIN_OP_STMT){
+		//If we need to convert, we'll do that here
+		if(is_converting_move_required(destination_type, multiplication_instruction->op2->type) == TRUE){
+			//Let the helper deal with it
+			source2 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->op2, destination_type);
+
+		//Otherwise this can be moved directly
+		} else {
+			//We first need to move the first operand into RAX
+			instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(multiplication_instruction->op2->type), multiplication_instruction->op2);
+
+			//Insert the move to rax before the multiplication instruction
+			insert_instruction_before_given(move_to_rax, multiplication_instruction);
+
+			//This is just the destination register here
+			source2 = move_to_rax->destination_register;
+		}
+
+	//Otherwise, we have a BIN_OP_WITH_CONST statement. We're actually going to need a temp assignment for the second operand(the constant)
+	//here for this to work
+	} else {
+		//Emit the move instruction here
+		instruction_t* move_to_rax = emit_constant_move_instruction(emit_temp_var(destination_type), multiplication_instruction->op1_const);
+
+		//Put it before our multiplication
+		insert_instruction_before_given(move_to_rax, multiplication_instruction);
+
+		//Our source2 now is this
+		source2 = move_to_rax->destination_register;
+	}
+
+	//Let's also check is any conversions are needed for the first source register
+	if(is_converting_move_required(destination_type, multiplication_instruction->op1->type) == TRUE){
+		source = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->op1, multiplication_instruction->assignee->type);
+
+	//Otherwise we'll just assign this to be op1
+	} else {
+		source = multiplication_instruction->op1;
+	}
+
+	//Select the actual instruction
+	multiplication_instruction->instruction_type = select_unsigned_mulitplication_instruction(size);
+
+	//This is the case where we have two source registers
+	multiplication_instruction->source_register = source;
+	//The other source register is in RAX
+	multiplication_instruction->source_register2 = source2;
+
+	//This is the assignee, we just don't see it
+	multiplication_instruction->destination_register = emit_temp_var(destination_type);
+
+	//Once we've done all that, we need one final movement operation
+	instruction_t* result_movement = emit_move_instruction(multiplication_instruction->assignee, multiplication_instruction->destination_register);
+
+	//Insert the result movement instruction to be after the multiplication operation
+	insert_instruction_after_given(result_movement, multiplication_instruction);
+
+	//Insert a pxor clear if need be
+	insert_pxor_clear_if_needed(result_movement);
+
+	//We now need to reset the window here
+	reconstruct_window(window, result_movement);
+}
+
+
+/**
+ * Select a signed multiplication based on a size
+ */
+static inline instruction_type_t select_signed_multiplication_instruction(variable_size_t size){
+	switch (size) {
+		case BYTE:
+			return IMULB;
+
+		case WORD:
+			return IMULW;
+
+		case DOUBLE_WORD:
+			return IMULL;
+
+		case QUAD_WORD:
+			return IMULQ;
+
+		default:
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in multiplication instruction\n");
+			exit(1);
+	}
+
+}
+
+
+/**
+ * Handle a signed multiplication operation
+ *
+ * A multiplication operation can be different based on size and sign
+ */
+static void handle_signed_multiplication_instruction(instruction_window_t* window){
+	//Grab out the first one
+	instruction_t* multiplication_instruction = window->instruction1;
+
+	//The actual destination type that we are after
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(multiplication_instruction->type_storage.result_type != NULL){
+		destination_type = multiplication_instruction->type_storage.result_type;
+	} else {
+		destination_type = multiplication_instruction->assignee->type;
+	}
+
+	//Determine what our size is off the bat
+	variable_size_t size = get_type_size(destination_type);
+
+	/**
+	 * Does op1 need an expanding/converting move? If so we will do that right now
+	 * and create it
+	 */
+	if(is_converting_move_required(destination_type, multiplication_instruction->op1->type) == TRUE){
+		multiplication_instruction->op1 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->op1, destination_type);
+	}
+
+	/**
+	 * What about op2(if we even have op2)
+	 */
+	if(multiplication_instruction->op2 != NULL
+		&& is_converting_move_required(destination_type, multiplication_instruction->op2->type) == TRUE){
+		multiplication_instruction->op2 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->op2, destination_type);
+	}
+
+	//We are going to be using a signed imull instruction regardless so let's get it now
+	multiplication_instruction->instruction_type = select_signed_multiplication_instruction(size);
+
+	/**
+	 * If we already have the setup we need where op1 and the assignee are the same variable,
+	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
+	 * to make all of this work
+	 */
+	if(variables_equal_no_ssa(multiplication_instruction->assignee, multiplication_instruction->op1, TRUE) == TRUE){
+		//Destination is just the assignee
+		multiplication_instruction->destination_register = multiplication_instruction->assignee;
+
+		//Assign the source or the source immediate based on which we need
+		if(multiplication_instruction->op2 != NULL){
+			multiplication_instruction->source_register = multiplication_instruction->op2;
+		} else {
+			multiplication_instruction->source_immediate = multiplication_instruction->op1_const;
+		}
+
+		//Rebuild around the instruction
+		reconstruct_window(window, multiplication_instruction);
+
+	/**
+	 * Otherwise we've got something like:
+	 * 	t4 <- t3 * 2
+	 *
+	 * 	We'll need to make it so that the assignee and the op1 are the same. We'd do something
+	 * 	like
+	 * 	
+	 * 	t3 <- t3 * 2
+	 * 	t4 <- t3
+	 */
+	} else {
+		//If this is not temp then we need it to be so we'll move it into being so
+		if(multiplication_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), multiplication_instruction->op1);
+
+			//Put this before the instruction
+			insert_instruction_before_given(temp_assigment, multiplication_instruction);
+
+			//This now is op1
+			multiplication_instruction->op1 = temp_assigment->destination_register;
+		}
+
+		//The destination register is op1
+		multiplication_instruction->destination_register = multiplication_instruction->op1;
+
+		//Assign the source or the source immediate based on which we need
+		if(multiplication_instruction->op2 != NULL){
+			multiplication_instruction->source_register = multiplication_instruction->op2;
+		} else {
+			multiplication_instruction->source_immediate = multiplication_instruction->op1_const;
+		}
+
+		//Move the destination register into the actual assignee now
+		instruction_t* assignment_instruction = emit_move_instruction(multiplication_instruction->assignee, multiplication_instruction->destination_register);
+
+		//This goes in *after* the multiplication
+		insert_instruction_after_given(assignment_instruction, multiplication_instruction);
+
+		//Rebuild the whole window around this
+		reconstruct_window(window, assignment_instruction);
+	}
+}
+
+
+/**
+ * Select an SSE multiplication instruction based on the size
+ */
+static inline instruction_type_t select_sse_multiplication_instruction(variable_size_t size){
+	switch(size){
+		case SINGLE_PRECISION:
+			return MULSS;
+
+		case DOUBLE_PRECISION:
+			return MULSD;
+
+		default:
+			fprintf(stderr, "Fatal internal compiler error: invalid assignee size for SSE multiplication instruction\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Handle an SSE multiplication instruction. By the time we get here, we already
+ * know that we're dealing with an SSE operation. This instruction will generate
+ * converting moves if such moves are required
+ *
+ * NOTE: SSE multiplication instructions never contain constants
+ */
+static void handle_sse_multiplication_instruction(instruction_window_t* window){
+	//Grab out the first one
+	instruction_t* multiplication_instruction = window->instruction1;
+
+	//The destination type
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(multiplication_instruction->type_storage.result_type != NULL){
+		destination_type = multiplication_instruction->type_storage.result_type;
+	} else {
+		destination_type = multiplication_instruction->assignee->type;
+	}
+
+	//Determine what our size is off the bat
+	variable_size_t size = get_type_size(destination_type);
+
+	/**
+	 * Does op1 need an expanding/converting move? If so we will do that right now
+	 * and create it
+	 */
+	if(is_converting_move_required(destination_type, multiplication_instruction->op1->type) == TRUE){
+		multiplication_instruction->op1 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->op1, destination_type);
+	}
+
+	/**
+	 * Do the same for op2. Note that we are guaranteed an op2 here becuase this is a floating point multiplication
+	 */
+	if(is_converting_move_required(destination_type, multiplication_instruction->op2->type) == TRUE){
+		multiplication_instruction->op2 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->op2, destination_type);
+	}
+
+	//We are going to be using a mulsX instruction regardless so let's get it now
+	multiplication_instruction->instruction_type = select_sse_multiplication_instruction(size);
+
+	/**
+	 * If we already have the setup we need where op1 and the assignee are the same variable,
+	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
+	 * to make all of this work
+	 */
+	if(variables_equal_no_ssa(multiplication_instruction->assignee, multiplication_instruction->op1, TRUE) == TRUE){
+		//Destination is just the assignee
+		multiplication_instruction->destination_register = multiplication_instruction->assignee;
+		//This is always op2
+		multiplication_instruction->source_register = multiplication_instruction->op2;
+
+		//Rebuild around the instruction
+		reconstruct_window(window, multiplication_instruction);
+
+	/**
+	 * Otherwise we've got something like:
+	 * 	t4 <- t3 * 2
+	 *
+	 * 	We'll need to make it so that the assignee and the op1 are the same. We'd do something
+	 * 	like
+	 * 	
+	 * 	t3 <- t3 * 2
+	 * 	t4 <- t3
+	 */
+	} else {
+		//If this is not temp then we need it to be so we'll move it into being so
+		if(multiplication_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), multiplication_instruction->op1);
+
+			//Put this before the instruction
+			insert_instruction_before_given(temp_assigment, multiplication_instruction);
+
+			//This now is op1
+			multiplication_instruction->op1 = temp_assigment->destination_register;
+		}
+
+		//The destination register is op1
+		multiplication_instruction->destination_register = multiplication_instruction->op1;
+
+		//This is always the source register
+		multiplication_instruction->source_register = multiplication_instruction->op2;
+
+		//Move the destination register into the actual assignee now
+		instruction_t* assignment_instruction = emit_move_instruction(multiplication_instruction->assignee, multiplication_instruction->destination_register);
+
+		//This goes in *after* the multiplication
+		insert_instruction_after_given(assignment_instruction, multiplication_instruction);
+
+		//Rebuild the whole window around this
+		reconstruct_window(window, assignment_instruction);
+	}
+}
+
+
+/**
+ * Handle a multiplication operation. This rule acts as a multiplexor into the
+ * actual processing rules based on type
+ */
+static inline void handle_multiplication_instruction(instruction_window_t* window){
+	//We'll need to extract what our result actually is
+	instruction_t* multiplication_instruction = window->instruction1;
+
+	generic_type_t* result_type = NULL;
+
+	/**
+	 * If the result type is here, we'll use that. Otherwise we will default
+	 * to the assignee type
+	 */
+	if(multiplication_instruction->type_storage.result_type != NULL){
+		result_type = multiplication_instruction->type_storage.result_type;
+	} else {
+		result_type = multiplication_instruction->assignee->type;
+	}
+
+	switch(result_type->basic_type_token){
+		case F32:
+		case F64:
+			handle_sse_multiplication_instruction(window);
+			break;
+
+		case I8:
+		case I16:
+		case I32:
+		case I64:
+			handle_signed_multiplication_instruction(window);
+			break;
+
+		default:
+			handle_unsigned_multiplication_instruction(window);
+			break;
+	}
+}
+
+
+/**
+ * t4 <- t2 / t3 
+ *
+ * Will become:
+ * movl t2, t5(rax)
+ * cltd
+ * idivl t3(divide by t3, we already guarantee this is a temp var(register))
+ * movl t5, t4 (rax has quotient)
+ * 
+ * As such, this will generate additional instructions for us, making it not
+ * a "single instruction" pattern
+ *
+ * NOTE: We guarantee that the instruction we're after is always the first
+ * instruction in the window
+ *
+ */
+static void handle_signed_division(instruction_window_t* window){
+	//Firstly, the instruction that we're looking for is the very first one
+	instruction_t* division_instruction = window->instruction1;
+
+	//A temp holder for the final second source variable
+	three_addr_var_t* dividend;
+	three_addr_var_t* divisor;
+
+	//The destination type
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(division_instruction->type_storage.result_type != NULL){
+		destination_type = division_instruction->type_storage.result_type;
+	} else {
+		destination_type = division_instruction->assignee->type;
+	}
+
+	//If we need to convert, we'll do that here
+	if(is_converting_move_required(destination_type, division_instruction->op1->type) == TRUE){
+		//Let the helper deal with it
+		dividend = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op1, destination_type);
+
+	//Otherwise this can be moved directly
+	} else {
+		//We first need to move the first operand into RAX
+		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(division_instruction->op1->type), division_instruction->op1);
+
+		//Insert the move to rax before the multiplication instruction
+		insert_instruction_before_given(move_to_rax, division_instruction);
+
+		//This is just the destination register here
+		dividend = move_to_rax->destination_register;
+	}
+
+	/**
+	 * For a signed division, the CXXX instruction will 
+	 * have a secondary destination that holds the higher order bits. We will
+	 * capture this if needed here
+	 */
+	three_addr_var_t* higher_order_dividend_bits = NULL;
+
+	//We need to use the CL instruction since we're doing signed division
+	instruction_t* cl_instruction = emit_conversion_instruction(dividend);
+
+	//Capute both the lower and higher order bit fields
+	dividend = cl_instruction->destination_register;
+	higher_order_dividend_bits = cl_instruction->destination_register2;
+
+	//Insert this before the given
+	insert_instruction_before_given(cl_instruction, division_instruction);
+
+	/**
+	 * If we have an op2(dividing two variables), we'll handle all of our converting moves here. We'll
+	 * also account for the case that we have a constant to take care of
+	 */
+	if(division_instruction->op2 != NULL){
+		//Do we need to do a type conversion? If so, we'll do a converting move here
+		if(is_converting_move_required(destination_type, division_instruction->op2->type) == TRUE){
+			divisor = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op2, destination_type);
+
+		//Otherwise divisor is just the op2
+		} else {
+			divisor = division_instruction->op2;
+		}
+
+	//Otherwise we have a constant - x86 division doesn't support having these as operands so we'll need a move
+	} else {
+		//Emit the constant move
+		instruction_t* constant_move = emit_constant_move_instruction(emit_temp_var(destination_type), division_instruction->op1_const);
+
+		//Now we'll insert this before the division instruction
+		insert_instruction_before_given(constant_move, division_instruction);
+
+		//This is the divisor now
+		divisor = constant_move->destination_register;
+	}
+
+	//Now we should have what we need, so we can emit the division instruction
+	instruction_t* division = emit_div_instruction(destination_type, divisor, dividend, higher_order_dividend_bits, TRUE);
+
+	//The quotient is the destination register
+	three_addr_var_t* quotient = division->destination_register;
+
+	//Insert this before the division instruction
+	insert_instruction_before_given(division, division_instruction);
+
+	//Once we've done all that, we need one final movement operation
+	instruction_t* result_movement = emit_move_instruction(division_instruction->assignee, quotient);
+
+	//Insert this before the original division instruction
+	insert_instruction_before_given(result_movement, division_instruction);
+
+	//Add this in if it's needed
+	insert_pxor_clear_if_needed(result_movement);
+
+	//Delete the division instruction
+	delete_statement(division_instruction);
+
+	//Reconstruct the window here
+	reconstruct_window(window, result_movement);
+}
+
+
+/**
+ * t4 <- t2 / t3 
+ *
+ * Will become:
+ * movl t2, t5(rax)
+ * xorl %edx MUST CLEAR EDX
+ * idivl t3(divide by t3, we already guarantee this is a temp var(register))
+ * movl t5, t4 (rax has quotient)
+ * 
+ * As such, this will generate additional instructions for us, making it not
+ * a "single instruction" pattern
+ *
+ * NOTE: We guarantee that the instruction we're after is always the first
+ * instruction in the window
+ */
+static void handle_unsigned_division(instruction_window_t* window){
+	//Firstly, the instruction that we're looking for is the very first one
+	instruction_t* division_instruction = window->instruction1;
+
+	//A temp holder for the final second source variable
+	three_addr_var_t* dividend;
+	three_addr_var_t* divisor;
+
+	//The destination type
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(division_instruction->type_storage.result_type != NULL){
+		destination_type = division_instruction->type_storage.result_type;
+	} else {
+		destination_type = division_instruction->assignee->type;
+	}
+
+	//If we need to convert, we'll do that here
+	if(is_converting_move_required(destination_type, division_instruction->op1->type) == TRUE){
+		//Let the helper deal with it
+		dividend = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op1, destination_type);
+
+	//Otherwise this can be moved directly
+	} else {
+		//We first need to move the first operand into RAX
+		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(division_instruction->op1->type), division_instruction->op1);
+
+		//Insert the move to rax before the multiplication instruction
+		insert_instruction_before_given(move_to_rax, division_instruction);
+
+		//This is just the destination register here
+		dividend = move_to_rax->destination_register;
+	}
+
+	/**
+	 * If we have an op2(dividing two variables), we'll handle all of our converting moves here. We'll
+	 * also account for the case that we have a constant to take care of
+	 */
+	if(division_instruction->op2 != NULL){
+		//Do we need to do a type conversion? If so, we'll do a converting move here
+		if(is_converting_move_required(destination_type, division_instruction->op2->type) == TRUE){
+			divisor = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op2, destination_type);
+
+		//Otherwise divisor is just the op2
+		} else {
+			divisor = division_instruction->op2;
+		}
+
+	//Otherwise we have a constant - x86 division doesn't support having these as operands so we'll need a move
+	} else {
+		//Emit the constant move
+		instruction_t* constant_move = emit_constant_move_instruction(emit_temp_var(destination_type), division_instruction->op1_const);
+
+		//Now we'll insert this before the division instruction
+		insert_instruction_before_given(constant_move, division_instruction);
+
+		//This is the divisor now
+		divisor = constant_move->destination_register;
+	}
+
+	/**
+	 * For unsigned division, we need to completely 0 out the %rdx register.
+	 * This is in contrast to signed division where we intentionally extend to said register. Here we will
+	 * just clean it out
+	 */
+	three_addr_var_t* cleared_rdx = emit_temp_var(destination_type);
+
+	//Get the instruction out
+	instruction_t* clear_instruction = emit_gp_register_clear_instruction(cleared_rdx);
+
+	//This goes in before the given instruction
+	insert_instruction_before_given(clear_instruction, division_instruction);
+
+	//Now we should have what we need, so we can emit the division instruction
+	instruction_t* division = emit_div_instruction(destination_type, divisor, dividend, cleared_rdx, FALSE);
+
+	//The quotient is the destination register
+	three_addr_var_t* quotient = division->destination_register;
+
+	//Insert this before the division instruction
+	insert_instruction_before_given(division, division_instruction);
+
+	//Once we've done all that, we need one final movement operation
+	instruction_t* result_movement = emit_move_instruction(division_instruction->assignee, quotient);
+
+	//Insert this before the original division instruction
+	insert_instruction_before_given(result_movement, division_instruction);
+
+	//Add in the clear instruction if need be
+	insert_pxor_clear_if_needed(result_movement);
+
+	//Delete the division instruction
+	delete_statement(division_instruction);
+
+	//Reconstruct the window here
+	reconstruct_window(window, result_movement);
+
+}
+
+
+/**
+ * Select an appropriate SSE division instruction based on size
+ */
+static inline instruction_type_t select_sse_division_instruction(variable_size_t size){
+	switch(size){
+		case SINGLE_PRECISION:
+			return DIVSS;
+
+		case DOUBLE_PRECISION:
+			return DIVSD;
+
+		default:
+			fprintf(stderr, "Fatal internal compiler error: invalid assignee size for SSE division instruction\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Handle an SSE multiplication instruction. By the time we get here, we already
+ * know that we're dealing with an SSE operation. This instruction will generate
+ * converting moves if such moves are required
+ */
+static void handle_sse_division_instruction(instruction_window_t* window){
+	//Grab out the first one
+	instruction_t* division_instruction = window->instruction1;
+
+	//This is the type that everything is targeting
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(division_instruction->type_storage.result_type != NULL){
+		destination_type = division_instruction->type_storage.result_type;
+	} else {
+		destination_type = division_instruction->assignee->type;
+	}
+
+	//Determine what our size is off the bat
+	variable_size_t size = get_type_size(destination_type);
+
+	/**
+	 * Does op1 need an expanding/converting move? If so we will do that right now
+	 * and create it
+	 */
+	if(is_converting_move_required(destination_type, division_instruction->op1->type) == TRUE){
+		division_instruction->op1 = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op1, destination_type);
+	}
+
+	/**
+	 * Do the same for op2. Note that we are guaranteed an op2 here becuase this is a floating point multiplication
+	 */
+	if(is_converting_move_required(destination_type, division_instruction->op2->type) == TRUE){
+		division_instruction->op2 = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op2, destination_type);
+	}
+
+	//We are going to be using a divsX instruction regardless so let's get it now
+	division_instruction->instruction_type = select_sse_division_instruction(size);
+
+	/**
+	 * If we already have the setup we need where op1 and the assignee are the same variable,
+	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
+	 * to make all of this work
+	 */
+	if(variables_equal_no_ssa(division_instruction->assignee, division_instruction->op1, TRUE) == TRUE){
+		//Destination is just the assignee
+		division_instruction->destination_register = division_instruction->assignee;
+		//This is always op2
+		division_instruction->source_register = division_instruction->op2;
+
+		//Rebuild around the instruction
+		reconstruct_window(window, division_instruction);
+
+	/**
+	 * Otherwise we've got something like:
+	 * 	t4 <- t3 / 2
+	 *
+	 * 	We'll need to make it so that the assignee and the op1 are the same. We'd do something
+	 * 	like
+	 * 	
+	 * 	t3 <- t3 / 2
+	 * 	t4 <- t3
+	 */
+	} else {
+		//If this is not temp then we need it to be so we'll move it into being so
+		if(division_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), division_instruction->op1);
+
+			//Put this before the instruction
+			insert_instruction_before_given(temp_assigment, division_instruction);
+
+			//This now is op1
+			division_instruction->op1 = temp_assigment->destination_register;
+		}
+
+		//The destination register is op1
+		division_instruction->destination_register = division_instruction->op1;
+
+		//This is always the source register
+		division_instruction->source_register = division_instruction->op2;
+
+		//Move the destination register into the actual assignee now
+		instruction_t* assignment_instruction = emit_move_instruction(division_instruction->assignee, division_instruction->destination_register);
+
+		//This goes in *after* the multiplication
+		insert_instruction_after_given(assignment_instruction, division_instruction);
+
+		//Rebuild the whole window around this
+		reconstruct_window(window, assignment_instruction);
+	}
+}
+
+
+/**
+ * Handle a division operation
+ *
+ * This rule simply multiplexes for us into the two specialized rules that
+ * we really want to be using
+ */
+static inline void handle_division_instruction(instruction_window_t* window){
+	instruction_t* division_instruction = window->instruction1;
+	generic_type_t* destination_type = NULL;
+
+	/**
+	 * If we are given a result type we *always* use that. Otherwise
+	 * we default to the assignee
+	 */
+	if(division_instruction->type_storage.result_type != NULL){
+		destination_type = division_instruction->type_storage.result_type;
+	} else {
+		destination_type = division_instruction->assignee->type;
+	}
+
+	/**
+	 * To dispatch properly here - if we don't have a floating point
+	 * division instruction, we split via signedness. Otherwise we just let
+	 * the float rule deal with it
+	 */
+	if(IS_FLOATING_POINT(destination_type) == FALSE){
+		u_int8_t is_signed = is_type_signed(destination_type);
+
+		if(is_signed == TRUE){
+			handle_signed_division(window);
+		} else {
+			handle_unsigned_division(window);
+		}
+
+	} else {
+		handle_sse_division_instruction(window);
 	}
 }
 
@@ -5621,65 +7196,105 @@ static void handle_cmp_instruction(instruction_window_t* window){
 	 */
 	u_int8_t used_by_branch_only = TRUE;
 
+	//Store the result type
+	generic_type_t* operator_type;
+
+	/**
+	 * If we have an operator type use that, otherwise we can find it out on the fly
+	 */
+	if(instruction->type_storage.result_type != NULL){
+		operator_type = instruction->type_storage.result_type;
+	} else {
+		/**
+		 * If we have 2 operands, we will find what they both go into. Otherwise
+		 * if we have a const we're just defaulting to the non-const
+		 */
+		if(instruction->op2 != NULL){
+			operator_type = get_operand_type_for_logical_operation(cfg_reference->type_symtab, instruction->op1->type, instruction->op2->type);
+		} else {
+			operator_type = instruction->op1->type;
+		}
+	}
+
 	//Determine what our size is off the bat
-	variable_size_t size = get_type_size(instruction->op1->type);
+	variable_size_t size = get_type_size(operator_type);
 
 	//Get the signedness and the floating point status
-	u_int8_t type_signed = is_type_signed(instruction->assignee->type);
-	u_int8_t is_floating_point = (size == SINGLE_PRECISION || size == DOUBLE_PRECISION) ? TRUE : FALSE;
+	u_int8_t type_signed = is_type_signed(operator_type);
+
+	//Store where or not it's a floating point type
+	u_int8_t is_floating_point = IS_FLOATING_POINT(operator_type);
 	
-	//Extract these for convenience
-	generic_type_t* left_hand_type = instruction->op1->type;
-	//For the right hand type, we only care if op2 isn't NULL. Constants won't affect us here
-	generic_type_t* right_hand_type = instruction->op2 != NULL ? instruction->op2->type : left_hand_type;
+	/**
+	 * If the assignee is a temp var then we can't be sure if it's only used
+	 * by a branch or if this is eventually expected to be assigned somewhere
+	 */
+	if(instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
+		//Grab a cursor to the next statement
+		instruction_t* cursor = instruction->next_statement;
 
-	//Grab a cursor to the next statement
-	instruction_t* cursor = instruction->next_statement;
+		//So long as the cursor is not NULL, keep crawling
+		while(cursor != NULL){
+			/**
+			 * This is the case that we're after. If we find that the branch relies
+			 * on this, then we can just get out
+			 */
+			if(variables_equal(cursor->op1, instruction->assignee, FALSE) == TRUE){
+				//This means that we are *not* exclusively used by a branch
+				if(cursor->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
+					used_by_branch_only = FALSE;
+					break;
+				}
 
-	//So long as the cursor is not NULL, keep crawling
-	while(cursor != NULL){
-		//This is the case that we're after. If we find that the branch relies
-		//on this, then we can just get out
-		if(variables_equal(cursor->op1, instruction->assignee, FALSE) == TRUE){
-			//This means that we are *not* exclusively used by a branch
-			if(cursor->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
+				/**
+				 * Otherwise logically speaking we do have a branch
+				 * statement here. As such, if it's a floating point
+				 * branch we'll need to flag that
+				 */
+				if(is_floating_point == TRUE){
+					cursor->relies_on_fp_comparison = TRUE;
+				}
+
+			/**
+			 * We could also be used by op2. If this is the case, then it's definitely not just
+			 * being used by a branch
+			 */
+			} else if (variables_equal(cursor->op2, instruction->assignee, FALSE) == TRUE){
+				/**
+				 * Branches never have dependencies stored in op2. As such if we see this,
+				 * it's an automatic false
+				 */
 				used_by_branch_only = FALSE;
 				break;
 			}
 
-			//Otherwise logically speaking we do have a branch
-			//statement here. As such, if it's a floating point
-			//branch we'll need to flag that
-			if(is_floating_point == TRUE){
-				cursor->relies_on_fp_comparison = TRUE;
-			}
+			/**
+			 * If we get to the end and it's not used by a branch, that is fine. The only
+			 * thing that we care about in this crawl is whether or not the above statement
+			 * was used by a branch instruction. If it was, then all of the extra setX
+			 * is unnecessary. If it wasn't then we need to be adding those extra steps
+			 */
 
-		//We could also be used by op2. If this is the case, then it's definitely not just
-		//being used by a branch
-		} else if (variables_equal(cursor->op2, instruction->assignee, FALSE) == TRUE){
-			//Branches never have dependencies stored in op2. As such if we see this,
-			//it's an automatic false
-			used_by_branch_only = FALSE;
-			break;
+			//Advance the cursor up
+			cursor = cursor->next_statement;
 		}
 
-		//If we get to the end and it's not used by a branch, that is fine. The only
-		//thing that we care about in this crawl is whether or not the above statement
-		//was used by a branch instruction. If it was, then all of the extra setX
-		//is unnecessary. If it wasn't then we need to be adding those extra steps
-
-		//Advance the cursor up
-		cursor = cursor->next_statement;
+	/**
+	 * If the assignee is non-temp then we can be sure that this is not just
+	 * used by a branch and is instead used as a variable assignment
+	 */
+	} else {
+		used_by_branch_only = FALSE;
 	}
 
 	//Handle any/all converting moves that are going to be needed here
-	if(is_converting_move_required(right_hand_type, instruction->op1->type) == TRUE){
-		instruction->op1 = create_and_insert_converting_move_instruction(instruction, instruction->op1, right_hand_type);
+	if(is_converting_move_required(operator_type, instruction->op1->type) == TRUE){
+		instruction->op1 = create_and_insert_converting_move_instruction(instruction, instruction->op1, operator_type);
 	}
 
 	//Same for op2, except this could be null
-	if(instruction->op2 != NULL && is_converting_move_required(left_hand_type, instruction->op2->type) == TRUE){
-		instruction->op2 = create_and_insert_converting_move_instruction(instruction, instruction->op2, left_hand_type);
+	if(instruction->op2 != NULL && is_converting_move_required(operator_type, instruction->op2->type) == TRUE){
+		instruction->op2 = create_and_insert_converting_move_instruction(instruction, instruction->op2, operator_type);
 	}
 
 	//If this is only used by a branch(which is the most common type to have), we will
@@ -5821,33 +7436,137 @@ static void handle_cmp_instruction(instruction_window_t* window){
 
 
 /**
- * Handle a subtraction operation
+ * Handle a subtraction operation. This may generate extra instructions
+ * depending on whether or not we have a setup where op1 and the assignee
+ * are the same variable or not
  */
-static void handle_subtraction_instruction(instruction_t* instruction){
+static void handle_subtraction_instruction(instruction_window_t* window){
+	//Grab out the first one
+	instruction_t* subtraction_instruction = window->instruction1;
+
+	//The destination type
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(subtraction_instruction->type_storage.result_type != NULL){
+		destination_type = subtraction_instruction->type_storage.result_type;
+	} else {
+		destination_type = subtraction_instruction->assignee->type;
+	}
+
 	//Determine what our size is off the bat
-	variable_size_t size = get_type_size(instruction->assignee->type);
+	variable_size_t size = get_type_size(destination_type);
 
-	//Select the appropriate level of minus instruction
-	instruction->instruction_type = select_sub_instruction(size);
+	/**
+	 * Does op1 need an expanding/converting move? If so we will do that right now
+	 * and create it
+	 */
+	if(is_converting_move_required(destination_type, subtraction_instruction->op1->type) == TRUE){
+		subtraction_instruction->op1 = create_and_insert_converting_move_instruction(subtraction_instruction, subtraction_instruction->op1, destination_type);
+	}
 
-	//Again we just need the source and dest registers
-	instruction->destination_register = instruction->assignee;
+	/**
+	 * What about op2(if we even have op2)
+	 */
+	if(subtraction_instruction->op2 != NULL
+		&& is_converting_move_required(destination_type, subtraction_instruction->op2->type) == TRUE){
+		subtraction_instruction->op2 = create_and_insert_converting_move_instruction(subtraction_instruction, subtraction_instruction->op2, destination_type);
+	}
 
-	//If we have a register value, we add that
-	if(instruction->op2 != NULL){
-		//Do we need any kind of type conversion here? If so we'll do that now
-		if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
-			//If this is needed, we'll let the helper do it
-			instruction->source_register = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
+	//We are going to be using a subtraction instruction regardless so let's get it now
+	subtraction_instruction->instruction_type = select_sub_instruction(size);
 
-		//Otherwise let this deal with it
+	/**
+	 * If we already have the setup we need where op1 and the assignee are the same variable,
+	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
+	 * to make all of this work
+	 */
+	if(variables_equal_no_ssa(subtraction_instruction->assignee, subtraction_instruction->op1, TRUE) == TRUE){
+		//Destination is just the assignee
+		subtraction_instruction->destination_register = subtraction_instruction->assignee;
+
+		//Assign the source or the source immediate based on which we need
+		if(subtraction_instruction->op2 != NULL){
+			subtraction_instruction->source_register = subtraction_instruction->op2;
 		} else {
-			instruction->source_register = instruction->op2;
+			subtraction_instruction->source_immediate = subtraction_instruction->op1_const;
 		}
 
+		//Rebuild around the subtraction instruction
+		reconstruct_window(window, subtraction_instruction);
+
+	/**
+	 * Otherwise we've got something like:
+	 * 	t4 <- t3 + 2
+	 *
+	 * 	We'll need to make it so that the assignee and the op1 are the same. We'd do something
+	 * 	like
+	 * 	
+	 * 	t3 <- t3 + 2
+	 * 	t4 <- t3
+	 */
 	} else {
-		//Otherwise grab the immediate source
-		instruction->source_immediate = instruction->op1_const;
+		//If this is not temp then we need it to be so we'll move it into being so
+		if(subtraction_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), subtraction_instruction->op1);
+
+			//Put this before the instruction
+			insert_instruction_before_given(temp_assigment, subtraction_instruction);
+
+			//This now is op1
+			subtraction_instruction->op1 = temp_assigment->destination_register;
+		}
+
+		//The destination register is op1
+		subtraction_instruction->destination_register = subtraction_instruction->op1;
+
+		//Assign the source or the source immediate based on which we need
+		if(subtraction_instruction->op2 != NULL){
+			subtraction_instruction->source_register = subtraction_instruction->op2;
+		} else {
+			subtraction_instruction->source_immediate = subtraction_instruction->op1_const;
+		}
+
+		//Move the destination register into the actual assignee now
+		instruction_t* assignment_instruction = emit_move_instruction(subtraction_instruction->assignee, subtraction_instruction->destination_register);
+
+		//This goes in *after* the subtraction
+		insert_instruction_after_given(assignment_instruction, subtraction_instruction);
+
+		//Let the helper deal with the pxor clear
+		insert_pxor_clear_if_needed(assignment_instruction);
+
+		//Rebuild the whole window around this
+		reconstruct_window(window, assignment_instruction);
+	}
+}
+
+
+/**
+ * A very simple helper function that selects the right add instruction based
+ * solely on variable size. Done to avoid code duplication
+ */
+static inline instruction_type_t select_add_instruction(variable_size_t size){
+	//Go based on size
+	switch(size){
+		case BYTE:
+			return ADDB;
+		case WORD:
+			return ADDW;
+		case DOUBLE_WORD:
+			return ADDL;
+		case QUAD_WORD:
+			return ADDQ;
+		case SINGLE_PRECISION:
+			return ADDSS;
+		case DOUBLE_PRECISION:
+			return ADDSD;
+		default:
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in add instruction\n");
+			exit(1);
 	}
 }
 
@@ -5861,778 +7580,816 @@ static void handle_subtraction_instruction(instruction_t* instruction){
  * CASE 1:
  * t23 <- t23 + 34
  * addl $34, t23
- */
-static void handle_addition_instruction(instruction_t* instruction){
-	//Determine what our size is off the bat
-	variable_size_t size = get_type_size(instruction->assignee->type);
-
-	//Grab the add instruction that we want
-	instruction->instruction_type = select_add_instruction(size);
-
-	//We'll just need to set the source immediate and destination register
-	instruction->destination_register = instruction->assignee;
-
-	//If we have a register value, we add that
-	if(instruction->op2 != NULL){
-		//Do we need a type conversion? If so, we'll do that here
-		if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
-			//Let the helper function deal with this
-			instruction->source_register = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
-
-		//Otherwise we'll just do this
-		} else {
-			instruction->source_register = instruction->op2;
-		}
-
-	} else {
-		//Otherwise grab the immediate source
-		instruction->source_immediate = instruction->op1_const;
-	}
-}
-
-
-/**
- * Handle the case where we have different assignee and op1 values
- * 
+ *
  * CASE 2:
- * t25 <- t15 + t17
- * leal (t15, t17), t25
+ * 	t23 <- t22 + 34
+ * 	leal 34(t22), t23
+ *
+ * This avoids us having to add instructions and is a nice little efficiency boost
+ *
+ * NOTE: this may be a bin_op_with_const or a regular bin_op. We need to be
+ * able to handle both cases
  */
-static void handle_addition_instruction_lea_modification(instruction_t* instruction){
-	//Determines what instruction to use
-	variable_size_t size = get_type_size(instruction->assignee->type);
+static void handle_addition_instruction(instruction_window_t* window){
+	//Grab out the first one
+	instruction_t* original_addition = window->instruction1;
 
-	//Now we'll get the appropriate lea instruction
-	instruction->instruction_type = select_lea_instruction(size);
+	//The destination type
+	generic_type_t* destination_type;
 
-	//We always know what the destination register will be
-	instruction->destination_register = instruction->assignee;
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(original_addition->type_storage.result_type != NULL){
+		destination_type = original_addition->type_storage.result_type;
+	} else {
+		destination_type = original_addition->assignee->type;
+	}
 
-	//We always have this
-	instruction->address_calc_reg1 = instruction->op1;
+	//Determine what our size is off the bat
+	variable_size_t size = get_type_size(destination_type);
 
-	//Now, we'll need to set the appropriate address calculation mode based
-	//on what we're given
-	//If we have op2, we'll have 2 registers
-	if(instruction->statement_type == THREE_ADDR_CODE_BIN_OP_STMT){
-		//2 registers in this case
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+	/**
+	 * Does op1 need an expanding/converting move? If so we will do that right now
+	 * and create it
+	 */
+	if(is_converting_move_required(destination_type, original_addition->op1->type) == TRUE){
+		original_addition->op1 = create_and_insert_converting_move_instruction(original_addition, original_addition->op1, destination_type);
+	}
 
-		//Extract for analysis
-		three_addr_var_t* addresss_calc_reg2 = instruction->op2;
+	/**
+	 * What about op2(if we even have op2)
+	 */
+	if(original_addition->op2 != NULL
+		&& is_converting_move_required(destination_type, original_addition->op2->type) == TRUE){
+		original_addition->op2 = create_and_insert_converting_move_instruction(original_addition, original_addition->op2, destination_type);
+	}
 
-		//Does this adhere to the same type as reg1? It must, so if it does not we will force it
-		//to 
-		if(is_converting_move_required(instruction->address_calc_reg1->type, addresss_calc_reg2->type) == TRUE){
-			//Let the helper deal with it
-			addresss_calc_reg2 = create_and_insert_converting_move_instruction(instruction, addresss_calc_reg2, instruction->address_calc_reg1->type);
+	/**
+	 * If these two are equal, then we have something like x1 <- x0 + 2. This can simply be
+	 * turned into addl $2, x_1
+	 */
+	if(variables_equal_no_ssa(original_addition->assignee, original_addition->op1, TRUE) == TRUE){
+		//Get the appropriate add instuction
+		original_addition->instruction_type = select_add_instruction(size);
+
+		original_addition->destination_register = original_addition->assignee;
+
+		//Assign the source or the source immediate based on which we need
+		if(original_addition->op2 != NULL){
+			original_addition->source_register = original_addition->op2;
+		} else {
+			original_addition->source_immediate = original_addition->op1_const;
 		}
 
-		//Whether or not a type conversion happened, we can assign this here
-		instruction->address_calc_reg2 = addresss_calc_reg2;
+		//Rebuilt the entire window around this
+		reconstruct_window(window, original_addition);
 
-	//Otherise it's just an offset(bin_op_with_const)
+	/**
+	 * Otherwise they're not equal. For most other binary operations we'd
+	 * need to force it to work at this point. However since this is addition
+	 * we can use a lea instead *if* we have valid types *and* we have a non
+	 * temp variable here. If we have a temp destination, then there is
+	 * no benefit from an instruction count perspective to doing this
+	 */
+	} else if(is_type_valid_for_addition_to_lea_conversion(size) == TRUE
+				&& (original_addition->assignee->variable_type != VARIABLE_TYPE_TEMP
+					|| original_addition->op1 == stack_pointer_variable)){
+		//Get the lea that we need
+		original_addition->instruction_type = select_lea_instruction(size);
+
+		//Address calc 1 is always op1
+		original_addition->address_calc_reg1 = original_addition->op1;
+		
+		//Based on the constant status we do it one way or the other
+		if(original_addition->statement_type == THREE_ADDR_CODE_BIN_OP_STMT){
+			original_addition->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+			original_addition->address_calc_reg2 = original_addition->op2;
+
+		} else {
+			original_addition->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+			original_addition->offset = original_addition->op1_const;
+		}
+
+		/**
+		 * If we require a converting move between the original assignee and this one, we will need
+		 * to use a temp var as the actual assignee and insert that here
+		 */
+		if(is_converting_move_required(original_addition->assignee->type, destination_type) == TRUE){
+			//We'll need a temp var for this
+			three_addr_var_t* temp_destination = emit_temp_var(destination_type);
+
+			//The fianl destination actually comes from the instruction
+			three_addr_var_t* final_destination = original_addition->assignee;
+
+			//This is what the lea will point to
+			original_addition->destination_register = temp_destination;
+
+			//Now we can emit the move
+			instruction_t* move_instruction = emit_move_instruction(final_destination, temp_destination);
+
+			//This goes right after the addition
+			insert_instruction_after_given(move_instruction, original_addition);
+
+			//Let the helper deal with the pxor clear
+			insert_pxor_clear_if_needed(move_instruction);
+
+			//Rebuild everything around is
+			reconstruct_window(window, move_instruction);
+
+		} else {
+			//We can just use the assignee directly
+			original_addition->destination_register = original_addition->assignee;
+
+			//Rebuilt the entire window around this
+			reconstruct_window(window, original_addition);
+		}
+
+	/**
+	 * Otherwise we've got something like:
+	 * 	t4 <- t3 + 2
+	 *
+	 * 	We'll need to make it so that the assignee and the op1 are the same. We'd do something
+	 * 	like
+	 * 	
+	 * 	t3 <- t3 + 2
+	 * 	t4 <- t3
+	 */
 	} else {
-		//We'll just have an offset here
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
-		//This is definitely not 0 if we're here
-		instruction->offset = instruction->op1_const;
+		//Get the appropriate add instuction
+		original_addition->instruction_type = select_add_instruction(size);
+
+		//If this is not temp then we need it to be so we'll move it into being so
+		if(original_addition->op1->variable_type != VARIABLE_TYPE_TEMP){
+			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), original_addition->op1);
+
+			//Put this before the instruction
+			insert_instruction_before_given(temp_assigment, original_addition);
+
+			//This now is op1
+			original_addition->op1 = temp_assigment->destination_register;
+		}
+
+		//The destination register is op1
+		original_addition->destination_register = original_addition->op1;
+
+		//Assign the source or the source immediate based on which we need
+		if(original_addition->op2 != NULL){
+			original_addition->source_register = original_addition->op2;
+		} else {
+			original_addition->source_immediate = original_addition->op1_const;
+		}
+
+		//Move the destination register into the actual assignee now
+		instruction_t* assignment_instruction = emit_move_instruction(original_addition->assignee, original_addition->destination_register);
+
+		//This goes in *after* the subtraction
+		insert_instruction_after_given(assignment_instruction, original_addition);
+
+		//Rebuild the whole window around this
+		reconstruct_window(window, assignment_instruction);
 	}
 }
 
 
 /**
- * Handle an unsigned multiplication operation
+ * Emit a conditional move instruction based on the op we're given. This is done in order to increase versatility of this
+ * helper function and reduce the need for extra code
  *
- * Because of the extra instructions that this will generate, this will count as
- * a multiple instruction selection pattern
- *
- * x <- a * 2;
- *
- * mov $3, %rax <- Source is always in RAX
- * mull %rcx -> result in rax
- *
- *
- * NOTE: this is always the first instruction in the instruction window
-*/
-static void handle_unsigned_multiplication_instruction(instruction_window_t* window){
-	//Instruction 1 is the multiplication instruction
-	instruction_t* multiplication_instruction = window->instruction1;
+ * The op's are one-to-one mappings for relational ops only. We're kind of hijacking the token system here but it will work
+ */
+static inline instruction_t* emit_cmovX_instruction(three_addr_var_t* destination_variable, three_addr_var_t* source, ollie_token_t op){
+	//First we allocate
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
-	//We'll need to know the variables size
-	variable_size_t size = get_type_size(multiplication_instruction->assignee->type);
-
-	//A temp holder for the final second source variable
-	three_addr_var_t* source;
-	three_addr_var_t* source2;
-
-	//If we have a BIN_OP with const statement, we need to 
-	if(multiplication_instruction->statement_type == THREE_ADDR_CODE_BIN_OP_STMT){
-		//If we need to convert, we'll do that here
-		if(is_converting_move_required(multiplication_instruction->assignee->type, multiplication_instruction->op2->type) == TRUE){
-			//Let the helper deal with it
-			source2 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->op2, multiplication_instruction->assignee->type);
-
-		//Otherwise this can be moved directly
-		} else {
-			//We first need to move the first operand into RAX
-			instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(multiplication_instruction->op2->type), multiplication_instruction->op2);
-
-			//Insert the move to rax before the multiplication instruction
-			insert_instruction_before_given(move_to_rax, multiplication_instruction);
-
-			//This is just the destination register here
-			source2 = move_to_rax->destination_register;
-		}
-
-	//Otherwise, we have a BIN_OP_WITH_CONST statement. We're actually going to need a temp assignment for the second operand(the constant)
-	//here for this to work
-	} else {
-		//Emit the move instruction here
-		instruction_t* move_to_rax = emit_constant_move_instruction(emit_temp_var(multiplication_instruction->assignee->type), multiplication_instruction->op1_const);
-
-		//Put it before our multiplication
-		insert_instruction_before_given(move_to_rax, multiplication_instruction);
-
-		//Our source2 now is this
-		source2 = move_to_rax->destination_register;
-	}
-
-	//Let's also check is any conversions are needed for the first source register
-	if(is_converting_move_required(multiplication_instruction->assignee->type, multiplication_instruction->op1->type) == TRUE){
-		source = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->op1, multiplication_instruction->assignee->type);
-
-	//Otherwise we'll just assign this to be op1
-	} else {
-		source = multiplication_instruction->op1;
-	}
-
-	
-	//We determine the instruction that we need based on signedness and size
-	switch (size) {
-		case BYTE:
-			multiplication_instruction->instruction_type = MULB;
+	//Go based on what op we've got. This is not going to support everything and it
+	//really doesn't need to
+	switch(op){
+		case NOT_EQUALS:
+			instruction->instruction_type = CMOVNE;
 			break;
-		case WORD:
-			multiplication_instruction->instruction_type = MULW;
+
+		case EQUALS:
+			instruction->instruction_type = CMOVE;
 			break;
-		case DOUBLE_WORD:
-			multiplication_instruction->instruction_type = MULL;
+			
+		case G_THAN:
+			instruction->instruction_type = CMOVG;
 			break;
-		case QUAD_WORD:
-			multiplication_instruction->instruction_type = MULQ;
+
+		case G_THAN_OR_EQ:
+			instruction->instruction_type = CMOVGE;
 			break;
-		//Everything else falls here
+
+		case L_THAN:
+			instruction->instruction_type = CMOVL;
+			break;
+
+		case L_THAN_OR_EQ:
+			instruction->instruction_type = CMOVLE;
+			break;
+
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in multiplication instruction\n");
+			printf("Fatal internal compiler error: Unknown op passed in for CMOVX selector. Review source code to see tokens supported\n");
 			exit(1);
 	}
 
-	//This is the case where we have two source registers
-	multiplication_instruction->source_register = source;
-	//The other source register is in RAX
-	multiplication_instruction->source_register2 = source2;
+	//Assign these two over
+	instruction->source_register = source;
+	instruction->destination_register = destination_variable;
 
-	//This is the assignee, we just don't see it
-	multiplication_instruction->destination_register = emit_temp_var(multiplication_instruction->assignee->type);
-
-	//Once we've done all that, we need one final movement operation
-	instruction_t* result_movement = emit_move_instruction(multiplication_instruction->assignee, multiplication_instruction->destination_register);
-
-	//Insert the result movement instruction to be after the multiplication operation
-	insert_instruction_after_given(result_movement, multiplication_instruction);
-
-	//We now need to reset the window here
-	reconstruct_window(window, result_movement);
+	//And give it back
+	return instruction;
 }
 
 
 /**
- * Handle a multiplication operation
+ * Emit a direct floating point comparison instruction(ucomiss, ucomisd, comiss, or comisd) 
  *
- * A multiplication operation can be different based on size and sign
+ * The caller has the option to use ordered/unordered instructions
  */
-static void handle_signed_multiplication_instruction(instruction_t* instruction){
-	//We'll need to know the variables size
-	variable_size_t size = get_type_size(instruction->assignee->type);
+static inline instruction_t* emit_float_comparison_instruction(three_addr_var_t* source_register, three_addr_var_t* source_register2, u_int8_t use_unordered){
+	//Allocate the instruction
+	instruction_t* comparison_instruction = calloc(1, sizeof(instruction_t));
 
-	//We determine the instruction that we need based on signedness and size
-	switch (size) {
-		case BYTE:
-			instruction->instruction_type = IMULB;
-			break;
-		case WORD:
-			instruction->instruction_type = IMULW;
+	//Run through the values here
+	if(use_unordered == FALSE){
+		switch(source_register->variable_size){
+			case SINGLE_PRECISION:
+				comparison_instruction->instruction_type = COMISS;
+				break;
+
+			case DOUBLE_PRECISION:
+				comparison_instruction->instruction_type = COMISD;
+				break;
+
+			//This should never happen
+			default:
+				printf("Fatal internal compiler error: attempt to use a non-float variable for float instruction\n");
+				exit(1);
+		}
+
+	} else {
+		switch(source_register->variable_size){
+			case SINGLE_PRECISION:
+				comparison_instruction->instruction_type = UCOMISS;
+				break;
+
+			case DOUBLE_PRECISION:
+				comparison_instruction->instruction_type = UCOMISD;
+				break;
+
+			//This should never happen
+			default:
+				printf("Fatal internal compiler error: attempt to use a non-float variable for float instruction\n");
+				exit(1);
+		}
+	}
+
+	//Add in both registers
+	comparison_instruction->source_register = source_register;
+	comparison_instruction->source_register2 = source_register2;
+
+	//Emit a dummy temp var in the assignee for tracking reasons. This will not
+	//be used anywhere else
+	comparison_instruction->assignee = emit_temp_var(u8);
+
+	//Give the instruction back
+	return comparison_instruction;
+}
+
+
+/**
+ * Emit a test instruction directly - bypassing the instruction selection step
+ *
+ * Test instructions inherently have no assignee as they don't modify registers
+ *
+ * NOTE: This may only be used DURING the process of register selection
+ */
+static inline instruction_t* emit_direct_test_instruction(three_addr_var_t* op1, three_addr_var_t* op2){
+	//First we'll allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//We'll need the size to select the appropriate instruction
+	variable_size_t size = get_type_size(op1->type);
+
+	//Select the size appropriately
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = TESTQ;
 			break;
 		case DOUBLE_WORD:
-			instruction->instruction_type = IMULL;
+			instruction->instruction_type = TESTL;
 			break;
-		//Everything else falls here
+		case WORD:
+			instruction->instruction_type = TESTW;
+			break;
+		case BYTE:
+			instruction->instruction_type = TESTB;
+			break;
 		default:
-			instruction->instruction_type = IMULQ;
 			break;
 	}
 
-	//Following this, we'll set the assignee and source
-	instruction->destination_register = instruction->assignee;
+	//Then we'll set op1 and op2 to be the source registers
+	instruction->source_register = op1;
+	instruction->source_register2 = op2;
 
-	//Are we using an immediate or register?
-	if(instruction->op2 != NULL){
-		//Do we need a type conversion here?
-		if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
-			//Let the helper deal with it
-			instruction->source_register = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
+	//And now we'll give it back
+	return instruction;
+}
 
-		//Otherwise assign directly
-		} else {
-			//This is the case where we have a source register
-			instruction->source_register = instruction->op2;
-		}
+
+/**
+ * Handle a logical OR instruction
+ * 
+ * ** General purpose case **
+ *
+ * t32 <- t32 || t19
+ *
+ * Will become:
+ *
+ * orq t19, t32 <---------- bitwise or
+ * setne t33 <------------ if it isn't 0, we eval to TRUE(1)
+ * movzx t33, t32  <-------------- move this into the result
+ *
+ * ** Floating point case **
+ * t32(int) <- t33(float) || t34(float)
+ *
+ * movl $1, t37 	 <--- Load up a 1 because cmovX can't have immediate values
+ * pxor t35, t35  	 <--- Get a value that's 0, we'll use it for comparing
+ * ucomiss t35, t33  <--- Compare t33 against 0
+ * setp t36			 <--- Set the parity flag. If t33 was NaN, in Ollie, that counts as not 0
+ * cmovne t37, t36   <--- Conditionally move t37 into t36 if the ZF isn't set
+ * ucomiss t35, t34  <--- Compare t34 against 0
+ * setp t38			 <--- If t34 was NaN, set this as true because NaN != 0
+ * cmovne t37, t38   <--- Move the 1 into our result *if* ZF isn't set
+ * orl t36, t38	 	 <--- Finally *or* the two results
+ * t32 <- t38 		 <--- Assign the result over
+ *
+ * Our final logical and result is in t38
+ *
+ * NOTE: We guarantee that the first instruction in the window is the one that
+ * we're after in this case
+ */
+static void handle_logical_or_instruction(instruction_window_t* window){
+	//Grab it out for convenience
+	instruction_t* logical_or = window->instruction1;
+
+	//The destination type
+	generic_type_t* destination_type;
+
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(logical_or->type_storage.result_type != NULL){
+		destination_type = logical_or->type_storage.result_type;
+	} else {
+		destination_type = logical_or->assignee->type;
+	}
+
+	//Is this a floating point operation or not? This will determine how we handle things
+	u_int8_t is_floating_point = IS_FLOATING_POINT(destination_type);
+
+	/**
+	 * Create and insert converting moves if it is required for op1
+	 */
+	if(is_converting_move_required(destination_type, logical_or->op1->type) == TRUE){
+		logical_or->op1 = create_and_insert_converting_move_instruction(logical_or, logical_or->op1, destination_type);
+	}
+
+	/**
+	 * Create and insert converting moves if it is required for op2
+	 */
+	if(is_converting_move_required(destination_type, logical_or->op2->type) == TRUE){
+		logical_or->op2 = create_and_insert_converting_move_instruction(logical_or, logical_or->op2, destination_type);
+	}
+
+	//Most common case - we are doing GP logical or
+	if(is_floating_point == FALSE){
+		//Save the after instruction
+		instruction_t* after_logical_or = window->instruction2;
+
+		//Let's first emit the or instruction
+		instruction_t* or_instruction = emit_or_instruction(logical_or->op1, logical_or->op2);
+
+		//Now we need the setne instruction
+		instruction_t* setne_instruction = emit_setne_instruction(emit_temp_var(u8), logical_or->op1);
+
+		//Flag that thsi relies on the above or instruction
+		setne_instruction->op1 = logical_or->op1;
+
+		//Now we can delete the old logical or instruction
+		delete_statement(logical_or);
+
+		//First insert the or instruction
+		insert_instruction_before_given(or_instruction, after_logical_or);
+
+		//Then we need the setne
+		insert_instruction_before_given(setne_instruction, after_logical_or);
+
+		//Emit and insert our final move. Note that this function will handle
+		instruction_t* move_instruction = emit_and_insert_move_instruction(logical_or->assignee, setne_instruction->destination_register, after_logical_or, INSERTION_ORDER_BEFORE);
+
+		//Reconstruct the window starting at the movzbl
+		reconstruct_window(window, move_instruction);
+
+	//Otherwise we are dealing with the floating point case
+	} else {
+		//Hold onto what the floating point type is
+		generic_type_t* operand_type = logical_or->op1->type;
+
+		/**
+		 * For all of our holders here, we have a unique case. We need the op1/op2
+		 * results to be 1 byte for the setp instructions, and we'll need our
+		 * cmovX holders to be at least 2 bytes. We will achieve this by using
+		 * variable copying here. Whatever our end variable size is it does 
+		 * not matter to us
+		 */
+		three_addr_var_t* op1_result = emit_temp_var(u8);
+		three_addr_var_t* op2_result = emit_temp_var(u8);
+
+		//We'll also need holders for the result of the op1/op2 CMOVNE instructions
+		three_addr_var_t* op1_cmovne_result = emit_var_copy(op1_result);
+		three_addr_var_t* op2_cmovne_result = emit_var_copy(op2_result);
+
+		//Make the size a u32 
+		op1_cmovne_result->type = u32;
+		op2_cmovne_result->type = u32;
+
+		//This is a "DOUBLE_WORD" sized variable for compliance reasons with the conditional move's limitations
+		op1_cmovne_result->variable_size = DOUBLE_WORD;
+		op2_cmovne_result->variable_size = DOUBLE_WORD;
+
+		//We'll need something to hold onto the one for us
+		three_addr_var_t* one_temporary_holder = emit_temp_var(u32);
+
+		//We'll also need a variable that's been 0'd out to compare with
+		three_addr_var_t* zeroed_out_variable = emit_temp_var(operand_type);
+
+		//The first thing that we need is an assignment to 1
+		instruction_t* assign_one = emit_constant_move_instruction(one_temporary_holder, emit_direct_integer_or_char_constant(1, one_temporary_holder->type));
+
+		//This goes in after the logical and
+		insert_instruction_after_given(assign_one, logical_or);
+
+		//Emit the PXOR instruction to get 0
+		instruction_t* clear_instruction = emit_sse_register_clear_instruction(zeroed_out_variable);
+
+		//We'll put this right after the logical and
+		insert_instruction_after_given(clear_instruction, assign_one);
 		
-	} else {
-		//In this case we'll have an immediate source
-		instruction->source_immediate = instruction->op1_const;
+		//Now compare the op1 against 0 using FP comparison
+		instruction_t* op1_comparison = emit_float_comparison_instruction(logical_or->op1, zeroed_out_variable, TRUE);
+
+		//This goes right after the clear instruction
+		insert_instruction_after_given(op1_comparison, clear_instruction);
+
+		//Following that, we'll need our setp instruction
+		instruction_t* op1_setp = emit_setp_instruction(op1_result, op1_comparison->assignee);
+
+		//Throw this in after the comparison
+		insert_instruction_after_given(op1_setp, op1_comparison);
+
+		//Following this, we'll need our conditional move to take place
+		instruction_t* op1_conditional_move = emit_cmovX_instruction(op1_cmovne_result, one_temporary_holder, NOT_EQUALS);
+
+		//This goes in after the setP
+		insert_instruction_after_given(op1_conditional_move, op1_setp);
+		
+		//Now compare the op2 against 0 using FP comparison
+		instruction_t* op2_comparison = emit_float_comparison_instruction(logical_or->op2, zeroed_out_variable, TRUE);
+
+		//This goes right after the op1 conditional move 
+		insert_instruction_after_given(op2_comparison, op1_conditional_move);
+
+		//Following that, we'll need our setp instruction
+		instruction_t* op2_setp = emit_setp_instruction(op2_result, op2_comparison->assignee);
+
+		//Throw this in after the comparison for op2
+		insert_instruction_after_given(op2_setp, op2_comparison);
+
+		//Following this, we'll need our conditional move to take place
+		instruction_t* op2_conditional_move = emit_cmovX_instruction(op2_cmovne_result, one_temporary_holder, NOT_EQUALS);
+
+		//This goes in after the setP
+		insert_instruction_after_given(op2_conditional_move, op2_setp);
+
+		//Emit the loigcal or, the final result is in the op1_setp
+		instruction_t* final_or = emit_or_instruction(op1_setp->destination_register, op2_setp->destination_register);
+
+		//This goes after the conditional move
+		insert_instruction_after_given(final_or, op2_conditional_move);
+
+		//And we need one final assignment into the destination
+		instruction_t* final_assignment = emit_and_insert_move_instruction(logical_or->assignee, final_or->destination_register, final_or, INSERTION_ORDER_AFTER);
+
+		//And after all of that, the logical or is now useless to us so we will scrap it
+		delete_statement(logical_or);
+
+		//Reconstruct the window starting at the final move
+		reconstruct_window(window, final_assignment);
 	}
 }
 
 
 /**
- * t4 <- t2 / t3 
+ * Handle a logical and instruction
  *
- * Will become:
- * movl t2, t5(rax)
- * cltd
- * idivl t3(divide by t3, we already guarantee this is a temp var(register))
- * movl t5, t4 (rax has quotient)
+ *
+ * ** General Purpose case **
+ *
+ * t32 <- t32 && t19
+ *
+ * This will translate to:
+ * testq t32, t32 <----- is this 0?
+ * setne t33 <----------- if it's not make this one
+ * testq t19, 19 <------- Is this 0?
+ * setne t34 <------------ If it's not, make it a one
+ * andq t33, t34 <---------- let's see if they're both 0, both 1, etc
+ * movzx t34, t32 <---------- store t34 with the result
+ *
+ * Since this will spawn multiple instructions, it will be invoked from the multiple instruction
+ * pattern selector
  * 
- * As such, this will generate additional instructions for us, making it not
- * a "single instruction" pattern
+ * ** Floating point case **
+ * t32(int) <- t33(float) && t34(float)
  *
- * NOTE: We guarantee that the instruction we're after is always the first
- * instruction in the window
+ * movl $1, t37 	 <--- Load up a 1 because cmovX can't have immediate values
+ * pxor t35, t35  	 <--- Get a value that's 0, we'll use it for comparing
+ * ucomiss t35, t33  <--- Compare t33 against 0
+ * setp t36			 <--- Set the parity flag. If t33 was NaN, in Ollie, that counts as not 0
+ * cmovne t37, t36   <--- Conditionally move t37 into t36 if the ZF isn't set
+ * ucomiss t35, t34  <--- Compare t34 against 0
+ * setp t38			 <--- If t34 was NaN, set this as true because NaN != 0
+ * cmovne t37, t38   <--- Move the 1 into our result *if* ZF isn't set
+ * andl t36, t38	 <--- Finally *and* the two results
+ * t32 <- t38 		 <--- Assign the result over
  *
- */
-static inline void handle_signed_division(instruction_window_t* window){
-	//Firstly, the instruction that we're looking for is the very first one
-	instruction_t* division_instruction = window->instruction1;
-
-	//A temp holder for the final second source variable
-	three_addr_var_t* dividend;
-	three_addr_var_t* divisor;
-
-	//If we need to convert, we'll do that here
-	if(is_converting_move_required(division_instruction->assignee->type, division_instruction->op1->type) == TRUE){
-		//Let the helper deal with it
-		dividend = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op1, division_instruction->assignee->type);
-
-	//Otherwise this can be moved directly
-	} else {
-		//We first need to move the first operand into RAX
-		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(division_instruction->op1->type), division_instruction->op1);
-
-		//Insert the move to rax before the multiplication instruction
-		insert_instruction_before_given(move_to_rax, division_instruction);
-
-		//This is just the destination register here
-		dividend = move_to_rax->destination_register;
-	}
-
-	/**
-	 * For a signed division, the CXXX instruction will 
-	 * have a secondary destination that holds the higher order bits. We will
-	 * capture this if needed here
-	 */
-	three_addr_var_t* higher_order_dividend_bits = NULL;
-
-	//We need to use the CL instruction since we're doing signed division
-	instruction_t* cl_instruction = emit_conversion_instruction(dividend);
-
-	//Capute both the lower and higher order bit fields
-	dividend = cl_instruction->destination_register;
-	higher_order_dividend_bits = cl_instruction->destination_register2;
-
-	//Insert this before the given
-	insert_instruction_before_given(cl_instruction, division_instruction);
-
-	/**
-	 * If we have an op2(dividing two variables), we'll handle all of our converting moves here. We'll
-	 * also account for the case that we have a constant to take care of
-	 */
-	if(division_instruction->op2 != NULL){
-		//Do we need to do a type conversion? If so, we'll do a converting move here
-		if(is_converting_move_required(division_instruction->assignee->type, division_instruction->op2->type) == TRUE){
-			divisor = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op2, division_instruction->assignee->type);
-
-		//Otherwise divisor is just the op2
-		} else {
-			divisor = division_instruction->op2;
-		}
-
-	//Otherwise we have a constant - x86 division doesn't support having these as operands so we'll need a move
-	} else {
-		//Emit the constant move
-		instruction_t* constant_move = emit_constant_move_instruction(emit_temp_var(division_instruction->assignee->type), division_instruction->op1_const);
-
-		//Now we'll insert this before the division instruction
-		insert_instruction_before_given(constant_move, division_instruction);
-
-		//This is the divisor now
-		divisor = constant_move->destination_register;
-	}
-
-	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(division_instruction->assignee, divisor, dividend, higher_order_dividend_bits, TRUE);
-
-	//The quotient is the destination register
-	three_addr_var_t* quotient = division->destination_register;
-
-	//Insert this before the division instruction
-	insert_instruction_before_given(division, division_instruction);
-
-	//Once we've done all that, we need one final movement operation
-	instruction_t* result_movement = emit_move_instruction(division_instruction->assignee, quotient);
-
-	//Insert this before the original division instruction
-	insert_instruction_before_given(result_movement, division_instruction);
-
-	//Delete the division instruction
-	delete_statement(division_instruction);
-
-	//Reconstruct the window here
-	reconstruct_window(window, result_movement);
-}
-
-
-/**
- * t4 <- t2 / t3 
- *
- * Will become:
- * movl t2, t5(rax)
- * xorl %edx MUST CLEAR EDX
- * idivl t3(divide by t3, we already guarantee this is a temp var(register))
- * movl t5, t4 (rax has quotient)
+ * Our final logical and result is in t38
  * 
- * As such, this will generate additional instructions for us, making it not
- * a "single instruction" pattern
- *
- * NOTE: We guarantee that the instruction we're after is always the first
- * instruction in the window
- *
+ * NOTE: We guarantee that the first instruction in the window is the one that we're after
+ * in this case
  */
-static inline void handle_unsigned_division(instruction_window_t* window){
-	//Firstly, the instruction that we're looking for is the very first one
-	instruction_t* division_instruction = window->instruction1;
+static void handle_logical_and_instruction(instruction_window_t* window){
+	//Grab it out for convenience
+	instruction_t* logical_and = window->instruction1;
 
-	//A temp holder for the final second source variable
-	three_addr_var_t* dividend;
-	three_addr_var_t* divisor;
+	//The destination type
+	generic_type_t* destination_type;
 
-	//If we need to convert, we'll do that here
-	if(is_converting_move_required(division_instruction->assignee->type, division_instruction->op1->type) == TRUE){
-		//Let the helper deal with it
-		dividend = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op1, division_instruction->assignee->type);
-
-	//Otherwise this can be moved directly
+	/**
+	 * If we are given a result type to use, then we will use it. Otherwise,
+	 * we'll default to the assignee type
+	 */
+	if(logical_and->type_storage.result_type != NULL){
+		destination_type = logical_and->type_storage.result_type;
 	} else {
-		//We first need to move the first operand into RAX
-		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(division_instruction->op1->type), division_instruction->op1);
-
-		//Insert the move to rax before the multiplication instruction
-		insert_instruction_before_given(move_to_rax, division_instruction);
-
-		//This is just the destination register here
-		dividend = move_to_rax->destination_register;
+		destination_type = logical_and->assignee->type;
 	}
 
 	/**
-	 * If we have an op2(dividing two variables), we'll handle all of our converting moves here. We'll
-	 * also account for the case that we have a constant to take care of
+	 * Create and insert converting moves if it is required for op1
 	 */
-	if(division_instruction->op2 != NULL){
-		//Do we need to do a type conversion? If so, we'll do a converting move here
-		if(is_converting_move_required(division_instruction->assignee->type, division_instruction->op2->type) == TRUE){
-			divisor = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op2, division_instruction->assignee->type);
+	if(is_converting_move_required(destination_type, logical_and->op1->type) == TRUE){
+		logical_and->op1 = create_and_insert_converting_move_instruction(logical_and, logical_and->op1, destination_type);
+	}
 
-		//Otherwise divisor is just the op2
-		} else {
-			divisor = division_instruction->op2;
+	/**
+	 * Create and insert converting moves if it is required for op2
+	 */
+	if(is_converting_move_required(destination_type, logical_and->op2->type) == TRUE){
+		logical_and->op2 = create_and_insert_converting_move_instruction(logical_and, logical_and->op2, destination_type);
+	}
+
+	//Is this a floating point logical and or not?
+	u_int8_t is_floating_point = IS_FLOATING_POINT(destination_type);
+
+	//If this is not a floating point operation(most common)
+	if(is_floating_point == FALSE){
+		//These operands - did they already come from a setX instruction
+		//or not? An example would be if we're doing something like x > y && y < z.
+		u_int8_t op1_came_from_setX = FALSE;
+		u_int8_t op2_came_from_setX = FALSE;
+
+		//Store the result variable for both of our test paths
+		three_addr_var_t* op1_result;
+		three_addr_var_t* op2_result;
+
+		//Preserve this for ourselves
+		instruction_t* after_logical_and = logical_and->next_statement;
+
+		//Grab a cursor to see where the operands came from
+		instruction_t* cursor = logical_and->previous_statement;
+
+		/**
+		 * Crawl back through the block to try and see if we can tell
+		 * where these all came from. Worst case we need to crawl the whole
+		 * block, which isn't bad because these blocks aren't enormous 99.9% of
+		 * the time
+		 */
+		while(cursor != NULL){
+			//Did we find where op1 got assigned?. If so, check to see
+			//if the operation that made it generated a truthful byte value(0 or 1)
+			//or not
+			if(variables_equal(logical_and->op1, cursor->assignee, FALSE)){
+				if(does_operator_generate_truthful_byte_value(cursor->op) == TRUE){
+					op1_came_from_setX = TRUE;
+				}
+
+			//Give op2 the exact same treatment
+			} else if(variables_equal(logical_and->op2, cursor->assignee, FALSE)){
+				if(does_operator_generate_truthful_byte_value(cursor->op) == TRUE){
+					op2_came_from_setX = TRUE;
+				}
+			}
+
+			//Push it back
+			cursor = cursor->previous_statement;
 		}
 
-	//Otherwise we have a constant - x86 division doesn't support having these as operands so we'll need a move
-	} else {
-		//Emit the constant move
-		instruction_t* constant_move = emit_constant_move_instruction(emit_temp_var(division_instruction->assignee->type), division_instruction->op1_const);
+		//We expect that it *not* being from
+		//setX is the most likely case
+		if(op1_came_from_setX == FALSE){
+			//Let's first emit our test instruction
+			instruction_t* test_instruction = emit_direct_test_instruction(logical_and->op1, logical_and->op1);
 
-		//Now we'll insert this before the division instruction
-		insert_instruction_before_given(constant_move, division_instruction);
+			//Emit a var to hold the result of op1
+			op1_result = emit_temp_var(u8);
 
-		//This is the divisor now
-		divisor = constant_move->destination_register;
-	}
+			//Now we'll need a setne(not zero) instruction that will the op1 result
+			instruction_t* set_instruction = emit_setne_instruction(op1_result, logical_and->op1);
 
-	/**
-	 * For unsigned division, we need to completely 0 out the %rdx register.
-	 * This is in contrast to signed division where we intentionally extend to said register. Here we will
-	 * just clean it out
-	 */
-	three_addr_var_t* cleared_rdx = emit_temp_var(division_instruction->assignee->type);
+			//IMPORTANT - flag that this depends on the source register
+			set_instruction->op1 = test_instruction->source_register;
 
-	//Get the instruction out
-	instruction_t* clear_instruction = emit_gp_register_clear_instruction(cleared_rdx);
+			//Insert these in order. The test comes first, then the set(relies on the flags from test)
+			insert_instruction_before_given(test_instruction, after_logical_and);
+			insert_instruction_before_given(set_instruction, after_logical_and);
 
-	//This goes in before the given instruction
-	insert_instruction_before_given(clear_instruction, division_instruction);
-
-	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(division_instruction->assignee, divisor, dividend, cleared_rdx, FALSE);
-
-	//The quotient is the destination register
-	three_addr_var_t* quotient = division->destination_register;
-
-	//Insert this before the division instruction
-	insert_instruction_before_given(division, division_instruction);
-
-	//Once we've done all that, we need one final movement operation
-	instruction_t* result_movement = emit_move_instruction(division_instruction->assignee, quotient);
-
-	//Insert this before the original division instruction
-	insert_instruction_before_given(result_movement, division_instruction);
-
-	//Delete the division instruction
-	delete_statement(division_instruction);
-
-	//Reconstruct the window here
-	reconstruct_window(window, result_movement);
-
-}
-
-
-/**
- * Handle a division operation
- *
- * This rule simply multiplexes for us into the two specialized rules that
- * we really want to be using
- */
-static void handle_division_instruction(instruction_window_t* window){
-	//Firstly, the instruction that we're looking for is the very first one
-	instruction_t* division_instruction = window->instruction1;
-
-	//We go entirely based on the assignee
-	u_int8_t is_signed = is_type_signed(division_instruction->assignee->type);
-
-	//Dispatch based on what we need here
-	if(is_signed == TRUE){
-		handle_signed_division(window);
-	} else {
-		handle_unsigned_division(window);
-	}
-}
-
-
-/**
- * Handle a signed modulus operation
- *
- * t3 <- t4 % t5
- *
- * Will become:
- * movl t4, t6 (rax)
- * cltd
- * idivl t5
- * t3 <- t7 (rdx has remainder)
- *
- * As such, this will generate additional instructions for us, making it not
- * a "single instruction" pattern
- *
- * NOTE: We guarantee that the instruction we're after is always the first
- * instruction in the window
- */
-static inline void handle_signed_modulus(instruction_window_t* window){
-	//Firstly, the instruction that we're looking for is the very first one
-	instruction_t* modulus_instruction = window->instruction1;
-
-	three_addr_var_t* dividend;
-	three_addr_var_t* divisor;
-
-	//If we need to convert, we'll do that here
-	if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op1->type) == TRUE){
-		//Let the helper deal with it
-		dividend = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op1, modulus_instruction->assignee->type);
-
-	//Otherwise this can be moved directly
-	} else {
-		//We first need to move the first operand into RAX
-		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(modulus_instruction->op1->type), modulus_instruction->op1);
-
-		//Insert the move to rax before the multiplication instruction
-		insert_instruction_before_given(move_to_rax, modulus_instruction);
-
-		//This is just the destination register here
-		dividend = move_to_rax->destination_register;
-	}
-
-	/**
-	 * For a signed division, the CXXX instruction will 
-	 * have a secondary destination that holds the higher order bits. We will
-	 * capture this if needed here
-	 */
-	three_addr_var_t* higher_order_dividend_bits = NULL;
-
-	//Now, we'll need the appropriate extension instruction *if* we're doing signed division
-	instruction_t* cl_instruction = emit_conversion_instruction(dividend);
-
-	//Store both here
-	dividend = cl_instruction->destination_register;
-	higher_order_dividend_bits = cl_instruction->destination_register2;
-
-	//Insert this before the mod instruction
-	insert_instruction_before_given(cl_instruction, modulus_instruction);
-
-	/**
-	 * Handle all converting moves/constant assignment moves that we need to here
-	 */
-	if(modulus_instruction->op2 != NULL){
-		//Do we need to do a type conversion? If so, we'll do a converting move here
-		if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op2->type) == TRUE){
-			divisor = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op2, modulus_instruction->assignee->type);
-
-		//Otherwise source 2 is just the op2
 		} else {
-			divisor = modulus_instruction->op2;
+			//If we make it here, we know that op1 already came from a setX instruction. So, we can just
+			//assign here and be done
+			op1_result = emit_var_copy(logical_and->op1);
+			//We will emit a type-coerced version of our value
+			op1_result->type = u8;
+			op1_result->variable_size = get_type_size(u8);
 		}
-	
-	//Otherwise we'll need a const assignment
-	} else {
-		//Emit the move
-		instruction_t* constant_assignment = emit_constant_move_instruction(emit_temp_var(modulus_instruction->assignee->type), modulus_instruction->op1_const);
 
-		//This goes right in before the mod
-		insert_instruction_before_given(constant_assignment, modulus_instruction);
+		//We expect that it *not* being from
+		//setX is the most likely case
+		if(op2_came_from_setX == FALSE){
+			//Test the 2 together
+			instruction_t* test_instruction = emit_direct_test_instruction(logical_and->op2, logical_and->op2);
 
-		//And this now is our divisor
-		divisor = constant_assignment->destination_register;
-	}
+			//Emit a var to hold the result of op2
+			op2_result = emit_temp_var(u8);
 
-	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(modulus_instruction->assignee, divisor, dividend, higher_order_dividend_bits, TRUE);
-	
-	//Store the remainder register here
-	three_addr_var_t* remainder_register = division->destination_register2;
+			//Set if it's not zero
+			instruction_t* set_instruction = emit_setne_instruction(op2_result, logical_and->op1);
 
-	//Insert this before the original modulus
-	insert_instruction_before_given(division, modulus_instruction);
+			//IMPORTANT - flag that this depends on the source register
+			set_instruction->op1 = test_instruction->source_register;
 
-	//Once we've done all that, we need one final movement operation
-	instruction_t* result_movement = emit_move_instruction(modulus_instruction->assignee, remainder_register);
-
-	//Insert this after the original modulus
-	insert_instruction_after_given(result_movement, modulus_instruction);
-
-	//Finally we'll delete the old modulus instruction, as we no longer need it
-	delete_statement(modulus_instruction);
-
-	//Reconstruct the window starting at the result movement
-	reconstruct_window(window, result_movement);
-}
-
-
-/**
- * Handle an unsigned modulus operation
- *
- * t3 <- t4 % t5
- *
- * Will become:
- * movl t4, t6 (rax)
- * xorl %edx
- * divl t5
- * t3 <- t7 (rdx has remainder)
- *
- * As such, this will generate additional instructions for us, making it not
- * a "single instruction" pattern
- *
- * NOTE: We guarantee that the instruction we're after is always the first
- * instruction in the window
- */
-static inline void handle_unsigned_modulus(instruction_window_t* window){
-	//Firstly, the instruction that we're looking for is the very first one
-	instruction_t* modulus_instruction = window->instruction1;
-
-	three_addr_var_t* dividend;
-	three_addr_var_t* divisor;
-
-	//If we need to convert, we'll do that here
-	if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op1->type) == TRUE){
-		//Let the helper deal with it
-		dividend = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op1, modulus_instruction->assignee->type);
-
-	//Otherwise this can be moved directly
-	} else {
-		//We first need to move the first operand into RAX
-		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(modulus_instruction->op1->type), modulus_instruction->op1);
-
-		//Insert the move to rax before the multiplication instruction
-		insert_instruction_before_given(move_to_rax, modulus_instruction);
-
-		//This is just the destination register here
-		dividend = move_to_rax->destination_register;
-	}
-
-	/**
-	 * Handle all converting moves/constant assignment moves that we need to here
-	 */
-	if(modulus_instruction->op2 != NULL){
-		//Do we need to do a type conversion? If so, we'll do a converting move here
-		if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op2->type) == TRUE){
-			divisor = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op2, modulus_instruction->assignee->type);
-
-		//Otherwise source 2 is just the op2
+			//Insert these in order. The test comes first, then the set(relies on the flags from test)
+			insert_instruction_before_given(test_instruction, after_logical_and);
+			insert_instruction_before_given(set_instruction, after_logical_and);
 		} else {
-			divisor = modulus_instruction->op2;
+			//If we make it here, we know that op2 already came from a setX instruction. So, we can just
+			//assign here and be done
+			op2_result = emit_var_copy(logical_and->op2);
+			//We will emit a type-coerced version of our value
+			op2_result->type = u8;
+			op2_result->variable_size = get_type_size(u8);
 		}
-	
-	//Otherwise we'll need a const assignment
+
+		//Now we'll need to ANDx these two values together to see if they're both 1
+		instruction_t* and_inst = emit_and_instruction(op1_result, op2_result);
+
+		//Now insert these in order. First comes the and instruction, then the final move
+		insert_instruction_before_given(and_inst, after_logical_and);
+
+		//Now emit our final move. Let the helper do this in case we have converitng moves
+		instruction_t* move_instruction = emit_and_insert_move_instruction(logical_and->assignee, and_inst->destination_register, after_logical_and, INSERTION_ORDER_BEFORE);
+
+		//We no longer need the logical and statement
+		delete_statement(logical_and);
+
+		//Reconstruct the window starting at the final move
+		reconstruct_window(window, move_instruction);
+
+	//Otherwise we are specifically doing a floating point logical and
 	} else {
-		//Emit the move
-		instruction_t* constant_assignment = emit_constant_move_instruction(emit_temp_var(modulus_instruction->assignee->type), modulus_instruction->op1_const);
+		//Hold onto what the floating point type is
+		generic_type_t* operand_type = logical_and->op1->type;
 
-		//This goes right in before the mod
-		insert_instruction_before_given(constant_assignment, modulus_instruction);
+		/**
+		 * For all of our holders here, we have a unique case. We need the op1/op2
+		 * results to be 1 byte for the setp instructions, and we'll need our
+		 * cmovX holders to be at least 2 bytes. We will achieve this by using
+		 * variable copying here. Whatever our end variable size is it does 
+		 * not matter to us
+		 */
+		three_addr_var_t* op1_result = emit_temp_var(u8);
+		three_addr_var_t* op2_result = emit_temp_var(u8);
 
-		//And this now is our divisor
-		divisor = constant_assignment->destination_register;
+		//We'll also need holders for the result of the op1/op2 CMOVNE instructions
+		three_addr_var_t* op1_cmovne_result = emit_var_copy(op1_result);
+		three_addr_var_t* op2_cmovne_result = emit_var_copy(op2_result);
+
+		//Make the size a u32
+		op1_cmovne_result->type = u32;
+		op2_cmovne_result->type = u32;
+
+		//This is a "DOUBLE_WORD" sized variable for compliance reasons with the conditional move's limitations
+		op1_cmovne_result->variable_size = DOUBLE_WORD;
+		op2_cmovne_result->variable_size = DOUBLE_WORD;
+
+		//We'll need something to hold onto the one for us
+		three_addr_var_t* one_temporary_holder = emit_temp_var(u32);
+
+		//We'll also need a variable that's been 0'd out to compare with
+		three_addr_var_t* zeroed_out_variable = emit_temp_var(operand_type);
+
+		//The first thing that we need is an assignment to 1
+		instruction_t* assign_one = emit_constant_move_instruction(one_temporary_holder, emit_direct_integer_or_char_constant(1, one_temporary_holder->type));
+
+		//This goes in after the logical and
+		insert_instruction_after_given(assign_one, logical_and);
+
+		//Emit the PXOR instruction to get 0
+		instruction_t* clear_instruction = emit_sse_register_clear_instruction(zeroed_out_variable);
+
+		//We'll put this right after the logical and
+		insert_instruction_after_given(clear_instruction, assign_one);
+		
+		//Now compare the op1 against 0 using FP comparison
+		instruction_t* op1_comparison = emit_float_comparison_instruction(logical_and->op1, zeroed_out_variable, TRUE);
+
+		//This goes right after the clear instruction
+		insert_instruction_after_given(op1_comparison, clear_instruction);
+
+		//Following that, we'll need our setp instruction
+		instruction_t* op1_setp = emit_setp_instruction(op1_result, op1_comparison->assignee);
+
+		//Throw this in after the comparison
+		insert_instruction_after_given(op1_setp, op1_comparison);
+
+		//Following this, we'll need our conditional move to take place
+		instruction_t* op1_conditional_move = emit_cmovX_instruction(op1_cmovne_result, one_temporary_holder, NOT_EQUALS);
+
+		//This goes in after the setP
+		insert_instruction_after_given(op1_conditional_move, op1_setp);
+		
+		//Now compare the op2 against 0 using FP comparison
+		instruction_t* op2_comparison = emit_float_comparison_instruction(logical_and->op2, zeroed_out_variable, TRUE);
+
+		//This goes right after the op1 conditional move 
+		insert_instruction_after_given(op2_comparison, op1_conditional_move);
+
+		//Following that, we'll need our setp instruction
+		instruction_t* op2_setp = emit_setp_instruction(op2_result, op2_comparison->assignee);
+
+		//Throw this in after the comparison for op2
+		insert_instruction_after_given(op2_setp, op2_comparison);
+
+		//Following this, we'll need our conditional move to take place
+		instruction_t* op2_conditional_move = emit_cmovX_instruction(op2_cmovne_result, one_temporary_holder, NOT_EQUALS);
+
+		//This goes in after the setP
+		insert_instruction_after_given(op2_conditional_move, op2_setp);
+
+		//Emit the loigcal and, the final result is in the op1_setp
+		instruction_t* final_and = emit_and_instruction(op1_setp->destination_register, op2_setp->destination_register);
+
+		//This goes after the conditional move
+		insert_instruction_after_given(final_and, op2_conditional_move);
+
+		//And we need one final assignment into the destination
+		instruction_t* final_assignment = emit_and_insert_move_instruction(logical_and->assignee, final_and->destination_register, final_and, INSERTION_ORDER_AFTER);
+
+		//And after all of that, the logical and is now useless to us so we will scrap it
+		delete_statement(logical_and);
+
+		//Reconstruct the window starting at the final move
+		reconstruct_window(window, final_assignment);
 	}
-
-	/**
-	 * For unsigned division, which is what modulus is, we need to completely 0 out the %rdx register.
-	 * This is in contrast to signed division where we intentionally extend to said register. Here we will
-	 * just clean it out
-	 */
-	three_addr_var_t* cleared_rdx = emit_temp_var(modulus_instruction->assignee->type);
-
-	//Get the instruction out
-	instruction_t* clear_instruction = emit_gp_register_clear_instruction(cleared_rdx);
-
-	//This goes in before the given instruction
-	insert_instruction_before_given(clear_instruction, modulus_instruction);
-
-	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(modulus_instruction->assignee, divisor, dividend, cleared_rdx, FALSE);
-	
-	//Store the remainder register here
-	three_addr_var_t* remainder_register = division->destination_register2;
-
-	//Insert this before the original modulus
-	insert_instruction_before_given(division, modulus_instruction);
-
-	//Once we've done all that, we need one final movement operation
-	instruction_t* result_movement = emit_move_instruction(modulus_instruction->assignee, remainder_register);
-
-	//Insert this after the original modulus
-	insert_instruction_after_given(result_movement, modulus_instruction);
-
-	//Finally we'll delete the old modulus instruction, as we no longer need it
-	delete_statement(modulus_instruction);
-
-	//Reconstruct the window starting at the result movement
-	reconstruct_window(window, result_movement);
-}
-
-
-/**
- * Handle a modulus(remainder) operation
- * Handle a division operation
- *
- * t3 <- t4 % t5
- *
- * Will become:
- * movl t4, t6 (rax)
- * cltd
- * idivl t5
- * t3 <- t7 (rdx has remainder)
- *
- * As such, this will generate additional instructions for us, making it not
- * a "single instruction" pattern
- *
- * NOTE: We guarantee that the instruction we're after is always the first
- * instruction in the window
- */
-static void handle_modulus_instruction(instruction_window_t* window){
-	//Firstly, the instruction that we're looking for is the very first one
-	instruction_t* modulus_instruction = window->instruction1;
-
-	//Signedness is always based on our assignee
-	u_int8_t is_signed = is_type_signed(modulus_instruction->assignee->type);
-
-	//Dynamic dispatch based on what we need
-	if(is_signed == TRUE){
-		handle_signed_modulus(window);
-	} else {
-		handle_unsigned_modulus(window);
-	}
-}
-
-
-/**
- * Handle an SSE multiplication instruction. By the time we get here, we already
- * know that we're dealing with an SSE operation. This instruction will generate
- * converting moves if such moves are required
- */
-static inline void handle_sse_division_instruction(instruction_t* instruction){
-	//Go based on what the assignee's type is
-	switch(instruction->assignee->variable_size){
-		case SINGLE_PRECISION:
-			instruction->instruction_type = DIVSS;
-			break;
-		case DOUBLE_PRECISION:
-			instruction->instruction_type = DIVSD;
-			break;
-		default:
-			printf("Fatal internal compiler error: invalid assignee size for SSE division instruction\n");
-	}
-
-	//Handle any/all converting moves that are going to be needed here
-	if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
-		instruction->op2 = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
-	}
-
-	//The source register is the op1 and the destination is the assignee. There is never a case where we
-	//will have a constant source, it is not possible for sse operations
-	instruction->destination_register = instruction->assignee;
-	instruction->source_register = instruction->op2;
-}
-
-
-/**
- * Handle an SSE multiplication instruction. By the time we get here, we already
- * know that we're dealing with an SSE operation. This instruction will generate
- * converting moves if such moves are required
- */
-static inline void handle_sse_multiplication_instruction(instruction_t* instruction){
-	//Go based on what the assignee's type is
-	switch(instruction->assignee->variable_size){
-		case SINGLE_PRECISION:
-			instruction->instruction_type = MULSS;
-			break;
-		case DOUBLE_PRECISION:
-			instruction->instruction_type = MULSD;
-			break;
-		default:
-			printf("Fatal internal compiler error: invalid assignee size for SSE multiplication instruction\n");
-	}
-
-	//Handle any/all converting moves that are going to be needed here
-	if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
-		instruction->op2 = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
-	}
-
-	//The source register is the op1 and the destination is the assignee. There is never a case where we
-	//will have a constant source, it is not possible for sse operations
-	instruction->destination_register = instruction->assignee;
-	instruction->source_register = instruction->op2;
 }
 
 
 /**
  * We can translate a bin op statement a few different ways based on the operand
+ *
+ * Since binary operations in OIR may be something like: x_1 = z_0 + y_0, we will
+ * first need to *expand* them into something like:
+ * 	t4 <- z_0
+ * 	t4 <- t4 + y_0
+ * 	x_1 <- t4
+ *
+ * This will need to be done on a case by case basis that all relies on what the 
+ * binary operation is that we're doing
  *
  * NOTE: We always assume that instruction 1 is the one that we're after
  */
@@ -6642,60 +8399,52 @@ static inline void handle_binary_operation_instruction(instruction_window_t* win
 
 	//Go based on what we have as the operation
 	switch(instruction->op){
-		/**
-		 * 2 options here
-		 *
-		 * CASE 1:
-		 * t23 <- t23 + 34
-		 * addl $34, t23
-		 *
-		 * OR
-		 *
-		 * CASE 2:
-		 * t25 <- t15 + t17
-		 * leal t25, (t15, t17)
-		 */
 		case PLUS:
-			//This is our first case. Of course ignore SSA here
-			if(variables_equal_no_ssa(instruction->assignee, instruction->op1, FALSE) == TRUE){
-				//Let the helper do it
-				handle_addition_instruction(instruction);
-
-			//Otherwise we need to handle case 2
-			} else {
-				//Let this different version do it
-				handle_addition_instruction_lea_modification(instruction);
-			}
-
+			handle_addition_instruction(window);
 			break;
 
 		case MINUS:
-			//Let the helper do it
-			handle_subtraction_instruction(instruction);
+			handle_subtraction_instruction(window);
 			break;
 
-		//Hanlde a left shift instruction
 		case L_SHIFT:
-			handle_left_shift_instruction(instruction);
+			handle_left_shift_instruction(window);
 			break;
 
-		//Handle a right shift operation
 		case R_SHIFT:
-			handle_right_shift_instruction(instruction);
+			handle_right_shift_instruction(window);
 			break;
 
-		//Handle the (|) operator
+		case DOUBLE_AND:
+			handle_logical_and_instruction(window);
+			break;
+
+		case DOUBLE_OR:
+			handle_logical_or_instruction(window);
+			break;
+
 		case SINGLE_OR:
-			handle_bitwise_inclusive_or_instruction(instruction);
+			handle_bitwise_inclusive_or_instruction(window);
 			break;
 
-		//Handle the (&) operator in a binary operation context
 		case SINGLE_AND:
-			handle_bitwise_and_instruction(instruction);
+			handle_bitwise_and_instruction(window);
 			break;
 
 		case CARROT:
-			handle_bitwise_exclusive_or_instruction(instruction);
+			handle_bitwise_exclusive_or_instruction(window);
+			break;
+
+		case MOD:
+			handle_modulus_instruction(window);
+			break;
+
+		case STAR:
+			handle_multiplication_instruction(window);
+			break;
+
+		case F_SLASH:
+			handle_division_instruction(window);
 			break;
 
 		//All of these instructions require us to use the CMP or CMPQ command
@@ -6705,7 +8454,6 @@ static inline void handle_binary_operation_instruction(instruction_window_t* win
 		case G_THAN_OR_EQ:
 		case L_THAN:
 		case L_THAN_OR_EQ:
-			//Let the helper do it. This will modify the window
 			handle_cmp_instruction(window);
 			break;
 
@@ -7315,154 +9063,6 @@ static inline void handle_indirect_function_call(instruction_t* instruction){
 
 
 /**
- * Emit a conditional move instruction based on the op we're given. This is done in order to increase versatility of this
- * helper function and reduce the need for extra code
- *
- * The op's are one-to-one mappings for relational ops only. We're kind of hijacking the token system here but it will work
- */
-static inline instruction_t* emit_cmovX_instruction(three_addr_var_t* destination_variable, three_addr_var_t* source, ollie_token_t op){
-	//First we allocate
-	instruction_t* instruction = calloc(1, sizeof(instruction_t));
-
-	//Go based on what op we've got. This is not going to support everything and it
-	//really doesn't need to
-	switch(op){
-		case NOT_EQUALS:
-			instruction->instruction_type = CMOVNE;
-			break;
-
-		case EQUALS:
-			instruction->instruction_type = CMOVE;
-			break;
-			
-		case G_THAN:
-			instruction->instruction_type = CMOVG;
-			break;
-
-		case G_THAN_OR_EQ:
-			instruction->instruction_type = CMOVGE;
-			break;
-
-		case L_THAN:
-			instruction->instruction_type = CMOVL;
-			break;
-
-		case L_THAN_OR_EQ:
-			instruction->instruction_type = CMOVLE;
-			break;
-
-		default:
-			printf("Fatal internal compiler error: Unknown op passed in for CMOVX selector. Review source code to see tokens supported\n");
-			exit(1);
-	}
-
-	//Assign these two over
-	instruction->source_register = source;
-	instruction->destination_register = destination_variable;
-
-	//And give it back
-	return instruction;
-}
-
-
-/**
- * Emit a direct floating point comparison instruction(ucomiss, ucomisd, comiss, or comisd) 
- *
- * The caller has the option to use ordered/unordered instructions
- */
-static inline instruction_t* emit_float_comparison_instruction(three_addr_var_t* source_register, three_addr_var_t* source_register2, u_int8_t use_unordered){
-	//Allocate the instruction
-	instruction_t* comparison_instruction = calloc(1, sizeof(instruction_t));
-
-	//Run through the values here
-	if(use_unordered == FALSE){
-		switch(source_register->variable_size){
-			case SINGLE_PRECISION:
-				comparison_instruction->instruction_type = COMISS;
-				break;
-
-			case DOUBLE_PRECISION:
-				comparison_instruction->instruction_type = COMISD;
-				break;
-
-			//This should never happen
-			default:
-				printf("Fatal internal compiler error: attempt to use a non-float variable for float instruction\n");
-				exit(1);
-		}
-
-	} else {
-		switch(source_register->variable_size){
-			case SINGLE_PRECISION:
-				comparison_instruction->instruction_type = UCOMISS;
-				break;
-
-			case DOUBLE_PRECISION:
-				comparison_instruction->instruction_type = UCOMISD;
-				break;
-
-			//This should never happen
-			default:
-				printf("Fatal internal compiler error: attempt to use a non-float variable for float instruction\n");
-				exit(1);
-		}
-	}
-
-	//Add in both registers
-	comparison_instruction->source_register = source_register;
-	comparison_instruction->source_register2 = source_register2;
-
-	//Emit a dummy temp var in the assignee for tracking reasons. This will not
-	//be used anywhere else
-	comparison_instruction->assignee = emit_temp_var(u8);
-
-	//Give the instruction back
-	return comparison_instruction;
-}
-
-
-/**
- * Emit a test instruction directly - bypassing the instruction selection step
- *
- * Test instructions inherently have no assignee as they don't modify registers
- *
- * NOTE: This may only be used DURING the process of register selection
- */
-static inline instruction_t* emit_direct_test_instruction(three_addr_var_t* op1, three_addr_var_t* op2){
-	//First we'll allocate it
-	instruction_t* instruction = calloc(1, sizeof(instruction_t));
-
-	//We'll need the size to select the appropriate instruction
-	variable_size_t size = get_type_size(op1->type);
-
-	//Select the size appropriately
-	switch(size){
-		case QUAD_WORD:
-			instruction->instruction_type = TESTQ;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = TESTL;
-			break;
-		case WORD:
-			instruction->instruction_type = TESTW;
-			break;
-		case BYTE:
-			instruction->instruction_type = TESTB;
-			break;
-		default:
-			break;
-	}
-
-	//Then we'll set op1 and op2 to be the source registers
-	instruction->source_register = op1;
-	instruction->source_register2 = op2;
-
-	//And now we'll give it back
-	return instruction;
-}
-
-
-/**
  *	//=========================== Logical Notting =============================
  * Although it may not seem like it, logical not is actually a multiple instruction
  * pattern. Note that logical not can take different forms for GP and SSE registers.
@@ -7493,44 +9093,68 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 	//Let's also determine if this is a floating point logical not or not
 	u_int8_t is_floating_point = IS_FLOATING_POINT(logical_not->op1->type);
 
-	//Grab an instruction cursor for the crawl
-	instruction_t* cursor = logical_not->next_statement;
+	/**
+	 * If the assignee is not temporary, then we know this is not just
+	 * used by a branch. If it is through, we'll need to do some more investigation
+	 * to find out
+	 */
+	if(logical_not->assignee->variable_type == VARIABLE_TYPE_TEMP){
+		//Grab an instruction cursor for the crawl
+		instruction_t* cursor = logical_not->next_statement;
 
-	//So long as the cursor is not NULL, keep crawling
-	while(cursor != NULL){
-		//This is the case that we're after. If we find that the branch relies
-		//on this, then we can just get out
-		if(variables_equal(cursor->op1, logical_not->assignee, FALSE) == TRUE){
-			//This means that we are *not* exclusively used by a branch
-			if(cursor->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
+		//So long as the cursor is not NULL, keep crawling
+		while(cursor != NULL){
+			/**
+			 * This is the case that we're after. If we find that the branch relies
+			 * on this, then we can just get out
+			 */
+			if(variables_equal(cursor->op1, logical_not->assignee, FALSE) == TRUE){
+				//This means that we are *not* exclusively used by a branch
+				if(cursor->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
+					used_by_branch_only = FALSE;
+					break;
+				}
+
+				/**
+				 * Otherwise logically speaking we do have a branch
+				 * statement here. As such, if it's a floating point
+				 * branch we'll need to flag that
+				 */
+				if(is_floating_point == TRUE){
+					cursor->relies_on_fp_comparison = TRUE;
+				}
+
+			/**
+			 * We could also be used by op2. If this is the case, then it's definitely not just
+			 * being used by a branch
+			 */
+			} else if (variables_equal(cursor->op2, logical_not->assignee, FALSE) == TRUE){
+				/**
+				 * Branches never have dependencies stored in op2. As such if we see this,
+				 * it's an automatic false
+				 */
 				used_by_branch_only = FALSE;
 				break;
 			}
 
-			//Otherwise logically speaking we do have a branch
-			//statement here. As such, if it's a floating point
-			//branch we'll need to flag that
-			if(is_floating_point == TRUE){
-				cursor->relies_on_fp_comparison = TRUE;
-			}
+			/**
+			 * If we get to the end and it's not used by a branch, that is fine. The only
+			 * thing that we care about in this crawl is whether or not the above statement
+			 * was used by a branch instruction. If it was, then all of the extra setX
+			 * is unnecessary. If it wasn't then we need to be adding those extra steps
+			 */
 
-		//We could also be used by op2. If this is the case, then it's definitely not just
-		//being used by a branch
-		} else if (variables_equal(cursor->op2, logical_not->assignee, FALSE) == TRUE){
-			//Branches never have dependencies stored in op2. As such if we see this,
-			//it's an automatic false
-			used_by_branch_only = FALSE;
-			break;
+			//Advance the cursor up
+			cursor = cursor->next_statement;
 		}
 
-		//If we get to the end and it's not used by a branch, that is fine. The only
-		//thing that we care about in this crawl is whether or not the above statement
-		//was used by a branch instruction. If it was, then all of the extra setX
-		//is unnecessary. If it wasn't then we need to be adding those extra steps
-
-		//Advance the cursor up
-		cursor = cursor->next_statement;
+	/**
+	 * The assignee isn't temp so we know that this is not just used by a branch
+	 */
+	} else {
+		used_by_branch_only = FALSE;
 	}
+
 
 	//This is the most common case - it is *not* being used by a floating
 	//point value
@@ -7706,428 +9330,6 @@ static inline void handle_setne_instruction(instruction_t* instruction){
 	//Just set the type and register
 	instruction->instruction_type = SETNE;
 	instruction->destination_register = instruction->assignee;
-}
-
-
-/**
- * Handle a logical OR instruction
- * 
- * ** General purpose case **
- *
- * t32 <- t32 || t19
- *
- * Will become:
- *
- * orq t19, t32 <---------- bitwise or
- * setne t33 <------------ if it isn't 0, we eval to TRUE(1)
- * movzx t33, t32  <-------------- move this into the result
- *
- * ** Floating point case **
- * t32(int) <- t33(float) || t34(float)
- *
- * movl $1, t37 	 <--- Load up a 1 because cmovX can't have immediate values
- * pxor t35, t35  	 <--- Get a value that's 0, we'll use it for comparing
- * ucomiss t35, t33  <--- Compare t33 against 0
- * setp t36			 <--- Set the parity flag. If t33 was NaN, in Ollie, that counts as not 0
- * cmovne t37, t36   <--- Conditionally move t37 into t36 if the ZF isn't set
- * ucomiss t35, t34  <--- Compare t34 against 0
- * setp t38			 <--- If t34 was NaN, set this as true because NaN != 0
- * cmovne t37, t38   <--- Move the 1 into our result *if* ZF isn't set
- * orl t36, t38	 	 <--- Finally *or* the two results
- * t32 <- t38 		 <--- Assign the result over
- *
- * Our final logical and result is in t38
- *
- * NOTE: We guarantee that the first instruction in the window is the one that
- * we're after in this case
- */
-static void handle_logical_or_instruction(instruction_window_t* window){
-	//Grab it out for convenience
-	instruction_t* logical_or = window->instruction1;
-
-	//Is this a floating point operation or not? This will determine how we handle things
-	u_int8_t is_floating_point = IS_FLOATING_POINT(logical_or->op1->type);
-
-	//Most common case - we are doing GP logical or
-	if(is_floating_point == FALSE){
-		//Save the after instruction
-		instruction_t* after_logical_or = window->instruction2;
-
-		//Let's first emit the or instruction
-		instruction_t* or_instruction = emit_or_instruction(logical_or->op1, logical_or->op2);
-
-		//Now we need the setne instruction
-		instruction_t* setne_instruction = emit_setne_instruction(emit_temp_var(u8), logical_or->op1);
-
-		//Flag that thsi relies on the above or instruction
-		setne_instruction->op1 = logical_or->op1;
-
-		//Now we can delete the old logical or instruction
-		delete_statement(logical_or);
-
-		//First insert the or instruction
-		insert_instruction_before_given(or_instruction, after_logical_or);
-
-		//Then we need the setne
-		insert_instruction_before_given(setne_instruction, after_logical_or);
-
-		//Emit and insert our final move. Note that this function will handle
-		instruction_t* move_instruction = emit_and_insert_move_instruction(logical_or->assignee, setne_instruction->destination_register, after_logical_or, INSERTION_ORDER_BEFORE);
-
-		//Reconstruct the window starting at the movzbl
-		reconstruct_window(window, move_instruction);
-
-	//Otherwise we are dealing with the floating point case
-	} else {
-		//Hold onto what the floating point type is
-		generic_type_t* operand_type = logical_or->op1->type;
-
-		/**
-		 * For all of our holders here, we have a unique case. We need the op1/op2
-		 * results to be 1 byte for the setp instructions, and we'll need our
-		 * cmovX holders to be at least 2 bytes. We will achieve this by using
-		 * variable copying here. Whatever our end variable size is it does 
-		 * not matter to us
-		 */
-		three_addr_var_t* op1_result = emit_temp_var(u8);
-		three_addr_var_t* op2_result = emit_temp_var(u8);
-
-		//We'll also need holders for the result of the op1/op2 CMOVNE instructions
-		three_addr_var_t* op1_cmovne_result = emit_var_copy(op1_result);
-		three_addr_var_t* op2_cmovne_result = emit_var_copy(op2_result);
-
-		//Make the size a u32 
-		op1_cmovne_result->type = u32;
-		op2_cmovne_result->type = u32;
-
-		//This is a "DOUBLE_WORD" sized variable for compliance reasons with the conditional move's limitations
-		op1_cmovne_result->variable_size = DOUBLE_WORD;
-		op2_cmovne_result->variable_size = DOUBLE_WORD;
-
-		//We'll need something to hold onto the one for us
-		three_addr_var_t* one_temporary_holder = emit_temp_var(u32);
-
-		//We'll also need a variable that's been 0'd out to compare with
-		three_addr_var_t* zeroed_out_variable = emit_temp_var(operand_type);
-
-		//The first thing that we need is an assignment to 1
-		instruction_t* assign_one = emit_constant_move_instruction(one_temporary_holder, emit_direct_integer_or_char_constant(1, one_temporary_holder->type));
-
-		//This goes in after the logical and
-		insert_instruction_after_given(assign_one, logical_or);
-
-		//Emit the PXOR instruction to get 0
-		instruction_t* clear_instruction = emit_sse_register_clear_instruction(zeroed_out_variable);
-
-		//We'll put this right after the logical and
-		insert_instruction_after_given(clear_instruction, assign_one);
-		
-		//Now compare the op1 against 0 using FP comparison
-		instruction_t* op1_comparison = emit_float_comparison_instruction(logical_or->op1, zeroed_out_variable, TRUE);
-
-		//This goes right after the clear instruction
-		insert_instruction_after_given(op1_comparison, clear_instruction);
-
-		//Following that, we'll need our setp instruction
-		instruction_t* op1_setp = emit_setp_instruction(op1_result, op1_comparison->assignee);
-
-		//Throw this in after the comparison
-		insert_instruction_after_given(op1_setp, op1_comparison);
-
-		//Following this, we'll need our conditional move to take place
-		instruction_t* op1_conditional_move = emit_cmovX_instruction(op1_cmovne_result, one_temporary_holder, NOT_EQUALS);
-
-		//This goes in after the setP
-		insert_instruction_after_given(op1_conditional_move, op1_setp);
-		
-		//Now compare the op2 against 0 using FP comparison
-		instruction_t* op2_comparison = emit_float_comparison_instruction(logical_or->op2, zeroed_out_variable, TRUE);
-
-		//This goes right after the op1 conditional move 
-		insert_instruction_after_given(op2_comparison, op1_conditional_move);
-
-		//Following that, we'll need our setp instruction
-		instruction_t* op2_setp = emit_setp_instruction(op2_result, op2_comparison->assignee);
-
-		//Throw this in after the comparison for op2
-		insert_instruction_after_given(op2_setp, op2_comparison);
-
-		//Following this, we'll need our conditional move to take place
-		instruction_t* op2_conditional_move = emit_cmovX_instruction(op2_cmovne_result, one_temporary_holder, NOT_EQUALS);
-
-		//This goes in after the setP
-		insert_instruction_after_given(op2_conditional_move, op2_setp);
-
-		//Emit the loigcal or, the final result is in the op1_setp
-		instruction_t* final_or = emit_or_instruction(op1_setp->destination_register, op2_setp->destination_register);
-
-		//This goes after the conditional move
-		insert_instruction_after_given(final_or, op2_conditional_move);
-
-		//And we need one final assignment into the destination
-		instruction_t* final_assignment = emit_and_insert_move_instruction(logical_or->assignee, final_or->destination_register, final_or, INSERTION_ORDER_AFTER);
-
-		//And after all of that, the logical or is now useless to us so we will scrap it
-		delete_statement(logical_or);
-
-		//Reconstruct the window starting at the final move
-		reconstruct_window(window, final_assignment);
-	}
-}
-
-
-/**
- * Handle a logical and instruction
- *
- *
- * ** General Purpose case **
- *
- * t32 <- t32 && t19
- *
- * This will translate to:
- * testq t32, t32 <----- is this 0?
- * setne t33 <----------- if it's not make this one
- * testq t19, 19 <------- Is this 0?
- * setne t34 <------------ If it's not, make it a one
- * andq t33, t34 <---------- let's see if they're both 0, both 1, etc
- * movzx t34, t32 <---------- store t34 with the result
- *
- * Since this will spawn multiple instructions, it will be invoked from the multiple instruction
- * pattern selector
- * 
- * ** Floating point case **
- * t32(int) <- t33(float) && t34(float)
- *
- * movl $1, t37 	 <--- Load up a 1 because cmovX can't have immediate values
- * pxor t35, t35  	 <--- Get a value that's 0, we'll use it for comparing
- * ucomiss t35, t33  <--- Compare t33 against 0
- * setp t36			 <--- Set the parity flag. If t33 was NaN, in Ollie, that counts as not 0
- * cmovne t37, t36   <--- Conditionally move t37 into t36 if the ZF isn't set
- * ucomiss t35, t34  <--- Compare t34 against 0
- * setp t38			 <--- If t34 was NaN, set this as true because NaN != 0
- * cmovne t37, t38   <--- Move the 1 into our result *if* ZF isn't set
- * andl t36, t38	 <--- Finally *and* the two results
- * t32 <- t38 		 <--- Assign the result over
- *
- * Our final logical and result is in t38
- * 
- * NOTE: We guarantee that the first instruction in the window is the one that we're after
- * in this case
- */
-static void handle_logical_and_instruction(instruction_window_t* window){
-	//Grab it out for convenience
-	instruction_t* logical_and = window->instruction1;
-
-	//Is this a floating point logical and or not?
-	u_int8_t is_floating_point = IS_FLOATING_POINT(logical_and->op1->type);
-
-	//If this is not a floating point operation(most common)
-	if(is_floating_point == FALSE){
-		//These operands - did they already come from a setX instruction
-		//or not? An example would be if we're doing something like x > y && y < z.
-		u_int8_t op1_came_from_setX = FALSE;
-		u_int8_t op2_came_from_setX = FALSE;
-
-		//Store the result variable for both of our test paths
-		three_addr_var_t* op1_result;
-		three_addr_var_t* op2_result;
-
-		//Preserve this for ourselves
-		instruction_t* after_logical_and = logical_and->next_statement;
-
-		//Grab a cursor to see where the operands came from
-		instruction_t* cursor = logical_and->previous_statement;
-
-		//Crawl back through the block to try and see if we can tell
-		//where these all came from. Worst case we need to crawl the whole
-		//block, which isn't bad because these blocks aren't enormous 99.9% of
-		//the time
-		while(cursor != NULL){
-			//Did we find where op1 got assigned?. If so, check to see
-			//if the operation that made it generated a truthful byte value(0 or 1)
-			//or not
-			if(variables_equal(logical_and->op1, cursor->assignee, FALSE)){
-				if(does_operator_generate_truthful_byte_value(cursor->op) == TRUE){
-					op1_came_from_setX = TRUE;
-				}
-
-			//Give op2 the exact same treatment
-			} else if(variables_equal(logical_and->op2, cursor->assignee, FALSE)){
-				if(does_operator_generate_truthful_byte_value(cursor->op) == TRUE){
-					op2_came_from_setX = TRUE;
-				}
-			}
-
-			//Push it back
-			cursor = cursor->previous_statement;
-		}
-
-		//We expect that it *not* being from
-		//setX is the most likely case
-		if(op1_came_from_setX == FALSE){
-			//Let's first emit our test instruction
-			instruction_t* test_instruction = emit_direct_test_instruction(logical_and->op1, logical_and->op1);
-
-			//Emit a var to hold the result of op1
-			op1_result = emit_temp_var(u8);
-
-			//Now we'll need a setne(not zero) instruction that will the op1 result
-			instruction_t* set_instruction = emit_setne_instruction(op1_result, logical_and->op1);
-
-			//IMPORTANT - flag that this depends on the source register
-			set_instruction->op1 = test_instruction->source_register;
-
-			//Insert these in order. The test comes first, then the set(relies on the flags from test)
-			insert_instruction_before_given(test_instruction, after_logical_and);
-			insert_instruction_before_given(set_instruction, after_logical_and);
-
-		} else {
-			//If we make it here, we know that op1 already came from a setX instruction. So, we can just
-			//assign here and be done
-			op1_result = emit_var_copy(logical_and->op1);
-			//We will emit a type-coerced version of our value
-			op1_result->type = u8;
-			op1_result->variable_size = get_type_size(u8);
-		}
-
-		//We expect that it *not* being from
-		//setX is the most likely case
-		if(op2_came_from_setX == FALSE){
-			//Test the 2 together
-			instruction_t* test_instruction = emit_direct_test_instruction(logical_and->op2, logical_and->op2);
-
-			//Emit a var to hold the result of op2
-			op2_result = emit_temp_var(u8);
-
-			//Set if it's not zero
-			instruction_t* set_instruction = emit_setne_instruction(op2_result, logical_and->op1);
-
-			//IMPORTANT - flag that this depends on the source register
-			set_instruction->op1 = test_instruction->source_register;
-
-			//Insert these in order. The test comes first, then the set(relies on the flags from test)
-			insert_instruction_before_given(test_instruction, after_logical_and);
-			insert_instruction_before_given(set_instruction, after_logical_and);
-		} else {
-			//If we make it here, we know that op2 already came from a setX instruction. So, we can just
-			//assign here and be done
-			op2_result = emit_var_copy(logical_and->op2);
-			//We will emit a type-coerced version of our value
-			op2_result->type = u8;
-			op2_result->variable_size = get_type_size(u8);
-		}
-
-		//Now we'll need to ANDx these two values together to see if they're both 1
-		instruction_t* and_inst = emit_and_instruction(op1_result, op2_result);
-
-		//Now insert these in order. First comes the and instruction, then the final move
-		insert_instruction_before_given(and_inst, after_logical_and);
-
-		//Now emit our final move. Let the helper do this in case we have converitng moves
-		instruction_t* move_instruction = emit_and_insert_move_instruction(logical_and->assignee, and_inst->destination_register, after_logical_and, INSERTION_ORDER_BEFORE);
-
-		//We no longer need the logical and statement
-		delete_statement(logical_and);
-
-		//Reconstruct the window starting at the final move
-		reconstruct_window(window, move_instruction);
-
-	//Otherwise we are specifically doing a floating point logical and
-	} else {
-		//Hold onto what the floating point type is
-		generic_type_t* operand_type = logical_and->op1->type;
-
-		/**
-		 * For all of our holders here, we have a unique case. We need the op1/op2
-		 * results to be 1 byte for the setp instructions, and we'll need our
-		 * cmovX holders to be at least 2 bytes. We will achieve this by using
-		 * variable copying here. Whatever our end variable size is it does 
-		 * not matter to us
-		 */
-		three_addr_var_t* op1_result = emit_temp_var(u8);
-		three_addr_var_t* op2_result = emit_temp_var(u8);
-
-		//We'll also need holders for the result of the op1/op2 CMOVNE instructions
-		three_addr_var_t* op1_cmovne_result = emit_var_copy(op1_result);
-		three_addr_var_t* op2_cmovne_result = emit_var_copy(op2_result);
-
-		//Make the size a u32
-		op1_cmovne_result->type = u32;
-		op2_cmovne_result->type = u32;
-
-		//This is a "DOUBLE_WORD" sized variable for compliance reasons with the conditional move's limitations
-		op1_cmovne_result->variable_size = DOUBLE_WORD;
-		op2_cmovne_result->variable_size = DOUBLE_WORD;
-
-		//We'll need something to hold onto the one for us
-		three_addr_var_t* one_temporary_holder = emit_temp_var(u32);
-
-		//We'll also need a variable that's been 0'd out to compare with
-		three_addr_var_t* zeroed_out_variable = emit_temp_var(operand_type);
-
-		//The first thing that we need is an assignment to 1
-		instruction_t* assign_one = emit_constant_move_instruction(one_temporary_holder, emit_direct_integer_or_char_constant(1, one_temporary_holder->type));
-
-		//This goes in after the logical and
-		insert_instruction_after_given(assign_one, logical_and);
-
-		//Emit the PXOR instruction to get 0
-		instruction_t* clear_instruction = emit_sse_register_clear_instruction(zeroed_out_variable);
-
-		//We'll put this right after the logical and
-		insert_instruction_after_given(clear_instruction, assign_one);
-		
-		//Now compare the op1 against 0 using FP comparison
-		instruction_t* op1_comparison = emit_float_comparison_instruction(logical_and->op1, zeroed_out_variable, TRUE);
-
-		//This goes right after the clear instruction
-		insert_instruction_after_given(op1_comparison, clear_instruction);
-
-		//Following that, we'll need our setp instruction
-		instruction_t* op1_setp = emit_setp_instruction(op1_result, op1_comparison->assignee);
-
-		//Throw this in after the comparison
-		insert_instruction_after_given(op1_setp, op1_comparison);
-
-		//Following this, we'll need our conditional move to take place
-		instruction_t* op1_conditional_move = emit_cmovX_instruction(op1_cmovne_result, one_temporary_holder, NOT_EQUALS);
-
-		//This goes in after the setP
-		insert_instruction_after_given(op1_conditional_move, op1_setp);
-		
-		//Now compare the op2 against 0 using FP comparison
-		instruction_t* op2_comparison = emit_float_comparison_instruction(logical_and->op2, zeroed_out_variable, TRUE);
-
-		//This goes right after the op1 conditional move 
-		insert_instruction_after_given(op2_comparison, op1_conditional_move);
-
-		//Following that, we'll need our setp instruction
-		instruction_t* op2_setp = emit_setp_instruction(op2_result, op2_comparison->assignee);
-
-		//Throw this in after the comparison for op2
-		insert_instruction_after_given(op2_setp, op2_comparison);
-
-		//Following this, we'll need our conditional move to take place
-		instruction_t* op2_conditional_move = emit_cmovX_instruction(op2_cmovne_result, one_temporary_holder, NOT_EQUALS);
-
-		//This goes in after the setP
-		insert_instruction_after_given(op2_conditional_move, op2_setp);
-
-		//Emit the loigcal and, the final result is in the op1_setp
-		instruction_t* final_and = emit_and_instruction(op1_setp->destination_register, op2_setp->destination_register);
-
-		//This goes after the conditional move
-		insert_instruction_after_given(final_and, op2_conditional_move);
-
-		//And we need one final assignment into the destination
-		instruction_t* final_assignment = emit_and_insert_move_instruction(logical_and->assignee, final_and->destination_register, final_and, INSERTION_ORDER_AFTER);
-
-		//And after all of that, the logical and is now useless to us so we will scrap it
-		delete_statement(logical_and);
-
-		//Reconstruct the window starting at the final move
-		reconstruct_window(window, final_assignment);
-	}
 }
 
 
@@ -8479,7 +9681,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 	instruction_t* pxor_instruction;
 
 	//The destination type is always stored in the instruction itself
-	generic_type_t* destination_type = store_instruction->memory_read_write_type;
+	generic_type_t* destination_type = store_instruction->type_storage.memory_read_write_type;
 
 	//The source type will be assigned later
 	generic_type_t* source_type;
@@ -8952,7 +10154,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 	three_addr_var_t* destination_register = load_instruction->assignee;
 
 	//This is always the memory region type
-	generic_type_t* memory_region_type = load_instruction->memory_read_write_type;
+	generic_type_t* memory_region_type = load_instruction->type_storage.memory_read_write_type;
 
 	/**
 	 * Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
@@ -10692,69 +11894,6 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		//rule is done and we can return
 		combine_lea_with_variable_offset_store_instruction(window, window->instruction1, window->instruction2);
 		return;
-	}
-
-	//We could see logical and/logical or
-	if(is_instruction_binary_operation(window->instruction1) == TRUE){
-		switch(window->instruction1->op){
-			//Handle the logical and case
-			case DOUBLE_AND:
-				handle_logical_and_instruction(window);
-				return;
-
-			//Handle logical or
-			case DOUBLE_OR:
-				handle_logical_or_instruction(window);
-				return;
-
-			//Handle division
-			case F_SLASH:
-				switch(window->instruction1->assignee->type->basic_type_token){
-					case F32:
-					case F64:
-						handle_sse_division_instruction(window->instruction1);
-						break;
-
-					default:
-						handle_division_instruction(window);
-						break;
-				}
-
-				return;
-
-			//Handle modulus
-			case MOD:	
-				handle_modulus_instruction(window);
-				return;
-
-			//If we have a multiplication *and* it's unsigned, we go here
-			case STAR:
-				switch(window->instruction1->assignee->type->basic_type_token){
-					//Floating point instruction, let the helper deal with it
-					case F32:
-					case F64:
-						handle_sse_multiplication_instruction(window->instruction1);
-						break;
-
-					//Signed mult, so we let the signed rule handle it
-					case I8:
-					case I16:
-					case I32:
-					case I64:
-						handle_signed_multiplication_instruction(window->instruction1);
-						break;
-
-					//Everything else counts as unsigned
-					default:
-						handle_unsigned_multiplication_instruction(window);
-						break;
-				}
-
-				return;
-
-			default:
-				break;
-		}
 	}
 
 	//The instruction that we have here is the window's instruction 1
