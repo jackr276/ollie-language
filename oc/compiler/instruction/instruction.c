@@ -1254,6 +1254,27 @@ instruction_t* emit_lea_rip_relative_constant(three_addr_var_t* assignee, three_
 
 
 /**
+ * Emit a lea with the index and scale only
+ */
+instruction_t* emit_lea_index_and_scale_only(three_addr_var_t* assignee, three_addr_var_t* offset, u_int64_t scale){
+	//First we allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Now we'll make our populations
+	stmt->statement_type = THREE_ADDR_CODE_LEA_STMT;
+	stmt->assignee = assignee;
+	stmt->op1 = offset;
+	stmt->lea_multiplier = scale;
+
+	//This has registers and a multiplier
+	stmt->lea_statement_type = OIR_LEA_TYPE_INDEX_AND_SCALE;
+
+	//And now we give it back
+	return stmt;
+}
+
+
+/**
  * Emit an indirect jump calculation that includes a block label in three address code form
  */
 instruction_t* emit_indir_jump_address_calc_instruction(three_addr_var_t* assignee, void* op1, three_addr_var_t* op2, u_int64_t type_size){

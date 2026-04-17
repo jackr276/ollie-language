@@ -2198,6 +2198,20 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	}
 
 
+	//TODO LIKELY HERE
+	//
+	/**
+	 *
+	 * CATCH STUFF LIKE 
+	 * 
+	 * t21 <- ^t8_0 * 4
+	 * t22 <- t19 + 21
+	 */
+
+
+
+
+
 	/**
 	 * --------------------- Folding constant assingments in LEA statements with ----------------------
 	 *  In cases where we have a lea statement that uses a constant which is assigned to a temporary

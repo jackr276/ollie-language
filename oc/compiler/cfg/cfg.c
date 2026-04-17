@@ -3805,6 +3805,11 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 
 	//This is whatever was emitted by the expression
 	three_addr_var_t* array_offset = expression_package.assignee;
+	//We'll grab this
+	three_addr_var_t* array_offset_constant;
+
+	//Let's check for a constant here we probably have one
+	
 
 	//The current type will always be what was inferred here
 	generic_type_t* member_type = array_accessor->inferred_type;
@@ -3835,8 +3840,24 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 		//Emit the variable directly here
 		*current_offset = emit_temp_var(u64);
 
-		//Emit the binary operation directly with this. The current offset remains unchanged
-		emit_binary_operation_with_constant(current_block, *current_offset, array_offset, STAR, emit_direct_integer_or_char_constant(member_type->type_size, u64));
+
+		//
+		//
+		//TODO DEAL WITH CONSTANTS
+		//
+		//
+
+		if(is_lea_compatible_power_of_2(member_type->type_size) == TRUE){
+			instruction_t* lea = emit_lea_index_and_scale_only(*current_offset, array_offset, member_type->type_size);
+
+			add_statement(current_block, lea);
+
+		} else {
+			three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(member_type->type_size, u64);
+
+			//Emit the binary operation directly with this. The current offset remains unchanged
+			emit_binary_operation_with_constant(current_block, *current_offset, array_offset, STAR, type_size_const);
+		}
 	}
 
 	/**
