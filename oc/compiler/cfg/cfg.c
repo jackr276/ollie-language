@@ -3805,8 +3805,6 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 
 	//This is whatever was emitted by the expression
 	three_addr_var_t* array_offset = expression_package.assignee;
-	//We'll grab this
-	three_addr_var_t* array_offset_constant;
 
 	//Let's check for a constant here we probably have one
 	
@@ -3840,23 +3838,45 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 		//Emit the variable directly here
 		*current_offset = emit_temp_var(u64);
 
+		/**
+		 * If this is just a constant(which it often will be), we can skip all of the binary
+		 * arithmetic and just go right to this
+		 */
+		if(current_block->exit_statement != NULL
+			&& current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
+			&& variables_equal(array_offset, current_block->exit_statement->assignee, TRUE) == TRUE){
 
-		//
-		//
-		//TODO DEAL WITH CONSTANTS
-		//
-		//
+			//Extract the old constant out
+			three_addr_const_t* constant_value = current_block->exit_statement->op1_const;
 
-		if(is_lea_compatible_power_of_2(member_type->type_size) == TRUE){
-			instruction_t* lea = emit_lea_index_and_scale_only(*current_offset, array_offset, member_type->type_size);
-
-			add_statement(current_block, lea);
-
-		} else {
+			//Emit the actual const over here
 			three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(member_type->type_size, u64);
 
-			//Emit the binary operation directly with this. The current offset remains unchanged
-			emit_binary_operation_with_constant(current_block, *current_offset, array_offset, STAR, type_size_const);
+			//Multiply them together
+			multiply_constants(type_size_const, constant_value);
+
+			//This just becomes an assignment expression
+			instruction_t* assignment = emit_assignment_with_const_instruction(*current_offset, type_size_const);
+
+			//Add it into the block
+			add_statement(current_block, assignment);
+
+		} else {
+			//We're using a lea if we can
+			if(is_lea_compatible_power_of_2(member_type->type_size) == TRUE){
+				//Emit the lea
+				instruction_t* lea = emit_lea_index_and_scale_only(*current_offset, array_offset, member_type->type_size);
+
+				//Add it in
+				add_statement(current_block, lea);
+
+			//Otherwise just a multiplication statement
+			} else {
+				three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(member_type->type_size, u64);
+
+				//Emit the binary operation directly with this. The current offset remains unchanged
+				emit_binary_operation_with_constant(current_block, *current_offset, array_offset, STAR, type_size_const);
+			}
 		}
 	}
 
