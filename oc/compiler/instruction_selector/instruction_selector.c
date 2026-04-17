@@ -205,6 +205,28 @@ static inline u_int8_t is_type_unsigned_64_bit(generic_type_t* type){
 
 
 /**
+ * Is a type lea compatible? Types are only lea compatible if they
+ * are 32 or 64 bit integers. Everything else is not compatible
+ */
+static inline u_int8_t is_type_lea_compatible(generic_type_t* type){
+	//If it's not a basic type we're done
+	if(type->type_class != TYPE_CLASS_BASIC){
+		return FALSE;
+	}
+
+	switch(type->basic_type_token){
+		case U32:
+		case I32:
+		case I64:
+		case U64:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Is the given type a 32 bit integer type?
  */
 static inline u_int8_t is_type_32_bit_int(generic_type_t* type){
@@ -1736,17 +1758,16 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
  * The pattern optimizer takes in a window and performs hyperlocal optimzations
  * on passing instructions. If we do end up deleting instructions, we'll need
  * to take care with how that affects the window that we take in
- *
- *
- * TODO WE HAVE MAJOR BLIND SPOTS IN OUR LEA COMPRESSOR - NEEDS TO BE STUDIED AND FIXED
  */
 static u_int8_t simplify_window(instruction_window_t* window){
 	//By default, we didn't change anything
 	u_int8_t changed = FALSE;
 
-	//Let's perform some quick checks. If we see a window where the first instruction
-	//is NULL or the second one is NULL, there's nothing we can do. We'll just leave in this
-	//case
+	/**
+	 * Let's perform some quick checks. If we see a window where the first instruction
+	 * is NULL or the second one is NULL, there's nothing we can do. We'll just leave in this
+	 * case
+	 */
 	if(window->instruction1 == NULL || window->instruction2 == NULL){
 		return changed;
 	}
@@ -2198,18 +2219,63 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	}
 
 
-	//TODO LIKELY HERE
-	//
 	/**
+	 * ------------------ Converting adjacent binary operations into LEA statements
+	 * If we have two adjacent binary operations where one is a bin_op_with_const
+	 * and one is a plain bin_op, there may be chances for us to convert them
+	 * into lea statements
 	 *
-	 * CATCH STUFF LIKE 
-	 * 
+	 * Example:
 	 * t21 <- ^t8_0 * 4
 	 * t22 <- t19 + 21
+	 *
+	 * Can become
+	 * t22 <- (t19, ^t8_0, 4)
 	 */
+	if(window->instruction2 != NULL
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& (window->instruction1->op == STAR || window->instruction1->op == PLUS)
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
+		&& variables_equal(window->instruction2->op2, window->instruction1->assignee, TRUE) == TRUE) {
 
+		//Extract for convenience
+		instruction_t* constant_operation = window->instruction1;
+		instruction_t* binary_operation = window->instruction2;
 
+		//Grab the result type out
+		generic_type_t* result_type;
 
+		//If we can find it great, otherwise just use op1
+		if(binary_operation->type_storage.result_type != NULL){
+			result_type = binary_operation->type_storage.result_type;
+		} else {
+			result_type = binary_operation->op1->type;
+		}
+
+		/**
+		 * If the type here is actually compatible, then we can do this
+		 */
+		if(is_type_lea_compatible(result_type) == TRUE){
+			switch(binary_operation->op){
+				case PLUS:
+
+					//This is a change
+					changed = TRUE;
+					break;
+
+				case STAR:
+
+					//This is a change
+					changed = TRUE;
+					break;
+
+				//By default do nothing
+				default:
+					break;
+			}
+		}
+	}
 
 
 	/**
