@@ -209,17 +209,21 @@ static inline u_int8_t is_type_unsigned_64_bit(generic_type_t* type){
  * are 32 or 64 bit integers. Everything else is not compatible
  */
 static inline u_int8_t is_type_lea_compatible(generic_type_t* type){
-	//If it's not a basic type we're done
-	if(type->type_class != TYPE_CLASS_BASIC){
-		return FALSE;
-	}
+	switch(type->type_class){
+		case TYPE_CLASS_BASIC:
+			switch(type->basic_type_token){
+				case U32:
+				case I32:
+				case I64:
+				case U64:
+					return TRUE;
+				default:
+					return FALSE;
+			}
 
-	switch(type->basic_type_token){
-		case U32:
-		case I32:
-		case I64:
-		case U64:
+		case TYPE_CLASS_POINTER:
 			return TRUE;
+
 		default:
 			return FALSE;
 	}
