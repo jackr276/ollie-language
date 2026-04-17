@@ -2368,11 +2368,31 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			result_type = binary_operation->op1->type;
 		}
 
+		/**
+		 * If we are lea compatible, we will convert
+		 * from two disparate binary operations into
+		 * one lea with an offset and two registers
+		 */
 		if(is_type_lea_compatible(result_type) == TRUE){
-			printf("HERE\n\n");
-			print_instruction_window_three_address_code(window);
-		}
+			//We'll work on the second one
+			constant_operation->statement_type = THREE_ADDR_CODE_LEA_STMT;
 
+			//This is a register and offset lea type
+			constant_operation->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_OFFSET;
+
+			//Copy over both operands from here
+			constant_operation->op1 = binary_operation->op1;
+			constant_operation->op2 = binary_operation->op2;
+
+			//Delete the old binary operation
+			delete_statement(binary_operation);
+
+			//Rebuilt the window around the constant operation
+			reconstruct_window(window, constant_operation);
+
+			//This is a change
+			changed = TRUE;
+		}
 	}
 
 
