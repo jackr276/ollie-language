@@ -2868,6 +2868,53 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
+
+	/**
+	 * ====================== Simplifying lea's internally =======================
+	 * We may end up with cases where lea statements have multipliers that are 1. If
+	 * this is the case, we'll want to remediate those
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT){
+		//Grab it out
+		instruction_t* lea_statement = window->instruction1;
+
+		switch(lea_statement->lea_statement_type){
+			/**
+			 * We have something like: 
+			 * 	t3 <- lea (, x, 1)
+			 *
+			 * 	We just convert it into t3 <- x
+			 *
+			 * We should already be set here with the assignee and all
+			 */
+			case OIR_LEA_TYPE_INDEX_AND_SCALE:
+				if(lea_statement->lea_multiplier == 1){
+					//Convert it over
+					lea_statement->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+
+					//Clear it out
+					lea_statement->lea_statement_type = OIR_LEA_TYPE_NONE;
+				}
+
+				break;
+
+			case OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE:
+
+			case OIR_LEA_TYPE_REGISTERS_AND_SCALE:
+
+
+			case OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE:
+
+
+			/**
+			 * Doesn't have a scale otherwise, so we are going to 
+			 * do nothing
+			 */
+			default:
+				break;
+		}
+	}
+
 	/**
 	 * ====================== Combining stores and operations =============
 	 *
