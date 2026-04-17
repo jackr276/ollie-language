@@ -5401,6 +5401,9 @@ static void handle_left_shift_instruction(instruction_window_t* window){
 
 		//This goes in *after* the left shift 
 		insert_instruction_after_given(assignment_instruction, left_shift_instruction);
+		
+		//Let the helper deal with the pxor clear
+		insert_pxor_clear_if_needed(assignment_instruction);
 
 		//Rebuild the whole window around this
 		reconstruct_window(window, assignment_instruction);
@@ -5584,6 +5587,9 @@ static void handle_right_shift_instruction(instruction_window_t* window){
 		//This goes in *after* the right shift 
 		insert_instruction_after_given(assignment_instruction, right_shift_instruction);
 
+		//Let the helper deal with the pxor clear
+		insert_pxor_clear_if_needed(assignment_instruction);
+
 		//Rebuild the whole window around this
 		reconstruct_window(window, assignment_instruction);
 	}
@@ -5712,6 +5718,9 @@ static void handle_bitwise_inclusive_or_instruction(instruction_window_t* window
 
 		//This goes in *after* the bitwise or
 		insert_instruction_after_given(assignment_instruction, bitwise_or);
+
+		//Let the helper deal with the pxor clear
+		insert_pxor_clear_if_needed(assignment_instruction);
 
 		//Rebuild the whole window around this
 		reconstruct_window(window, assignment_instruction);
@@ -5842,6 +5851,9 @@ static void handle_bitwise_and_instruction(instruction_window_t* window){
 		//This goes in *after* the subtraction
 		insert_instruction_after_given(assignment_instruction, bitwise_and);
 
+		//Let the helper deal with the pxor clear
+		insert_pxor_clear_if_needed(assignment_instruction);
+
 		//Rebuild the whole window around this
 		reconstruct_window(window, assignment_instruction);
 	}
@@ -5970,6 +5982,9 @@ static void handle_bitwise_exclusive_or_instruction(instruction_window_t* window
 
 		//This goes in *after* the subtraction
 		insert_instruction_after_given(assignment_instruction, bitwise_xor);
+
+		//Let the helper deal with the pxor clear
+		insert_pxor_clear_if_needed(assignment_instruction);
 
 		//Rebuild the whole window around this
 		reconstruct_window(window, assignment_instruction);
@@ -7520,6 +7535,9 @@ static void handle_subtraction_instruction(instruction_window_t* window){
 
 		//This goes in *after* the subtraction
 		insert_instruction_after_given(assignment_instruction, subtraction_instruction);
+
+		//Let the helper deal with the pxor clear
+		insert_pxor_clear_if_needed(assignment_instruction);
 
 		//Rebuild the whole window around this
 		reconstruct_window(window, assignment_instruction);
