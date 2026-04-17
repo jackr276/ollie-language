@@ -2075,11 +2075,10 @@ static void optimize_logical_or_branch_logic(symtab_function_record_t* function,
 	three_addr_var_t* op2 = short_circuit_statment->op2;
 
 	//The cursor for our first half
-	instruction_t* first_half_cursor = short_circuit_statment->previous_statement;
-
+	instruction_t* first_half_cursor = short_circuit_statment->previous_statement;;
+	
 	//Trace our way up to where op1 was assigned
 	while(variables_equal(op1, first_half_cursor->assignee, FALSE) == FALSE){
-		//Keep advancing backward
 		first_half_cursor = first_half_cursor->previous_statement;
 	}
 
@@ -2088,7 +2087,6 @@ static void optimize_logical_or_branch_logic(symtab_function_record_t* function,
 
 	//Trace our way up to where op2 was assigned
 	while(variables_equal(op2, second_half_cursor->assignee, FALSE) == FALSE){
-		//Keep advancing backward
 		second_half_cursor = second_half_cursor->previous_statement;
 	}
 

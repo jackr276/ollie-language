@@ -2315,12 +2315,12 @@ static generic_ast_node_t* sizeof_statement(ollie_token_stream_t* token_stream, 
 	generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
 
 	//This will be an int const
-	const_node->constant_type = INT_CONST_FORCE_U;
+	const_node->constant_type = INT_CONST;
 	//Store the actual value of the type size
-	const_node->constant_value.unsigned_int_value = return_type->type_size;
+	const_node->constant_value.signed_int_value = return_type->type_size;
 	//Grab and store type info
 	//This will always end up as a generic signed int
-	const_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(return_type->type_size, 32);
+	const_node->inferred_type = determine_required_minimum_signed_integer_type_size(return_type->type_size, 32);
 	//We cannot assign to this
 	const_node->is_assignable = FALSE;
 	//Store this too

@@ -2583,6 +2583,122 @@ generic_type_t* create_function_pointer_type(visibilty_type_t visibility, u_int8
 
 
 /**
+ * Compute the operand type for a logical and/or operation. We perform floating point
+ * coercion here. j
+ */
+generic_type_t* get_operand_type_for_logical_operation(void* symtab, generic_type_t* type_a, generic_type_t* type_b){
+	type_symtab_t* type_corrected_symtab = symtab;
+
+	//Are these floats or not?
+	u_int8_t typea_is_float = IS_FLOATING_POINT(type_a);
+	u_int8_t typeb_is_float = IS_FLOATING_POINT(type_b);
+
+	/**
+	 * Case 1: both floats - largest one wins
+	 */
+	if(typea_is_float == TRUE && typeb_is_float == TRUE){
+		if(type_a->type_size > type_b->type_size){
+			return type_a;
+		} else {
+			return type_b;
+		}
+
+	/**
+	 * Case 2: type_a is a float, b is not
+	 */
+	} else if(typea_is_float == TRUE && typeb_is_float == FALSE){
+		//If type_a is large enough, just use that
+		if(type_a->type_size >= type_b->type_size){
+			return type_a;
+		//Otherwise just force an f64
+		} else {
+			return lookup_type_name_only(type_corrected_symtab, "f64", NOT_MUTABLE)->type;
+		}
+
+	/**
+	 * Case 3: type_b is a float, a is not
+	 */
+	} else if(typea_is_float == FALSE && typeb_is_float == TRUE){
+		//If type_b is large enough, just use that
+		if(type_b->type_size >= type_a->type_size){
+			return type_b;
+		//Otherwise just force an f64
+		} else {
+			return lookup_type_name_only(type_corrected_symtab, "f64", NOT_MUTABLE)->type;
+		}
+
+	/**
+	 * Case 4: no floats - largest wins
+	 */
+	} else {
+		if(type_a->type_size > type_b->type_size){
+			return type_a;
+		} else {
+			return type_b;
+		}
+	}
+}
+
+
+/**
+ * Compute the operand type for a relational operation. We perform floating point
+ * coercion here. j
+ */
+generic_type_t* get_operand_type_for_relational_operation(void* symtab, generic_type_t* type_a, generic_type_t* type_b){
+	type_symtab_t* type_corrected_symtab = symtab;
+
+	//Are these floats or not?
+	u_int8_t typea_is_float = IS_FLOATING_POINT(type_a);
+	u_int8_t typeb_is_float = IS_FLOATING_POINT(type_b);
+
+	/**
+	 * Case 1: both floats - largest one wins
+	 */
+	if(typea_is_float == TRUE && typeb_is_float == TRUE){
+		if(type_a->type_size > type_b->type_size){
+			return type_a;
+		} else {
+			return type_b;
+		}
+
+	/**
+	 * Case 2: type_a is a float, b is not
+	 */
+	} else if(typea_is_float == TRUE && typeb_is_float == FALSE){
+		//If type_a is large enough, just use that
+		if(type_a->type_size >= type_b->type_size){
+			return type_a;
+		//Otherwise just force an f64
+		} else {
+			return lookup_type_name_only(type_corrected_symtab, "f64", NOT_MUTABLE)->type;
+		}
+
+	/**
+	 * Case 3: type_b is a float, a is not
+	 */
+	} else if(typea_is_float == FALSE && typeb_is_float == TRUE){
+		//If type_b is large enough, just use that
+		if(type_b->type_size >= type_a->type_size){
+			return type_b;
+		//Otherwise just force an f64
+		} else {
+			return lookup_type_name_only(type_corrected_symtab, "f64", NOT_MUTABLE)->type;
+		}
+
+	/**
+	 * Case 4: no floats - largest wins
+	 */
+	} else {
+		if(type_a->type_size > type_b->type_size){
+			return type_a;
+		} else {
+			return type_b;
+		}
+	}
+}
+
+
+/**
  * Add a function's parameter in
  */
 void add_parameter_to_function_type(generic_type_t* function_type, generic_type_t* parameter){

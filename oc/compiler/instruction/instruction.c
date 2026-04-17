@@ -1254,6 +1254,27 @@ instruction_t* emit_lea_rip_relative_constant(three_addr_var_t* assignee, three_
 
 
 /**
+ * Emit a lea with the index and scale only
+ */
+instruction_t* emit_lea_index_and_scale_only(three_addr_var_t* assignee, three_addr_var_t* offset, u_int64_t scale){
+	//First we allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Now we'll make our populations
+	stmt->statement_type = THREE_ADDR_CODE_LEA_STMT;
+	stmt->assignee = assignee;
+	stmt->op1 = offset;
+	stmt->lea_multiplier = scale;
+
+	//This has registers and a multiplier
+	stmt->lea_statement_type = OIR_LEA_TYPE_INDEX_AND_SCALE;
+
+	//And now we give it back
+	return stmt;
+}
+
+
+/**
  * Emit an indirect jump calculation that includes a block label in three address code form
  */
 instruction_t* emit_indir_jump_address_calc_instruction(three_addr_var_t* assignee, void* op1, three_addr_var_t* op2, u_int64_t type_size){
@@ -4620,6 +4641,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			break;
 
 		//Handle lea printing
+		case LEAW:
 		case LEAL:
 		case LEAQ:
 			//Invoke the helper
@@ -5406,7 +5428,7 @@ instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* 
 	stmt->op1 = op1;
 
 	//Important - add the type that we expect to be writing to in memory
-	stmt->memory_read_write_type = memory_write_type;
+	stmt->type_storage.memory_read_write_type = memory_write_type;
 
 	//And that's it, we'll now just give it back
 	return stmt;
@@ -5436,7 +5458,7 @@ instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_ad
 	stmt->op2 = storee;
 
 	//Important - add the type that we expect to be writing to in memory
-	stmt->memory_read_write_type = memory_write_type;
+	stmt->type_storage.memory_read_write_type = memory_write_type;
 
 	//And give it back
 	return stmt;
@@ -5466,7 +5488,7 @@ instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_ad
 	stmt->op2 = storee;
 
 	//Important - add the type that we expect to be writing to in memory
-	stmt->memory_read_write_type = memory_write_type;
+	stmt->type_storage.memory_read_write_type = memory_write_type;
 
 	//And give it back
 	return stmt;
@@ -5496,7 +5518,7 @@ instruction_t* emit_store_const_with_constant_offset_ir_code(three_addr_var_t* b
 	stmt->op1_const = storee;
 
 	//Important - add the type that we expect to be writing to in memory
-	stmt->memory_read_write_type = memory_write_type;
+	stmt->type_storage.memory_read_write_type = memory_write_type;
 
 	//And give it back
 	return stmt;
@@ -5517,7 +5539,7 @@ instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* o
 	stmt->op1 = op1;
 
 	//Important - store the type that we expect to be getting out of memory
-	stmt->memory_read_write_type = memory_read_type;
+	stmt->type_storage.memory_read_write_type = memory_read_type;
 	
 	//And that's it, we'll now just give it back
 	return stmt;
@@ -5543,7 +5565,7 @@ instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee
 	stmt->op2 = offset;
 
 	//Important - store the type that we expect to be getting out of memory
-	stmt->memory_read_write_type = memory_read_type;
+	stmt->type_storage.memory_read_write_type = memory_read_type;
 
 	//And give it back
 	return stmt;
@@ -5569,7 +5591,7 @@ instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee
 	stmt->offset = offset;
 
 	//Important - store the type that we expect to be getting out of memory
-	stmt->memory_read_write_type = memory_read_type;
+	stmt->type_storage.memory_read_write_type = memory_read_type;
 
 	//And give it back
 	return stmt;
