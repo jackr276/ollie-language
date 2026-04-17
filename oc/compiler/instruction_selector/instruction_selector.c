@@ -2257,17 +2257,46 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		 * If the type here is actually compatible, then we can do this
 		 */
 		if(is_type_lea_compatible(result_type) == TRUE){
-			switch(binary_operation->op){
+			switch(constant_operation->op){
+				/**
+				 * For the case of a plus:
+				 * 	t21 <- t20 + 8
+				 * 	t22 <- t19 + t21
+				 *
+				 * 	t22 <- 8(t19, t20)
+				 */
 				case PLUS:
+					//Convert instruction2 into a lea
+					binary_operation->statement_type = THREE_ADDR_CODE_LEA_STMT;
+					binary_operation->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_OFFSET;
+
+					//The op2 now becomes the op1
+					binary_operation->op2 = constant_operation->op1;
+
+					//Store the constant over as well
+					binary_operation->op1_const = constant_operation->op1_const;
+					
+					//Once this is done we can scrap the first instruction
+					delete_statement(constant_operation);
+
+					//Rebuild the window around the binary operation
+					reconstruct_window(window, binary_operation);
 
 					//This is a change
 					changed = TRUE;
 					break;
 
 				case STAR:
+					//We need to make sure that we have a compatible power of 2, otherwise this will all break down
+					if(is_constant_lea_compatible_power_of_2(constant_operation->op1_const) == FALSE){
+						break;
+					}
+
+					//printf("HERE\n");
+					//print_instruction_window_three_address_code(window);
 
 					//This is a change
-					changed = TRUE;
+					//changed = TRUE;
 					break;
 
 				//By default do nothing
