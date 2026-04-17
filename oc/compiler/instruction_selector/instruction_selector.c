@@ -2286,17 +2286,38 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					changed = TRUE;
 					break;
 
+				/**
+				 * For the case of a *:
+				 * 	t21 <- t20 * 8
+				 * 	t22 <- t19 + t21
+				 *
+				 * 	t22 <- (t19, t20, 8)
+				 */
 				case STAR:
 					//We need to make sure that we have a compatible power of 2, otherwise this will all break down
 					if(is_constant_lea_compatible_power_of_2(constant_operation->op1_const) == FALSE){
 						break;
 					}
 
-					//printf("HERE\n");
-					//print_instruction_window_three_address_code(window);
+					//Convert instruction2 into a lea
+					binary_operation->statement_type = THREE_ADDR_CODE_LEA_STMT;
+					binary_operation->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_SCALE;
+
+					//The op2 now becomes the op1
+					binary_operation->op2 = constant_operation->op1;
+
+					//Store the constant over as well
+					binary_operation->lea_multiplier = constant_operation->op1_const->constant_value.signed_long_constant;
+					
+					//Once this is done we can scrap the first instruction
+					delete_statement(constant_operation);
+
+					//Rebuild the window around the binary operation
+					reconstruct_window(window, binary_operation);
 
 					//This is a change
-					//changed = TRUE;
+					changed = TRUE;
+
 					break;
 
 				//By default do nothing
