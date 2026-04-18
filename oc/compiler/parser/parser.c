@@ -230,6 +230,25 @@ static inline u_int8_t is_type_commutative_for_operation(generic_type_t* type, o
 
 			return TRUE;
 
+		/**
+		 * Equality operations are always going to be commutative
+		 */
+		case DOUBLE_EQUALS:
+		case NOT_EQUALS:
+			return TRUE;
+
+		/**
+		 * Bitwise and, or and xor are commutative
+		 */
+		case SINGLE_OR:
+		case SINGLE_AND:
+		case CARROT:
+			if(IS_FLOATING_POINT(type) == TRUE){
+				return FALSE;
+			}
+
+			return TRUE;
+			
 
 		//By defualt - we're assuming this operator is not commutative
 		default:
@@ -5303,10 +5322,24 @@ static generic_ast_node_t* equality_expression(ollie_token_stream_t* token_strea
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
-		//Add both child nodes in order only now that we know everything is valid
-		add_child_node(sub_tree_root, temp_holder);
-		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
-		add_child_node(sub_tree_root, right_child);
+		/**
+		 * If we are multiplying *and* the type is commutative, we will 
+		 * perform reordering here if need be
+		 */
+		if(is_type_commutative_for_operation(return_type, op.tok) == TRUE
+			&& temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT){
+			//We'll now swap these two nodes so that the constant is on the right
+			add_child_node(sub_tree_root, right_child);
+			add_child_node(sub_tree_root, temp_holder);
+
+		/**
+		 * Otherwise all is normal so the temp holder goes on the left,
+		 * right child on the right
+		 */
+		} else {
+			add_child_node(sub_tree_root, temp_holder);
+			add_child_node(sub_tree_root, right_child);
+		}
 
 		//Store the return type
 		sub_tree_root->inferred_type = return_type;
@@ -5436,9 +5469,24 @@ static generic_ast_node_t* and_expression(ollie_token_stream_t* token_stream, si
 		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 		sub_tree_root->binary_operator = lookahead.tok;
 
-		//Add the child nodes in the proper order here
-		add_child_node(sub_tree_root, temp_holder);
-		add_child_node(sub_tree_root, right_child);
+		/**
+		 * If we are multiplying *and* the type is commutative, we will 
+		 * perform reordering here if need be
+		 */
+		if(is_type_commutative_for_operation(final_type, lookahead.tok) == TRUE
+			&& temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT){
+			//We'll now swap these two nodes so that the constant is on the right
+			add_child_node(sub_tree_root, right_child);
+			add_child_node(sub_tree_root, temp_holder);
+
+		/**
+		 * Otherwise all is normal so the temp holder goes on the left,
+		 * right child on the right
+		 */
+		} else {
+			add_child_node(sub_tree_root, temp_holder);
+			add_child_node(sub_tree_root, right_child);
+		}
 
 		//We now know that the subtree root has a type of u_int8(boolean)
 		sub_tree_root->inferred_type = final_type;
