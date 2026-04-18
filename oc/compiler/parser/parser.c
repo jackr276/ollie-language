@@ -220,6 +220,16 @@ static inline u_int8_t is_type_commutative_for_operation(generic_type_t* type, o
 
 			return TRUE;
 
+		/**
+		 * For addition, any type that is *not* a float is commutative
+		 */
+		case PLUS:
+			if(IS_FLOATING_POINT(type) == TRUE){
+				return FALSE;
+			}
+
+			return TRUE;
+
 
 		//By defualt - we're assuming this operator is not commutative
 		default:
@@ -4798,18 +4808,32 @@ static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_strea
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = op.tok;
 
-		//We actually already know this guy's first child--it's the previous root currently
-		//being held in temp_holder. We'll add the temp holder in as the subtree root
-		add_child_node(sub_tree_root, temp_holder);
+		/**
+		 * If we are multiplying *and* the type is commutative, we will 
+		 * perform reordering here if need be
+		 */
+		if(is_type_commutative_for_operation(return_type, op.tok) == TRUE
+			&& temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT){
+			//We'll now swap these two nodes so that the constant is on the right
+			add_child_node(sub_tree_root, right_child);
+			add_child_node(sub_tree_root, temp_holder);
 
-		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
-		add_child_node(sub_tree_root, right_child);
+		/**
+		 * Otherwise all is normal so the temp holder goes on the left,
+		 * right child on the right
+		 */
+		} else {
+			add_child_node(sub_tree_root, temp_holder);
+			add_child_node(sub_tree_root, right_child);
+		}
 		
 		//Now we can finally assign the sub tree type
 		sub_tree_root->inferred_type = return_type;
 
-		//Copy over the variable. It will either be NULL(common case) or it will carry
-		//the value of the pointer that we manipulated
+		/**
+		 * Copy over the variable. It will either be NULL(common case) or it will carry
+		 * the value of the pointer that we manipulated
+		 */
 		sub_tree_root->variable = variable;
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
