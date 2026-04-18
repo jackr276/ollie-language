@@ -210,6 +210,15 @@ static inline u_int8_t is_copy_assignment_required(generic_type_t* destination_t
  */
 static inline u_int8_t is_type_commutative_for_operation(generic_type_t* type, ollie_token_t op){
 	switch(op){
+		/**
+		 * For multiplication, any type that is *not* a float is commutative
+		 */
+		case STAR:
+			if(IS_FLOATING_POINT(type) == TRUE){
+				return FALSE;
+			}
+
+			return TRUE;
 
 
 		//By defualt - we're assuming this operator is not commutative
@@ -4570,23 +4579,31 @@ static generic_ast_node_t* multiplicative_expression(ollie_token_stream_t* token
 		 * If we are multiplying *and* the type is commutative, we will 
 		 * perform reordering here if need be
 		 */
-		if(op.tok == STAR) {
+		if(is_type_commutative_for_operation(return_type, op.tok) == TRUE
+			&& temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT){
+			//We'll now swap these two nodes so that the constant is on the right
+			add_child_node(sub_tree_root, right_child);
+			add_child_node(sub_tree_root, temp_holder);
 
+		/**
+		 * Otherwise all is normal so the temp holder goes on the left,
+		 * right child on the right
+		 */
+		} else {
+			add_child_node(sub_tree_root, temp_holder);
+			add_child_node(sub_tree_root, right_child);
 		}
-
 
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
-		//Add these both in in order
-		add_child_node(sub_tree_root, temp_holder);
-		add_child_node(sub_tree_root, right_child);
-
 		//Assign the node type
 		sub_tree_root->inferred_type = return_type;
 
-		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
-		//"sub-tree root". We'll now refresh the token to keep looking
+		/**
+		 * By the end of this, we always have a proper subtree with the operator as the root, being held in 
+		 * "sub-tree root". We'll now refresh the token to keep looking
+		 */
 		lookahead = get_next_token(token_stream, &parser_line_num);
 	}
 
