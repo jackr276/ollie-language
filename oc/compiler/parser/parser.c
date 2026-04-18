@@ -205,6 +205,59 @@ static inline u_int8_t is_copy_assignment_required(generic_type_t* destination_t
 
 
 /**
+ * Is the given type commutative when the normal rules of
+ * arithmetic apply? 
+ */
+static inline u_int8_t is_type_commutative_for_operation(generic_type_t* type, ollie_token_t op){
+	switch(op){
+		/**
+		 * For multiplication, any type that is *not* a float is commutative
+		 */
+		case STAR:
+			if(IS_FLOATING_POINT(type) == TRUE){
+				return FALSE;
+			}
+
+			return TRUE;
+
+		/**
+		 * For addition, any type that is *not* a float is commutative
+		 */
+		case PLUS:
+			if(IS_FLOATING_POINT(type) == TRUE){
+				return FALSE;
+			}
+
+			return TRUE;
+
+		/**
+		 * Equality operations are always going to be commutative
+		 */
+		case DOUBLE_EQUALS:
+		case NOT_EQUALS:
+			return TRUE;
+
+		/**
+		 * Bitwise and, or and xor are commutative
+		 */
+		case SINGLE_OR:
+		case SINGLE_AND:
+		case CARROT:
+			if(IS_FLOATING_POINT(type) == TRUE){
+				return FALSE;
+			}
+
+			return TRUE;
+			
+
+		//By defualt - we're assuming this operator is not commutative
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Perform any needed constant coercion that is being done for an assignment. This includes converting pointers to 64-bit
  * integers for constant coercion
  */
@@ -4365,6 +4418,11 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
  * will return a pointer to the root of the subtree that is created by it, whether that subtree
  * originated here or not
  *
+ * NOTE: multiplication is commutative for certain types, so we are able to dynamically reorder these
+ * if we have a multiplication instruction *and* we end up with a constant in the left hand child
+ *
+ * Example: 3 * x -> x * 3
+ *
  * BNF Rule: <multiplicative-expression> ::= <cast-expression>{ (* | / | %) <cast-expression>}*
  */
 static generic_ast_node_t* multiplicative_expression(ollie_token_stream_t* token_stream, side_type_t side){
@@ -4545,19 +4603,36 @@ static generic_ast_node_t* multiplicative_expression(ollie_token_stream_t* token
 
 		//We now need to make an operator node
 		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
+		
+		/**
+		 * If we are multiplying *and* the type is commutative, we will 
+		 * perform reordering here if need be
+		 */
+		if(is_type_commutative_for_operation(return_type, op.tok) == TRUE
+			&& temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT){
+			//We'll now swap these two nodes so that the constant is on the right
+			add_child_node(sub_tree_root, right_child);
+			add_child_node(sub_tree_root, temp_holder);
+
+		/**
+		 * Otherwise all is normal so the temp holder goes on the left,
+		 * right child on the right
+		 */
+		} else {
+			add_child_node(sub_tree_root, temp_holder);
+			add_child_node(sub_tree_root, right_child);
+		}
 
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
-		//Add these both in in order
-		add_child_node(sub_tree_root, temp_holder);
-		add_child_node(sub_tree_root, right_child);
-
 		//Assign the node type
 		sub_tree_root->inferred_type = return_type;
 
-		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
-		//"sub-tree root". We'll now refresh the token to keep looking
+		/**
+		 * By the end of this, we always have a proper subtree with the operator as the root, being held in 
+		 * "sub-tree root". We'll now refresh the token to keep looking
+		 */
 		lookahead = get_next_token(token_stream, &parser_line_num);
 	}
 
@@ -4750,18 +4825,32 @@ static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_strea
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = op.tok;
 
-		//We actually already know this guy's first child--it's the previous root currently
-		//being held in temp_holder. We'll add the temp holder in as the subtree root
-		add_child_node(sub_tree_root, temp_holder);
+		/**
+		 * If we are multiplying *and* the type is commutative, we will 
+		 * perform reordering here if need be
+		 */
+		if(is_type_commutative_for_operation(return_type, op.tok) == TRUE
+			&& temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT){
+			//We'll now swap these two nodes so that the constant is on the right
+			add_child_node(sub_tree_root, right_child);
+			add_child_node(sub_tree_root, temp_holder);
 
-		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
-		add_child_node(sub_tree_root, right_child);
+		/**
+		 * Otherwise all is normal so the temp holder goes on the left,
+		 * right child on the right
+		 */
+		} else {
+			add_child_node(sub_tree_root, temp_holder);
+			add_child_node(sub_tree_root, right_child);
+		}
 		
 		//Now we can finally assign the sub tree type
 		sub_tree_root->inferred_type = return_type;
 
-		//Copy over the variable. It will either be NULL(common case) or it will carry
-		//the value of the pointer that we manipulated
+		/**
+		 * Copy over the variable. It will either be NULL(common case) or it will carry
+		 * the value of the pointer that we manipulated
+		 */
 		sub_tree_root->variable = variable;
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
@@ -5229,10 +5318,24 @@ static generic_ast_node_t* equality_expression(ollie_token_stream_t* token_strea
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
-		//Add both child nodes in order only now that we know everything is valid
-		add_child_node(sub_tree_root, temp_holder);
-		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
-		add_child_node(sub_tree_root, right_child);
+		/**
+		 * If we are multiplying *and* the type is commutative, we will 
+		 * perform reordering here if need be
+		 */
+		if(is_type_commutative_for_operation(return_type, op.tok) == TRUE
+			&& temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT){
+			//We'll now swap these two nodes so that the constant is on the right
+			add_child_node(sub_tree_root, right_child);
+			add_child_node(sub_tree_root, temp_holder);
+
+		/**
+		 * Otherwise all is normal so the temp holder goes on the left,
+		 * right child on the right
+		 */
+		} else {
+			add_child_node(sub_tree_root, temp_holder);
+			add_child_node(sub_tree_root, right_child);
+		}
 
 		//Store the return type
 		sub_tree_root->inferred_type = return_type;
@@ -5360,9 +5463,24 @@ static generic_ast_node_t* and_expression(ollie_token_stream_t* token_stream, si
 		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 		sub_tree_root->binary_operator = lookahead.tok;
 
-		//Add the child nodes in the proper order here
-		add_child_node(sub_tree_root, temp_holder);
-		add_child_node(sub_tree_root, right_child);
+		/**
+		 * If we are multiplying *and* the type is commutative, we will 
+		 * perform reordering here if need be
+		 */
+		if(is_type_commutative_for_operation(final_type, lookahead.tok) == TRUE
+			&& temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT){
+			//We'll now swap these two nodes so that the constant is on the right
+			add_child_node(sub_tree_root, right_child);
+			add_child_node(sub_tree_root, temp_holder);
+
+		/**
+		 * Otherwise all is normal so the temp holder goes on the left,
+		 * right child on the right
+		 */
+		} else {
+			add_child_node(sub_tree_root, temp_holder);
+			add_child_node(sub_tree_root, right_child);
+		}
 
 		//We now know that the subtree root has a type of u_int8(boolean)
 		sub_tree_root->inferred_type = final_type;
@@ -5491,9 +5609,24 @@ static generic_ast_node_t* exclusive_or_expression(ollie_token_stream_t* token_s
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
-		//Add both children in order now that everything is valid
-		add_child_node(sub_tree_root, temp_holder);
-		add_child_node(sub_tree_root, right_child);
+		/**
+		 * If we are multiplying *and* the type is commutative, we will 
+		 * perform reordering here if need be
+		 */
+		if(is_type_commutative_for_operation(final_type, lookahead.tok) == TRUE
+			&& temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT){
+			//We'll now swap these two nodes so that the constant is on the right
+			add_child_node(sub_tree_root, right_child);
+			add_child_node(sub_tree_root, temp_holder);
+
+		/**
+		 * Otherwise all is normal so the temp holder goes on the left,
+		 * right child on the right
+		 */
+		} else {
+			add_child_node(sub_tree_root, temp_holder);
+			add_child_node(sub_tree_root, right_child);
+		}
 
 		//Store the final type
 		sub_tree_root->inferred_type = final_type;
@@ -5517,6 +5650,8 @@ static generic_ast_node_t* exclusive_or_expression(ollie_token_stream_t* token_s
 /**
  * An inclusive or expression will always return a reference to the root node of it's subtree. That node
  * could be an operator or it could be a passthrough
+ *
+ * NOTE: inclusive or is a commutative type, so it is eligible for constant reordering
  *
  * BNF rule: <inclusive-or-expression> ::= <exclusive-or-expression>{ | <exclusive-or-expression>}*
  */
@@ -5623,9 +5758,24 @@ static generic_ast_node_t* inclusive_or_expression(ollie_token_stream_t* token_s
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
-		//Now we add the 2 children in order
-		add_child_node(sub_tree_root, temp_holder);
-		add_child_node(sub_tree_root, right_child);
+		/**
+		 * If we are multiplying *and* the type is commutative, we will 
+		 * perform reordering here if need be
+		 */
+		if(is_type_commutative_for_operation(final_type, lookahead.tok) == TRUE
+			&& temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT){
+			//We'll now swap these two nodes so that the constant is on the right
+			add_child_node(sub_tree_root, right_child);
+			add_child_node(sub_tree_root, temp_holder);
+
+		/**
+		 * Otherwise all is normal so the temp holder goes on the left,
+		 * right child on the right
+		 */
+		} else {
+			add_child_node(sub_tree_root, temp_holder);
+			add_child_node(sub_tree_root, right_child);
+		}
 
 		//Store the final type
 		sub_tree_root->inferred_type = final_type;
