@@ -4658,8 +4658,6 @@ static generic_ast_node_t* multiplicative_expression(ollie_token_stream_t* token
  *  4.) Unsigned will always dominate signed
  *
  * BNF Rule: <additive-expression> ::= <multiplicative-expression>{ (+ | -) <multiplicative-expression>}*
- *
- * TODO HERE
  */
 static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_stream, side_type_t side){
 	//Lookahead token
@@ -5203,8 +5201,6 @@ static generic_ast_node_t* relational_expression(ollie_token_stream_t* token_str
  * always return a pointer to the subtree, whether that subtree is made here or elsewhere
  *
  * BNF Rule: <equality-expression> ::= <relational-expression>{ (==|!=) <relational-expression> }*
- *
- * TODO HERE
  */
 static generic_ast_node_t* equality_expression(ollie_token_stream_t* token_stream, side_type_t side){
 	//Lookahead token
@@ -5366,8 +5362,6 @@ static generic_ast_node_t* equality_expression(ollie_token_stream_t* token_strea
  * at a rule lower down on the tree
  *
  * BNF Rule: <and-expression> ::= <equality-expression>{& <equality-expression>}* 
- *
- * TODO HERE
  */
 static generic_ast_node_t* and_expression(ollie_token_stream_t* token_stream, side_type_t side){
 	//Lookahead token
@@ -5513,8 +5507,6 @@ static generic_ast_node_t* and_expression(ollie_token_stream_t* token_stream, si
  * the chain
  *
  * BNF Rule: <exclusive-or-expression> ::= <and-expression>{^ <and-expression}*
- *
- * TODO HERE
  */
 static generic_ast_node_t* exclusive_or_expression(ollie_token_stream_t* token_stream, side_type_t side){
 	//Lookahead token
@@ -5617,9 +5609,24 @@ static generic_ast_node_t* exclusive_or_expression(ollie_token_stream_t* token_s
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
-		//Add both children in order now that everything is valid
-		add_child_node(sub_tree_root, temp_holder);
-		add_child_node(sub_tree_root, right_child);
+		/**
+		 * If we are multiplying *and* the type is commutative, we will 
+		 * perform reordering here if need be
+		 */
+		if(is_type_commutative_for_operation(final_type, lookahead.tok) == TRUE
+			&& temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT){
+			//We'll now swap these two nodes so that the constant is on the right
+			add_child_node(sub_tree_root, right_child);
+			add_child_node(sub_tree_root, temp_holder);
+
+		/**
+		 * Otherwise all is normal so the temp holder goes on the left,
+		 * right child on the right
+		 */
+		} else {
+			add_child_node(sub_tree_root, temp_holder);
+			add_child_node(sub_tree_root, right_child);
+		}
 
 		//Store the final type
 		sub_tree_root->inferred_type = final_type;
@@ -5751,9 +5758,24 @@ static generic_ast_node_t* inclusive_or_expression(ollie_token_stream_t* token_s
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
-		//Now we add the 2 children in order
-		add_child_node(sub_tree_root, temp_holder);
-		add_child_node(sub_tree_root, right_child);
+		/**
+		 * If we are multiplying *and* the type is commutative, we will 
+		 * perform reordering here if need be
+		 */
+		if(is_type_commutative_for_operation(final_type, lookahead.tok) == TRUE
+			&& temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT){
+			//We'll now swap these two nodes so that the constant is on the right
+			add_child_node(sub_tree_root, right_child);
+			add_child_node(sub_tree_root, temp_holder);
+
+		/**
+		 * Otherwise all is normal so the temp holder goes on the left,
+		 * right child on the right
+		 */
+		} else {
+			add_child_node(sub_tree_root, temp_holder);
+			add_child_node(sub_tree_root, right_child);
+		}
 
 		//Store the final type
 		sub_tree_root->inferred_type = final_type;
