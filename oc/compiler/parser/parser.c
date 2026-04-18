@@ -205,6 +205,21 @@ static inline u_int8_t is_copy_assignment_required(generic_type_t* destination_t
 
 
 /**
+ * Is the given type commutative when the normal rules of
+ * arithmetic apply? 
+ */
+static inline u_int8_t is_type_commutative_for_operation(generic_type_t* type, ollie_token_t op){
+	switch(op){
+
+
+		//By defualt - we're assuming this operator is not commutative
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Perform any needed constant coercion that is being done for an assignment. This includes converting pointers to 64-bit
  * integers for constant coercion
  */
@@ -4365,6 +4380,11 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
  * will return a pointer to the root of the subtree that is created by it, whether that subtree
  * originated here or not
  *
+ * NOTE: multiplication is commutative for certain types, so we are able to dynamically reorder these
+ * if we have a multiplication instruction *and* we end up with a constant in the left hand child
+ *
+ * Example: 3 * x -> x * 3
+ *
  * BNF Rule: <multiplicative-expression> ::= <cast-expression>{ (* | / | %) <cast-expression>}*
  */
 static generic_ast_node_t* multiplicative_expression(ollie_token_stream_t* token_stream, side_type_t side){
@@ -4545,6 +4565,15 @@ static generic_ast_node_t* multiplicative_expression(ollie_token_stream_t* token
 
 		//We now need to make an operator node
 		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
+		
+		/**
+		 * If we are multiplying *and* the type is commutative, we will 
+		 * perform reordering here if need be
+		 */
+		if(op.tok == STAR) {
+
+		}
+
 
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
@@ -4583,6 +4612,8 @@ static generic_ast_node_t* multiplicative_expression(ollie_token_stream_t* token
  *  4.) Unsigned will always dominate signed
  *
  * BNF Rule: <additive-expression> ::= <multiplicative-expression>{ (+ | -) <multiplicative-expression>}*
+ *
+ * TODO HERE
  */
 static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_stream, side_type_t side){
 	//Lookahead token
@@ -5112,6 +5143,8 @@ static generic_ast_node_t* relational_expression(ollie_token_stream_t* token_str
  * always return a pointer to the subtree, whether that subtree is made here or elsewhere
  *
  * BNF Rule: <equality-expression> ::= <relational-expression>{ (==|!=) <relational-expression> }*
+ *
+ * TODO HERE
  */
 static generic_ast_node_t* equality_expression(ollie_token_stream_t* token_stream, side_type_t side){
 	//Lookahead token
@@ -5259,6 +5292,8 @@ static generic_ast_node_t* equality_expression(ollie_token_stream_t* token_strea
  * at a rule lower down on the tree
  *
  * BNF Rule: <and-expression> ::= <equality-expression>{& <equality-expression>}* 
+ *
+ * TODO HERE
  */
 static generic_ast_node_t* and_expression(ollie_token_stream_t* token_stream, side_type_t side){
 	//Lookahead token
@@ -5389,6 +5424,8 @@ static generic_ast_node_t* and_expression(ollie_token_stream_t* token_stream, si
  * the chain
  *
  * BNF Rule: <exclusive-or-expression> ::= <and-expression>{^ <and-expression}*
+ *
+ * TODO HERE
  */
 static generic_ast_node_t* exclusive_or_expression(ollie_token_stream_t* token_stream, side_type_t side){
 	//Lookahead token
@@ -5517,6 +5554,8 @@ static generic_ast_node_t* exclusive_or_expression(ollie_token_stream_t* token_s
 /**
  * An inclusive or expression will always return a reference to the root node of it's subtree. That node
  * could be an operator or it could be a passthrough
+ *
+ * NOTE: inclusive or is a commutative type, so it is eligible for constant reordering
  *
  * BNF rule: <inclusive-or-expression> ::= <exclusive-or-expression>{ | <exclusive-or-expression>}*
  */
