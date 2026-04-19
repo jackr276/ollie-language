@@ -4258,34 +4258,16 @@ static inline void generate_value_name_key_for_instruction(instruction_t* instru
 
 
 /**
- * Get the value name for a given variable. The way we do this
- * involves drilling down recursively until we hit the bottom
- * depths
+ * Get the value name for a given variable. 
+ *
+ * We will be using the value numbering table to search.
  */
-static three_addr_var_t* get_value_name(three_addr_var_t* variable){
+static three_addr_var_t* get_value_name(value_numbering_table_t* table, three_addr_var_t* variable){
 	//Simple catch case if we hit it
 	if(variable == NULL){
 		return NULL;
 	}
 
-	/**
-	 * Now based on the value name type we will return 
-	 * whatever we're after
-	 */
-	switch(variable->value_name.value_name_type){
-		//Most common case - just give ourself back
-		case VALUE_NAME_SUB_NONE:
-			return variable;
-
-		//Otherwise, we will keep going down until we hit the bottom sub variable
-		case VALUE_NAME_SUB_VARIABLE:
-			return get_value_name(variable->value_name.subsitution.substitution_variable);
-
-		//If this is happening then something is wrong
-		default:
-			fprintf(stderr, "Fatal internal compiler error: invalid value name type detected\n");
-			exit(1);
-	}
 }
 
 
@@ -4294,10 +4276,22 @@ static three_addr_var_t* get_value_name(three_addr_var_t* variable){
  * similar to the way that register allocation coalescence works except that this
  * one does not rely on interference, and instead relies on proven value names
  */
-static inline void perform_value_name_substitutions(instruction_t* instruction){
+static inline void perform_value_name_substitutions(value_numbering_table_t* table, instruction_t* instruction){
 	//Do it for op1 and op2
-	instruction->op1 = get_value_name(instruction->op1);
-	instruction->op2 = get_value_name(instruction->op2);
+	instruction->op1 = get_value_name(table, instruction->op1);
+	instruction->op2 = get_value_name(table, instruction->op2);
+
+	//Run through all of the parameters
+	for(u_int32_t i = 0; i < instruction->parameters.current_index; i++){
+		//Grab it out
+		three_addr_var_t* variable = dynamic_array_get_at(&(instruction->parameters), i);
+
+		//Value number it
+		variable = get_value_name(table, variable);
+
+		//Now set it in
+		dynamic_array_set_at(&(instruction->parameters), variable, i);
+	}
 }
 
 
@@ -4351,6 +4345,8 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 
 	//So long as we see phi functions
 	while(cursor != NULL && cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
+		//TODO NEED PHI FUNC VALUING
+
 		//It's redundant so we continue out
 		if(convert_phi_function_if_redundant(cursor) == TRUE){
 			cursor = cursor->next_statement;
@@ -4390,7 +4386,7 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 			 * First we will use the value numberer itself to 
 			 * perform all necessary substitutions
 			 */
-			perform_value_name_substitutions(cursor);
+			perform_value_name_substitutions(table, cursor);
 
 			/**
 			 * Once we end up down here, we know that we have something that
@@ -4428,20 +4424,19 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 				//The op1 is just the result that we found
 				cursor->op1 = found_result;
 
-				/**
-				 * Populate the value name here. This is a variable value name
-				 * and will always be. This will ensure that we're always
-				 * using the assignee instead of the given variable down the
-				 * road
-				 */
-				cursor->assignee->value_name.value_name_type = VALUE_NAME_SUB_VARIABLE;
-				cursor->assignee->value_name.subsitution.substitution_variable = found_result;
-
 				//We've used this one more time
 				found_result->use_count++;
 
-				//Destroy the textual string - we don't need it
-				dynamic_string_dealloc(&textual_string);
+				/**
+				 * Now we can use the textual string again to create a new 
+				 * record that makes sure any future instructions that use
+				 * the assignee here can instead use the result that we got
+				 */
+				clear_dynamic_string(&textual_string);
+				concatenate_value_name_string(cursor->assignee, &textual_string);
+
+				//Now we can add this to the table for future reference
+				add_value_number_expression(table, found_result, &textual_string);
 
 				//Flag that we did do a simplification
 				simplification_occured = TRUE;
@@ -4460,7 +4455,7 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 		 * The value name is stored inside of the variable itself and is linked internally
 		 */
 		} else {
-			perform_value_name_substitutions(cursor);
+			perform_value_name_substitutions(table, cursor);
 		}
 
 		//Always bump up to the next statement
@@ -4517,7 +4512,8 @@ static inline u_int32_t estimate_value_numbering_keyspace_for_function(dynamic_a
 	if(keyspace <= INSTRUCTION_NUMBER_THRESHOLD){
 		return keyspace;
 	} else {
-		return keyspace * 2;
+		//There are 3 potential variables for each instruction
+		return keyspace * 3;
 	}
 }
 
