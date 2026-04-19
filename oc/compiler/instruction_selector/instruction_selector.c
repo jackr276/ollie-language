@@ -148,6 +148,36 @@ static void print_instruction_window(instruction_window_t* window){
 
 
 /**
+ * Is this instruction going to be used to set condition codes? If so, we
+ * don't want to accidentally value number the thing and remove it
+ */
+static inline u_int8_t does_instruction_set_condition_codes(instruction_t* instruction){
+	switch(instruction->instruction_type){
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+			switch(instruction->op){
+				case G_THAN:
+				case G_THAN_OR_EQ:
+				case L_THAN:
+				case L_THAN_OR_EQ:
+				case DOUBLE_EQUALS:
+				case NOT_EQUALS:
+					return TRUE;
+
+				default:
+					return FALSE;
+			}
+
+		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
+			return TRUE;
+
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Does the block that we're passing in end in a direct(jmp) jump to
  * the very next block. If so, we'll return what block the jump goes to.
  * If not, we'll return null.
@@ -4326,8 +4356,12 @@ static void global_value_number_block(value_numbering_table_t* table, basic_bloc
 		 * Option 1: we've found it, so this is a redundant computation. Instead of 
 		 * doing this computation, we will replace the result with a copy from the
 		 * found result into this value
+		 *
+		 * Important caveat: if this instruction sets condition codes(like a CMP instruction), we
+		 * actually can't replace it even if we do find it. This is because
 		 */
-		if(found_result != NULL){
+		if(found_result != NULL
+			&& does_instruction_set_condition_codes(cursor) == FALSE){
 			printf("FOUND A MATCH\n");
 			print_three_addr_code_stmt(stdout, cursor);
 
