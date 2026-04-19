@@ -4144,6 +4144,9 @@ static inline u_int8_t convert_phi_function_if_redundant(instruction_t* phi_func
  * some distinguishable starting keys and their given operand values
  */
 static inline void generate_value_name_key_for_instruction(instruction_t* instruction, dynamic_string_t* textual_key){
+	//For holding constant strings
+	char constant_string[300];
+
 	//Based on the instruction type we generate different keys
 	switch(instruction->instruction_type){
 		case THREE_ADDR_CODE_PHI_FUNC:
@@ -4165,6 +4168,18 @@ static inline void generate_value_name_key_for_instruction(instruction_t* instru
 		 * value names like BINx_0+y_0
 		 */
 		case THREE_ADDR_CODE_BIN_OP_STMT:
+			//Starting key
+			dynamic_string_concatenate(textual_key, "BIN");
+			
+			//First op
+			get_value_name(instruction->op1, textual_key);
+
+			//Actual opcode
+			dynamic_string_add_char_to_back(textual_key, instruction->op);
+
+			//Second op
+			get_value_name(instruction->op2, textual_key);
+
 			break;
 
 		/**
@@ -4172,7 +4187,23 @@ static inline void generate_value_name_key_for_instruction(instruction_t* instru
 		 * have value names like BINx_0-2
 		 */
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+			//Starting key
+			dynamic_string_concatenate(textual_key, "BIN");
+			
+			//First op
+			get_value_name(instruction->op1, textual_key);
 
+			//Actual opcode
+			dynamic_string_add_char_to_back(textual_key, instruction->op);
+
+			//Generate the constant string as well
+			sprintf(constant_string, "%d_%ld", instruction->op1_const->const_type, instruction->op1_const->constant_value.signed_long_constant);
+			
+			//Add this in
+			dynamic_string_concatenate(textual_key, constant_string);
+
+			break;
+ 
 		default:
 			break;
 	}
