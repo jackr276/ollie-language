@@ -156,13 +156,18 @@ static inline u_int8_t does_instruction_set_condition_codes(instruction_t* instr
 		case THREE_ADDR_CODE_BIN_OP_STMT:
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 			switch(instruction->op){
+				/**
+				 * These will all have a flag that tells us whether or not they set
+				 * condition codes. We will rely on that flag for these instructions.
+				 * For other instructions it does not matter
+				 */
 				case G_THAN:
 				case G_THAN_OR_EQ:
 				case L_THAN:
 				case L_THAN_OR_EQ:
 				case DOUBLE_EQUALS:
 				case NOT_EQUALS:
-					return TRUE;
+					return instruction->assignee->sets_cc;
 
 				default:
 					return FALSE;
@@ -4483,8 +4488,6 @@ static void global_value_number_block(value_numbering_table_t* table, basic_bloc
 		 */
 		if(found_result != NULL
 			&& does_instruction_set_condition_codes(cursor) == FALSE){
-			printf("FOUND A MATCH\n");
-			print_three_addr_code_stmt(stdout, cursor);
 
 			//This is now an assignment statement
 			cursor->statement_type = THREE_ADDR_CODE_ASSN_STMT;

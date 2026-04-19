@@ -209,6 +209,8 @@ struct three_addr_var_t{
 	u_int8_t is_dereferenced;
 	//Is this a stack pointer?
 	u_int8_t is_stack_pointer;
+	//Does this set condition codes?
+	u_int8_t sets_cc;
 	//What is the size of this variable
 	variable_size_t variable_size;
 	//What membership do we have if any
