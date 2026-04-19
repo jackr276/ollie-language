@@ -35,6 +35,18 @@ typedef struct three_addr_const_t three_addr_const_t;
 typedef struct live_range_t live_range_t;
 //The definition of a global variable container
 typedef struct global_variable_t global_variable_t;
+//The value name struct for variables
+typedef struct value_name_t value_name_t;
+
+/**
+ * The value name tag tells us if we have a value
+ * name to substitute in or not. The default
+ * option is none
+ */
+typedef enum {
+	VALUE_NAME_SUB_NONE,
+	VALUE_NAME_SUB_VARIABLE,
+} value_name_tag_t;
 
 /**
  * This enumeration will tell the printer in the final
@@ -171,6 +183,22 @@ struct live_range_t {
 
 
 /**
+ * The value name struct is used by the compiler
+ * to identify where copies can be optimized
+ *
+ * FUTURE ENHANCEMENT: constant propogation
+ */
+struct value_name_t {
+	union {
+		three_addr_const_t* substitution_constant;
+		three_addr_var_t* substitution_variable;
+	} subsitution;
+
+	value_name_tag_t value_name_type;
+};
+
+
+/**
  * A three address var may be a temp variable or it may be
  * linked to a non-temp variable. It keeps a generation counter
  * for eventual SSA and type information
@@ -182,7 +210,8 @@ struct three_addr_var_t{
 	generic_type_t* type;
 	//What live range is this variable associate with
 	live_range_t* associated_live_range;
-
+	//The value name for the given variable
+	value_name_t value_name;
 	union {
 		//What is the stack region associated with this variable?
 		stack_region_t* stack_region;
