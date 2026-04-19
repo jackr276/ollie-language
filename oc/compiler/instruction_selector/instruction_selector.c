@@ -4187,8 +4187,51 @@ static inline void generate_value_name_key_for_instruction(instruction_t* instru
 
 			break;
 
+		/**
+		 * For a lea there are several different
+		 * kinds, so we'll need to account for each
+		 * different kind accordingly
+		 */
 		case THREE_ADDR_CODE_LEA_STMT:
+			dynamic_string_concatenate(textual_key, "LEA");
+
 			//TODO
+			exit(1);
+
+			switch(instruction->lea_statement_type){
+				case OIR_LEA_TYPE_INDEX_AND_SCALE:
+					break;
+					
+				case OIR_LEA_TYPE_REGISTERS_AND_SCALE:
+					break;
+
+				case OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE:
+					break;
+
+				case OIR_LEA_TYPE_OFFSET_ONLY:
+					break;
+
+				case OIR_LEA_TYPE_REGISTERS_AND_OFFSET:
+					break;
+
+				case OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE:
+					break;
+
+				case OIR_LEA_TYPE_REGISTERS_ONLY:
+					break;
+
+				case OIR_LEA_TYPE_RIP_RELATIVE:
+					break;
+
+				case OIR_LEA_TYPE_RIP_RELATIVE_WITH_OFFSET:
+					break;
+
+				//We should never get here
+				default:
+					fprintf(stderr, "Fatal internal compiler error: invalid lea type detected in value numberer\n");
+					exit(1);
+			}
+
 			break;
 
 		/**
