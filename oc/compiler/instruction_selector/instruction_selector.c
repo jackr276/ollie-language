@@ -4309,22 +4309,43 @@ static void global_value_number_block(value_numbering_table_t* table, basic_bloc
 				cursor = cursor->next_statement;
 				continue;
 		}
+
+		/**
+		 * Once we end up down here, we know that we have something that
+		 * is worth considering for us. We will now get the value name
+		 * for this instruction to see if it has already been computed 
+		 * before
+		 */
+		dynamic_string_t textual_string = dynamic_string_alloc();
+
+		//Generate the value name
+		generate_value_name_key_for_instruction(cursor, &textual_string);
+
+		//Can we find the result in the table?
+		three_addr_var_t* found_result = lookup_value_number_expression(table, &textual_string);
+
+		/**
+		 * Option 1: we've found it, so this is a redundant computation. Instead of 
+		 * doing this computation, we will replace the result with a copy from the
+		 * found result into this value
+		 */
+		if(found_result != NULL){
+			printf("FOUND A MATCH\n");
+			print_three_addr_code_stmt(stdout, cursor);
+
+
+		/**
+		 * Option 2: we've found nothing, so this is a brand new computation. We will 
+		 * need to account for this by adding a new value name inside of the hash table
+		 * for future passes
+		 */
+		} else {
+			add_value_number_expression(table, cursor->assignee, &textual_string);
+		}
+
+		//Go onto the next statemnt
+		cursor = cursor->next_statement;
 	}
-
-	/**
-	 * Once we end up down here, we know that we have something that
-	 * is worth considering for us. We will now get the value name
-	 * for this instruction to see if it has already been computed 
-	 * before
-	 */
-	dynamic_string_t value_name = dynamic_string_alloc();
-
-	//Generate the value name
-	generate_value_name_key_for_instruction(cursor, &value_name);
-
-
-
-
 
 	/**
 	 * For each child c of the block in the *dominator* tree, we will
