@@ -4148,13 +4148,17 @@ static inline void generate_value_name_key_for_instruction(instruction_t* instru
 	char constant_string[300];
 
 	//Based on the instruction type we generate different keys
-	switch(instruction->instruction_type){
+	switch(instruction->statement_type){
 		case THREE_ADDR_CODE_PHI_FUNC:
 			dynamic_string_concatenate(textual_key, "PHI");
 
 			//Concatenate the variable name of each of the parameters onto the end
 			for(u_int32_t i = 0; i < instruction->parameters.current_index; i++){
-				get_value_name(dynamic_array_get_at(&(instruction->parameters), i), textual_key);
+				//Extract the var
+				three_addr_var_t* variable = dynamic_array_get_at(&(instruction->parameters), i);
+
+				//Grab it's value name
+				get_value_name(variable, textual_key);
 			}
 
 			break;
