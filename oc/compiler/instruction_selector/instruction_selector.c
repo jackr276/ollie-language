@@ -4138,6 +4138,10 @@ static inline u_int8_t convert_phi_function_if_redundant(instruction_t* phi_func
  * instruction consists of the instruction type converted to a char *and*
  * the variables that are inside of it. We are given an allocated
  * dynamic string as the key for this function and we will populate it
+ *
+ * Remember that these value names are not meant to be anything fancy, they
+ * just need to be unique. As such we will generate the value names with
+ * some distinguishable starting keys and their given operand values
  */
 static inline void generate_value_name_key_for_instruction(instruction_t* instruction, dynamic_string_t* textual_key){
 	//Based on the instruction type we generate different keys
@@ -4152,7 +4156,23 @@ static inline void generate_value_name_key_for_instruction(instruction_t* instru
 
 			break;
 
-		//TODO NOT IN YET
+		case THREE_ADDR_CODE_LEA_STMT:
+			//TODO
+			break;
+
+		/**
+		 * For a bin op statement we'll have
+		 * value names like BINx_0+y_0
+		 */
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+			break;
+
+		/**
+		 * For bin op with const statements we'll
+		 * have value names like BINx_0-2
+		 */
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+
 		default:
 			break;
 	}
