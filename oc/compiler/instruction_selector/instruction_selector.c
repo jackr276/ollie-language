@@ -4334,15 +4334,28 @@ static void global_value_numbering_pass(symtab_function_record_t* function, basi
  * until we see the first pass where we experience no change at all.
  */
 static void simplify(cfg_t* cfg){
-	//We will do each function individually for efficiency reasons. This way, if
-	//one function requires a lot of simplification, it will not drag the rest of the 
-	//functions along with it in each pass
+	/**
+	 * We will do each function individually for efficiency reasons. This way, if
+	 * one function requires a lot of simplification, it will not drag the rest of the 
+	 * functions along with it in each pass
+	 */
 	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Extract it
 		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
+		//Extract the function record too
+		symtab_function_record_t* function = function_entry->function_defined_in;
+
 		//Let this keep going until we're done changing
 		while(simplifier_pass(function_entry) == TRUE);
+
+		/**
+		 * Once we're confident that we've done all of the simplifying that we can, we 
+		 * will now attempt to run a global value numbering pass for this function. If
+		 * this pass optimizes anything, we will then retrigger the simplifier
+		 * to see if there are any more opportuntities
+		 */
+		global_value_numbering_pass(function, function_entry, &(function->function_blocks));
 	}
 }
 
