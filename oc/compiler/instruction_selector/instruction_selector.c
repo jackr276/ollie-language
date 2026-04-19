@@ -4049,7 +4049,7 @@ static u_int8_t simplifier_pass(basic_block_t* entry){
  * a given dynamic string. It is a assumed that the string has been
  * allocated by the caller
  */
-static void get_value_name(three_addr_var_t* variable, dynamic_string_t* output){
+static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_string_t* output){
 	//Allocate a temporary buffer for this
 	char buffer[1000];
 	//Holder for the variable record
@@ -4205,7 +4205,7 @@ static inline void generate_value_name_key_for_instruction(instruction_t* instru
 				three_addr_var_t* variable = dynamic_array_get_at(&(instruction->parameters), i);
 
 				//Grab it's value name
-				get_value_name(variable, textual_key);
+				concatenate_value_name_string(variable, textual_key);
 			}
 
 			break;
@@ -4219,13 +4219,13 @@ static inline void generate_value_name_key_for_instruction(instruction_t* instru
 			dynamic_string_concatenate(textual_key, "BIN");
 			
 			//First op
-			get_value_name(instruction->op1, textual_key);
+			concatenate_value_name_string(instruction->op1, textual_key);
 
 			//Actual opcode
 			dynamic_string_add_char_to_back(textual_key, instruction->op);
 
 			//Second op
-			get_value_name(instruction->op2, textual_key);
+			concatenate_value_name_string(instruction->op2, textual_key);
 
 			break;
 
@@ -4238,7 +4238,7 @@ static inline void generate_value_name_key_for_instruction(instruction_t* instru
 			dynamic_string_concatenate(textual_key, "BIN");
 			
 			//First op
-			get_value_name(instruction->op1, textual_key);
+			concatenate_value_name_string(instruction->op1, textual_key);
 
 			//Actual opcode
 			dynamic_string_add_char_to_back(textual_key, instruction->op);
@@ -4395,6 +4395,13 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 			} else {
 				add_value_number_expression(table, cursor->assignee, &textual_string);
 			}
+
+		/**
+		 * Otherwise, it is not eligible but we can still perform value name subsitution on this. 
+		 * The value name is stored inside of the variable itself and is linked internally
+		 */
+		} else {
+
 		}
 
 		//Always bump up to the next statement
