@@ -4299,14 +4299,29 @@ static three_addr_var_t* get_value_name(value_numbering_table_t* table, three_ad
  * run or not
  */
 static inline u_int8_t perform_value_name_substitutions(value_numbering_table_t* table, instruction_t* instruction){
+	//Did we or did we not perform a substitution
+	u_int8_t substitution_occured = FALSE;
+
 	//Temp holder for our value names
-	instruction_t* value_name;
+	three_addr_var_t* value_name;
 
-	//Do it for op1 and op2
-	instruction->op1 = get_value_name(table, instruction->op1);
-	instruction->op2 = get_value_name(table, instruction->op2);
+	//First comes op1
+	value_name = get_value_name(table, instruction->op1);
 
-	//TODO DIFFERENCE DET.
+	//Flag that this is true
+	if(value_name != instruction->op1){
+		instruction->op1 = value_name;
+		substitution_occured = TRUE;
+	}
+
+	//Now do it for op2
+	value_name = get_value_name(table, instruction->op2);
+
+	//Flag that this is true
+	if(value_name != instruction->op2){
+		instruction->op2 = value_name;
+		substitution_occured = TRUE;
+	}
 
 	//Run through all of the parameters
 	for(u_int32_t i = 0; i < instruction->parameters.current_index; i++){
@@ -4314,11 +4329,19 @@ static inline u_int8_t perform_value_name_substitutions(value_numbering_table_t*
 		three_addr_var_t* variable = dynamic_array_get_at(&(instruction->parameters), i);
 
 		//Value number it
-		variable = get_value_name(table, variable);
+		value_name = get_value_name(table, variable);
 
-		//Now set it in
-		dynamic_array_set_at(&(instruction->parameters), variable, i);
+		//If we found a difference then we will flag it here
+		if(value_name != variable){
+			//Add it
+			dynamic_array_set_at(&(instruction->parameters), variable, i);
+
+			//Flag it
+			substitution_occured = TRUE;
+		}
 	}
+
+	return substitution_occured;
 }
 
 
@@ -4415,7 +4438,9 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 			 * First we will use the value numberer itself to 
 			 * perform all necessary substitutions
 			 */
-			perform_value_name_substitutions(table, cursor);
+			if(perform_value_name_substitutions(table, cursor) == TRUE){
+				simplification_occured = TRUE;
+			}
 
 			/**
 			 * Once we end up down here, we know that we have something that
@@ -4484,7 +4509,9 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 		 * The value name is stored inside of the variable itself and is linked internally
 		 */
 		} else {
-			perform_value_name_substitutions(table, cursor);
+			if(perform_value_name_substitutions(table, cursor) == TRUE){
+				simplification_occured = TRUE;
+			}
 		}
 
 		//Always bump up to the next statement
