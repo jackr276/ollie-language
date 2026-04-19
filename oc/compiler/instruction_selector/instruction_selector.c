@@ -4196,6 +4196,10 @@ static inline void generate_value_name_key_for_instruction(instruction_t* instru
 		 * For a lea there are several different
 		 * kinds, so we'll need to account for each
 		 * different kind accordingly
+		 *
+		 * NOTE: this is currently not implemented, though the stubbing
+		 * is all here for the lea statements, there is going to need to
+		 * be some extra work done here to make this happen
 		 */
 		case THREE_ADDR_CODE_LEA_STMT:
 			dynamic_string_concatenate(textual_key, "LEA");
@@ -4442,20 +4446,6 @@ static void global_value_number_block(value_numbering_table_t* table, basic_bloc
 		switch(cursor->statement_type){
 			case THREE_ADDR_CODE_BIN_OP_STMT:
 			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-				break;
-
-			case THREE_ADDR_CODE_LEA_STMT:
-				switch(cursor->lea_statement_type){
-					//We will skip these as they are meant to be simplified
-					case OIR_LEA_TYPE_RIP_RELATIVE:
-					case OIR_LEA_TYPE_RIP_RELATIVE_WITH_OFFSET:
-						cursor = cursor->next_statement;
-						continue;
-
-					default:
-						break;
-				}
-
 				break;
 
 			//Skip ahead
