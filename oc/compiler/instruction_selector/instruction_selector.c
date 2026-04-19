@@ -4427,8 +4427,6 @@ static void global_value_number_block(value_numbering_table_t* table, basic_bloc
 	 * Now that we've done everything that need be done for the phi function,
 	 * we will go through and use global value numbering on every statement
 	 * that we consider to be eligible. 
-	 *
-	 * TODO ADD LEAS
 	 */
 	while(cursor != NULL){
 		/**
@@ -12516,7 +12514,6 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		return;
 	}
 
-
 	/**
 	 * Compressing lea constant loads with the rip-relative addressing that
 	 * comes before them
@@ -12534,8 +12531,10 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE){
 
-		//Invoke a special helper here that will deal with the selection for us and also
-		//modify our window
+		/**
+		 * Invoke a special helper here that will deal with the selection for us and also
+		 * modify our window
+		 */
 		combine_lea_with_regular_load_instruction(window, window->instruction1, window->instruction2);
 		return;
 	}
@@ -12552,8 +12551,10 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		//Is the lea's assignee equal to the offset of the load
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op2, TRUE) == TRUE){
 
-		//Let the helper deal with it. This helper handles all possible cases, so once it's done this whole
-		//rule is done and we can return
+		/**
+		 * Let the helper deal with it. This helper handles all possible cases, so once it's done this whole
+		 * rule is done and we can return
+		 */
 		combine_lea_with_variable_offset_load_instruction(window, window->instruction1, window->instruction2);
 		return;
 	}
@@ -12569,8 +12570,10 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		//Is the lea's assignee equal to the offset(op1) of the store
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE){
 
-		//Let the helper deal with it. This helper handles all possible cases, so once it's done this whole
-		//rule is done and we can return
+		/**
+		 * Let the helper deal with it. This helper handles all possible cases, so once it's done this whole
+		 * rule is done and we can return
+		 */
 		combine_lea_with_variable_offset_store_instruction(window, window->instruction1, window->instruction2);
 		return;
 	}
