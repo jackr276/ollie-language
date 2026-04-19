@@ -4235,10 +4235,8 @@ static inline void generate_value_name_key_for_instruction(instruction_t* instru
  * 		get value numbers for each operand
  * 		if the expression(Ti) has been computed before:
  * 			replace the operation i with a copy from Ti
- * 			associate the value number with Ti
  * 		else:
  * 			insert a new value number into the table at the hash key location
- * 			record that new value number for Ti
  *
  * 	for each successor c of block b:
  * 		replace all phi node operands in c that were computed in this block with their value
@@ -4333,6 +4331,19 @@ static void global_value_number_block(value_numbering_table_t* table, basic_bloc
 			printf("FOUND A MATCH\n");
 			print_three_addr_code_stmt(stdout, cursor);
 
+			//This is now an assignment statement
+			cursor->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+
+			//Null out everything else just to be safe
+			cursor->op2 = NULL;
+			cursor->op1_const = NULL;
+			cursor->op = BLANK;
+
+			//The op1 is just the result that we found
+			cursor->op1 = found_result;
+
+			//Destroy the textual string - we don't need it
+			dynamic_string_dealloc(&textual_string);
 
 		/**
 		 * Option 2: we've found nothing, so this is a brand new computation. We will 
@@ -4427,7 +4438,7 @@ static inline u_int32_t estimate_value_numbering_keyspace_for_function(dynamic_a
  * For right now, we will limit the value numbering to non-constant operations. In the future we will probably
  * expand this to include constants as well
  */
-static void global_value_numbering_pass(symtab_function_record_t* function, basic_block_t* function_entry_block, dynamic_array_t* function_blocks){
+static void global_value_numbering_pass(basic_block_t* function_entry_block, dynamic_array_t* function_blocks){
 	//Estimate the keyspace first
 	u_int32_t keyspace = estimate_value_numbering_keyspace_for_function(function_blocks);
 
@@ -4475,7 +4486,7 @@ static void simplify(cfg_t* cfg){
 		 * this pass optimizes anything, we will then retrigger the simplifier
 		 * to see if there are any more opportuntities
 		 */
-		global_value_numbering_pass(function, function_entry, &(function->function_blocks));
+		global_value_numbering_pass(function_entry, &(function->function_blocks));
 	}
 }
 
