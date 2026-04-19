@@ -4284,7 +4284,6 @@ static three_addr_var_t* get_value_name(value_numbering_table_t* table, three_ad
 		return variable;
 	//Otherwise we found something, so we'll hand that back
 	} else {
-		printf("HERE\n\n\n\n\n");
 		return value_name_substitution;
 	}
 }
@@ -4294,11 +4293,20 @@ static three_addr_var_t* get_value_name(value_numbering_table_t* table, three_ad
  * For every RHS variable, we will perform value name substitutions. This is very
  * similar to the way that register allocation coalescence works except that this
  * one does not rely on interference, and instead relies on proven value names
+ *
+ * This function will flag if a substution actually went through or not. This is important
+ * because that is our check for whether or not this whole thing needs a simplification
+ * run or not
  */
-static inline void perform_value_name_substitutions(value_numbering_table_t* table, instruction_t* instruction){
+static inline u_int8_t perform_value_name_substitutions(value_numbering_table_t* table, instruction_t* instruction){
+	//Temp holder for our value names
+	instruction_t* value_name;
+
 	//Do it for op1 and op2
 	instruction->op1 = get_value_name(table, instruction->op1);
 	instruction->op2 = get_value_name(table, instruction->op2);
+
+	//TODO DIFFERENCE DET.
 
 	//Run through all of the parameters
 	for(u_int32_t i = 0; i < instruction->parameters.current_index; i++){
@@ -4364,10 +4372,12 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 
 	//So long as we see phi functions
 	while(cursor != NULL && cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
-		//TODO NEED PHI FUNC VALUING
-
 		//It's redundant so we continue out
 		if(convert_phi_function_if_redundant(cursor) == TRUE){
+			//This is a simplification
+			simplification_occured = TRUE;
+
+			//Onto the next one
 			cursor = cursor->next_statement;
 			continue;
 		}
@@ -4629,7 +4639,6 @@ static void simplify(cfg_t* cfg){
 		 * we do our value naming for real
 		 */
 		if(simplification_occured == TRUE){
-			printf("HERE\n\n\n\n");
 			while(simplifier_pass(function_entry) == TRUE);
 		}
 	}
