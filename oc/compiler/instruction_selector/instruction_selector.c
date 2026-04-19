@@ -4258,6 +4258,30 @@ static inline void generate_value_name_key_for_instruction(instruction_t* instru
 
 
 /**
+ * Get the value name for a given variable. The way we do this
+ * involves drilling down recursively until we hit the bottom
+ * depths
+ */
+static three_addr_var_t* get_value_name(three_addr_var_t* variable){
+	//Simple catch case if we hit it
+	if(variable == NULL){
+		return NULL;
+	}
+
+}
+
+
+/**
+ * For every RHS variable, we will perform value name substitutions. This is very
+ * similar to the way that register allocation coalescence works except that this
+ * one does not rely on interference, and instead relies on proven value names
+ */
+static inline void perform_value_name_substitutions(instruction_t* instruction){
+
+}
+
+
+/**
  * Perform the value numbering algorithm for one block. This algorithm
  * naturally reproduces itself in a recursive manner by traversing the dominator tree.
  * Traversing a dominator tree will naturally traverse the function in reverse post
@@ -4343,6 +4367,12 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 		 */
 		if(is_expression_eligible_for_value_numbering(cursor)){
 			/**
+			 * First we will use the value numberer itself to 
+			 * perform all necessary substitutions
+			 */
+			perform_value_name_substitutions(cursor);
+
+			/**
 			 * Once we end up down here, we know that we have something that
 			 * is worth considering for us. We will now get the value name
 			 * for this instruction to see if it has already been computed 
@@ -4378,6 +4408,15 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 				//The op1 is just the result that we found
 				cursor->op1 = found_result;
 
+				/**
+				 * Populate the value name here. This is a variable value name
+				 * and will always be. This will ensure that we're always
+				 * using the assignee instead of the given variable down the
+				 * road
+				 */
+				cursor->assignee->value_name.value_name_type = VALUE_NAME_SUB_VARIABLE;
+				cursor->assignee->value_name.subsitution.substitution_variable = found_result;
+
 				//We've used this one more time
 				found_result->use_count++;
 
@@ -4401,7 +4440,7 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 		 * The value name is stored inside of the variable itself and is linked internally
 		 */
 		} else {
-
+			perform_value_name_substitutions(cursor);
 		}
 
 		//Always bump up to the next statement
