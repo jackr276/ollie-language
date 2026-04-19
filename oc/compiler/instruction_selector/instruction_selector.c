@@ -30,6 +30,9 @@ static generic_type_t* u16;
 static generic_type_t* i16;
 static generic_type_t* u8;
 
+//The dynamic string that we reuse for searching
+static dynamic_string_t value_name_searcher_string;
+
 static inline three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type);
 
 //A holder for the stack pointer
@@ -4268,6 +4271,22 @@ static three_addr_var_t* get_value_name(value_numbering_table_t* table, three_ad
 		return NULL;
 	}
 
+	//Clear out the search string
+	clear_dynamic_string(&value_name_searcher_string);
+	//Add the name to the string
+	concatenate_value_name_string(variable, &value_name_searcher_string);
+
+	//Try to find it
+	three_addr_var_t* value_name_substitution = lookup_value_number_expression(table, &value_name_searcher_string);
+
+	//Most common - it's null, just return ourselves
+	if(value_name_substitution == NULL){
+		return variable;
+	//Otherwise we found something, so we'll hand that back
+	} else {
+		printf("HERE\n\n\n\n\n");
+		return value_name_substitution;
+	}
 }
 
 
@@ -12721,6 +12740,9 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	u16 = lookup_type_name_only(cfg->type_symtab, "u16", NOT_MUTABLE)->type;
 	u8 = lookup_type_name_only(cfg->type_symtab, "u8", NOT_MUTABLE)->type;
 
+	//Allocate it
+	value_name_searcher_string = dynamic_string_alloc();
+
 	//Stash the stack pointer & instruction pointer
 	stack_pointer_variable = cfg->stack_pointer;
 	instruction_pointer_variable = cfg->instruction_pointer;
@@ -12765,4 +12787,7 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	if(print_irs == TRUE){
 		print_ordered_blocks(cfg, PRINT_INSTRUCTION);
 	}
+
+	//We no longer need this string
+	dynamic_string_dealloc(&value_name_searcher_string);
 }
