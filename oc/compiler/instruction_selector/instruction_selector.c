@@ -11485,6 +11485,8 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			 */
 			if(lea_statement->assignee->use_count <= 1){
 				delete_statement(lea_statement);
+			} else {
+				handle_lea_statement(lea_statement);
 			}
 
 			//Rebuild the window around the load
@@ -11531,6 +11533,8 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			 */
 			if(lea_statement->assignee->use_count <= 1){
 				delete_statement(lea_statement);
+			} else {
+				handle_lea_statement(lea_statement);
 			}
 
 			//Rebuild the window around the load
@@ -11582,6 +11586,8 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			 */
 			if(lea_statement->assignee->use_count <= 1){
 				delete_statement(lea_statement);
+			} else {
+				handle_lea_statement(lea_statement);
 			}
 
 			//Rebuild around the load
@@ -11633,6 +11639,8 @@ static void combine_lea_with_regular_load_instruction(instruction_window_t* wind
 			 */
 			if(lea_statement->assignee->use_count <= 1){
 				delete_statement(lea_statement);
+			} else {
+				handle_lea_statement(lea_statement);
 			}
 
 			//Rebuild the window based on the load statement
@@ -12287,6 +12295,8 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 			 */
 			if(lea_statement->assignee->use_count <= 1){
 				delete_statement(lea_statement);
+			} else {
+				handle_lea_statement(lea_statement);
 			}
 
 			//Rebuild around the final instruction(the store)
@@ -12330,6 +12340,8 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 			 */
 			if(lea_statement->assignee->use_count <= 1){
 				delete_statement(lea_statement);
+			} else {
+				handle_lea_statement(lea_statement);
 			}
 
 			//Rebuild around the final instruction(the store)
@@ -12374,14 +12386,13 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 			//This will always have registers, an offset and a scale
 			variable_offset_store->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
 
-			//The lea is redundant
-			delete_statement(lea_statement);
-
 			/**
 			 * We can delete this *if* it's not being used by someone else
 			 */
 			if(lea_statement->assignee->use_count <= 1){
 				delete_statement(lea_statement);
+			} else {
+				handle_lea_statement(lea_statement);
 			}
 
 			//Rebuild around the final instruction(the store)
