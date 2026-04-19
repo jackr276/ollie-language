@@ -14,7 +14,7 @@
  * us doing this entire process anyway. This will exclude most tiny
  * functions from the value numbering run which is a good efficiency boost
  */
-#define INSTRUCTION_NUMBER_THRESHOLD 10
+#define INSTRUCTION_NUMBER_THRESHOLD 6
 
 //Link to instruction for the three addr var
 #include "../../instruction/instruction.h"
