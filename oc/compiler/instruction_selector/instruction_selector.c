@@ -4269,7 +4269,10 @@ static inline void generate_value_name_key_for_instruction(instruction_t* instru
  * 	for each child c of block b in the dominator tree
  * 		Dominator Value Numbering Traversal(b)
  */
-static void global_value_number_block(value_numbering_table_t* table, basic_block_t* block){
+static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_block_t* block){
+	//Were we able to perform any value numbering? If so flag this as true
+	u_int8_t simplification_occured = FALSE;
+
 	/**
 	 * 	for each phi node in b:
 	 * 		if phi node is redundant then:
@@ -4373,6 +4376,9 @@ static void global_value_number_block(value_numbering_table_t* table, basic_bloc
 			//Destroy the textual string - we don't need it
 			dynamic_string_dealloc(&textual_string);
 
+			//Flag that we did do a simplification
+			simplification_occured = TRUE;
+
 		/**
 		 * Option 2: we've found nothing, so this is a brand new computation. We will 
 		 * need to account for this by adding a new value name inside of the hash table
@@ -4394,9 +4400,17 @@ static void global_value_number_block(value_numbering_table_t* table, basic_bloc
 		//Extract the dominator chid
 		basic_block_t* dominator_child = dynamic_array_get_at(&(block->dominator_children), i);
 
-		//Recursively explore this one next
-		global_value_number_block(table, dominator_child);
+		/**
+		 * Recursively explore this one next. If we notice that this child
+		 * block had some simplification occur, then we'll set the flag
+		 */
+		if(global_value_number_block(table, dominator_child) == TRUE){
+			simplification_occured = TRUE;
+		}
 	}
+
+	//Return whether or not we did any simplifying
+	return simplification_occured;
 }
 
 
@@ -4466,26 +4480,27 @@ static inline u_int32_t estimate_value_numbering_keyspace_for_function(dynamic_a
  * For right now, we will limit the value numbering to non-constant operations. In the future we will probably
  * expand this to include constants as well
  */
-static void global_value_numbering_pass(basic_block_t* function_entry_block, dynamic_array_t* function_blocks){
+static u_int8_t global_value_numbering_pass(basic_block_t* function_entry_block, dynamic_array_t* function_blocks){
 	//Estimate the keyspace first
 	u_int32_t keyspace = estimate_value_numbering_keyspace_for_function(function_blocks);
 
 	//If we are below the threshold, we'll skip this function as it almost certainly isn't worth it
 	if(keyspace <= INSTRUCTION_NUMBER_THRESHOLD){
-		return;
+		return FALSE;
 	}
 
 	//Otherwise we can allocate our hash table
 	value_numbering_table_t numbering_table = value_numbering_table_alloc(keyspace);
 	
 	//Invoke the value numberer with the function entry block as our starting point
-	global_value_number_block(&numbering_table, function_entry_block);
+	u_int8_t simplification_occured = global_value_number_block(&numbering_table, function_entry_block);
 
 	//Destroy the table once down
 	value_numbering_table_dealloc(&numbering_table);
+
+	//Give back whether or not we did anything
+	return simplification_occured;
 }
-
-
 
 
 /**
@@ -4498,7 +4513,7 @@ static void simplify(cfg_t* cfg){
 	 * one function requires a lot of simplification, it will not drag the rest of the 
 	 * functions along with it in each pass
 	 */
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+	for(u_int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Extract it
 		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
@@ -4514,7 +4529,19 @@ static void simplify(cfg_t* cfg){
 		 * this pass optimizes anything, we will then retrigger the simplifier
 		 * to see if there are any more opportuntities
 		 */
-		global_value_numbering_pass(function_entry, &(function->function_blocks));
+		u_int8_t simplification_occured = global_value_numbering_pass(function_entry, &(function->function_blocks));
+
+		/**
+		 * If we did do any global value numbering, then we'll need to come back
+		 * and resimplify to make sure we haven't missed anything post-simplify
+		 *
+		 * TODO - we're going to need to add a dead code shakeout here too once
+		 * we do our value naming for real
+		 */
+		if(simplification_occured == TRUE){
+			printf("HERE\n\n\n\n");
+			while(simplifier_pass(function_entry) == TRUE);
+		}
 	}
 }
 
