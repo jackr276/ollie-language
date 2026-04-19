@@ -4002,7 +4002,7 @@ static u_int8_t simplifier_pass(basic_block_t* entry){
  * a given dynamic string. It is a assumed that the string has been
  * allocated by the caller
  */
-static inline void get_value_name(three_addr_var_t* variable, dynamic_string_t* output){
+static void get_value_name(three_addr_var_t* variable, dynamic_string_t* output){
 	//Allocate a temporary buffer for this
 	char buffer[1000];
 	//Holder for the variable record
@@ -4270,12 +4270,17 @@ static void global_value_number_block(value_numbering_table_t* table, basic_bloc
 		 * will generate the value name for it and save it inside. We need to do
 		 * this so that we have a trail of where it came from
 		 */
+		dynamic_string_t textual_key = dynamic_string_alloc();
 
-
+		//Generate the value name like so
+		generate_value_name_key_for_instruction(cursor, &textual_key);
+		
+		//Now add this in with the key as our name, and the value as the assignee
+		add_value_number_expression(table, cursor->assignee, &textual_key);
+		
 		//Bump it up
 		cursor = cursor->next_statement;
 	}
-
 
 
 	/**

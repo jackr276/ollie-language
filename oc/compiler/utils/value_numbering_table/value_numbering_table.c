@@ -76,14 +76,14 @@ value_numbering_table_t value_numbering_table_alloc(u_int32_t keyspace){
  * Add a given value into the hash table. Note that once this happens the memory for the dynamic string
  * is owned by this hash table 
  */
-void add_value_number_expression(value_numbering_table_t* table, three_addr_var_t* result, dynamic_string_t textual_key){
+void add_value_number_expression(value_numbering_table_t* table, three_addr_var_t* result, dynamic_string_t* textual_key){
 	//First we'll need to hash this
-	u_int64_t textual_key_hash = hash(textual_key.string, table->keyspace);
+	u_int64_t textual_key_hash = hash(textual_key->string, table->keyspace);
 
 	//Allocate the fresh node here and populate it
 	value_numbering_node_t* new_node = calloc(1, sizeof(value_numbering_node_t));
 	new_node->result_value = result;
-	new_node->textual_key = textual_key;
+	new_node->textual_key = *textual_key;
 
 	//Grab a pointer to the current value
 	value_numbering_node_t* cursor = table->table[textual_key_hash];
