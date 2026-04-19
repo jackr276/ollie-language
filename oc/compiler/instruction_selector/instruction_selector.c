@@ -4298,30 +4298,6 @@ static inline void generate_value_name_key_for_instruction(instruction_t* instru
 
 					break;
 
-				case OIR_LEA_TYPE_RIP_RELATIVE:
-					//Get the value name for op2
-					get_value_name(instruction->op2, textual_key);
-
-					//Get the value name for op1
-					get_value_name(instruction->op1, textual_key);
-
-					break;
-
-				case OIR_LEA_TYPE_RIP_RELATIVE_WITH_OFFSET:
-					//Generate the constant string as well
-					sprintf(constant_string, "%d_%ld", instruction->op1_const->const_type, instruction->op1_const->constant_value.signed_long_constant);
-
-					//Add this onto the back
-					dynamic_string_concatenate(textual_key, constant_string);
-
-					//Get the value name for op2
-					get_value_name(instruction->op2, textual_key);
-
-					//Get the value name for op1
-					get_value_name(instruction->op1, textual_key);
-
-					break;
-
 				//We should never get here
 				default:
 					fprintf(stderr, "Fatal internal compiler error: invalid lea type detected in value numberer\n");
@@ -4463,7 +4439,20 @@ static void global_value_number_block(value_numbering_table_t* table, basic_bloc
 		switch(cursor->statement_type){
 			case THREE_ADDR_CODE_BIN_OP_STMT:
 			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+				break;
+
 			case THREE_ADDR_CODE_LEA_STMT:
+				switch(cursor->lea_statement_type){
+					//We will skip these as they are meant to be simplified
+					case OIR_LEA_TYPE_RIP_RELATIVE:
+					case OIR_LEA_TYPE_RIP_RELATIVE_WITH_OFFSET:
+						cursor = cursor->next_statement;
+						continue;
+
+					default:
+						break;
+				}
+
 				break;
 
 			//Skip ahead
