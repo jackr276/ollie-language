@@ -4268,6 +4268,24 @@ static three_addr_var_t* get_value_name(three_addr_var_t* variable){
 		return NULL;
 	}
 
+	/**
+	 * Now based on the value name type we will return 
+	 * whatever we're after
+	 */
+	switch(variable->value_name.value_name_type){
+		//Most common case - just give ourself back
+		case VALUE_NAME_SUB_NONE:
+			return variable;
+
+		//Otherwise, we will keep going down until we hit the bottom sub variable
+		case VALUE_NAME_SUB_VARIABLE:
+			return get_value_name(variable->value_name.subsitution.substitution_variable);
+
+		//If this is happening then something is wrong
+		default:
+			fprintf(stderr, "Fatal internal compiler error: invalid value name type detected\n");
+			exit(1);
+	}
 }
 
 
@@ -4277,7 +4295,9 @@ static three_addr_var_t* get_value_name(three_addr_var_t* variable){
  * one does not rely on interference, and instead relies on proven value names
  */
 static inline void perform_value_name_substitutions(instruction_t* instruction){
-
+	//Do it for op1 and op2
+	instruction->op1 = get_value_name(instruction->op1);
+	instruction->op2 = get_value_name(instruction->op2);
 }
 
 
