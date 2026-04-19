@@ -4200,24 +4200,57 @@ static inline void generate_value_name_key_for_instruction(instruction_t* instru
 
 			switch(instruction->lea_statement_type){
 				case OIR_LEA_TYPE_INDEX_AND_SCALE:
+					//Get the value name for op1
+					get_value_name(instruction->op1, textual_key);
+
+					//Now the multiplier
+					sprintf(constant_string, "%ld", instruction->lea_multiplier);
+
+					//Add this onto the back
+					dynamic_string_concatenate(textual_key, constant_string);
+
 					break;
 					
 				case OIR_LEA_TYPE_REGISTERS_AND_SCALE:
+					//Get the value name for op1
+					get_value_name(instruction->op1, textual_key);
+
+
+					//Now the multiplier
+					sprintf(constant_string, "%ld", instruction->lea_multiplier);
+
 					break;
 
 				case OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE:
+
+					//Now the multiplier
+					sprintf(constant_string, "%ld", instruction->lea_multiplier);
+
 					break;
 
 				case OIR_LEA_TYPE_OFFSET_ONLY:
 					break;
 
 				case OIR_LEA_TYPE_REGISTERS_AND_OFFSET:
+					//Get the value name for op1
+					get_value_name(instruction->op1, textual_key);
+
+
 					break;
 
 				case OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE:
+					//Get the value name for op1
+					get_value_name(instruction->op1, textual_key);
+
+					//Now the multiplier
+					sprintf(constant_string, "%ld", instruction->lea_multiplier);
+
 					break;
 
 				case OIR_LEA_TYPE_REGISTERS_ONLY:
+					//Get the value name for op1
+					get_value_name(instruction->op1, textual_key);
+
 					break;
 
 				case OIR_LEA_TYPE_RIP_RELATIVE:
@@ -4367,6 +4400,7 @@ static void global_value_number_block(value_numbering_table_t* table, basic_bloc
 		switch(cursor->statement_type){
 			case THREE_ADDR_CODE_BIN_OP_STMT:
 			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+			case THREE_ADDR_CODE_LEA_STMT:
 				break;
 
 			//Skip ahead
