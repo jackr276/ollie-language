@@ -4285,6 +4285,45 @@ static void global_value_number_block(value_numbering_table_t* table, basic_bloc
 		//Bump it up
 		cursor = cursor->next_statement;
 	}
+	
+	/**
+	 * Now that we've done everything that need be done for the phi function,
+	 * we will go through and use global value numbering on every statement
+	 * that we consider to be eligible. 
+	 *
+	 * TODO ADD LEAS
+	 */
+	while(cursor != NULL){
+		/**
+		 * What is the cursor's type? If it's not something
+		 * that we are considering then we will leave here
+		 * now
+		 */
+		switch(cursor->statement_type){
+			case THREE_ADDR_CODE_BIN_OP_STMT:
+			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+				break;
+
+			//Skip ahead
+			default:
+				cursor = cursor->next_statement;
+				continue;
+		}
+	}
+
+	/**
+	 * Once we end up down here, we know that we have something that
+	 * is worth considering for us. We will now get the value name
+	 * for this instruction to see if it has already been computed 
+	 * before
+	 */
+	dynamic_string_t value_name = dynamic_string_alloc();
+
+	//Generate the value name
+	generate_value_name_key_for_instruction(cursor, &value_name);
+
+
+
 
 
 	/**
