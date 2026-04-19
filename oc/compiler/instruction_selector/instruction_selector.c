@@ -1612,31 +1612,22 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		u_int32_t and_mask = (1 << divisor_log2) - 1;
 
 		/**
-		 * Step 0: assign the dividend over to a temp var. We need to preserve
-		 * op1 for our addition step. This will eventually become our "bias"
-		 */
-		three_addr_var_t* bias_temp_var = emit_temp_var(type);
-
-		//Assign the op1 over
-		instruction_t* dividend_assignment = emit_assignment_instruction(bias_temp_var, mod_instruction->op1);
-
-		//This goes in before the mod instruction
-		insert_instruction_before_given(dividend_assignment, mod_instruction);
-
-		/**
 		 * Step 1: Extract the sign bit, backfilling with either 1's or 0's as we go. Since we are
 		 * looking to backfill we *must* use an arithmetic right shift here
 		 */
  		three_addr_const_t* num_bits_first_shift = emit_direct_integer_or_char_constant(type_size_in_bits - 1, type);
 
+		//Get a variable for the first shift
+		three_addr_var_t* first_shift_result = emit_temp_var(type);
+
 		//Now we need to perform the first shift. We will force this to be signed so that an arithmetic shift is used
-		instruction_t* arithmetic_shift = emit_binary_operation_with_const_instruction(bias_temp_var, bias_temp_var, R_SHIFT, num_bits_first_shift);
+		instruction_t* arithmetic_shift = emit_binary_operation_with_const_instruction(first_shift_result, mod_instruction->op1, R_SHIFT, num_bits_first_shift);
 
 		//IMPORTANT - flag that we need to force this to be signed
 		arithmetic_shift->optional_storage.forced_signedness = FORCED_SIGNED;
 
-		//This goes in after the dividend
-		insert_instruction_after_given(arithmetic_shift, dividend_assignment);
+		//Put this in before the mod
+		insert_instruction_before_given(arithmetic_shift, mod_instruction);
 
 		/**
 		 * Step 2: Fully convert into our bias by shifting right logically now by our number of bits 
@@ -1645,8 +1636,11 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		 */
 		three_addr_const_t* bias_shift_constant = emit_direct_integer_or_char_constant(type_size_in_bits - divisor_log2, type);
 
+		//Here's the temp var that we'll actually use for our bias
+		three_addr_var_t* bias_temp_var = emit_temp_var(type);
+
 		//Now we need to perform the logical right shift
-		instruction_t* logical_shift = emit_binary_operation_with_const_instruction(bias_temp_var, bias_temp_var, R_SHIFT, bias_shift_constant);
+		instruction_t* logical_shift = emit_binary_operation_with_const_instruction(bias_temp_var, first_shift_result, R_SHIFT, bias_shift_constant);
 
 		//IMPORTANT - flag that we need to force this to be unsigned so that it is a logical shift
 		logical_shift->optional_storage.forced_signedness = FORCED_UNSIGNED;
