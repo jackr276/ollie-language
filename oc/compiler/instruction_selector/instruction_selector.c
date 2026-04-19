@@ -212,6 +212,24 @@ static inline basic_block_t* does_block_end_in_jump(basic_block_t* block){
 
 
 /**
+ * Is the given expression eligible for value numbering? Note that all
+ * expressions will have the algorithm run, but only expressions that
+ * we explicitly approve of here will attempt to be subsituted for
+ *
+ * This list may be updated as the IR increases/chagnes
+ */
+static inline u_int8_t is_expression_eligible_for_value_numbering(instruction_t* instruction){
+	switch(instruction->statement_type){
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Is a type an unsigned 64 bit type? This is used for type conversions in 
  * the instruction selector
  */
@@ -4319,76 +4337,67 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 	 */
 	while(cursor != NULL){
 		/**
-		 * What is the cursor's type? If it's not something
-		 * that we are considering then we will leave here
-		 * now
+		 * We're only going to attempt to search for this if it's actually eligible.
+		 * If it is not, we will still perform value name substitution, but we will
+		 * not store anything in the hashtable
 		 */
-		switch(cursor->statement_type){
-			case THREE_ADDR_CODE_BIN_OP_STMT:
-			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-				break;
+		if(is_expression_eligible_for_value_numbering(cursor)){
+			/**
+			 * Once we end up down here, we know that we have something that
+			 * is worth considering for us. We will now get the value name
+			 * for this instruction to see if it has already been computed 
+			 * before
+			 */
+			dynamic_string_t textual_string = dynamic_string_alloc();
 
-			//Skip ahead
-			default:
-				cursor = cursor->next_statement;
-				continue;
+			//Generate the value name
+			generate_value_name_key_for_instruction(cursor, &textual_string);
+
+			//Can we find the result in the table?
+			three_addr_var_t* found_result = lookup_value_number_expression(table, &textual_string);
+
+			/**
+			 * Option 1: we've found it, so this is a redundant computation. Instead of 
+			 * doing this computation, we will replace the result with a copy from the
+			 * found result into this value
+			 *
+			 * Important caveat: if this instruction sets condition codes(like a CMP instruction), we
+			 * actually can't replace it even if we do find it. This is because
+			 */
+			if(found_result != NULL
+				&& does_instruction_set_condition_codes(cursor) == FALSE){
+
+				//This is now an assignment statement
+				cursor->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+
+				//Null out everything else just to be safe
+				cursor->op2 = NULL;
+				cursor->op1_const = NULL;
+				cursor->op = BLANK;
+
+				//The op1 is just the result that we found
+				cursor->op1 = found_result;
+
+				//We've used this one more time
+				found_result->use_count++;
+
+				//Destroy the textual string - we don't need it
+				dynamic_string_dealloc(&textual_string);
+
+				//Flag that we did do a simplification
+				simplification_occured = TRUE;
+
+			/**
+			 * Option 2: we've found nothing, so this is a brand new computation. We will 
+			 * need to account for this by adding a new value name inside of the hash table
+			 * for future passes
+			 */
+			} else {
+				add_value_number_expression(table, cursor->assignee, &textual_string);
+			}
 		}
 
-		/**
-		 * Once we end up down here, we know that we have something that
-		 * is worth considering for us. We will now get the value name
-		 * for this instruction to see if it has already been computed 
-		 * before
-		 */
-		dynamic_string_t textual_string = dynamic_string_alloc();
-
-		//Generate the value name
-		generate_value_name_key_for_instruction(cursor, &textual_string);
-
-		//Can we find the result in the table?
-		three_addr_var_t* found_result = lookup_value_number_expression(table, &textual_string);
-
-		/**
-		 * Option 1: we've found it, so this is a redundant computation. Instead of 
-		 * doing this computation, we will replace the result with a copy from the
-		 * found result into this value
-		 *
-		 * Important caveat: if this instruction sets condition codes(like a CMP instruction), we
-		 * actually can't replace it even if we do find it. This is because
-		 */
-		if(found_result != NULL
-			&& does_instruction_set_condition_codes(cursor) == FALSE){
-
-			//This is now an assignment statement
-			cursor->statement_type = THREE_ADDR_CODE_ASSN_STMT;
-
-			//Null out everything else just to be safe
-			cursor->op2 = NULL;
-			cursor->op1_const = NULL;
-			cursor->op = BLANK;
-
-			//The op1 is just the result that we found
-			cursor->op1 = found_result;
-
-			//We've used this one more time
-			found_result->use_count++;
-
-			//Destroy the textual string - we don't need it
-			dynamic_string_dealloc(&textual_string);
-
-			//Flag that we did do a simplification
-			simplification_occured = TRUE;
-
-		/**
-		 * Option 2: we've found nothing, so this is a brand new computation. We will 
-		 * need to account for this by adding a new value name inside of the hash table
-		 * for future passes
-		 */
-		} else {
-			add_value_number_expression(table, cursor->assignee, &textual_string);
-		}
-
-		//Go onto the next statemnt
+		//Always bump up to the next statement
 		cursor = cursor->next_statement;
 	}
 
