@@ -4499,6 +4499,9 @@ static void global_value_number_block(value_numbering_table_t* table, basic_bloc
 			//The op1 is just the result that we found
 			cursor->op1 = found_result;
 
+			//We've used this one more time
+			found_result->use_count++;
+
 			//Destroy the textual string - we don't need it
 			dynamic_string_dealloc(&textual_string);
 
@@ -11477,8 +11480,12 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			//This one will have an addressing type of registers and offset
 			variable_offset_load->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
 
-			//The lea is now useless so get rid of it
-			delete_statement(lea_statement);
+			/**
+			 * We can delete this *if* it's not being used by someone else
+			 */
+			if(lea_statement->assignee->use_count <= 1){
+				delete_statement(lea_statement);
+			}
 
 			//Rebuild the window around the load
 			reconstruct_window(window, variable_offset_load);
@@ -11519,8 +11526,12 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 				variable_offset_load->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
 			}
 
-			//The lea is now useless so get rid of it
-			delete_statement(lea_statement);
+			/**
+			 * We can delete this *if* it's not being used by someone else
+			 */
+			if(lea_statement->assignee->use_count <= 1){
+				delete_statement(lea_statement);
+			}
 
 			//Rebuild the window around the load
 			reconstruct_window(window, variable_offset_load);
@@ -11566,8 +11577,12 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			//This will always be a registers, offset and scale type
 			variable_offset_load->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
 
-			//The lea is now useless so get rid of it
-			delete_statement(lea_statement);
+			/**
+			 * We can delete this *if* it's not being used by someone else
+			 */
+			if(lea_statement->assignee->use_count <= 1){
+				delete_statement(lea_statement);
+			}
 
 			//Rebuild around the load
 			reconstruct_window(window, variable_offset_load);
@@ -11613,8 +11628,12 @@ static void combine_lea_with_regular_load_instruction(instruction_window_t* wind
 			//The rip offset variable is our .LCx value
 			load_statement->rip_offset_variable = lea_statement->op2;
 
-			//Now that we've gotten all we need from the lea, we can delete it
-			delete_statement(lea_statement);
+			/**
+			 * We can delete this *if* it's not being used by someone else
+			 */
+			if(lea_statement->assignee->use_count <= 1){
+				delete_statement(lea_statement);
+			}
 
 			//Rebuild the window based on the load statement
 			reconstruct_window(window, load_statement);
@@ -12263,8 +12282,12 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 			//The calculation mode here will always be registers and offset
 			variable_offset_store->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
 
-			//The lea is redundant
-			delete_statement(lea_statement);
+			/**
+			 * We can delete this *if* it's not being used by someone else
+			 */
+			if(lea_statement->assignee->use_count <= 1){
+				delete_statement(lea_statement);
+			}
 
 			//Rebuild around the final instruction(the store)
 			reconstruct_window(window, variable_offset_store);
@@ -12302,8 +12325,12 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 				variable_offset_store->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
 			}
 
-			//The lea is redundant
-			delete_statement(lea_statement);
+			/**
+			 * We can delete this *if* it's not being used by someone else
+			 */
+			if(lea_statement->assignee->use_count <= 1){
+				delete_statement(lea_statement);
+			}
 
 			//Rebuild around the final instruction(the store)
 			reconstruct_window(window, variable_offset_store);
@@ -12349,6 +12376,13 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 
 			//The lea is redundant
 			delete_statement(lea_statement);
+
+			/**
+			 * We can delete this *if* it's not being used by someone else
+			 */
+			if(lea_statement->assignee->use_count <= 1){
+				delete_statement(lea_statement);
+			}
 
 			//Rebuild around the final instruction(the store)
 			reconstruct_window(window, variable_offset_store);
