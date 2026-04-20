@@ -4631,12 +4631,34 @@ static u_int8_t global_value_numbering_pass(basic_block_t* function_entry_block,
 
 
 /**
+ * Run through an entire array of function blocks and reset the status for
+ * every single one. We assume that the caller knows what they are doing, and
+ * that the blocks inside of the array are really the correct blocks
+ */
+static inline void reset_visit_status_for_function(dynamic_array_t* function_blocks){
+	//Run through all of the blocks
+	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+		//Extract the current block
+		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
+
+		//Flag it as false
+		current->visited = FALSE;
+	}
+}
+
+
+/**
  * Perform a mark and sweep pass on the given function blocks. This will only
  * be triggered if we discover areas that we are able to simplify
  * using value numbering. The mark and sweep will happen first, followed
  * by the simplifier
  */
 static inline void perform_mark_and_sweep_pass(dynamic_array_t* function_blocks){
+	/**
+	 * First thing we'll do is reset the visited status of the CFG. This just ensures
+	 * that we won't have any issues with the CFG in terms of traversal
+	 */
+	reset_visit_status_for_function(function_blocks);
 
 }
 
