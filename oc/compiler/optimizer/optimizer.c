@@ -134,6 +134,9 @@ static inline void reset_marks_for_block(basic_block_t* block){
 		//Go down the block by one
 		cursor = cursor->next_statement;
 	}
+
+	//Remove that this has a mark
+	block->contains_mark = FALSE;
 }
 
 

@@ -4944,6 +4944,10 @@ static simplification_type_t sweep(dynamic_array_t* function_blocks, basic_block
 					//We'll first find the nearest marked postdominator
 					nearest_marked_postdom = nearest_marked_postdominator(function_blocks, block);
 
+					//We now need to unlink the successors that were in this branch
+					delete_successor(block, stmt->if_block);
+					delete_successor(block, stmt->else_block);
+
 					//This is now useless
 					delete_statement(stmt);
 
@@ -5007,6 +5011,44 @@ static simplification_type_t sweep(dynamic_array_t* function_blocks, basic_block
 
 	//Give back the simplification result
 	return result;
+}
+
+
+/**
+ * Reset all of the marked instructions for a given block
+ */
+static inline void reset_marks_for_block(basic_block_t* block){
+	//Start at the top
+	instruction_t* cursor = block->leader_statement;
+
+	//Crawl through the block
+	while(cursor != NULL){
+		//Unmark it
+		cursor->mark = FALSE;
+
+		//Go down the block by one
+		cursor = cursor->next_statement;
+	}
+
+	//Remove that this has a mark
+	block->contains_mark = FALSE;
+}
+
+
+/**
+ * Run through and reset all of the marks on every instruction in a given
+ * function. This is done in anticipation of us using the mark/sweep algorithm
+ * again after branch optimizations
+ */
+static inline void reset_all_marks(dynamic_array_t* function_blocks){
+	//Run through every block
+	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+		//Block to work on
+		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
+
+		//Let the helper do it
+		reset_marks_for_block(current);
+	}
 }
 
 
@@ -5338,6 +5380,11 @@ static inline simplification_type_t perform_mark_and_sweep_pass(basic_block_t* f
 	reset_visit_status_for_function(function_blocks);
 
 	/**
+	 * Reset the marks for all of our blocks
+	 */
+	reset_all_marks(function_blocks);
+
+	/**
 	 * Now we will let the mark algorithm go through and flag instructions as important
 	 * as need be
 	 */
@@ -5393,6 +5440,7 @@ static void simplify(cfg_t* cfg){
 			 * to reorder all of the blocks
 			 */
 			if(result == SIMPLIFICATION_INSTRUCTIONS_AND_CONTROL_FLOW){
+				printf("HERE\n\n\n");
 				order_blocks(cfg);
 			}
 
