@@ -32,9 +32,8 @@ static generic_type_t* u8;
 
 //The dynamic string that we reuse for searching
 static dynamic_string_t value_name_searcher_string;
-
-static inline three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type);
-
+//A queue that we will reuse for postdominator searching
+static heap_queue_t postdominator_queue;
 //A holder for the stack pointer
 static three_addr_var_t* stack_pointer_variable;
 //A holder for the instruction pointer
@@ -42,9 +41,10 @@ static three_addr_var_t* instruction_pointer_variable;
 //A reference to our CFG
 static cfg_t* cfg_reference;
 
+static inline three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type);
+
 //The window for our "sliding window" optimizer
 typedef struct instruction_window_t instruction_window_t;
-
 
 /**
  * Will we be printing these out as instructions or as three address code
@@ -4766,23 +4766,23 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
  * we'll have our answer
  */
 static basic_block_t* nearest_marked_postdominator(dynamic_array_t* function_blocks, basic_block_t* B){
-	//We'll need a queue for the BFS
-	heap_queue_t queue = heap_queue_alloc();
+	//Reset the queue for this go around
+	heap_queue_clear(&postdominator_queue);
 
 	//First, we'll reset every single block here
 	reset_visit_status_for_function(function_blocks);
 
 	//Seed the search with B
-	enqueue(&queue, B);
+	enqueue(&postdominator_queue, B);
 
 	//The nearest marked postdominator and a holder for our candidates
 	basic_block_t* nearest_marked_postdominator = NULL;
 	basic_block_t* candidate;
 
 	//So long as the queue is not empty
-	while(queue_is_empty(&queue) == FALSE){
+	while(queue_is_empty(&postdominator_queue) == FALSE){
 		//Grab the block off
-		candidate = dequeue(&queue);
+		candidate = dequeue(&postdominator_queue);
 		
 		//If we've been here before, continue;
 		if(candidate->visited == TRUE){
@@ -4814,13 +4814,13 @@ static basic_block_t* nearest_marked_postdominator(dynamic_array_t* function_blo
 
 			//If it's already been visited, we won't bother with it. If it hasn't been visited, we'll add it in
 			if(successor->visited == FALSE){
-				enqueue(&queue, successor);
+				enqueue(&postdominator_queue, successor);
 			}
 		}
 	}
 
 	//Destroy the queue when done
-	heap_queue_dealloc(&queue);
+	heap_queue_dealloc(&postdominator_queue);
 
 	//And give this back
 	return nearest_marked_postdominator;
@@ -13432,8 +13432,14 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	u16 = lookup_type_name_only(cfg->type_symtab, "u16", NOT_MUTABLE)->type;
 	u8 = lookup_type_name_only(cfg->type_symtab, "u8", NOT_MUTABLE)->type;
 
-	//Allocate it
+	/**
+	 * Allocate any of these reusable memory regions that we'll
+	 * be using. We do this because it's cheaper to just use
+	 * 1 over and over instead of allocating fresh every single
+	 * time that we need something
+	 */
 	value_name_searcher_string = dynamic_string_alloc();
+	postdominator_queue = heap_queue_alloc();
 
 	//Stash the stack pointer & instruction pointer
 	stack_pointer_variable = cfg->stack_pointer;
@@ -13480,6 +13486,10 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 		print_ordered_blocks(cfg, PRINT_INSTRUCTION);
 	}
 
-	//We no longer need this string
+	/**
+	 * Now we'll deallocate all of the shared memory
+	 * regions that we've been using
+	 */
 	dynamic_string_dealloc(&value_name_searcher_string);
+	heap_queue_dealloc(&postdominator_queue);
 }
