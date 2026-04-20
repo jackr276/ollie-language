@@ -4356,6 +4356,9 @@ static void insert_callee_saving_logic(basic_block_t* function_entry, basic_bloc
 		//Emit it 
 		instruction_t* dummy_push = emit_direct_gp_register_push_instruction(dummy_callee_saving_push_register);
 
+		//Flag that this is a callee saving instruction
+		dummy_push->is_callee_saving_instruction = TRUE;
+
 		//Important to note that this will be the very last thing we push to the stack 
 		insert_instruction_before_given(dummy_push, entry_instruction);
 	}
@@ -4379,6 +4382,9 @@ static void insert_callee_saving_logic(basic_block_t* function_entry, basic_bloc
 		if(gp_callee_saved_bytes % 16 != 0){
 			//Emit the dummy pop
 			instruction_t* dummy_pop = emit_direct_gp_register_pop_instruction(dummy_callee_saving_push_register);
+
+			//Flag that this is a callee saving instruction
+			dummy_pop->is_callee_saving_instruction = TRUE;
 
 			//This goes right after the exit(successive pops will be inserted after it)
 			insert_instruction_before_given(dummy_pop, predecessor->exit_statement);
