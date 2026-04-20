@@ -12,6 +12,13 @@
 #include <sys/types.h>
 
 /**
+ * We'll need to hang onto these two variables for our referencing
+ * later. Global variable is just easiest
+ */
+static three_addr_var_t* stack_pointer_variable;
+static three_addr_var_t* instruction_pointer_variable;
+
+/**
  * We only want to perform ret-hoisting for small enough
  * blocks. If we have gigantic ret blocks, hoisting them
  * would case more trouble than it's worth because it would
@@ -472,7 +479,7 @@ static inline u_int8_t is_block_eligible_for_ret_hoisting(basic_block_t* block){
 
 			case ADDQ:
 				//Only counts if this isn't the stack pointer
-				if(cursor->destination_register->is_stack_pointer == FALSE){
+				if(cursor->destination_register == stack_pointer_variable){
 					number_of_non_call_management_instructions++;
 				}
 
@@ -873,7 +880,7 @@ static void reorder_blocks(basic_block_t* function_entry_block){
 		}
 
 		//Now we'll go through each of the successors in this node
-		for(u_int16_t idx = 0; idx < current->successors.current_index; idx++){
+		for(u_int32_t idx = 0; idx < current->successors.current_index; idx++){
 			//Now as we go through here, if the direct end jump wasn't NULL, we'll have already added it in. We don't
 			//want to have that happen again, so we'll make sure that if it's not NULL we don't double add it
 
@@ -912,8 +919,12 @@ static void reorder_blocks(basic_block_t* function_entry_block){
  * optimizations:
  */
 void postprocess(cfg_t* cfg){
+	//Cache these two special variables
+	stack_pointer_variable = cfg->stack_pointer;
+	instruction_pointer_variable = cfg->instruction_pointer;
+
 	//Run through every function block here separately
-	for(u_int16_t i = 0 ; i < cfg->function_entry_blocks.current_index; i++){
+	for(u_int32_t i = 0 ; i < cfg->function_entry_blocks.current_index; i++){
 		//Extract the given function block
 		basic_block_t* function_entry_block = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 

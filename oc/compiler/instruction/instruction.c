@@ -1032,9 +1032,6 @@ three_addr_var_t* emit_var_copy(three_addr_var_t* var){
 	//Transfer this status over
 	emitted_var->variable_type = var->variable_type;
 
-	//Is this a stack pointer?
-	emitted_var->is_stack_pointer = var->is_stack_pointer;
-
 	//Copy the generation level
 	emitted_var->ssa_generation = var->ssa_generation;
 

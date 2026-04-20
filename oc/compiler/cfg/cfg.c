@@ -11167,8 +11167,6 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	symtab_variable_record_t* stack_pointer = initialize_stack_pointer(results->type_symtab);
 	//Initialize the variable too
 	three_addr_var_t* stack_pointer_var = emit_var(stack_pointer);
-	//Mark it
-	stack_pointer_var->is_stack_pointer = TRUE;
 	//Store the stack pointer
 	cfg->stack_pointer = stack_pointer_var;
 

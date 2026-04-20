@@ -206,8 +206,6 @@ struct three_addr_var_t{
 	//Is this variable dereferenced in some way
 	//(either loaded from or stored to)
 	u_int8_t is_dereferenced;
-	//Is this a stack pointer?
-	u_int8_t is_stack_pointer;
 	//Does this set condition codes?
 	u_int8_t sets_cc;
 	//What is the size of this variable
