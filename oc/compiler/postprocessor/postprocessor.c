@@ -479,7 +479,7 @@ static inline u_int8_t is_block_eligible_for_ret_hoisting(basic_block_t* block){
 
 			case ADDQ:
 				//Only counts if this isn't the stack pointer
-				if(cursor->destination_register == stack_pointer_variable){
+				if(cursor->destination_register != stack_pointer_variable){
 					number_of_non_call_management_instructions++;
 				}
 
