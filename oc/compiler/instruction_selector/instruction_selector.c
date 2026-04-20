@@ -55,6 +55,16 @@ typedef enum {
 	PRINT_INSTRUCTION
 } instruction_printing_mode_t;
 
+/**
+ * Determine what kind of simplification that we need to do. Some simplifications
+ * require a complete rework of the control flow
+ */
+typedef enum {
+	NO_SIMPLIFICATION,
+	SIMPLIFICATION_INSTRUCTIONS_ONLY,
+	SIMPLIFICATION_INSTRUCTIONS_AND_CONTROL_FLOW,
+} simplification_type_t;
+
 
 /**
  * What is the alignment type for a given variable. Most of the time
@@ -394,10 +404,12 @@ static void order_blocks(cfg_t* cfg){
 	//We'll first wipe the visited status on this CFG
 	reset_visited_status(cfg, TRUE);
 	
-	//We will perform a breadth first search and use the "direct successor" area
-	//of the blocks to store them all in one chain per function. The functions themselves
-	//are separated and stored individually, because in ollie a function is the smallest unit
-	//of procedures
+	/**
+	 * We will perform a breadth first search and use the "direct successor" area
+	 * of the blocks to store them all in one chain per function. The functions themselves
+	 * are separated and stored individually, because in ollie a function is the smallest unit
+	 * of procedures
+	 */
 	
 	//We'll need to use a queue every time, we may as well just have one big one
 	heap_queue_t queue = heap_queue_alloc();
@@ -4881,7 +4893,10 @@ static basic_block_t* nearest_marked_postdominator(dynamic_array_t* function_blo
  * 			if i is not a jump then:
  * 			  delete i
  */
-static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entry_block){
+static simplification_type_t sweep(dynamic_array_t* function_blocks, basic_block_t* function_entry_block){
+	//By default assume we did nothing
+	simplification_type_t result = NO_SIMPLIFICATION;
+
 	//For each and every operation in every basic block
 	for(u_int32_t _ = 0; _ < function_blocks->current_index; _++){
 		//Grab the block out
@@ -4939,6 +4954,9 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 					 */
 					stmt = emit_jump(block, nearest_marked_postdom);
 
+					//We have done instructions and control flow here
+					result = SIMPLIFICATION_INSTRUCTIONS_AND_CONTROL_FLOW;
+
 					break;
 
 				/**
@@ -4965,6 +4983,11 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 					//Delete the statement, now that we know it is not a jump
 					delete_statement(temp);
 
+					//If we havent' flagged already, not that we did instructions
+					if(result == NO_SIMPLIFICATION){
+						result = SIMPLIFICATION_INSTRUCTIONS_ONLY;
+					}
+
 					break;
 			}
 		}
@@ -4981,6 +5004,9 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 	 * that have been flagged as unimportant
 	 */
 	sweep_stack_data_area(&(function_entry_block->function_defined_in->local_stack));
+
+	//Give back the simplification result
+	return result;
 }
 
 
@@ -5304,7 +5330,7 @@ static void mark(dynamic_array_t* function_blocks){
  * using value numbering. The mark and sweep will happen first, followed
  * by the simplifier
  */
-static inline void perform_mark_and_sweep_pass(basic_block_t* function_entry, dynamic_array_t* function_blocks){
+static inline simplification_type_t perform_mark_and_sweep_pass(basic_block_t* function_entry, dynamic_array_t* function_blocks){
 	/**
 	 * First thing we'll do is reset the visited status of the CFG. This just ensures
 	 * that we won't have any issues with the CFG in terms of traversal
@@ -5322,7 +5348,7 @@ static inline void perform_mark_and_sweep_pass(basic_block_t* function_entry, dy
 	 * do that later on down the road regardless. Running this mark and sweep alone should
 	 * take care of any extra assignments that we don't want/need
 	 */
-	sweep(function_blocks, function_entry);
+	return sweep(function_blocks, function_entry);
 }
 
 
@@ -5360,7 +5386,15 @@ static void simplify(cfg_t* cfg){
 		 */
 		if(simplification_occured == TRUE){
 			//Run the mark and sweep
-			perform_mark_and_sweep_pass(function_entry, &(function->function_blocks));
+			simplification_type_t result = perform_mark_and_sweep_pass(function_entry, &(function->function_blocks));
+
+			/**
+			 * If we ended up doing control flow simplification, we are going to need
+			 * to reorder all of the blocks
+			 */
+			if(result == SIMPLIFICATION_INSTRUCTIONS_AND_CONTROL_FLOW){
+				order_blocks(cfg);
+			}
 
 			//Now run the simplifier
 			while(simplifier_pass(function_entry) == TRUE);
