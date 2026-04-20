@@ -4648,6 +4648,320 @@ static inline void reset_visit_status_for_function(dynamic_array_t* function_blo
 
 
 /**
+ * The mark algorithm will go through and mark every operation(three address code statement) as
+ * critical or noncritical. We will then go back through and see which operations are setting
+ * those critical values
+ *
+ * for each operation i:
+ * 	clear i's mark
+ * 	if i is critical then
+ * 		mark i
+ * 		add i to the worklist
+ * 	while worklist not empty
+ * 		remove i from the worklist i is x <- y op z
+ * 		if def(y) is not marked then
+ * 			mark def(y)
+ * 			add def(y) to worklist
+ * 		if def(z) is not marked then
+ * 			mark def(z)
+ * 			add def(y) to worklist
+ * 		for each block b in RDF(block(i))
+ * 			let j be the branch that ends b
+ * 			if j is unmarked then
+ * 				mark j
+ * 				add j to worklist
+ */
+static void mark(dynamic_array_t* function_blocks){
+	//First we'll need a worklist
+	dynamic_array_t worklist = dynamic_array_alloc();
+
+	//Now we'll go through every single operation in every single block
+	for(u_int32_t _ = 0; _ < function_blocks->current_index; _++){
+		basic_block_t* current = dynamic_array_get_at(function_blocks, _);
+
+		instruction_t* current_stmt = current->leader_statement;
+
+		/**
+		 * We'll now go through and mark every statement that we
+		 * deem to be critical in the block. Statements are critical
+		 * if they:
+		 * 	1.) set a return value
+		 * 	2.) is an input/output statement
+		 * 	3.) affects the value in a storage location that could be
+		 * 		accessed outside of the procedure(i.e. a parameter that is a pointer)
+		 */
+		while(current_stmt != NULL){
+			current_stmt->mark = FALSE;
+
+			/**
+			 * We will go through every operation and determine its importance based on our rules
+			 */
+			switch(current_stmt->statement_type){
+				/**
+				 * Return statements are always considered important
+				 */
+				case THREE_ADDR_CODE_RET_STMT:
+					current_stmt->mark = TRUE;
+					dynamic_array_add(&worklist, current_stmt);
+					current->contains_mark = TRUE;
+					break;
+
+				/**
+				 * Raise statements are equivalent to ret statements
+				 * and are thus also always considered important
+				 */
+				case THREE_ADDR_CODE_RAISE_STMT:
+					current_stmt->mark = TRUE;
+					dynamic_array_add(&worklist, current_stmt);
+					current->contains_mark = TRUE;
+					break;
+
+				/**
+				 * Asm inline statements are also
+				 * always important because we don't 
+				 * analyze them, so the user assumes that
+				 * their direct code will be executed
+				 */
+				case THREE_ADDR_CODE_ASM_INLINE_STMT:
+					current_stmt->mark = TRUE;
+					dynamic_array_add(&worklist, current_stmt);
+					current->contains_mark = TRUE;
+					break;
+
+				/**
+				 * Since we don't know whether or not a function
+				 * that is being called performs an important task,
+				 * we also always consider it to be important
+				 */
+				case THREE_ADDR_CODE_FUNC_CALL:
+					current_stmt->mark = TRUE;
+					dynamic_array_add(&worklist, current_stmt);
+					current->contains_mark = TRUE;
+					break;
+
+				/**
+				 * Indirect function calls are the same as function calls. They will 
+				 * always count becuase we do not know whether or not the indirectly
+				 * called function performs some important task. As such, we will 
+				 * mark it as important
+				 */
+				case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+					current_stmt->mark = TRUE;
+					dynamic_array_add(&worklist, current_stmt);
+					current->contains_mark = TRUE;
+					break;
+
+				/**
+				 * And finally idle statements are considered important
+				 * because they literally do nothing, so if the user
+				 * put them there, we'll assume that it was for a good reason
+				 */
+				case THREE_ADDR_CODE_IDLE_STMT:
+					current_stmt->mark = TRUE;
+					//Add it to the list
+					dynamic_array_add(&worklist, current_stmt);
+					//The block now has a mark
+					current->contains_mark = TRUE;
+					break;
+
+				/**
+				 * All store statements are considered useful by the ollie optimizer,
+				 * regardless of the actual use count tracking
+				 */
+				case THREE_ADDR_CODE_STORE_STATEMENT:
+				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+					current_stmt->mark = TRUE;
+					dynamic_array_add(&worklist, current_stmt);
+					current->contains_mark = TRUE;
+					break;
+
+				/**
+				 * Any/all memory copying statements are considered useful by the ollie
+				 * optimizer regardless of use count tracking
+				 */
+				case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
+					current_stmt->mark = TRUE;
+					dynamic_array_add(&worklist, current_stmt);
+					current->contains_mark = TRUE;
+					break;
+
+				/**
+				 * Special cases: these stack allocation and deallocation statements
+				 * do not have any variables in them(%rsp is inferred because it is the stack)
+				 * They must always be marked, and they may never be deleted. However, since there
+				 * are no variables in them to trace around, we will not add them to the worklist
+				 */
+				case THREE_ADDR_CODE_STACK_ALLOCATION_STMT:
+				case THREE_ADDR_CODE_STACK_DEALLOCATION_STMT:
+					current_stmt->mark = TRUE;
+					current->contains_mark = TRUE;
+					break;
+
+				//Let's see what other special cases we have
+				default:
+					break;
+			}
+
+			//Advance the current statement up
+			current_stmt = current_stmt->next_statement;
+		}
+	}
+
+	/**
+	 * Now that we've marked everything that is initially critical, we'll go through and trace
+	 * these values back through the code
+	 */
+	while(dynamic_array_is_empty(&worklist) == FALSE){
+		//Grab out the operation from the worklist(delete from back-most efficient)
+		instruction_t* stmt = dynamic_array_delete_from_back(&worklist);
+		//Generic array for holding parameters
+		dynamic_array_t params;
+
+		//There are several unique cases that require extra attention
+		switch(stmt->statement_type){
+			//If it's a phi function, now we need to go back and mark everything that it came from
+			case THREE_ADDR_CODE_PHI_FUNC:
+				params = stmt->parameters;
+
+				//Add this in here
+				for(u_int32_t i = 0; i < params.current_index; i++){
+					//Grab the param out
+					three_addr_var_t* phi_func_param = dynamic_array_get_at(&params, i);
+
+					//Add the definitions in
+					mark_and_add_definition(function_blocks, phi_func_param, &worklist);
+				}
+
+				break;
+
+			//If we have a function call, everything in the function call
+			//is important
+			case THREE_ADDR_CODE_FUNC_CALL:
+				//Grab the parameters out
+				params = stmt->parameters;
+
+				//Run through them all and mark them
+				for(u_int32_t i = 0; i < params.current_index; i++){
+					mark_and_add_definition(function_blocks, dynamic_array_get_at(&params, i), &worklist);
+				}
+
+				break;
+
+			/**
+			 * An indirect function call behaves similarly to a function call, but we'll also
+			 * need to mark it's "op1" value as important. This is the value that stores
+			 * the memory address of the function that we're calling
+			 */
+			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+				//Mark the op1 of this function as being important
+				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
+
+				//Grab the parameters out
+				params = stmt->parameters;
+
+				//Run through them all and mark them
+				for(u_int32_t i = 0; i < params.current_index; i++){
+					mark_and_add_definition(function_blocks, dynamic_array_get_at(&params, i), &worklist);
+				}
+
+				break;
+
+			/**
+			 * There will be special rules for store statements because we have assignees
+			 * that are not really assignees, they are more like operands
+			 */
+			case THREE_ADDR_CODE_STORE_STATEMENT:
+			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+				//Add the assignee as if it was a variable itself
+				mark_and_add_definition(function_blocks, stmt->assignee, &worklist);
+
+				//We need to mark the place where each definition is set
+				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->op2, &worklist);
+				break;
+
+			/**
+			 * For a memory copy statement, we need the defitinition of the assignee
+			 * and op1 marked as they are both important to the overall copy
+			 */
+			case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
+				mark_and_add_definition(function_blocks, stmt->assignee, &worklist);
+				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
+				break;
+
+			//In all other cases, we'll just mark and add the two operands 
+			default:
+				//We need to mark the place where each definition is set
+				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->op2, &worklist);
+
+				break;
+		}
+
+		//Grab this out for convenience
+		basic_block_t* block = stmt->block_contained_in;
+
+		/**
+		 * Now we'll apply this logic to the branching/indirect jumping
+		 * statements here
+		 *
+		 * for each block b in RDF(block(i))
+		 * 	let j be the branch that ends b
+		 * 	if j is unmarked then
+		 * 		mark j
+		 * 		add j to worklist
+		 */
+		//If this block even has an RDF(it may now)
+		if(block->reverse_dominance_frontier.internal_array != NULL){
+			for(u_int32_t i = 0; i < block->reverse_dominance_frontier.current_index; i++){
+				//Grab the block out of the RDF
+				basic_block_t* rdf_block = dynamic_array_get_at(&(block->reverse_dominance_frontier), i);
+
+				//Grab out the exit statement
+				instruction_t* exit_statement = rdf_block->exit_statement;
+
+				switch(exit_statement->statement_type){
+					/**
+					 * An indirect jump means that we had some kind of switch statement. This
+					 * will be marked as important
+					 */
+					case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
+						if(exit_statement->mark == FALSE){
+							exit_statement->mark = TRUE;
+							dynamic_array_add(&worklist, exit_statement);
+							rdf_block->contains_mark = TRUE;
+						}
+
+						break;
+
+					/**
+					 * This is the most common case, we'll have a branch that
+					 * ends the predecessor
+					 */
+					case THREE_ADDR_CODE_BRANCH_STMT:
+						if(exit_statement->mark == FALSE){
+							exit_statement->mark = TRUE;
+							dynamic_array_add(&worklist, exit_statement);
+							rdf_block->contains_mark = TRUE;
+						}
+
+						break;
+
+					//By default just leave
+					default:
+						break;
+				}
+			}
+		}
+	}
+
+	dynamic_array_dealloc(&worklist);
+}
+
+
+/**
  * Perform a mark and sweep pass on the given function blocks. This will only
  * be triggered if we discover areas that we are able to simplify
  * using value numbering. The mark and sweep will happen first, followed
@@ -4659,6 +4973,12 @@ static inline void perform_mark_and_sweep_pass(dynamic_array_t* function_blocks)
 	 * that we won't have any issues with the CFG in terms of traversal
 	 */
 	reset_visit_status_for_function(function_blocks);
+
+	/**
+	 * Now we will let the mark algorithm go through and flag instructions as important
+	 * as need be
+	 */
+	mark(function_blocks);
 
 }
 
