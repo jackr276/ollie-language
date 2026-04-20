@@ -4759,6 +4759,122 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 
 
 /**
+ * The sweep algorithm will go through and remove every operation that has not been marked
+ *
+ * procedure sweep:
+ * 	for each operation i:
+ * 		if is is unmarked then:
+ * 			if i is a branch then
+ * 			  rewrite i with a jump to i's nearest
+ * 			  marked postdominator
+ *
+ * 			if i is not a jump then:
+ * 			  delete i
+ */
+static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entry_block){
+	//For each and every operation in every basic block
+	for(u_int32_t _ = 0; _ < function_blocks->current_index; _++){
+		//Grab the block out
+		basic_block_t* block = dynamic_array_get_at(function_blocks, _);
+
+		//Holder for the postdom
+		basic_block_t* nearest_marked_postdom;
+
+		//Grab the statement out
+		instruction_t* stmt = block->leader_statement;
+
+		//For each statement in the block
+		while(stmt != NULL){
+			//If it's useful, ignore it
+			if(stmt->mark == TRUE){
+				stmt = stmt->next_statement;
+				continue;
+			}
+
+			//A holder for when we perform deletions
+			instruction_t* temp;
+
+			/**
+			 * Some statements like jumps and branches
+			 * require special attention
+			 */
+			switch(stmt->statement_type){
+				/**
+				 * We *never* delete jump statements because
+				 * they are critical to the control flow. They
+				 * may be cleaned up by other optimizations, but for
+				 * here we leave them
+				 */
+				case THREE_ADDR_CODE_JUMP_STMT:
+					stmt = stmt->next_statement;
+
+					break;
+
+				/**
+				 * If we have a branch that is now useless,
+				 * we'll need to replace it with a jump to
+				 * it's nearest marked postdominator
+				 */
+				case THREE_ADDR_CODE_BRANCH_STMT:
+					//We'll first find the nearest marked postdominator
+					nearest_marked_postdom = nearest_marked_postdominator(function_blocks, block);
+
+					//This is now useless
+					delete_statement(stmt);
+
+					/**
+					 * Emit the jump statement to the nearest marked postdominator
+					 * NOTE: the emit jump adds the successor in for us, so we don't need to
+					 * do so here
+					 */
+					stmt = emit_jump(block, nearest_marked_postdom);
+
+					break;
+
+				/**
+				 * By default no special treatment, we're just deleting
+				 */
+				default:
+					//Perform the deletion and advancement
+					temp = stmt;
+
+					/**
+					 * If we are deleting an indirect jump address calculation statement,
+					 * then this statements jump table is useless
+					 */
+					if(temp->statement_type == THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT){
+						//We'll need to deallocate this jump table
+						jump_table_dealloc(block->jump_table);
+
+						//Flag it as null
+						block->jump_table = NULL;
+					}
+					
+					//Advance the statement
+					stmt = stmt->next_statement;
+					//Delete the statement, now that we know it is not a jump
+					delete_statement(temp);
+
+					break;
+			}
+		}
+	}
+	
+	/**
+	 * Once we've done all of the actual sweeping inside of the blocks, we will now also clean up
+	 * the stack from any unmarked regions. If a region is unmarked, it is entirely useless and as such
+	 * we'll just get rid of it
+	 */
+
+	/**
+	 * Invoke the stack sweeper. This function will go through an remove any stack regions
+	 * that have been flagged as unimportant
+	 */
+	sweep_stack_data_area(&(function_entry_block->function_defined_in->local_stack));
+}
+
+
+/**
  * The mark algorithm will go through and mark every operation(three address code statement) as
  * critical or noncritical. We will then go back through and see which operations are setting
  * those critical values
@@ -5078,7 +5194,7 @@ static void mark(dynamic_array_t* function_blocks){
  * using value numbering. The mark and sweep will happen first, followed
  * by the simplifier
  */
-static inline void perform_mark_and_sweep_pass(dynamic_array_t* function_blocks){
+static inline void perform_mark_and_sweep_pass(basic_block_t* function_entry, dynamic_array_t* function_blocks){
 	/**
 	 * First thing we'll do is reset the visited status of the CFG. This just ensures
 	 * that we won't have any issues with the CFG in terms of traversal
@@ -5091,6 +5207,12 @@ static inline void perform_mark_and_sweep_pass(dynamic_array_t* function_blocks)
 	 */
 	mark(function_blocks);
 
+	/**
+	 * Finally we can run sweep(). We will not run any clean() operation because we already
+	 * do that later on down the road regardless. Running this mark and sweep alone should
+	 * take care of any extra assignments that we don't want/need
+	 */
+	sweep(function_blocks, function_entry);
 }
 
 
@@ -5129,9 +5251,9 @@ static void simplify(cfg_t* cfg){
 		 */
 		if(simplification_occured == TRUE){
 			//Run the mark and sweep
-			perform_mark_and_sweep_pass(&(function->function_blocks));
+			perform_mark_and_sweep_pass(function_entry, &(function->function_blocks));
 
-
+			//Now run the simplifier
 			while(simplifier_pass(function_entry) == TRUE);
 		}
 	}
