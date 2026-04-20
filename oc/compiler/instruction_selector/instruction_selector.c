@@ -4150,6 +4150,8 @@ static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_st
  *
  * Return TRUE if it was redundant, FALSE if not. If it was redundant then
  * we will have transformed this into an assignment
+ *
+ * TODO ASSIGN VALUE NAME
  */
 static inline u_int8_t convert_phi_function_if_redundant(instruction_t* phi_function){
 	//Extract the parameters
@@ -4516,6 +4518,41 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 
 		//Always bump up to the next statement
 		cursor = cursor->next_statement;
+	}
+
+	/**
+	 * For each successor of this block, we will replace any/all values 
+	 * in the underlying phi functions with their value names that
+	 * we've computed in this block
+	 */
+	for(u_int32_t i = 0; i < block->successors.current_index; i++){
+		//Grab the successor
+		basic_block_t* successor = dynamic_array_get_at(&(block->successors), i);
+
+		//Grab a leader statement
+		instruction_t* phi_cursor = successor->leader_statement;
+
+		//Run through every instruction that is a phi statement
+		while(phi_cursor != NULL
+				&& phi_cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
+			//Run through every parameter
+			for(u_int32_t j = 0; j < phi_cursor->parameters.current_index; j++){
+				//Extract the parameter
+				three_addr_var_t* parameter_var = dynamic_array_get_at(&(phi_cursor->parameters), j);
+
+				//Try to get the value name
+				three_addr_var_t* value_name = get_value_name(table, parameter_var);
+
+				//If these are not equal we take action
+				if(value_name != parameter_var){
+					//Replace this in here
+					dynamic_array_set_at(&(phi_cursor->parameters), value_name, j);
+
+					//This is a simplification
+					simplification_occured = TRUE;
+				}
+			}
+		}
 	}
 
 	/**
