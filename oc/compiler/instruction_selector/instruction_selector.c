@@ -4872,9 +4872,6 @@ static basic_block_t* nearest_marked_postdominator(dynamic_array_t* function_blo
 		}
 	}
 
-	//Destroy the queue when done
-	heap_queue_dealloc(&postdominator_queue);
-
 	//And give this back
 	return nearest_marked_postdominator;
 }
@@ -5440,7 +5437,6 @@ static void simplify(cfg_t* cfg){
 			 * to reorder all of the blocks
 			 */
 			if(result == SIMPLIFICATION_INSTRUCTIONS_AND_CONTROL_FLOW){
-				printf("HERE\n\n\n");
 				order_blocks(cfg);
 			}
 
