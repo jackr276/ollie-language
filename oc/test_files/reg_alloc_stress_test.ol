@@ -42,9 +42,9 @@ pub fn main() -> i32{
 	let x:mut i32 = 3;
 	let y:mut i32 = x - 1;
 	let aa:mut i32 = x - y;
-	let bb:mut i32 = x - y;
-	let cc:mut i32 = x - y;
-	let dd:mut i32 = x - y;
+	let bb:mut i32 = x - aa;
+	let cc:mut i32 = x - bb;
+	let dd:mut i32 = x - cc;
 
 	let z:mut i32 = y + x;
 	let a:i32 = 'a';
