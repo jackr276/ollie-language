@@ -4150,10 +4150,8 @@ static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_st
  *
  * Return TRUE if it was redundant, FALSE if not. If it was redundant then
  * we will have transformed this into an assignment
- *
- * TODO ASSIGN VALUE NAME
  */
-static inline u_int8_t convert_phi_function_if_redundant(instruction_t* phi_function){
+static inline u_int8_t convert_phi_function_if_redundant(value_numbering_table_t* table, instruction_t* phi_function){
 	//Extract the parameters
 	dynamic_array_t* parameters = &(phi_function->parameters);
 
@@ -4170,6 +4168,9 @@ static inline u_int8_t convert_phi_function_if_redundant(instruction_t* phi_func
 		}
 	}
 
+	//Deallocate the parameters array
+	dynamic_array_dealloc(&(phi_function->parameters));
+
 	/**
 	 * If we survived to down here then the phi function is redundant. We will replace
 	 * this phi function with a regular copy assignment now
@@ -4177,8 +4178,20 @@ static inline u_int8_t convert_phi_function_if_redundant(instruction_t* phi_func
 	phi_function->statement_type = THREE_ADDR_CODE_ASSN_STMT;
 	phi_function->op1 = first_parameter;
 
-	//Deallocate the parameters array
-	dynamic_array_dealloc(&(phi_function->parameters));
+	/**
+	 * We will now also create a value number for the phi assignee
+	 * to be replaced by whatever the simplfication came out to be
+	 */
+	dynamic_string_t value_name = dynamic_string_alloc();
+
+	//Get the value name string of the assignee
+	concatenate_value_name_string(phi_function->assignee, &value_name);
+
+	/**
+	 * Store this in here so that every reference to the old assignee
+	 * can become the first parameter
+	 */
+	add_value_number_expression(table, first_parameter, &value_name);
 
 	//This was redundant
 	return TRUE;
@@ -4398,7 +4411,7 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 	//So long as we see phi functions
 	while(cursor != NULL && cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
 		//It's redundant so we continue out
-		if(convert_phi_function_if_redundant(cursor) == TRUE){
+		if(convert_phi_function_if_redundant(table, cursor) == TRUE){
 			//This is a simplification
 			simplification_occured = TRUE;
 
