@@ -4535,23 +4535,14 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 		//Run through every instruction that is a phi statement
 		while(phi_cursor != NULL
 				&& phi_cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
-			//Run through every parameter
-			for(u_int32_t j = 0; j < phi_cursor->parameters.current_index; j++){
-				//Extract the parameter
-				three_addr_var_t* parameter_var = dynamic_array_get_at(&(phi_cursor->parameters), j);
 
-				//Try to get the value name
-				three_addr_var_t* value_name = get_value_name(table, parameter_var);
-
-				//If these are not equal we take action
-				if(value_name != parameter_var){
-					//Replace this in here
-					dynamic_array_set_at(&(phi_cursor->parameters), value_name, j);
-
-					//This is a simplification
-					simplification_occured = TRUE;
-				}
+			if(perform_value_name_substitutions(table, phi_cursor) == TRUE){
+				//Flag that a simplification happened
+				simplification_occured = TRUE;
 			}
+
+			//Bump the cursor up
+			phi_cursor = phi_cursor->next_statement;
 		}
 	}
 
