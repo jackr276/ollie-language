@@ -4648,6 +4648,117 @@ static inline void reset_visit_status_for_function(dynamic_array_t* function_blo
 
 
 /**
+ * Mark definitions(assignment) of a three address variable within a given
+ * function. The current_function parameter is an optimization step designed to help
+ * us weed out useless blocks. Note that the variable passed in may be null. If it is,
+ * we just leave immediately
+ */
+static void mark_and_add_definition(dynamic_array_t* current_function_blocks, three_addr_var_t* variable, dynamic_array_t* worklist){
+	//If the variable is NULL, we leave
+	if(variable == NULL){
+		return;
+	}
+
+	/**
+	 * There is no point in trying to mark a variable like this, we will
+	 * never find the definition since they exist by default
+	 */
+	if(variable == stack_pointer_variable || variable == instruction_pointer_variable){
+		return;
+	}
+
+	/**
+	 * Similarly, for all of these variable types, there is also no point
+	 * ever in marking them
+	 */
+	switch(variable->variable_type){
+		case VARIABLE_TYPE_LOCAL_CONSTANT:
+		case VARIABLE_TYPE_FUNCTION_ADDRESS:
+		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+			return;
+		default:
+			break;
+	}
+
+	/**
+	 * If this variable has a stack region, then we will be marking
+	 * said stack region. We know that this discriminating union is a stack
+	 * region because of the if-check above that rules out local constants
+	 */
+	if(variable->associated_memory_region.stack_region != NULL){
+		mark_stack_region(variable->associated_memory_region.stack_region);
+	}
+
+	//Run through everything here
+	for(u_int32_t _ = 0; _ < current_function_blocks->current_index; _++){
+		//Grab the block out
+		basic_block_t* block = dynamic_array_get_at(current_function_blocks, _);
+
+		//This is always where we start
+		instruction_t* stmt = block->exit_statement;
+
+		//Our logic is based on the variable type
+		switch(variable->variable_type){
+			case VARIABLE_TYPE_NON_TEMP:
+			case VARIABLE_TYPE_MEMORY_ADDRESS:
+				stmt = block->exit_statement;
+
+				//So long as this isn't NULL
+				while(stmt != NULL){
+					//If it's marked we're out of here
+					if(stmt->mark == TRUE || stmt->assignee == NULL){
+						stmt = stmt->previous_statement;
+						continue;
+					}
+
+					//Is the assignee our variable AND it's unmarked?
+					if(stmt->assignee->linked_var == variable->linked_var
+						&& stmt->assignee->ssa_generation == variable->ssa_generation){
+
+						dynamic_array_add(worklist, stmt);
+						stmt->mark = TRUE;
+						block->contains_mark = TRUE;
+						return;
+					}
+
+					//Advance the statement
+					stmt = stmt->previous_statement;
+				}
+
+				break;
+
+			case VARIABLE_TYPE_TEMP:
+				//So long as this isn't NULL
+				while(stmt != NULL){
+					//If this is the case, we'll just go onto the next one
+					if(stmt->mark == TRUE || stmt->assignee == NULL){
+						stmt = stmt->previous_statement;
+						continue;
+					}
+
+					//Is the assignee our variable AND it's unmarked?
+					if(stmt->assignee->temp_var_number == variable->temp_var_number){
+						dynamic_array_add(worklist, stmt);
+						stmt->mark = TRUE;
+						block->contains_mark = TRUE;
+						return;
+					}
+
+					//Advance the statement
+					stmt = stmt->previous_statement;
+				}
+
+				break;
+
+			default:
+				printf("Fatal internal compiler error: attempting to mark invalid variable type: %s\n", variable_type_to_string(variable->variable_type));
+				exit(1);
+		}
+	}
+}
+
+
+/**
  * The mark algorithm will go through and mark every operation(three address code statement) as
  * critical or noncritical. We will then go back through and see which operations are setting
  * those critical values
