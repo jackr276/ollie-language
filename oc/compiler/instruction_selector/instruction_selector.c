@@ -4336,7 +4336,7 @@ static inline u_int8_t perform_value_name_substitutions(value_numbering_table_t*
 		//If we found a difference then we will flag it here
 		if(value_name != variable){
 			//Add it
-			dynamic_array_set_at(&(instruction->parameters), variable, i);
+			dynamic_array_set_at(&(instruction->parameters), value_name, i);
 
 			//Flag it
 			substitution_occured = TRUE;
