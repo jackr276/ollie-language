@@ -4631,6 +4631,18 @@ static u_int8_t global_value_numbering_pass(basic_block_t* function_entry_block,
 
 
 /**
+ * Perform a mark and sweep pass on the given function blocks. This will only
+ * be triggered if we discover areas that we are able to simplify
+ * using value numbering. The mark and sweep will happen first, followed
+ * by the simplifier
+ */
+static inline void perform_mark_and_sweep_pass(dynamic_array_t* function_blocks){
+
+}
+
+
+
+/**
  * We'll make use of a while change algorithm here. We make passes
  * until we see the first pass where we experience no change at all.
  */
@@ -4661,11 +4673,12 @@ static void simplify(cfg_t* cfg){
 		/**
 		 * If we did do any global value numbering, then we'll need to come back
 		 * and resimplify to make sure we haven't missed anything post-simplify
-		 *
-		 * TODO - we're going to need to add a dead code shakeout here too once
-		 * we do our value naming for real
 		 */
 		if(simplification_occured == TRUE){
+			//Run the mark and sweep
+			perform_mark_and_sweep_pass(&(function->function_blocks));
+
+
 			while(simplifier_pass(function_entry) == TRUE);
 		}
 	}
