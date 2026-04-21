@@ -2389,41 +2389,88 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 			//TODO HOW TO ACCOUNT FOR BRANCH
 			case DOUBLE_AND:
+				if(binary_operation->assignee->sets_cc){
+					printf("SETS CONDITION CODES\n");
+				} else {
+					printf("FAIR GAME\n");
+				}
 				printf("||\n");
 				break;
 
 			//TODO HOW TO ACCOUNT FOR BRANCH
 			case DOUBLE_OR:
+				if(binary_operation->assignee->sets_cc){
+					printf("SETS CONDITION CODES\n");
+				} else {
+					printf("FAIR GAME\n");
+				}
+
 				printf("&&\n");
 				break;
 
 			//TODO HOW TO ACCOUNT FOR BRANCH
 			case DOUBLE_EQUALS:
+				if(binary_operation->assignee->sets_cc){
+					printf("SETS CONDITION CODES\n");
+				} else {
+					printf("FAIR GAME\n");
+				}
 				printf("==\n");
 				break;
 
 			//TODO HOW TO ACCOUNT FOR BRANCH
 			case NOT_EQUALS:
+				if(binary_operation->assignee->sets_cc){
+					printf("SETS CONDITION CODES\n");
+				} else {
+					printf("FAIR GAME\n");
+				}
+
 				printf("!=\n");
 				break;
 
 			//TODO HOW TO ACCOUNT FOR BRANCH
 			case L_THAN:
+				if(binary_operation->assignee->sets_cc){
+					printf("SETS CONDITION CODES\n");
+				} else {
+					printf("FAIR GAME\n");
+				}
+
+
 				printf("<\n");
 				break;
 
 			//TODO HOW TO ACCOUNT FOR BRANCH
 			case L_THAN_OR_EQ:
+				if(binary_operation->assignee->sets_cc){
+					printf("SETS CONDITION CODES\n");
+				} else {
+					printf("FAIR GAME\n");
+				}
+
 				printf("<=\n");
 				break;
 
 			//TODO HOW TO ACCOUNT FOR BRANCH
 			case G_THAN:
+				if(binary_operation->assignee->sets_cc){
+					printf("SETS CONDITION CODES\n");
+				} else {
+					printf("FAIR GAME\n");
+				}
+
 				printf(">\n");
 				break;
 
 			//TODO HOW TO ACCOUNT FOR BRANCH
 			case G_THAN_OR_EQ:
+				if(binary_operation->assignee->sets_cc){
+					printf("SETS CONDITION CODES\n");
+				} else {
+					printf("FAIR GAME\n");
+				}
+
 				printf(">=\n");
 				break;
 
