@@ -1782,7 +1782,8 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 			 * If this is not temp, then we're going to need to insert a move
 			 * instruction to avoid altering it
 			 */
-			if(mod_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+			if(mod_instruction->op1->variable_type != VARIABLE_TYPE_TEMP
+				|| mod_instruction->op1->was_value_named == TRUE){
 				//Emit the move
 				instruction_t* move_instruction = emit_assignment_instruction(emit_temp_var(mod_instruction->op1->type), mod_instruction->op1);
 
@@ -6863,8 +6864,15 @@ static void handle_left_shift_instruction(instruction_window_t* window){
 	 *  a_0 <- t3
 	 */
 	} else {
-		//If this is not temp then we need it to be so we'll move it into being so
-		if(left_shift_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+
+		/**
+		 * If this is either not a temp var *or* we have a use count that is higher than
+		 * one(can happen with value numbering), then we'll need to emit another
+		 * temp assignment
+		 */
+		if(left_shift_instruction->op1->variable_type != VARIABLE_TYPE_TEMP
+			|| left_shift_instruction->op1->was_value_named == TRUE){
+
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), left_shift_instruction->op1);
 
 			//Put this before the instruction
@@ -7048,8 +7056,14 @@ static void handle_right_shift_instruction(instruction_window_t* window){
 	 *  a_0 <- t3
 	 */
 	} else {
-		//If this is not temp then we need it to be so we'll move it into being so
-		if(right_shift_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+		/**
+		 * If this is either not a temp var *or* we have a use count that is higher than
+		 * one(can happen with value numbering), then we'll need to emit another
+		 * temp assignment
+		 */
+		if(right_shift_instruction->op1->variable_type != VARIABLE_TYPE_TEMP
+			|| right_shift_instruction->op1->was_value_named == TRUE){
+
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), right_shift_instruction->op1);
 
 			//Put this before the instruction
@@ -7180,8 +7194,14 @@ static void handle_bitwise_inclusive_or_instruction(instruction_window_t* window
 	 * 	t4 <- t3
 	 */
 	} else {
-		//If this is not temp then we need it to be so we'll move it into being so
-		if(bitwise_or->op1->variable_type != VARIABLE_TYPE_TEMP){
+		/**
+		 * If this is either not a temp var *or* we have a use count that is higher than
+		 * one(can happen with value numbering), then we'll need to emit another
+		 * temp assignment
+		 */
+		if(bitwise_or->op1->variable_type != VARIABLE_TYPE_TEMP
+			|| bitwise_or->op1->was_value_named == TRUE){
+
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), bitwise_or->op1);
 
 			//Put this before the instruction
@@ -7312,8 +7332,15 @@ static void handle_bitwise_and_instruction(instruction_window_t* window){
 	 * 	t4 <- t3
 	 */
 	} else {
-		//If this is not temp then we need it to be so we'll move it into being so
-		if(bitwise_and->op1->variable_type != VARIABLE_TYPE_TEMP){
+
+		/**
+		 * If this is either not a temp var *or* we have a use count that is higher than
+		 * one(can happen with value numbering), then we'll need to emit another
+		 * temp assignment
+		 */
+		if(bitwise_and->op1->variable_type != VARIABLE_TYPE_TEMP
+			|| bitwise_and->op1->was_value_named == TRUE){
+
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), bitwise_and->op1);
 
 			//Put this before the instruction
@@ -7444,8 +7471,15 @@ static void handle_bitwise_exclusive_or_instruction(instruction_window_t* window
 	 * 	t4 <- t3
 	 */
 	} else {
-		//If this is not temp then we need it to be so we'll move it into being so
-		if(bitwise_xor->op1->variable_type != VARIABLE_TYPE_TEMP){
+
+		/**
+		 * If this is either not a temp var *or* we have a use count that is higher than
+		 * one(can happen with value numbering), then we'll need to emit another
+		 * temp assignment
+		 */
+		if(bitwise_xor->op1->variable_type != VARIABLE_TYPE_TEMP
+			|| bitwise_xor->op1->was_value_named == TRUE){
+
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), bitwise_xor->op1);
 
 			//Put this before the instruction
@@ -7984,8 +8018,14 @@ static void handle_signed_multiplication_instruction(instruction_window_t* windo
 	 * 	t4 <- t3
 	 */
 	} else {
-		//If this is not temp then we need it to be so we'll move it into being so
-		if(multiplication_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+		/**
+		 * If this is either not a temp var *or* we have a use count that is higher than
+		 * one(can happen with value numbering), then we'll need to emit another
+		 * temp assignment
+		 */
+		if(multiplication_instruction->op1->variable_type != VARIABLE_TYPE_TEMP
+			|| multiplication_instruction->op1->was_value_named == TRUE){
+
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), multiplication_instruction->op1);
 
 			//Put this before the instruction
@@ -8105,8 +8145,14 @@ static void handle_sse_multiplication_instruction(instruction_window_t* window){
 	 * 	t4 <- t3
 	 */
 	} else {
-		//If this is not temp then we need it to be so we'll move it into being so
-		if(multiplication_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+		/**
+		 * If this is either not a temp var *or* we have a use count that is higher than
+		 * one(can happen with value numbering), then we'll need to emit another
+		 * temp assignment
+		 */
+		if(multiplication_instruction->op1->variable_type != VARIABLE_TYPE_TEMP
+			|| multiplication_instruction->op1->was_value_named == TRUE){
+
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), multiplication_instruction->op1);
 
 			//Put this before the instruction
@@ -8502,8 +8548,15 @@ static void handle_sse_division_instruction(instruction_window_t* window){
 	 * 	t4 <- t3
 	 */
 	} else {
-		//If this is not temp then we need it to be so we'll move it into being so
-		if(division_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+		
+		/**
+		 * If this is either not a temp var *or* we have a use count that is higher than
+		 * one(can happen with value numbering), then we'll need to emit another
+		 * temp assignment
+		 */
+		if(division_instruction->op1->variable_type != VARIABLE_TYPE_TEMP
+			|| division_instruction->op1->was_value_named == TRUE){
+
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), division_instruction->op1);
 
 			//Put this before the instruction
