@@ -3079,6 +3079,13 @@ void emit_branch(basic_block_t* basic_block, basic_block_t* if_destination, basi
 	//Emit the actual instruction here
 	instruction_t* branch_instruction = emit_branch_statement(if_destination, else_destination, conditional_result, branch_type);
 
+	/**
+	 * We need to flag for later on that this conditional result is being used to set condition
+	 * codes. This is especially important for the value numberer because we need to make
+	 * sure that we don't optimize this away if we need said condition codes
+	 */
+	conditional_result->sets_cc = TRUE;
+
 	//Mark this as the op1 so that we can track in the optimizer
 	branch_instruction->op1 = conditional_result;
 
@@ -11160,8 +11167,6 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	symtab_variable_record_t* stack_pointer = initialize_stack_pointer(results->type_symtab);
 	//Initialize the variable too
 	three_addr_var_t* stack_pointer_var = emit_var(stack_pointer);
-	//Mark it
-	stack_pointer_var->is_stack_pointer = TRUE;
 	//Store the stack pointer
 	cfg->stack_pointer = stack_pointer_var;
 

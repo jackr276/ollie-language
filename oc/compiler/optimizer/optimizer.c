@@ -19,7 +19,6 @@ static three_addr_var_t* instruction_pointer_variable;
 //A pointer to the cfg
 static cfg_t* cfg_reference;
 
-
 /**
  * We are going to need to maintain a mapping of temporary
  * variables to replacement variables. Remember that the SSA 
@@ -32,7 +31,6 @@ typedef struct temporary_variable_mapping_t{
 	u_int32_t source_temp_var_id;
 	//The replacement variable
 	three_addr_var_t* replacement_var;
-
 } temporary_variable_mapping_t;
 
 
@@ -136,6 +134,9 @@ static inline void reset_marks_for_block(basic_block_t* block){
 		//Go down the block by one
 		cursor = cursor->next_statement;
 	}
+
+	//Remove that this has a mark
+	block->contains_mark = FALSE;
 }
 
 
@@ -891,11 +892,13 @@ static basic_block_t* nearest_marked_postdominator(dynamic_array_t* function_blo
 		//Mark this for later
 		candidate->visited = TRUE;
 
-		//Now let's check for our criterion.
-		//We want:
-		//	it to be in the postdominator set
-		//	it to have a mark
-		//	it to not equal itself
+		/**
+		 * Now let's check for our criterion.
+		 * We want:
+		 *	it to be in the postdominator set
+		 *	it to have a mark
+		 *	it to not equal itself
+		 */
 		if(dynamic_array_contains(&(B->postdominator_set), candidate) != NOT_FOUND
 		  && candidate->contains_mark == TRUE && B != candidate){
 			//We've found it, so we're done

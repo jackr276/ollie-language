@@ -10,6 +10,7 @@
 
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
+#include "../utils/value_numbering_table/value_numbering_table.h"
 #include "../utils/constants.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,8 +30,10 @@ static generic_type_t* u16;
 static generic_type_t* i16;
 static generic_type_t* u8;
 
-static inline three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type);
-
+//The dynamic string that we reuse for searching
+static dynamic_string_t value_name_searcher_string;
+//A queue that we will reuse for postdominator searching
+static heap_queue_t postdominator_queue;
 //A holder for the stack pointer
 static three_addr_var_t* stack_pointer_variable;
 //A holder for the instruction pointer
@@ -38,9 +41,10 @@ static three_addr_var_t* instruction_pointer_variable;
 //A reference to our CFG
 static cfg_t* cfg_reference;
 
+static inline three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type);
+
 //The window for our "sliding window" optimizer
 typedef struct instruction_window_t instruction_window_t;
-
 
 /**
  * Will we be printing these out as instructions or as three address code
@@ -50,6 +54,16 @@ typedef enum {
 	PRINT_THREE_ADDRESS_CODE,
 	PRINT_INSTRUCTION
 } instruction_printing_mode_t;
+
+/**
+ * Determine what kind of simplification that we need to do. Some simplifications
+ * require a complete rework of the control flow
+ */
+typedef enum {
+	NO_SIMPLIFICATION,
+	SIMPLIFICATION_INSTRUCTIONS_ONLY,
+	SIMPLIFICATION_INSTRUCTIONS_AND_CONTROL_FLOW,
+} simplification_type_t;
 
 
 /**
@@ -147,6 +161,41 @@ static void print_instruction_window(instruction_window_t* window){
 
 
 /**
+ * Is this instruction going to be used to set condition codes? If so, we
+ * don't want to accidentally value number the thing and remove it
+ */
+static inline u_int8_t does_instruction_set_condition_codes(instruction_t* instruction){
+	switch(instruction->instruction_type){
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+			switch(instruction->op){
+				/**
+				 * These will all have a flag that tells us whether or not they set
+				 * condition codes. We will rely on that flag for these instructions.
+				 * For other instructions it does not matter
+				 */
+				case G_THAN:
+				case G_THAN_OR_EQ:
+				case L_THAN:
+				case L_THAN_OR_EQ:
+				case DOUBLE_EQUALS:
+				case NOT_EQUALS:
+					return instruction->assignee->sets_cc;
+
+				default:
+					return FALSE;
+			}
+
+		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
+			return TRUE;
+
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Does the block that we're passing in end in a direct(jmp) jump to
  * the very next block. If so, we'll return what block the jump goes to.
  * If not, we'll return null.
@@ -171,6 +220,24 @@ static inline basic_block_t* does_block_end_in_jump(basic_block_t* block){
 		//By default no
 		default:
 			return NULL;
+	}
+}
+
+
+/**
+ * Is the given expression eligible for value numbering? Note that all
+ * expressions will have the algorithm run, but only expressions that
+ * we explicitly approve of here will attempt to be subsituted for
+ *
+ * This list may be updated as the IR increases/chagnes
+ */
+static inline u_int8_t is_expression_eligible_for_value_numbering(instruction_t* instruction){
+	switch(instruction->statement_type){
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+			return TRUE;
+		default:
+			return FALSE;
 	}
 }
 
@@ -337,10 +404,12 @@ static void order_blocks(cfg_t* cfg){
 	//We'll first wipe the visited status on this CFG
 	reset_visited_status(cfg, TRUE);
 	
-	//We will perform a breadth first search and use the "direct successor" area
-	//of the blocks to store them all in one chain per function. The functions themselves
-	//are separated and stored individually, because in ollie a function is the smallest unit
-	//of procedures
+	/**
+	 * We will perform a breadth first search and use the "direct successor" area
+	 * of the blocks to store them all in one chain per function. The functions themselves
+	 * are separated and stored individually, because in ollie a function is the smallest unit
+	 * of procedures
+	 */
 	
 	//We'll need to use a queue every time, we may as well just have one big one
 	heap_queue_t queue = heap_queue_alloc();
@@ -1581,31 +1650,22 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		u_int32_t and_mask = (1 << divisor_log2) - 1;
 
 		/**
-		 * Step 0: assign the dividend over to a temp var. We need to preserve
-		 * op1 for our addition step. This will eventually become our "bias"
-		 */
-		three_addr_var_t* bias_temp_var = emit_temp_var(type);
-
-		//Assign the op1 over
-		instruction_t* dividend_assignment = emit_assignment_instruction(bias_temp_var, mod_instruction->op1);
-
-		//This goes in before the mod instruction
-		insert_instruction_before_given(dividend_assignment, mod_instruction);
-
-		/**
 		 * Step 1: Extract the sign bit, backfilling with either 1's or 0's as we go. Since we are
 		 * looking to backfill we *must* use an arithmetic right shift here
 		 */
  		three_addr_const_t* num_bits_first_shift = emit_direct_integer_or_char_constant(type_size_in_bits - 1, type);
 
+		//Get a variable for the first shift
+		three_addr_var_t* first_shift_result = emit_temp_var(type);
+
 		//Now we need to perform the first shift. We will force this to be signed so that an arithmetic shift is used
-		instruction_t* arithmetic_shift = emit_binary_operation_with_const_instruction(bias_temp_var, bias_temp_var, R_SHIFT, num_bits_first_shift);
+		instruction_t* arithmetic_shift = emit_binary_operation_with_const_instruction(first_shift_result, mod_instruction->op1, R_SHIFT, num_bits_first_shift);
 
 		//IMPORTANT - flag that we need to force this to be signed
 		arithmetic_shift->optional_storage.forced_signedness = FORCED_SIGNED;
 
-		//This goes in after the dividend
-		insert_instruction_after_given(arithmetic_shift, dividend_assignment);
+		//Put this in before the mod
+		insert_instruction_before_given(arithmetic_shift, mod_instruction);
 
 		/**
 		 * Step 2: Fully convert into our bias by shifting right logically now by our number of bits 
@@ -1614,8 +1674,11 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		 */
 		three_addr_const_t* bias_shift_constant = emit_direct_integer_or_char_constant(type_size_in_bits - divisor_log2, type);
 
+		//Here's the temp var that we'll actually use for our bias
+		three_addr_var_t* bias_temp_var = emit_temp_var(type);
+
 		//Now we need to perform the logical right shift
-		instruction_t* logical_shift = emit_binary_operation_with_const_instruction(bias_temp_var, bias_temp_var, R_SHIFT, bias_shift_constant);
+		instruction_t* logical_shift = emit_binary_operation_with_const_instruction(bias_temp_var, first_shift_result, R_SHIFT, bias_shift_constant);
 
 		//IMPORTANT - flag that we need to force this to be unsigned so that it is a logical shift
 		logical_shift->optional_storage.forced_signedness = FORCED_UNSIGNED;
@@ -1719,7 +1782,8 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 			 * If this is not temp, then we're going to need to insert a move
 			 * instruction to avoid altering it
 			 */
-			if(mod_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+			if(mod_instruction->op1->variable_type != VARIABLE_TYPE_TEMP
+				|| mod_instruction->op1->was_value_named == TRUE){
 				//Emit the move
 				instruction_t* move_instruction = emit_assignment_instruction(emit_temp_var(mod_instruction->op1->type), mod_instruction->op1);
 
@@ -3997,19 +4061,1444 @@ static u_int8_t simplifier_pass(basic_block_t* entry){
 
 
 /**
+ * Get the value name for a given variable and *concatenate* it into
+ * a given dynamic string. It is a assumed that the string has been
+ * allocated by the caller
+ */
+static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_string_t* output){
+	//Allocate a temporary buffer for this
+	char buffer[1000];
+	//Holder for the variable record
+	symtab_variable_record_t* variable_record = variable->linked_var;
+
+	//Handle each variable type accordingly
+	switch(variable->variable_type){
+		/**
+		 * Temporary variables just output as t<number>
+		 */
+		case VARIABLE_TYPE_TEMP:
+			sprintf(buffer, "t%d", variable->temp_var_number);
+			dynamic_string_concatenate(output, buffer);
+
+			break;
+
+		/**
+		 * For non temporaries we will use:
+		 * 	<lexical_scope>_name_<ssa_generation>
+		 *
+		 * 	This will guarantee uniqueness even if we have
+		 * 	colliding
+		 */
+		case VARIABLE_TYPE_NON_TEMP:
+			//Store the variable record
+			sprintf(buffer, "%d_%s_%d", variable_record->lexical_scope_id, variable_record->var_name.string, variable->ssa_generation);
+			dynamic_string_concatenate(output, buffer);
+
+			break;
+
+		/**
+		 * For a memory address, we will just print this
+		 * out as M<<lexical_scope>_<name>_<ssa_generation>>
+		 * if we have a variable name. If not then we'll just be printing
+		 * out the temp var number
+		 */
+		case VARIABLE_TYPE_MEMORY_ADDRESS:
+			if(variable_record != NULL){
+				sprintf(buffer, "M<%d_%s_%d>", variable_record->lexical_scope_id, variable_record->var_name.string, variable->ssa_generation);
+			} else {
+				sprintf(buffer, "M<t%d>", variable->temp_var_number);
+			}
+
+			dynamic_string_concatenate(output, buffer);
+			break;
+
+		/**
+		 * For a stack memory address, we will just print this
+		 * out as SM<<scope>_<name>_<ssa_generation>> if we have a
+		 * variable name. If not then we will be using the temp 
+		 * variable number
+		 */
+		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+			if(variable_record != NULL){
+				sprintf(buffer, "SM<%d_%s_%d>", variable_record->lexical_scope_id, variable_record->var_name.string, variable->ssa_generation);
+			} else {
+				sprintf(buffer, "SM<t%d>", variable->temp_var_number);
+			}
+
+			dynamic_string_concatenate(output, buffer);
+			break;
+
+		/**
+		 * Local constants are already unique so we can just print them
+		 * out as is
+		 */
+		case VARIABLE_TYPE_LOCAL_CONSTANT:
+			sprintf(buffer, ".LC%d", variable->associated_memory_region.local_constant->local_constant_id);
+			dynamic_string_concatenate(output, buffer);
+
+			break;
+
+		/**
+		 * Function addresses just output the name of the underlying function
+		 */
+		case VARIABLE_TYPE_FUNCTION_ADDRESS:
+			sprintf(buffer, "%s", variable->associated_memory_region.rip_relative_function->func_name.string);
+			dynamic_string_concatenate(output, buffer);
+			break;
+
+		default:
+			fprintf(stderr, "Fatal internal compiler error: unrecognized variable type detected in value name generator\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Is the given phi function redundant? A phi function is redundant
+ * if *all* of the variables inside of the phi function have ended
+ * up becoming the same via the GVN pass. This is easy to check
+ * because we just need to compare the phi function's first parameter
+ * against all of the others. If they all match, then it is redundant
+ * and we will convert it into an assignment
+ *
+ * Return TRUE if it was redundant, FALSE if not. If it was redundant then
+ * we will have transformed this into an assignment
+ */
+static inline u_int8_t convert_phi_function_if_redundant(value_numbering_table_t* table, instruction_t* phi_function){
+	//Extract the parameters
+	dynamic_array_t* parameters = &(phi_function->parameters);
+
+	//Grab the first parameter
+	three_addr_var_t* first_parameter = dynamic_array_get_at(parameters, 0);
+
+	//Now run through every other parameter and compare
+	for(u_int32_t i = 1; i < parameters->current_index; i++){
+		three_addr_var_t* compare_to_param = dynamic_array_get_at(parameters, i);
+
+		//If these aren't equal then we fail out
+		if(variables_equal(first_parameter, compare_to_param, FALSE) == FALSE){
+			return FALSE;
+		}
+	}
+
+	//Deallocate the parameters array
+	dynamic_array_dealloc(&(phi_function->parameters));
+
+	/**
+	 * If we survived to down here then the phi function is redundant. We will replace
+	 * this phi function with a regular copy assignment now
+	 */
+	phi_function->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+	phi_function->op1 = first_parameter;
+
+	/**
+	 * We will now also create a value number for the phi assignee
+	 * to be replaced by whatever the simplfication came out to be
+	 */
+	dynamic_string_t value_name = dynamic_string_alloc();
+
+	//Get the value name string of the assignee
+	concatenate_value_name_string(phi_function->assignee, &value_name);
+
+	/**
+	 * Store this in here so that every reference to the old assignee
+	 * can become the first parameter
+	 */
+	add_value_number_expression(table, first_parameter, &value_name);
+
+	//This was redundant
+	return TRUE;
+}
+
+
+/**
+ * Generate the key for a given instruction. The key for a given
+ * instruction consists of the instruction type converted to a char *and*
+ * the variables that are inside of it. We are given an allocated
+ * dynamic string as the key for this function and we will populate it
+ *
+ * Remember that these value names are not meant to be anything fancy, they
+ * just need to be unique. As such we will generate the value names with
+ * some distinguishable starting keys and their given operand values
+ */
+static inline void generate_value_name_key_for_instruction(instruction_t* instruction, dynamic_string_t* textual_key){
+	//For holding constant strings
+	char constant_string[300];
+
+	//Based on the instruction type we generate different keys
+	switch(instruction->statement_type){
+		case THREE_ADDR_CODE_PHI_FUNC:
+			dynamic_string_concatenate(textual_key, "PHI");
+
+			//Concatenate the variable name of each of the parameters onto the end
+			for(u_int32_t i = 0; i < instruction->parameters.current_index; i++){
+				//Extract the var
+				three_addr_var_t* variable = dynamic_array_get_at(&(instruction->parameters), i);
+
+				//Grab it's value name
+				concatenate_value_name_string(variable, textual_key);
+			}
+
+			break;
+
+		/**
+		 * For a bin op statement we'll have
+		 * value names like BINx_0+y_0
+		 */
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+			//Starting key
+			dynamic_string_concatenate(textual_key, "BIN");
+			
+			//First op
+			concatenate_value_name_string(instruction->op1, textual_key);
+
+			//Actual opcode
+			dynamic_string_add_char_to_back(textual_key, instruction->op);
+
+			//Second op
+			concatenate_value_name_string(instruction->op2, textual_key);
+
+			break;
+
+		/**
+		 * For bin op with const statements we'll
+		 * have value names like BINx_0-2
+		 */
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+			//Starting key
+			dynamic_string_concatenate(textual_key, "BIN");
+			
+			//First op
+			concatenate_value_name_string(instruction->op1, textual_key);
+
+			//Actual opcode
+			dynamic_string_add_char_to_back(textual_key, instruction->op);
+
+			//Generate the constant string as well
+			sprintf(constant_string, "%d_%ld", instruction->op1_const->const_type, instruction->op1_const->constant_value.signed_long_constant);
+			
+			//Add this in
+			dynamic_string_concatenate(textual_key, constant_string);
+
+			break;
+ 
+		default:
+			break;
+	}
+}
+
+
+/**
+ * Get the value name for a given variable. 
+ *
+ * We will be using the value numbering table to search.
+ */
+static three_addr_var_t* get_value_name(value_numbering_table_t* table, three_addr_var_t* variable){
+	//Simple catch case if we hit it
+	if(variable == NULL){
+		return NULL;
+	}
+
+	//Clear out the search string
+	clear_dynamic_string(&value_name_searcher_string);
+	//Add the name to the string
+	concatenate_value_name_string(variable, &value_name_searcher_string);
+
+	//Try to find it
+	three_addr_var_t* value_name_substitution = lookup_value_number_expression(table, &value_name_searcher_string);
+
+	//Most common - it's null, just return ourselves
+	if(value_name_substitution == NULL){
+		return variable;
+	//Otherwise we found something, so we'll hand that back
+	} else {
+		return value_name_substitution;
+	}
+}
+
+
+/**
+ * Replace the "current" variable with the "given" variable *and* update
+ * the use count accordingly. These will all be right hand side variables
+ * so we this will all be a use count, and not an assignment count
+ *
+ * This function returns TRUE if we could replace the variable, and FALSE if we 
+ * did not
+ */
+static inline u_int8_t replace_rhs_variable(three_addr_var_t** current, three_addr_var_t* given){
+	//If these aren't equal we replace
+	if(*current != given){
+		//Bump this one's use count down
+		(*current)->use_count--;
+
+		//Make this equal the given
+		*current = given;
+
+		//Bump this one's use count up
+		given->use_count++;
+
+		//We did substitute
+		return TRUE;
+
+	//Otherwise we didn't
+	} else {
+		return FALSE;
+	}
+}
+
+
+/**
+ * Replace a variable inside of a parameter list. Since this is inside of a parameter list, we only
+ * need to worry about the use count here. This function returns TRUE if a replacement did happen,
+ * and FALSE if it did not
+ */
+static inline u_int8_t replace_all_parameter_list_variables(value_numbering_table_t* table, dynamic_array_t* parameter_list){
+	//Flag whether or not we've made one
+	u_int8_t performed_substitution = FALSE;
+
+	//Run through the entire list
+	for(u_int32_t i = 0; i < parameter_list->current_index; i++){
+		//Grab the old one out
+		three_addr_var_t* old_variable = dynamic_array_get_at(parameter_list, i);
+
+		//Get the value name out
+		three_addr_var_t* value_name = get_value_name(table, old_variable);
+		
+		//If they're not equal then we replace
+		if(old_variable != value_name){
+			//Set it in
+			dynamic_array_set_at(parameter_list, value_name, i);
+
+			//Bump his use count down
+			old_variable->use_count--;
+
+			//While this one goes up
+			value_name->use_count++;
+
+			//Flag that we did perform one
+			performed_substitution = TRUE;
+		}
+	}
+
+	return performed_substitution;
+}
+
+
+/**
+ * For every RHS variable, we will perform value name substitutions. This is very
+ * similar to the way that register allocation coalescence works except that this
+ * one does not rely on interference, and instead relies on proven value names
+ *
+ * This function will flag if a substution actually went through or not. This is important
+ * because that is our check for whether or not this whole thing needs a simplification
+ * run or not
+ */
+static inline u_int8_t perform_value_name_substitutions(value_numbering_table_t* table, instruction_t* instruction){
+	//Did we or did we not perform a substitution
+	u_int8_t substitution_occured = FALSE;
+
+	//Temp holder for our value names
+	three_addr_var_t* value_name;
+
+	//First comes op1
+	value_name = get_value_name(table, instruction->op1);
+
+	//Replace the variable, and flag that this worked if it did
+	if(replace_rhs_variable(&(instruction->op1), value_name) == TRUE){
+		substitution_occured = TRUE;
+	}
+
+	//Now do it for op2
+	value_name = get_value_name(table, instruction->op2);
+
+	//Same deal here
+	if(replace_rhs_variable(&(instruction->op2), value_name) == TRUE){
+		substitution_occured = TRUE;
+	}
+
+	//Now replace all of the parameter list variables
+	if(replace_all_parameter_list_variables(table, &(instruction->parameters)) == TRUE){
+		substitution_occured = TRUE;
+	}
+
+	return substitution_occured;
+}
+
+
+/**
+ * Perform the value numbering algorithm for one block. This algorithm
+ * naturally reproduces itself in a recursive manner by traversing the dominator tree.
+ * Traversing a dominator tree will naturally traverse the function in reverse post
+ * order
+ *
+ * NOTE: this function is recursive
+ *
+ * Algorithm Dominator Value Numbering Traversal(block b):
+ * 	for each phi node in b:
+ * 		if phi node is redundant then:
+ * 			remove it
+ * 			continue
+ *
+ * 		set the value number as the assigned var name
+ * 		add phi node to hash table
+ *
+ * 	for each assignment i:
+ * 		get value numbers for each operand
+ * 		if the expression(Ti) has been computed before:
+ * 			replace the operation i with a copy from Ti
+ * 		else:
+ * 			insert a new value number into the table at the hash key location
+ *
+ * 	for each successor c of block b:
+ * 		replace all phi node operands in c that were computed in this block with their value
+ *
+ * 	for each child c of block b in the dominator tree
+ * 		Dominator Value Numbering Traversal(b)
+ */
+static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_block_t* block){
+	//Were we able to perform any value numbering? If so flag this as true
+	u_int8_t simplification_occured = FALSE;
+
+	/**
+	 * 	for each phi node in b:
+	 * 		if phi node is redundant then:
+	 * 			convert it to an assignment
+	 * 			continue
+	 *
+	 * 		set the value number as the assigned var name
+	 * 		add phi instruction to hash table
+	 *
+	 * 	For a phi node to be redundant, all of the values inside of
+	 * 	it have to be the exact same
+	 */
+	instruction_t* cursor = block->leader_statement;
+
+	//So long as we see phi functions
+	while(cursor != NULL && cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
+		//It's redundant so we continue out
+		if(convert_phi_function_if_redundant(table, cursor) == TRUE){
+			//This is a simplification
+			simplification_occured = TRUE;
+
+			//Onto the next one
+			cursor = cursor->next_statement;
+			continue;
+		}
+		
+		/**
+		 * Otherwise we will need to save this value inside of the hash table. We
+		 * will generate the value name for it and save it inside. We need to do
+		 * this so that we have a trail of where it came from
+		 */
+		dynamic_string_t textual_key = dynamic_string_alloc();
+
+		//Generate the value name like so
+		generate_value_name_key_for_instruction(cursor, &textual_key);
+		
+		//Now add this in with the key as our name, and the value as the assignee
+		add_value_number_expression(table, cursor->assignee, &textual_key);
+		
+		//Bump it up
+		cursor = cursor->next_statement;
+	}
+	
+	/**
+	 * Now that we've done everything that need be done for the phi function,
+	 * we will go through and use global value numbering on every statement
+	 * that we consider to be eligible. 
+	 */
+	while(cursor != NULL){
+		/**
+		 * We're only going to attempt to search for this if it's actually eligible.
+		 * If it is not, we will still perform value name substitution, but we will
+		 * not store anything in the hashtable
+		 */
+		if(is_expression_eligible_for_value_numbering(cursor)){
+			/**
+			 * First we will use the value numberer itself to 
+			 * perform all necessary substitutions
+			 */
+			if(perform_value_name_substitutions(table, cursor) == TRUE){
+				simplification_occured = TRUE;
+			}
+
+			/**
+			 * Once we end up down here, we know that we have something that
+			 * is worth considering for us. We will now get the value name
+			 * for this instruction to see if it has already been computed 
+			 * before
+			 */
+			dynamic_string_t textual_string = dynamic_string_alloc();
+
+			//Generate the value name
+			generate_value_name_key_for_instruction(cursor, &textual_string);
+
+			//Can we find the result in the table?
+			three_addr_var_t* found_result = lookup_value_number_expression(table, &textual_string);
+
+			/**
+			 * Option 1: we've found it, so this is a redundant computation. Instead of 
+			 * doing this computation, we will replace the result with a copy from the
+			 * found result into this value
+			 *
+			 * Important caveat: if this instruction sets condition codes(like a CMP instruction), we
+			 * actually can't replace it even if we do find it. This is because
+			 */
+			if(found_result != NULL
+				&& does_instruction_set_condition_codes(cursor) == FALSE){
+
+				//This is now an assignment statement
+				cursor->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+
+				//Null out everything else just to be safe
+				cursor->op2 = NULL;
+				cursor->op1_const = NULL;
+				cursor->op = BLANK;
+
+				//The op1 is just the result that we found
+				cursor->op1 = found_result;
+
+				//We've used this one more time
+				found_result->use_count++;
+
+				//Knock this down too
+				cursor->op1->use_count--;
+
+				/**
+				 * Now we can use the textual string again to create a new 
+				 * record that makes sure any future instructions that use
+				 * the assignee here can instead use the result that we got
+				 */
+				clear_dynamic_string(&textual_string);
+				concatenate_value_name_string(cursor->assignee, &textual_string);
+
+				//Now we can add this to the table for future reference
+				add_value_number_expression(table, found_result, &textual_string);
+
+				//Flag that we did do a simplification
+				simplification_occured = TRUE;
+
+			/**
+			 * Option 2: we've found nothing, so this is a brand new computation. We will 
+			 * need to account for this by adding a new value name inside of the hash table
+			 * for future passes
+			 */
+			} else {
+				add_value_number_expression(table, cursor->assignee, &textual_string);
+			}
+
+		/**
+		 * Otherwise, it is not eligible but we can still perform value name subsitution on this. 
+		 * The value name is stored inside of the variable itself and is linked internally
+		 */
+		} else {
+			if(perform_value_name_substitutions(table, cursor) == TRUE){
+				simplification_occured = TRUE;
+			}
+		}
+
+		//Always bump up to the next statement
+		cursor = cursor->next_statement;
+	}
+
+	/**
+	 * For each successor of this block, we will replace any/all values 
+	 * in the underlying phi functions with their value names that
+	 * we've computed in this block
+	 */
+	for(u_int32_t i = 0; i < block->successors.current_index; i++){
+		//Grab the successor
+		basic_block_t* successor = dynamic_array_get_at(&(block->successors), i);
+
+		//Grab a leader statement
+		instruction_t* phi_cursor = successor->leader_statement;
+
+		//Run through every instruction that is a phi statement
+		while(phi_cursor != NULL
+				&& phi_cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
+
+			if(perform_value_name_substitutions(table, phi_cursor) == TRUE){
+				//Flag that a simplification happened
+				simplification_occured = TRUE;
+			}
+
+			//Bump the cursor up
+			phi_cursor = phi_cursor->next_statement;
+		}
+	}
+
+	/**
+	 * For each child c of the block in the *dominator* tree, we will
+	 * invoke this same algorithm recursively
+	 */
+	for(u_int32_t i = 0; i < block->dominator_children.current_index; i++){
+		//Extract the dominator chid
+		basic_block_t* dominator_child = dynamic_array_get_at(&(block->dominator_children), i);
+
+		/**
+		 * Recursively explore this one next. If we notice that this child
+		 * block had some simplification occur, then we'll set the flag
+		 */
+		if(global_value_number_block(table, dominator_child) == TRUE){
+			simplification_occured = TRUE;
+		}
+	}
+
+	//Return whether or not we did any simplifying
+	return simplification_occured;
+}
+
+
+/**
+ * Estimate the keyspace that we'll need for a given function
+ * by tallying up the number of instructions that the function contains.
+ * This is a very rough estimate, it's just designed to help us
+ * avoid allocating tons of space
+ */
+static inline u_int32_t estimate_value_numbering_keyspace_for_function(dynamic_array_t* function_blocks){
+	//Initially we have nothing
+	u_int32_t keyspace = 0;
+
+	//Run through every block in the function
+	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* function_block = dynamic_array_get_at(function_blocks, i);
+
+		//Tally up the total instructions
+		keyspace += function_block->number_of_instructions;
+	}
+
+	/**
+	 * If we find that we have less than a certain
+	 * number of instructions, we'll do nothing because
+	 * we expect to not be value numbering here. However
+	 * if we exceed the threshold, we will double the
+	 * keyspace to try and cut done on collisions
+	 */
+	if(keyspace <= INSTRUCTION_NUMBER_THRESHOLD){
+		return keyspace;
+	} else {
+		//There are 3 potential variables for each instruction
+		return keyspace * 3;
+	}
+}
+
+
+/**
+ * Perform a global value numbering pass to determine if there are any redundant computations. This relies on
+ * everything being in SSA form which OIR uses by default. We will also need the dominator tree and the ability
+ * to traverse in reverse post order. We will be using the SSA names as the value numbers themselves inside of our
+ * contextual strings
+ *
+ * Algorithm Dominator Value Numbering Traversal(block b):
+ * 	for each phi node in b:
+ * 		set the value number as the assigned var name
+ * 		add phi node to hash table
+ *
+ * 	for each assignment i:
+ * 		get value numbers for each operand
+ * 		if the expression(Ti) has been computed before:
+ * 			replace the operation i with a copy from Ti
+ * 			associate the value number with Ti
+ * 		else:
+ * 			insert a new value number into the table at the hash key location
+ * 			record that new value number for Ti
+ *
+ * 	for each successor c of block b:
+ * 		replace all phi node operands in c that were computed in this block with their value
+ *
+ * 	for each child c of block b in the dominator tree
+ * 		Dominator Value Numbering Traversal(b)
+ *
+ * We will be using the full SSA variable names as their given value numbers inside of this algorithm. For temporary
+ * variables, their temp var number(which is guaranteed unique across the entire program) will be used as the value
+ * number. This should avoid any/all collisions that we may face
+ *
+ * For right now, we will limit the value numbering to non-constant operations. In the future we will probably
+ * expand this to include constants as well
+ */
+static u_int8_t global_value_numbering_pass(basic_block_t* function_entry_block, dynamic_array_t* function_blocks){
+	//Estimate the keyspace first
+	u_int32_t keyspace = estimate_value_numbering_keyspace_for_function(function_blocks);
+
+	//If we are below the threshold, we'll skip this function as it almost certainly isn't worth it
+	if(keyspace <= INSTRUCTION_NUMBER_THRESHOLD){
+		return FALSE;
+	}
+
+	//Otherwise we can allocate our hash table
+	value_numbering_table_t numbering_table = value_numbering_table_alloc(keyspace);
+	
+	//Invoke the value numberer with the function entry block as our starting point
+	u_int8_t simplification_occured = global_value_number_block(&numbering_table, function_entry_block);
+
+	//Destroy the table once down
+	value_numbering_table_dealloc(&numbering_table);
+
+	//Give back whether or not we did anything
+	return simplification_occured;
+}
+
+
+/**
+ * Run through an entire array of function blocks and reset the status for
+ * every single one. We assume that the caller knows what they are doing, and
+ * that the blocks inside of the array are really the correct blocks
+ */
+static inline void reset_visit_status_for_function(dynamic_array_t* function_blocks){
+	//Run through all of the blocks
+	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+		//Extract the current block
+		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
+
+		//Flag it as false
+		current->visited = FALSE;
+	}
+}
+
+
+/**
+ * Mark definitions(assignment) of a three address variable within a given
+ * function. The current_function parameter is an optimization step designed to help
+ * us weed out useless blocks. Note that the variable passed in may be null. If it is,
+ * we just leave immediately
+ */
+static void mark_and_add_definition(dynamic_array_t* current_function_blocks, three_addr_var_t* variable, dynamic_array_t* worklist){
+	//If the variable is NULL, we leave
+	if(variable == NULL){
+		return;
+	}
+
+	/**
+	 * There is no point in trying to mark a variable like this, we will
+	 * never find the definition since they exist by default
+	 */
+	if(variable == stack_pointer_variable || variable == instruction_pointer_variable){
+		return;
+	}
+
+	/**
+	 * Similarly, for all of these variable types, there is also no point
+	 * ever in marking them
+	 */
+	switch(variable->variable_type){
+		case VARIABLE_TYPE_LOCAL_CONSTANT:
+		case VARIABLE_TYPE_FUNCTION_ADDRESS:
+		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+			return;
+		default:
+			break;
+	}
+
+	/**
+	 * If this variable has a stack region, then we will be marking
+	 * said stack region. We know that this discriminating union is a stack
+	 * region because of the if-check above that rules out local constants
+	 */
+	if(variable->associated_memory_region.stack_region != NULL){
+		mark_stack_region(variable->associated_memory_region.stack_region);
+	}
+
+	//Run through everything here
+	for(u_int32_t _ = 0; _ < current_function_blocks->current_index; _++){
+		//Grab the block out
+		basic_block_t* block = dynamic_array_get_at(current_function_blocks, _);
+
+		//This is always where we start
+		instruction_t* stmt = block->exit_statement;
+
+		//Our logic is based on the variable type
+		switch(variable->variable_type){
+			case VARIABLE_TYPE_NON_TEMP:
+			case VARIABLE_TYPE_MEMORY_ADDRESS:
+				stmt = block->exit_statement;
+
+				//So long as this isn't NULL
+				while(stmt != NULL){
+					//If it's marked we're out of here
+					if(stmt->mark == TRUE || stmt->assignee == NULL){
+						stmt = stmt->previous_statement;
+						continue;
+					}
+
+					//Is the assignee our variable AND it's unmarked?
+					if(stmt->assignee->linked_var == variable->linked_var
+						&& stmt->assignee->ssa_generation == variable->ssa_generation){
+
+						dynamic_array_add(worklist, stmt);
+						stmt->mark = TRUE;
+						block->contains_mark = TRUE;
+						return;
+					}
+
+					//Advance the statement
+					stmt = stmt->previous_statement;
+				}
+
+				break;
+
+			case VARIABLE_TYPE_TEMP:
+				//So long as this isn't NULL
+				while(stmt != NULL){
+					//If this is the case, we'll just go onto the next one
+					if(stmt->mark == TRUE || stmt->assignee == NULL){
+						stmt = stmt->previous_statement;
+						continue;
+					}
+
+					//Is the assignee our variable AND it's unmarked?
+					if(stmt->assignee->temp_var_number == variable->temp_var_number){
+						dynamic_array_add(worklist, stmt);
+						stmt->mark = TRUE;
+						block->contains_mark = TRUE;
+						return;
+					}
+
+					//Advance the statement
+					stmt = stmt->previous_statement;
+				}
+
+				break;
+
+			default:
+				printf("Fatal internal compiler error: attempting to mark invalid variable type: %s\n", variable_type_to_string(variable->variable_type));
+				exit(1);
+		}
+	}
+}
+
+
+/**
+ * To find the nearest marked postdominator, we can do a breadth-first
+ * search starting at our block B. Whenever we find a node that is both:
+ * 	a.) A postdominator of B
+ * 	b.) marked
+ * we'll have our answer
+ */
+static basic_block_t* nearest_marked_postdominator(dynamic_array_t* function_blocks, basic_block_t* B){
+	//Reset the queue for this go around
+	heap_queue_clear(&postdominator_queue);
+
+	//First, we'll reset every single block here
+	reset_visit_status_for_function(function_blocks);
+
+	//Seed the search with B
+	enqueue(&postdominator_queue, B);
+
+	//The nearest marked postdominator and a holder for our candidates
+	basic_block_t* nearest_marked_postdominator = NULL;
+	basic_block_t* candidate;
+
+	//So long as the queue is not empty
+	while(queue_is_empty(&postdominator_queue) == FALSE){
+		//Grab the block off
+		candidate = dequeue(&postdominator_queue);
+		
+		//If we've been here before, continue;
+		if(candidate->visited == TRUE){
+			continue;
+		}
+
+		//Mark this for later
+		candidate->visited = TRUE;
+
+		/**
+		 * Now let's check for our criterion.
+		 * We want:
+		 *	it to be in the postdominator set
+		 *	it to have a mark
+		 *	it to not equal itself
+		 */
+		if(dynamic_array_contains(&(B->postdominator_set), candidate) != NOT_FOUND
+		  && candidate->contains_mark == TRUE && B != candidate){
+			//We've found it, so we're done
+			nearest_marked_postdominator = candidate;
+			//Get out
+			break;
+		}
+
+		//Enqueue all of the successors
+		for(u_int32_t i = 0; i < candidate->successors.current_index; i++){
+			//Grab the successor out
+			basic_block_t* successor = dynamic_array_get_at(&(candidate->successors), i);
+
+			//If it's already been visited, we won't bother with it. If it hasn't been visited, we'll add it in
+			if(successor->visited == FALSE){
+				enqueue(&postdominator_queue, successor);
+			}
+		}
+	}
+
+	//And give this back
+	return nearest_marked_postdominator;
+}
+
+
+/**
+ * The sweep algorithm will go through and remove every operation that has not been marked
+ *
+ * procedure sweep:
+ * 	for each operation i:
+ * 		if is is unmarked then:
+ * 			if i is a branch then
+ * 			  rewrite i with a jump to i's nearest
+ * 			  marked postdominator
+ *
+ * 			if i is not a jump then:
+ * 			  delete i
+ */
+static simplification_type_t sweep(dynamic_array_t* function_blocks, basic_block_t* function_entry_block){
+	//By default assume we did nothing
+	simplification_type_t result = NO_SIMPLIFICATION;
+
+	//For each and every operation in every basic block
+	for(u_int32_t _ = 0; _ < function_blocks->current_index; _++){
+		//Grab the block out
+		basic_block_t* block = dynamic_array_get_at(function_blocks, _);
+
+		//Holder for the postdom
+		basic_block_t* nearest_marked_postdom;
+
+		//Grab the statement out
+		instruction_t* stmt = block->leader_statement;
+
+		//For each statement in the block
+		while(stmt != NULL){
+			//If it's useful, ignore it
+			if(stmt->mark == TRUE){
+				stmt = stmt->next_statement;
+				continue;
+			}
+
+			//A holder for when we perform deletions
+			instruction_t* temp;
+
+			/**
+			 * Some statements like jumps and branches
+			 * require special attention
+			 */
+			switch(stmt->statement_type){
+				/**
+				 * We *never* delete jump statements because
+				 * they are critical to the control flow. They
+				 * may be cleaned up by other optimizations, but for
+				 * here we leave them
+				 */
+				case THREE_ADDR_CODE_JUMP_STMT:
+					stmt = stmt->next_statement;
+
+					break;
+
+				/**
+				 * If we have a branch that is now useless,
+				 * we'll need to replace it with a jump to
+				 * it's nearest marked postdominator
+				 */
+				case THREE_ADDR_CODE_BRANCH_STMT:
+					//We'll first find the nearest marked postdominator
+					nearest_marked_postdom = nearest_marked_postdominator(function_blocks, block);
+
+					//We now need to unlink the successors that were in this branch
+					delete_successor(block, stmt->if_block);
+					delete_successor(block, stmt->else_block);
+
+					//This is now useless
+					delete_statement(stmt);
+
+					/**
+					 * Emit the jump statement to the nearest marked postdominator
+					 * NOTE: the emit jump adds the successor in for us, so we don't need to
+					 * do so here
+					 */
+					stmt = emit_jump(block, nearest_marked_postdom);
+
+					//We have done instructions and control flow here
+					result = SIMPLIFICATION_INSTRUCTIONS_AND_CONTROL_FLOW;
+
+					break;
+
+				/**
+				 * By default no special treatment, we're just deleting
+				 */
+				default:
+					//Perform the deletion and advancement
+					temp = stmt;
+
+					/**
+					 * If we are deleting an indirect jump address calculation statement,
+					 * then this statements jump table is useless
+					 */
+					if(temp->statement_type == THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT){
+						//We'll need to deallocate this jump table
+						jump_table_dealloc(block->jump_table);
+
+						//Flag it as null
+						block->jump_table = NULL;
+					}
+					
+					//Advance the statement
+					stmt = stmt->next_statement;
+					//Delete the statement, now that we know it is not a jump
+					delete_statement(temp);
+
+					//If we havent' flagged already, not that we did instructions
+					if(result == NO_SIMPLIFICATION){
+						result = SIMPLIFICATION_INSTRUCTIONS_ONLY;
+					}
+
+					break;
+			}
+		}
+	}
+	
+	/**
+	 * Once we've done all of the actual sweeping inside of the blocks, we will now also clean up
+	 * the stack from any unmarked regions. If a region is unmarked, it is entirely useless and as such
+	 * we'll just get rid of it
+	 */
+
+	/**
+	 * Invoke the stack sweeper. This function will go through an remove any stack regions
+	 * that have been flagged as unimportant
+	 */
+	sweep_stack_data_area(&(function_entry_block->function_defined_in->local_stack));
+
+	//Give back the simplification result
+	return result;
+}
+
+
+/**
+ * Reset all of the marked instructions for a given block
+ */
+static inline void reset_marks_for_block(basic_block_t* block){
+	//Start at the top
+	instruction_t* cursor = block->leader_statement;
+
+	//Crawl through the block
+	while(cursor != NULL){
+		//Unmark it
+		cursor->mark = FALSE;
+
+		//Go down the block by one
+		cursor = cursor->next_statement;
+	}
+
+	//Remove that this has a mark
+	block->contains_mark = FALSE;
+}
+
+
+/**
+ * Run through and reset all of the marks on every instruction in a given
+ * function. This is done in anticipation of us using the mark/sweep algorithm
+ * again after branch optimizations
+ */
+static inline void reset_all_marks(dynamic_array_t* function_blocks){
+	//Run through every block
+	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+		//Block to work on
+		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
+
+		//Let the helper do it
+		reset_marks_for_block(current);
+	}
+}
+
+
+/**
+ * The mark algorithm will go through and mark every operation(three address code statement) as
+ * critical or noncritical. We will then go back through and see which operations are setting
+ * those critical values
+ *
+ * for each operation i:
+ * 	clear i's mark
+ * 	if i is critical then
+ * 		mark i
+ * 		add i to the worklist
+ * 	while worklist not empty
+ * 		remove i from the worklist i is x <- y op z
+ * 		if def(y) is not marked then
+ * 			mark def(y)
+ * 			add def(y) to worklist
+ * 		if def(z) is not marked then
+ * 			mark def(z)
+ * 			add def(y) to worklist
+ * 		for each block b in RDF(block(i))
+ * 			let j be the branch that ends b
+ * 			if j is unmarked then
+ * 				mark j
+ * 				add j to worklist
+ */
+static void mark(dynamic_array_t* function_blocks){
+	//First we'll need a worklist
+	dynamic_array_t worklist = dynamic_array_alloc();
+
+	//Now we'll go through every single operation in every single block
+	for(u_int32_t _ = 0; _ < function_blocks->current_index; _++){
+		basic_block_t* current = dynamic_array_get_at(function_blocks, _);
+
+		instruction_t* current_stmt = current->leader_statement;
+
+		/**
+		 * We'll now go through and mark every statement that we
+		 * deem to be critical in the block. Statements are critical
+		 * if they:
+		 * 	1.) set a return value
+		 * 	2.) is an input/output statement
+		 * 	3.) affects the value in a storage location that could be
+		 * 		accessed outside of the procedure(i.e. a parameter that is a pointer)
+		 */
+		while(current_stmt != NULL){
+			current_stmt->mark = FALSE;
+
+			/**
+			 * We will go through every operation and determine its importance based on our rules
+			 */
+			switch(current_stmt->statement_type){
+				/**
+				 * Return statements are always considered important
+				 */
+				case THREE_ADDR_CODE_RET_STMT:
+					current_stmt->mark = TRUE;
+					dynamic_array_add(&worklist, current_stmt);
+					current->contains_mark = TRUE;
+					break;
+
+				/**
+				 * Raise statements are equivalent to ret statements
+				 * and are thus also always considered important
+				 */
+				case THREE_ADDR_CODE_RAISE_STMT:
+					current_stmt->mark = TRUE;
+					dynamic_array_add(&worklist, current_stmt);
+					current->contains_mark = TRUE;
+					break;
+
+				/**
+				 * Asm inline statements are also
+				 * always important because we don't 
+				 * analyze them, so the user assumes that
+				 * their direct code will be executed
+				 */
+				case THREE_ADDR_CODE_ASM_INLINE_STMT:
+					current_stmt->mark = TRUE;
+					dynamic_array_add(&worklist, current_stmt);
+					current->contains_mark = TRUE;
+					break;
+
+				/**
+				 * Since we don't know whether or not a function
+				 * that is being called performs an important task,
+				 * we also always consider it to be important
+				 */
+				case THREE_ADDR_CODE_FUNC_CALL:
+					current_stmt->mark = TRUE;
+					dynamic_array_add(&worklist, current_stmt);
+					current->contains_mark = TRUE;
+					break;
+
+				/**
+				 * Indirect function calls are the same as function calls. They will 
+				 * always count becuase we do not know whether or not the indirectly
+				 * called function performs some important task. As such, we will 
+				 * mark it as important
+				 */
+				case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+					current_stmt->mark = TRUE;
+					dynamic_array_add(&worklist, current_stmt);
+					current->contains_mark = TRUE;
+					break;
+
+				/**
+				 * And finally idle statements are considered important
+				 * because they literally do nothing, so if the user
+				 * put them there, we'll assume that it was for a good reason
+				 */
+				case THREE_ADDR_CODE_IDLE_STMT:
+					current_stmt->mark = TRUE;
+					//Add it to the list
+					dynamic_array_add(&worklist, current_stmt);
+					//The block now has a mark
+					current->contains_mark = TRUE;
+					break;
+
+				/**
+				 * All store statements are considered useful by the ollie optimizer,
+				 * regardless of the actual use count tracking
+				 */
+				case THREE_ADDR_CODE_STORE_STATEMENT:
+				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+					current_stmt->mark = TRUE;
+					dynamic_array_add(&worklist, current_stmt);
+					current->contains_mark = TRUE;
+					break;
+
+				/**
+				 * Any/all memory copying statements are considered useful by the ollie
+				 * optimizer regardless of use count tracking
+				 */
+				case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
+					current_stmt->mark = TRUE;
+					dynamic_array_add(&worklist, current_stmt);
+					current->contains_mark = TRUE;
+					break;
+
+				/**
+				 * Special cases: these stack allocation and deallocation statements
+				 * do not have any variables in them(%rsp is inferred because it is the stack)
+				 * They must always be marked, and they may never be deleted. However, since there
+				 * are no variables in them to trace around, we will not add them to the worklist
+				 */
+				case THREE_ADDR_CODE_STACK_ALLOCATION_STMT:
+				case THREE_ADDR_CODE_STACK_DEALLOCATION_STMT:
+					current_stmt->mark = TRUE;
+					current->contains_mark = TRUE;
+					break;
+
+				//Let's see what other special cases we have
+				default:
+					break;
+			}
+
+			//Advance the current statement up
+			current_stmt = current_stmt->next_statement;
+		}
+	}
+
+	/**
+	 * Now that we've marked everything that is initially critical, we'll go through and trace
+	 * these values back through the code
+	 */
+	while(dynamic_array_is_empty(&worklist) == FALSE){
+		//Grab out the operation from the worklist(delete from back-most efficient)
+		instruction_t* stmt = dynamic_array_delete_from_back(&worklist);
+		//Generic array for holding parameters
+		dynamic_array_t params;
+
+		//There are several unique cases that require extra attention
+		switch(stmt->statement_type){
+			//If it's a phi function, now we need to go back and mark everything that it came from
+			case THREE_ADDR_CODE_PHI_FUNC:
+				params = stmt->parameters;
+
+				//Add this in here
+				for(u_int32_t i = 0; i < params.current_index; i++){
+					//Grab the param out
+					three_addr_var_t* phi_func_param = dynamic_array_get_at(&params, i);
+
+					//Add the definitions in
+					mark_and_add_definition(function_blocks, phi_func_param, &worklist);
+				}
+
+				break;
+
+			//If we have a function call, everything in the function call
+			//is important
+			case THREE_ADDR_CODE_FUNC_CALL:
+				//Grab the parameters out
+				params = stmt->parameters;
+
+				//Run through them all and mark them
+				for(u_int32_t i = 0; i < params.current_index; i++){
+					mark_and_add_definition(function_blocks, dynamic_array_get_at(&params, i), &worklist);
+				}
+
+				break;
+
+			/**
+			 * An indirect function call behaves similarly to a function call, but we'll also
+			 * need to mark it's "op1" value as important. This is the value that stores
+			 * the memory address of the function that we're calling
+			 */
+			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+				//Mark the op1 of this function as being important
+				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
+
+				//Grab the parameters out
+				params = stmt->parameters;
+
+				//Run through them all and mark them
+				for(u_int32_t i = 0; i < params.current_index; i++){
+					mark_and_add_definition(function_blocks, dynamic_array_get_at(&params, i), &worklist);
+				}
+
+				break;
+
+			/**
+			 * There will be special rules for store statements because we have assignees
+			 * that are not really assignees, they are more like operands
+			 */
+			case THREE_ADDR_CODE_STORE_STATEMENT:
+			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+				//Add the assignee as if it was a variable itself
+				mark_and_add_definition(function_blocks, stmt->assignee, &worklist);
+
+				//We need to mark the place where each definition is set
+				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->op2, &worklist);
+				break;
+
+			/**
+			 * For a memory copy statement, we need the defitinition of the assignee
+			 * and op1 marked as they are both important to the overall copy
+			 */
+			case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
+				mark_and_add_definition(function_blocks, stmt->assignee, &worklist);
+				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
+				break;
+
+			//In all other cases, we'll just mark and add the two operands 
+			default:
+				//We need to mark the place where each definition is set
+				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->op2, &worklist);
+
+				break;
+		}
+
+		//Grab this out for convenience
+		basic_block_t* block = stmt->block_contained_in;
+
+		/**
+		 * Now we'll apply this logic to the branching/indirect jumping
+		 * statements here
+		 *
+		 * for each block b in RDF(block(i))
+		 * 	let j be the branch that ends b
+		 * 	if j is unmarked then
+		 * 		mark j
+		 * 		add j to worklist
+		 */
+		//If this block even has an RDF(it may now)
+		if(block->reverse_dominance_frontier.internal_array != NULL){
+			for(u_int32_t i = 0; i < block->reverse_dominance_frontier.current_index; i++){
+				//Grab the block out of the RDF
+				basic_block_t* rdf_block = dynamic_array_get_at(&(block->reverse_dominance_frontier), i);
+
+				//Grab out the exit statement
+				instruction_t* exit_statement = rdf_block->exit_statement;
+
+				switch(exit_statement->statement_type){
+					/**
+					 * An indirect jump means that we had some kind of switch statement. This
+					 * will be marked as important
+					 */
+					case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
+						if(exit_statement->mark == FALSE){
+							exit_statement->mark = TRUE;
+							dynamic_array_add(&worklist, exit_statement);
+							rdf_block->contains_mark = TRUE;
+						}
+
+						break;
+
+					/**
+					 * This is the most common case, we'll have a branch that
+					 * ends the predecessor
+					 */
+					case THREE_ADDR_CODE_BRANCH_STMT:
+						if(exit_statement->mark == FALSE){
+							exit_statement->mark = TRUE;
+							dynamic_array_add(&worklist, exit_statement);
+							rdf_block->contains_mark = TRUE;
+						}
+
+						break;
+
+					//By default just leave
+					default:
+						break;
+				}
+			}
+		}
+	}
+
+	dynamic_array_dealloc(&worklist);
+}
+
+
+/**
+ * Perform a mark and sweep pass on the given function blocks. This will only
+ * be triggered if we discover areas that we are able to simplify
+ * using value numbering. The mark and sweep will happen first, followed
+ * by the simplifier
+ */
+static inline simplification_type_t perform_mark_and_sweep_pass(basic_block_t* function_entry, dynamic_array_t* function_blocks){
+	/**
+	 * First thing we'll do is reset the visited status of the CFG. This just ensures
+	 * that we won't have any issues with the CFG in terms of traversal
+	 */
+	reset_visit_status_for_function(function_blocks);
+
+	/**
+	 * Reset the marks for all of our blocks
+	 */
+	reset_all_marks(function_blocks);
+
+	/**
+	 * Now we will let the mark algorithm go through and flag instructions as important
+	 * as need be
+	 */
+	mark(function_blocks);
+
+	/**
+	 * Finally we can run sweep(). We will not run any clean() operation because we already
+	 * do that later on down the road regardless. Running this mark and sweep alone should
+	 * take care of any extra assignments that we don't want/need
+	 */
+	return sweep(function_blocks, function_entry);
+}
+
+
+/**
  * We'll make use of a while change algorithm here. We make passes
  * until we see the first pass where we experience no change at all.
  */
 static void simplify(cfg_t* cfg){
-	//We will do each function individually for efficiency reasons. This way, if
-	//one function requires a lot of simplification, it will not drag the rest of the 
-	//functions along with it in each pass
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+	/**
+	 * We will do each function individually for efficiency reasons. This way, if
+	 * one function requires a lot of simplification, it will not drag the rest of the 
+	 * functions along with it in each pass
+	 */
+	for(u_int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Extract it
 		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
+		//Extract the function record too
+		symtab_function_record_t* function = function_entry->function_defined_in;
+
 		//Let this keep going until we're done changing
 		while(simplifier_pass(function_entry) == TRUE);
+
+		/**
+		 * Once we're confident that we've done all of the simplifying that we can, we 
+		 * will now attempt to run a global value numbering pass for this function. If
+		 * this pass optimizes anything, we will then retrigger the simplifier
+		 * to see if there are any more opportuntities
+		 */
+		u_int8_t simplification_occured = global_value_numbering_pass(function_entry, &(function->function_blocks));
+
+		/**
+		 * If we did do any global value numbering, then we'll need to come back
+		 * and resimplify to make sure we haven't missed anything post-simplify
+		 */
+		if(simplification_occured == TRUE){
+			//Run the mark and sweep
+			simplification_type_t result = perform_mark_and_sweep_pass(function_entry, &(function->function_blocks));
+
+			/**
+			 * If we ended up doing control flow simplification, we are going to need
+			 * to reorder all of the blocks
+			 */
+			if(result == SIMPLIFICATION_INSTRUCTIONS_AND_CONTROL_FLOW){
+				order_blocks(cfg);
+			}
+
+			//Now run the simplifier
+			while(simplifier_pass(function_entry) == TRUE);
+		}
 	}
 }
 
@@ -5375,8 +6864,15 @@ static void handle_left_shift_instruction(instruction_window_t* window){
 	 *  a_0 <- t3
 	 */
 	} else {
-		//If this is not temp then we need it to be so we'll move it into being so
-		if(left_shift_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+
+		/**
+		 * If this is either not a temp var *or* we have a use count that is higher than
+		 * one(can happen with value numbering), then we'll need to emit another
+		 * temp assignment
+		 */
+		if(left_shift_instruction->op1->variable_type != VARIABLE_TYPE_TEMP
+			|| left_shift_instruction->op1->was_value_named == TRUE){
+
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), left_shift_instruction->op1);
 
 			//Put this before the instruction
@@ -5560,8 +7056,14 @@ static void handle_right_shift_instruction(instruction_window_t* window){
 	 *  a_0 <- t3
 	 */
 	} else {
-		//If this is not temp then we need it to be so we'll move it into being so
-		if(right_shift_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+		/**
+		 * If this is either not a temp var *or* we have a use count that is higher than
+		 * one(can happen with value numbering), then we'll need to emit another
+		 * temp assignment
+		 */
+		if(right_shift_instruction->op1->variable_type != VARIABLE_TYPE_TEMP
+			|| right_shift_instruction->op1->was_value_named == TRUE){
+
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), right_shift_instruction->op1);
 
 			//Put this before the instruction
@@ -5692,8 +7194,14 @@ static void handle_bitwise_inclusive_or_instruction(instruction_window_t* window
 	 * 	t4 <- t3
 	 */
 	} else {
-		//If this is not temp then we need it to be so we'll move it into being so
-		if(bitwise_or->op1->variable_type != VARIABLE_TYPE_TEMP){
+		/**
+		 * If this is either not a temp var *or* we have a use count that is higher than
+		 * one(can happen with value numbering), then we'll need to emit another
+		 * temp assignment
+		 */
+		if(bitwise_or->op1->variable_type != VARIABLE_TYPE_TEMP
+			|| bitwise_or->op1->was_value_named == TRUE){
+
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), bitwise_or->op1);
 
 			//Put this before the instruction
@@ -5824,8 +7332,15 @@ static void handle_bitwise_and_instruction(instruction_window_t* window){
 	 * 	t4 <- t3
 	 */
 	} else {
-		//If this is not temp then we need it to be so we'll move it into being so
-		if(bitwise_and->op1->variable_type != VARIABLE_TYPE_TEMP){
+
+		/**
+		 * If this is either not a temp var *or* we have a use count that is higher than
+		 * one(can happen with value numbering), then we'll need to emit another
+		 * temp assignment
+		 */
+		if(bitwise_and->op1->variable_type != VARIABLE_TYPE_TEMP
+			|| bitwise_and->op1->was_value_named == TRUE){
+
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), bitwise_and->op1);
 
 			//Put this before the instruction
@@ -5956,8 +7471,15 @@ static void handle_bitwise_exclusive_or_instruction(instruction_window_t* window
 	 * 	t4 <- t3
 	 */
 	} else {
-		//If this is not temp then we need it to be so we'll move it into being so
-		if(bitwise_xor->op1->variable_type != VARIABLE_TYPE_TEMP){
+
+		/**
+		 * If this is either not a temp var *or* we have a use count that is higher than
+		 * one(can happen with value numbering), then we'll need to emit another
+		 * temp assignment
+		 */
+		if(bitwise_xor->op1->variable_type != VARIABLE_TYPE_TEMP
+			|| bitwise_xor->op1->was_value_named == TRUE){
+
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), bitwise_xor->op1);
 
 			//Put this before the instruction
@@ -6496,8 +8018,14 @@ static void handle_signed_multiplication_instruction(instruction_window_t* windo
 	 * 	t4 <- t3
 	 */
 	} else {
-		//If this is not temp then we need it to be so we'll move it into being so
-		if(multiplication_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+		/**
+		 * If this is either not a temp var *or* we have a use count that is higher than
+		 * one(can happen with value numbering), then we'll need to emit another
+		 * temp assignment
+		 */
+		if(multiplication_instruction->op1->variable_type != VARIABLE_TYPE_TEMP
+			|| multiplication_instruction->op1->was_value_named == TRUE){
+
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), multiplication_instruction->op1);
 
 			//Put this before the instruction
@@ -6617,8 +8145,14 @@ static void handle_sse_multiplication_instruction(instruction_window_t* window){
 	 * 	t4 <- t3
 	 */
 	} else {
-		//If this is not temp then we need it to be so we'll move it into being so
-		if(multiplication_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+		/**
+		 * If this is either not a temp var *or* we have a use count that is higher than
+		 * one(can happen with value numbering), then we'll need to emit another
+		 * temp assignment
+		 */
+		if(multiplication_instruction->op1->variable_type != VARIABLE_TYPE_TEMP
+			|| multiplication_instruction->op1->was_value_named == TRUE){
+
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), multiplication_instruction->op1);
 
 			//Put this before the instruction
@@ -7014,8 +8548,15 @@ static void handle_sse_division_instruction(instruction_window_t* window){
 	 * 	t4 <- t3
 	 */
 	} else {
-		//If this is not temp then we need it to be so we'll move it into being so
-		if(division_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+		
+		/**
+		 * If this is either not a temp var *or* we have a use count that is higher than
+		 * one(can happen with value numbering), then we'll need to emit another
+		 * temp assignment
+		 */
+		if(division_instruction->op1->variable_type != VARIABLE_TYPE_TEMP
+			|| division_instruction->op1->was_value_named == TRUE){
+
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), division_instruction->op1);
 
 			//Put this before the instruction
@@ -7509,8 +9050,14 @@ static void handle_subtraction_instruction(instruction_window_t* window){
 	 * 	t4 <- t3
 	 */
 	} else {
-		//If this is not temp then we need it to be so we'll move it into being so
-		if(subtraction_instruction->op1->variable_type != VARIABLE_TYPE_TEMP){
+		/**
+		 * If this is either not a temp var *or* we have a use count that is higher than
+		 * one(can happen with value numbering), then we'll need to emit another
+		 * temp assignment
+		 */
+		if(subtraction_instruction->op1->variable_type != VARIABLE_TYPE_TEMP
+			|| subtraction_instruction->op1->was_value_named == TRUE){
+
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), subtraction_instruction->op1);
 
 			//Put this before the instruction
@@ -7720,8 +9267,13 @@ static void handle_addition_instruction(instruction_window_t* window){
 		//Get the appropriate add instuction
 		original_addition->instruction_type = select_add_instruction(size);
 
-		//If this is not temp then we need it to be so we'll move it into being so
-		if(original_addition->op1->variable_type != VARIABLE_TYPE_TEMP){
+		/**
+		 * If this is a not a temp var *or* we have a higher use count, we'll emit
+		 * an extra assignment to ensure we aren't overwriting things here
+		 */
+		if(original_addition->op1->variable_type != VARIABLE_TYPE_TEMP
+			|| original_addition->op1->was_value_named == TRUE){
+
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), original_addition->op1);
 
 			//Put this before the instruction
@@ -10843,8 +12395,14 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			//This one will have an addressing type of registers and offset
 			variable_offset_load->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
 
-			//The lea is now useless so get rid of it
-			delete_statement(lea_statement);
+			/**
+			 * We can delete this *if* it's not being used by someone else
+			 */
+			if(lea_statement->assignee->use_count <= 1){
+				delete_statement(lea_statement);
+			} else {
+				handle_lea_statement(lea_statement);
+			}
 
 			//Rebuild the window around the load
 			reconstruct_window(window, variable_offset_load);
@@ -10885,8 +12443,14 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 				variable_offset_load->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
 			}
 
-			//The lea is now useless so get rid of it
-			delete_statement(lea_statement);
+			/**
+			 * We can delete this *if* it's not being used by someone else
+			 */
+			if(lea_statement->assignee->use_count <= 1){
+				delete_statement(lea_statement);
+			} else {
+				handle_lea_statement(lea_statement);
+			}
 
 			//Rebuild the window around the load
 			reconstruct_window(window, variable_offset_load);
@@ -10932,8 +12496,14 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			//This will always be a registers, offset and scale type
 			variable_offset_load->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
 
-			//The lea is now useless so get rid of it
-			delete_statement(lea_statement);
+			/**
+			 * We can delete this *if* it's not being used by someone else
+			 */
+			if(lea_statement->assignee->use_count <= 1){
+				delete_statement(lea_statement);
+			} else {
+				handle_lea_statement(lea_statement);
+			}
 
 			//Rebuild around the load
 			reconstruct_window(window, variable_offset_load);
@@ -10979,8 +12549,14 @@ static void combine_lea_with_regular_load_instruction(instruction_window_t* wind
 			//The rip offset variable is our .LCx value
 			load_statement->rip_offset_variable = lea_statement->op2;
 
-			//Now that we've gotten all we need from the lea, we can delete it
-			delete_statement(lea_statement);
+			/**
+			 * We can delete this *if* it's not being used by someone else
+			 */
+			if(lea_statement->assignee->use_count <= 1){
+				delete_statement(lea_statement);
+			} else {
+				handle_lea_statement(lea_statement);
+			}
 
 			//Rebuild the window based on the load statement
 			reconstruct_window(window, load_statement);
@@ -11629,8 +13205,14 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 			//The calculation mode here will always be registers and offset
 			variable_offset_store->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
 
-			//The lea is redundant
-			delete_statement(lea_statement);
+			/**
+			 * We can delete this *if* it's not being used by someone else
+			 */
+			if(lea_statement->assignee->use_count <= 1){
+				delete_statement(lea_statement);
+			} else {
+				handle_lea_statement(lea_statement);
+			}
 
 			//Rebuild around the final instruction(the store)
 			reconstruct_window(window, variable_offset_store);
@@ -11668,8 +13250,14 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 				variable_offset_store->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
 			}
 
-			//The lea is redundant
-			delete_statement(lea_statement);
+			/**
+			 * We can delete this *if* it's not being used by someone else
+			 */
+			if(lea_statement->assignee->use_count <= 1){
+				delete_statement(lea_statement);
+			} else {
+				handle_lea_statement(lea_statement);
+			}
 
 			//Rebuild around the final instruction(the store)
 			reconstruct_window(window, variable_offset_store);
@@ -11713,8 +13301,14 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 			//This will always have registers, an offset and a scale
 			variable_offset_store->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
 
-			//The lea is redundant
-			delete_statement(lea_statement);
+			/**
+			 * We can delete this *if* it's not being used by someone else
+			 */
+			if(lea_statement->assignee->use_count <= 1){
+				delete_statement(lea_statement);
+			} else {
+				handle_lea_statement(lea_statement);
+			}
 
 			//Rebuild around the final instruction(the store)
 			reconstruct_window(window, variable_offset_store);
@@ -11837,7 +13431,6 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		return;
 	}
 
-
 	/**
 	 * Compressing lea constant loads with the rip-relative addressing that
 	 * comes before them
@@ -11855,8 +13448,10 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE){
 
-		//Invoke a special helper here that will deal with the selection for us and also
-		//modify our window
+		/**
+		 * Invoke a special helper here that will deal with the selection for us and also
+		 * modify our window
+		 */
 		combine_lea_with_regular_load_instruction(window, window->instruction1, window->instruction2);
 		return;
 	}
@@ -11873,8 +13468,10 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		//Is the lea's assignee equal to the offset of the load
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op2, TRUE) == TRUE){
 
-		//Let the helper deal with it. This helper handles all possible cases, so once it's done this whole
-		//rule is done and we can return
+		/**
+		 * Let the helper deal with it. This helper handles all possible cases, so once it's done this whole
+		 * rule is done and we can return
+		 */
 		combine_lea_with_variable_offset_load_instruction(window, window->instruction1, window->instruction2);
 		return;
 	}
@@ -11890,8 +13487,10 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		//Is the lea's assignee equal to the offset(op1) of the store
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE){
 
-		//Let the helper deal with it. This helper handles all possible cases, so once it's done this whole
-		//rule is done and we can return
+		/**
+		 * Let the helper deal with it. This helper handles all possible cases, so once it's done this whole
+		 * rule is done and we can return
+		 */
 		combine_lea_with_variable_offset_store_instruction(window, window->instruction1, window->instruction2);
 		return;
 	}
@@ -12071,6 +13670,15 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	u16 = lookup_type_name_only(cfg->type_symtab, "u16", NOT_MUTABLE)->type;
 	u8 = lookup_type_name_only(cfg->type_symtab, "u8", NOT_MUTABLE)->type;
 
+	/**
+	 * Allocate any of these reusable memory regions that we'll
+	 * be using. We do this because it's cheaper to just use
+	 * 1 over and over instead of allocating fresh every single
+	 * time that we need something
+	 */
+	value_name_searcher_string = dynamic_string_alloc();
+	postdominator_queue = heap_queue_alloc();
+
 	//Stash the stack pointer & instruction pointer
 	stack_pointer_variable = cfg->stack_pointer;
 	instruction_pointer_variable = cfg->instruction_pointer;
@@ -12115,4 +13723,11 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	if(print_irs == TRUE){
 		print_ordered_blocks(cfg, PRINT_INSTRUCTION);
 	}
+
+	/**
+	 * Now we'll deallocate all of the shared memory
+	 * regions that we've been using
+	 */
+	dynamic_string_dealloc(&value_name_searcher_string);
+	heap_queue_dealloc(&postdominator_queue);
 }
