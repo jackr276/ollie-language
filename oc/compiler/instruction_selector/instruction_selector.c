@@ -4365,19 +4365,16 @@ static inline u_int8_t perform_value_name_substitutions(value_numbering_table_t*
 	//First comes op1
 	value_name = get_value_name(table, instruction->op1);
 
-	//Flag that this is true
-	if(value_name != instruction->op1){
-		instruction->op1 = value_name;
+	//Replace the variable, and flag that this worked if it did
+	if(replace_rhs_variable(&(instruction->op1), value_name) == TRUE){
 		substitution_occured = TRUE;
-
 	}
 
 	//Now do it for op2
 	value_name = get_value_name(table, instruction->op2);
 
-	//Flag that this is true
-	if(value_name != instruction->op2){
-		instruction->op2 = value_name;
+	//Same deal here
+	if(replace_rhs_variable(&(instruction->op2), value_name) == TRUE){
 		substitution_occured = TRUE;
 	}
 
