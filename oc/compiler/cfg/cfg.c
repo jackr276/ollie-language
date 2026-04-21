@@ -8975,6 +8975,9 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					conditional_decider = emit_test_not_zero(current_block, ret_package.assignee, &operator);
 				}
 
+				//Flag that this does set condition codes
+				conditional_decider->sets_cc = TRUE;
+
 				//Select the needed branch statement
 				branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
@@ -9509,6 +9512,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				if(operator == BLANK){
 					conditional_decider = emit_test_not_zero(current_block, ret_package.assignee, &operator);
 				}
+
+				//Flag that this does set condition codes
+				conditional_decider->sets_cc = TRUE;
 
 				//Select the needed branch statement
 				branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
