@@ -32,6 +32,38 @@ pub fn identical_or(x:i32) -> i32 {
 	ret x | x;
 }
 
+pub fn identical_lthan(x:i32) -> i32 {
+	ret x < x;
+}
+
+pub fn identical_lthan_or_eq(x:i32) -> i32 {
+	ret x <= x;
+}
+
+pub fn identical_gthan(x:i32) -> i32 {
+	ret x > x;
+}
+
+pub fn identical_gthan_or_eq(x:i32) -> i32 {
+	ret x >= x;
+}
+
+pub fn identical_eq(x:i32) -> i32 {
+	ret x == x;
+}
+
+pub fn identical_not_eq(x:i32) -> i32 {
+	ret x != x;
+}
+
+pub fn identical_logical_and(x:i32) -> i32 {
+	ret x && x;
+}
+
+pub fn identical_logical_or(x:i32) -> i32 {
+	ret x || x;
+}
+
 //Dummy
 pub fn main() -> i32 {
 	ret 0;
