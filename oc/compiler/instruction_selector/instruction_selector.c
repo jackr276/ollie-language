@@ -2303,9 +2303,47 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * AND 
 	 * 	t4 <- x & x
 	 * 	t4 <- x
+	 *
+	 * OR 
+	 *  t4 <- x | x
+	 *  t4 <- x
 	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
+		&& variables_equal(window->instruction1->op1, window->instruction1->op2, TRUE) == TRUE){
+		//Grab this out
+		instruction_t* binary_operation = window->instruction1; 
+
+		// The binary operation determines the optimization
+		switch(binary_operation->op){
+			case PLUS:
+				printf("PLUS\n");
+				print_instruction_window_three_address_code(window);
+				break;
+
+			case MINUS:
+				printf("MINUS\n");
+				break;
 
 
+			case CARROT:
+				printf("XOR\n");
+				break;
+
+			case SINGLE_AND:
+				printf("AND\n");
+				break;
+
+			case SINGLE_OR:
+				printf("OR\n");
+				break;
+
+			/**
+			 * By default we can't do anything so we'll need to just break out
+			 */
+			default:
+				break;
+		}
+	}
 
 	/**
 	 * ------------------ Converting adjacent binary operations into LEA statements
