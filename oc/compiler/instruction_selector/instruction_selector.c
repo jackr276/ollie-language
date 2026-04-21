@@ -2316,20 +2316,54 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		//We'll need this for some of our optimizations
 		three_addr_const_t* simplification_constant;
 
+		//We will also need the result type, especially for float determination
+		generic_type_t* result_type;
+
+		//If we have it stored then use that, otherwise use op1
+		if(binary_operation->type_storage.result_type != NULL){
+			result_type = binary_operation->type_storage.result_type;
+		} else {
+			result_type = binary_operation->op1->type;
+		}
+
 		// The binary operation determines the optimization
 		switch(binary_operation->op){
+			//TODO FLOATS
 			case PLUS:
 				printf("PLUS\n");
 				print_instruction_window_three_address_code(window);
 				break;
 
+			//TODO FLOATS
 			case MINUS:
 				printf("MINUS\n");
 				break;
 
-
+			/**
+			 * Any number "xor'd" with itself will always be 0 due to the 
+			 * xor property. As such we can replace this entire operation with
+			 * an assignment of a zero constant
+			 */
 			case CARROT:
-				printf("XOR\n");
+				//Get out our 0 constant
+				simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
+
+				//Remove these variables
+				binary_operation->op1->use_count--;
+				binary_operation->op2->use_count--;
+				binary_operation->op1 = NULL;
+				binary_operation->op2 = NULL;
+
+				//Avoid any confusion with the op as well
+				binary_operation->op = BLANK;
+
+				//Now we will convert this into our assignment operation
+				binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+				binary_operation->op1_const = simplification_constant;
+
+				//This is a change
+				changed = TRUE;
+
 				break;
 
 			case SINGLE_AND:
