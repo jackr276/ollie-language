@@ -2342,7 +2342,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			/**
 			 * Any number "xor'd" with itself will always be 0 due to the 
 			 * xor property. As such we can replace this entire operation with
-			 * an assignment of a zero constant
+			 * an assignment of a zero constant. These will only ever be integers
+			 * so we don't need to worry about anything regarding floating point here
 			 */
 			case CARROT:
 				//Get out our 0 constant
@@ -2366,12 +2367,24 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 				break;
 
+			/**
+			 * Any number bitwise and'd/or'd with itself is just going to return that exact
+			 * same number so we can skip the and part entirely. These will only
+			 * ever be integers so we don't need to worry about anything regarding
+			 * floating point here
+			 */
 			case SINGLE_AND:
-				printf("AND\n");
-				break;
-
 			case SINGLE_OR:
-				printf("OR\n");
+				//Delete the second operand
+				binary_operation->op2->use_count--;
+				binary_operation->op2 = NULL;
+
+				//Avoid confusion by clearing out the operator
+				binary_operation->op = BLANK;
+
+				//Change this over into a pure assignment
+				binary_operation->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+
 				break;
 
 			/**
