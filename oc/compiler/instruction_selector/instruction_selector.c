@@ -2387,6 +2387,46 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 				break;
 
+			//TODO HOW TO ACCOUNT FOR BRANCH
+			case DOUBLE_AND:
+				printf("||\n");
+				break;
+
+			//TODO HOW TO ACCOUNT FOR BRANCH
+			case DOUBLE_OR:
+				printf("&&\n");
+				break;
+
+			//TODO HOW TO ACCOUNT FOR BRANCH
+			case DOUBLE_EQUALS:
+				printf("==\n");
+				break;
+
+			//TODO HOW TO ACCOUNT FOR BRANCH
+			case NOT_EQUALS:
+				printf("!=\n");
+				break;
+
+			//TODO HOW TO ACCOUNT FOR BRANCH
+			case L_THAN:
+				printf("<\n");
+				break;
+
+			//TODO HOW TO ACCOUNT FOR BRANCH
+			case L_THAN_OR_EQ:
+				printf("<=\n");
+				break;
+
+			//TODO HOW TO ACCOUNT FOR BRANCH
+			case G_THAN:
+				printf(">\n");
+				break;
+
+			//TODO HOW TO ACCOUNT FOR BRANCH
+			case G_THAN_OR_EQ:
+				printf(">=\n");
+				break;
+
 			/**
 			 * By default we can't do anything so we'll need to just break out
 			 */
