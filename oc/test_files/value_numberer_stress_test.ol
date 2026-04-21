@@ -14,6 +14,7 @@ pub fn value_number_simplify(x:i32, y:i32, z:i32) -> i32{
 }
 
 
+//Dummy
 pub fn main() -> i32 {
-
+	ret 0;
 }
