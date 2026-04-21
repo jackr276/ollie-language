@@ -2011,10 +2011,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * --------------------- Folding constant assignments in arithmetic expressions ----------------
 	 *  In cases where we have a binary operation that is not a BIN_OP_WITH_CONST, but after simplification
 	 *  could be, we want to eliminate unnecessary register pressure by having consts directly in the arithmetic expression 
-	 *
-	 * NOTE: This does not work for division or modulus instructions
 	 */
-	//Check first with 1 and 2
 	if(window->instruction2 != NULL 
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
@@ -2285,6 +2282,29 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			changed = TRUE;
 		}
 	}
+
+	/**
+	 * --------------------- Simplifying binary operations with non-constants ----------------------
+	 * If we have binary operations that are non-constant, there is still a chance that we're able
+	 * to simplify things here. 
+	 *
+	 * Addition:
+	 * 	t4 <- x + x
+	 * 	t4 <- x * 2
+	 *
+	 * Subtraction
+	 * 	t4 <- x - x
+	 * 	t4 <- 0
+	 *
+	 * XOR
+	 * 	t4 <- x ^ x
+	 * 	t4 <- 0
+	 *
+	 * AND 
+	 * 	t4 <- x & x
+	 * 	t4 <- x
+	 */
+
 
 
 	/**
