@@ -4347,6 +4347,35 @@ static inline u_int8_t replace_rhs_variable(three_addr_var_t** current, three_ad
 
 
 /**
+ * Replace a variable inside of a parameter list. Since this is inside of a parameter list, we only
+ * need to worry about the use count here. This function returns TRUE if a replacement did happen,
+ * and FALSE if it did not
+ */
+static inline u_int8_t replace_parameter_list_variable(dynamic_array_t* parameter_list, u_int32_t index, three_addr_var_t* replacement){
+	//Grab the old one out
+	three_addr_var_t* old_variable = dynamic_array_get_at(parameter_list, index);
+
+	//If they're not equal then we replace
+	if(old_variable != replacement){
+		//Set it in
+		dynamic_array_set_at(parameter_list, replacement, index);
+
+		//Bump his use count down
+		old_variable->use_count--;
+
+		//While this one goes up
+		replacement->use_count++;
+
+		return TRUE;
+
+	} else {
+		return FALSE;
+	}
+}
+
+
+
+/**
  * For every RHS variable, we will perform value name substitutions. This is very
  * similar to the way that register allocation coalescence works except that this
  * one does not rely on interference, and instead relies on proven value names
