@@ -2313,6 +2313,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		//Grab this out
 		instruction_t* binary_operation = window->instruction1; 
 
+		//We'll need this for some of our optimizations
+		three_addr_const_t* simplification_constant;
+
 		// The binary operation determines the optimization
 		switch(binary_operation->op){
 			case PLUS:
