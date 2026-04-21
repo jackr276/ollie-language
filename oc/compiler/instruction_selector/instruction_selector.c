@@ -4317,6 +4317,36 @@ static three_addr_var_t* get_value_name(value_numbering_table_t* table, three_ad
 
 
 /**
+ * Replace the "current" variable with the "given" variable *and* update
+ * the use count accordingly. These will all be right hand side variables
+ * so we this will all be a use count, and not an assignment count
+ *
+ * This function returns TRUE if we could replace the variable, and FALSE if we 
+ * did not
+ */
+static inline u_int8_t replace_rhs_variable(three_addr_var_t** current, three_addr_var_t* given){
+	//If these aren't equal we replace
+	if(*current != given){
+		//Bump this one's use count down
+		(*current)->use_count--;
+
+		//Make this equal the given
+		*current = given;
+
+		//Bump this one's use count up
+		given->use_count++;
+
+		//We did substitute
+		return TRUE;
+
+	//Otherwise we didn't
+	} else {
+		return FALSE;
+	}
+}
+
+
+/**
  * For every RHS variable, we will perform value name substitutions. This is very
  * similar to the way that register allocation coalescence works except that this
  * one does not rely on interference, and instead relies on proven value names
@@ -4339,6 +4369,7 @@ static inline u_int8_t perform_value_name_substitutions(value_numbering_table_t*
 	if(value_name != instruction->op1){
 		instruction->op1 = value_name;
 		substitution_occured = TRUE;
+
 	}
 
 	//Now do it for op2
