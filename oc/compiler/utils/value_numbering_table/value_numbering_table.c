@@ -85,6 +85,9 @@ void add_value_number_expression(value_numbering_table_t* table, three_addr_var_
 	new_node->result_value = result;
 	new_node->textual_key = *textual_key;
 
+	//Flag that this variable was itself value named
+	result->was_value_named = TRUE;
+
 	//Grab a pointer to the current value
 	value_numbering_node_t* cursor = table->table[textual_key_hash];
 

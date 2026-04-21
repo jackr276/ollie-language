@@ -208,6 +208,8 @@ struct three_addr_var_t{
 	u_int8_t is_dereferenced;
 	//Does this set condition codes?
 	u_int8_t sets_cc;
+	//Was this variable value named?
+	u_int8_t was_value_named;
 	//What is the size of this variable
 	variable_size_t variable_size;
 	//What membership do we have if any

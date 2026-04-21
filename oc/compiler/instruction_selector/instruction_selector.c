@@ -4405,10 +4405,6 @@ static inline u_int8_t perform_value_name_substitutions(value_numbering_table_t*
 	//Replace the variable, and flag that this worked if it did
 	if(replace_rhs_variable(&(instruction->op1), value_name) == TRUE){
 		substitution_occured = TRUE;
-
-		printf("VALUE NAME: ");
-		print_variable(stdout, value_name, PRINTING_VAR_INLINE);
-		printf(" USE COUNT: %d\n", value_name->use_count);
 	}
 
 	//Now do it for op2
@@ -9001,17 +8997,13 @@ static void handle_subtraction_instruction(instruction_window_t* window){
 	 * 	t4 <- t3
 	 */
 	} else {
-		printf("VAR NAME: ");
-		print_variable(stdout, subtraction_instruction->op1, PRINTING_VAR_INLINE);
-		printf(" USE COUNT: %d\n", subtraction_instruction->op1->use_count);
-		printf("POINTER: %p\n", subtraction_instruction->op1);
 		/**
 		 * If this is either not a temp var *or* we have a use count that is higher than
 		 * one(can happen with value numbering), then we'll need to emit another
 		 * temp assignment
 		 */
 		if(subtraction_instruction->op1->variable_type != VARIABLE_TYPE_TEMP
-			|| subtraction_instruction->op1->use_count > 1){
+			|| subtraction_instruction->op1->was_value_named == TRUE){
 
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), subtraction_instruction->op1);
 
@@ -9227,7 +9219,7 @@ static void handle_addition_instruction(instruction_window_t* window){
 		 * an extra assignment to ensure we aren't overwriting things here
 		 */
 		if(original_addition->op1->variable_type != VARIABLE_TYPE_TEMP
-			|| original_addition->op1->use_count > 1){
+			|| original_addition->op1->was_value_named == TRUE){
 
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), original_addition->op1);
 
