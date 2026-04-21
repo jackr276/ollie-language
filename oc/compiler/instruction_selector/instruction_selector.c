@@ -4351,28 +4351,36 @@ static inline u_int8_t replace_rhs_variable(three_addr_var_t** current, three_ad
  * need to worry about the use count here. This function returns TRUE if a replacement did happen,
  * and FALSE if it did not
  */
-static inline u_int8_t replace_parameter_list_variable(dynamic_array_t* parameter_list, u_int32_t index, three_addr_var_t* replacement){
-	//Grab the old one out
-	three_addr_var_t* old_variable = dynamic_array_get_at(parameter_list, index);
+static inline u_int8_t replace_all_parameter_list_variables(value_numbering_table_t* table, dynamic_array_t* parameter_list){
+	//Flag whether or not we've made one
+	u_int8_t performed_substitution = FALSE;
 
-	//If they're not equal then we replace
-	if(old_variable != replacement){
-		//Set it in
-		dynamic_array_set_at(parameter_list, replacement, index);
+	//Run through the entire list
+	for(u_int32_t i = 0; i < parameter_list->current_index; i++){
+		//Grab the old one out
+		three_addr_var_t* old_variable = dynamic_array_get_at(parameter_list, i);
 
-		//Bump his use count down
-		old_variable->use_count--;
+		//Get the value name out
+		three_addr_var_t* value_name = get_value_name(table, old_variable);
+		
+		//If they're not equal then we replace
+		if(old_variable != value_name){
+			//Set it in
+			dynamic_array_set_at(parameter_list, value_name, i);
 
-		//While this one goes up
-		replacement->use_count++;
+			//Bump his use count down
+			old_variable->use_count--;
 
-		return TRUE;
+			//While this one goes up
+			value_name->use_count++;
 
-	} else {
-		return FALSE;
+			//Flag that we did perform one
+			performed_substitution = TRUE;
+		}
 	}
-}
 
+	return performed_substitution;
+}
 
 
 /**
@@ -4407,22 +4415,9 @@ static inline u_int8_t perform_value_name_substitutions(value_numbering_table_t*
 		substitution_occured = TRUE;
 	}
 
-	//Run through all of the parameters
-	for(u_int32_t i = 0; i < instruction->parameters.current_index; i++){
-		//Grab it out
-		three_addr_var_t* variable = dynamic_array_get_at(&(instruction->parameters), i);
-
-		//Value number it
-		value_name = get_value_name(table, variable);
-
-		//If we found a difference then we will flag it here
-		if(value_name != variable){
-			//Add it
-			dynamic_array_set_at(&(instruction->parameters), value_name, i);
-
-			//Flag it
-			substitution_occured = TRUE;
-		}
+	//Now replace all of the parameter list variables
+	if(replace_all_parameter_list_variables(table, &(instruction->parameters)) == TRUE){
+		substitution_occured = TRUE;
 	}
 
 	return substitution_occured;
@@ -4564,6 +4559,9 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 
 				//We've used this one more time
 				found_result->use_count++;
+
+				//Knock this down too
+				cursor->op1->use_count--;
 
 				/**
 				 * Now we can use the textual string again to create a new 
