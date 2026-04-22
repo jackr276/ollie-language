@@ -6840,9 +6840,9 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 
 	//Now we'll print out each and every function inside of the function_entry_blocks
 	//array. Each function will be printed using the BFS strategy
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
-		//We'll need a queue for our BFS
-		heap_queue_t queue = heap_queue_alloc();
+	for(u_int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+		//Clear the traversal queue
+		heap_queue_clear(&traversal_queue);
 
 		//Grab this out for convenience
 		basic_block_t* function_entry_block = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
@@ -6852,12 +6852,12 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 		print_local_stack_data_area(&(function_entry_block->function_defined_in->local_stack));
 
 		//Seed the search by adding the funciton block into the queue
-		enqueue(&queue, function_entry_block);
+		enqueue(&traversal_queue, function_entry_block);
 
 		//So long as the queue isn't empty
-		while(queue_is_empty(&queue) == FALSE){
+		while(queue_is_empty(&traversal_queue) == FALSE){
 			//Pop off of the queue
-			block = dequeue(&queue);
+			block = dequeue(&traversal_queue);
 
 			//If this wasn't visited, we'll print
 			if(block->visited == FALSE){
@@ -6873,13 +6873,10 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 				basic_block_t* successor = block->successors.internal_array[j];
 
 				if(successor->visited == FALSE){
-					enqueue(&queue, successor);
+					enqueue(&traversal_queue, successor);
 				}
 			}
 		}
-
-		//Destroy the heap queue when done
-		heap_queue_dealloc(&queue);
 	}
 }
 
