@@ -41,6 +41,8 @@ static symtab_function_record_t* current_function = NULL;
 static dynamic_set_t errors_raised_by_current_function;
 //The queue that holds all of our jump statements for a given function
 static heap_queue_t current_function_jump_statements;
+//The BFS queue for namespaces
+static heap_queue_t namespace_bfs_queue;
 
 //Our stack for storing variables, etc
 static lex_stack_t grouping_stack;
@@ -1706,8 +1708,7 @@ static inline u_int8_t is_namespace_predecessor_of_given(function_namespace_t* p
 	 * and eventually find the current namespace, then the function is
 	 * inside of a predecessor namespace and this access is valid
 	 */
-	//We'll need a queue for the BFS
-	heap_queue_t namespace_bfs_queue = heap_queue_alloc();
+	heap_queue_clear(&namespace_bfs_queue);
 
 	//Add the function namespace as our seed
 	enqueue(&namespace_bfs_queue, predecessor_candidate);
@@ -1719,8 +1720,6 @@ static inline u_int8_t is_namespace_predecessor_of_given(function_namespace_t* p
 
 		//Condition - if it's equal to our current one get out
 		if(cursor == given){
-			//Destroy the queue
-			heap_queue_dealloc(&namespace_bfs_queue);
 			return SUCCESS;
 		}
 
@@ -1730,8 +1729,6 @@ static inline u_int8_t is_namespace_predecessor_of_given(function_namespace_t* p
 
 			//If this matches the  current namespace - we're done 
 			if(candidate == given){
-				//Destroy the queue
-				heap_queue_dealloc(&namespace_bfs_queue);
 				return SUCCESS;
 			}
 
@@ -1739,9 +1736,6 @@ static inline u_int8_t is_namespace_predecessor_of_given(function_namespace_t* p
 			enqueue(&namespace_bfs_queue, candidate);
 		}
 	}
-
-	//Scrap the queue
-	heap_queue_dealloc(&namespace_bfs_queue);
 
 	//If we made it all the way down here, we have a failure
 	return FAILURE;
@@ -14247,6 +14241,9 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	variable_symtab = variable_symtab_alloc();
 	type_symtab = type_symtab_alloc();
 
+	//Allocate the reusable namespace queue
+	namespace_bfs_queue = heap_queue_alloc();
+
 	//For the type and variable symtabs, their scope needs to be initialized before
 	//anything else happens
 	
@@ -14345,6 +14342,7 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	lex_stack_dealloc(&grouping_stack);
 	lex_stack_dealloc(&assignment_grouping_stack);
 	nesting_stack_dealloc(&nesting_stack);
+	heap_queue_dealloc(&namespace_bfs_queue);
 
 	//Once we're done, destroy the token stream
 	destroy_token_stream(token_stream);
