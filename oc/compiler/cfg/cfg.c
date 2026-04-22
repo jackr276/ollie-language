@@ -68,6 +68,10 @@ static dynamic_array_t current_function_labeled_blocks;
 static dynamic_array_t current_function_user_defined_jump_statements;
 //The current stack offset for any given function
 static u_int64_t stack_offset = 0;
+
+//Reusable memory regions for our graph traversals
+static heap_queue_t traversal_queue;
+
 //For any/all error printing
 char error_info[1500];
 
@@ -1443,13 +1447,12 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
  */
 static basic_block_t* immediate_postdominator(basic_block_t* B){
 	//If we've already found the immediate dominator, why find it again?
-	//We'll just give that back
 	if(B->immediate_postdominator != NULL){
 		return B->immediate_postdominator;
 	}
 
-	//Create the queue
-	heap_queue_t queue = heap_queue_alloc();
+	//First we'll wipe the queue clean
+	heap_queue_clear(&traversal_queue);
 
 	//The visited array
 	dynamic_array_t visited = dynamic_array_alloc();
@@ -1461,12 +1464,12 @@ static basic_block_t* immediate_postdominator(basic_block_t* B){
 	dynamic_array_t postdominator_set = B->postdominator_set;
 
 	//Seed the search with B
-	enqueue(&queue, B);
+	enqueue(&traversal_queue, B);
 
 	//So long as the queue isn't empty
-	while(queue_is_empty(&queue) == FALSE){
+	while(queue_is_empty(&traversal_queue) == FALSE){
 		//Pop off of the queue
-		basic_block_t* current = dequeue(&queue);
+		basic_block_t* current = dequeue(&traversal_queue);
 
 		/**
 		 * If we have found the first breadth-first successor that postdominates B,
@@ -1486,16 +1489,13 @@ static basic_block_t* immediate_postdominator(basic_block_t* B){
 			basic_block_t* successor = current->successors.internal_array[j];
 
 			if(dynamic_array_contains(&visited, successor) == NOT_FOUND){
-				enqueue(&queue, successor);
+				enqueue(&traversal_queue, successor);
 			}
 		}
 	}
 
 	//Destroy visited
 	dynamic_array_dealloc(&visited);
-
-	//Destroy the queue
-	heap_queue_dealloc(&queue);
 
 	//Give it back
 	return ipdom;
@@ -11133,6 +11133,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	break_stack = heap_stack_alloc();
 	continue_stack = heap_stack_alloc(); 
 	nesting_stack = nesting_stack_alloc();
+	traversal_queue = heap_queue_alloc();
 
 	//Keep these on hand
 	f64 = lookup_type_name_only(type_symtab, "f64", NOT_MUTABLE)->type;
