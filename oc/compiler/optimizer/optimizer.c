@@ -16,6 +16,9 @@
 static three_addr_var_t* stack_pointer_variable;
 static three_addr_var_t* instruction_pointer_variable;
 
+//A reusable queue for postdominator traversal
+static heap_queue_t postdominator_queue;
+
 //A pointer to the cfg
 static cfg_t* cfg_reference;
 
@@ -866,23 +869,23 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
  * we'll have our answer
  */
 static basic_block_t* nearest_marked_postdominator(dynamic_array_t* function_blocks, basic_block_t* B){
-	//We'll need a queue for the BFS
-	heap_queue_t queue = heap_queue_alloc();
+	//Wipe out the postdominator queue for this go around
+	heap_queue_clear(&postdominator_queue);
 
 	//First, we'll reset every single block here
 	reset_visit_status_for_function(function_blocks);
 
 	//Seed the search with B
-	enqueue(&queue, B);
+	enqueue(&postdominator_queue, B);
 
 	//The nearest marked postdominator and a holder for our candidates
 	basic_block_t* nearest_marked_postdominator = NULL;
 	basic_block_t* candidate;
 
 	//So long as the queue is not empty
-	while(queue_is_empty(&queue) == FALSE){
+	while(queue_is_empty(&postdominator_queue) == FALSE){
 		//Grab the block off
-		candidate = dequeue(&queue);
+		candidate = dequeue(&postdominator_queue);
 		
 		//If we've been here before, continue;
 		if(candidate->visited == TRUE){
@@ -914,13 +917,10 @@ static basic_block_t* nearest_marked_postdominator(dynamic_array_t* function_blo
 
 			//If it's already been visited, we won't bother with it. If it hasn't been visited, we'll add it in
 			if(successor->visited == FALSE){
-				enqueue(&queue, successor);
+				enqueue(&postdominator_queue, successor);
 			}
 		}
 	}
-
-	//Destroy the queue when done
-	heap_queue_dealloc(&queue);
 
 	//And give this back
 	return nearest_marked_postdominator;
@@ -3127,6 +3127,9 @@ cfg_t* optimize(cfg_t* cfg){
 	stack_pointer_variable = cfg->stack_pointer;
 	instruction_pointer_variable = cfg->instruction_pointer;
 
+	//Allocate the reusable memory
+	postdominator_queue = heap_queue_alloc();
+
 	/**
 	 * We will optimize on a function by function basis. This is because functions are independent units 
 	 * that do not have interlocking dependencies. Us doing this allows for more efficient operation because
@@ -3251,6 +3254,8 @@ cfg_t* optimize(cfg_t* cfg){
 		recompute_all_dominance_relations(current_function_blocks, function_entry_block);
 	}
 
+	//Now that we are done we can free all of the reusable memory
+	heap_queue_dealloc(&postdominator_queue);
 
 	//Give back the CFG
 	return cfg;
