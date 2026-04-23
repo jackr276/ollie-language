@@ -8988,7 +8988,7 @@ static void handle_cmp_instruction(instruction_window_t* window){
 	 * by a branch statement or if we are going to need to expand it out
 	 * more. By default, we assume it is just being used by a branch
 	 */
-	u_int8_t used_by_branch_only = TRUE;
+	u_int8_t used_by_branch_only = instruction->op1->sets_cc;
 
 	//Store the result type
 	generic_type_t* operator_type;
@@ -9018,69 +9018,6 @@ static void handle_cmp_instruction(instruction_window_t* window){
 
 	//Store where or not it's a floating point type
 	u_int8_t is_floating_point = IS_FLOATING_POINT(operator_type);
-	
-	/**
-	 * If the assignee is a temp var then we can't be sure if it's only used
-	 * by a branch or if this is eventually expected to be assigned somewhere
-	 */
-	if(instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
-		//Grab a cursor to the next statement
-		instruction_t* cursor = instruction->next_statement;
-
-		//So long as the cursor is not NULL, keep crawling
-		while(cursor != NULL){
-			/**
-			 * This is the case that we're after. If we find that the branch relies
-			 * on this, then we can just get out
-			 */
-			if(variables_equal(cursor->op1, instruction->assignee, FALSE) == TRUE){
-				//This means that we are *not* exclusively used by a branch
-				if(cursor->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
-					used_by_branch_only = FALSE;
-					break;
-				}
-
-				/**
-				 * Otherwise logically speaking we do have a branch
-				 * statement here. As such, if it's a floating point
-				 * branch we'll need to flag that
-				 */
-				if(is_floating_point == TRUE){
-					cursor->relies_on_fp_comparison = TRUE;
-				}
-
-			/**
-			 * We could also be used by op2. If this is the case, then it's definitely not just
-			 * being used by a branch
-			 */
-			} else if (variables_equal(cursor->op2, instruction->assignee, FALSE) == TRUE){
-				/**
-				 * Branches never have dependencies stored in op2. As such if we see this,
-				 * it's an automatic false
-				 */
-				used_by_branch_only = FALSE;
-				break;
-			}
-
-			/**
-			 * If we get to the end and it's not used by a branch, that is fine. The only
-			 * thing that we care about in this crawl is whether or not the above statement
-			 * was used by a branch instruction. If it was, then all of the extra setX
-			 * is unnecessary. If it wasn't then we need to be adding those extra steps
-			 */
-
-			//Advance the cursor up
-			cursor = cursor->next_statement;
-		}
-
-	/**
-	 * If the assignee is non-temp then we can be sure that this is not just
-	 * used by a branch and is instead used as a variable assignment
-	 */
-	} else {
-		used_by_branch_only = FALSE;
-	}
-
 	//Handle any/all converting moves that are going to be needed here
 	if(is_converting_move_required(operator_type, instruction->op1->type) == TRUE){
 		instruction->op1 = create_and_insert_converting_move_instruction(instruction, instruction->op1, operator_type);
@@ -10635,7 +10572,7 @@ static void handle_branch_instruction(instruction_window_t* window){
 
 	//Most common case, we do not expect that most things will
 	//be relying on FP comparison
-	if(branch_stmt->relies_on_fp_comparison == FALSE){
+	if(branch_stmt->op1->comes_from_fp_comparison == FALSE){
 		switch(branch_stmt->branch_type){
 			case BRANCH_A:
 				jump_to_if = emit_jump_instruction_directly(if_block, JA);
@@ -10889,77 +10826,14 @@ static inline void handle_indirect_function_call(instruction_t* instruction){
  * get here
  */
 static void handle_logical_not_instruction(instruction_window_t* window){
-	//Is this value *exclusively* used by a branch?
-	u_int8_t used_by_branch_only = TRUE;
-
 	//Let's grab the value out for convenience
 	instruction_t* logical_not = window->instruction1;
 
+	//Is this value *exclusively* used by a branch?
+	u_int8_t used_by_branch_only = logical_not->op1->sets_cc;
+
 	//Let's also determine if this is a floating point logical not or not
 	u_int8_t is_floating_point = IS_FLOATING_POINT(logical_not->op1->type);
-
-	/**
-	 * If the assignee is not temporary, then we know this is not just
-	 * used by a branch. If it is through, we'll need to do some more investigation
-	 * to find out
-	 */
-	if(logical_not->assignee->variable_type == VARIABLE_TYPE_TEMP){
-		//Grab an instruction cursor for the crawl
-		instruction_t* cursor = logical_not->next_statement;
-
-		//So long as the cursor is not NULL, keep crawling
-		while(cursor != NULL){
-			/**
-			 * This is the case that we're after. If we find that the branch relies
-			 * on this, then we can just get out
-			 */
-			if(variables_equal(cursor->op1, logical_not->assignee, FALSE) == TRUE){
-				//This means that we are *not* exclusively used by a branch
-				if(cursor->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
-					used_by_branch_only = FALSE;
-					break;
-				}
-
-				/**
-				 * Otherwise logically speaking we do have a branch
-				 * statement here. As such, if it's a floating point
-				 * branch we'll need to flag that
-				 */
-				if(is_floating_point == TRUE){
-					cursor->relies_on_fp_comparison = TRUE;
-				}
-
-			/**
-			 * We could also be used by op2. If this is the case, then it's definitely not just
-			 * being used by a branch
-			 */
-			} else if (variables_equal(cursor->op2, logical_not->assignee, FALSE) == TRUE){
-				/**
-				 * Branches never have dependencies stored in op2. As such if we see this,
-				 * it's an automatic false
-				 */
-				used_by_branch_only = FALSE;
-				break;
-			}
-
-			/**
-			 * If we get to the end and it's not used by a branch, that is fine. The only
-			 * thing that we care about in this crawl is whether or not the above statement
-			 * was used by a branch instruction. If it was, then all of the extra setX
-			 * is unnecessary. If it wasn't then we need to be adding those extra steps
-			 */
-
-			//Advance the cursor up
-			cursor = cursor->next_statement;
-		}
-
-	/**
-	 * The assignee isn't temp so we know that this is not just used by a branch
-	 */
-	} else {
-		used_by_branch_only = FALSE;
-	}
-
 
 	//This is the most common case - it is *not* being used by a floating
 	//point value
@@ -13359,36 +13233,9 @@ static void handle_test_if_not_zero_instruction(instruction_window_t* window){
 		instruction_t* cursor = instruction;
 
 		/**
-		 * We also need to flag any branches that come up in front of us
-		 * to tell them that they rely on an FP comparison. We do this
-		 * by a simple crawl
+		 * Now that we have this, we can emit the comparison command. We will
+		 * just repurpose the above instruction to do this
 		 */
-
-		//So long as the cursor is not NULL, keep crawling
-		while(cursor != NULL){
-			//If it's not a branch then we don't care
-			if(cursor->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
-				cursor = cursor->next_statement;
-				continue;
-			}
-
-			//This is the case that we're after. If we find that the branch relies
-			//on this, then we can just get out
-			if(variables_equal(cursor->op1, instruction->assignee, FALSE) == TRUE){
-				cursor->relies_on_fp_comparison = TRUE;
-			}
-
-			//If we get to the end and it's not used by a branch, that is fine. The only
-			//thing that we care about in this crawl is whether or not the above statement
-			//was used by a branch instruction. If it was, then all of the extra setX
-			//is unnecessary. If it wasn't then we need to be adding those extra steps
-
-			//Advance the cursor up
-			cursor = cursor->next_statement;
-		}
-
-		//Now that we have this, we can emit the comparison command. We will
-		//just repurpose the above instruction to do this
 		switch(zeroed_out->variable_size){
 			case SINGLE_PRECISION:
 				instruction->instruction_type = UCOMISS;
