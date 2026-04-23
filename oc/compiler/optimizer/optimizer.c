@@ -2733,33 +2733,36 @@ static inline conditional_status_t determine_conditional_status(instruction_t* c
 			 * var, then we'll be able to go through here and try to find where it was assigned
 			 */
 			if(conditional->op1->variable_type == VARIABLE_TYPE_TEMP){
-				//Go back so long as we aren't NULL
+				//Grab a cursor starting at the prior statement
+				instruction_t* instruction_cursor = conditional->previous_statement;
+
 				while(instruction_cursor != NULL){
-					//If we have equal variables here, we can see what to do
+					/**
+					 * The only way to "safely" do this is if we have a constant here. If we have that,
+					 * we would be looking for a three_addr_code_assn_const statement. If we don't have
+					 * that we'll also leave
+					 */
 					if(variables_equal(conditional->op1, instruction_cursor->assignee, FALSE) == TRUE){
-						//The only way to "safely" do this is if we have a constant here. If we have that,
-						//we would be looking for a three_addr_code_assn_const statement. If we don't have
-						//that we'll also leave
+						//This has to be an assn const statement to work, so if it's not then leave
 						if(instruction_cursor->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
 							break;
 						}
 
-						//Since this is a test if not zero instruction, we will now look and see what
-						//the constant value is. If it's zero, then this is always false. If it's nonzero,
-						//then this is always true
-						if(is_constant_value_zero(instruction_cursor->op1_const) == FALSE){
-							status = CONDITIONAL_ALWAYS_TRUE;
-						} else {
-							status = CONDITIONAL_ALWAYS_FALSE;
-						}
-
-						break;
+						/**
+						 * Since this is a test if not zero instruction, we will now look and see what
+						 * the constant value is. If it's zero, then this is always false. If it's nonzero,
+						 * then this is always true
+						 */
+						return is_constant_value_zero(instruction_cursor->op1_const) == TRUE ? CONDITIONAL_ALWAYS_FALSE : CONDITIONAL_ALWAYS_TRUE;
 					}
 
 					//Back it up by one
 					instruction_cursor = instruction_cursor->previous_statement;
 				}
 
+				//If we make it to the end here then we found nothing, so return unknown
+				return CONDITIONAL_UNKNOWN;
+				
 			/**
 			 * If we have something where the variable isn't
 			 * temporary, then it's not going to be safe to do
@@ -2768,13 +2771,6 @@ static inline conditional_status_t determine_conditional_status(instruction_t* c
 			} else {
 				return CONDITIONAL_UNKNOWN;
 			}
-
-
-
-
-			//Trace back up the block
-			break;
-
 	
 		//If we have an unknown type then let's just leave
 		default:
