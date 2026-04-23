@@ -2328,10 +2328,34 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 		// The binary operation determines the optimization
 		switch(binary_operation->op){
-			//TODO FLOATS
+			/**
+			 * For plus, if we have a floating point computation type we aren't
+			 * going to be able to simplify this like we want because floating point
+			 * addition and multiplying by 2 are not exactly the same. As such we're
+			 * only doing this if we have a non floating point computation type
+			 */
 			case PLUS:
-				printf("PLUS\n");
-				print_instruction_window_three_address_code(window);
+				if(IS_FLOATING_POINT(result_type) == FALSE){
+					//Emit the 2 for our doubling operation
+					simplification_constant = emit_direct_integer_or_char_constant(2, result_type);
+					
+					//Op2 is no longer needed
+					binary_operation->op2->use_count--;
+					binary_operation->op2 = NULL;
+
+					//This is now a BIN_OP_WITH_CONST
+					binary_operation->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+
+					//Throw the constant in
+					binary_operation->op1_const = simplification_constant;
+
+					//The op is multiplication
+					binary_operation->op = STAR;
+
+					//This does count as a change
+					changed = TRUE;
+				}
+
 				break;
 
 			/**
