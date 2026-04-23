@@ -13229,9 +13229,6 @@ static void handle_test_if_not_zero_instruction(instruction_window_t* window){
 		//Add this in before our statement
 		insert_instruction_before_given(pxor_instruction, instruction);
 
-		//Grab an instruction cursor
-		instruction_t* cursor = instruction;
-
 		/**
 		 * Now that we have this, we can emit the comparison command. We will
 		 * just repurpose the above instruction to do this
