@@ -2334,9 +2334,36 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				print_instruction_window_three_address_code(window);
 				break;
 
-			//TODO FLOATS
+			/**
+			 * For minus, if we have a floating point computation type
+			 * we are not able to make this into 0 because floating point
+			 * subtraction may not truly result in 0. As such we will only
+			 * take this step if we do *not* have floating points
+			 */
 			case MINUS:
-				printf("MINUS\n");
+				if(IS_FLOATING_POINT(result_type) == FALSE){
+					//Spit out the 0 constant to use here
+					simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
+
+					//Remove these variables
+					binary_operation->op1->use_count--;
+					binary_operation->op2->use_count--;
+					binary_operation->op1 = NULL;
+					binary_operation->op2 = NULL;
+
+					//Remove the opcode to avoid confusion
+					binary_operation->op = BLANK;
+
+					//This is a const assignment
+					binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+					//And throw the simplification constant in
+					binary_operation->op1_const = simplification_constant;
+					
+					//This is a change
+					changed = TRUE;
+				}
+
 				break;
 
 			/**
