@@ -18,6 +18,9 @@
 static three_addr_var_t* stack_pointer_variable;
 static three_addr_var_t* instruction_pointer_variable;
 
+// A reusable queue for our traversals
+static heap_queue_t bfs_queue;
+
 /**
  * We only want to perform ret-hoisting for small enough
  * blocks. If we have gigantic ret blocks, hoisting them
@@ -822,23 +825,23 @@ static void condense(cfg_t* cfg, basic_block_t* function_entry_block){
 static void reorder_blocks(basic_block_t* function_entry_block){
 	//We'll first wipe the visited status on this CFG
 	reset_function_visited_status(function_entry_block, TRUE);
+
+	//Clear out our reusable queue
+	heap_queue_clear(&bfs_queue);
 	
 	//We will perform a breadth first search and use the "direct successor" area
 	//of the blocks to store them all in one chain
 	
-	//We'll need to use a queue every time, we may as well just have one big one
-	heap_queue_t queue = heap_queue_alloc();
-
 	//These are reset for every function we deal with
 	basic_block_t* previous = NULL;
 
 	//This function start block is the begging of our BFS	
-	enqueue(&queue, function_entry_block);
+	enqueue(&bfs_queue, function_entry_block);
 	
 	//So long as the queue is not empty
-	while(queue_is_empty(&queue) == FALSE){
+	while(queue_is_empty(&bfs_queue) == FALSE){
 		//Grab this block off of the queue
-		basic_block_t* current = dequeue(&queue);
+		basic_block_t* current = dequeue(&bfs_queue);
 
 		//If previous is NULL, this is the first block
 		if(previous == NULL){
@@ -876,7 +879,7 @@ static void reorder_blocks(basic_block_t* function_entry_block){
 		//If this is the case, we'll add it in first
 		if(direct_end_jump != NULL && direct_end_jump->visited == FALSE){
 			//Add it into the queue
-			enqueue(&queue, direct_end_jump);
+			enqueue(&bfs_queue, direct_end_jump);
 		}
 
 		//Now we'll go through each of the successors in this node
@@ -900,13 +903,10 @@ static void reorder_blocks(basic_block_t* function_entry_block){
 
 			//Otherwise it's not, so we'll add it in
 			if(successor->visited == FALSE){
-				enqueue(&queue, successor);
+				enqueue(&bfs_queue, successor);
 			}
 		}
 	}
-
-	//Destroy the queue when done
-	heap_queue_dealloc(&queue);
 }
 
 
@@ -922,6 +922,9 @@ void postprocess(cfg_t* cfg){
 	//Cache these two special variables
 	stack_pointer_variable = cfg->stack_pointer;
 	instruction_pointer_variable = cfg->instruction_pointer;
+
+	//Allocate the reusable queue
+	bfs_queue = heap_queue_alloc();
 
 	//Run through every function block here separately
 	for(u_int32_t i = 0 ; i < cfg->function_entry_blocks.current_index; i++){
@@ -943,4 +946,7 @@ void postprocess(cfg_t* cfg){
 		*/
 		reorder_blocks(function_entry_block);
 	}
+
+	//We can now destroy the output queue
+	heap_queue_dealloc(&bfs_queue);
 }
