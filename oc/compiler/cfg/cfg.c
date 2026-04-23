@@ -3664,6 +3664,25 @@ static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, t
 
 
 /**
+ * Emit a test instruction. Note that this is different depending on what kind of testing that we're doing(GP vs SSE)
+ *
+ * Note that for the operator input, we will use this to modify the given operator *if* we have a floating point operation.
+ * This is because the eventual selected code for floating point will turn if(x) into if(x != 0) essentially, so we need to
+ * have that logic already in for when the branch statements are selected
+ */
+static inline three_addr_var_t* emit_test_not_zero_for_constant(basic_block_t* basic_block, three_addr_const_t* tested_constant){
+	//Emit the instruction
+	instruction_t* test_if_not_zero = emit_test_if_not_zero_for_const_statement(emit_temp_var(u8), tested_constant);
+
+	//Now we'll add it into the block
+	add_statement(basic_block, test_if_not_zero);
+
+	//Give back the final assignee
+	return test_if_not_zero->assignee;
+}
+
+
+/**
  * Emit a bitwise not statement 
  */
 static inline three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, three_addr_var_t* var){

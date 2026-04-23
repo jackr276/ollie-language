@@ -841,6 +841,11 @@ instruction_t* emit_phi_function(symtab_variable_record_t* variable);
 instruction_t* emit_test_if_not_zero_statement(three_addr_var_t* destination_variable, three_addr_var_t* being_tested);
 
 /**
+ * Emit a "test if not 0 three address code statement"
+ */
+instruction_t* emit_test_if_not_zero_for_const_statement(three_addr_var_t* destination_variable, three_addr_const_t* being_tested);
+
+/**
  * Emit an idle statement
  */
 instruction_t* emit_idle_instruction();

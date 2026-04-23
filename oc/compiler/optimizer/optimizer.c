@@ -2703,6 +2703,8 @@ static void optimize_short_circuit_logic(symtab_function_record_t* function, dyn
  * to trace up the block to find out. If we are unable to
  * find out, that is ok, we just return false and assume
  * that it can't be done
+ *
+ * TODO HERE ENHANCEMENT IS NEEDED
  */
 static inline conditional_status_t determine_conditional_status(instruction_t* conditional){
 	//By default assume that we don't know enough to determine this
