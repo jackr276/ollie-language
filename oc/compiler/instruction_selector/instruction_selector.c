@@ -8988,7 +8988,7 @@ static void handle_cmp_instruction(instruction_window_t* window){
 	 * by a branch statement or if we are going to need to expand it out
 	 * more. By default, we assume it is just being used by a branch
 	 */
-	u_int8_t used_by_branch_only = instruction->op1->sets_cc;
+	u_int8_t used_by_branch_only = instruction->assignee->sets_cc;
 
 	//Store the result type
 	generic_type_t* operator_type;
@@ -10830,7 +10830,7 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 	instruction_t* logical_not = window->instruction1;
 
 	//Is this value *exclusively* used by a branch?
-	u_int8_t used_by_branch_only = logical_not->op1->sets_cc;
+	u_int8_t used_by_branch_only = logical_not->assignee->sets_cc;
 
 	//Let's also determine if this is a floating point logical not or not
 	u_int8_t is_floating_point = IS_FLOATING_POINT(logical_not->op1->type);
