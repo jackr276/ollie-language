@@ -2707,12 +2707,6 @@ static void optimize_short_circuit_logic(symtab_function_record_t* function, dyn
  * TODO HERE ENHANCEMENT IS NEEDED
  */
 static inline conditional_status_t determine_conditional_status(instruction_t* conditional){
-	//By default assume that we don't know enough to determine this
-	conditional_status_t status = CONDITIONAL_UNKNOWN;
-
-	//Instruction cursor
-	instruction_t* instruction_cursor = conditional;
-
 	//There are several conditional types that we are going
 	//to be able to look through here
 	switch (conditional->statement_type) {
@@ -2725,39 +2719,58 @@ static inline conditional_status_t determine_conditional_status(instruction_t* c
 		 * t2 <- test if not zero t1
 		 */
 		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
-			//If we have something where the variable isn't
-			//temporary, then it's not going to be safe to do
-			//this so we'll just leave now
-			if(conditional->op1->variable_type != VARIABLE_TYPE_TEMP){
-				break;
+			/**
+			 * If we have a constant for the conditional, then this is easy for us. We will
+			 * simply evaluate as is without searching. If the constant value is 0, then we 
+			 * are false, otherwise true
+			 */
+			if(conditional->op1_const != NULL){
+				return is_constant_value_zero(conditional->op1_const) == TRUE ? CONDITIONAL_ALWAYS_FALSE : CONDITIONAL_ALWAYS_TRUE;
 			}
 
-			//Go back so long as we aren't NULL
-			while(instruction_cursor != NULL){
-				//If we have equal variables here, we can see what to do
-				if(variables_equal(conditional->op1, instruction_cursor->assignee, FALSE) == TRUE){
-					//The only way to "safely" do this is if we have a constant here. If we have that,
-					//we would be looking for a three_addr_code_assn_const statement. If we don't have
-					//that we'll also leave
-					if(instruction_cursor->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
+			/**
+			 * Otherwise, we'll need to abandon that line of thinking. If the variable itself is a temp
+			 * var, then we'll be able to go through here and try to find where it was assigned
+			 */
+			if(conditional->op1->variable_type == VARIABLE_TYPE_TEMP){
+				//Go back so long as we aren't NULL
+				while(instruction_cursor != NULL){
+					//If we have equal variables here, we can see what to do
+					if(variables_equal(conditional->op1, instruction_cursor->assignee, FALSE) == TRUE){
+						//The only way to "safely" do this is if we have a constant here. If we have that,
+						//we would be looking for a three_addr_code_assn_const statement. If we don't have
+						//that we'll also leave
+						if(instruction_cursor->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
+							break;
+						}
+
+						//Since this is a test if not zero instruction, we will now look and see what
+						//the constant value is. If it's zero, then this is always false. If it's nonzero,
+						//then this is always true
+						if(is_constant_value_zero(instruction_cursor->op1_const) == FALSE){
+							status = CONDITIONAL_ALWAYS_TRUE;
+						} else {
+							status = CONDITIONAL_ALWAYS_FALSE;
+						}
+
 						break;
 					}
 
-					//Since this is a test if not zero instruction, we will now look and see what
-					//the constant value is. If it's zero, then this is always false. If it's nonzero,
-					//then this is always true
-					if(is_constant_value_zero(instruction_cursor->op1_const) == FALSE){
-						status = CONDITIONAL_ALWAYS_TRUE;
-					} else {
-						status = CONDITIONAL_ALWAYS_FALSE;
-					}
-
-					break;
+					//Back it up by one
+					instruction_cursor = instruction_cursor->previous_statement;
 				}
 
-				//Back it up by one
-				instruction_cursor = instruction_cursor->previous_statement;
+			/**
+			 * If we have something where the variable isn't
+			 * temporary, then it's not going to be safe to do
+			 * this so we'll just leave now
+			 */
+			} else {
+				return CONDITIONAL_UNKNOWN;
 			}
+
+
+
 
 			//Trace back up the block
 			break;
@@ -2765,12 +2778,8 @@ static inline conditional_status_t determine_conditional_status(instruction_t* c
 	
 		//If we have an unknown type then let's just leave
 		default:
-			break;
+			return CONDITIONAL_UNKNOWN;
 	}
-
-
-	//Give back the status
-	return status;
 }
 
 
