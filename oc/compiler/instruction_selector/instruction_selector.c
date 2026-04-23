@@ -13338,8 +13338,10 @@ static void handle_test_if_not_zero_instruction(instruction_window_t* window){
 		//Rebuild the window around this instruction
 		reconstruct_window(window, instruction);
 		
-	//For floating point operations, we need to effectively emit a "test if 0" command here, except we won't
-	//be using a constant. Instead, we can zero out a given XMM register and use that instead
+	/**
+	 * For floating point operations, we need to effectively emit a "test if 0" command here, except we won't
+	 * be using a constant. Instead, we can zero out a given XMM register and use that instead
+	 */
 	} else {
 		//Grab this for use
 		generic_type_t* fp_type = instruction->op1->type;

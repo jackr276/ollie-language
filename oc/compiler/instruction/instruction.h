@@ -208,6 +208,8 @@ struct three_addr_var_t{
 	u_int8_t is_dereferenced;
 	//Does this set condition codes?
 	u_int8_t sets_cc;
+	//Does this derive from an FP comparison
+	u_int8_t comes_from_fp_comparison;
 	//Was this variable value named?
 	u_int8_t was_value_named;
 	//What is the size of this variable
@@ -366,9 +368,6 @@ struct instruction_t{
 	u_int8_t mark;
 	//Is this a regular or inverse branch
 	u_int8_t inverse_branch;
-	//Does this branch rely on a floating point comparison? This could affect
-	//our selection logic later on
-	u_int8_t relies_on_fp_comparison;
 	//Do we need to stop this value from being coalesced. This is only used
 	//very specifically in the logical not handler currently
 	u_int8_t cannot_be_combined;

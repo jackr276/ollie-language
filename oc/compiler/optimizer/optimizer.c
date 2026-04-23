@@ -1973,6 +1973,8 @@ static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* f
 
 		//Test instruction, we're just testing against ourselves here
 		instruction_t* test = emit_test_not_zero_instruction(first_branch_conditional_decider, first_half_cursor->assignee, &first_condition_op);
+		
+		//TODO SETS CC
 
 		//Throw it into the block
 		add_statement(original_block, test);
