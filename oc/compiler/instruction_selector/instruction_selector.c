@@ -2468,25 +2468,64 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 				break;
 
-			//TODO HOW TO ACCOUNT FOR BRANCH
+			/**
+			 * x == x is always true, so we will turn this into a
+			 * 1 *if* we see that it is not relied on for setting
+			 * condition codes. In reality we should never get here
+			 * if it does, but we need to take the precaution
+			 */
 			case DOUBLE_EQUALS:
-				if(binary_operation->assignee->sets_cc){
-					printf("SETS CONDITION CODES\n");
-				} else {
-					printf("FAIR GAME\n");
+				if(binary_operation->assignee->sets_cc == FALSE){
+					//Spit the constant out
+					simplification_constant = emit_direct_integer_or_char_constant(1, result_type);
+
+					//Remove these variables
+					binary_operation->op1->use_count--;
+					binary_operation->op2->use_count--;
+					binary_operation->op1 = NULL;
+					binary_operation->op2 = NULL;
+
+					//Avoid any confusion with the op as well
+					binary_operation->op = BLANK;
+
+					//Convert this into a regular assignment
+					binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+					binary_operation->op1_const = simplification_constant;
+
+					//This is a change
+					changed = TRUE;
 				}
-				printf("==\n");
+
 				break;
 
-			//TODO HOW TO ACCOUNT FOR BRANCH
+			/**
+			 * x != x is always false, so we will turn this into a
+			 * 0 *if* we see that it is not relied on for setting
+			 * condition codes. In reality we should never get here
+			 * if it does, but we need to take the precaution
+			 */
 			case NOT_EQUALS:
-				if(binary_operation->assignee->sets_cc){
-					printf("SETS CONDITION CODES\n");
-				} else {
-					printf("FAIR GAME\n");
+				if(binary_operation->assignee->sets_cc == FALSE){
+					//Spit the constant out
+					simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
+
+					//Remove these variables
+					binary_operation->op1->use_count--;
+					binary_operation->op2->use_count--;
+					binary_operation->op1 = NULL;
+					binary_operation->op2 = NULL;
+
+					//Avoid any confusion with the op as well
+					binary_operation->op = BLANK;
+
+					//Convert this into a regular assignment
+					binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+					binary_operation->op1_const = simplification_constant;
+
+					//This is a change
+					changed = TRUE;
 				}
 
-				printf("!=\n");
 				break;
 
 			//TODO HOW TO ACCOUNT FOR BRANCH
