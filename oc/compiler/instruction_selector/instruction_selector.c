@@ -2438,25 +2438,34 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 				break;
 
-			//TODO HOW TO ACCOUNT FOR BRANCH
+			/**
+			 * For logical AND, if two things are the same then the
+			 * logical and result is just one
+			 */
 			case DOUBLE_AND:
-				if(binary_operation->assignee->sets_cc){
-					printf("SETS CONDITION CODES\n");
-				} else {
-					printf("FAIR GAME\n");
-				}
-				printf("||\n");
-				break;
-
-			//TODO HOW TO ACCOUNT FOR BRANCH
 			case DOUBLE_OR:
-				if(binary_operation->assignee->sets_cc){
-					printf("SETS CONDITION CODES\n");
-				} else {
-					printf("FAIR GAME\n");
+				/**
+				 * We will only go ahead with this optimization if we do
+				 * not set condition codes. This really is just a precaution,
+				 * as this should never have gotten here anyway if it does(optimizer
+				 * does it's own simplification), but we need to check
+				 *
+				 *
+				 * TODO WILL NOT WORK UNTIL WE FIX THE TEMP ASSIGNMENTS
+				 */
+				if(binary_operation->assignee->sets_cc == FALSE){
+					//Get rid of the second operand and the op
+					binary_operation->op2->use_count--;
+					binary_operation->op2 = NULL;
+					binary_operation->op = BLANK;
+
+					//Turn this into a test to see if op1 is 0 or not, that's all we need
+					binary_operation->statement_type = THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT;
+
+					//This is a change
+					changed = TRUE;
 				}
 
-				printf("&&\n");
 				break;
 
 			//TODO HOW TO ACCOUNT FOR BRANCH
