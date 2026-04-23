@@ -3656,6 +3656,9 @@ static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, t
 		//operator
 		if(IS_FLOATING_POINT(tested_variable->type) == TRUE){
 			*operator = NOT_EQUALS;
+
+			//Flag that this comes out of an FP comparsion
+			test_if_not_zero->assignee->comes_from_fp_comparison = TRUE;
 		}
 
 		//Give back the final assignee
@@ -5001,6 +5004,13 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 			//This will always overwrite the other value
 			instruction_t* logical_not_statement = emit_logical_not_instruction(emit_temp_var(u8), assignee);
+
+			/**
+			 * If we came from a floating point operation, then we will just flag as such here
+			 */
+			if(IS_FLOATING_POINT(assignee->type) == TRUE){
+				logical_not_statement->assignee->comes_from_fp_comparison = TRUE;
+			}
 
 			//Get it into the block right after the unary expression
 			add_statement(current_block, logical_not_statement);

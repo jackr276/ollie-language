@@ -1815,6 +1815,9 @@ static inline instruction_t* emit_test_not_zero_instruction(three_addr_var_t* de
 	//operator
 	if(IS_FLOATING_POINT(tested_variable->type) == TRUE){
 		*operator = NOT_EQUALS;
+
+		//Flag that this comes from FP comparison
+		destination_variable->comes_from_fp_comparison = TRUE;
 	}
 
 	//Give back the final assignee
@@ -1973,8 +1976,9 @@ static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* f
 
 		//Test instruction, we're just testing against ourselves here
 		instruction_t* test = emit_test_not_zero_instruction(first_branch_conditional_decider, first_half_cursor->assignee, &first_condition_op);
-		
-		//TODO SETS CC
+
+		//Flag that this sets condition codes/uses FP comp
+		first_branch_conditional_decider->sets_cc = TRUE;
 
 		//Throw it into the block
 		add_statement(original_block, test);
@@ -1989,7 +1993,7 @@ static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* f
 	//	goto else
 	//else
 	//	goto second_half_block
-	emit_branch(original_block, else_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL, first_half_float);
+	emit_branch(original_block, else_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
 
 	/**
 	 * HANDLING THE SECOND BLOCK
@@ -2014,6 +2018,9 @@ static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* f
 		//Test instruction, we're just testing against ourselves here
 		instruction_t* test = emit_test_not_zero_instruction(second_branch_conditional_decider, second_half_cursor->assignee, &second_condition_op);
 
+		//Flag that this sets condition codes/uses FP comp
+		second_branch_conditional_decider->sets_cc = TRUE;
+
 		//Throw it into the block
 		add_statement(second_half_block, test);
 	}
@@ -2026,7 +2033,7 @@ static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* f
 	// goto if_block
 	//else 
 	// goto else_block
-	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_INVERSE, second_half_float);
+	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_INVERSE);
 }
 
 
@@ -2149,6 +2156,9 @@ static void optimize_logical_or_branch_logic(symtab_function_record_t* function,
 		//Test instruction, we're just testing against ourselves here
 		instruction_t* test = emit_test_not_zero_instruction(first_branch_conditional_decider, first_half_cursor->assignee, &first_condition_op);
 
+		//Flag that this sets condition codes/uses FP comp
+		first_branch_conditional_decider->sets_cc = TRUE;
+
 		//Throw it into the block
 		add_statement(original_block, test);
 	}
@@ -2162,7 +2172,7 @@ static void optimize_logical_or_branch_logic(symtab_function_record_t* function,
 	//	goto if
 	//else
 	//	goto second_half_block
-	emit_branch(original_block, if_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL, first_half_float);
+	emit_branch(original_block, if_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
 
 	/**
 	 * HANDLING THE SECOND BLOCK
@@ -2187,6 +2197,9 @@ static void optimize_logical_or_branch_logic(symtab_function_record_t* function,
 		//Test instruction, we're just testing against ourselves here
 		instruction_t* test = emit_test_not_zero_instruction(second_branch_conditional_decider, second_half_cursor->assignee, &second_condition_op);
 
+		//Flag that this sets condition codes/uses FP comp
+		second_branch_conditional_decider->sets_cc = TRUE;
+
 		//Throw it into the block
 		add_statement(second_half_block, test);
 	}
@@ -2200,7 +2213,7 @@ static void optimize_logical_or_branch_logic(symtab_function_record_t* function,
 	// goto if_block
 	//else 
 	// goto else_block
-	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_NORMAL, second_half_float);
+	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
 }
 
 
@@ -2324,6 +2337,9 @@ static void optimize_logical_and_inverse_branch_logic(symtab_function_record_t* 
 		//Test instruction, we're just testing against ourselves here
 		instruction_t* test = emit_test_not_zero_instruction(first_branch_conditional_decider, first_half_cursor->assignee, &first_condition_op);
 
+		//Flag that this sets condition codes/uses FP comp
+		first_branch_conditional_decider->sets_cc = TRUE;
+
 		//Throw it into the block
 		add_statement(original_block, test);
 	}
@@ -2336,7 +2352,7 @@ static void optimize_logical_and_inverse_branch_logic(symtab_function_record_t* 
 	//	goto if 
 	//else
 	//	goto second_half_block 
-	emit_branch(original_block, if_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL, first_half_float);
+	emit_branch(original_block, if_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
 
 	/**
 	 * HANDLING THE SECOND BLOCK
@@ -2361,6 +2377,9 @@ static void optimize_logical_and_inverse_branch_logic(symtab_function_record_t* 
 		//Test instruction, we're just testing against ourselves here
 		instruction_t* test = emit_test_not_zero_instruction(second_branch_conditional_decider, second_half_cursor->assignee, &second_condition_op);
 
+		//Flag that this sets condition codes/uses FP comp
+		second_branch_conditional_decider->sets_cc = TRUE;
+
 		//Throw it into the block
 		add_statement(second_half_block, test);
 	}
@@ -2373,7 +2392,7 @@ static void optimize_logical_and_inverse_branch_logic(symtab_function_record_t* 
 	// goto if_block
 	//else 
 	// goto else_block
-	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_NORMAL, second_half_float);
+	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
 }
 
 
@@ -2498,6 +2517,9 @@ static void optimize_logical_and_branch_logic(symtab_function_record_t* function
 		//Test instruction, we're just testing against ourselves here
 		instruction_t* test = emit_test_not_zero_instruction(first_branch_conditional_decider, first_half_cursor->assignee, &first_condition_op);
 
+		//Flag that this sets condition codes/uses FP comp
+		first_branch_conditional_decider->sets_cc = TRUE;
+
 		//Throw it into the block
 		add_statement(original_block, test);
 	}
@@ -2511,7 +2533,7 @@ static void optimize_logical_and_branch_logic(symtab_function_record_t* function
 	//	goto else
 	//else
 	//	goto second_half_block 
-	emit_branch(original_block, else_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL, first_half_float);
+	emit_branch(original_block, else_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
 
 	/**
 	 * HANDLING THE SECOND BLOCK
@@ -2536,6 +2558,9 @@ static void optimize_logical_and_branch_logic(symtab_function_record_t* function
 		//Test instruction, we're just testing against ourselves here
 		instruction_t* test = emit_test_not_zero_instruction(second_branch_conditional_decider, second_half_cursor->assignee, &second_condition_op);
 
+		//Flag that this sets condition codes/uses FP comp
+		second_branch_conditional_decider->sets_cc = TRUE;
+
 		//Throw it into the block
 		add_statement(second_half_block, test);
 	}
@@ -2549,7 +2574,7 @@ static void optimize_logical_and_branch_logic(symtab_function_record_t* function
 	// goto if_block
 	//else 
 	// goto else_block
-	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_half_cursor->assignee, BRANCH_CATEGORY_NORMAL, second_half_float);
+	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_half_cursor->assignee, BRANCH_CATEGORY_NORMAL);
 }
 
 
