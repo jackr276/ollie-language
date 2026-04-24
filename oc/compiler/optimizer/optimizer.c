@@ -2079,7 +2079,30 @@ static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* f
  * t7 <- test if not zero y
  * cbranch_nz .L12 else .L3
  *
- * TODO THIS IS OUR TEST CANDIDATE
+ * Real world example:
+ *
+ * .L5:
+ * .... stuff
+ * .... stuff
+ * .... more stuff
+ * t4 <- x + y
+ * t5 <- x > t4
+ * t6 <- y_0 || t5
+ * cbranch_nz .L13 else .L12
+ *
+ * Transforms into
+ *
+ * .L5:
+ * .... stuff
+ * .... stuff
+ * .... more stuff
+ * t8 <- test if not zero y_0
+ * cbranch_nz .L13 else .L6
+ *
+ * .L6:
+ * t4 <- x + y
+ * t5 <- x > t4
+ * cbranch_nz .L13 else .L12
  */
 static void optimize_logical_or_branch_logic(symtab_function_record_t* function, instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
 	/**
@@ -2186,10 +2209,11 @@ static void optimize_logical_or_branch_logic(symtab_function_record_t* function,
 		bisect_block(second_block, first_half_assigned_at->next_statement);
 
 	/**
-	 * Otherwise, the first operand will need to have a special test command emitted for it. This
-	 * "test not zero" command will be used by the branch that we add on to determine the jump
-	 *
-	 * TODO NOT GONNA WORK
+	 * Otherwise we have two options: 
+	 * 	1.) We have a second half cursor - great, we'll just take everything starting there downwards to
+	 * 		be our second half block
+	 * 	2.) We have no second half cursor - we'll just need to move the ending branch statement down
+	 * 		to the new block and leave everything else
 	 */
 	} else {
 		/**
@@ -2199,11 +2223,19 @@ static void optimize_logical_or_branch_logic(symtab_function_record_t* function,
 		first_block = original_block;
 		second_block = basic_block_alloc(original_block->estimated_execution_frequency, function);
 
-		/**
-		 * We'll now split here but the split is misleading. Basically we are going to transfer
-		 * the entire first block over to the second block
-		 */
-		bisect_block(second_block, first_block->leader_statement);
+		if(op2_operand_type == SHORT_CIRCUIT_OPERAND_TYPE_EXPR){
+			/**
+			 * Split everything up to and including where the second half was assigned at
+			 */
+			bisect_block(second_block, second_half_assigned_at);
+
+		} else {
+			//Get it out of the old block
+			remove_statement(short_circuit_statment);
+
+			//Put it in the new one
+			add_statement(second_block, short_circuit_statment);
+		}
 	}
 
 
