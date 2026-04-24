@@ -2808,7 +2808,26 @@ static inline conditional_status_t determine_conditional_status(instruction_t* c
 
 						//Even though there was a little that we could do, we still can't know anything
 						return CONDITIONAL_UNKNOWN;
-					
+
+					/**
+					 * In the cases where we have: x > x, x < x, x != x, this is always
+					 * going to be false because they are equal. This is one where we 
+					 * can optimize an always true/always false path
+					 */
+					case G_THAN:
+					case L_THAN:
+					case NOT_EQUALS:
+						return CONDITIONAL_ALWAYS_FALSE;
+
+					/**
+					 * In cases where we have x >= x, x <= x, x == x, this is always going to 
+					 * be true because they are equal. This is a case where we can prove
+					 * truthfullness
+					 */
+					case G_THAN_OR_EQ:
+					case L_THAN_OR_EQ:
+					case DOUBLE_EQUALS:
+						return CONDITIONAL_ALWAYS_TRUE;
 
 					//By default we just give back that we don't knwo
 					default:
