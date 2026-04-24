@@ -6,6 +6,7 @@
 */
 #include "optimizer.h"
 #include "../utils/queue/heap_queue.h"
+#include "../data_dependency_graph/data_dependency_graph.h"
 #include "../utils/constants.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -2042,6 +2043,18 @@ static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* f
 
 
 /**
+ * At a high level, here's what we're going to need to do for the block splitting:
+ * 	
+ * 	1.) We need to determine the dependencies for both of our operands. This is because we will
+ * 		be doing a block split at some point. At this point we're just going to end up computing
+ * 		the dependency graph and transitive closure of the entire block
+ *
+ * 	2.) Every instruction that the first operand(and it may be 0 instructions) relies on stays in
+ * 		the first block. Every instruction that the second operand relies on comes with it to the second
+ * 		block(within reason, so every temp assignment)
+ *
+ * 	3.) Now that the split has been performed, we are able to add in the short circuiting logic(simpler)
+ *
  * Real world example:
  *
  * .L5:
@@ -2081,6 +2094,13 @@ static void optimize_logical_or_branch_logic(symtab_function_record_t* function,
 	 * from the original block. This will allow us to add new ones in as we see fit
 	 */
 	remove_all_successors(original_block);
+
+	/**
+	 * We will need to create the data dependency graph here. This graph will be populated, and we will
+	 * eventually use it to determine how we need to split our block
+	 */
+	data_dependency_graph_t dependency_graph = dependency_graph_alloc(original_block->number_of_instructions);
+
 
 	/**
 	 * There is a possibility that the first/second operands
@@ -2286,6 +2306,9 @@ static void optimize_logical_or_branch_logic(symtab_function_record_t* function,
 	//else 
 	// goto else_block
 	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
+
+	//We can deallocate the dependency graph now
+	dependency_graph_dealloc(&dependency_graph);
 }
 
 
