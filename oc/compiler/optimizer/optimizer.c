@@ -2042,43 +2042,6 @@ static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* f
 
 
 /**
- * Handle a compound or statement optimization
- *
- * These statement will take what was once one block, and split it into 
- * 2 successive blocks
- *
- * .L2
- * t5 <- x0 < 3
- * t7 <- x0 != 1
- * t5 <- t5 || t7
- * cbranch_nz .L12 else .L13
- *
- *
- * Turn this into:
- *
- * .L2:
- * t5 <- x_0 < 3 <---- if this is true, we leave(to if case)
- * cbranch_l .L13 else .L3
- *
- * .L3 <----- The *only* way we get here is if the first condition is false 
- * t7 <- x0 != 1 <------- If this is true, jump to if
- * cbranch_ne .L12 else .L13
- *
- * We may also have a case where one(or both) of our operands are just constants. If this is the case,
- * then we'll just insert test if not zero statements to get the condition codes for them
- *
- * This:
- * t5 <- x || y
- * cbranch_nz .L12 else .L13
- *
- * Becomes:
- * t6 <- test if not zero x
- * cbranch_nz .L12 else .L3
- *
- * .L3:
- * t7 <- test if not zero y
- * cbranch_nz .L12 else .L3
- *
  * Real world example:
  *
  * .L5:
