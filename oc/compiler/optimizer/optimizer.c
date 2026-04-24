@@ -2714,8 +2714,6 @@ static void optimize_short_circuit_logic(symtab_function_record_t* function, dyn
  * to trace up the block to find out. If we are unable to
  * find out, that is ok, we just return false and assume
  * that it can't be done
- *
- * TODO HERE ENHANCEMENT IS NEEDED
  */
 static inline conditional_status_t determine_conditional_status(instruction_t* conditional){
 	//There are several conditional types that we are going
@@ -2782,6 +2780,23 @@ static inline conditional_status_t determine_conditional_status(instruction_t* c
 			} else {
 				return CONDITIONAL_UNKNOWN;
 			}
+
+		/**
+		 * For binary operation statements, there are some cases where we can determine if this is true
+		 * or not so we will investigate now
+		 */
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+			/**
+			 * If we end up with cases where op1 == op2, then we are going to be able to simplify
+			 * accordingly
+			 */
+			if(variables_equal(conditional->op1, conditional->op2, FALSE) == TRUE){
+				printf("HERE\n\n");
+			}
+
+			//By default we don't know 
+			return CONDITIONAL_UNKNOWN;
+
 	
 		//If we have an unknown type then let's just leave
 		default:
