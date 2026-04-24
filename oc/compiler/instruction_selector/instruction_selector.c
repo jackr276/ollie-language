@@ -2449,9 +2449,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				 * not set condition codes. This really is just a precaution,
 				 * as this should never have gotten here anyway if it does(optimizer
 				 * does it's own simplification), but we need to check
-				 *
-				 *
-				 * TODO WILL NOT WORK UNTIL WE FIX THE TEMP ASSIGNMENTS
 				 */
 				if(binary_operation->assignee->sets_cc == FALSE){
 					//Get rid of the second operand and the op
@@ -6419,6 +6416,12 @@ instruction_t* emit_constant_move_instruction(three_addr_var_t* destination, thr
 
 
 /**
+ * Create and insert a regular move instruction before the given after instruction. It is assumed
+ * that we will not be needing any kind of converting moves here for this to work
+ */
+
+
+/**
  * Create and insert a converting move operation where the destination's type is the desired type. This handles all of the overhead of creating,
  * finding the converting moves, and inserting
  */
@@ -9709,8 +9712,26 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 		logical_or->op2 = create_and_insert_converting_move_instruction(logical_or, logical_or->op2, destination_type);
 	}
 
-	//Most common case - we are doing GP logical or
+	/**
+	 * For a general purpose logical or, we are going to need to ensure
+	 * that the op1 is fine with being overwritten. This is because
+	 * we are performing an or on the entire thing. This is not the case
+	 * for the floating point operation because we're just using the test
+	 * command
+	 */
 	if(is_floating_point == FALSE){
+		//If this is not a temp var then we will make it one
+		if(logical_or->op1->variable_type != VARIABLE_TYPE_TEMP){
+			//Emit the move
+ 			instruction_t* move_to_temp = emit_move_instruction(emit_temp_var(destination_type), logical_or->op1);
+
+			//Add this into the block
+			insert_instruction_before_given(move_to_temp, logical_or);
+
+			//The op1 now is this one's destination 
+			logical_or->op1 = move_to_temp->destination_register;
+		}
+
 		//Save the after instruction
 		instruction_t* after_logical_or = window->instruction2;
 
