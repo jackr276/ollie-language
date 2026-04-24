@@ -5347,32 +5347,15 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 		case DOUBLE_OR:
 			//op1 always comes from the left side
 			op1 = left_side.assignee;
+			op2 = right_side.assignee;
 
-			/*
-			 * As for op2, there is a chance that we actually have a constant assignment in the op2
-			 * slot. This only works if the variables are completely equal. If they are not then
-			 * this is a false positive which is possible
+			/**
+			 * IMPORTANT - for operations like these, our final result type is always a boolean. However,
+			 * for the actual operation, we may have floats, ints, etc. To stop this from causing problems,
+			 * we will just use the type off of op1 for our final result type here inside of the instruction
+			 * itself
 			 */
-			if(current_block->exit_statement != NULL 
-				&& current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-				&& variables_equal(right_side.assignee, current_block->exit_statement->assignee, FALSE) == TRUE){
-				//Just assign the constant over
-				op1_const = current_block->exit_statement->op1_const;
-
-				//We default to op1 for a constant
-				final_result_type = op1->type;
-
-			} else {
-				op2 = right_side.assignee;
-
-				/**
-				 * IMPORTANT - for operations like these, our final result type is always a boolean. However,
-				 * for the actual operation, we may have floats, ints, etc. To stop this from causing problems,
-				 * we will just use the type off of op1 for our final result type here inside of the instruction
-				 * itself
-				 */
-				final_result_type = get_operand_type_for_logical_operation(type_symtab, op1->type, op2->type);
-			}
+			final_result_type = get_operand_type_for_logical_operation(type_symtab, op1->type, op2->type);
 			
 			break;
 
