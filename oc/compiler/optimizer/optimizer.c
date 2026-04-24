@@ -3249,15 +3249,6 @@ cfg_t* optimize(cfg_t* cfg){
 		sweep(current_function_blocks, function_entry_block);
 
 		/**
-		 * PASS 3: compound logic optimization
-		 * Now that we've sweeped everything, we know that what branches are left must be useful. This means
-		 * that we can expend the compute of optimizing the short circuit logic on them, and we will do so here
-		 *
-		 * TODO SHOULD THIS BE AFTER ALWAYS TRUE FALSE PATHS?
-		 */
-		optimize_short_circuit_logic(current_function, current_function_blocks);
-
-		/**
 		 * PASS 4: always true/false optimization
 		 * Now that we've broken up and logical and/or logic, we can go through and see if there are any
 		 * branches that we can eliminate due to their conditions being always true/false. An example
@@ -3300,6 +3291,15 @@ cfg_t* optimize(cfg_t* cfg){
 			//Invoke the sweeper
 			sweep(current_function_blocks, function_entry_block);
 		}
+
+		/**
+		 * PASS 3: compound logic optimization
+		 * Now that we've sweeped everything, we know that what branches are left must be useful. This means
+		 * that we can expend the compute of optimizing the short circuit logic on them, and we will do so here
+		 *
+		 * TODO SHOULD THIS BE AFTER ALWAYS TRUE FALSE PATHS?
+		 */
+		optimize_short_circuit_logic(current_function, current_function_blocks);
 		
 		/**
 		 * PASS 4: Clean algorithm
