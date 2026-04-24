@@ -5345,51 +5345,35 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	switch(logical_or_expr->binary_operator){
 		case DOUBLE_AND:
 		case DOUBLE_OR:
-			/**
-			 * If the left side is not a temp var, we will emit a temp variable,
-			 * we will emit a temp assignment to compensate
+			//op1 always comes from the left side
+			op1 = left_side.assignee;
+
+			/*
+			 * As for op2, there is a chance that we actually have a constant assignment in the op2
+			 * slot. This only works if the variables are completely equal. If they are not then
+			 * this is a false positive which is possible
 			 */
-			if(left_side.assignee->variable_type != VARIABLE_TYPE_TEMP){
-				//Emit the instruction
-				instruction_t* left_side_temp_assignment = emit_assignment_instruction(emit_temp_var(left_side.assignee->type), left_side.assignee);
+			if(current_block->exit_statement != NULL 
+				&& current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
+				&& variables_equal(right_side.assignee, current_block->exit_statement->assignee, FALSE) == TRUE){
+				//Just assign the constant over
+				op1_const = current_block->exit_statement->op1_const;
 
-				//Throw it into the block
-				add_statement(current_block, left_side_temp_assignment);
+				//We default to op1 for a constant
+				final_result_type = op1->type;
 
-				//Add this in here
-				op1 = left_side_temp_assignment->assignee; 
-
-			//Otherwise just grab out what we have
-			} else {
-				op1 = left_side.assignee;
-			}
-
-			/**
-			 * Same treatment for the right. If it's not a temp var then we will make it one
-		 	 */
-			if(right_side.assignee->variable_type != VARIABLE_TYPE_TEMP){
-				//Emit the instruction
-				instruction_t* right_side_temp_assignment = emit_assignment_instruction(emit_temp_var(right_side.assignee->type), right_side.assignee);
-
-				//Throw it into the block
-				add_statement(current_block, right_side_temp_assignment);
-
-				//Add this in here
-				op2 = right_side_temp_assignment->assignee; 
-
-			//Otherwise just grab out what we have
 			} else {
 				op2 = right_side.assignee;
+
+				/**
+				 * IMPORTANT - for operations like these, our final result type is always a boolean. However,
+				 * for the actual operation, we may have floats, ints, etc. To stop this from causing problems,
+				 * we will just use the type off of op1 for our final result type here inside of the instruction
+				 * itself
+				 */
+				final_result_type = get_operand_type_for_logical_operation(type_symtab, op1->type, op2->type);
 			}
 			
-			/**
-			 * IMPORTANT - for operations like these, our final result type is always a boolean. However,
-			 * for the actual operation, we may have floats, ints, etc. To stop this from causing problems,
-			 * we will just use the type off of op1 for our final result type here inside of the instruction
-			 * itself
-			 */
-			final_result_type = get_operand_type_for_logical_operation(type_symtab, op1->type, op2->type);
-
 			break;
 
 		/**
