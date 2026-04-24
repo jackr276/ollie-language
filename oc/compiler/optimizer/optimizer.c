@@ -318,7 +318,6 @@ void remove_statement(instruction_t* stmt){
  *   E
  *
  * NOTE: this rule does *no* successor management or branch insertion
- *
  */
 static inline void bisect_block(basic_block_t* new, instruction_t* bisect_start){
 	//Grab a cursor to the start statement
@@ -2088,14 +2087,14 @@ static void optimize_logical_or_branch_logic(symtab_function_record_t* function,
 	 * to store the second half of our short circuit logic
 	 */
 	basic_block_t* original_block = short_circuit_statment->block_contained_in;
-	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency, function);
+	basic_block_t* first_block;
+	basic_block_t* second_block;
 
 	/**
 	 * We need to perform some decoupling here. We will remove all of the successors
 	 * from the original block. This will allow us to add new ones in as we see fit
 	 */
 	remove_all_successors(original_block);
-
 
 	/**
 	 * There is a possibility that the first/second operands
@@ -2127,7 +2126,7 @@ static void optimize_logical_or_branch_logic(symtab_function_record_t* function,
 		first_half_assigned_at = short_circuit_statment->previous_statement;
 
 		//Trace our way up to where op1 was assigned
-		while(variables_equal(op1, first_half_assigned_at->assignee, FALSE) == FALSE){
+		while(variables_equal(short_circuit_statment->op1, first_half_assigned_at->assignee, FALSE) == FALSE){
 			first_half_assigned_at = first_half_assigned_at->previous_statement;
 		}
  
@@ -2141,39 +2140,72 @@ static void optimize_logical_or_branch_logic(symtab_function_record_t* function,
 		op1 = short_circuit_statment->op1;
 	}
 
-	
+	/**
+	 * Now do the same for op2
+	 *
+	 * If this is a temp var(most common), we will
+	 * go back and find where it was assigned from
+	 */
+	if(op2->variable_type == VARIABLE_TYPE_TEMP){
+		op2_operand_type = SHORT_CIRCUIT_OPERAND_TYPE_EXPR;
 
-	//The cursor for our second half
-	instruction_t* second_half_cursor = short_circuit_statment->previous_statement;
+		//Seed it with the prior statement
+		second_half_assigned_at = short_circuit_statment->previous_statement;
 
-	//Trace our way up to where op2 was assigned
-	while(variables_equal(op2, second_half_cursor->assignee, FALSE) == FALSE){
-		second_half_cursor = second_half_cursor->previous_statement;
+		//Trace our way up to where op1 was assigned
+		while(variables_equal(short_circuit_statment->op2, second_half_assigned_at->assignee, FALSE) == FALSE){
+			second_half_assigned_at = second_half_assigned_at->previous_statement;
+		}
+ 
+	/**
+	 * Otherwise we have a non-temp var. If this is the
+	 * case, we'll just hang onto it in op1 and go on from
+	 * there
+	 */
+	} else {
+		op2_operand_type = SHORT_CIRCUIT_OPEREAND_TYPE_VAR;
+		op2 = short_circuit_statment->op2;
 	}
-
-	//Now we've found where we need to effectively split the block into 2 pieces
-	//Everything after this op1 assignment needs to be removed from this block
-	//and put into the new block. The split starts at the first half cursor's *next statement*
-	bisect_block(second_half_block, first_half_cursor->next_statement);
 
 	/**
-	 * Now starting at the second half cursor's next statement, we'll *delete* everything
-	 * after it because we no longer need it
+	 * Is op1's operand type an expression? If so, we'll need to keep everything up
+	 * to and including the expression itself inside of our "first block"
 	 */
-	instruction_t* delete_cursor = second_half_cursor->next_statement;
-	
-	//Delete until we run out
-	while(delete_cursor != NULL){
-		//Hold onto it
-		instruction_t* holder = delete_cursor;
+	if(op1_operand_type == SHORT_CIRCUIT_OPERAND_TYPE_EXPR){
+		/**
+		 * The first block is the original, the second block will need to be allocated fresh
+		 */
+		first_block = original_block;
+		second_block = basic_block_alloc(original_block->estimated_execution_frequency, function);
 
-		//Move it along up
-		delete_cursor = delete_cursor->next_statement;
+		/**
+		 * Now split the original block into two pieces. Everything *after* the operation that
+		 * assigns the first half cursor needs to go into a new block. We will use the bisect 
+		 * block helper to do this
+		 */
+		bisect_block(second_block, first_half_assigned_at->next_statement);
 
-		//Delete the holder. This is a full delete, this statement
-		//isn't ever coming back
-		delete_statement(holder);
+	/**
+	 * Otherwise, the first operand will need to have a special test command emitted for it. This
+	 * "test not zero" command will be used by the branch that we add on to determine the jump
+	 *
+	 * TODO NOT GONNA WORK
+	 */
+	} else {
+		/**
+		 * The first block is still the original(for predecessor management), and the second
+		 * block needs to be created fresh
+		 */
+		first_block = original_block;
+		second_block = basic_block_alloc(original_block->estimated_execution_frequency, function);
+
+		/**
+		 * We'll now split here but the split is misleading. Basically we are going to transfer
+		 * the entire first block over to the second block
+		 */
+		bisect_block(second_block, first_block->leader_statement);
 	}
+
 
 	//Now we have 2 blocks, split nicely in half for us to work with
 	//The first block contains the first condition, and the second
