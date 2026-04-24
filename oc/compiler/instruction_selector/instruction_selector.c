@@ -2451,6 +2451,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				 * does it's own simplification), but we need to check
 				 */
 				if(binary_operation->assignee->sets_cc == FALSE){
+					//Hang onto the actual assignee
+					three_addr_var_t* final_assignee = binary_operation->assignee;
+
 					//Get rid of the second operand and the op
 					binary_operation->op2->use_count--;
 					binary_operation->op2 = NULL;
@@ -2458,6 +2461,27 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 					//Turn this into a test to see if op1 is 0 or not, that's all we need
 					binary_operation->statement_type = THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT;
+
+					//Emit a temporary assignee for the test not zero
+					binary_operation->assignee = emit_temp_var(u8);
+
+					/**
+					 * Since we aren't setting condition codes, we need to emit a setne statement
+					 * as well as an assignment over to the actual assignee for this to work
+					 */
+					instruction_t* setne = emit_setne_code(emit_temp_var(u8), binary_operation->assignee);
+
+					//This goes in right after our assignee
+					insert_instruction_after_given(setne, binary_operation);
+
+					//Now we'll need a final assignment
+					instruction_t* final_assignment = emit_assignment_instruction(final_assignee, setne->assignee);
+
+					//This goes in after our other statement
+					insert_instruction_after_given(final_assignment, setne);
+
+					//Rebuild the entire window around this
+					reconstruct_window(window, final_assignment);
 
 					//This is a change
 					changed = TRUE;
