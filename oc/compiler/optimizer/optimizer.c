@@ -1869,6 +1869,15 @@ static inline void remove_all_successors(basic_block_t* block){
 
 
 /**
+ * Build the data dependency graph for the instructions in a block. This will only be invoked if we absolutely
+ * need it to be by the short circuit optimizer
+ */
+static void build_data_dependency_graph_for_block(basic_block_t* block, data_dependency_graph_t* graph){
+	//TODO
+}
+
+
+/**
  * Handle a logical or inverse branch statement optimization
  *
  * These statement will take what was once one block, and split it into 
