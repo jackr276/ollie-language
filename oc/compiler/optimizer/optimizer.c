@@ -38,6 +38,17 @@ typedef struct temporary_variable_mapping_t{
 
 
 /**
+ * This enum will tell us if we have a operation as the 
+ * operand in a short circuit optimization or if we have
+ * an actual expression
+ */
+typedef enum {
+	SHORT_CIRCUIT_OPERAND_TYPE_EXPR,
+	SHORT_CIRCUIT_OPEREAND_TYPE_VAR
+} short_circuit_operand_type_t;
+
+
+/**
  * Add an item to the current stack worklist
  */
 #define ADD_TO_STACK_WORKLIST(insertee, worklist, current_index)\
@@ -2065,7 +2076,6 @@ static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* f
  * t6 <- test if not zero x
  * cbranch_nz .L12 else .L3
  *
- *
  * .L3:
  * t7 <- test if not zero y
  * cbranch_nz .L12 else .L3
@@ -2073,9 +2083,11 @@ static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* f
  * TODO THIS IS OUR TEST CANDIDATE
  */
 static void optimize_logical_or_branch_logic(symtab_function_record_t* function, instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
-	//Grab out the block that we're using
+	/**
+	 * We will always need two blocks - the original block and a new block
+	 * to store the second half of our short circuit logic
+	 */
 	basic_block_t* original_block = short_circuit_statment->block_contained_in;
-	//The new block that we'll need for our second half
 	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency, function);
 
 	/**
@@ -2084,17 +2096,52 @@ static void optimize_logical_or_branch_logic(symtab_function_record_t* function,
 	 */
 	remove_all_successors(original_block);
 
-	//Extract the op1, we'll need to traverse
-	three_addr_var_t* op1 = short_circuit_statment->op1;
-	three_addr_var_t* op2 = short_circuit_statment->op2;
 
-	//The cursor for our first half
-	instruction_t* first_half_cursor = short_circuit_statment->previous_statement;;
-	
-	//Trace our way up to where op1 was assigned
-	while(variables_equal(op1, first_half_cursor->assignee, FALSE) == FALSE){
-		first_half_cursor = first_half_cursor->previous_statement;
+	/**
+	 * There is a possibility that the first/second operands
+	 * may just be non-temp values, or they may be actual
+	 * expression. We won't make any assumptions now, but
+	 * the types here will be used to express that in a readable
+	 * way
+	 */
+	short_circuit_operand_type_t op1_operand_type;
+	short_circuit_operand_type_t op2_operand_type;
+
+	/**
+	 * We'll either be storing an expression or an instruction
+	 * with which to split on
+	 */
+	instruction_t* first_half_assigned_at = NULL;
+	instruction_t* second_half_assigned_at = NULL;
+	three_addr_var_t* op1 = NULL;
+	three_addr_var_t* op2 = NULL;
+
+	/**
+	 * If this is a temp var(most common), we will
+	 * go back and find where it was assigned from
+	 */
+	if(op1->variable_type == VARIABLE_TYPE_TEMP){
+		op1_operand_type = SHORT_CIRCUIT_OPERAND_TYPE_EXPR;
+
+		//Seed it with the prior statement
+		first_half_assigned_at = short_circuit_statment->previous_statement;
+
+		//Trace our way up to where op1 was assigned
+		while(variables_equal(op1, first_half_assigned_at->assignee, FALSE) == FALSE){
+			first_half_assigned_at = first_half_assigned_at->previous_statement;
+		}
+ 
+	/**
+	 * Otherwise we have a non-temp var. If this is the
+	 * case, we'll just hang onto it in op1 and go on from
+	 * there
+	 */
+	} else {
+		op1_operand_type = SHORT_CIRCUIT_OPEREAND_TYPE_VAR;
+		op1 = short_circuit_statment->op1;
 	}
+
+	
 
 	//The cursor for our second half
 	instruction_t* second_half_cursor = short_circuit_statment->previous_statement;
