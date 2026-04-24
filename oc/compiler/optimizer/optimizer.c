@@ -1892,8 +1892,6 @@ static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* f
 	basic_block_t* original_block = short_circuit_statment->block_contained_in;
 	//The new block that we'll need for our second half
 	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency, function);
-	//VERY important that we copy this on over
-	second_half_block->function_defined_in = original_block->function_defined_in;
 
 	/**
 	 * We need to perform some decoupling here. We will remove all of the successors
@@ -2040,12 +2038,8 @@ static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* f
  * 2 successive blocks
  *
  * .L2
- * t5 <- x_0
- * t6 <- 3
- * t5 <- t5 < t6
- * t7 <- x_0
- * t8 <- 1
- * t7 <- t7 != t8
+ * t5 <- x0 < 3
+ * t7 <- x0 != 1
  * t5 <- t5 || t7
  * cbranch_nz .L12 else .L13
  *
@@ -2053,24 +2047,36 @@ static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* f
  * Turn this into:
  *
  * .L2:
- * t5 <- x_0
- * t6 <- 3
- * t5 <- t5 < t6 <---- if this is true, we leave(to if case)
+ * t5 <- x_0 < 3 <---- if this is true, we leave(to if case)
  * cbranch_l .L13 else .L3
  *
  * .L3 <----- The *only* way we get here is if the first condition is false 
- * t7 <- x_0
- * t8 <- 1
- * t7 <- t7 != t8 <------- If this is true, jump to if
+ * t7 <- x0 != 1 <------- If this is true, jump to if
  * cbranch_ne .L12 else .L13
+ *
+ * We may also have a case where one(or both) of our operands are just constants. If this is the case,
+ * then we'll just insert test if not zero statements to get the condition codes for them
+ *
+ * This:
+ * t5 <- x || y
+ * cbranch_nz .L12 else .L13
+ *
+ * Becomes:
+ * t6 <- test if not zero x
+ * cbranch_nz .L12 else .L3
+ *
+ *
+ * .L3:
+ * t7 <- test if not zero y
+ * cbranch_nz .L12 else .L3
+ *
+ * TODO THIS IS OUR TEST CANDIDATE
  */
 static void optimize_logical_or_branch_logic(symtab_function_record_t* function, instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
 	//Grab out the block that we're using
 	basic_block_t* original_block = short_circuit_statment->block_contained_in;
 	//The new block that we'll need for our second half
 	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency, function);
-	//VERY important that we copy this on over
-	second_half_block->function_defined_in = original_block->function_defined_in;
 
 	/**
 	 * We need to perform some decoupling here. We will remove all of the successors
@@ -2244,8 +2250,6 @@ static void optimize_logical_and_inverse_branch_logic(symtab_function_record_t* 
 	basic_block_t* original_block = short_circuit_statment->block_contained_in;
 	//The new block that we'll need for our second half
 	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency, function);
-	//VERY important that we copy this on over
-	second_half_block->function_defined_in = original_block->function_defined_in;
 
 	/**
 	 * We need to perform some decoupling here. We will remove all of the successors
@@ -2420,8 +2424,6 @@ static void optimize_logical_and_branch_logic(symtab_function_record_t* function
 	basic_block_t* original_block = short_circuit_statment->block_contained_in;
 	//The new block that we'll need for our second half
 	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency, function);
-	//VERY important that we copy this on over
-	second_half_block->function_defined_in = original_block->function_defined_in;
 
 	/**
 	 * We need to perform some decoupling here. We will remove all of the successors
