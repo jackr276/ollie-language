@@ -2791,12 +2791,33 @@ static inline conditional_status_t determine_conditional_status(instruction_t* c
 			 * accordingly
 			 */
 			if(variables_equal(conditional->op1, conditional->op2, FALSE) == TRUE){
-				printf("HERE\n\n");
+				switch(conditional->op){
+					/**
+					 * For logical and/logical or, we won't be able to completely
+					 * simplify, but we can at least turn this into a test not zero
+					 * statement because we know that the operands are identical
+					 */
+					case DOUBLE_AND:
+					case DOUBLE_OR:
+						//This is not a test not zero
+						conditional->statement_type = THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT;
+
+						//We can remove op2
+						conditional->op2->use_count--;
+						conditional->op2 = NULL;
+
+						//Even though there was a little that we could do, we still can't know anything
+						return CONDITIONAL_UNKNOWN;
+					
+
+					//By default we just give back that we don't knwo
+					default:
+						return CONDITIONAL_UNKNOWN;
+				}
 			}
 
 			//By default we don't know 
 			return CONDITIONAL_UNKNOWN;
-
 	
 		//If we have an unknown type then let's just leave
 		default:
@@ -2967,9 +2988,11 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 
 				break;
 
-			//Do nothing, we can't be sure about what the conditional
-			//is which is perfectly fine. In fact, we expect this to
-			//be the majority case
+			/**
+			 * Do nothing, we can't be sure about what the conditionalal
+			 * is which is perfectly fine. In fact, we expect this to
+			 * be the majority case
+			 */
 			case CONDITIONAL_UNKNOWN:
 				break;
 		}
@@ -3210,6 +3233,8 @@ cfg_t* optimize(cfg_t* cfg){
 		 * PASS 3: compound logic optimization
 		 * Now that we've sweeped everything, we know that what branches are left must be useful. This means
 		 * that we can expend the compute of optimizing the short circuit logic on them, and we will do so here
+		 *
+		 * TODO SHOULD THIS BE AFTER ALWAYS TRUE FALSE PATHS?
 		 */
 		optimize_short_circuit_logic(current_function, current_function_blocks);
 
@@ -3219,6 +3244,8 @@ cfg_t* optimize(cfg_t* cfg){
 		 * branches that we can eliminate due to their conditions being always true/false. An example
 		 * of this would be while(true) always being true, so there being no need for a comparison
 		 * on each step
+		 *
+		 * TODO SHOULD THIS BE BEFORE SHORT CIRCUIT?
 		 */
 		u_int8_t found_branches_to_optimize = optimize_always_true_false_paths(current_function_blocks);
 
