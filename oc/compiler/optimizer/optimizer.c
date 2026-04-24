@@ -3249,18 +3249,16 @@ cfg_t* optimize(cfg_t* cfg){
 		sweep(current_function_blocks, function_entry_block);
 
 		/**
-		 * PASS 4: always true/false optimization
+		 * PASS 3: always true/false optimization
 		 * Now that we've broken up and logical and/or logic, we can go through and see if there are any
 		 * branches that we can eliminate due to their conditions being always true/false. An example
 		 * of this would be while(true) always being true, so there being no need for a comparison
 		 * on each step
-		 *
-		 * TODO SHOULD THIS BE BEFORE SHORT CIRCUIT?
 		 */
 		u_int8_t found_branches_to_optimize = optimize_always_true_false_paths(current_function_blocks);
 
 		/**
-		 * PASS 4.5: if we did find branches to optimize, we now potentially have a lot
+		 * PASS 3.5: if we did find branches to optimize, we now potentially have a lot
 		 * of orphaned code that is no longer useful. This would not have been picked up by
 		 * the original mark and sweep, but it will be now. So, we will rerun mark/sweep
 		 * *if* we've found branches that were optimzied. Otherwise, this would just be a waste
@@ -3293,11 +3291,9 @@ cfg_t* optimize(cfg_t* cfg){
 		}
 
 		/**
-		 * PASS 3: compound logic optimization
+		 * PASS 4: compound logic optimization
 		 * Now that we've sweeped everything, we know that what branches are left must be useful. This means
 		 * that we can expend the compute of optimizing the short circuit logic on them, and we will do so here
-		 *
-		 * TODO SHOULD THIS BE AFTER ALWAYS TRUE FALSE PATHS?
 		 */
 		optimize_short_circuit_logic(current_function, current_function_blocks);
 		
