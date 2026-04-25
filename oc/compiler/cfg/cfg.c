@@ -7660,24 +7660,9 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 		return result_package;
 	}
 
-	//Add the conditional check into the end here
-	cfg_result_package_t package = emit_expression(compound_stmt_end, ast_cursor->next_sibling, TRUE);
-
-	//Store for later
-	three_addr_var_t* conditional_decider = package.assignee;
-
-	//Extract the operator
-	ollie_token_t operator = package.operator;
-
-	//If this is blank, we'll need to emit the test code here
-	if(operator == BLANK){
-		conditional_decider = emit_test_not_zero(compound_stmt_end, package.assignee, &operator);
-	}
-
-	//Select the appropriate branch type
-	branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
-		
 	/**
+	 * Now we can use the helper to emit our branch 
+	 *
 	 * Branch works in a regular way
 	 *
 	 * If condition 
@@ -7685,7 +7670,7 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	 * else
 	 * 	exit
 	 */
-	emit_branch(compound_stmt_end, do_while_stmt_entry_block, do_while_stmt_exit_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
+	cfg_result_package_t branch_results = emit_branch_v2(compound_stmt_end, ast_cursor->next_sibling, do_while_stmt_entry_block, do_while_stmt_exit_block, BRANCH_CATEGORY_NORMAL);
 
 	//Now that we're done here, pop the break/continue stacks to remove these blocks
 	pop(&continue_stack);
