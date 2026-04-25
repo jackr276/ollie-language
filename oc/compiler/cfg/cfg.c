@@ -7737,8 +7737,8 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	//Grab a cursor to the while statement node
 	generic_ast_node_t* ast_cursor = while_stmt_node->first_child;
 
-	//The entry block contains our expression statement
-	cfg_result_package_t package = emit_expression(while_statement_entry_block, ast_cursor, TRUE);
+	//We'll need this for later
+	generic_ast_node_t* conditional_cursor = ast_cursor;
 
 	//The very next node is a compound statement
 	ast_cursor = ast_cursor->next_sibling;
@@ -7749,28 +7749,15 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	//We're out of the compound statement - pop the nesting level
 	pop_nesting_level(&nesting_stack);
 
-	//If it's null, that means that we were given an empty while loop here.
-	//We'll just allocate our own and use that
+	/**
+	 * If it's null, that means that we were given an empty while loop here.
+	 * We'll just allocate our own and use that
+	 */
 	if(compound_statement_results.starting_block == NULL){
 		//Just give a dummy here
 		compound_statement_results.starting_block = basic_block_alloc_and_estimate();
 		compound_statement_results.final_block = compound_statement_results.starting_block;
 	}
-
-	//What does the conditional jump rely on?
-	three_addr_var_t* conditional_decider = package.assignee;
-
-	//Extract the operator
-	ollie_token_t operator = package.operator;
-
-	//If the operator is blank, we need to emit a test instruction
-	if(operator == BLANK){
-		//Emit the testing instruction
-	 	conditional_decider = emit_test_not_zero(while_statement_entry_block, package.assignee, &operator);
-	}
-
-	//The branch type here will be an inverse branch
-	branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_INVERSE, is_type_signed(conditional_decider->type));
 
 	/**
 	 * Inverse jump out of the while loop to the end if bad
@@ -7778,14 +7765,16 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	 * If destination -> end of loop
 	 * Else destination -> loop body
 	 */
-	emit_branch(while_statement_entry_block, while_statement_end_block, compound_statement_results.starting_block, branch_type, conditional_decider, BRANCH_CATEGORY_INVERSE);
+	cfg_result_package_t branch_results = emit_branch_v2(while_statement_entry_block, conditional_cursor, while_statement_end_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE);
 
 	//Let's now find the end of the compound statement
 	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
 
-	//If the block is empty *or* it doesn't end in a return, we need a jump
+	/**
+	 * If the block does not end in a termianl statement, we will need to emit a jump right back
+	 * up to the entry block
+	 */
 	if(does_block_end_in_terminal_statement(compound_stmt_end) == FALSE){
-		//The compound statement end will jump right back up to the entry block
 		emit_jump(compound_stmt_end, while_statement_entry_block);
 	}
 
