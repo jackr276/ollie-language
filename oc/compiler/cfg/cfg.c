@@ -7962,6 +7962,52 @@ static cfg_result_package_t visit_if_statement_v2(generic_ast_node_t* root_node)
 	//Remove the IF nester
 	pop_nesting_level(&nesting_stack);
 
+	/**
+	 * If we have an empty if statement(possible), then we'll just go about creating
+	 * a block here so we don't have any weird behavior
+	 */
+	if(if_compound_statement_results.starting_block == NULL){
+		if_compound_statement_results.starting_block = basic_block_alloc_and_estimate();
+		if_compound_statement_results.final_block = if_compound_statement_results.starting_block;
+	}
+
+	/**
+	 * If the if compound statement final block does not end in a return, we'll need to make
+	 * it jump to the exit block
+	 */
+	if(does_block_end_in_terminal_statement(if_compound_statement_results.final_block) == FALSE){
+		emit_jump(if_compound_statement_results.final_block, current_exit_block);
+	}
+
+	/**
+	 * Now that we've emitted everything for the compound statement, we can emit the conditional
+	 * and branch. The branch will be a normal branch, with success going to the if, and failure to
+	 * the else
+	 */
+	emit_branch_v2(current_entry_block, conditional_node, if_compound_statement_results.starting_block, current_exit_block, BRANCH_CATEGORY_NORMAL);
+
+	//Bump the cursor up to the next statement
+	cursor = cursor->next_sibling;
+
+	/**
+	 * So long as we keep seeing else-if statements, we will keep processing here accordingly
+	 */
+	while(cursor != NULL && cursor->ast_node_type == AST_NODE_TYPE_ELSE_IF_STMT){
+		//Grab a cursor for this specific traversal
+		generic_ast_node_t* else_if_cursor = cursor->first_child;
+
+		/**
+		 * The old exit block is now our new entry block, and we'll need to create
+		 * a new exit block for ourselves
+		 */
+		current_entry_block = current_exit_block;
+		current_exit_block = basic_block_alloc_and_estimate();
+
+	}
+
+
+	//This will always end up being the exit block
+	final_result.final_block = current_exit_block;
 
 	//Give back the final result in the end
 	return final_result;
