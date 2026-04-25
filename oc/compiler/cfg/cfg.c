@@ -3327,10 +3327,47 @@ static cfg_result_package_t emit_branch_v2(basic_block_t* starting_block, generi
 			}
 
 		} else {
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(1);
-		}
+			/**
+			 * .L5:
+			 * t4 <- x + y
+			 * t5 <- x > t4
+			 * t6 <- y_0 || t5
+			 * cbranch_nz .L13 else .L12
+			 *
+			 * Transforms into
+			 *
+			 * .L5:
+			 * t8 <- test if not zero y_0
+			 * cbranch_nz .L13 else .L6 <-- go to if, else second block
+			 *
+			 * .L6:
+			 * t4 <- x + y
+			 * t5 <- x > t4
+			 * cbranch_nz .L13 else .L12 <-- go to if, else else block
+			 */
+			if(branch_category == BRANCH_CATEGORY_NORMAL){
 
+			/**
+			 * .L2
+			 * t7 <- b_1 != 0 
+			 * t10 <- a_1 < 33
+			 * t11 <- t7 || t10
+			 * cbranch_z .L9 else .L13 <-- Notice how it goes to if on failure
+			 *
+			 * Turn this into:
+			 *
+			 * .L2:
+			 * t7 <- b_1 != 0 <--- If this does work, we know that t11 will *not* be zero, so jump to else
+			 * cbranch_ne .L13 else .L3
+			 *
+			 * .L3: <----- We only get here if the first one is false
+			 * t10 <- a_1 < 33
+			 * cbranch_ge .L9 else .L13 <-- If this also fails, we've satisfied the initial condition
+			 */
+			} else {
+
+			}
+		}
 	}
 
 	//Update this - odds are it's changed
