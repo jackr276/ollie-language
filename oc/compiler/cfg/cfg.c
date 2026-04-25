@@ -3243,8 +3243,6 @@ static cfg_result_package_t emit_branch_v2(basic_block_t* starting_block, generi
 	 * If we got here then we are short circuiting based on the operator that we were given. The
 	 * short circuit process will create several additional blocks that we will use instead of 
 	 * just using this one block
-	 *
-	 * TODO THE ACTUAL INVERSE LOGIC IS WRONG, BUT RECURSION SEEMS OK
 	 */
 	} else {
 		//Create our secondary block to use
@@ -3272,14 +3270,18 @@ static cfg_result_package_t emit_branch_v2(basic_block_t* starting_block, generi
 				//Get the first child for the left statement
 				generic_ast_node_t* child_cursor = conditional_node->first_child;
 
-				//Recursively emit the left side of the branch
-				cfg_result_package_t left_side_results = emit_branch_v2(current_block, child_cursor, if_block, secondary_block, branch_category);
+				/**
+				 * Left side: IF FAIL -> else block, else secondary block
+				 */
+				cfg_result_package_t left_side_results = emit_branch_v2(current_block, child_cursor, else_block, secondary_block, BRANCH_CATEGORY_INVERSE);
 
 				//Current block now is our secondary
 				current_block = secondary_block;
 
-				//Now that we've done the left hand side, do the right hand side
-				cfg_result_package_t right_side_results = emit_branch_v2(current_block, child_cursor->next_sibling, if_block, else_block, branch_category);
+				/**
+				 * Right side: IF SUCCESS -> if block, else else block
+				 */
+				cfg_result_package_t right_side_results = emit_branch_v2(current_block, child_cursor->next_sibling, if_block, else_block, BRANCH_CATEGORY_NORMAL);
 
 				//Update the current block once again
 				current_block = right_side_results.final_block;
@@ -3307,14 +3309,18 @@ static cfg_result_package_t emit_branch_v2(basic_block_t* starting_block, generi
 				//Get the first child for the left statement
 				generic_ast_node_t* child_cursor = conditional_node->first_child;
 
-				//Recursively emit the left side of the branch
-				cfg_result_package_t left_side_results = emit_branch_v2(current_block, child_cursor, if_block, secondary_block, branch_category);
+				/**
+				 * Left side: IF FAIL -> if block, else secondary block
+				 */
+				cfg_result_package_t left_side_results = emit_branch_v2(current_block, child_cursor, if_block, secondary_block, BRANCH_CATEGORY_INVERSE);
 
 				//Current block now is our secondary
 				current_block = secondary_block;
 
-				//Now that we've done the left hand side, do the right hand side
-				cfg_result_package_t right_side_results = emit_branch_v2(current_block, child_cursor->next_sibling, if_block, else_block, branch_category);
+				/**
+				 * Left Side: IF FAIL -> if block, else else block
+				 */
+				cfg_result_package_t right_side_results = emit_branch_v2(current_block, child_cursor->next_sibling, if_block, else_block, BRANCH_CATEGORY_INVERSE);
 
 				//Update the current block once again
 				current_block = right_side_results.final_block;
