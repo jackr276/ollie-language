@@ -3107,6 +3107,69 @@ static inline u_int8_t does_operator_set_condition_codes(ollie_token_t op){
 
 
 /**
+ * Emit a test instruction. Note that this is different depending on what kind of testing that we're doing(GP vs SSE)
+ *
+ * Note that for the operator input, we will use this to modify the given operator *if* we have a floating point operation.
+ * This is because the eventual selected code for floating point will turn if(x) into if(x != 0) essentially, so we need to
+ * have that logic already in for when the branch statements are selected
+ */
+static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, three_addr_var_t* tested_variable, ollie_token_t* operator){
+	//If we don't have a temp var, then we just go right to the emission
+	if(tested_variable->variable_type != VARIABLE_TYPE_TEMP
+		|| IS_FLOATING_POINT(tested_variable->type) == TRUE){
+
+		//Emit the instruction
+		instruction_t* test_if_not_zero = emit_test_if_not_zero_statement(emit_temp_var(u8), tested_variable);
+
+		//Now we'll add it into the block
+		add_statement(basic_block, test_if_not_zero);
+
+		//If this is a floating point variable, update the pass-by-reference
+		//operator
+		if(IS_FLOATING_POINT(tested_variable->type) == TRUE){
+			*operator = NOT_EQUALS;
+
+			//Flag that this comes out of an FP comparsion
+			test_if_not_zero->assignee->comes_from_fp_comparison = TRUE;
+		}
+
+		//Give back the final assignee
+		return test_if_not_zero->assignee;
+
+	/**
+	 * Otherwise if we have a temp variable, we should look to see if this is really
+	 * a constant assignment. If it is a constant then the constant that was assigned
+	 * will be the last statement in the current block, and its assignee will be equal
+	 * to the result that we got
+	 */
+	} else {
+		if(basic_block->exit_statement != NULL
+	 		&& basic_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
+			&& variables_equal(basic_block->exit_statement->assignee, tested_variable, FALSE) == TRUE){
+			//Use the constant enhancment to make this happen
+			instruction_t* test_if_not_zero = emit_test_if_not_zero_for_const_statement(emit_temp_var(u8), basic_block->exit_statement->op1_const);
+
+			//Add it in
+			add_statement(basic_block, test_if_not_zero);
+
+			//Give back the result
+			return test_if_not_zero->assignee;
+
+		} else {
+			//Emit the instruction
+			instruction_t* test_if_not_zero = emit_test_if_not_zero_statement(emit_temp_var(u8), tested_variable);
+
+			//Now we'll add it into the block
+			add_statement(basic_block, test_if_not_zero);
+
+			//Give back the final assignee
+			return test_if_not_zero->assignee;
+		}
+	}
+}
+
+
+/**
  * Emit a branch statement with an if destination and else destination. We will also handle the emittal of the conditional node here
  * for the purposes of doing the branch. The returned result package will include the starting & ending blocks for the branch. The
  * branch category is also given and will be used when we're accounting for how to place things
@@ -3138,10 +3201,13 @@ static cfg_result_package_t emit_branch_v2(basic_block_t* starting_block, generi
 		 * If the given operator does not set condition codes appropriately, then
 		 * we'll need to make that happen here
 		 */
-		if(binary_results.operator){
-
+		if(does_operator_set_condition_codes(binary_results.operator) == FALSE){
+			//We'll need a test command for this
+			conditional_decider = emit_test_not_zero(current_block, conditional_decider, &(binary_results.operator));
 		}
 
+		//Flag that this sets condition codes
+		conditional_decider->sets_cc = TRUE;
 
 
 
@@ -3724,69 +3790,6 @@ static inline three_addr_var_t* emit_sse_dec_code(basic_block_t* basic_block, th
 
 	//Finally, the result that we give back is the incrementee
 	return final_assignee;
-}
-
-
-/**
- * Emit a test instruction. Note that this is different depending on what kind of testing that we're doing(GP vs SSE)
- *
- * Note that for the operator input, we will use this to modify the given operator *if* we have a floating point operation.
- * This is because the eventual selected code for floating point will turn if(x) into if(x != 0) essentially, so we need to
- * have that logic already in for when the branch statements are selected
- */
-static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, three_addr_var_t* tested_variable, ollie_token_t* operator){
-	//If we don't have a temp var, then we just go right to the emission
-	if(tested_variable->variable_type != VARIABLE_TYPE_TEMP
-		|| IS_FLOATING_POINT(tested_variable->type) == TRUE){
-
-		//Emit the instruction
-		instruction_t* test_if_not_zero = emit_test_if_not_zero_statement(emit_temp_var(u8), tested_variable);
-
-		//Now we'll add it into the block
-		add_statement(basic_block, test_if_not_zero);
-
-		//If this is a floating point variable, update the pass-by-reference
-		//operator
-		if(IS_FLOATING_POINT(tested_variable->type) == TRUE){
-			*operator = NOT_EQUALS;
-
-			//Flag that this comes out of an FP comparsion
-			test_if_not_zero->assignee->comes_from_fp_comparison = TRUE;
-		}
-
-		//Give back the final assignee
-		return test_if_not_zero->assignee;
-
-	/**
-	 * Otherwise if we have a temp variable, we should look to see if this is really
-	 * a constant assignment. If it is a constant then the constant that was assigned
-	 * will be the last statement in the current block, and its assignee will be equal
-	 * to the result that we got
-	 */
-	} else {
-		if(basic_block->exit_statement != NULL
-	 		&& basic_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-			&& variables_equal(basic_block->exit_statement->assignee, tested_variable, FALSE) == TRUE){
-			//Use the constant enhancment to make this happen
-			instruction_t* test_if_not_zero = emit_test_if_not_zero_for_const_statement(emit_temp_var(u8), basic_block->exit_statement->op1_const);
-
-			//Add it in
-			add_statement(basic_block, test_if_not_zero);
-
-			//Give back the result
-			return test_if_not_zero->assignee;
-
-		} else {
-			//Emit the instruction
-			instruction_t* test_if_not_zero = emit_test_if_not_zero_statement(emit_temp_var(u8), tested_variable);
-
-			//Now we'll add it into the block
-			add_statement(basic_block, test_if_not_zero);
-
-			//Give back the final assignee
-			return test_if_not_zero->assignee;
-		}
-	}
 }
 
 
