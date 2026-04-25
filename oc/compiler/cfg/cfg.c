@@ -7928,6 +7928,47 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 
 
 /**
+ * Process an if-else-if statement into CFG form, handling all possible contigencies
+ */
+static cfg_result_package_t visit_if_statement_v2(generic_ast_node_t* root_node){
+	//Final result package
+	cfg_result_package_t final_result = {NULL, NULL, NULL, BLANK};
+
+	/**
+	 * We will maintain a current entry block and a current entry block. The first
+	 * entry block we know for sure is our very first top guy
+	 */
+	basic_block_t* current_entry_block = basic_block_alloc_and_estimate();
+	basic_block_t* current_exit_block = basic_block_alloc_and_estimate();
+
+	//This is definitely our starting block
+	final_result.starting_block = current_entry_block;
+
+	//We'll also need a cursor to traverse the entire thing
+	generic_ast_node_t* cursor = root_node->first_child;
+
+	//Hang onto this for later
+	generic_ast_node_t* conditional_node = cursor;
+	
+	//Signify that this is happening inside of an IF
+	push_nesting_level(&nesting_stack, NESTING_IF_STATEMENT);
+
+	//Advance the cursor up to get the compound statement 
+	cursor = cursor->next_sibling;
+
+	//Let the helper emit the entire compound statement
+	cfg_result_package_t if_compound_statement_results = visit_compound_statement(cursor);
+
+	//Remove the IF nester
+	pop_nesting_level(&nesting_stack);
+
+
+	//Give back the final result in the end
+	return final_result;
+}
+
+
+/**
  * Process the if-statement subtree into CFG form
  */
 static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
