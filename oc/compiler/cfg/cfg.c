@@ -7932,17 +7932,23 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
  */
 static cfg_result_package_t visit_if_statement_v2(generic_ast_node_t* root_node){
 	//Final result package
-	cfg_result_package_t final_result = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t if_results_package = {NULL, NULL, NULL, BLANK};
 
 	/**
 	 * We will maintain a current entry block and a current entry block. The first
 	 * entry block we know for sure is our very first top guy
 	 */
 	basic_block_t* current_entry_block = basic_block_alloc_and_estimate();
-	basic_block_t* current_exit_block = basic_block_alloc_and_estimate();
+
+	/**
+	 * The overall exit block is where everything goes to in the end to get out
+	 * of the if execution. This may change to be a function exit block if we return
+	 * through every single control path
+	 */
+	basic_block_t* overall_exit_block = basic_block_alloc_and_estimate();
 
 	//This is definitely our starting block
-	final_result.starting_block = current_entry_block;
+	if_results_package.starting_block = current_entry_block;
 
 	//We'll also need a cursor to traverse the entire thing
 	generic_ast_node_t* cursor = root_node->first_child;
@@ -7973,35 +7979,50 @@ static cfg_result_package_t visit_if_statement_v2(generic_ast_node_t* root_node)
 
 	/**
 	 * If the if compound statement final block does not end in a return, we'll need to make
-	 * it jump to the exit block
+	 * it jump to the exit block. This is the overall exit block, not the current exit block
+	 * which is just where we go if something didn't work
 	 */
 	if(does_block_end_in_terminal_statement(if_compound_statement_results.final_block) == FALSE){
-		emit_jump(if_compound_statement_results.final_block, current_exit_block);
+		emit_jump(if_compound_statement_results.final_block, overall_exit_block);
 	}
-
-	/**
-	 * Now that we've emitted everything for the compound statement, we can emit the conditional
-	 * and branch. The branch will be a normal branch, with success going to the if, and failure to
-	 * the else
-	 */
-	emit_branch_v2(current_entry_block, conditional_node, if_compound_statement_results.starting_block, current_exit_block, BRANCH_CATEGORY_NORMAL);
-
+	
 	//Bump the cursor up to the next statement
 	cursor = cursor->next_sibling;
 
 	/**
+	 * Is the cursor NULL? If it is, then to get out of this if we just
+	 * need to jump to the final exit block. If it's not NULL, then we're going 
+	 * to need to jump to a new conditional block for the else-if/else that we
+	 * need to emit next
+	 */
+	if(cursor != NULL){
+		//Hang onto the old "entry"
+		basic_block_t* old_entry_block_holder = current_entry_block;
+
+		//We'll make a fresh new entry block for our else-if/else
+		current_entry_block = basic_block_alloc_and_estimate();
+
+		//Now branch out to the new current entry block
+		emit_branch_v2(old_entry_block_holder, conditional_node, if_compound_statement_results.starting_block, current_entry_block, BRANCH_CATEGORY_NORMAL);
+	
+	/**
+	 * This is a terminal case - we're done so we can set the final block and get out
+	 */
+	} else {
+		emit_branch_v2(current_entry_block, conditional_node, if_compound_statement_results.starting_block, overall_exit_block, BRANCH_CATEGORY_NORMAL);
+		if_results_package.final_block = overall_exit_block;
+		return if_results_package;
+	}
+
+	/**
 	 * So long as we keep seeing else-if statements, we will keep processing here accordingly
+	 *
+	 * When we enter this loop, the current entry block is already pre-allocated and ready for
+	 * us to use
 	 */
 	while(cursor != NULL && cursor->ast_node_type == AST_NODE_TYPE_ELSE_IF_STMT){
 		//Grab a cursor for this specific traversal
 		generic_ast_node_t* else_if_cursor = cursor->first_child;
-
-		/**
-		 * The old exit block is now our new entry block, and we'll need to create
-		 * a new exit block for ourselves
-		 */
-		current_entry_block = current_exit_block;
-		current_exit_block = basic_block_alloc_and_estimate();
 
 		//Hang onto the conditional for us
 		generic_ast_node_t* else_if_conditional = else_if_cursor;
@@ -8029,29 +8050,42 @@ static cfg_result_package_t visit_if_statement_v2(generic_ast_node_t* root_node)
 
 		/**
 		 * If the else if compound statement final block does not end in a return, we'll need to make
-		 * it jump to the exit block
+		 * it jump to the overall exit block
 		 */
 		if(does_block_end_in_terminal_statement(else_if_compound_statement_results.final_block) == FALSE){
-			emit_jump(else_if_compound_statement_results.final_block, current_exit_block);
+			emit_jump(else_if_compound_statement_results.final_block, overall_exit_block);
 		}
 
-		/**
-		 * Now that we've emitted everything for the compound statement, we can emit the conditional
-		 * and branch. The branch will be a normal branch, with success going to the if, and failure to
-		 * the else
-		 */
-		emit_branch_v2(current_entry_block, else_if_conditional, else_if_compound_statement_results.starting_block, current_entry_block, BRANCH_CATEGORY_NORMAL);
-
-		//Push this up to the next sibling
+		//Bump the cursor up to the next statement
 		cursor = cursor->next_sibling;
+
+		/**
+		 * Is the cursor NULL? If it is, then to get out of this if we just
+		 * need to jump to the final exit block. If it's not NULL, then we're going 
+		 * to need to jump to a new conditional block for the else-if/else that we
+		 * need to emit next
+		 */
+		if(cursor != NULL){
+			//Hang onto the old "entry"
+			basic_block_t* old_entry_block_holder = current_entry_block;
+
+			//We'll make a fresh new entry block for our else-if/else
+			current_entry_block = basic_block_alloc_and_estimate();
+
+			//Now branch out to the new current entry block
+			emit_branch_v2(old_entry_block_holder, else_if_conditional, else_if_compound_statement_results.starting_block, current_entry_block, BRANCH_CATEGORY_NORMAL);
+		
+		/**
+		 * This is a terminal case - we're done so we can set the final block and get out
+		 */
+		} else {
+			emit_branch_v2(current_entry_block, else_if_conditional, else_if_compound_statement_results.starting_block, overall_exit_block, BRANCH_CATEGORY_NORMAL);
+			if_results_package.final_block = overall_exit_block;
+			return if_results_package;
+		}
 	}
 
 
-	//This will always end up being the exit block
-	final_result.final_block = current_exit_block;
-
-	//Give back the final result in the end
-	return final_result;
 }
 
 
