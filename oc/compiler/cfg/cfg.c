@@ -3346,6 +3346,24 @@ static cfg_result_package_t emit_branch_v2(basic_block_t* starting_block, generi
 			 * cbranch_nz .L13 else .L12 <-- go to if, else else block
 			 */
 			if(branch_category == BRANCH_CATEGORY_NORMAL){
+				//Get the first child for the left statement
+				generic_ast_node_t* child_cursor = conditional_node->first_child;
+
+				/**
+				 * Left side: IF SUCCESS -> if block, else secondary block
+				 */
+				cfg_result_package_t left_side_results = emit_branch_v2(current_block, child_cursor, if_block, secondary_block, BRANCH_CATEGORY_NORMAL);
+
+				//Current block now is our secondary
+				current_block = secondary_block;
+
+				/**
+				 * Left Side: IF SUCCESS -> if block, else else block
+				 */
+				cfg_result_package_t right_side_results = emit_branch_v2(current_block, child_cursor->next_sibling, if_block, else_block, BRANCH_CATEGORY_NORMAL);
+
+				//Update the current block once again
+				current_block = right_side_results.final_block;
 
 			/**
 			 * .L2
@@ -3365,7 +3383,24 @@ static cfg_result_package_t emit_branch_v2(basic_block_t* starting_block, generi
 			 * cbranch_ge .L9 else .L13 <-- If this also fails, we've satisfied the initial condition
 			 */
 			} else {
+				//Get the first child for the left statement
+				generic_ast_node_t* child_cursor = conditional_node->first_child;
 
+				/**
+				 * Left side: IF SUCCESS -> else, else secondary block
+				 */
+				cfg_result_package_t left_side_results = emit_branch_v2(current_block, child_cursor, else_block, secondary_block, BRANCH_CATEGORY_NORMAL);
+
+				//Current block now is our secondary
+				current_block = secondary_block;
+
+				/**
+				 * Left Side: IF FAILS -> if block, else else block
+				 */
+				cfg_result_package_t right_side_results = emit_branch_v2(current_block, child_cursor->next_sibling, if_block, else_block, BRANCH_CATEGORY_INVERSE);
+
+				//Update the current block once again
+				current_block = right_side_results.final_block;
 			}
 		}
 	}
