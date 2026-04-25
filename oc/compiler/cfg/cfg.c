@@ -3071,6 +3071,21 @@ instruction_t* emit_jump(basic_block_t* basic_block, basic_block_t* destination_
 
 
 /**
+ * Is an operator short circuit eligible? Return TRUE if yes, FALSE
+ * if no
+ */
+static inline u_int8_t is_op_short_circuit_eligible(ollie_token_t op){
+	switch(op){
+		case DOUBLE_AND:
+		case DOUBLE_OR:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Emit a branch statement with an if destination and else destination. We will also handle the emittal of the conditional node here
  * for the purposes of doing the branch. The returned result package will include the starting & ending blocks for the branch. The
  * branch category is also given and will be used when we're accounting for how to place things
@@ -3078,6 +3093,21 @@ instruction_t* emit_jump(basic_block_t* basic_block, basic_block_t* destination_
 static cfg_result_package_t emit_branch_v2(basic_block_t* starting_block, generic_ast_node_t* conditional_node, basic_block_t* if_block, basic_block_t* else_block, branch_category_t branch_category){
 	//Allcoate the results
 	cfg_result_package_t results = {starting_block, starting_block, NULL, BLANK};
+
+	/**
+	 * The first thing that we need to do is emit the conditional. However - this conditional
+	 * could potentially be something that we'd like to short circuit(&& / ||). We assume that 
+	 * this doesn't happen most of the time, but when it does, we will implement the
+	 * short circuit optimization here
+	 */
+	if(is_operator_relational_operator(conditional_node->binary_operator) == FALSE){
+
+	/**
+	 * If we got here then we are short circuiting TODO
+	 */
+	} else {
+
+	}
 
 
 	//Give back our final results
