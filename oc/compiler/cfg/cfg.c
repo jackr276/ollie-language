@@ -3250,65 +3250,81 @@ static cfg_result_package_t emit_branch_v2(basic_block_t* starting_block, generi
 		//Create our secondary block to use
 		basic_block_t* secondary_block = basic_block_alloc_and_estimate();
 
-		/**
-		 * Logical and short circuiting logic:
-		 * 	Regular Branch:
-		 * .L2
-		 * t5 <- x_0 < 3 
-		 * t7 <- x_0 != 1
-		 * t5 <- t5 && t7
-		 * cbranch_nz .L12 else .L13
-		 *
-		 * Turn this into:
-		 * .L2:
-		 * t5 <- x_0 < 3 <---- if this is false, we leave(inverse branch)
-		 * cbranch_ge .L13 else .L3
-		 *
-		 * .L3 <----- The *only* way we get here is if the first condition is true
-		 * t7 <- x_0 != 1 <------- If this is true, jump to if(regular branch)
-		 * cbranch_ne .L12 else .L13
-		 * 		
-		 * 	
-		 * 	Inverse Branch:
-		 * .L2
-		 * t5 <- x_0 < 3 
-		 * t7 <- x_0 != 1
-		 * t5 <- t5 && t7
-		 * cbranch_z .L12 else .L13 <--- notice how it's branch if zero, we go to if if this fails(hence inverse)
-		 *
-		 * Turn this into:
-		 *
-		 * .L2:
-		 * t5 <- x_0 < 3 <---- if this doesn't work, we're done. We can go to *if case*
-		 * cbranch_ge .L12 else .L3
-		 *
-		 * .L3 <----- The *only* way we get here is if the first condition is true
-		 * t7 <- x_0 != 1 <------- Remember we're looking for a failure, so if this fails to go *if*, otherwise *else*
-		 * cbranch_e .L12 else .L13
-		 * 
-		 */
 		if(conditional_node->binary_operator == DOUBLE_AND){
+			/**
+			 * 	Regular Branch:
+			 * .L2
+			 * t5 <- x_0 < 3 
+			 * t7 <- x_0 != 1
+			 * t5 <- t5 && t7
+			 * cbranch_nz .L12 else .L13
+			 *
+			 * Turn this into:
+			 * .L2:
+			 * t5 <- x_0 < 3 <---- if this is false, we leave(inverse branch)
+			 * cbranch_ge .L13 else .L3
+			 *
+			 * .L3 <----- The *only* way we get here is if the first condition is true
+			 * t7 <- x_0 != 1 <------- If this is true, jump to if(regular branch)
+			 * cbranch_ne .L12 else .L13
+			 */
+			if(branch_category == BRANCH_CATEGORY_NORMAL){
+				//Get the first child for the left statement
+				generic_ast_node_t* child_cursor = conditional_node->first_child;
+
+				//Recursively emit the left side of the branch
+				cfg_result_package_t left_side_results = emit_branch_v2(current_block, child_cursor, if_block, secondary_block, branch_category);
+
+				//Current block now is our secondary
+				current_block = secondary_block;
+
+				//Now that we've done the left hand side, do the right hand side
+				cfg_result_package_t right_side_results = emit_branch_v2(current_block, child_cursor->next_sibling, if_block, else_block, branch_category);
+
+				//Update the current block once again
+				current_block = right_side_results.final_block;
+
+			/**
+			 * 	Inverse Branch:
+			 * .L2
+			 * t5 <- x_0 < 3 
+			 * t7 <- x_0 != 1
+			 * t5 <- t5 && t7
+			 * cbranch_z .L12 else .L13 <--- notice how it's branch if zero, we go to if if this fails(hence inverse)
+			 *
+			 * Turn this into:
+			 *
+			 * .L2:
+			 * t5 <- x_0 < 3 <---- if this doesn't work, we're done. We can go to *if case*
+			 * cbranch_ge .L12 else .L3
+			 *
+			 * .L3 <----- The *only* way we get here is if the first condition is true
+			 * t7 <- x_0 != 1 <------- Remember we're looking for a failure, so if this fails to go *if*, otherwise *else*
+			 * cbranch_e .L12 else .L13
+			 *
+			 */
+			} else {
+				//Get the first child for the left statement
+				generic_ast_node_t* child_cursor = conditional_node->first_child;
+
+				//Recursively emit the left side of the branch
+				cfg_result_package_t left_side_results = emit_branch_v2(current_block, child_cursor, if_block, secondary_block, branch_category);
+
+				//Current block now is our secondary
+				current_block = secondary_block;
+
+				//Now that we've done the left hand side, do the right hand side
+				cfg_result_package_t right_side_results = emit_branch_v2(current_block, child_cursor->next_sibling, if_block, else_block, branch_category);
+
+				//Update the current block once again
+				current_block = right_side_results.final_block;
+			}
 
 		} else {
 			printf("TODO NOT IMPLEMENTED\n");
 			exit(1);
 		}
 
-
-		//Get the first child for the left statement
-		generic_ast_node_t* child_cursor = conditional_node->first_child;
-
-		//Recursively emit the left side of the branch
-		cfg_result_package_t left_side_results = emit_branch_v2(current_block, child_cursor, if_block, secondary_block, branch_category);
-
-		//Current block now is our secondary
-		current_block = secondary_block;
-
-		//Now that we've done the left hand side, do the right hand side
-		cfg_result_package_t right_side_results = emit_branch_v2(current_block, child_cursor->next_sibling, if_block, else_block, branch_category);
-
-		//Update the current block once again
-		current_block = right_side_results.final_block;
 	}
 
 	//Update this - odds are it's changed
