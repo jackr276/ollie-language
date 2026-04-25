@@ -3173,6 +3173,8 @@ static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, t
  * Emit a branch statement with an if destination and else destination. We will also handle the emittal of the conditional node here
  * for the purposes of doing the branch. The returned result package will include the starting & ending blocks for the branch. The
  * branch category is also given and will be used when we're accounting for how to place things
+ *
+ * TODO DEAL WITH "comes from fp comparison"
  */
 static cfg_result_package_t emit_branch_v2(basic_block_t* starting_block, generic_ast_node_t* conditional_node, basic_block_t* if_block, basic_block_t* else_block, branch_category_t branch_category){
 	//Allcoate the results
@@ -3197,6 +3199,9 @@ static cfg_result_package_t emit_branch_v2(basic_block_t* starting_block, generi
 		//Extract the actual result assignee
 		three_addr_var_t* conditional_decider = binary_results.assignee;
 
+		//TODO really don't like this
+		u_int8_t type_signed = is_type_signed(conditional_decider->type);
+
 		/**
 		 * If the given operator does not set condition codes appropriately, then
 		 * we'll need to make that happen here
@@ -3209,7 +3214,30 @@ static cfg_result_package_t emit_branch_v2(basic_block_t* starting_block, generi
 		//Flag that this sets condition codes
 		conditional_decider->sets_cc = TRUE;
 
+		//Now let's try to decide the branch type
+		branch_type_t branch_type = select_appropriate_branch_statement(binary_results.operator, branch_category, type_signed);
 
+		//Now we can finall spit this one out
+		instruction_t* branch_statement = emit_branch_statement(if_block, else_block, conditional_decider, branch_type);
+
+		//Add it into the block
+		add_statement(current_block, branch_statement);
+
+		/**
+		 * Based on what the category is, we can add the successors in a different
+		 * order just so that the IRs look somewhat nicer. This has no effect on
+		 * functionality, purely visual
+		 */
+		if(branch_category == BRANCH_CATEGORY_NORMAL){
+			add_successor(current_block, if_block);
+			add_successor(current_block, else_block);
+			branch_statement->inverse_branch = FALSE;
+
+		} else {
+			add_successor(current_block, else_block);
+			add_successor(current_block, if_block);
+			branch_statement->inverse_branch = TRUE;
+		}
 
 	/**
 	 * If we got here then we are short circuiting TODO
