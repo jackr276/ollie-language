@@ -7646,8 +7646,10 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//We will explicitly declare that this is an exit here
 	for_stmt_exit_block->block_type = BLOCK_TYPE_LOOP_EXIT;
 
-	//All breaks will go to the exit block
-	//Hold off on the continue block for now
+	/**
+	 * All breaks will go to the exit block
+	 * Hold off on the continue block for now
+	 */
 	push(&break_stack, for_stmt_exit_block);
 
 	//Once we get here, we already know what the start and exit are for this statement
@@ -7657,8 +7659,10 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//Grab a cursor for our traversal
 	generic_ast_node_t* cursor = root_node->first_child;
 
-	//The first thing that we are able to see is a chain of statements that may
-	//or may not be there. We will let our given rule handle it
+	/**
+	 * The first thing that we are able to see is a chain of statements that may
+	 * or may not be there. We will let our given rule handle it
+	 */
 	if(cursor->ast_node_type == AST_NODE_TYPE_EXPR_CHAIN){
 		cfg_result_package_t expression_chain_result = emit_expression_chain(for_stmt_entry_block, cursor, FALSE);
 
@@ -7669,40 +7673,27 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 		cursor = cursor->next_sibling;
 	}
 
-	//Once we reach here, we are officially in the loop. Everything beyond this point
-	//is going to happen repeatedly
+	/**
+	 * Once we reach here, we are officially in the loop. Everything beyond this point
+	 * is going to happen repeatedly
+	 */
 	push_nesting_level(&nesting_stack, NESTING_LOOP_STATEMENT);
 
-	//We'll now need to create our repeating node. This is the node that will actually repeat from the for loop.
-	//The second and third condition in the for loop are the ones that execute continously. The third condition
-	//always executes at the end of each iteration
+	/**
+	 * We'll now need to create our repeating node. This is the node that will actually repeat from the for loop.
+	 * The second and third condition in the for loop are the ones that execute continously. The third condition
+	 * always executes at the end of each iteration
+	 */
 	basic_block_t* condition_block = basic_block_alloc_and_estimate();
 	//Flag that this is a loop start
 	condition_block->block_type = BLOCK_TYPE_LOOP_ENTRY;
 
 	//We will now emit a jump from the entry block, to the condition block
 	emit_jump(for_stmt_entry_block, condition_block);
+
+	//Grab the node for the condition block - save for later
+	generic_ast_node_t* condition_block_node = cursor->first_child;
 	
-	//For later branching - null by default
-	three_addr_var_t* conditional_decider = NULL;
-	//What is the conditional operator?
-	ollie_token_t operator = BLANK;
-
-	//*if* we have a condition block we will emit it now - remember that this is not a strict requirement
-	if(cursor->first_child != NULL){
-		//The condition block values package. This is just a regular expression
-		cfg_result_package_t condition_block_vals = emit_expression(condition_block, cursor->first_child, TRUE);
-
-		//Store this for later
-		conditional_decider = condition_block_vals.assignee;
-		operator = condition_block_vals.operator;	
-
-		//If this is blank, we need to change this
-		if(operator == BLANK){
-			conditional_decider = emit_test_not_zero(condition_block_vals.final_block, condition_block_vals.assignee, &operator);
-		}
-	}
-
 	//Now push up to the third condition
 	cursor = cursor->next_sibling;
 
@@ -7735,28 +7726,25 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//Once we're done with the compound statement, we are no longer in the loop
 	pop_nesting_level(&nesting_stack);
 
-	//If we have an empty interior just emit a dummy block. It will be optimized away 
-	//regardless
+	//If we have an empty interior just emit a dummy block. It will be optimized away regardless
 	if(compound_statement_results.starting_block == NULL){
 		compound_statement_results.starting_block = basic_block_alloc_and_estimate();
 		compound_statement_results.final_block = compound_statement_results.starting_block;
 	}
 
-	//If we have a conditional at all, we will emit appropriate branch
-	//logic
-	if(conditional_decider != NULL){
-		//Determine the kind of branch that we'll need here
-		branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_INVERSE, is_type_signed(conditional_decider->type));
-
-		/**
-		 * Inverse jumping logic so
-		 *
-		 * if not condition 
-		 * 	goto exit
-		 * else
-		 * 	goto update
-		 */
-		emit_branch(condition_block, for_stmt_exit_block, compound_statement_results.starting_block, branch_type, conditional_decider, BRANCH_CATEGORY_INVERSE);
+	/**
+	 * If we have a conditional at all, we will emit appropriate branch
+	 * logic
+	 *
+	 * Inverse jumping logic so
+	 *
+	 * if not condition 
+	 * 	goto exit
+	 * else
+	 * 	goto update
+	 */
+	if(condition_block_node != NULL){
+		emit_branch_v2(condition_block, condition_block_node, for_stmt_exit_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE);
 
 	//Otherwise - we're doing as the user wants here and just emitting a straight jump from this block to the body
 	} else {
