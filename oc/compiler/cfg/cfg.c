@@ -3243,50 +3243,26 @@ static cfg_result_package_t emit_branch_v2(basic_block_t* starting_block, generi
 	 * If we got here then we are short circuiting based on the operator that we were given. The
 	 * short circuit process will create several additional blocks that we will use instead of 
 	 * just using this one block
-	 *
-	 * TODO JUST BASE CASE FOR NOW
 	 */
 	} else {
 		//Create our secondary block to use
 		basic_block_t* secondary_block = basic_block_alloc_and_estimate();
 
-		/**
-		 * We'll need to account for both the inverse and normal
-		 * branch cases whilst doing this, but the basic flow is as
-		 * follows
-		 *
-		 * Optimizing a logical and short circuit:
-		 * 	1.) Emit the left side binary expression entirely in the first block
-		 * 	2.) Branch out to the success/fail block as needed, and create a new block
-		 * 	3.) Emit the right side binary expression in the new block
-		 * 	4.) Emit the final branch nonsense in the new block
-		 */
-		if(conditional_node->binary_operator == DOUBLE_AND){
-			/**
-			 *
-			 */
-			if(branch_category == BRANCH_CATEGORY_NORMAL){
+		//Get the first child for the left statement
+		generic_ast_node_t* child_cursor = conditional_node->first_child;
 
-			} else {
+		//Recursively emit the left side of the branch
+		cfg_result_package_t left_side_results = emit_branch_v2(current_block, child_cursor, if_block, secondary_block, branch_category);
 
-			}
+		//Update all our current block
+		current_block = left_side_results.final_block;
 
+		//Now that we've done the left hand side, do the right hand side
+		cfg_result_package_t right_side_results = emit_branch_v2(current_block, child_cursor->next_sibling, if_block, else_block, branch_category);
 
-		/**
-		 * Optimizing a logical or short circuit
-		 */
-		} else {
-			/**
-			 *
-			 */
-			if(branch_category == BRANCH_CATEGORY_NORMAL){
-
-			} else {
-
-			}
-		}
+		//Update the current block once again
+		current_block = right_side_results.final_block;
 	}
-
 
 	//Update this - odds are it's changed
 	results.final_block = current_block;
