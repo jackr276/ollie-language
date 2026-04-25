@@ -8003,6 +8003,47 @@ static cfg_result_package_t visit_if_statement_v2(generic_ast_node_t* root_node)
 		current_entry_block = current_exit_block;
 		current_exit_block = basic_block_alloc_and_estimate();
 
+		//Hang onto the conditional for us
+		generic_ast_node_t* else_if_conditional = else_if_cursor;
+
+		//Signify that this is happening inside of an IF
+		push_nesting_level(&nesting_stack, NESTING_IF_STATEMENT);
+
+		//Advance the cursor up to get the compound statement 
+		else_if_cursor = else_if_cursor->next_sibling;
+
+		//Let the helper emit the entire compound statement
+		cfg_result_package_t else_if_compound_statement_results = visit_compound_statement(else_if_cursor);
+
+		//Remove the IF nester
+		pop_nesting_level(&nesting_stack);
+
+		/**
+		 * If we have an empty if statement(possible), then we'll just go about creating
+		 * a block here so we don't have any weird behavior
+		 */
+		if(else_if_compound_statement_results.starting_block == NULL){
+			else_if_compound_statement_results.starting_block = basic_block_alloc_and_estimate();
+			else_if_compound_statement_results.final_block = else_if_compound_statement_results.starting_block;
+		}
+
+		/**
+		 * If the else if compound statement final block does not end in a return, we'll need to make
+		 * it jump to the exit block
+		 */
+		if(does_block_end_in_terminal_statement(else_if_compound_statement_results.final_block) == FALSE){
+			emit_jump(else_if_compound_statement_results.final_block, current_exit_block);
+		}
+
+		/**
+		 * Now that we've emitted everything for the compound statement, we can emit the conditional
+		 * and branch. The branch will be a normal branch, with success going to the if, and failure to
+		 * the else
+		 */
+		emit_branch_v2(current_entry_block, else_if_conditional, else_if_compound_statement_results.starting_block, current_entry_block, BRANCH_CATEGORY_NORMAL);
+
+		//Push this up to the next sibling
+		cursor = cursor->next_sibling;
 	}
 
 
