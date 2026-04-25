@@ -13,6 +13,7 @@
 */
 
 #include "cfg.h"
+#include <complex.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -3086,6 +3087,26 @@ static inline u_int8_t is_op_short_circuit_eligible(ollie_token_t op){
 
 
 /**
+ * Does a given operator set condition codes? Return true if yes, false
+ * if no. Yes all ops can set condition codes, but we're referring to
+ * specifically relational operators here
+ */
+static inline u_int8_t does_operator_set_condition_codes(ollie_token_t op){
+	switch(op){
+		case L_THAN:
+		case L_THAN_OR_EQ:
+		case G_THAN:
+		case G_THAN_OR_EQ:
+		case DOUBLE_EQUALS:
+		case NOT_EQUALS:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Emit a branch statement with an if destination and else destination. We will also handle the emittal of the conditional node here
  * for the purposes of doing the branch. The returned result package will include the starting & ending blocks for the branch. The
  * branch category is also given and will be used when we're accounting for how to place things
@@ -3094,6 +3115,9 @@ static cfg_result_package_t emit_branch_v2(basic_block_t* starting_block, generi
 	//Allcoate the results
 	cfg_result_package_t results = {starting_block, starting_block, NULL, BLANK};
 
+	//Keep track of the current block
+	basic_block_t* current_block = starting_block;
+
 	/**
 	 * The first thing that we need to do is emit the conditional. However - this conditional
 	 * could potentially be something that we'd like to short circuit(&& / ||). We assume that 
@@ -3101,6 +3125,25 @@ static cfg_result_package_t emit_branch_v2(basic_block_t* starting_block, generi
 	 * short circuit optimization here
 	 */
 	if(is_operator_relational_operator(conditional_node->binary_operator) == FALSE){
+		//First let the helper emit it
+		cfg_result_package_t binary_results = emit_binary_expression(current_block, conditional_node);
+
+		//Update the final block
+		current_block = results.final_block;
+
+		//Extract the actual result assignee
+		three_addr_var_t* conditional_decider = binary_results.assignee;
+
+		/**
+		 * If the given operator does not set condition codes appropriately, then
+		 * we'll need to make that happen here
+		 */
+		if(binary_results.operator){
+
+		}
+
+
+
 
 	/**
 	 * If we got here then we are short circuiting TODO
@@ -3109,6 +3152,9 @@ static cfg_result_package_t emit_branch_v2(basic_block_t* starting_block, generi
 
 	}
 
+
+	//Update this - odds are it's changed
+	results.final_block = current_block;
 
 	//Give back our final results
 	return results;
