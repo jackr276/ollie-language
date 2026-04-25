@@ -3189,7 +3189,7 @@ static cfg_result_package_t emit_branch_v2(basic_block_t* starting_block, generi
 	 * this doesn't happen most of the time, but when it does, we will implement the
 	 * short circuit optimization here
 	 */
-	if(is_operator_relational_operator(conditional_node->binary_operator) == FALSE){
+	if(is_op_short_circuit_eligible(conditional_node->binary_operator) == FALSE){
 		//First let the helper emit it
 		cfg_result_package_t binary_results = emit_binary_expression(current_block, conditional_node);
 
@@ -3243,6 +3243,8 @@ static cfg_result_package_t emit_branch_v2(basic_block_t* starting_block, generi
 	 * If we got here then we are short circuiting based on the operator that we were given. The
 	 * short circuit process will create several additional blocks that we will use instead of 
 	 * just using this one block
+	 *
+	 * TODO THE ACTUAL INVERSE LOGIC IS WRONG, BUT RECURSION SEEMS OK
 	 */
 	} else {
 		//Create our secondary block to use
@@ -3254,8 +3256,8 @@ static cfg_result_package_t emit_branch_v2(basic_block_t* starting_block, generi
 		//Recursively emit the left side of the branch
 		cfg_result_package_t left_side_results = emit_branch_v2(current_block, child_cursor, if_block, secondary_block, branch_category);
 
-		//Update all our current block
-		current_block = left_side_results.final_block;
+		//Current block now is our secondary
+		current_block = secondary_block;
 
 		//Now that we've done the left hand side, do the right hand side
 		cfg_result_package_t right_side_results = emit_branch_v2(current_block, child_cursor->next_sibling, if_block, else_block, branch_category);
