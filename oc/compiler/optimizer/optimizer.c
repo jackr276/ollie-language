@@ -3365,13 +3365,6 @@ cfg_t* optimize(cfg_t* cfg){
 		}
 
 		/**
-		 * PASS 4: compound logic optimization
-		 * Now that we've sweeped everything, we know that what branches are left must be useful. This means
-		 * that we can expend the compute of optimizing the short circuit logic on them, and we will do so here
-		 */
-		//optimize_short_circuit_logic(current_function, current_function_blocks);
-		
-		/**
 		 * PASS 4: Clean algorithm
 		 * Clean follows after sweep because during the sweep process, we will likely delete the contents of
 		 * entire blocks. Clean uses 4 different steps in a specific order to eliminate control flow

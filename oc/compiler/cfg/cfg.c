@@ -3071,6 +3071,21 @@ instruction_t* emit_jump(basic_block_t* basic_block, basic_block_t* destination_
 
 
 /**
+ * Emit a branch statement with an if destination and else destination. We will also handle the emittal of the conditional node here
+ * for the purposes of doing the branch. The returned result package will include the starting & ending blocks for the branch. The
+ * branch category is also given and will be used when we're accounting for how to place things
+ */
+static cfg_result_package_t emit_branch_v2(basic_block_t* starting_block, generic_ast_node_t* conditional_node, basic_block_t* if_block, basic_block_t* else_block, branch_category_t branch_category){
+	//Allcoate the results
+	cfg_result_package_t results = {starting_block, starting_block, NULL, BLANK};
+
+
+	//Give back our final results
+	return results;
+}
+
+
+/**
  * Emit a branch statement with an if destination, else destination, conditional result and branch type
  *
  * This rule also handles all successor management required for the rule
@@ -3117,6 +3132,8 @@ static void emit_branch(basic_block_t* basic_block, basic_block_t* if_destinatio
  * Emit a user defined jump statement that points to a label, not to a block
  *
  * We'll leave out all of the successor logic here as well, until we reach the end
+ *
+ * TODO BRANCH HERE
  */
 static inline void emit_user_defined_branch(basic_block_t* basic_block, symtab_variable_record_t* if_destination, basic_block_t* else_destination, three_addr_var_t* conditional_decider, branch_type_t branch_type){
 	//Emit the branch, purposefully leaving the if area NULL
