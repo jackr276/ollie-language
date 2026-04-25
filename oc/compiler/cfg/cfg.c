@@ -9115,39 +9115,17 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				}
 
 				//First child is the conditional
-				generic_ast_node_t* cursor = ast_cursor->first_child;
+				generic_ast_node_t* binary_expression_cursor = ast_cursor->first_child;
 
-				//We'll need to emit the conditional in the current block
-				cfg_result_package_t ret_package = emit_expression(current_block, cursor, TRUE);
-
-				//Update the current block
-				current_block = ret_package.final_block;
-
-				//We'll need a block at the very end which we'll hit after we jump
-				symtab_variable_record_t* if_block = as
+				/**
+				 * The if block comes from the ast cursor's variable, the else
+				 * block will be allocated fresh
+				 */
+				symtab_variable_record_t* if_block = ast_cursor->variable;
 				basic_block_t* else_block = basic_block_alloc_and_estimate();
 
-				//Save this here for later
-				three_addr_var_t* conditional_decider = ret_package.assignee;
-
-				//Grab out the operator
-				ollie_token_t operator = ret_package.operator;
-
-				//If the return package's operator is blank,
-				//then we'll need to emit a test instruction here
-				if(operator == BLANK){
-					conditional_decider = emit_test_not_zero(current_block, ret_package.assignee, &operator);
-				}
-
-				//Flag that this does set condition codes
-				conditional_decider->sets_cc = TRUE;
-
-				//Select the needed branch statement
-				branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
-
-				//Now we can emit the branch itself. The branch itself is incomplete right now, there is a special postprocessor
-				//method for each function that handles filling the rest in
-				emit_user_defined_branch(current_block, ast_cursor->variable, else_block, conditional_decider, branch_type);
+				//Let the helper emit the actual branch
+				emit_user_defined_branch(current_block, binary_expression_cursor, if_block, else_block, BRANCH_CATEGORY_NORMAL);
 
 				//The current block now is said jumping to block
 				current_block = else_block;
@@ -9653,39 +9631,18 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					current_block = starting_block;
 				}
 
-				//The first child is our conditional
-				generic_ast_node_t* cursor = ast_cursor->first_child;
+				//First child is the conditional
+				generic_ast_node_t* binary_expression_cursor = ast_cursor->first_child;
 
-				//We'll need to emit the conditional in the current block
-				cfg_result_package_t ret_package = emit_expression(current_block, cursor, TRUE);
-
-				//Update the current block
-				current_block = ret_package.final_block;
-
-				//We'll need a block at the very end which we'll hit after we jump
+				/**
+				 * The if block comes from the ast cursor's variable, the else
+				 * block will be allocated fresh
+				 */
+				symtab_variable_record_t* if_block = ast_cursor->variable;
 				basic_block_t* else_block = basic_block_alloc_and_estimate();
 
-				//Save this here for later
-				three_addr_var_t* conditional_decider = ret_package.assignee;
-
-				//Grab the operator out
-				ollie_token_t operator = ret_package.operator;
-
-				//If the return package's operator is blank,
-				//then we'll need to emit a test instruction here
-				if(operator == BLANK){
-					conditional_decider = emit_test_not_zero(current_block, ret_package.assignee, &operator);
-				}
-
-				//Flag that this does set condition codes
-				conditional_decider->sets_cc = TRUE;
-
-				//Select the needed branch statement
-				branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
-
-				//Now we can emit the branch itself. The branch itself is incomplete right now, there is a special postprocessor
-				//method for each function that handles filling the rest in
-				emit_user_defined_branch(current_block, ast_cursor->variable, else_block, conditional_decider, branch_type);
+				//Let the helper emit the actual branch
+				emit_user_defined_branch(current_block, binary_expression_cursor, if_block, else_block, BRANCH_CATEGORY_NORMAL);
 
 				//The current block now is said jumping to block
 				current_block = else_block;
