@@ -9049,8 +9049,10 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					//Package and return
 					generic_results = (cfg_result_package_t){starting_block, current_block, NULL, BLANK};
 
-					//We're done here, so return the starting block. There is no 
-					//point in going on
+					/**
+					 * We're done here, so return the starting block. There is no 
+					 * point in going on
+					 */
 					return generic_results;
 
 				//Otherwise, we have a conditional continue here
@@ -9087,8 +9089,10 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					current_block = starting_block;
 				}
 
-				//There are two options here: We could have a conditional break
-				//or a normal break. If there is no child node, we have a normal break
+				/**
+				 * There are two options here: We could have a conditional break
+				 * or a normal break. If there is no child node, we have a normal break
+				 */
 				if(ast_cursor->first_child == NULL){
 					//Peak off of the break stack to get what we're breaking to
 					basic_block_t* breaking_to = peek(&break_stack);
@@ -9099,44 +9103,31 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					//Package and return
 					generic_results = (cfg_result_package_t){starting_block, current_block, NULL, BLANK};
 
-					//For a regular break statement, this is it, so we just get out
-					//Give back the starting block
+					/**
+					 * For a regular break statement, this is it, so we just get out
+					 * and give back the starting block
+					 */
 					return generic_results;
 
 				//Otherwise, we have a conditional break, which will generate a conditional jump instruction
 				} else {
+					generic_ast_node_t* conditional_node = ast_cursor->first_child;
+
 					//We'll also need a new block to jump to, since this is a conditional break
 					basic_block_t* new_block = basic_block_alloc_and_estimate();
-
-					//First let's emit the conditional code
-					cfg_result_package_t ret_package = emit_expression(current_block, ast_cursor->first_child, TRUE);
-
-					//Store this for later
-					three_addr_var_t* conditional_decider = ret_package.assignee;
-
-					//Extract the operator
-					ollie_token_t operator = ret_package.operator;
-
-					//If this is blank, we'll need a test instruction
-					if(operator == BLANK){
-						conditional_decider = emit_test_not_zero(current_block, ret_package.assignee, &operator);
-					}
-
-					//First we'll select the appropriate branch type. We are using a regular branch type here
-					branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
 					//Peak off of the break stack to get what we're breaking to
 					basic_block_t* breaking_to = peek(&break_stack);
 
 					/**
-					 * Now we'll emit the branch like so:
+					 * Let the helper come here and emit the branch for us
 					 *
 					 * if conditional
 					 * 	goto end block
 					 * else 
 					 * 	goto new block
 					 */
-					emit_branch(current_block, breaking_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
+					emit_branch_v2(current_block, conditional_node, breaking_to, new_block, BRANCH_CATEGORY_NORMAL);
 
 					//Once we're out here, the current block is now the new one
 					current_block = new_block;
@@ -9550,8 +9541,10 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					//Package and return
 					results = (cfg_result_package_t){starting_block, current_block, NULL, BLANK};
 
-					//We're done here, so return the starting block. There is no 
-					//point in going on
+					/**
+					 * We're done here, so return the starting block. There is no 
+					 * point in going on
+					 */
 					return results;
 
 				//Otherwise, we have a conditional continue here
@@ -9606,38 +9599,23 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				//Otherwise, we have a conditional break, which will generate a conditional jump instruction
 				} else {
+					generic_ast_node_t* conditional_node = ast_cursor->first_child;
+
 					//We'll also need a new block to jump to, since this is a conditional break
 					basic_block_t* new_block = basic_block_alloc_and_estimate();
-
-					//First let's emit the conditional code
-					cfg_result_package_t ret_package = emit_expression(current_block, ast_cursor->first_child, TRUE);
-
-					//Store this for later
-					three_addr_var_t* conditional_decider = ret_package.assignee;
-					
-					//Grab the operator out
-					ollie_token_t operator = ret_package.operator;
-
-					//If this is blank, we'll need a test instruction
-					if(operator == BLANK){
-						conditional_decider = emit_test_not_zero(current_block, ret_package.assignee, &operator);
-					}
-
-					//First we'll select the appropriate branch type. We are using a regular branch type here
-					branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
 					//Peak off of the break stack to get what we're breaking to
 					basic_block_t* breaking_to = peek(&break_stack);
 
 					/**
-					 * Now we'll emit the branch like so:
+					 * Let the helper come here and emit the branch for us
 					 *
 					 * if conditional
 					 * 	goto end block
 					 * else 
 					 * 	goto new block
 					 */
-					emit_branch(current_block, breaking_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
+					emit_branch_v2(current_block, conditional_node, breaking_to, new_block, BRANCH_CATEGORY_NORMAL);
 
 					//Once we're out here, the current block is now the new one
 					current_block = new_block;
