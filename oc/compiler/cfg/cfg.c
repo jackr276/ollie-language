@@ -3425,49 +3425,6 @@ static cfg_result_package_t emit_branch_v2(basic_block_t* starting_block, generi
 
 
 /**
- * Emit a branch statement with an if destination, else destination, conditional result and branch type
- *
- * This rule also handles all successor management required for the rule
- */
-static void emit_branch(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, branch_type_t branch_type, three_addr_var_t* conditional_result, branch_category_t branch_category){
-	//Emit the actual instruction here
-	instruction_t* branch_instruction = emit_branch_statement(if_destination, else_destination, conditional_result, branch_type);
-
-	/**
-	 * We need to flag for later on that this conditional result is being used to set condition
-	 * codes. This is especially important for the value numberer because we need to make
-	 * sure that we don't optimize this away if we need said condition codes
-	 */
-	conditional_result->sets_cc = TRUE;
-
-	//Mark this as the op1 so that we can track in the optimizer
-	branch_instruction->op1 = conditional_result;
-
-	//Add the statement into the block
-	add_statement(basic_block, branch_instruction);
-
-	/**
-	 * Based on what the category is, we can add the successors in a different
-	 * order just so that the IRs look somewhat nicer. This has no effect on
-	 * functionality, purely visual
-	 */
-	if(branch_category == BRANCH_CATEGORY_NORMAL){
-		//The if and else destinations are now both successors
-		add_successor(basic_block, if_destination);
-		add_successor(basic_block, else_destination);
-		//Not an inverse branch
-		branch_instruction->inverse_branch = FALSE;
-	} else {
-		//The if and else destinations are now both successors
-		add_successor(basic_block, else_destination);
-		add_successor(basic_block, if_destination);
-		//An inverse branch
-		branch_instruction->inverse_branch = TRUE;
-	}
-}
-
-
-/**
  * Emit a user defined jump statement that points to a label, not to a block
  *
  * We'll leave out all of the successor logic here as well, until we reach the end
@@ -6261,6 +6218,45 @@ static cfg_result_package_t emit_error_handle_statement(generic_ast_node_t* erro
 
 
 /**
+ * Emit a branch for a switch/handle statement. This is very different than the other branches that we are used to. Mainly, it will
+ * not attempt to perform *any* short circuiting. It also assumes that the caller has already set everything up that is needed for the conditional
+ */
+static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, branch_type_t branch_type, three_addr_var_t* conditional_result, branch_category_t branch_category){
+	//Emit the actual instruction here
+	instruction_t* branch_instruction = emit_branch_statement(if_destination, else_destination, conditional_result, branch_type);
+
+	/**
+	 * We need to flag for later on that this conditional result is being used to set condition
+	 * codes. This is especially important for the value numberer because we need to make
+	 * sure that we don't optimize this away if we need said condition codes
+	 */
+	conditional_result->sets_cc = TRUE;
+
+	//Mark this as the op1 so that we can track in the optimizer
+	branch_instruction->op1 = conditional_result;
+
+	//Add the statement into the block
+	add_statement(basic_block, branch_instruction);
+
+	/**
+	 * Based on what the category is, we can add the successors in a different
+	 * order just so that the IRs look somewhat nicer. This has no effect on
+	 * functionality, purely visual
+	 */
+	if(branch_category == BRANCH_CATEGORY_NORMAL){
+		add_successor(basic_block, if_destination);
+		add_successor(basic_block, else_destination);
+		branch_instruction->inverse_branch = FALSE;
+
+	} else {
+		add_successor(basic_block, else_destination);
+		add_successor(basic_block, if_destination);
+		branch_instruction->inverse_branch = TRUE;
+	}
+}
+
+
+/**
  * A handle statement internally becomes a switch statement based on the returned error of the function(%rdx). We will switch
  * based on %rdx and handle things accordingly. Remember that this is only a thing that exists for functions that error, non-errorable
  * functions should never have handle statements. The function itself is going to pass us its result in %rax, but that doesn't mean
@@ -6445,7 +6441,7 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 	//Add the comparsion
 	add_statement(starting_block, comparison);
 	//Get the branch out - this handles everything for us
-	emit_branch(starting_block, default_block, jump_calculation_block, BRANCH_A, comparison->assignee, BRANCH_CATEGORY_NORMAL);
+	emit_branch_for_switch_statement(starting_block, default_block, jump_calculation_block, BRANCH_A, comparison->assignee, BRANCH_CATEGORY_NORMAL);
 
 	/**
 	 * Now we can do the indirect jump calculation and emit the indirect jump. Remember that we're already starting at 0, so we don't
@@ -8581,7 +8577,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	 * else:
 	 * 	goto upper_bound_check
 	 */
-	emit_branch(root_level_block, default_block, upper_bound_check_block, branch_lower_than, lower_than_decider, BRANCH_CATEGORY_NORMAL);
+	emit_branch_for_switch_statement(root_level_block, default_block, upper_bound_check_block, branch_lower_than, lower_than_decider, BRANCH_CATEGORY_NORMAL);
 
 	//This will be used for tracking
 	three_addr_var_t* higher_than_decider = emit_temp_var(input_result_type);
@@ -8600,7 +8596,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	 * else:
 	 *  goto jump block calculation
 	 */
-	emit_branch(upper_bound_check_block, default_block, jump_calculation_block, branch_greater_than, higher_than_decider, BRANCH_CATEGORY_NORMAL);
+	emit_branch_for_switch_statement(upper_bound_check_block, default_block, jump_calculation_block, branch_greater_than, higher_than_decider, BRANCH_CATEGORY_NORMAL);
 
 	//To avoid violating SSA rules, we'll emit a temporary assignment here
 	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_results.assignee);
@@ -8798,7 +8794,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	 * else:
 	 * 	goto upper_bound_check
 	 */
-	emit_branch(root_level_block, default_block, upper_bound_check_block, branch_lower_than, lower_than_decider, BRANCH_CATEGORY_NORMAL);
+	emit_branch_for_switch_statement(root_level_block, default_block, upper_bound_check_block, branch_lower_than, lower_than_decider, BRANCH_CATEGORY_NORMAL);
 
 	//This will be used for tracking
 	three_addr_var_t* higher_than_decider = emit_temp_var(input_result_type);
@@ -8817,7 +8813,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	 * else:
 	 *  goto jump block calculation
 	 */
-	emit_branch(upper_bound_check_block, default_block, jump_calculation_block, branch_greater_than, higher_than_decider, BRANCH_CATEGORY_NORMAL);
+	emit_branch_for_switch_statement(upper_bound_check_block, default_block, jump_calculation_block, branch_greater_than, higher_than_decider, BRANCH_CATEGORY_NORMAL);
 
 	//To avoid violating SSA rules, we'll emit a temporary assignment here
 	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_results.assignee);
@@ -9581,8 +9577,10 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					current_block = starting_block;
 				}
 
-				//There are two options here: We could have a conditional break
-				//or a normal break. If there is no child node, we have a normal break
+				/**
+				 * There are two options here: We could have a conditional break
+				 * or a normal break. If there is no child node, we have a normal break
+				 */
 				if(ast_cursor->first_child == NULL){
 					//Peak off of the break stack to get what we're breaking to
 					basic_block_t* breaking_to = peek(&break_stack);
