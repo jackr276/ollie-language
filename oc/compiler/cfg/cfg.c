@@ -3194,7 +3194,7 @@ static cfg_result_package_t emit_branch_v2(basic_block_t* starting_block, generi
 		cfg_result_package_t binary_results = emit_binary_expression(current_block, conditional_node);
 
 		//Update the final block
-		current_block = results.final_block;
+		current_block = binary_results.final_block;
 
 		//Extract the actual result assignee
 		three_addr_var_t* conditional_decider = binary_results.assignee;
@@ -3321,24 +3321,57 @@ static void emit_branch(basic_block_t* basic_block, basic_block_t* if_destinatio
  * Emit a user defined jump statement that points to a label, not to a block
  *
  * We'll leave out all of the successor logic here as well, until we reach the end
- *
- * TODO BRANCH HERE
  */
-static inline void emit_user_defined_branch(basic_block_t* basic_block, symtab_variable_record_t* if_destination, basic_block_t* else_destination, three_addr_var_t* conditional_decider, branch_type_t branch_type){
-	//Emit the branch, purposefully leaving the if area NULL
-	instruction_t* branch = emit_branch_statement(NULL, else_destination, conditional_decider, branch_type);
+static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_block, generic_ast_node_t* conditional_node, symtab_variable_record_t* if_destination, basic_block_t* else_destination, branch_category_t branch_category){
+	//Allcoate the results
+	cfg_result_package_t results = {starting_block, starting_block, NULL, BLANK};
 
-	//We'll need to store the label in here for later on down the line
-	branch->var_record = if_destination;
+	//Keep track of the current block
+	basic_block_t* current_block = starting_block;
 
-	//Mark where we came from
-	branch->block_contained_in = basic_block;
+	//First let the helper emit it
+	cfg_result_package_t binary_results = emit_binary_expression(current_block, conditional_node);
 
-	//Add this to the array of user defined jumps
-	dynamic_array_add(&current_function_user_defined_jump_statements, branch);
+	//Update the final block
+	current_block = binary_results.final_block;
 
-	//Add this into the first block
-	add_statement(basic_block, branch);
+	//Extract the actual result assignee
+	three_addr_var_t* conditional_decider = binary_results.assignee;
+
+	//TODO really don't like this
+	u_int8_t type_signed = is_type_signed(conditional_decider->type);
+
+	/**
+	 * If the given operator does not set condition codes appropriately, then
+	 * we'll need to make that happen here
+	 */
+	if(does_operator_set_condition_codes(binary_results.operator) == FALSE){
+		//We'll need a test command for this
+		conditional_decider = emit_test_not_zero(current_block, conditional_decider, &(binary_results.operator));
+	}
+
+	//Flag that this sets condition codes
+	conditional_decider->sets_cc = TRUE;
+
+	//Now let's try to decide the branch type
+	branch_type_t branch_type = select_appropriate_branch_statement(binary_results.operator, branch_category, type_signed);
+
+	//Now we can finall spit this one out
+	instruction_t* branch_statement = emit_branch_statement(NULL, else_destination, conditional_decider, branch_type);
+	
+	//Store the if destination for later
+	branch_statement->var_record = if_destination;
+
+	//Add it into the block
+	add_statement(current_block, branch_statement);
+
+	//Add this into the array for later
+	dynamic_array_add(&current_function_user_defined_jump_statements, branch_statement);
+
+	//Update the final block
+	results.final_block = current_block;
+
+	return results;
 }
 
 
@@ -9091,6 +9124,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				current_block = ret_package.final_block;
 
 				//We'll need a block at the very end which we'll hit after we jump
+				symtab_variable_record_t* if_block = as
 				basic_block_t* else_block = basic_block_alloc_and_estimate();
 
 				//Save this here for later
