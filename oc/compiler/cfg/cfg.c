@@ -13,7 +13,6 @@
 */
 
 #include "cfg.h"
-#include <complex.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -3170,6 +3169,18 @@ static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, t
 
 
 /**
+ * Emit the conditional for a branch. This can be a ternary or binary expression
+ */
+static inline cfg_result_package_t emit_branch_conditional_expression(basic_block_t* starting_block, generic_ast_node_t* branch_node){
+	if(branch_node->ast_node_type == AST_NODE_TYPE_TERNARY_EXPRESSION){
+		return emit_ternary_expression(starting_block, branch_node);
+	} else {
+		return emit_binary_expression(starting_block, branch_node);
+	}
+}
+
+
+/**
  * Emit a branch statement with an if destination and else destination. We will also handle the emittal of the conditional node here
  * for the purposes of doing the branch. The returned result package will include the starting & ending blocks for the branch. The
  * branch category is also given and will be used when we're accounting for how to place things
@@ -3191,7 +3202,7 @@ static cfg_result_package_t emit_branch_v2(basic_block_t* starting_block, generi
 	 */
 	if(is_op_short_circuit_eligible(conditional_node->binary_operator) == FALSE){
 		//First let the helper emit it
-		cfg_result_package_t binary_results = emit_binary_expression(current_block, conditional_node);
+		cfg_result_package_t binary_results = emit_branch_conditional_expression(current_block, conditional_node);
 
 		//Update the final block
 		current_block = binary_results.final_block;
@@ -3469,7 +3480,7 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 	basic_block_t* current_block = starting_block;
 
 	//First let the helper emit it
-	cfg_result_package_t binary_results = emit_binary_expression(current_block, conditional_node);
+	cfg_result_package_t binary_results = emit_branch_conditional_expression(current_block, conditional_node);
 
 	//Update the final block
 	current_block = binary_results.final_block;
@@ -5521,28 +5532,10 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	//Grab a cursor to the first child
 	generic_ast_node_t* cursor = ternary_operation->first_child;
 
-	//Let's first process the conditional
-	cfg_result_package_t expression_package = emit_binary_expression(current_block, cursor);
-
-	//Reassign to be the true end block
-	current_block = expression_package.final_block;
-
-	//Store for later
-	three_addr_var_t* conditional_decider = expression_package.assignee;
-
-	//Extract the operator
-	ollie_token_t operator = expression_package.operator;
-
-	//If this is blank, we need a test instruction
-	if(operator == BLANK){
-		conditional_decider = emit_test_not_zero(current_block, expression_package.assignee, &operator);
-	}
-
-	//Select the jump type for our conditional. This is a normal branch, we aren't doing any inverting
-	branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
-
-	//emit the branch statement
-	emit_branch(current_block, if_block, else_block,  branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
+	/**
+	 * Let the helper emit the normal if branch/conditional expression here
+	 */
+	emit_branch_v2(current_block, cursor, if_block, else_block, BRANCH_CATEGORY_NORMAL);
 	
 	//Now we'll go through and process the two children
 	cursor = cursor->next_sibling;
@@ -6071,7 +6064,6 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			break;
 
 		case AST_NODE_TYPE_TERNARY_EXPRESSION:
-			//Emit the ternary expression
 			result_package = emit_ternary_expression(basic_block, expr_node);
 			break; 
 
