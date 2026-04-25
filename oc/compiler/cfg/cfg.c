@@ -9035,8 +9035,10 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					current_block = starting_block;
 				}
 
-				//There are two options here. We could see a regular continue or a conditional
-				//continue. If the child is null, then it is a regular continue
+				/**
+				 * There are two options here. We could see a regular continue or a conditional
+				 * continue. If the child is null, then it is a regular continue
+				 */
 				if(ast_cursor->first_child == NULL){
 					//Peek the continue block off of the stack
 					basic_block_t* continuing_to = peek(&continue_stack);
@@ -9053,29 +9055,14 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 				//Otherwise, we have a conditional continue here
 				} else {
-					//Emit the expression code into the current statement
-					cfg_result_package_t package = emit_expression(current_block, ast_cursor->first_child, TRUE);
-
-					//Store for later
-					three_addr_var_t* conditional_decider = package.assignee;
-
-					//Extract the operator
-					ollie_token_t operator = package.operator;
-
-					//If this is blank, we'll need a test instruction
-					if(operator == BLANK){
-						conditional_decider = emit_test_not_zero(current_block, package.assignee, &operator);
-					}
+					//Grab the conditional cursor
+					generic_ast_node_t* conditional_expression = ast_cursor->first_child;
 
 					//We'll need a new block here - this will count as a branch
 					basic_block_t* new_block = basic_block_alloc_and_estimate();
 
 					//Peek the continue block off of the stack
 					basic_block_t* continuing_to = peek(&continue_stack);
-
-					//Select the appropriate branch type using
-					//a normal jump
-					branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
 					/**
 					 * Now we will emit the branch like so
@@ -9085,7 +9072,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					 * else:
 					 * 	goto new block
 					 */
-					emit_branch(current_block, continuing_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
+					emit_branch_v2(current_block, conditional_expression, continuing_to, new_block, BRANCH_CATEGORY_NORMAL);
 
 					//And as we go forward, this new block will be the current block
 					current_block = new_block;
@@ -9549,8 +9536,10 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					current_block = starting_block;
 				}
 
-				//There are two options here. We could see a regular continue or a conditional
-				//continue. If the child is null, then it is a regular continue
+				/**
+				 * There are two options here. We could see a regular continue or a conditional
+				 * continue. If the child is null, then it is a regular continue
+				 */
 				if(ast_cursor->first_child == NULL){
 					//Peek the continue block off of the stack
 					basic_block_t* continuing_to = peek(&continue_stack);
@@ -9567,28 +9556,14 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				//Otherwise, we have a conditional continue here
 				} else {
-					//Emit the expression code into the current statement
-					cfg_result_package_t package = emit_expression(current_block, ast_cursor->first_child, TRUE);
-
-					//Store for later
-					three_addr_var_t* conditional_decider = package.assignee;
-
-					//Grab the operator out
-					ollie_token_t operator = package.operator;
-					
-					//If this is blank, we'll need a test instruction
-					if(operator == BLANK){
-						conditional_decider = emit_test_not_zero(current_block, package.assignee, &operator);
-					}
+					//Grab the conditional cursor
+					generic_ast_node_t* conditional_expression = ast_cursor->first_child;
 
 					//We'll need a new block here - this will count as a branch
 					basic_block_t* new_block = basic_block_alloc_and_estimate();
 
 					//Peek the continue block off of the stack
 					basic_block_t* continuing_to = peek(&continue_stack);
-
-					//Select the appropriate branch type, we will not use an inverse jump here
-					branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
 					/**
 					 * Now we will emit the branch like so
@@ -9598,7 +9573,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					 * else:
 					 * 	goto new block
 					 */
-					emit_branch(current_block, continuing_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
+					emit_branch_v2(current_block, conditional_expression, continuing_to, new_block, BRANCH_CATEGORY_NORMAL);
 
 					//And as we go forward, this new block will be the current block
 					current_block = new_block;
