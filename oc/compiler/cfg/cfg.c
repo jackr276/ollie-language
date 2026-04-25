@@ -3075,7 +3075,7 @@ instruction_t* emit_jump(basic_block_t* basic_block, basic_block_t* destination_
  *
  * This rule also handles all successor management required for the rule
  */
-void emit_branch(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, branch_type_t branch_type, three_addr_var_t* conditional_result, branch_category_t branch_category){
+static void emit_branch(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, branch_type_t branch_type, three_addr_var_t* conditional_result, branch_category_t branch_category){
 	//Emit the actual instruction here
 	instruction_t* branch_instruction = emit_branch_statement(if_destination, else_destination, conditional_result, branch_type);
 

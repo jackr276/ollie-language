@@ -2009,7 +2009,7 @@ static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* f
 	//	goto else
 	//else
 	//	goto second_half_block
-	emit_branch(original_block, else_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
+	//emit_branch(original_block, else_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
 
 	/**
 	 * HANDLING THE SECOND BLOCK
@@ -2047,7 +2047,7 @@ static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* f
 	// goto if_block
 	//else 
 	// goto else_block
-	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_INVERSE);
+	//emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_INVERSE);
 }
 
 
@@ -2088,52 +2088,38 @@ static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* f
  * t4 <- x + y
  * t5 <- x > t4
  * cbranch_nz .L13 else .L12
- */
 static void optimize_logical_or_branch_logic(symtab_function_record_t* function, instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
-	/**
 	 * We will always need two blocks - the original block and a new block
 	 * to store the second half of our short circuit logic
-	 */
 	basic_block_t* original_block = short_circuit_statment->block_contained_in;
 	basic_block_t* first_block;
 	basic_block_t* second_block;
 
-	/**
 	 * We need to perform some decoupling here. We will remove all of the successors
 	 * from the original block. This will allow us to add new ones in as we see fit
-	 */
 	remove_all_successors(original_block);
 
-	/**
 	 * We will need to create the data dependency graph here. This graph will be populated, and we will
 	 * eventually use it to determine how we need to split our block
-	 */
 	data_dependency_graph_t dependency_graph = dependency_graph_alloc(original_block->number_of_instructions);
 
 
-	/**
 	 * There is a possibility that the first/second operands
 	 * may just be non-temp values, or they may be actual
 	 * expression. We won't make any assumptions now, but
 	 * the types here will be used to express that in a readable
 	 * way
-	 */
 	short_circuit_operand_type_t op1_operand_type;
 	short_circuit_operand_type_t op2_operand_type;
 
-	/**
 	 * We'll either be storing an expression or an instruction
 	 * with which to split on
-	 */
 	instruction_t* first_half_assigned_at = NULL;
 	instruction_t* second_half_assigned_at = NULL;
 	three_addr_var_t* op1 = NULL;
 	three_addr_var_t* op2 = NULL;
-
-	/**
 	 * If this is a temp var(most common), we will
 	 * go back and find where it was assigned from
-	 */
 	if(op1->variable_type == VARIABLE_TYPE_TEMP){
 		op1_operand_type = SHORT_CIRCUIT_OPERAND_TYPE_EXPR;
 
@@ -2145,22 +2131,18 @@ static void optimize_logical_or_branch_logic(symtab_function_record_t* function,
 			first_half_assigned_at = first_half_assigned_at->previous_statement;
 		}
  
-	/**
 	 * Otherwise we have a non-temp var. If this is the
 	 * case, we'll just hang onto it in op1 and go on from
 	 * there
-	 */
 	} else {
 		op1_operand_type = SHORT_CIRCUIT_OPEREAND_TYPE_VAR;
 		op1 = short_circuit_statment->op1;
 	}
 
-	/**
 	 * Now do the same for op2
 	 *
 	 * If this is a temp var(most common), we will
 	 * go back and find where it was assigned from
-	 */
 	if(op2->variable_type == VARIABLE_TYPE_TEMP){
 		op2_operand_type = SHORT_CIRCUIT_OPERAND_TYPE_EXPR;
 
@@ -2172,53 +2154,39 @@ static void optimize_logical_or_branch_logic(symtab_function_record_t* function,
 			second_half_assigned_at = second_half_assigned_at->previous_statement;
 		}
  
-	/**
 	 * Otherwise we have a non-temp var. If this is the
 	 * case, we'll just hang onto it in op1 and go on from
 	 * there
-	 */
 	} else {
 		op2_operand_type = SHORT_CIRCUIT_OPEREAND_TYPE_VAR;
 		op2 = short_circuit_statment->op2;
 	}
 
-	/**
 	 * Is op1's operand type an expression? If so, we'll need to keep everything up
 	 * to and including the expression itself inside of our "first block"
-	 */
 	if(op1_operand_type == SHORT_CIRCUIT_OPERAND_TYPE_EXPR){
-		/**
 		 * The first block is the original, the second block will need to be allocated fresh
-		 */
 		first_block = original_block;
 		second_block = basic_block_alloc(original_block->estimated_execution_frequency, function);
 
-		/**
 		 * Now split the original block into two pieces. Everything *after* the operation that
 		 * assigns the first half cursor needs to go into a new block. We will use the bisect 
 		 * block helper to do this
-		 */
 		bisect_block(second_block, first_half_assigned_at->next_statement);
 
-	/**
 	 * Otherwise we have two options: 
 	 * 	1.) We have a second half cursor - great, we'll just take everything starting there downwards to
 	 * 		be our second half block
 	 * 	2.) We have no second half cursor - we'll just need to move the ending branch statement down
 	 * 		to the new block and leave everything else
-	 */
 	} else {
-		/**
 		 * The first block is still the original(for predecessor management), and the second
 		 * block needs to be created fresh
-		 */
 		first_block = original_block;
 		second_block = basic_block_alloc(original_block->estimated_execution_frequency, function);
 
 		if(op2_operand_type == SHORT_CIRCUIT_OPERAND_TYPE_EXPR){
-			/**
 			 * Split everything up to and including where the second half was assigned at
-			 */
 			bisect_block(second_block, second_half_assigned_at);
 
 		} else {
@@ -2236,13 +2204,11 @@ static void optimize_logical_or_branch_logic(symtab_function_record_t* function,
 	//block contains the second condition and nothing else after it
 	//The old branch and the compound and condition is now gone
 	
-	/**
 	 * HANDLING THE FIRST BLOCK
 	 *
 	 * The first block will exploit the logical or property that if the
 	 * first condition works, the second *should never execute*. We have
 	 * a normal branch here
-	 */
 	//We need the operator
 	ollie_token_t first_condition_op = first_half_cursor->op;
 	//And if the type is signed
@@ -2275,14 +2241,12 @@ static void optimize_logical_or_branch_logic(symtab_function_record_t* function,
 	//	goto if
 	//else
 	//	goto second_half_block
-	emit_branch(original_block, if_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
+	//emit_branch(original_block, if_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
 
-	/**
 	 * HANDLING THE SECOND BLOCK
 	 *
 	 * The second block is only reachable if the first condition is false. Therefore, if the second condition
 	 * is true, we can jump to our if target. Otherwise, go to the else target
-	 */
 	ollie_token_t second_condition_op = second_half_cursor->op;
 	//And if the type is signed
 	u_int8_t second_half_signed = is_type_signed(second_half_cursor->assignee->type);
@@ -2314,11 +2278,13 @@ static void optimize_logical_or_branch_logic(symtab_function_record_t* function,
 	// goto if_block
 	//else 
 	// goto else_block
-	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
+	//emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
 
 	//We can deallocate the dependency graph now
 	dependency_graph_dealloc(&dependency_graph);
 }
+
+*/
 
 
 /**
@@ -2452,7 +2418,7 @@ static void optimize_logical_and_inverse_branch_logic(symtab_function_record_t* 
 	//	goto if 
 	//else
 	//	goto second_half_block 
-	emit_branch(original_block, if_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
+	//emit_branch(original_block, if_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
 
 	/**
 	 * HANDLING THE SECOND BLOCK
@@ -2490,7 +2456,7 @@ static void optimize_logical_and_inverse_branch_logic(symtab_function_record_t* 
 	// goto if_block
 	//else 
 	// goto else_block
-	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
+	//emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
 }
 
 
@@ -2627,7 +2593,7 @@ static void optimize_logical_and_branch_logic(symtab_function_record_t* function
 	//	goto else
 	//else
 	//	goto second_half_block 
-	emit_branch(original_block, else_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
+	//emit_branch(original_block, else_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
 
 	/**
 	 * HANDLING THE SECOND BLOCK
@@ -2666,7 +2632,7 @@ static void optimize_logical_and_branch_logic(symtab_function_record_t* function
 	// goto if_block
 	//else 
 	// goto else_block
-	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_half_cursor->assignee, BRANCH_CATEGORY_NORMAL);
+	//emit_branch(second_half_block, if_target, else_target, second_half_branch, second_half_cursor->assignee, BRANCH_CATEGORY_NORMAL);
 }
 
 
@@ -2804,7 +2770,7 @@ static void optimize_short_circuit_logic(symtab_function_record_t* function, dyn
 			} else {
 				//Most common case
 				if(inverse_branch == FALSE){
-					optimize_logical_or_branch_logic(function, short_circuit_statement, if_target, else_target);
+					//optimize_logical_or_branch_logic(function, short_circuit_statement, if_target, else_target);
 				} else {
 					optimize_logical_or_inverse_branch_logic(function, short_circuit_statement, if_target, else_target);
 				}
@@ -3403,7 +3369,7 @@ cfg_t* optimize(cfg_t* cfg){
 		 * Now that we've sweeped everything, we know that what branches are left must be useful. This means
 		 * that we can expend the compute of optimizing the short circuit logic on them, and we will do so here
 		 */
-		optimize_short_circuit_logic(current_function, current_function_blocks);
+		//optimize_short_circuit_logic(current_function, current_function_blocks);
 		
 		/**
 		 * PASS 4: Clean algorithm
