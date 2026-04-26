@@ -13770,31 +13770,12 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 	 * Keep going after the first iteration so long as we keep seeing the ::
 	 */
 	do {
+		//Need to see an ident first
+		lookahead = get_next_token(stream, &parser_line_num);
 
 		//If this isn't an identifier, we fail out
 		if(lookahead.tok != IDENT){
 			sprintf(info, "Expected identifier in namespace declaration but found \"%s\"", lexitem_to_string(&lookahead));
-			return print_and_return_error(info, parser_line_num);
-		}
-
-	} while(lookahead.tok == COLONCOLON);
-
-
-
-	//Refresh the lookahead
-	lookahead = get_next_token(stream, &parser_line_num);
-
-	/**
-	 * We are able to see the :: separator over and over again
-	 * if we want to declare a more complex namespace immediately
-	 */
-	while(lookahead.tok == COLONCOLON){
-		//Refresh the lookahead again, we should see an identifier now
-		lookahead = get_next_token(stream, &parser_line_num);
-
-		//If we don't have an identifier then we fail out
-		if(lookahead.tok != IDENT){
-			sprintf(info, "Expected identifier in after :: in namespace declaration but got \"%s\"", lexitem_to_string(&lookahead));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -13835,13 +13816,14 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 		 */
 		function_namespace_t* new_namepsace = create_namespace_record(function_symtab, namespace_name);
 
-
 		//This now is the current namespace
 		current_namespace = new_namepsace;
 
 		//Refresh the lookahead
 		lookahead = get_next_token(stream, &parser_line_num);
-	}
+
+		//We keep going so long as we see the :: separator
+	} while(lookahead.tok == COLONCOLON);
 
 	/**
 	 * By the time we get out down here we should be seeing an L_CURLY. If we don't then fail out
