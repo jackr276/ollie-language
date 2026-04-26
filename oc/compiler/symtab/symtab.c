@@ -950,6 +950,22 @@ void exit_namespace(function_symtab_t* symtab){
 
 
 /**
+ * Set the current namespace to be a given record. This should be used when we need to jump
+ * multiple namespaces at a time
+ */
+void set_current_namespace(function_symtab_t* symtab, function_namespace_t* new_current_namespace){
+	//Just to be safe here
+	if(new_current_namespace == NULL){
+		fprintf(stderr, "Fatal internal compiler error: attempt to enter a null namespace\n");
+		exit(1);
+	}
+
+	//Just set current to this
+	symtab->current = new_current_namespace;
+}
+
+
+/**
  * Dynamically allocate and create a type record
  *
  * The hash_type function automatically allows us to distinguish between

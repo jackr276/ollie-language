@@ -13757,20 +13757,29 @@ static generic_ast_node_t* namespace_member(ollie_token_stream_t* token_stream){
  * BNF Rule: <namespace-partition> ::= namespace <identifier>{::<identifier>}? { <namespace_member>+ }
  */
 static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
-	//Refresh the lookahead
-	lexitem_t lookahead = get_next_token(stream, &parser_line_num);
-
-	//If this isn't an identifier, we fail out
-	if(lookahead.tok != IDENT){
-		sprintf(info, "Expected identifier in namespace declaration but found \"%s\"", lexitem_to_string(&lookahead));
-		return print_and_return_error(info, parser_line_num);
-	}
+	//Lookahead token
+	lexitem_t lookahead;
 
 	//We'll need to keep track of the current namespace
 	function_namespace_t* current_namespace = function_symtab->current;
 
 	//Hang onto whatever the namespace was when we got here
 	function_namespace_t* old_parent = current_namespace;
+
+	/**
+	 * Keep going after the first iteration so long as we keep seeing the ::
+	 */
+	do {
+
+		//If this isn't an identifier, we fail out
+		if(lookahead.tok != IDENT){
+			sprintf(info, "Expected identifier in namespace declaration but found \"%s\"", lexitem_to_string(&lookahead));
+			return print_and_return_error(info, parser_line_num);
+		}
+
+	} while(lookahead.tok == COLONCOLON);
+
+
 
 	//Refresh the lookahead
 	lookahead = get_next_token(stream, &parser_line_num);
@@ -13825,6 +13834,7 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 		 * current one
 		 */
 		function_namespace_t* new_namepsace = create_namespace_record(function_symtab, namespace_name);
+
 
 		//This now is the current namespace
 		current_namespace = new_namepsace;
