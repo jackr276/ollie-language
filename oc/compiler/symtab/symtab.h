@@ -467,6 +467,12 @@ void enter_namespace(function_symtab_t* symtab, function_namespace_t* new_namesp
 void exit_namespace(function_symtab_t* symtab);
 
 /**
+ * Set the current namespace to be a given record. This should be used when we need to jump
+ * multiple namespaces at a time
+ */
+void set_current_namespace(function_symtab_t* symtab, function_namespace_t* new_current_namespace);
+
+/**
  * Create a type record for the symbol table
  */
 symtab_type_record_t* create_type_record(generic_type_t* type);
