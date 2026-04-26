@@ -13819,28 +13819,41 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 		//This now is the current namespace
 		current_namespace = new_namepsace;
 
+		//Enter this new namespace
+		enter_namespace(function_symtab, current_namespace);
+
 		//Refresh the lookahead
 		lookahead = get_next_token(stream, &parser_line_num);
 
-		//We keep going so long as we see the :: separator
-	} while(lookahead.tok == COLONCOLON);
+		/**
+		 * Exit case - we've seen the L_CURLY so we are ready
+		 * to stop processing
+		 */
+		if(lookahead.tok == L_CURLY){
+			//Push this onto the stack for matching later
+			push_token(&grouping_stack, lookahead);
 
-	/**
-	 * By the time we get out down here we should be seeing an L_CURLY. If we don't then fail out
-	 */
-	if(lookahead.tok != L_CURLY){
-		sprintf(info, "Expected { after namespace declaration but instead found \"%s\"", lexitem_to_string(&lookahead));
-		return print_and_return_error(info, parser_line_num);
-	}
+			break;
 
-	//Push this onto the stack for matching later
-	push_token(&grouping_stack, lookahead);
+		/**
+		 * Continue case - we've seen a :: so we keep
+		 * going in the loop
+		 */
+		} else if(lookahead.tok == COLONCOLON){
+			continue;
+
+		/**
+		 * Fail case - we've seen some weird issue here so we fail
+		 */
+		} else {
+			sprintf(info, "Expected { or :: after namespace declaration but instead found \"%s\"", lexitem_to_string(&lookahead));
+			return print_and_return_error(info, parser_line_num);
+		}
+
+	} while(TRUE);
 
 	//We're now safe to allocate this ast node
 	generic_ast_node_t* namespace_node = ast_node_alloc(AST_NODE_TYPE_NAMESPACE_DECLARATION, SIDE_TYPE_LEFT);
-
-	//Set the current namespace to be what we've determined is current
-	set_current_namespace(function_symtab, current_namespace);
 
 	//Seed the lookahead for our search
 	lookahead = get_next_token(stream, &parser_line_num);
@@ -13871,13 +13884,16 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 		lookahead = get_next_token(stream, &parser_line_num);
 	}
 
-	//Now that we are done, reset the current namespace to be what we had previously
-	set_current_namespace(function_symtab, old_parent);
-
 	//Now that we've exited we need to match off of the grouping stack
 	if(pop_token(&grouping_stack).tok != L_CURLY){
 		return print_and_return_error("Mismatched curly braces detected", parser_line_num);
 	}
+
+	/**
+	 * Once we're done, we will escape back up to the old parent namespace. We do this
+	 * becuase we don't know how many levels down we are, so just exiting will not work
+	 */
+	set_current_namespace(function_symtab, old_parent);
 
 	return namespace_node;
 }
