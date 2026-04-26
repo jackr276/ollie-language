@@ -139,7 +139,7 @@ char* lexitem_to_string(lexitem_t* lexitem){
 		case DONE:
 			return "DONE";
 		case NAMESPACE:
-			return "NAMESPACE";
+			return "namespace";
 		case IDENT:
 		case FUNC_CONST:
 		case STR_CONST:

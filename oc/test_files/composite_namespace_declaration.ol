@@ -5,7 +5,13 @@
 */
 
 
-namespace composite::namespace {
+namespace composite::nmspace {
+	pub fn my_fn() -> i32 {
+		ret 5;
+	}
+}
+
+namespace other::nmspace {
 	pub fn my_fn() -> i32 {
 		ret 5;
 	}
@@ -14,5 +20,5 @@ namespace composite::namespace {
 
 //Should return 5 if everything is working
 pub fn main() -> i32 {
-	ret @composite::namespace::my_fn();
+	ret @composite::nmspace::my_fn() + @other::nmspace::my_fn();
 }
