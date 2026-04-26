@@ -13747,7 +13747,10 @@ static generic_ast_node_t* namespace_member(ollie_token_stream_t* token_stream){
 /**
  * Process the new namespace directive. A new namespace partition itself contains one or
  * many declaration partitions. Namespaces may not be empty. We may also declare more than
- * one namespace in this way. This is usually done by the user for code readability purposes
+ * one namespace in this way. This is usually done by the user for code readability purposes. 
+ * When we do declare one namespace like this, we consider it to be a fresh declaration entirely.
+ * In other words, a user can't try to already have namespace1{} declared and then go try
+ * to declare namespace1::namespace2{} separately, becuase namespace1 already exists
  *
  * NOTE: By the time we get here, we've already seen and consumed "namespace"
  *
@@ -13762,6 +13765,9 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 		sprintf(info, "Expected identifier in namespace declaration but found \"%s\"", lexitem_to_string(&lookahead));
 		return print_and_return_error(info, parser_line_num);
 	}
+
+	//We'll need to keep track of the current namespace
+	function_namespace_t* current_namespace = NULL;
 
 	//Refresh the lookahead
 	lookahead = get_next_token(stream, &parser_line_num);
@@ -13780,20 +13786,43 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 			return print_and_return_error(info, parser_line_num);
 		}
 
+		//Keep a reference to this for later on
+		char* namespace_name = lookahead.lexeme.string;
+
+		/**
+		 * We now need to search to make sure that we don't have duplicate values
+		 * here for this namespace declaration. We will search the function symtab
+		 * for this. It is actually ok for us to have a function namespace 
+		 * that matches the name of something else that isn't another function
+		 * namespace
+		 *
+		 * We are able to have namespaces that match function names, there is no conflict
+		 * in that
+		 */
+		function_namespace_t* namespace = lookup_namespace_under_current(function_symtab, namespace_name);
+
+		//If we found one, then we can't do this
+		if(namespace != NULL){
+			//Accurate printing based on whether or not we're in the default namespace
+			if(function_symtab->current->is_default == TRUE){
+				sprintf(info, "Namespace \"%s\" has already been declared under the top level namespace",
+							generate_fully_qualified_namespace_name(namespace).string);
+			} else {
+				sprintf(info, "Namespace \"%s\" has already been declared under the parent namespace \"%s\"",
+						generate_fully_qualified_namespace_name(namespace).string,
+						generate_fully_qualified_namespace_name(function_symtab->current).string);
+			}
+
+			return print_and_return_error(info, parser_line_num);
+		}
+
 		//Refresh the lookahead
 		lookahead = get_next_token(stream, &parser_line_num);
 	}
 
-	//Once we get here we need to push back the overconsumed token
-	push_back_token(stream, &parser_line_num);
-
-	//TODO BAD
-	//Keep a reference to this for later on
-	char* namespace_name = lookahead.lexeme.string;
-
-	//We now need to see an L_CURLY 
-	lookahead = get_next_token(stream, &parser_line_num);
-
+	/**
+	 * By the time we get out down here we should be seeing an L_CURLY. If we don't then fail out
+	 */
 	if(lookahead.tok != L_CURLY){
 		sprintf(info, "Expected { after namespace declaration but instead found \"%s\"", lexitem_to_string(&lookahead));
 		return print_and_return_error(info, parser_line_num);
@@ -13801,35 +13830,6 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 
 	//Push this onto the stack for matching later
 	push_token(&grouping_stack, lookahead);
-
-	/**
-	 * We now need to search to make sure that we don't have duplicate values
-	 * here for this namespace declaration. We will search the function symtab
-	 * for this. It is actually ok for us to have a function namespace 
-	 * that matches the name of something else that isn't another function
-	 * namespace
-	 *
-	 * We are able to have namespaces that match function names, there is no conflict
-	 * in that
-	 */
-
-	//Do we have a namespace named this already underneath the current parent?
-	function_namespace_t* namespace = lookup_namespace_under_current(function_symtab, namespace_name);
-
-	//If we found one, then we can't do this
-	if(namespace != NULL){
-		//Accurate printing based on whether or not we're in the default namespace
-		if(function_symtab->current->is_default == TRUE){
-			sprintf(info, "Namespace \"%s\" has already been declared under the top level namespace",
-		   				generate_fully_qualified_namespace_name(namespace).string);
-		} else {
-			sprintf(info, "Namespace \"%s\" has already been declared under the parent namespace \"%s\"",
-		   			generate_fully_qualified_namespace_name(namespace).string,
-		   			generate_fully_qualified_namespace_name(function_symtab->current).string);
-		}
-
-		return print_and_return_error(info, parser_line_num);
-	}
 
 	//Otherwise, we can create this namespace
 	function_namespace_t* new_namespace = create_namespace_record(function_symtab, namespace_name);
