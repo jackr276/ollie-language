@@ -13746,11 +13746,12 @@ static generic_ast_node_t* namespace_member(ollie_token_stream_t* token_stream){
 
 /**
  * Process the new namespace directive. A new namespace partition itself contains one or
- * many declaration partitions. Namespaces may not be empty. 
+ * many declaration partitions. Namespaces may not be empty. We may also declare more than
+ * one namespace in this way. This is usually done by the user for code readability purposes
  *
  * NOTE: By the time we get here, we've already seen and consumed "namespace"
  *
- * BNF Rule: <namespace-partition> ::= namespace <identifier> { <namespace_member>+ }
+ * BNF Rule: <namespace-partition> ::= namespace <identifier>{::<identifier>}? { <namespace_member>+ }
  */
 static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 	//Refresh the lookahead
@@ -13762,6 +13763,31 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 		return print_and_return_error(info, parser_line_num);
 	}
 
+	//Refresh the lookahead
+	lookahead = get_next_token(stream, &parser_line_num);
+
+	/**
+	 * We are able to see the :: separator over and over again
+	 * if we want to declare a more complex namespace immediately
+	 */
+	while(lookahead.tok == COLONCOLON){
+		//Refresh the lookahead again, we should see an identifier now
+		lookahead = get_next_token(stream, &parser_line_num);
+
+		//If we don't have an identifier then we fail out
+		if(lookahead.tok != IDENT){
+			sprintf(info, "Expected identifier in after :: in namespace declaration but got \"%s\"", lexitem_to_string(&lookahead));
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//Refresh the lookahead
+		lookahead = get_next_token(stream, &parser_line_num);
+	}
+
+	//Once we get here we need to push back the overconsumed token
+	push_back_token(stream, &parser_line_num);
+
+	//TODO BAD
 	//Keep a reference to this for later on
 	char* namespace_name = lookahead.lexeme.string;
 
