@@ -13767,7 +13767,10 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 	}
 
 	//We'll need to keep track of the current namespace
-	function_namespace_t* current_namespace = NULL;
+	function_namespace_t* current_namespace = function_symtab->current;
+
+	//Hang onto whatever the namespace was when we got here
+	function_namespace_t* old_parent = current_namespace;
 
 	//Refresh the lookahead
 	lookahead = get_next_token(stream, &parser_line_num);
@@ -13799,22 +13802,32 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 		 * We are able to have namespaces that match function names, there is no conflict
 		 * in that
 		 */
-		function_namespace_t* namespace = lookup_namespace_under_current(function_symtab, namespace_name);
+		function_namespace_t* found_namespace = lookup_namespace_under_parent(current_namespace, namespace_name);
 
 		//If we found one, then we can't do this
-		if(namespace != NULL){
+		if(found_namespace != NULL){
 			//Accurate printing based on whether or not we're in the default namespace
 			if(function_symtab->current->is_default == TRUE){
 				sprintf(info, "Namespace \"%s\" has already been declared under the top level namespace",
-							generate_fully_qualified_namespace_name(namespace).string);
+							generate_fully_qualified_namespace_name(found_namespace).string);
 			} else {
 				sprintf(info, "Namespace \"%s\" has already been declared under the parent namespace \"%s\"",
-						generate_fully_qualified_namespace_name(namespace).string,
-						generate_fully_qualified_namespace_name(function_symtab->current).string);
+						generate_fully_qualified_namespace_name(found_namespace).string,
+						generate_fully_qualified_namespace_name(current_namespace).string);
 			}
 
 			return print_and_return_error(info, parser_line_num);
 		}
+
+		/**
+		 * Now that we are certain that this is not a duplicate, we will create this new namepace
+		 * underneath the current one that we have. Once we've done this, this new namespace will be the
+		 * current one
+		 */
+		function_namespace_t* new_namepsace = create_namespace_record(function_symtab, namespace_name);
+
+		//This now is the current namespace
+		current_namespace = new_namepsace;
 
 		//Refresh the lookahead
 		lookahead = get_next_token(stream, &parser_line_num);
@@ -13831,14 +13844,11 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 	//Push this onto the stack for matching later
 	push_token(&grouping_stack, lookahead);
 
-	//Otherwise, we can create this namespace
-	function_namespace_t* new_namespace = create_namespace_record(function_symtab, namespace_name);
-
 	//We're now safe to allocate this ast node
 	generic_ast_node_t* namespace_node = ast_node_alloc(AST_NODE_TYPE_NAMESPACE_DECLARATION, SIDE_TYPE_LEFT);
 
-	//We are now inside of this namespace
-	enter_namespace(function_symtab, new_namespace);
+	//Set the current namespace to be what we've determined is current
+	set_current_namespace(function_symtab, current_namespace);
 
 	//Seed the lookahead for our search
 	lookahead = get_next_token(stream, &parser_line_num);
@@ -13869,8 +13879,8 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 		lookahead = get_next_token(stream, &parser_line_num);
 	}
 
-	//Now that we are done we can leave this namespace
-	exit_namespace(function_symtab);
+	//Now that we are done, reset the current namespace to be what we had previously
+	set_current_namespace(function_symtab, old_parent);
 
 	//Now that we've exited we need to match off of the grouping stack
 	if(pop_token(&grouping_stack).tok != L_CURLY){
