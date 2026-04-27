@@ -8103,8 +8103,20 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		 * need to jump to the final exit block. If it's not NULL, then we're going 
 		 * to need to jump to a new conditional block for the else-if/else that we
 		 * need to emit next
+		 *
+		 *
+		 * There are 2 options here: the cursor could be another chained else-if statement, *or* it could
+		 * be a final else statement. If the latter is the case, we will need to emit the final else case
+		 * here inside of our conditional
 		 */
 		if(cursor != NULL){
+			switch(cursor->ast_node_type){
+
+				//Should be impossible to hit
+				default:
+					fprintf(stderr, "Fatal internal compiler error: invalid node type discovered in else-if emitter\n");
+					exit(1);
+			}
 			//Hang onto the old "entry"
 			basic_block_t* old_entry_block_holder = current_entry_block;
 
