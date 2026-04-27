@@ -113,7 +113,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 static cfg_result_package_t visit_let_statement(basic_block_t* basic_block, generic_ast_node_t* node);
 static void visit_static_let_statement(generic_ast_node_t* node);
 static inline void visit_static_declare_statement(generic_ast_node_t* node);
-static cfg_result_package_t visit_if_statement_v2(generic_ast_node_t* root_node);
+static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node);
@@ -3186,8 +3186,6 @@ static inline cfg_result_package_t emit_branch_conditional_expression(basic_bloc
  * Emit a branch statement with an if destination and else destination. We will also handle the emittal of the conditional node here
  * for the purposes of doing the branch. The returned result package will include the starting & ending blocks for the branch. The
  * branch category is also given and will be used when we're accounting for how to place things
- *
- * TODO DEAL WITH "comes from fp comparison"
  */
 static cfg_result_package_t emit_branch_v2(basic_block_t* starting_block, generic_ast_node_t* conditional_node, basic_block_t* if_block, basic_block_t* else_block, branch_category_t branch_category){
 	//Allcoate the results
@@ -3212,9 +3210,6 @@ static cfg_result_package_t emit_branch_v2(basic_block_t* starting_block, generi
 		//Extract the actual result assignee
 		three_addr_var_t* conditional_decider = binary_results.assignee;
 
-		//TODO really don't like this
-		u_int8_t type_signed = is_type_signed(conditional_decider->type);
-
 		/**
 		 * If the given operator does not set condition codes appropriately, then
 		 * we'll need to make that happen here
@@ -3222,6 +3217,27 @@ static cfg_result_package_t emit_branch_v2(basic_block_t* starting_block, generi
 		if(does_operator_set_condition_codes(binary_results.operator) == FALSE){
 			//We'll need a test command for this
 			conditional_decider = emit_test_not_zero(current_block, conditional_decider, &(binary_results.operator));
+		}
+
+		/**
+		 * Let's try to grab the final result type. Remember that the comparison type may be different than
+		 * the actual assignee type. If we can grab it then we will use that, otherwise we will use
+		 * the assignee type
+		 */
+		u_int8_t type_signed;
+		if(current_block->exit_statement != NULL
+			&& is_binary_operation(current_block->exit_statement)
+			&& variables_equal(current_block->exit_statement->assignee, conditional_decider, FALSE) == TRUE){
+
+			//If we have a result type use that, otherwise take from op1
+			if(current_block->exit_statement->type_storage.result_type != NULL){
+				type_signed = is_type_signed(current_block->exit_statement->type_storage.result_type);
+			} else {
+				type_signed = is_type_signed(current_block->exit_statement->op1->type);
+			}
+
+		} else {
+			type_signed = is_type_signed(conditional_decider->type);
 		}
 
 		//Flag that this sets condition codes
@@ -7932,7 +7948,7 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 /**
  * Process an if-else-if statement into CFG form, handling all possible contigencies
  */
-static cfg_result_package_t visit_if_statement_v2(generic_ast_node_t* root_node){
+static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	//Final result package
 	cfg_result_package_t if_results_package = {NULL, NULL, NULL, BLANK};
 
@@ -8936,7 +8952,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 		
 			case AST_NODE_TYPE_IF_STMT:
 				//We'll now enter the if statement
-				generic_results = visit_if_statement_v2(ast_cursor);
+				generic_results = visit_if_statement(ast_cursor);
 			
 				//Once we have the if statement start, we'll add it in as a successor
 				if(starting_block == NULL){
@@ -9428,7 +9444,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 		
 			case AST_NODE_TYPE_IF_STMT:
 				//We'll now enter the if statement
-				generic_results = visit_if_statement_v2(ast_cursor);
+				generic_results = visit_if_statement(ast_cursor);
 			
 				//Once we have the if statement start, we'll add it in as a successor
 				if(starting_block == NULL){
