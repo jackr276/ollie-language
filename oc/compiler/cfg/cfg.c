@@ -7967,6 +7967,44 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 
 
 /**
+ * Translate an if-else-if-else statement into CFG form, handling all possible contingencies
+ * and control flow situations
+ *
+ *
+ * Remember how a full if-else-if-else is handled, with the first child nodes being a conditional
+ * and a compound statement, followed by any else if and/or else compound statements. A full
+ * example is below
+ *
+ * 	if(x == 0) {
+ * 		x += 1;
+ *
+ * 	} else if (x == 1) {
+ * 		x += 2;
+ *
+ * 	} else if (x == 2) {
+ * 		x += 3;
+ *
+ * 	} else {
+ * 		x += 4;
+ * 	}
+ *
+ * 	In AST format:
+ * 										 <if - statement>
+ * 			/			/						|			 					\				\
+ * 	<conditional>	<compound-stmt>	 		<else-if>					   <else-if>		<compound-stmt>
+ * 											/	\						 / 	 		\
+ * 								<conditional>   <compound-stmt>		<conditional>  <compound-stmt>
+ *
+ * 	This is what we'll need to parse through and translate. This structure is chosen so that we have a minimal
+ * 	memory footprint. We rely on this context being completely understood by the CFG converter here to work
+ */
+static cfg_result_package_t visit_if_statement_v2(generic_ast_node_t* root_node){
+	//TODO
+
+}
+
+
+/**
  * Process an if-else-if statement into CFG form, handling all possible contigencies
  */
 static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
