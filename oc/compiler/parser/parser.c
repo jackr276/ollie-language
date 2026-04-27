@@ -13746,73 +13746,114 @@ static generic_ast_node_t* namespace_member(ollie_token_stream_t* token_stream){
 
 /**
  * Process the new namespace directive. A new namespace partition itself contains one or
- * many declaration partitions. Namespaces may not be empty. 
+ * many declaration partitions. Namespaces may not be empty. We may also declare more than
+ * one namespace in this way. This is usually done by the user for code readability purposes. 
+ * When we do declare one namespace like this, we consider it to be a fresh declaration entirely.
+ * In other words, a user can't try to already have namespace1{} declared and then go try
+ * to declare namespace1::namespace2{} separately, becuase namespace1 already exists
  *
  * NOTE: By the time we get here, we've already seen and consumed "namespace"
  *
- * BNF Rule: <namespace-partition> ::= namespace <identifier> { <namespace_member>+ }
+ * BNF Rule: <namespace-partition> ::= namespace <identifier>{::<identifier>}? { <namespace_member>+ }
  */
 static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
-	//Refresh the lookahead
-	lexitem_t lookahead = get_next_token(stream, &parser_line_num);
+	//Lookahead token
+	lexitem_t lookahead;
 
-	//If this isn't an identifier, we fail out
-	if(lookahead.tok != IDENT){
-		sprintf(info, "Expected identifier in namespace declaration but found \"%s\"", lexitem_to_string(&lookahead));
-		return print_and_return_error(info, parser_line_num);
-	}
+	//We'll need to keep track of the current namespace
+	function_namespace_t* current_namespace = function_symtab->current;
 
-	//Keep a reference to this for later on
-	char* namespace_name = lookahead.lexeme.string;
-
-	//We now need to see an L_CURLY 
-	lookahead = get_next_token(stream, &parser_line_num);
-
-	if(lookahead.tok != L_CURLY){
-		sprintf(info, "Expected { after namespace declaration but instead found \"%s\"", lexitem_to_string(&lookahead));
-		return print_and_return_error(info, parser_line_num);
-	}
-
-	//Push this onto the stack for matching later
-	push_token(&grouping_stack, lookahead);
+	//Hang onto whatever the namespace was when we got here
+	function_namespace_t* old_parent = current_namespace;
 
 	/**
-	 * We now need to search to make sure that we don't have duplicate values
-	 * here for this namespace declaration. We will search the function symtab
-	 * for this. It is actually ok for us to have a function namespace 
-	 * that matches the name of something else that isn't another function
-	 * namespace
-	 *
-	 * We are able to have namespaces that match function names, there is no conflict
-	 * in that
+	 * Keep going after the first iteration so long as we keep seeing the ::
 	 */
+	do {
+		//Need to see an ident first
+		lookahead = get_next_token(stream, &parser_line_num);
 
-	//Do we have a namespace named this already underneath the current parent?
-	function_namespace_t* namespace = lookup_namespace_under_current(function_symtab, namespace_name);
-
-	//If we found one, then we can't do this
-	if(namespace != NULL){
-		//Accurate printing based on whether or not we're in the default namespace
-		if(function_symtab->current->is_default == TRUE){
-			sprintf(info, "Namespace \"%s\" has already been declared under the top level namespace",
-		   				generate_fully_qualified_namespace_name(namespace).string);
-		} else {
-			sprintf(info, "Namespace \"%s\" has already been declared under the parent namespace \"%s\"",
-		   			generate_fully_qualified_namespace_name(namespace).string,
-		   			generate_fully_qualified_namespace_name(function_symtab->current).string);
+		//If this isn't an identifier, we fail out
+		if(lookahead.tok != IDENT){
+			sprintf(info, "Expected identifier in namespace declaration but found \"%s\"", lexitem_to_string(&lookahead));
+			return print_and_return_error(info, parser_line_num);
 		}
 
-		return print_and_return_error(info, parser_line_num);
-	}
+		//Keep a reference to this for later on
+		char* namespace_name = lookahead.lexeme.string;
 
-	//Otherwise, we can create this namespace
-	function_namespace_t* new_namespace = create_namespace_record(function_symtab, namespace_name);
+		/**
+		 * We now need to search to make sure that we don't have duplicate values
+		 * here for this namespace declaration. We will search the function symtab
+		 * for this. It is actually ok for us to have a function namespace 
+		 * that matches the name of something else that isn't another function
+		 * namespace
+		 *
+		 * We are able to have namespaces that match function names, there is no conflict
+		 * in that
+		 */
+		function_namespace_t* found_namespace = lookup_namespace_under_parent(current_namespace, namespace_name);
+
+		//If we found one, then we can't do this
+		if(found_namespace != NULL){
+			//Accurate printing based on whether or not we're in the default namespace
+			if(function_symtab->current->is_default == TRUE){
+				sprintf(info, "Namespace \"%s\" has already been declared under the top level namespace",
+							generate_fully_qualified_namespace_name(found_namespace).string);
+			} else {
+				sprintf(info, "Namespace \"%s\" has already been declared under the parent namespace \"%s\"",
+						generate_fully_qualified_namespace_name(found_namespace).string,
+						generate_fully_qualified_namespace_name(current_namespace).string);
+			}
+
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		/**
+		 * Now that we are certain that this is not a duplicate, we will create this new namepace
+		 * underneath the current one that we have. Once we've done this, this new namespace will be the
+		 * current one
+		 */
+		function_namespace_t* new_namepsace = create_namespace_record(function_symtab, namespace_name);
+
+		//This now is the current namespace
+		current_namespace = new_namepsace;
+
+		//Enter this new namespace
+		enter_namespace(function_symtab, current_namespace);
+
+		//Refresh the lookahead
+		lookahead = get_next_token(stream, &parser_line_num);
+
+		/**
+		 * Exit case - we've seen the L_CURLY so we are ready
+		 * to stop processing
+		 */
+		if(lookahead.tok == L_CURLY){
+			//Push this onto the stack for matching later
+			push_token(&grouping_stack, lookahead);
+
+			break;
+
+		/**
+		 * Continue case - we've seen a :: so we keep
+		 * going in the loop
+		 */
+		} else if(lookahead.tok == COLONCOLON){
+			continue;
+
+		/**
+		 * Fail case - we've seen some weird issue here so we fail
+		 */
+		} else {
+			sprintf(info, "Expected { or :: after namespace declaration but instead found \"%s\"", lexitem_to_string(&lookahead));
+			return print_and_return_error(info, parser_line_num);
+		}
+
+	} while(TRUE);
 
 	//We're now safe to allocate this ast node
 	generic_ast_node_t* namespace_node = ast_node_alloc(AST_NODE_TYPE_NAMESPACE_DECLARATION, SIDE_TYPE_LEFT);
-
-	//We are now inside of this namespace
-	enter_namespace(function_symtab, new_namespace);
 
 	//Seed the lookahead for our search
 	lookahead = get_next_token(stream, &parser_line_num);
@@ -13843,13 +13884,16 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 		lookahead = get_next_token(stream, &parser_line_num);
 	}
 
-	//Now that we are done we can leave this namespace
-	exit_namespace(function_symtab);
-
 	//Now that we've exited we need to match off of the grouping stack
 	if(pop_token(&grouping_stack).tok != L_CURLY){
 		return print_and_return_error("Mismatched curly braces detected", parser_line_num);
 	}
+
+	/**
+	 * Once we're done, we will escape back up to the old parent namespace. We do this
+	 * becuase we don't know how many levels down we are, so just exiting will not work
+	 */
+	set_current_namespace(function_symtab, old_parent);
 
 	return namespace_node;
 }
