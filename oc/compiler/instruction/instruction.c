@@ -2284,7 +2284,14 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
 			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- Test if not zero ");
-			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			
+			//Print out either the constant or what is being tested
+			if(stmt->op1 != NULL){
+				print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			} else {
+				print_three_addr_constant(stdout, stmt->op1_const);
+			}
+
 			fprintf(fl, "\n");
 
 			break;
@@ -5925,6 +5932,25 @@ instruction_t* emit_test_if_not_zero_statement(three_addr_var_t* destination_var
 	//The assignee/op1 is passed through
 	stmt->assignee = destination_variable;
 	stmt->op1 = being_tested;
+
+	//Note what kind of node this is
+	stmt->statement_type = THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT;
+
+	//And give the statement back
+	return stmt;
+}
+
+
+/**
+ * Emit a "test if not 0 three address code statement"
+ */
+instruction_t* emit_test_if_not_zero_for_const_statement(three_addr_var_t* destination_variable, three_addr_const_t* being_tested){
+	//First we allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//The assignee/op1 is passed through
+	stmt->assignee = destination_variable;
+	stmt->op1_const = being_tested;
 
 	//Note what kind of node this is
 	stmt->statement_type = THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT;

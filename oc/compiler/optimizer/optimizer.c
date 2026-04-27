@@ -93,36 +93,6 @@ static inline int32_t increment_and_get(){
 
 
 /**
- * Create a basic block and add it into the set of all function blocks
- */
-static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency, symtab_function_record_t* function){
-	//Allocate the block
-	basic_block_t* created = calloc(1, sizeof(basic_block_t));
-
-	//Put the block ID in
-	created->block_id = increment_and_get();
-
-	//By default we're normal here
-	created->block_type = BLOCK_TYPE_NORMAL;
-
-	//What is the estimated execution cost of this block?
-	created->estimated_execution_frequency = estimated_execution_frequency;
-
-	//Let's add in what function this block came from
-	created->function_defined_in = function;
-
-	//Add this into the dynamic array
-	dynamic_array_add(&(cfg_reference->created_blocks), created);
-
-	//Add it into the function's block array
-	dynamic_array_add(&(function->function_blocks), created);
-
-	//Give it back
-	return created;
-}
-
-
-/**
  * Reset all of the marked instructions for a given block
  */
 static inline void reset_marks_for_block(basic_block_t* block){
@@ -307,7 +277,6 @@ void remove_statement(instruction_t* stmt){
  *   E
  *
  * NOTE: this rule does *no* successor management or branch insertion
- *
  */
 static inline void bisect_block(basic_block_t* new, instruction_t* bisect_start){
 	//Grab a cursor to the start statement
@@ -1815,6 +1784,9 @@ static inline instruction_t* emit_test_not_zero_instruction(three_addr_var_t* de
 	//operator
 	if(IS_FLOATING_POINT(tested_variable->type) == TRUE){
 		*operator = NOT_EQUALS;
+
+		//Flag that this comes from FP comparison
+		destination_variable->comes_from_fp_comparison = TRUE;
 	}
 
 	//Give back the final assignee
@@ -1855,862 +1827,12 @@ static inline void remove_all_successors(basic_block_t* block){
 
 
 /**
- * Handle a logical or inverse branch statement optimization
- *
- * These statement will take what was once one block, and split it into 
- * 2 successive blocks
- *
- * .L2
- * t5 <- 0
- * t6 <- b_1
- * t7 <- t6 != t5
- * t8 <- 33
- * t9 <- a_1
- * t10 <- t9 < t8
- * t11 <- t7 || t10
- * cbranch_z .L9 else .L13 <-- Notice how it goes to if on failure
- *
- * Turn this into:
- *
- * .L2:
- * t5 <- 0
- * t6 <- b_1
- * t7 <- t6 != t5 <--- If this does work, we know that t11 will *not* be zero, so jump to else
- * cbranch_ne .L13 else .L3
- *
- * .L3: <----- We only get here if the first one is false
- * t8 <- 33
- * t9 <- a_1
- * t10 <- t9 < t8
- * cbranch_ge .L9 else .L13 <-- If this also fails, we've satisfied the initial condition
- */
-static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* function, instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
-	//Grab out the block that we're using
-	basic_block_t* original_block = short_circuit_statment->block_contained_in;
-	//The new block that we'll need for our second half
-	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency, function);
-	//VERY important that we copy this on over
-	second_half_block->function_defined_in = original_block->function_defined_in;
-
-	/**
-	 * We need to perform some decoupling here. We will remove all of the successors
-	 * from the original block. This will allow us to add new ones in as we see fit
-	 */
-	remove_all_successors(original_block);
-
-	//Extract the op1, we'll need to traverse
-	three_addr_var_t* op1 = short_circuit_statment->op1;
-	three_addr_var_t* op2 = short_circuit_statment->op2;
-
-	//The cursor for our first half
-	instruction_t* first_half_cursor = short_circuit_statment->previous_statement;
-
-	//Trace our way up to where op1 was assigned
-	while(variables_equal(op1, first_half_cursor->assignee, FALSE) == FALSE){
-		//Keep advancing backward
-		first_half_cursor = first_half_cursor->previous_statement;
-	}
-
-	//The cursor for our second half
-	instruction_t* second_half_cursor = short_circuit_statment->previous_statement;
-
-	//Trace our way up to where op2 was assigned
-	while(variables_equal(op2, second_half_cursor->assignee, FALSE) == FALSE){
-		//Keep advancing backward
-		second_half_cursor = second_half_cursor->previous_statement;
-	}
-
-	//Now we've found where we need to effectively split the block into 2 pieces
-	//Everything after this op1 assignment needs to be removed from this block
-	//and put into the new block. The split starts at the first half cursor's *next statement*
-	bisect_block(second_half_block, first_half_cursor->next_statement);
-
-	/**
-	 * Now starting at the second half cursor's next statement, we'll *delete* everything
-	 * after it because we no longer need it
-	 */
-	instruction_t* delete_cursor = second_half_cursor->next_statement;
-	
-	//Delete until we run out
-	while(delete_cursor != NULL){
-		//Hold onto it
-		instruction_t* holder = delete_cursor;
-
-		//Move it along up
-		delete_cursor = delete_cursor->next_statement;
-
-		//Delete the holder. This is a full delete, this statement
-		//isn't ever coming back
-		delete_statement(holder);
-	}
-
-	//Now we have 2 blocks, split nicely in half for us to work with
-	//The first block contains the first condition, and the second
-	//block contains the second condition and nothing else after it
-	//The old branch and the compound and condition is now gone
-	
-	/**
-	 * HANDLING THE FIRST BLOCK
-	 *
-	 * The first block will exploit the logical or property that if the
-	 * first condition works, the second *should never execute*. We have
-	 * a normal branch here
-	 */
-	//We need the operator
-	ollie_token_t first_condition_op = first_half_cursor->op;
-	//And if the type is signed
-	u_int8_t first_half_signed = is_type_signed(first_half_cursor->assignee->type);
-	//Does the first half using float logic?
-	u_int8_t first_half_float = IS_FLOATING_POINT(first_half_cursor->assignee->type);
-
-	//The conditional decider is by default the assignee
-	three_addr_var_t* first_branch_conditional_decider = first_half_cursor->assignee;
-
-	//This is possible - if it happens we need to emit test code
-	if(first_condition_op == BLANK){
-		//This is now the first half's conditional decider
-		first_branch_conditional_decider = emit_temp_var(first_half_cursor->assignee->type);
-
-		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_not_zero_instruction(first_branch_conditional_decider, first_half_cursor->assignee, &first_condition_op);
-
-		//Throw it into the block
-		add_statement(original_block, test);
-	}
-
-	//Determine an appropriate branch. Remember, if this *fails* the if condition
-	//succeeds, so this is an *inverse* jump
-	branch_type_t first_half_branch = select_appropriate_branch_statement(first_condition_op, BRANCH_CATEGORY_NORMAL, first_half_signed);
-
-	//Now we'll emit our branch at the very end of the first block. Remember it's:
-	//if condition works:
-	//	goto else
-	//else
-	//	goto second_half_block
-	emit_branch(original_block, else_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL, first_half_float);
-
-	/**
-	 * HANDLING THE SECOND BLOCK
-	 *
-	 * The second block is only reachable if the first condition is false. Therefore, if the second condition
-	 * is true, we can jump to our if target. Otherwise, go to the else target
-	 */
-	ollie_token_t second_condition_op = second_half_cursor->op;
-	//And if the type is signed
-	u_int8_t second_half_signed = is_type_signed(second_half_cursor->assignee->type);
-	//Does the first half using float logic?
-	u_int8_t second_half_float = IS_FLOATING_POINT(second_half_cursor->assignee->type);
-
-	//The conditional decider is by default the assignee
-	three_addr_var_t* second_branch_conditional_decider = second_half_cursor->assignee;
-
-	//This is possible - if it happens we need to emit test code
-	if(second_condition_op == BLANK){
-		//This is now the first half's conditional decider
-		second_branch_conditional_decider = emit_temp_var(second_half_cursor->assignee->type);
-
-		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_not_zero_instruction(second_branch_conditional_decider, second_half_cursor->assignee, &second_condition_op);
-
-		//Throw it into the block
-		add_statement(second_half_block, test);
-	}
-
-	//Determine the appropriate inverse jump here
-	branch_type_t second_half_branch = select_appropriate_branch_statement(second_condition_op, BRANCH_CATEGORY_INVERSE, second_half_signed);
-
-	//Now we'll emit our final branch at the end of the first block. Remember it's:
-	//if condition fails:
-	// goto if_block
-	//else 
-	// goto else_block
-	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_INVERSE, second_half_float);
-}
-
-
-/**
- * Handle a compound or statement optimization
- *
- * These statement will take what was once one block, and split it into 
- * 2 successive blocks
- *
- * .L2
- * t5 <- x_0
- * t6 <- 3
- * t5 <- t5 < t6
- * t7 <- x_0
- * t8 <- 1
- * t7 <- t7 != t8
- * t5 <- t5 || t7
- * cbranch_nz .L12 else .L13
- *
- *
- * Turn this into:
- *
- * .L2:
- * t5 <- x_0
- * t6 <- 3
- * t5 <- t5 < t6 <---- if this is true, we leave(to if case)
- * cbranch_l .L13 else .L3
- *
- * .L3 <----- The *only* way we get here is if the first condition is false 
- * t7 <- x_0
- * t8 <- 1
- * t7 <- t7 != t8 <------- If this is true, jump to if
- * cbranch_ne .L12 else .L13
- */
-static void optimize_logical_or_branch_logic(symtab_function_record_t* function, instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
-	//Grab out the block that we're using
-	basic_block_t* original_block = short_circuit_statment->block_contained_in;
-	//The new block that we'll need for our second half
-	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency, function);
-	//VERY important that we copy this on over
-	second_half_block->function_defined_in = original_block->function_defined_in;
-
-	/**
-	 * We need to perform some decoupling here. We will remove all of the successors
-	 * from the original block. This will allow us to add new ones in as we see fit
-	 */
-	remove_all_successors(original_block);
-
-	//Extract the op1, we'll need to traverse
-	three_addr_var_t* op1 = short_circuit_statment->op1;
-	three_addr_var_t* op2 = short_circuit_statment->op2;
-
-	//The cursor for our first half
-	instruction_t* first_half_cursor = short_circuit_statment->previous_statement;;
-	
-	//Trace our way up to where op1 was assigned
-	while(variables_equal(op1, first_half_cursor->assignee, FALSE) == FALSE){
-		first_half_cursor = first_half_cursor->previous_statement;
-	}
-
-	//The cursor for our second half
-	instruction_t* second_half_cursor = short_circuit_statment->previous_statement;
-
-	//Trace our way up to where op2 was assigned
-	while(variables_equal(op2, second_half_cursor->assignee, FALSE) == FALSE){
-		second_half_cursor = second_half_cursor->previous_statement;
-	}
-
-	//Now we've found where we need to effectively split the block into 2 pieces
-	//Everything after this op1 assignment needs to be removed from this block
-	//and put into the new block. The split starts at the first half cursor's *next statement*
-	bisect_block(second_half_block, first_half_cursor->next_statement);
-
-	/**
-	 * Now starting at the second half cursor's next statement, we'll *delete* everything
-	 * after it because we no longer need it
-	 */
-	instruction_t* delete_cursor = second_half_cursor->next_statement;
-	
-	//Delete until we run out
-	while(delete_cursor != NULL){
-		//Hold onto it
-		instruction_t* holder = delete_cursor;
-
-		//Move it along up
-		delete_cursor = delete_cursor->next_statement;
-
-		//Delete the holder. This is a full delete, this statement
-		//isn't ever coming back
-		delete_statement(holder);
-	}
-
-	//Now we have 2 blocks, split nicely in half for us to work with
-	//The first block contains the first condition, and the second
-	//block contains the second condition and nothing else after it
-	//The old branch and the compound and condition is now gone
-	
-	/**
-	 * HANDLING THE FIRST BLOCK
-	 *
-	 * The first block will exploit the logical or property that if the
-	 * first condition works, the second *should never execute*. We have
-	 * a normal branch here
-	 */
-	//We need the operator
-	ollie_token_t first_condition_op = first_half_cursor->op;
-	//And if the type is signed
-	u_int8_t first_half_signed = is_type_signed(first_half_cursor->assignee->type);
-	//Store if it is a float
-	u_int8_t first_half_float = IS_FLOATING_POINT(first_half_cursor->assignee->type);
-
-	//The conditional decider is by default the assignee
-	three_addr_var_t* first_branch_conditional_decider = first_half_cursor->assignee;
-
-	//This is possible - if it happens we need to emit test code
-	if(first_condition_op == BLANK){
-		//This is now the first half's conditional decider
-		first_branch_conditional_decider = emit_temp_var(first_half_cursor->assignee->type);
-
-		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_not_zero_instruction(first_branch_conditional_decider, first_half_cursor->assignee, &first_condition_op);
-
-		//Throw it into the block
-		add_statement(original_block, test);
-	}
-
-	//Determine an appropriate branch. Remember, if this *fails* the if condition
-	//succeeds, so this is an *inverse* jump
-	branch_type_t first_half_branch = select_appropriate_branch_statement(first_condition_op, BRANCH_CATEGORY_NORMAL, first_half_signed);
-
-	//Now we'll emit our branch at the very end of the first block. Remember it's:
-	//if condition works:
-	//	goto if
-	//else
-	//	goto second_half_block
-	emit_branch(original_block, if_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL, first_half_float);
-
-	/**
-	 * HANDLING THE SECOND BLOCK
-	 *
-	 * The second block is only reachable if the first condition is false. Therefore, if the second condition
-	 * is true, we can jump to our if target. Otherwise, go to the else target
-	 */
-	ollie_token_t second_condition_op = second_half_cursor->op;
-	//And if the type is signed
-	u_int8_t second_half_signed = is_type_signed(second_half_cursor->assignee->type);
-	//Store whether the second half is a float
-	u_int8_t second_half_float = IS_FLOATING_POINT(second_half_cursor->assignee->type);
-
-	//The conditional decider is by default the assignee
-	three_addr_var_t* second_branch_conditional_decider = second_half_cursor->assignee;
-
-	//This is possible - if it happens we need to emit test code
-	if(second_condition_op == BLANK){
-		//This is now the first half's conditional decider
-		second_branch_conditional_decider = emit_temp_var(second_half_cursor->assignee->type);
-
-		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_not_zero_instruction(second_branch_conditional_decider, second_half_cursor->assignee, &second_condition_op);
-
-		//Throw it into the block
-		add_statement(second_half_block, test);
-	}
-
-	//Determine an appropriate branch. Remember, if this *succeeds* the if condition
-	//succeeds, so this is a *regular* jump
-	branch_type_t second_half_branch = select_appropriate_branch_statement(second_condition_op, BRANCH_CATEGORY_NORMAL, second_half_signed);
-
-	//Now we'll emit our final branch at the end of the first block. Remember it's:
-	//if condition succeeds:
-	// goto if_block
-	//else 
-	// goto else_block
-	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_NORMAL, second_half_float);
-}
-
-
-/**
- * Handle an inverse-branching logical and condition
- *
- * These statement will take what was once one block, and split it into 
- * 2 successive blocks
- *
- * .L2
- * t5 <- x_0
- * t6 <- 3
- * t5 <- t5 < t6
- * t7 <- x_0
- * t8 <- 1
- * t7 <- t7 != t8
- * t5 <- t5 && t7
- * cbranch_z .L12 else .L13 <--- notice how it's branch if zero, we go to if if this fails(hence inverse)
- *
- * Turn this into:
- *
- * .L2:
- * t5 <- x_0
- * t6 <- 3
- * t5 <- t5 < t6 <---- if this doesn't work, we're done. We can go to *if case*
- * cbranch_ge .L12 else .L3
- *
- * .L3 <----- The *only* way we get here is if the first condition is true
- * t7 <- x_0
- * t8 <- 1
- * t7 <- t7 != t8 <------- Remember we're looking for a failure, so if this fails to go *if*, otherwise *else*
- * cbranch_e .L12 else .L13
- */
-static void optimize_logical_and_inverse_branch_logic(symtab_function_record_t* function, instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
-	//Grab out the block that we're using
-	basic_block_t* original_block = short_circuit_statment->block_contained_in;
-	//The new block that we'll need for our second half
-	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency, function);
-	//VERY important that we copy this on over
-	second_half_block->function_defined_in = original_block->function_defined_in;
-
-	/**
-	 * We need to perform some decoupling here. We will remove all of the successors
-	 * from the original block. This will allow us to add new ones in as we see fit
-	 */
-	remove_all_successors(original_block);
-
-	//Extract the op1, we'll need to traverse
-	three_addr_var_t* op1 = short_circuit_statment->op1;
-	three_addr_var_t* op2 = short_circuit_statment->op2;
-
-	//The cursor for our first half
-	instruction_t* first_half_cursor = short_circuit_statment->previous_statement;
-
-	//Trace our way up to where op1 was assigned
-	while(variables_equal(op1, first_half_cursor->assignee, FALSE) == FALSE){
-		//Keep advancing backward
-		first_half_cursor = first_half_cursor->previous_statement;
-	}
-
-	//The cursor for our second half
-	instruction_t* second_half_cursor = short_circuit_statment->previous_statement;
-
-	//Trace our way up to where op2 was assigned
-	while(variables_equal(op2, second_half_cursor->assignee, FALSE) == FALSE){
-		//Keep advancing backward
-		second_half_cursor = second_half_cursor->previous_statement;
-	}
-
-	//Now we've found where we need to effectively split the block into 2 pieces
-	//Everything after this op1 assignment needs to be removed from this block
-	//and put into the new block. The split starts at the first half cursor's *next statement*
-	bisect_block(second_half_block, first_half_cursor->next_statement);
-
-	/**
-	 * Now starting at the second half cursor's next statement, we'll *delete* everything
-	 * after it because we no longer need it
-	 */
-	instruction_t* delete_cursor = second_half_cursor->next_statement;
-	
-	//Delete until we run out
-	while(delete_cursor != NULL){
-		//Hold onto it
-		instruction_t* holder = delete_cursor;
-
-		//Move it along up
-		delete_cursor = delete_cursor->next_statement;
-
-		//Delete the holder. This is a full delete, this statement
-		//isn't ever coming back
-		delete_statement(holder);
-	}
-
-	//Now we have 2 blocks, split nicely in half for us to work with
-	//The first block contains the first condition, and the second
-	//block contains the second condition and nothing else after it
-	//The old branch and the compound and condition is now gone
-	
-	/**
-	 * HANDLING THE FIRST BLOCK
-	 *
-	 * The first block will exploit the logical and property that if the
-	 * first condition fails, the second *should never execute*. We have
-	 * an inverse jump of sorts here
-	 */
-	//We need the operator
-	ollie_token_t first_condition_op = first_half_cursor->op;
-	//And if the type is signed
-	u_int8_t first_half_signed = is_type_signed(first_half_cursor->assignee->type);
-	//Store whether this is a float or not
-	u_int8_t first_half_float = IS_FLOATING_POINT(first_half_cursor->assignee->type);
-
-	//The conditional decider is by default the assignee
-	three_addr_var_t* first_branch_conditional_decider = first_half_cursor->assignee;
-
-	//This is possible - if it happens we need to emit test code
-	if(first_condition_op == BLANK){
-		//This is now the first half's conditional decider
-		first_branch_conditional_decider = emit_temp_var(first_half_cursor->assignee->type);
-
-		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_not_zero_instruction(first_branch_conditional_decider, first_half_cursor->assignee, &first_condition_op);
-
-		//Throw it into the block
-		add_statement(original_block, test);
-	}
-
-	//Determine the appropriate branch using an inverse jump
-	branch_type_t first_half_branch = select_appropriate_branch_statement(first_condition_op, BRANCH_CATEGORY_INVERSE, first_half_signed);
-
-	//Now we'll emit our branch at the very end of the first block. Remember it's:
-	//if condition fails:
-	//	goto if 
-	//else
-	//	goto second_half_block 
-	emit_branch(original_block, if_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL, first_half_float);
-
-	/**
-	 * HANDLING THE SECOND BLOCK
-	 *
-	 * The second block is only reachable if the first condition is true. Therefore, if the second condition
-	 * is also true, we can jump to our if target. Otherwise, go to the else target
-	 */
-	ollie_token_t second_condition_op = second_half_cursor->op;
-	//And if the type is signed
-	u_int8_t second_half_signed = is_type_signed(second_half_cursor->assignee->type);
-	//Store whether the second half is a float
-	u_int8_t second_half_float = IS_FLOATING_POINT(second_half_cursor->assignee->type);
-
-	//The conditional decider is by default the assignee
-	three_addr_var_t* second_branch_conditional_decider = second_half_cursor->assignee;
-
-	//This is possible - if it happens we need to emit test code
-	if(second_condition_op == BLANK){
-		//This is now the first half's conditional decider
-		second_branch_conditional_decider = emit_temp_var(second_half_cursor->assignee->type);
-
-		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_not_zero_instruction(second_branch_conditional_decider, second_half_cursor->assignee, &second_condition_op);
-
-		//Throw it into the block
-		add_statement(second_half_block, test);
-	}
-
-	//Determine the appropriate branch using an inverse jump
-	branch_type_t second_half_branch = select_appropriate_branch_statement(second_condition_op, BRANCH_CATEGORY_INVERSE, second_half_signed);
-
-	//Now we'll emit our final branch at the end of the first block. Remember it's:
-	//if condition fails:
-	// goto if_block
-	//else 
-	// goto else_block
-	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_NORMAL, second_half_float);
-}
-
-
-/**
- * Handle a compound and statement optimization
- *
- * These statement will take what was once one block, and split it into 
- * 2 successive blocks
- *
- * .L2
- * t5 <- x_0
- * t6 <- 3
- * t5 <- t5 < t6
- * t7 <- x_0
- * t8 <- 1
- * t7 <- t7 != t8
- * t5 <- t5 && t7
- * cbranch_nz .L12 else .L13
- *
- *
- * Turn this into:
- *
- * .L2:
- * t5 <- x_0
- * t6 <- 3
- * t5 <- t5 < t6 <---- if this is false, we leave(to else case)
- * cbranch_ge .L13 else .L3
- *
- * .L3 <----- The *only* way we get here is if the first condition is true
- * t7 <- x_0
- * t8 <- 1
- * t7 <- t7 != t8 <------- If this is true, jump to if
- * cbranch_ne .L12 else .L13
- */
-static void optimize_logical_and_branch_logic(symtab_function_record_t* function, instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
-	//Grab out the block that we're using
-	basic_block_t* original_block = short_circuit_statment->block_contained_in;
-	//The new block that we'll need for our second half
-	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency, function);
-	//VERY important that we copy this on over
-	second_half_block->function_defined_in = original_block->function_defined_in;
-
-	/**
-	 * We need to perform some decoupling here. We will remove all of the successors
-	 * from the original block. This will allow us to add new ones in as we see fit
-	 */
-	remove_all_successors(original_block);
-
-	//Extract the op1, we'll need to traverse
-	three_addr_var_t* op1 = short_circuit_statment->op1;
-	three_addr_var_t* op2 = short_circuit_statment->op2;
-
-	//The cursor for our first half
-	instruction_t* first_half_cursor = short_circuit_statment->previous_statement;
-
-	//Trace our way up to where op1 was assigned
-	while(variables_equal(op1, first_half_cursor->assignee, FALSE) == FALSE){
-		//Keep advancing backward
-		first_half_cursor = first_half_cursor->previous_statement;
-	}
-
-	//The cursor for our second half
-	instruction_t* second_half_cursor = short_circuit_statment->previous_statement;
-
-	//Trace our way up to where op2 was assigned
-	while(variables_equal(op2, second_half_cursor->assignee, FALSE) == FALSE){
-		//Keep advancing backward
-		second_half_cursor = second_half_cursor->previous_statement;
-	}
-
-	//Now we've found where we need to effectively split the block into 2 pieces
-	//Everything after this op1 assignment needs to be removed from this block
-	//and put into the new block. The split starts at the first half cursor's *next statement*
-	bisect_block(second_half_block, first_half_cursor->next_statement);
-
-	/**
-	 * Now starting at the second half cursor's next statement, we'll *delete* everything
-	 * after it because we no longer need it
-	 */
-	instruction_t* delete_cursor = second_half_cursor->next_statement;
-	
-	//Delete until we run out
-	while(delete_cursor != NULL){
-		//Hold onto it
-		instruction_t* holder = delete_cursor;
-
-		//Move it along up
-		delete_cursor = delete_cursor->next_statement;
-
-		//Delete the holder. This is a full delete, this statement
-		//isn't ever coming back
-		delete_statement(holder);
-	}
-
-	//Now we have 2 blocks, split nicely in half for us to work with
-	//The first block contains the first condition, and the second
-	//block contains the second condition and nothing else after it
-	//The old branch and the compound and condition is now gone
-	
-	/**
-	 * HANDLING THE FIRST BLOCK
-	 *
-	 * The first block will exploit the logical and property that if the
-	 * first condition fails, the second *should never execute*. We have
-	 * an inverse jump of sorts here
-	 */
-	//We need the operator
-	ollie_token_t first_condition_op = first_half_cursor->op;
-	//And if the type is signed
-	u_int8_t first_half_signed = is_type_signed(first_half_cursor->assignee->type);
-	//Store whether the first half is a float
-	u_int8_t first_half_float = IS_FLOATING_POINT(first_half_cursor->assignee->type);
-
-	//The conditional decider is by default the assignee
-	three_addr_var_t* first_branch_conditional_decider = first_half_cursor->assignee;
-
-	//This is possible - if it happens we need to emit test code
-	if(first_condition_op == BLANK){
-		//This is now the first half's conditional decider
-		first_branch_conditional_decider = emit_temp_var(first_half_cursor->assignee->type);
-
-		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_not_zero_instruction(first_branch_conditional_decider, first_half_cursor->assignee, &first_condition_op);
-
-		//Throw it into the block
-		add_statement(original_block, test);
-	}
-
-	//Determine an appropriate branch. Remember, if this *fails* the if condition
-	//succeeds, so this is an *inverse* jump
-	branch_type_t first_half_branch = select_appropriate_branch_statement(first_condition_op, BRANCH_CATEGORY_INVERSE, first_half_signed);
-
-	//Now we'll emit our branch at the very end of the first block. Remember it's:
-	//if condition fails:
-	//	goto else
-	//else
-	//	goto second_half_block 
-	emit_branch(original_block, else_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL, first_half_float);
-
-	/**
-	 * HANDLING THE SECOND BLOCK
-	 *
-	 * The second block is only reachable if the first condition is true. Therefore, if the second condition
-	 * is also true, we can jump to our if target. Otherwise, go to the else target
-	 */
-	ollie_token_t second_condition_op = second_half_cursor->op;
-	//And if the type is signed
-	u_int8_t second_half_signed = is_type_signed(second_half_cursor->assignee->type);
-	//Store whether the second half is a float
-	u_int8_t second_half_float = IS_FLOATING_POINT(second_half_cursor->assignee->type);
-
-	//The conditional decider is by default the assignee
-	three_addr_var_t* second_branch_conditional_decider = second_half_cursor->assignee;
-
-	//This is possible - if it happens we need to emit test code
-	if(second_condition_op == BLANK){
-		//This is now the first half's conditional decider
-		second_branch_conditional_decider = emit_temp_var(second_half_cursor->assignee->type);
-
-		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_not_zero_instruction(second_branch_conditional_decider, second_half_cursor->assignee, &second_condition_op);
-
-		//Throw it into the block
-		add_statement(second_half_block, test);
-	}
-
-	//Determine an appropriate branch. Remember, if this *succeeds* the if condition
-	//succeeds, so this is a *regular* jump
-	branch_type_t second_half_branch = select_appropriate_branch_statement(second_condition_op, BRANCH_CATEGORY_NORMAL, second_half_signed);
-
-	//Now we'll emit our final branch at the end of the first block. Remember it's:
-	//if condition succeeds:
-	// goto if_block
-	//else 
-	// goto else_block
-	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_half_cursor->assignee, BRANCH_CATEGORY_NORMAL, second_half_float);
-}
-
-
-/**
- * The compound logic optimizer will go through and look for compound and or or statements
- * that are parts of branch endings and see if they're able to be short-circuited. These
- * statements have been pre-marked by the cfg constructor, so whichever survive until here are going to 
- * be optimized
- *
- * KEY ASSUMPTION: The basic block that contains a branch will contain all of the necessary
- * information for this to happen. This means that the actual branch must contain straight
- * line code
- *
- *
- * Here is a brief example:
- * t9 <- 0x2
- * t10 <- x_0 < t9
- * t11 <- 0x1
- * t12 <- x_0 != t11
- * t13 <- t10 && t12 <-------- COMPOUND JUMP
- * cbranch_nz .L8 else .L9
- *
- * .L8():
- * t14 <- 0x2
- * t15 <- x_0 * t14
- * x_2 <- t15
- * jmp .L5
- *
- * .L9():
- * t16 <- 0x3
- * t17 <- x_0 + t16
- * x_1 <- t17
- * jmp .L5	
- *
- * We could optimize this statement by realizing that if the first condition fails(t10), there is no chance
- * for the next one to succeed, and as such we can jump immediately after t10 is defined
- *
- * TURNS INTO THIS:
- *  
- *  .L1
- * t9 <- 0x2
- * t10 <- x_0 < t9
- * cbranch_ge .L8 else .L3 ---------------- If it's more than it can't work, so we leave
- *
- * .L33
- * t11 <- 0x1
- * t12 <- x_0 != t11
- * cbranch_ne .L8 else .L9
- * --------------------------------t13 <- t10 && t12 <-------------------- No longer a need for this one
- * -------------------------------- No longer a need for the original branch at all --------------------
- *
- * .L8():
- * t14 <- 0x2
- * t15 <- x_0 * t14
- * x_2 <- t15
- * jmp .L5
- *
- * .L9():
- * t16 <- 0x3
- * t17 <- x_0 + t16
- * x_1 <- t17
- * jmp .L5	
- */
-static void optimize_short_circuit_logic(symtab_function_record_t* function, dynamic_array_t* function_blocks){
-	//For every single block in the function
-	for(u_int32_t _ = 0; _ < function_blocks->current_index; _++){
-		//Grab the block out
-		basic_block_t* block = dynamic_array_get_at(function_blocks, _);
-
-		//If it's empty then leave
-		if(block->leader_statement == NULL){
-			continue;
-		}
-
-		//The branch is the block's exit statement
-		instruction_t* branch_statement = block->exit_statement;
-
-		//If the exit statement is not a branch, then we're done here
-		if(branch_statement->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
-			continue;
-		}
-
-		//Extract both of these values - we will need them
-		basic_block_t* if_target = branch_statement->if_block;
-		basic_block_t* else_target = branch_statement->else_block;
-
-		//Is this an inverse jumping branch?
-		u_int8_t inverse_branch = branch_statement->inverse_branch;
-
-		//Grab a statement cursor
-		instruction_t* cursor = block->exit_statement->previous_statement;
-
-		//First, we need to mark everything that is related to the branch inside of this block
-		mark_all_branch_related_statements(block);
-
-		//Store all of our eligible statements in this block. This will be done in a FIFO
-		//fashion
-		dynamic_array_t eligible_statements = dynamic_array_alloc();
-
-		//Let's run through and see if we can find a statement that's eligible for short circuiting.
-		while(cursor != NULL){
-			//If this isn't marked, we don't care. Just move on
-			if(cursor->mark == FALSE){
-				cursor = cursor->previous_statement;
-				continue;
-			}
-
-			//If we make it here, then we've found something that is eligible for a compound logic optimization
-			if(cursor->op == DOUBLE_AND || cursor->op == DOUBLE_OR){
-				//Add the cursor. We will iterate over these statements in the order we found them,
-				//so going through in
-				dynamic_array_add(&eligible_statements, cursor);
-			}
-
-			//move it back
-			cursor = cursor->previous_statement;
-		}
-
-		//Now we'll iterate over the array and process what we have
-		for(u_int16_t i = 0; i < eligible_statements.current_index; i++){
-			//Grab the block out
-			instruction_t* short_circuit_statement = dynamic_array_get_at(&eligible_statements, i);
-
-			//Make the helper call. These are treated differently based on what their
-			//operators are, so we'll need to use the appropriate call
-			if(short_circuit_statement->op == DOUBLE_AND){
-				//Most common case
-				if(inverse_branch == FALSE){
-					optimize_logical_and_branch_logic(function, short_circuit_statement, if_target, else_target);
-				} else {
-					optimize_logical_and_inverse_branch_logic(function, short_circuit_statement, if_target, else_target);
-				}
-
-			//Otherwise we have the double or
-			} else {
-				//Most common case
-				if(inverse_branch == FALSE){
-					optimize_logical_or_branch_logic(function, short_circuit_statement, if_target, else_target);
-				} else {
-					optimize_logical_or_inverse_branch_logic(function, short_circuit_statement, if_target, else_target);
-				}
-			}
-		}
-
-		//Deallocate the array
-		dynamic_array_dealloc(&eligible_statements);
-	}
-}
-
-
-/**
  * Is a given conditional always true or always false? We will need
  * to trace up the block to find out. If we are unable to
  * find out, that is ok, we just return false and assume
  * that it can't be done
  */
 static inline conditional_status_t determine_conditional_status(instruction_t* conditional){
-	//By default assume that we don't know enough to determine this
-	conditional_status_t status = CONDITIONAL_UNKNOWN;
-
-	//Instruction cursor
-	instruction_t* instruction_cursor = conditional;
-
 	//There are several conditional types that we are going
 	//to be able to look through here
 	switch (conditional->statement_type) {
@@ -2723,52 +1845,120 @@ static inline conditional_status_t determine_conditional_status(instruction_t* c
 		 * t2 <- test if not zero t1
 		 */
 		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
-			//If we have something where the variable isn't
-			//temporary, then it's not going to be safe to do
-			//this so we'll just leave now
-			if(conditional->op1->variable_type != VARIABLE_TYPE_TEMP){
-				break;
+			/**
+			 * If we have a constant for the conditional, then this is easy for us. We will
+			 * simply evaluate as is without searching. If the constant value is 0, then we 
+			 * are false, otherwise true
+			 */
+			if(conditional->op1_const != NULL){
+				return is_constant_value_zero(conditional->op1_const) == TRUE ? CONDITIONAL_ALWAYS_FALSE : CONDITIONAL_ALWAYS_TRUE;
 			}
 
-			//Go back so long as we aren't NULL
-			while(instruction_cursor != NULL){
-				//If we have equal variables here, we can see what to do
-				if(variables_equal(conditional->op1, instruction_cursor->assignee, FALSE) == TRUE){
-					//The only way to "safely" do this is if we have a constant here. If we have that,
-					//we would be looking for a three_addr_code_assn_const statement. If we don't have
-					//that we'll also leave
-					if(instruction_cursor->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
-						break;
+			/**
+			 * Otherwise, we'll need to abandon that line of thinking. If the variable itself is a temp
+			 * var, then we'll be able to go through here and try to find where it was assigned
+			 */
+			if(conditional->op1->variable_type == VARIABLE_TYPE_TEMP){
+				//Grab a cursor starting at the prior statement
+				instruction_t* instruction_cursor = conditional->previous_statement;
+
+				while(instruction_cursor != NULL){
+					/**
+					 * The only way to "safely" do this is if we have a constant here. If we have that,
+					 * we would be looking for a three_addr_code_assn_const statement. If we don't have
+					 * that we'll also leave
+					 */
+					if(variables_equal(conditional->op1, instruction_cursor->assignee, FALSE) == TRUE){
+						//This has to be an assn const statement to work, so if it's not then leave
+						if(instruction_cursor->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
+							break;
+						}
+
+						/**
+						 * Since this is a test if not zero instruction, we will now look and see what
+						 * the constant value is. If it's zero, then this is always false. If it's nonzero,
+						 * then this is always true
+						 */
+						return is_constant_value_zero(instruction_cursor->op1_const) == TRUE ? CONDITIONAL_ALWAYS_FALSE : CONDITIONAL_ALWAYS_TRUE;
 					}
 
-					//Since this is a test if not zero instruction, we will now look and see what
-					//the constant value is. If it's zero, then this is always false. If it's nonzero,
-					//then this is always true
-					if(is_constant_value_zero(instruction_cursor->op1_const) == FALSE){
-						status = CONDITIONAL_ALWAYS_TRUE;
-					} else {
-						status = CONDITIONAL_ALWAYS_FALSE;
-					}
-
-					break;
+					//Back it up by one
+					instruction_cursor = instruction_cursor->previous_statement;
 				}
 
-				//Back it up by one
-				instruction_cursor = instruction_cursor->previous_statement;
+				//If we make it to the end here then we found nothing, so return unknown
+				return CONDITIONAL_UNKNOWN;
+				
+			/**
+			 * If we have something where the variable isn't
+			 * temporary, then it's not going to be safe to do
+			 * this so we'll just leave now
+			 */
+			} else {
+				return CONDITIONAL_UNKNOWN;
 			}
 
-			//Trace back up the block
-			break;
+		/**
+		 * For binary operation statements, there are some cases where we can determine if this is true
+		 * or not so we will investigate now
+		 */
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+			/**
+			 * If we end up with cases where op1 == op2, then we are going to be able to simplify
+			 * accordingly
+			 */
+			if(variables_equal(conditional->op1, conditional->op2, FALSE) == TRUE){
+				switch(conditional->op){
+					/**
+					 * For logical and/logical or, we won't be able to completely
+					 * simplify, but we can at least turn this into a test not zero
+					 * statement because we know that the operands are identical
+					 */
+					case DOUBLE_AND:
+					case DOUBLE_OR:
+						//This is not a test not zero
+						conditional->statement_type = THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT;
 
+						//We can remove op2
+						conditional->op2->use_count--;
+						conditional->op2 = NULL;
+
+						//Even though there was a little that we could do, we still can't know anything
+						return CONDITIONAL_UNKNOWN;
+
+					/**
+					 * In the cases where we have: x > x, x < x, x != x, this is always
+					 * going to be false because they are equal. This is one where we 
+					 * can optimize an always true/always false path
+					 */
+					case G_THAN:
+					case L_THAN:
+					case NOT_EQUALS:
+						return CONDITIONAL_ALWAYS_FALSE;
+
+					/**
+					 * In cases where we have x >= x, x <= x, x == x, this is always going to 
+					 * be true because they are equal. This is a case where we can prove
+					 * truthfullness
+					 */
+					case G_THAN_OR_EQ:
+					case L_THAN_OR_EQ:
+					case DOUBLE_EQUALS:
+						return CONDITIONAL_ALWAYS_TRUE;
+
+					//By default we just give back that we don't knwo
+					default:
+						return CONDITIONAL_UNKNOWN;
+				}
+			}
+
+			//By default we don't know 
+			return CONDITIONAL_UNKNOWN;
 	
 		//If we have an unknown type then let's just leave
 		default:
-			break;
+			return CONDITIONAL_UNKNOWN;
 	}
-
-
-	//Give back the status
-	return status;
 }
 
 
@@ -2934,9 +2124,11 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 
 				break;
 
-			//Do nothing, we can't be sure about what the conditional
-			//is which is perfectly fine. In fact, we expect this to
-			//be the majority case
+			/**
+			 * Do nothing, we can't be sure about what the conditionalal
+			 * is which is perfectly fine. In fact, we expect this to
+			 * be the majority case
+			 */
 			case CONDITIONAL_UNKNOWN:
 				break;
 		}
@@ -3174,14 +2366,7 @@ cfg_t* optimize(cfg_t* cfg){
 		sweep(current_function_blocks, function_entry_block);
 
 		/**
-		 * PASS 3: compound logic optimization
-		 * Now that we've sweeped everything, we know that what branches are left must be useful. This means
-		 * that we can expend the compute of optimizing the short circuit logic on them, and we will do so here
-		 */
-		optimize_short_circuit_logic(current_function, current_function_blocks);
-
-		/**
-		 * PASS 4: always true/false optimization
+		 * PASS 3: always true/false optimization
 		 * Now that we've broken up and logical and/or logic, we can go through and see if there are any
 		 * branches that we can eliminate due to their conditions being always true/false. An example
 		 * of this would be while(true) always being true, so there being no need for a comparison
@@ -3190,7 +2375,7 @@ cfg_t* optimize(cfg_t* cfg){
 		u_int8_t found_branches_to_optimize = optimize_always_true_false_paths(current_function_blocks);
 
 		/**
-		 * PASS 4.5: if we did find branches to optimize, we now potentially have a lot
+		 * PASS 3.5: if we did find branches to optimize, we now potentially have a lot
 		 * of orphaned code that is no longer useful. This would not have been picked up by
 		 * the original mark and sweep, but it will be now. So, we will rerun mark/sweep
 		 * *if* we've found branches that were optimzied. Otherwise, this would just be a waste
@@ -3221,7 +2406,7 @@ cfg_t* optimize(cfg_t* cfg){
 			//Invoke the sweeper
 			sweep(current_function_blocks, function_entry_block);
 		}
-		
+
 		/**
 		 * PASS 4: Clean algorithm
 		 * Clean follows after sweep because during the sweep process, we will likely delete the contents of

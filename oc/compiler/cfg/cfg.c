@@ -3071,49 +3071,377 @@ instruction_t* emit_jump(basic_block_t* basic_block, basic_block_t* destination_
 
 
 /**
- * Emit a branch statement with an if destination, else destination, conditional result and branch type
- *
- * This rule also handles all successor management required for the rule
+ * Is an operator short circuit eligible? Return TRUE if yes, FALSE
+ * if no
  */
-void emit_branch(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, branch_type_t branch_type, three_addr_var_t* conditional_result, branch_category_t branch_category, u_int8_t relies_on_fp_comparison){
-	//Emit the actual instruction here
-	instruction_t* branch_instruction = emit_branch_statement(if_destination, else_destination, conditional_result, branch_type);
-
-	/**
-	 * We need to flag for later on that this conditional result is being used to set condition
-	 * codes. This is especially important for the value numberer because we need to make
-	 * sure that we don't optimize this away if we need said condition codes
-	 */
-	conditional_result->sets_cc = TRUE;
-
-	//Mark this as the op1 so that we can track in the optimizer
-	branch_instruction->op1 = conditional_result;
-
-	//Store whether or not this relies on a floating point comparison. This will be important
-	//down the road in the instruction selecotr
-	branch_instruction->relies_on_fp_comparison = relies_on_fp_comparison;
-
-	//Add the statement into the block
-	add_statement(basic_block, branch_instruction);
-
-	/**
-	 * Based on what the category is, we can add the successors in a different
-	 * order just so that the IRs look somewhat nicer. This has no effect on
-	 * functionality, purely visual
-	 */
-	if(branch_category == BRANCH_CATEGORY_NORMAL){
-		//The if and else destinations are now both successors
-		add_successor(basic_block, if_destination);
-		add_successor(basic_block, else_destination);
-		//Not an inverse branch
-		branch_instruction->inverse_branch = FALSE;
-	} else {
-		//The if and else destinations are now both successors
-		add_successor(basic_block, else_destination);
-		add_successor(basic_block, if_destination);
-		//An inverse branch
-		branch_instruction->inverse_branch = TRUE;
+static inline u_int8_t is_op_short_circuit_eligible(ollie_token_t op){
+	switch(op){
+		case DOUBLE_AND:
+		case DOUBLE_OR:
+			return TRUE;
+		default:
+			return FALSE;
 	}
+}
+
+
+/**
+ * Does a given operator set condition codes? Return true if yes, false
+ * if no. Yes all ops can set condition codes, but we're referring to
+ * specifically relational operators here
+ */
+static inline u_int8_t does_operator_set_condition_codes(ollie_token_t op){
+	switch(op){
+		case L_THAN:
+		case L_THAN_OR_EQ:
+		case G_THAN:
+		case G_THAN_OR_EQ:
+		case DOUBLE_EQUALS:
+		case NOT_EQUALS:
+		//Logical not sets it
+		case EXCLAMATION:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Emit a test instruction. Note that this is different depending on what kind of testing that we're doing(GP vs SSE)
+ *
+ * Note that for the operator input, we will use this to modify the given operator *if* we have a floating point operation.
+ * This is because the eventual selected code for floating point will turn if(x) into if(x != 0) essentially, so we need to
+ * have that logic already in for when the branch statements are selected
+ */
+static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, three_addr_var_t* tested_variable, ollie_token_t* operator){
+	//If we don't have a temp var, then we just go right to the emission
+	if(tested_variable->variable_type != VARIABLE_TYPE_TEMP
+		|| IS_FLOATING_POINT(tested_variable->type) == TRUE){
+
+		//Emit the instruction
+		instruction_t* test_if_not_zero = emit_test_if_not_zero_statement(emit_temp_var(u8), tested_variable);
+
+		//Now we'll add it into the block
+		add_statement(basic_block, test_if_not_zero);
+
+		/**
+		 * If this is a floating point variable, update the pass-by-reference
+		 * operator
+		 */
+		if(IS_FLOATING_POINT(tested_variable->type) == TRUE){
+			//This is needed for branching later on
+			*operator = NOT_EQUALS;
+
+			//Flag that this comes out of an FP comparsion
+			test_if_not_zero->assignee->comes_from_fp_comparison = TRUE;
+		}
+
+		//Give back the final assignee
+		return test_if_not_zero->assignee;
+
+	/**
+	 * Otherwise if we have a temp variable, we should look to see if this is really
+	 * a constant assignment. If it is a constant then the constant that was assigned
+	 * will be the last statement in the current block, and its assignee will be equal
+	 * to the result that we got
+	 */
+	} else {
+		if(basic_block->exit_statement != NULL
+	 		&& basic_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
+			&& variables_equal(basic_block->exit_statement->assignee, tested_variable, FALSE) == TRUE){
+			//Use the constant enhancment to make this happen
+			instruction_t* test_if_not_zero = emit_test_if_not_zero_for_const_statement(emit_temp_var(u8), basic_block->exit_statement->op1_const);
+
+			//Add it in
+			add_statement(basic_block, test_if_not_zero);
+
+			//Give back the result
+			return test_if_not_zero->assignee;
+
+		} else {
+			//Emit the instruction
+			instruction_t* test_if_not_zero = emit_test_if_not_zero_statement(emit_temp_var(u8), tested_variable);
+
+			//Now we'll add it into the block
+			add_statement(basic_block, test_if_not_zero);
+
+			//Give back the final assignee
+			return test_if_not_zero->assignee;
+		}
+	}
+}
+
+
+/**
+ * Emit the conditional for a branch. This can be a ternary or binary expression
+ */
+static inline cfg_result_package_t emit_branch_conditional_expression(basic_block_t* starting_block, generic_ast_node_t* branch_node){
+	if(branch_node->ast_node_type == AST_NODE_TYPE_TERNARY_EXPRESSION){
+		return emit_ternary_expression(starting_block, branch_node);
+	} else {
+		return emit_binary_expression(starting_block, branch_node);
+	}
+}
+
+
+/**
+ * Emit a branch statement with an if destination and else destination. We will also handle the emittal of the conditional node here
+ * for the purposes of doing the branch. The returned result package will include the starting & ending blocks for the branch. The
+ * branch category is also given and will be used when we're accounting for how to place things
+ */
+static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_ast_node_t* conditional_node, basic_block_t* if_block, basic_block_t* else_block, branch_category_t branch_category){
+	//Allcoate the results
+	cfg_result_package_t results = {starting_block, starting_block, NULL, BLANK};
+
+	//Keep track of the current block
+	basic_block_t* current_block = starting_block;
+
+	/**
+	 * The first thing that we need to do is emit the conditional. However - this conditional
+	 * could potentially be something that we'd like to short circuit(&& / ||). We assume that 
+	 * this doesn't happen most of the time, but when it does, we will implement the
+	 * short circuit optimization here
+	 */
+	if(is_op_short_circuit_eligible(conditional_node->binary_operator) == FALSE){
+		//First let the helper emit it
+		cfg_result_package_t binary_results = emit_branch_conditional_expression(current_block, conditional_node);
+
+		//Update the final block
+		current_block = binary_results.final_block;
+
+		//Extract the actual result assignee
+		three_addr_var_t* conditional_decider = binary_results.assignee;
+
+		/**
+		 * If the given operator does not set condition codes appropriately, then
+		 * we'll need to make that happen here. We pass the operator
+		 * in by reference so that we may change it later on
+		 */
+		if(does_operator_set_condition_codes(binary_results.operator) == FALSE){
+			conditional_decider = emit_test_not_zero(current_block, conditional_decider, &(binary_results.operator));
+		}
+
+		/**
+		 * Let's try to grab the final result type. Remember that the comparison type may be different than
+		 * the actual assignee type. If we can grab it then we will use that, otherwise we will use
+		 * the assignee type
+		 */
+		u_int8_t type_signed;
+		if(current_block->exit_statement != NULL
+			&& is_binary_operation(current_block->exit_statement)
+			&& variables_equal(current_block->exit_statement->assignee, conditional_decider, FALSE) == TRUE){
+
+			//If we have a result type use that, otherwise take from op1
+			if(current_block->exit_statement->type_storage.result_type != NULL){
+				type_signed = is_type_signed(current_block->exit_statement->type_storage.result_type);
+			} else {
+				type_signed = is_type_signed(current_block->exit_statement->op1->type);
+			}
+
+		} else {
+			type_signed = is_type_signed(conditional_decider->type);
+		}
+
+		//Flag that this sets condition codes
+		conditional_decider->sets_cc = TRUE;
+
+		//Now let's try to decide the branch type
+		branch_type_t branch_type = select_appropriate_branch_statement(binary_results.operator, branch_category, type_signed);
+
+		//Now we can finall spit this one out
+		instruction_t* branch_statement = emit_branch_statement(if_block, else_block, conditional_decider, branch_type);
+
+		//Add it into the block
+		add_statement(current_block, branch_statement);
+
+		/**
+		 * Based on what the category is, we can add the successors in a different
+		 * order just so that the IRs look somewhat nicer. This has no effect on
+		 * functionality, purely visual
+		 */
+		if(branch_category == BRANCH_CATEGORY_NORMAL){
+			add_successor(current_block, if_block);
+			add_successor(current_block, else_block);
+			branch_statement->inverse_branch = FALSE;
+
+		} else {
+			add_successor(current_block, else_block);
+			add_successor(current_block, if_block);
+			branch_statement->inverse_branch = TRUE;
+		}
+
+	/**
+	 * If we got here then we are short circuiting based on the operator that we were given. The
+	 * short circuit process will create several additional blocks that we will use instead of 
+	 * just using this one block
+	 */
+	} else {
+		//Create our secondary block to use
+		basic_block_t* secondary_block = basic_block_alloc_and_estimate();
+
+		if(conditional_node->binary_operator == DOUBLE_AND){
+			/**
+			 * 	Regular Branch:
+			 * .L2
+			 * t5 <- x_0 < 3 
+			 * t7 <- x_0 != 1
+			 * t5 <- t5 && t7
+			 * cbranch_nz .L12 else .L13
+			 *
+			 * Turn this into:
+			 * .L2:
+			 * t5 <- x_0 < 3 <---- if this is false, we leave(inverse branch)
+			 * cbranch_ge .L13 else .L3
+			 *
+			 * .L3 <----- The *only* way we get here is if the first condition is true
+			 * t7 <- x_0 != 1 <------- If this is true, jump to if(regular branch)
+			 * cbranch_ne .L12 else .L13
+			 */
+			if(branch_category == BRANCH_CATEGORY_NORMAL){
+				//Get the first child for the left statement
+				generic_ast_node_t* child_cursor = conditional_node->first_child;
+
+				/**
+				 * Left side: IF FAIL -> else block, else secondary block
+				 */
+				emit_branch(current_block, child_cursor, else_block, secondary_block, BRANCH_CATEGORY_INVERSE);
+
+				//Current block now is our secondary
+				current_block = secondary_block;
+
+				/**
+				 * Right side: IF SUCCESS -> if block, else else block
+				 */
+				cfg_result_package_t right_side_results = emit_branch(current_block, child_cursor->next_sibling, if_block, else_block, BRANCH_CATEGORY_NORMAL);
+
+				//Update the current block once again
+				current_block = right_side_results.final_block;
+
+			/**
+			 * 	Inverse Branch:
+			 * .L2
+			 * t5 <- x_0 < 3 
+			 * t7 <- x_0 != 1
+			 * t5 <- t5 && t7
+			 * cbranch_z .L12 else .L13 <--- notice how it's branch if zero, we go to if if this fails(hence inverse)
+			 *
+			 * Turn this into:
+			 *
+			 * .L2:
+			 * t5 <- x_0 < 3 <---- if this doesn't work, we're done. We can go to *if case*
+			 * cbranch_ge .L12 else .L3
+			 *
+			 * .L3 <----- The *only* way we get here is if the first condition is true
+			 * t7 <- x_0 != 1 <------- Remember we're looking for a failure, so if this fails to go *if*, otherwise *else*
+			 * cbranch_e .L12 else .L13
+			 *
+			 */
+			} else {
+				//Get the first child for the left statement
+				generic_ast_node_t* child_cursor = conditional_node->first_child;
+
+				/**
+				 * Left side: IF FAIL -> if block, else secondary block
+				 */
+				emit_branch(current_block, child_cursor, if_block, secondary_block, BRANCH_CATEGORY_INVERSE);
+
+				//Current block now is our secondary
+				current_block = secondary_block;
+
+				/**
+				 * Left Side: IF FAIL -> if block, else else block
+				 */
+				cfg_result_package_t right_side_results = emit_branch(current_block, child_cursor->next_sibling, if_block, else_block, BRANCH_CATEGORY_INVERSE);
+
+				//Update the current block once again
+				current_block = right_side_results.final_block;
+			}
+
+		} else {
+			/**
+			 * .L5:
+			 * t4 <- x + y
+			 * t5 <- x > t4
+			 * t6 <- y_0 || t5
+			 * cbranch_nz .L13 else .L12
+			 *
+			 * Transforms into
+			 *
+			 * .L5:
+			 * t8 <- test if not zero y_0
+			 * cbranch_nz .L13 else .L6 <-- go to if, else second block
+			 *
+			 * .L6:
+			 * t4 <- x + y
+			 * t5 <- x > t4
+			 * cbranch_nz .L13 else .L12 <-- go to if, else else block
+			 */
+			if(branch_category == BRANCH_CATEGORY_NORMAL){
+				//Get the first child for the left statement
+				generic_ast_node_t* child_cursor = conditional_node->first_child;
+
+				/**
+				 * Left side: IF SUCCESS -> if block, else secondary block
+				 */
+				emit_branch(current_block, child_cursor, if_block, secondary_block, BRANCH_CATEGORY_NORMAL);
+
+				//Current block now is our secondary
+				current_block = secondary_block;
+
+				/**
+				 * Left Side: IF SUCCESS -> if block, else else block
+				 */
+				cfg_result_package_t right_side_results = emit_branch(current_block, child_cursor->next_sibling, if_block, else_block, BRANCH_CATEGORY_NORMAL);
+
+				//Update the current block once again
+				current_block = right_side_results.final_block;
+
+			/**
+			 * .L2
+			 * t7 <- b_1 != 0 
+			 * t10 <- a_1 < 33
+			 * t11 <- t7 || t10
+			 * cbranch_z .L9 else .L13 <-- Notice how it goes to if on failure
+			 *
+			 * Turn this into:
+			 *
+			 * .L2:
+			 * t7 <- b_1 != 0 <--- If this does work, we know that t11 will *not* be zero, so jump to else
+			 * cbranch_ne .L13 else .L3
+			 *
+			 * .L3: <----- We only get here if the first one is false
+			 * t10 <- a_1 < 33
+			 * cbranch_ge .L9 else .L13 <-- If this also fails, we've satisfied the initial condition
+			 */
+			} else {
+				//Get the first child for the left statement
+				generic_ast_node_t* child_cursor = conditional_node->first_child;
+
+				/**
+				 * Left side: IF SUCCESS -> else, else secondary block
+				 */
+				emit_branch(current_block, child_cursor, else_block, secondary_block, BRANCH_CATEGORY_NORMAL);
+
+				//Current block now is our secondary
+				current_block = secondary_block;
+
+				/**
+				 * Left Side: IF FAILS -> if block, else else block
+				 */
+				cfg_result_package_t right_side_results = emit_branch(current_block, child_cursor->next_sibling, if_block, else_block, BRANCH_CATEGORY_INVERSE);
+
+				//Update the current block once again
+				current_block = right_side_results.final_block;
+			}
+		}
+	}
+
+	//Update this - odds are it's changed
+	results.final_block = current_block;
+
+	//Give back our final results
+	return results;
 }
 
 
@@ -3122,21 +3450,74 @@ void emit_branch(basic_block_t* basic_block, basic_block_t* if_destination, basi
  *
  * We'll leave out all of the successor logic here as well, until we reach the end
  */
-static inline void emit_user_defined_branch(basic_block_t* basic_block, symtab_variable_record_t* if_destination, basic_block_t* else_destination, three_addr_var_t* conditional_decider, branch_type_t branch_type){
-	//Emit the branch, purposefully leaving the if area NULL
-	instruction_t* branch = emit_branch_statement(NULL, else_destination, conditional_decider, branch_type);
+static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_block, generic_ast_node_t* conditional_node, symtab_variable_record_t* if_destination, basic_block_t* else_destination, branch_category_t branch_category){
+	//Allcoate the results
+	cfg_result_package_t results = {starting_block, starting_block, NULL, BLANK};
 
-	//We'll need to store the label in here for later on down the line
-	branch->var_record = if_destination;
+	//Keep track of the current block
+	basic_block_t* current_block = starting_block;
 
-	//Mark where we came from
-	branch->block_contained_in = basic_block;
+	//First let the helper emit it
+	cfg_result_package_t binary_results = emit_branch_conditional_expression(current_block, conditional_node);
 
-	//Add this to the array of user defined jumps
-	dynamic_array_add(&current_function_user_defined_jump_statements, branch);
+	//Update the final block
+	current_block = binary_results.final_block;
 
-	//Add this into the first block
-	add_statement(basic_block, branch);
+	//Extract the actual result assignee
+	three_addr_var_t* conditional_decider = binary_results.assignee;
+
+	/**
+	 * If the given operator does not set condition codes appropriately, then
+	 * we'll need to make that happen here
+	 */
+	if(does_operator_set_condition_codes(binary_results.operator) == FALSE){
+		//We'll need a test command for this
+		conditional_decider = emit_test_not_zero(current_block, conditional_decider, &(binary_results.operator));
+	}
+
+	/**
+	 * Let's try to grab the final result type. Remember that the comparison type may be different than
+	 * the actual assignee type. If we can grab it then we will use that, otherwise we will use
+	 * the assignee type
+	 */
+	u_int8_t type_signed;
+	if(current_block->exit_statement != NULL
+		&& is_binary_operation(current_block->exit_statement)
+		&& variables_equal(current_block->exit_statement->assignee, conditional_decider, FALSE) == TRUE){
+
+		//If we have a result type use that, otherwise take from op1
+		if(current_block->exit_statement->type_storage.result_type != NULL){
+			type_signed = is_type_signed(current_block->exit_statement->type_storage.result_type);
+		} else {
+			type_signed = is_type_signed(current_block->exit_statement->op1->type);
+		}
+
+	} else {
+		type_signed = is_type_signed(conditional_decider->type);
+	}
+
+	//Flag that this sets condition codes
+	conditional_decider->sets_cc = TRUE;
+
+	//Now let's try to decide the branch type
+	branch_type_t branch_type = select_appropriate_branch_statement(binary_results.operator, branch_category, type_signed);
+
+	//Now we can finall spit this one out
+	instruction_t* branch_statement = emit_branch_statement(NULL, else_destination, conditional_decider, branch_type);
+	
+	//Store the if destination for later
+	branch_statement->var_record = if_destination;
+
+	//Add it into the block
+	add_statement(current_block, branch_statement);
+
+	//Add this into the array for later
+	dynamic_array_add(&current_function_user_defined_jump_statements, branch_statement);
+
+	//Update the final block
+	results.final_block = current_block;
+
+	return results;
 }
 
 
@@ -3635,31 +4016,6 @@ static inline three_addr_var_t* emit_sse_dec_code(basic_block_t* basic_block, th
 
 	//Finally, the result that we give back is the incrementee
 	return final_assignee;
-}
-
-
-/**
- * Emit a test instruction. Note that this is different depending on what kind of testing that we're doing(GP vs SSE)
- *
- * Note that for the operator input, we will use this to modify the given operator *if* we have a floating point operation.
- * This is because the eventual selected code for floating point will turn if(x) into if(x != 0) essentially, so we need to
- * have that logic already in for when the branch statements are selected
- */
-static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, three_addr_var_t* tested_variable, ollie_token_t* operator){
-	//Emit the instruction
-	instruction_t* test_if_not_zero = emit_test_if_not_zero_statement(emit_temp_var(u8), tested_variable);
-
-	//Now we'll add it into the block
-	add_statement(basic_block, test_if_not_zero);
-
-	//If this is a floating point variable, update the pass-by-reference
-	//operator
-	if(IS_FLOATING_POINT(tested_variable->type) == TRUE){
-		*operator = NOT_EQUALS;
-	}
-
-	//Give back the final assignee
-	return test_if_not_zero->assignee;
 }
 
 
@@ -4971,6 +5327,13 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//This will always overwrite the other value
 			instruction_t* logical_not_statement = emit_logical_not_instruction(emit_temp_var(u8), assignee);
 
+			/**
+			 * If we came from a floating point operation, then we will just flag as such here
+			 */
+			if(IS_FLOATING_POINT(assignee->type) == TRUE){
+				logical_not_statement->assignee->comes_from_fp_comparison = TRUE;
+			}
+
 			//Get it into the block right after the unary expression
 			add_statement(current_block, logical_not_statement);
 
@@ -5165,28 +5528,10 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	//Grab a cursor to the first child
 	generic_ast_node_t* cursor = ternary_operation->first_child;
 
-	//Let's first process the conditional
-	cfg_result_package_t expression_package = emit_binary_expression(current_block, cursor);
-
-	//Reassign to be the true end block
-	current_block = expression_package.final_block;
-
-	//Store for later
-	three_addr_var_t* conditional_decider = expression_package.assignee;
-
-	//Extract the operator
-	ollie_token_t operator = expression_package.operator;
-
-	//If this is blank, we need a test instruction
-	if(operator == BLANK){
-		conditional_decider = emit_test_not_zero(current_block, expression_package.assignee, &operator);
-	}
-
-	//Select the jump type for our conditional. This is a normal branch, we aren't doing any inverting
-	branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
-
-	//emit the branch statement
-	emit_branch(current_block, if_block, else_block,  branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL, FALSE);
+	/**
+	 * Let the helper emit the normal if branch/conditional expression here
+	 */
+	emit_branch(current_block, cursor, if_block, else_block, BRANCH_CATEGORY_NORMAL);
 	
 	//Now we'll go through and process the two children
 	cursor = cursor->next_sibling;
@@ -5304,43 +5649,10 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	switch(logical_or_expr->binary_operator){
 		case DOUBLE_AND:
 		case DOUBLE_OR:
-			/**
-			 * If the left side is not a temp var, we will emit a temp variable,
-			 * we will emit a temp assignment to compensate
-			 */
-			if(left_side.assignee->variable_type != VARIABLE_TYPE_TEMP){
-				//Emit the instruction
-				instruction_t* left_side_temp_assignment = emit_assignment_instruction(emit_temp_var(left_side.assignee->type), left_side.assignee);
+			//op1 always comes from the left side
+			op1 = left_side.assignee;
+			op2 = right_side.assignee;
 
-				//Throw it into the block
-				add_statement(current_block, left_side_temp_assignment);
-
-				//Add this in here
-				op1 = left_side_temp_assignment->assignee; 
-
-			//Otherwise just grab out what we have
-			} else {
-				op1 = left_side.assignee;
-			}
-
-			/**
-			 * Same treatment for the right. If it's not a temp var then we will make it one
-		 	 */
-			if(right_side.assignee->variable_type != VARIABLE_TYPE_TEMP){
-				//Emit the instruction
-				instruction_t* right_side_temp_assignment = emit_assignment_instruction(emit_temp_var(right_side.assignee->type), right_side.assignee);
-
-				//Throw it into the block
-				add_statement(current_block, right_side_temp_assignment);
-
-				//Add this in here
-				op2 = right_side_temp_assignment->assignee; 
-
-			//Otherwise just grab out what we have
-			} else {
-				op2 = right_side.assignee;
-			}
-			
 			/**
 			 * IMPORTANT - for operations like these, our final result type is always a boolean. However,
 			 * for the actual operation, we may have floats, ints, etc. To stop this from causing problems,
@@ -5348,7 +5660,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 			 * itself
 			 */
 			final_result_type = get_operand_type_for_logical_operation(type_symtab, op1->type, op2->type);
-
+			
 			break;
 
 		/**
@@ -5384,6 +5696,14 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 				//Now use the helper to get the final result type
 				final_result_type = get_operand_type_for_relational_operation(type_symtab, op1->type, op2->type);
+			}
+
+			/**
+			 * If the final result type is an FP comparison, we need to flag this for later on down
+			 * the line when we need to perform instruction selection
+			 */
+			if(IS_FLOATING_POINT(final_result_type) == TRUE){
+				assignee->comes_from_fp_comparison = TRUE;
 			}
 
 			break;
@@ -5740,7 +6060,6 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			break;
 
 		case AST_NODE_TYPE_TERNARY_EXPRESSION:
-			//Emit the ternary expression
 			result_package = emit_ternary_expression(basic_block, expr_node);
 			break; 
 
@@ -5938,6 +6257,37 @@ static cfg_result_package_t emit_error_handle_statement(generic_ast_node_t* erro
 
 
 /**
+ * Emit a branch for a switch/handle statement. This is very different than the other branches that we are used to. Mainly, it will
+ * not attempt to perform *any* short circuiting. It also assumes that the caller has already set everything up that is needed for the conditional.
+ *
+ * These are always normal branches - there is not an option for an inverse branch here
+ */
+static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, branch_type_t branch_type, three_addr_var_t* conditional_result){
+	//Emit the actual instruction here
+	instruction_t* branch_instruction = emit_branch_statement(if_destination, else_destination, conditional_result, branch_type);
+
+	/**
+	 * We need to flag for later on that this conditional result is being used to set condition
+	 * codes. This is especially important for the value numberer because we need to make
+	 * sure that we don't optimize this away if we need said condition codes
+	 */
+	conditional_result->sets_cc = TRUE;
+
+	//Mark this as the op1 so that we can track in the optimizer
+	branch_instruction->op1 = conditional_result;
+
+	//Add the statement into the block
+	add_statement(basic_block, branch_instruction);
+
+	add_successor(basic_block, if_destination);
+	add_successor(basic_block, else_destination);
+
+	//These are always normal branches
+	branch_instruction->inverse_branch = FALSE;
+}
+
+
+/**
  * A handle statement internally becomes a switch statement based on the returned error of the function(%rdx). We will switch
  * based on %rdx and handle things accordingly. Remember that this is only a thing that exists for functions that error, non-errorable
  * functions should never have handle statements. The function itself is going to pass us its result in %rax, but that doesn't mean
@@ -6122,7 +6472,7 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 	//Add the comparsion
 	add_statement(starting_block, comparison);
 	//Get the branch out - this handles everything for us
-	emit_branch(starting_block, default_block, jump_calculation_block, BRANCH_A, comparison->assignee, BRANCH_CATEGORY_NORMAL, FALSE);
+	emit_branch_for_switch_statement(starting_block, default_block, jump_calculation_block, BRANCH_A, comparison->assignee);
 
 	/**
 	 * Now we can do the indirect jump calculation and emit the indirect jump. Remember that we're already starting at 0, so we don't
@@ -7323,8 +7673,10 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//We will explicitly declare that this is an exit here
 	for_stmt_exit_block->block_type = BLOCK_TYPE_LOOP_EXIT;
 
-	//All breaks will go to the exit block
-	//Hold off on the continue block for now
+	/**
+	 * All breaks will go to the exit block
+	 * Hold off on the continue block for now
+	 */
 	push(&break_stack, for_stmt_exit_block);
 
 	//Once we get here, we already know what the start and exit are for this statement
@@ -7334,8 +7686,10 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//Grab a cursor for our traversal
 	generic_ast_node_t* cursor = root_node->first_child;
 
-	//The first thing that we are able to see is a chain of statements that may
-	//or may not be there. We will let our given rule handle it
+	/**
+	 * The first thing that we are able to see is a chain of statements that may
+	 * or may not be there. We will let our given rule handle it
+	 */
 	if(cursor->ast_node_type == AST_NODE_TYPE_EXPR_CHAIN){
 		cfg_result_package_t expression_chain_result = emit_expression_chain(for_stmt_entry_block, cursor, FALSE);
 
@@ -7346,40 +7700,27 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 		cursor = cursor->next_sibling;
 	}
 
-	//Once we reach here, we are officially in the loop. Everything beyond this point
-	//is going to happen repeatedly
+	/**
+	 * Once we reach here, we are officially in the loop. Everything beyond this point
+	 * is going to happen repeatedly
+	 */
 	push_nesting_level(&nesting_stack, NESTING_LOOP_STATEMENT);
 
-	//We'll now need to create our repeating node. This is the node that will actually repeat from the for loop.
-	//The second and third condition in the for loop are the ones that execute continously. The third condition
-	//always executes at the end of each iteration
+	/**
+	 * We'll now need to create our repeating node. This is the node that will actually repeat from the for loop.
+	 * The second and third condition in the for loop are the ones that execute continously. The third condition
+	 * always executes at the end of each iteration
+	 */
 	basic_block_t* condition_block = basic_block_alloc_and_estimate();
 	//Flag that this is a loop start
 	condition_block->block_type = BLOCK_TYPE_LOOP_ENTRY;
 
 	//We will now emit a jump from the entry block, to the condition block
 	emit_jump(for_stmt_entry_block, condition_block);
+
+	//Grab the node for the condition block - save for later
+	generic_ast_node_t* condition_block_node = cursor->first_child;
 	
-	//For later branching - null by default
-	three_addr_var_t* conditional_decider = NULL;
-	//What is the conditional operator?
-	ollie_token_t operator = BLANK;
-
-	//*if* we have a condition block we will emit it now - remember that this is not a strict requirement
-	if(cursor->first_child != NULL){
-		//The condition block values package. This is just a regular expression
-		cfg_result_package_t condition_block_vals = emit_expression(condition_block, cursor->first_child, TRUE);
-
-		//Store this for later
-		conditional_decider = condition_block_vals.assignee;
-		operator = condition_block_vals.operator;	
-
-		//If this is blank, we need to change this
-		if(operator == BLANK){
-			conditional_decider = emit_test_not_zero(condition_block_vals.final_block, condition_block_vals.assignee, &operator);
-		}
-	}
-
 	//Now push up to the third condition
 	cursor = cursor->next_sibling;
 
@@ -7412,28 +7753,25 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//Once we're done with the compound statement, we are no longer in the loop
 	pop_nesting_level(&nesting_stack);
 
-	//If we have an empty interior just emit a dummy block. It will be optimized away 
-	//regardless
+	//If we have an empty interior just emit a dummy block. It will be optimized away regardless
 	if(compound_statement_results.starting_block == NULL){
 		compound_statement_results.starting_block = basic_block_alloc_and_estimate();
 		compound_statement_results.final_block = compound_statement_results.starting_block;
 	}
 
-	//If we have a conditional at all, we will emit appropriate branch
-	//logic
-	if(conditional_decider != NULL){
-		//Determine the kind of branch that we'll need here
-		branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_INVERSE, is_type_signed(conditional_decider->type));
-
-		/**
-		 * Inverse jumping logic so
-		 *
-		 * if not condition 
-		 * 	goto exit
-		 * else
-		 * 	goto update
-		 */
-		emit_branch(condition_block, for_stmt_exit_block, compound_statement_results.starting_block, branch_type, conditional_decider, BRANCH_CATEGORY_INVERSE, FALSE);
+	/**
+	 * If we have a conditional at all, we will emit appropriate branch
+	 * logic
+	 *
+	 * Inverse jumping logic so
+	 *
+	 * if not condition 
+	 * 	goto exit
+	 * else
+	 * 	goto update
+	 */
+	if(condition_block_node != NULL){
+		emit_branch(condition_block, condition_block_node, for_stmt_exit_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE);
 
 	//Otherwise - we're doing as the user wants here and just emitting a straight jump from this block to the body
 	} else {
@@ -7520,24 +7858,9 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 		return result_package;
 	}
 
-	//Add the conditional check into the end here
-	cfg_result_package_t package = emit_expression(compound_stmt_end, ast_cursor->next_sibling, TRUE);
-
-	//Store for later
-	three_addr_var_t* conditional_decider = package.assignee;
-
-	//Extract the operator
-	ollie_token_t operator = package.operator;
-
-	//If this is blank, we'll need to emit the test code here
-	if(operator == BLANK){
-		conditional_decider = emit_test_not_zero(compound_stmt_end, package.assignee, &operator);
-	}
-
-	//Select the appropriate branch type
-	branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
-		
 	/**
+	 * Now we can use the helper to emit our branch 
+	 *
 	 * Branch works in a regular way
 	 *
 	 * If condition 
@@ -7545,7 +7868,7 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	 * else
 	 * 	exit
 	 */
-	emit_branch(compound_stmt_end, do_while_stmt_entry_block, do_while_stmt_exit_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL, FALSE);
+	emit_branch(compound_stmt_end, ast_cursor->next_sibling, do_while_stmt_entry_block, do_while_stmt_exit_block, BRANCH_CATEGORY_NORMAL);
 
 	//Now that we're done here, pop the break/continue stacks to remove these blocks
 	pop(&continue_stack);
@@ -7593,8 +7916,8 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	//Grab a cursor to the while statement node
 	generic_ast_node_t* ast_cursor = while_stmt_node->first_child;
 
-	//The entry block contains our expression statement
-	cfg_result_package_t package = emit_expression(while_statement_entry_block, ast_cursor, TRUE);
+	//We'll need this for later
+	generic_ast_node_t* conditional_cursor = ast_cursor;
 
 	//The very next node is a compound statement
 	ast_cursor = ast_cursor->next_sibling;
@@ -7605,28 +7928,15 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	//We're out of the compound statement - pop the nesting level
 	pop_nesting_level(&nesting_stack);
 
-	//If it's null, that means that we were given an empty while loop here.
-	//We'll just allocate our own and use that
+	/**
+	 * If it's null, that means that we were given an empty while loop here.
+	 * We'll just allocate our own and use that
+	 */
 	if(compound_statement_results.starting_block == NULL){
 		//Just give a dummy here
 		compound_statement_results.starting_block = basic_block_alloc_and_estimate();
 		compound_statement_results.final_block = compound_statement_results.starting_block;
 	}
-
-	//What does the conditional jump rely on?
-	three_addr_var_t* conditional_decider = package.assignee;
-
-	//Extract the operator
-	ollie_token_t operator = package.operator;
-
-	//If the operator is blank, we need to emit a test instruction
-	if(operator == BLANK){
-		//Emit the testing instruction
-	 	conditional_decider = emit_test_not_zero(while_statement_entry_block, package.assignee, &operator);
-	}
-
-	//The branch type here will be an inverse branch
-	branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_INVERSE, is_type_signed(conditional_decider->type));
 
 	/**
 	 * Inverse jump out of the while loop to the end if bad
@@ -7634,14 +7944,16 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	 * If destination -> end of loop
 	 * Else destination -> loop body
 	 */
-	emit_branch(while_statement_entry_block, while_statement_end_block, compound_statement_results.starting_block, branch_type, conditional_decider, BRANCH_CATEGORY_INVERSE, FALSE);
+	emit_branch(while_statement_entry_block, conditional_cursor, while_statement_end_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE);
 
 	//Let's now find the end of the compound statement
 	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
 
-	//If the block is empty *or* it doesn't end in a return, we need a jump
+	/**
+	 * If the block does not end in a termianl statement, we will need to emit a jump right back
+	 * up to the entry block
+	 */
 	if(does_block_end_in_terminal_statement(compound_stmt_end) == FALSE){
-		//The compound statement end will jump right back up to the entry block
 		emit_jump(compound_stmt_end, while_statement_entry_block);
 	}
 
@@ -7655,225 +7967,215 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 
 
 /**
- * Process the if-statement subtree into CFG form
+ * Process an if-else-if statement into CFG form, handling all possible contigencies
  */
 static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
-	//The statement result package for our if statement
-	cfg_result_package_t result_package;
+	//Final result package
+	cfg_result_package_t if_results_package = {NULL, NULL, NULL, BLANK};
 
-	//We always have an entry block and an exit block
-	basic_block_t* entry_block = basic_block_alloc_and_estimate();
-	entry_block->block_type = BLOCK_TYPE_IF_ENTRY;
-	basic_block_t* exit_block = basic_block_alloc_and_estimate();
-	exit_block->block_type = BLOCK_TYPE_IF_EXIT;
+	/**
+	 * We will maintain a current entry block and a current entry block. The first
+	 * entry block we know for sure is our very first top guy
+	 */
+	basic_block_t* current_entry_block = basic_block_alloc_and_estimate();
 
-	//Note the starting and final blocks here
-	result_package.starting_block = entry_block;
-	result_package.final_block = exit_block;
+	/**
+	 * The overall exit block is where everything goes to in the end to get out
+	 * of the if execution. This may change to be a function exit block if we return
+	 * through every single control path
+	 */
+	basic_block_t* overall_exit_block = basic_block_alloc_and_estimate();
 
-	//An if statement has no assignee, and no operator
-	result_package.assignee = NULL;
-	result_package.operator = BLANK;
+	//This is definitely our starting block
+	if_results_package.starting_block = current_entry_block;
 
-	//Grab the cursor
+	//We'll also need a cursor to traverse the entire thing
 	generic_ast_node_t* cursor = root_node->first_child;
 
-	//Add whatever our conditional is into the starting block
-	cfg_result_package_t package = emit_expression(entry_block, cursor, TRUE);
-
-	//Variable for down the road
-	three_addr_var_t* conditional_decider = package.assignee;
-
-	//Extract the operator
-	ollie_token_t operator = package.operator;
-
-	//If the operator is blank, we need to emit a test instruction
-	if(operator == BLANK){
-		//Emit the testing instruction
-		conditional_decider = emit_test_not_zero(entry_block, package.assignee, &operator);
-	}
-
-	//No we'll move one step beyond, the next node must be a compound statement
-	cursor = cursor->next_sibling;
-
-	//Push that we're in an if statement for the compound statement
+	//Hang onto this for later
+	generic_ast_node_t* conditional_node = cursor;
+	
+	//Signify that this is happening inside of an IF
 	push_nesting_level(&nesting_stack, NESTING_IF_STATEMENT);
 
-	//Visit the compound statement that we're required to have here
+	//Advance the cursor up to get the compound statement 
+	cursor = cursor->next_sibling;
+
+	//Let the helper emit the entire compound statement
 	cfg_result_package_t if_compound_statement_results = visit_compound_statement(cursor);
 
-	//And then pop it off
+	//Remove the IF nester
 	pop_nesting_level(&nesting_stack);
 
-	//If the starting block is null, create a dummy one
+	/**
+	 * If we have an empty if statement(possible), then we'll just go about creating
+	 * a block here so we don't have any weird behavior
+	 */
 	if(if_compound_statement_results.starting_block == NULL){
 		if_compound_statement_results.starting_block = basic_block_alloc_and_estimate();
 		if_compound_statement_results.final_block = if_compound_statement_results.starting_block;
 	}
 
-	//Extract this for convenience
-	basic_block_t* if_compound_stmt_end = if_compound_statement_results.final_block;
-
-	//If the block is empty *or* it doesn't end in a return, we add a jump
-	if(does_block_end_in_terminal_statement(if_compound_stmt_end) == FALSE){
-		//The successor to the if-stmt end path is the if statement end block
-		emit_jump(if_compound_stmt_end, exit_block);
+	/**
+	 * If the if compound statement final block does not end in a return, we'll need to make
+	 * it jump to the exit block. This is the overall exit block, not the current exit block
+	 * which is just where we go if something didn't work
+	 */
+	if(does_block_end_in_terminal_statement(if_compound_statement_results.final_block) == FALSE){
+		emit_jump(if_compound_statement_results.final_block, overall_exit_block);
 	}
-
-	//Select an appropriate branch for the entry block
-	branch_type_t entry_block_branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
-
-	//Emit the branch from the entry block out to the starting block. We will *intentionally* leave the else case NULL
-	//because we may have else-if cases that we need to add down the road
-	emit_branch(entry_block, if_compound_statement_results.starting_block, NULL, entry_block_branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL, FALSE);
-
-	//From our perspective, the previous entry block
-	//is now the one we've just made
-	basic_block_t* previous_entry_block = entry_block;
-
-	//Advance the cursor up to it's next sibling
+	
+	//Bump the cursor up to the next statement
 	cursor = cursor->next_sibling;
 
-	//So long as we keep seeing else-if clauses
+	/**
+	 * Is the cursor NULL? If it is, then to get out of this if we just
+	 * need to jump to the final exit block. If it's not NULL, then we're going 
+	 * to need to jump to a new conditional block for the else-if/else that we
+	 * need to emit next
+	 */
+	if(cursor != NULL){
+		//Hang onto the old "entry"
+		basic_block_t* old_entry_block_holder = current_entry_block;
+
+		//We'll make a fresh new entry block for our else-if/else
+		current_entry_block = basic_block_alloc_and_estimate();
+
+		//Now branch out to the new current entry block
+		emit_branch(old_entry_block_holder, conditional_node, if_compound_statement_results.starting_block, current_entry_block, BRANCH_CATEGORY_NORMAL);
+	
+	/**
+	 * This is a terminal case - we're done so we can set the final block and get out
+	 */
+	} else {
+		emit_branch(current_entry_block, conditional_node, if_compound_statement_results.starting_block, overall_exit_block, BRANCH_CATEGORY_NORMAL);
+		if_results_package.final_block = overall_exit_block;
+		return if_results_package;
+	}
+
+	/**
+	 * So long as we keep seeing else-if statements, we will keep processing here accordingly
+	 *
+	 * When we enter this loop, the current entry block is already pre-allocated and ready for
+	 * us to use
+	 */
 	while(cursor != NULL && cursor->ast_node_type == AST_NODE_TYPE_ELSE_IF_STMT){
-		//Grab a cursor to traverse the else-if block
+		//Grab a cursor for this specific traversal
 		generic_ast_node_t* else_if_cursor = cursor->first_child;
 
-		//Make a new one
-		basic_block_t* new_entry_block = basic_block_alloc_and_estimate();
+		//Hang onto the conditional for us
+		generic_ast_node_t* else_if_conditional = else_if_cursor;
 
-		//Extract the old branch statement from the previous entry block
-		instruction_t* branch_statement = previous_entry_block->exit_statement;
-
-		/**
-		 * For our bookeeping, we'll need to force the old branch statement to
-		 * point here to the current entry block. We'll also need
-		 * to add a successor
-		 */
-		branch_statement->else_block = new_entry_block;
-		//The current entry block is the else branch for the conditional
-		//branch in the previous one
-		add_successor(previous_entry_block, new_entry_block);
-
-		//So we've seen the else-if clause. Let's grab the expression first
-		package = emit_expression(new_entry_block, else_if_cursor, TRUE);
-
-		//Advance it up -- we should now have a compound statement
-		else_if_cursor = else_if_cursor->next_sibling;
-
-		//Push that we're in an if statement
+		//Signify that this is happening inside of an IF
 		push_nesting_level(&nesting_stack, NESTING_IF_STATEMENT);
 
-		//Let this handle the compound statement
+		//Advance the cursor up to get the compound statement 
+		else_if_cursor = else_if_cursor->next_sibling;
+
+		//Let the helper emit the entire compound statement
 		cfg_result_package_t else_if_compound_statement_results = visit_compound_statement(else_if_cursor);
 
-		//And now pop it off
+		//Remove the IF nester
 		pop_nesting_level(&nesting_stack);
 
-		//If this is NULL, then we need to emit dummy blocks
+		/**
+		 * If we have an empty if statement(possible), then we'll just go about creating
+		 * a block here so we don't have any weird behavior
+		 */
 		if(else_if_compound_statement_results.starting_block == NULL){
 			else_if_compound_statement_results.starting_block = basic_block_alloc_and_estimate();
 			else_if_compound_statement_results.final_block = else_if_compound_statement_results.starting_block;
 		}
 
-		//This is the package's assignee
-		conditional_decider = package.assignee;
-
-		//Extract the operator
-		ollie_token_t operator = package.operator;
-
-		//If the operator is blank, we need to emit a test instruction
-		if(operator == BLANK){
-			//Emit the testing instruction
-			conditional_decider = emit_test_not_zero(new_entry_block, package.assignee, &operator);
+		/**
+		 * If the else if compound statement final block does not end in a return, we'll need to make
+		 * it jump to the overall exit block
+		 */
+		if(does_block_end_in_terminal_statement(else_if_compound_statement_results.final_block) == FALSE){
+			emit_jump(else_if_compound_statement_results.final_block, overall_exit_block);
 		}
 
-		//Select the branch here as well
-		branch_type_t else_if_branch = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
-
-		//Now we'll emit the branch statement into the current entry block. Again we intentionally
-		//leave the else area null for later use
-		emit_branch(new_entry_block, else_if_compound_statement_results.starting_block, NULL, else_if_branch, conditional_decider, BRANCH_CATEGORY_NORMAL, FALSE);
-
-		//Now we'll find the end of this statement
-		basic_block_t* else_if_compound_stmt_exit = else_if_compound_statement_results.final_block;
-
-		//If the block is empty *or* it doesn't end in a return, we need the jump
-		if(does_block_end_in_terminal_statement(else_if_compound_stmt_exit) == FALSE){
-			//The successor to the if-stmt end path is the if statement end block
-			emit_jump(else_if_compound_stmt_exit, exit_block);
-		}
-
-		//Now for our bookkeeping, the current entry block here now also counts as the previous
-		//entry block
-		previous_entry_block = new_entry_block;
-
-		//Advance this up to the next one
+		//Bump the cursor up to the next statement
 		cursor = cursor->next_sibling;
+
+		/**
+		 * Is the cursor NULL? If it is, then to get out of this if we just
+		 * need to jump to the final exit block. If it's not NULL, then we're going 
+		 * to need to jump to a new conditional block for the else-if/else that we
+		 * need to emit next
+		 */
+		if(cursor != NULL){
+			//Hang onto the old "entry"
+			basic_block_t* old_entry_block_holder = current_entry_block;
+
+			//We'll make a fresh new entry block for our else-if/else
+			current_entry_block = basic_block_alloc_and_estimate();
+
+			//Now branch out to the new current entry block
+			emit_branch(old_entry_block_holder, else_if_conditional, else_if_compound_statement_results.starting_block, current_entry_block, BRANCH_CATEGORY_NORMAL);
+		
+		/**
+		 * This is a terminal case - we're done so we can set the final block and get out
+		 */
+		} else {
+			emit_branch(current_entry_block, else_if_conditional, else_if_compound_statement_results.starting_block, overall_exit_block, BRANCH_CATEGORY_NORMAL);
+			if_results_package.final_block = overall_exit_block;
+			return if_results_package;
+		}
 	}
 
-	//Now that we're out of here - we may have an else statement on our hands
+	/**
+	 * If we get here and the cursor is a compound statement, then we have
+	 * an else condition to deal with. Remember that we have a freshly
+	 * allocated "current_entry_block". To make this all work nicely,
+	 * we'll need to chain that into the compound statement here with a jump.
+	 * This will be optimized away later
+	 */
 	if(cursor != NULL && cursor->ast_node_type == AST_NODE_TYPE_COMPOUND_STMT){
-		//Push the nesting level now that we're in a compound statement
+		//Push the if nesting level
 		push_nesting_level(&nesting_stack, NESTING_IF_STATEMENT);
 
-		//Grab the compound statement
+		//Get the results for the else statement
 		cfg_result_package_t else_compound_statement_values = visit_compound_statement(cursor);
 
 		//Pop it off
 		pop_nesting_level(&nesting_stack);
 
-		//Extract for convenience
-		instruction_t* branch_statement = previous_entry_block->exit_statement;
-
-		//This very well could be NULL, in which case we can just go to the end
-		if(else_compound_statement_values.starting_block != NULL){
-			//The else block here now points to the else's start
-			branch_statement->else_block = else_compound_statement_values.starting_block;
-
-			//It is also now a successor as well
-			add_successor(previous_entry_block, else_compound_statement_values.starting_block);
-
-			//More bookeeping based on the exit type
-			basic_block_t* else_compound_statement_exit = else_compound_statement_values.final_block;
-
-			//If the block is empty *or* it doesn't end in a return, we need the jump
-			if(does_block_end_in_terminal_statement(else_compound_statement_exit) == FALSE){
-				//The successor to the if-stmt end path is the if statement end block
-				emit_jump(else_compound_statement_exit, exit_block);
-			}
-
-		} else {
-			//The else block here is just the exit block
-			branch_statement->else_block = exit_block;
-
-			//And it's a successor as well
-			add_successor(previous_entry_block, exit_block);
+		/**
+		 * If we have an empty if statement(possible), then we'll just go about creating
+		 * a block here so we don't have any weird behavior
+		 */
+		if(else_compound_statement_values.starting_block == NULL){
+			else_compound_statement_values.starting_block = basic_block_alloc_and_estimate();
+			else_compound_statement_values.final_block = else_compound_statement_values.starting_block;
 		}
 
-	//Otherwise the if statement will need to jump directly to the end
+		//IMPORTANT - the current entry needs to be chained into this else
+		emit_jump(current_entry_block, else_compound_statement_values.starting_block);
+
+		/**
+		 * If the else if compound statement final block does not end in a return, we'll need to make
+		 * it jump to the overall exit block
+		 */
+		if(does_block_end_in_terminal_statement(else_compound_statement_values.final_block) == FALSE){
+			emit_jump(else_compound_statement_values.final_block, overall_exit_block);
+		}
+	}
+
+	/**
+	 * If we have an exit block that has no predecessors, that means that we return through every
+	 * control path. In this instance, we need to set the result package's final block to be the
+	 * exit block
+	 */
+	if(overall_exit_block->predecessors.current_index == 0){
+		if_results_package.final_block = function_exit_block;
 	} else {
-		//Extract the branch for convenience
-		instruction_t* branch_statement = previous_entry_block->exit_statement;
-
-		//The else scenario here is just the exit block
-		branch_statement->else_block = exit_block;
-
-		//The exit block is now a successor as well
-		add_successor(previous_entry_block, exit_block);
+		if_results_package.final_block = overall_exit_block;
 	}
 
-	//If we have an exit block that has no predecessors, that means that we return through every
-	//control path. In this instance, we need to set the result package's final block to be the
-	//exit block
-	if(exit_block->predecessors.internal_array == NULL || exit_block->predecessors.current_index == 0){
-		result_package.final_block = function_exit_block;
-	}
-
-	//Give back the result package
-	return result_package;
+	//Give back the results package here
+	return if_results_package;
 }
-
 
 /**
  * Visit a default statement.  These statements are also handled like individual blocks that can 
@@ -8296,7 +8598,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	 * else:
 	 * 	goto upper_bound_check
 	 */
-	emit_branch(root_level_block, default_block, upper_bound_check_block, branch_lower_than, lower_than_decider, BRANCH_CATEGORY_NORMAL, FALSE);
+	emit_branch_for_switch_statement(root_level_block, default_block, upper_bound_check_block, branch_lower_than, lower_than_decider);
 
 	//This will be used for tracking
 	three_addr_var_t* higher_than_decider = emit_temp_var(input_result_type);
@@ -8315,7 +8617,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	 * else:
 	 *  goto jump block calculation
 	 */
-	emit_branch(upper_bound_check_block, default_block, jump_calculation_block, branch_greater_than, higher_than_decider, BRANCH_CATEGORY_NORMAL, FALSE);
+	emit_branch_for_switch_statement(upper_bound_check_block, default_block, jump_calculation_block, branch_greater_than, higher_than_decider);
 
 	//To avoid violating SSA rules, we'll emit a temporary assignment here
 	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_results.assignee);
@@ -8513,7 +8815,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	 * else:
 	 * 	goto upper_bound_check
 	 */
-	emit_branch(root_level_block, default_block, upper_bound_check_block, branch_lower_than, lower_than_decider, BRANCH_CATEGORY_NORMAL, FALSE);
+	emit_branch_for_switch_statement(root_level_block, default_block, upper_bound_check_block, branch_lower_than, lower_than_decider);
 
 	//This will be used for tracking
 	three_addr_var_t* higher_than_decider = emit_temp_var(input_result_type);
@@ -8532,7 +8834,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	 * else:
 	 *  goto jump block calculation
 	 */
-	emit_branch(upper_bound_check_block, default_block, jump_calculation_block, branch_greater_than, higher_than_decider, BRANCH_CATEGORY_NORMAL, FALSE);
+	emit_branch_for_switch_statement(upper_bound_check_block, default_block, jump_calculation_block, branch_greater_than, higher_than_decider);
 
 	//To avoid violating SSA rules, we'll emit a temporary assignment here
 	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_results.assignee);
@@ -8750,8 +9052,10 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					current_block = starting_block;
 				}
 
-				//There are two options here. We could see a regular continue or a conditional
-				//continue. If the child is null, then it is a regular continue
+				/**
+				 * There are two options here. We could see a regular continue or a conditional
+				 * continue. If the child is null, then it is a regular continue
+				 */
 				if(ast_cursor->first_child == NULL){
 					//Peek the continue block off of the stack
 					basic_block_t* continuing_to = peek(&continue_stack);
@@ -8762,35 +9066,22 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					//Package and return
 					generic_results = (cfg_result_package_t){starting_block, current_block, NULL, BLANK};
 
-					//We're done here, so return the starting block. There is no 
-					//point in going on
+					/**
+					 * We're done here, so return the starting block. There is no 
+					 * point in going on
+					 */
 					return generic_results;
 
 				//Otherwise, we have a conditional continue here
 				} else {
-					//Emit the expression code into the current statement
-					cfg_result_package_t package = emit_expression(current_block, ast_cursor->first_child, TRUE);
-
-					//Store for later
-					three_addr_var_t* conditional_decider = package.assignee;
-
-					//Extract the operator
-					ollie_token_t operator = package.operator;
-
-					//If this is blank, we'll need a test instruction
-					if(operator == BLANK){
-						conditional_decider = emit_test_not_zero(current_block, package.assignee, &operator);
-					}
+					//Grab the conditional cursor
+					generic_ast_node_t* conditional_expression = ast_cursor->first_child;
 
 					//We'll need a new block here - this will count as a branch
 					basic_block_t* new_block = basic_block_alloc_and_estimate();
 
 					//Peek the continue block off of the stack
 					basic_block_t* continuing_to = peek(&continue_stack);
-
-					//Select the appropriate branch type using
-					//a normal jump
-					branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
 					/**
 					 * Now we will emit the branch like so
@@ -8800,7 +9091,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					 * else:
 					 * 	goto new block
 					 */
-					emit_branch(current_block, continuing_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL, FALSE);
+					emit_branch(current_block, conditional_expression, continuing_to, new_block, BRANCH_CATEGORY_NORMAL);
 
 					//And as we go forward, this new block will be the current block
 					current_block = new_block;
@@ -8815,8 +9106,10 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					current_block = starting_block;
 				}
 
-				//There are two options here: We could have a conditional break
-				//or a normal break. If there is no child node, we have a normal break
+				/**
+				 * There are two options here: We could have a conditional break
+				 * or a normal break. If there is no child node, we have a normal break
+				 */
 				if(ast_cursor->first_child == NULL){
 					//Peak off of the break stack to get what we're breaking to
 					basic_block_t* breaking_to = peek(&break_stack);
@@ -8827,44 +9120,31 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					//Package and return
 					generic_results = (cfg_result_package_t){starting_block, current_block, NULL, BLANK};
 
-					//For a regular break statement, this is it, so we just get out
-					//Give back the starting block
+					/**
+					 * For a regular break statement, this is it, so we just get out
+					 * and give back the starting block
+					 */
 					return generic_results;
 
 				//Otherwise, we have a conditional break, which will generate a conditional jump instruction
 				} else {
+					generic_ast_node_t* conditional_node = ast_cursor->first_child;
+
 					//We'll also need a new block to jump to, since this is a conditional break
 					basic_block_t* new_block = basic_block_alloc_and_estimate();
-
-					//First let's emit the conditional code
-					cfg_result_package_t ret_package = emit_expression(current_block, ast_cursor->first_child, TRUE);
-
-					//Store this for later
-					three_addr_var_t* conditional_decider = ret_package.assignee;
-
-					//Extract the operator
-					ollie_token_t operator = ret_package.operator;
-
-					//If this is blank, we'll need a test instruction
-					if(operator == BLANK){
-						conditional_decider = emit_test_not_zero(current_block, ret_package.assignee, &operator);
-					}
-
-					//First we'll select the appropriate branch type. We are using a regular branch type here
-					branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
 					//Peak off of the break stack to get what we're breaking to
 					basic_block_t* breaking_to = peek(&break_stack);
 
 					/**
-					 * Now we'll emit the branch like so:
+					 * Let the helper come here and emit the branch for us
 					 *
 					 * if conditional
 					 * 	goto end block
 					 * else 
 					 * 	goto new block
 					 */
-					emit_branch(current_block, breaking_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL, FALSE);
+					emit_branch(current_block, conditional_node, breaking_to, new_block, BRANCH_CATEGORY_NORMAL);
 
 					//Once we're out here, the current block is now the new one
 					current_block = new_block;
@@ -8949,35 +9229,17 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				}
 
 				//First child is the conditional
-				generic_ast_node_t* cursor = ast_cursor->first_child;
+				generic_ast_node_t* binary_expression_cursor = ast_cursor->first_child;
 
-				//We'll need to emit the conditional in the current block
-				cfg_result_package_t ret_package = emit_expression(current_block, cursor, TRUE);
-
-				//Update the current block
-				current_block = ret_package.final_block;
-
-				//We'll need a block at the very end which we'll hit after we jump
+				/**
+				 * The if block comes from the ast cursor's variable, the else
+				 * block will be allocated fresh
+				 */
+				symtab_variable_record_t* if_block = ast_cursor->variable;
 				basic_block_t* else_block = basic_block_alloc_and_estimate();
 
-				//Save this here for later
-				three_addr_var_t* conditional_decider = ret_package.assignee;
-
-				//Grab out the operator
-				ollie_token_t operator = ret_package.operator;
-
-				//If the return package's operator is blank,
-				//then we'll need to emit a test instruction here
-				if(operator == BLANK){
-					conditional_decider = emit_test_not_zero(current_block, ret_package.assignee, &operator);
-				}
-
-				//Select the needed branch statement
-				branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
-
-				//Now we can emit the branch itself. The branch itself is incomplete right now, there is a special postprocessor
-				//method for each function that handles filling the rest in
-				emit_user_defined_branch(current_block, ast_cursor->variable, else_block, conditional_decider, branch_type);
+				//Let the helper emit the actual branch
+				emit_user_defined_branch(current_block, binary_expression_cursor, if_block, else_block, BRANCH_CATEGORY_NORMAL);
 
 				//The current block now is said jumping to block
 				current_block = else_block;
@@ -9282,8 +9544,10 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					current_block = starting_block;
 				}
 
-				//There are two options here. We could see a regular continue or a conditional
-				//continue. If the child is null, then it is a regular continue
+				/**
+				 * There are two options here. We could see a regular continue or a conditional
+				 * continue. If the child is null, then it is a regular continue
+				 */
 				if(ast_cursor->first_child == NULL){
 					//Peek the continue block off of the stack
 					basic_block_t* continuing_to = peek(&continue_stack);
@@ -9294,34 +9558,22 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					//Package and return
 					results = (cfg_result_package_t){starting_block, current_block, NULL, BLANK};
 
-					//We're done here, so return the starting block. There is no 
-					//point in going on
+					/**
+					 * We're done here, so return the starting block. There is no 
+					 * point in going on
+					 */
 					return results;
 
 				//Otherwise, we have a conditional continue here
 				} else {
-					//Emit the expression code into the current statement
-					cfg_result_package_t package = emit_expression(current_block, ast_cursor->first_child, TRUE);
-
-					//Store for later
-					three_addr_var_t* conditional_decider = package.assignee;
-
-					//Grab the operator out
-					ollie_token_t operator = package.operator;
-					
-					//If this is blank, we'll need a test instruction
-					if(operator == BLANK){
-						conditional_decider = emit_test_not_zero(current_block, package.assignee, &operator);
-					}
+					//Grab the conditional cursor
+					generic_ast_node_t* conditional_expression = ast_cursor->first_child;
 
 					//We'll need a new block here - this will count as a branch
 					basic_block_t* new_block = basic_block_alloc_and_estimate();
 
 					//Peek the continue block off of the stack
 					basic_block_t* continuing_to = peek(&continue_stack);
-
-					//Select the appropriate branch type, we will not use an inverse jump here
-					branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
 					/**
 					 * Now we will emit the branch like so
@@ -9331,7 +9583,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					 * else:
 					 * 	goto new block
 					 */
-					emit_branch(current_block, continuing_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL, FALSE);
+					emit_branch(current_block, conditional_expression, continuing_to, new_block, BRANCH_CATEGORY_NORMAL);
 
 					//And as we go forward, this new block will be the current block
 					current_block = new_block;
@@ -9346,8 +9598,10 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					current_block = starting_block;
 				}
 
-				//There are two options here: We could have a conditional break
-				//or a normal break. If there is no child node, we have a normal break
+				/**
+				 * There are two options here: We could have a conditional break
+				 * or a normal break. If there is no child node, we have a normal break
+				 */
 				if(ast_cursor->first_child == NULL){
 					//Peak off of the break stack to get what we're breaking to
 					basic_block_t* breaking_to = peek(&break_stack);
@@ -9364,38 +9618,23 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				//Otherwise, we have a conditional break, which will generate a conditional jump instruction
 				} else {
+					generic_ast_node_t* conditional_node = ast_cursor->first_child;
+
 					//We'll also need a new block to jump to, since this is a conditional break
 					basic_block_t* new_block = basic_block_alloc_and_estimate();
-
-					//First let's emit the conditional code
-					cfg_result_package_t ret_package = emit_expression(current_block, ast_cursor->first_child, TRUE);
-
-					//Store this for later
-					three_addr_var_t* conditional_decider = ret_package.assignee;
-					
-					//Grab the operator out
-					ollie_token_t operator = ret_package.operator;
-
-					//If this is blank, we'll need a test instruction
-					if(operator == BLANK){
-						conditional_decider = emit_test_not_zero(current_block, ret_package.assignee, &operator);
-					}
-
-					//First we'll select the appropriate branch type. We are using a regular branch type here
-					branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
 					//Peak off of the break stack to get what we're breaking to
 					basic_block_t* breaking_to = peek(&break_stack);
 
 					/**
-					 * Now we'll emit the branch like so:
+					 * Let the helper come here and emit the branch for us
 					 *
 					 * if conditional
 					 * 	goto end block
 					 * else 
 					 * 	goto new block
 					 */
-					emit_branch(current_block, breaking_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL, FALSE);
+					emit_branch(current_block, conditional_node, breaking_to, new_block, BRANCH_CATEGORY_NORMAL);
 
 					//Once we're out here, the current block is now the new one
 					current_block = new_block;
@@ -9483,36 +9722,18 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					current_block = starting_block;
 				}
 
-				//The first child is our conditional
-				generic_ast_node_t* cursor = ast_cursor->first_child;
+				//First child is the conditional
+				generic_ast_node_t* binary_expression_cursor = ast_cursor->first_child;
 
-				//We'll need to emit the conditional in the current block
-				cfg_result_package_t ret_package = emit_expression(current_block, cursor, TRUE);
-
-				//Update the current block
-				current_block = ret_package.final_block;
-
-				//We'll need a block at the very end which we'll hit after we jump
+				/**
+				 * The if block comes from the ast cursor's variable, the else
+				 * block will be allocated fresh
+				 */
+				symtab_variable_record_t* if_block = ast_cursor->variable;
 				basic_block_t* else_block = basic_block_alloc_and_estimate();
 
-				//Save this here for later
-				three_addr_var_t* conditional_decider = ret_package.assignee;
-
-				//Grab the operator out
-				ollie_token_t operator = ret_package.operator;
-
-				//If the return package's operator is blank,
-				//then we'll need to emit a test instruction here
-				if(operator == BLANK){
-					conditional_decider = emit_test_not_zero(current_block, ret_package.assignee, &operator);
-				}
-
-				//Select the needed branch statement
-				branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
-
-				//Now we can emit the branch itself. The branch itself is incomplete right now, there is a special postprocessor
-				//method for each function that handles filling the rest in
-				emit_user_defined_branch(current_block, ast_cursor->variable, else_block, conditional_decider, branch_type);
+				//Let the helper emit the actual branch
+				emit_user_defined_branch(current_block, binary_expression_cursor, if_block, else_block, BRANCH_CATEGORY_NORMAL);
 
 				//The current block now is said jumping to block
 				current_block = else_block;

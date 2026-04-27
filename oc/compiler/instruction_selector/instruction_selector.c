@@ -2011,10 +2011,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * --------------------- Folding constant assignments in arithmetic expressions ----------------
 	 *  In cases where we have a binary operation that is not a BIN_OP_WITH_CONST, but after simplification
 	 *  could be, we want to eliminate unnecessary register pressure by having consts directly in the arithmetic expression 
-	 *
-	 * NOTE: This does not work for division or modulus instructions
 	 */
-	//Check first with 1 and 2
 	if(window->instruction2 != NULL 
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
@@ -2286,6 +2283,283 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
+	/**
+	 * --------------------- Simplifying binary operations with non-constants ----------------------
+	 * If we have binary operations that are non-constant, there is still a chance that we're able
+	 * to simplify things here. 
+	 *
+	 * Addition:
+	 * 	t4 <- x + x
+	 * 	t4 <- x * 2
+	 *
+	 * Subtraction
+	 * 	t4 <- x - x
+	 * 	t4 <- 0
+	 *
+	 * XOR
+	 * 	t4 <- x ^ x
+	 * 	t4 <- 0
+	 *
+	 * AND 
+	 * 	t4 <- x & x
+	 * 	t4 <- x
+	 *
+	 * OR 
+	 *  t4 <- x | x
+	 *  t4 <- x
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
+		&& variables_equal(window->instruction1->op1, window->instruction1->op2, TRUE) == TRUE){
+		//Grab this out
+		instruction_t* binary_operation = window->instruction1; 
+
+		//We'll need this for some of our optimizations
+		three_addr_const_t* simplification_constant;
+
+		//We will also need the result type, especially for float determination
+		generic_type_t* result_type;
+
+		//If we have it stored then use that, otherwise use op1
+		if(binary_operation->type_storage.result_type != NULL){
+			result_type = binary_operation->type_storage.result_type;
+		} else {
+			result_type = binary_operation->op1->type;
+		}
+
+		// The binary operation determines the optimization
+		switch(binary_operation->op){
+			/**
+			 * For plus, if we have a floating point computation type we aren't
+			 * going to be able to simplify this like we want because floating point
+			 * addition and multiplying by 2 are not exactly the same. As such we're
+			 * only doing this if we have a non floating point computation type
+			 */
+			case PLUS:
+				if(IS_FLOATING_POINT(result_type) == FALSE){
+					//Emit the 2 for our doubling operation
+					simplification_constant = emit_direct_integer_or_char_constant(2, result_type);
+					
+					//Op2 is no longer needed
+					binary_operation->op2->use_count--;
+					binary_operation->op2 = NULL;
+
+					//This is now a BIN_OP_WITH_CONST
+					binary_operation->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+
+					//Throw the constant in
+					binary_operation->op1_const = simplification_constant;
+
+					//The op is multiplication
+					binary_operation->op = STAR;
+
+					//This does count as a change
+					changed = TRUE;
+				}
+
+				break;
+
+			/**
+			 * For minus, if we have a floating point computation type
+			 * we are not able to make this into 0 because floating point
+			 * subtraction may not truly result in 0. As such we will only
+			 * take this step if we do *not* have floating points
+			 */
+			case MINUS:
+				if(IS_FLOATING_POINT(result_type) == FALSE){
+					//Spit out the 0 constant to use here
+					simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
+
+					//Remove these variables
+					binary_operation->op1->use_count--;
+					binary_operation->op2->use_count--;
+					binary_operation->op1 = NULL;
+					binary_operation->op2 = NULL;
+
+					//Remove the opcode to avoid confusion
+					binary_operation->op = BLANK;
+
+					//This is a const assignment
+					binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+					//And throw the simplification constant in
+					binary_operation->op1_const = simplification_constant;
+					
+					//This is a change
+					changed = TRUE;
+				}
+
+				break;
+
+			/**
+			 * Any number "xor'd" with itself will always be 0 due to the 
+			 * xor property. As such we can replace this entire operation with
+			 * an assignment of a zero constant. These will only ever be integers
+			 * so we don't need to worry about anything regarding floating point here
+			 */
+			case CARROT:
+				//Get out our 0 constant
+				simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
+
+				//Remove these variables
+				binary_operation->op1->use_count--;
+				binary_operation->op2->use_count--;
+				binary_operation->op1 = NULL;
+				binary_operation->op2 = NULL;
+
+				//Avoid any confusion with the op as well
+				binary_operation->op = BLANK;
+
+				//Now we will convert this into our assignment operation
+				binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+				binary_operation->op1_const = simplification_constant;
+
+				//This is a change
+				changed = TRUE;
+
+				break;
+
+			/**
+			 * Any number bitwise and'd/or'd with itself is just going to return that exact
+			 * same number so we can skip the and part entirely. These will only
+			 * ever be integers so we don't need to worry about anything regarding
+			 * floating point here
+			 */
+			case SINGLE_AND:
+			case SINGLE_OR:
+				//Delete the second operand
+				binary_operation->op2->use_count--;
+				binary_operation->op2 = NULL;
+
+				//Avoid confusion by clearing out the operator
+				binary_operation->op = BLANK;
+
+				//Change this over into a pure assignment
+				binary_operation->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+
+				break;
+
+			/**
+			 * For logical AND, if two things are the same then the
+			 * logical and result is just one
+			 */
+			case DOUBLE_AND:
+			case DOUBLE_OR:
+				/**
+				 * We will only go ahead with this optimization if we do
+				 * not set condition codes. This really is just a precaution,
+				 * as this should never have gotten here anyway if it does(optimizer
+				 * does it's own simplification), but we need to check
+				 */
+				if(binary_operation->assignee->sets_cc == FALSE){
+					//Hang onto the actual assignee
+					three_addr_var_t* final_assignee = binary_operation->assignee;
+
+					//Get rid of the second operand and the op
+					binary_operation->op2->use_count--;
+					binary_operation->op2 = NULL;
+					binary_operation->op = BLANK;
+
+					//Turn this into a test to see if op1 is 0 or not, that's all we need
+					binary_operation->statement_type = THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT;
+
+					//Emit a temporary assignee for the test not zero
+					binary_operation->assignee = emit_temp_var(u8);
+
+					/**
+					 * Since we aren't setting condition codes, we need to emit a setne statement
+					 * as well as an assignment over to the actual assignee for this to work
+					 */
+					instruction_t* setne = emit_setne_code(emit_temp_var(u8), binary_operation->assignee);
+
+					//This goes in right after our assignee
+					insert_instruction_after_given(setne, binary_operation);
+
+					//Now we'll need a final assignment
+					instruction_t* final_assignment = emit_assignment_instruction(final_assignee, setne->assignee);
+
+					//This goes in after our other statement
+					insert_instruction_after_given(final_assignment, setne);
+
+					//Rebuild the entire window around this
+					reconstruct_window(window, final_assignment);
+
+					//This is a change
+					changed = TRUE;
+				}
+
+				break;
+
+			/**
+			 * x == x / x >= x / x <= x is always true, so we will turn this into a
+			 * 1 *if* we see that it is not relied on for setting
+			 * condition codes. In reality we should never get here
+			 * if it does, but we need to take the precaution
+			 */
+			case DOUBLE_EQUALS:
+			case G_THAN_OR_EQ:
+			case L_THAN_OR_EQ:
+				if(binary_operation->assignee->sets_cc == FALSE){
+					//Spit the constant out
+					simplification_constant = emit_direct_integer_or_char_constant(1, result_type);
+
+					//Remove these variables
+					binary_operation->op1->use_count--;
+					binary_operation->op2->use_count--;
+					binary_operation->op1 = NULL;
+					binary_operation->op2 = NULL;
+
+					//Avoid any confusion with the op as well
+					binary_operation->op = BLANK;
+
+					//Convert this into a regular assignment
+					binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+					binary_operation->op1_const = simplification_constant;
+
+					//This is a change
+					changed = TRUE;
+				}
+
+				break;
+
+			/**
+			 * x != x / x < x / x > x is always false, so we will turn this into a
+			 * 0 *if* we see that it is not relied on for setting
+			 * condition codes. In reality we should never get here
+			 * if it does, but we need to take the precaution
+			 */
+			case NOT_EQUALS:
+			case G_THAN:
+			case L_THAN:
+				if(binary_operation->assignee->sets_cc == FALSE){
+					//Spit the constant out
+					simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
+
+					//Remove these variables
+					binary_operation->op1->use_count--;
+					binary_operation->op2->use_count--;
+					binary_operation->op1 = NULL;
+					binary_operation->op2 = NULL;
+
+					//Avoid any confusion with the op as well
+					binary_operation->op = BLANK;
+
+					//Convert this into a regular assignment
+					binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+					binary_operation->op1_const = simplification_constant;
+
+					//This is a change
+					changed = TRUE;
+				}
+
+				break;
+
+			/**
+			 * By default we can't do anything so we'll need to just break out
+			 */
+			default:
+				break;
+		}
+	}
 
 	/**
 	 * ------------------ Converting adjacent binary operations into LEA statements
@@ -6166,6 +6440,12 @@ instruction_t* emit_constant_move_instruction(three_addr_var_t* destination, thr
 
 
 /**
+ * Create and insert a regular move instruction before the given after instruction. It is assumed
+ * that we will not be needing any kind of converting moves here for this to work
+ */
+
+
+/**
  * Create and insert a converting move operation where the destination's type is the desired type. This handles all of the overhead of creating,
  * finding the converting moves, and inserting
  */
@@ -8735,7 +9015,7 @@ static void handle_cmp_instruction(instruction_window_t* window){
 	 * by a branch statement or if we are going to need to expand it out
 	 * more. By default, we assume it is just being used by a branch
 	 */
-	u_int8_t used_by_branch_only = TRUE;
+	u_int8_t used_by_branch_only = instruction->assignee->sets_cc;
 
 	//Store the result type
 	generic_type_t* operator_type;
@@ -8765,69 +9045,6 @@ static void handle_cmp_instruction(instruction_window_t* window){
 
 	//Store where or not it's a floating point type
 	u_int8_t is_floating_point = IS_FLOATING_POINT(operator_type);
-	
-	/**
-	 * If the assignee is a temp var then we can't be sure if it's only used
-	 * by a branch or if this is eventually expected to be assigned somewhere
-	 */
-	if(instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
-		//Grab a cursor to the next statement
-		instruction_t* cursor = instruction->next_statement;
-
-		//So long as the cursor is not NULL, keep crawling
-		while(cursor != NULL){
-			/**
-			 * This is the case that we're after. If we find that the branch relies
-			 * on this, then we can just get out
-			 */
-			if(variables_equal(cursor->op1, instruction->assignee, FALSE) == TRUE){
-				//This means that we are *not* exclusively used by a branch
-				if(cursor->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
-					used_by_branch_only = FALSE;
-					break;
-				}
-
-				/**
-				 * Otherwise logically speaking we do have a branch
-				 * statement here. As such, if it's a floating point
-				 * branch we'll need to flag that
-				 */
-				if(is_floating_point == TRUE){
-					cursor->relies_on_fp_comparison = TRUE;
-				}
-
-			/**
-			 * We could also be used by op2. If this is the case, then it's definitely not just
-			 * being used by a branch
-			 */
-			} else if (variables_equal(cursor->op2, instruction->assignee, FALSE) == TRUE){
-				/**
-				 * Branches never have dependencies stored in op2. As such if we see this,
-				 * it's an automatic false
-				 */
-				used_by_branch_only = FALSE;
-				break;
-			}
-
-			/**
-			 * If we get to the end and it's not used by a branch, that is fine. The only
-			 * thing that we care about in this crawl is whether or not the above statement
-			 * was used by a branch instruction. If it was, then all of the extra setX
-			 * is unnecessary. If it wasn't then we need to be adding those extra steps
-			 */
-
-			//Advance the cursor up
-			cursor = cursor->next_statement;
-		}
-
-	/**
-	 * If the assignee is non-temp then we can be sure that this is not just
-	 * used by a branch and is instead used as a variable assignment
-	 */
-	} else {
-		used_by_branch_only = FALSE;
-	}
-
 	//Handle any/all converting moves that are going to be needed here
 	if(is_converting_move_required(operator_type, instruction->op1->type) == TRUE){
 		instruction->op1 = create_and_insert_converting_move_instruction(instruction, instruction->op1, operator_type);
@@ -9519,8 +9736,26 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 		logical_or->op2 = create_and_insert_converting_move_instruction(logical_or, logical_or->op2, destination_type);
 	}
 
-	//Most common case - we are doing GP logical or
+	/**
+	 * For a general purpose logical or, we are going to need to ensure
+	 * that the op1 is fine with being overwritten. This is because
+	 * we are performing an or on the entire thing. This is not the case
+	 * for the floating point operation because we're just using the test
+	 * command
+	 */
 	if(is_floating_point == FALSE){
+		//If this is not a temp var then we will make it one
+		if(logical_or->op1->variable_type != VARIABLE_TYPE_TEMP){
+			//Emit the move
+ 			instruction_t* move_to_temp = emit_move_instruction(emit_temp_var(destination_type), logical_or->op1);
+
+			//Add this into the block
+			insert_instruction_before_given(move_to_temp, logical_or);
+
+			//The op1 now is this one's destination 
+			logical_or->op1 = move_to_temp->destination_register;
+		}
+
 		//Save the after instruction
 		instruction_t* after_logical_or = window->instruction2;
 
@@ -10382,7 +10617,7 @@ static void handle_branch_instruction(instruction_window_t* window){
 
 	//Most common case, we do not expect that most things will
 	//be relying on FP comparison
-	if(branch_stmt->relies_on_fp_comparison == FALSE){
+	if(branch_stmt->op1->comes_from_fp_comparison == FALSE){
 		switch(branch_stmt->branch_type){
 			case BRANCH_A:
 				jump_to_if = emit_jump_instruction_directly(if_block, JA);
@@ -10636,77 +10871,14 @@ static inline void handle_indirect_function_call(instruction_t* instruction){
  * get here
  */
 static void handle_logical_not_instruction(instruction_window_t* window){
-	//Is this value *exclusively* used by a branch?
-	u_int8_t used_by_branch_only = TRUE;
-
 	//Let's grab the value out for convenience
 	instruction_t* logical_not = window->instruction1;
 
+	//Is this value *exclusively* used by a branch?
+	u_int8_t used_by_branch_only = logical_not->assignee->sets_cc;
+
 	//Let's also determine if this is a floating point logical not or not
 	u_int8_t is_floating_point = IS_FLOATING_POINT(logical_not->op1->type);
-
-	/**
-	 * If the assignee is not temporary, then we know this is not just
-	 * used by a branch. If it is through, we'll need to do some more investigation
-	 * to find out
-	 */
-	if(logical_not->assignee->variable_type == VARIABLE_TYPE_TEMP){
-		//Grab an instruction cursor for the crawl
-		instruction_t* cursor = logical_not->next_statement;
-
-		//So long as the cursor is not NULL, keep crawling
-		while(cursor != NULL){
-			/**
-			 * This is the case that we're after. If we find that the branch relies
-			 * on this, then we can just get out
-			 */
-			if(variables_equal(cursor->op1, logical_not->assignee, FALSE) == TRUE){
-				//This means that we are *not* exclusively used by a branch
-				if(cursor->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
-					used_by_branch_only = FALSE;
-					break;
-				}
-
-				/**
-				 * Otherwise logically speaking we do have a branch
-				 * statement here. As such, if it's a floating point
-				 * branch we'll need to flag that
-				 */
-				if(is_floating_point == TRUE){
-					cursor->relies_on_fp_comparison = TRUE;
-				}
-
-			/**
-			 * We could also be used by op2. If this is the case, then it's definitely not just
-			 * being used by a branch
-			 */
-			} else if (variables_equal(cursor->op2, logical_not->assignee, FALSE) == TRUE){
-				/**
-				 * Branches never have dependencies stored in op2. As such if we see this,
-				 * it's an automatic false
-				 */
-				used_by_branch_only = FALSE;
-				break;
-			}
-
-			/**
-			 * If we get to the end and it's not used by a branch, that is fine. The only
-			 * thing that we care about in this crawl is whether or not the above statement
-			 * was used by a branch instruction. If it was, then all of the extra setX
-			 * is unnecessary. If it wasn't then we need to be adding those extra steps
-			 */
-
-			//Advance the cursor up
-			cursor = cursor->next_statement;
-		}
-
-	/**
-	 * The assignee isn't temp so we know that this is not just used by a branch
-	 */
-	} else {
-		used_by_branch_only = FALSE;
-	}
-
 
 	//This is the most common case - it is *not* being used by a floating
 	//point value
@@ -13085,8 +13257,10 @@ static void handle_test_if_not_zero_instruction(instruction_window_t* window){
 		//Rebuild the window around this instruction
 		reconstruct_window(window, instruction);
 		
-	//For floating point operations, we need to effectively emit a "test if 0" command here, except we won't
-	//be using a constant. Instead, we can zero out a given XMM register and use that instead
+	/**
+	 * For floating point operations, we need to effectively emit a "test if 0" command here, except we won't
+	 * be using a constant. Instead, we can zero out a given XMM register and use that instead
+	 */
 	} else {
 		//Grab this for use
 		generic_type_t* fp_type = instruction->op1->type;
@@ -13100,40 +13274,10 @@ static void handle_test_if_not_zero_instruction(instruction_window_t* window){
 		//Add this in before our statement
 		insert_instruction_before_given(pxor_instruction, instruction);
 
-		//Grab an instruction cursor
-		instruction_t* cursor = instruction;
-
 		/**
-		 * We also need to flag any branches that come up in front of us
-		 * to tell them that they rely on an FP comparison. We do this
-		 * by a simple crawl
+		 * Now that we have this, we can emit the comparison command. We will
+		 * just repurpose the above instruction to do this
 		 */
-
-		//So long as the cursor is not NULL, keep crawling
-		while(cursor != NULL){
-			//If it's not a branch then we don't care
-			if(cursor->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
-				cursor = cursor->next_statement;
-				continue;
-			}
-
-			//This is the case that we're after. If we find that the branch relies
-			//on this, then we can just get out
-			if(variables_equal(cursor->op1, instruction->assignee, FALSE) == TRUE){
-				cursor->relies_on_fp_comparison = TRUE;
-			}
-
-			//If we get to the end and it's not used by a branch, that is fine. The only
-			//thing that we care about in this crawl is whether or not the above statement
-			//was used by a branch instruction. If it was, then all of the extra setX
-			//is unnecessary. If it wasn't then we need to be adding those extra steps
-
-			//Advance the cursor up
-			cursor = cursor->next_statement;
-		}
-
-		//Now that we have this, we can emit the comparison command. We will
-		//just repurpose the above instruction to do this
 		switch(zeroed_out->variable_size){
 			case SINGLE_PRECISION:
 				instruction->instruction_type = UCOMISS;
