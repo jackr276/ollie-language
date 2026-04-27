@@ -2957,6 +2957,7 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 			sprintf(info, "Variable \"%s\" is not mutable and cannot be assigned to outisde of an initial \"let\" statement. Use the \"mut\" keyword if you wish to mutate. First defined here:", assignee->var_name.string);
 			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			print_variable_name(assignee);
+			num_errors++;
 			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
@@ -8937,11 +8938,36 @@ static generic_ast_node_t* labeled_statement(ollie_token_stream_t* token_stream)
  *
  * NOTE: We assume that the caller has already seen and consumed the if token if they make it here
  *
+ * Remember how a full if-else-if-else is handled, with the first child nodes being a conditional
+ * and a compound statement, followed by any else if and/or else compound statements. A full
+ * example is below
+ *
+ * 	if(x == 0) {
+ * 		x += 1;
+ *
+ * 	} else if (x == 1) {
+ * 		x += 2;
+ *
+ * 	} else if (x == 2) {
+ * 		x += 3;
+ *
+ * 	} else {
+ * 		x += 4;
+ * 	}
+ *
+ * 	In AST format:
+ * 										 <if - statement>
+ * 			/			/						|			 					\				\
+ * 	<conditional>	<compound-stmt>	 		<else-if>					   <else-if>		<compound-stmt>
+ * 											/	\						 / 	 		\
+ * 								<conditional>   <compound-stmt>		<conditional>  <compound-stmt>
+ *
+ * 	This is what we'll need to parse through and translate. This structure is chosen so that we have a minimal
+ * 	memory footprint. We rely on this context being completely understood by the CFG converter here to work
+ *
  * BNF Rule: <if-statement> ::= if( <logical-or-expression> ) then <compound-statement> {else if statement}* {else-statement}?
  */
 static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
-	//Freeze the line number
-	u_int32_t current_line = parser_line_num;
 	//Lookahead tokens
 	lexitem_t lookahead;
 	lexitem_t lookahead2;
@@ -8949,16 +8975,19 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 	//Push the if statement nesting level
 	push_nesting_level(&nesting_stack, NESTING_IF_STATEMENT);
 
-	//Let's first create our if statement. This is an overall header for the if statement as a whole. Everything
-	//will be a child of this statement
+	/**
+	 * Let's first create our if statement. This is an overall header for the if statement as a whole. Everything
+	 * will be a child of this statement
+	 */
 	generic_ast_node_t* if_stmt = ast_node_alloc(AST_NODE_TYPE_IF_STMT, SIDE_TYPE_LEFT);
+	if_stmt->line_number = parser_line_num;
 
 	//Remember, we've already seen the if token, so now we just need to see an L_PAREN
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
 	//Fail out if we don't have it
 	if(lookahead.tok != L_PAREN){
-		return print_and_return_error("Left parenthesis expected after if statement", current_line);
+		return print_and_return_error("Left parenthesis expected after if statement", parser_line_num);
 	}
 
 	//Push onto the stack for matching later
@@ -8969,7 +8998,7 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 
 	//If we see an invalid one
 	if(expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		return print_and_return_error("Invalid conditional expression given as if statement condition", current_line);
+		return print_and_return_error("Invalid conditional expression given as if statement condition", parser_line_num);
 	}
 
 	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
@@ -8983,12 +9012,12 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 
 	//If we don't see the R_Paren
 	if(lookahead.tok != R_PAREN){
-		return print_and_return_error("Right parenthesis expected after expression in if statement", current_line);
+		return print_and_return_error("Right parenthesis expected after expression in if statement", parser_line_num);
 	}
 
 	//Now let's check the stack, we need to have matching ones here
 	if(pop_token(&grouping_stack).tok != L_PAREN){
-		return print_and_return_error("Unmatched parenthesis detected", current_line);
+		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
 	}
 
 	//If we make it here, we can add this in as the first child to the root node
@@ -8999,8 +9028,6 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 
 	//If this node fails, whole thing is bad
 	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		num_errors++;
-		//It's already an error, so just send it back up
 		return compound_stmt_node;
 	}
 
@@ -9021,7 +9048,7 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 
 		//Fail out if we don't have it
 		if(lookahead.tok != L_PAREN){
-			return print_and_return_error("Left parenthesis expected after else if statement", current_line);
+			return print_and_return_error("Left parenthesis expected after else if statement", parser_line_num);
 		}
 
 		//Push onto the stack for matching later
@@ -9032,7 +9059,7 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 
 		//If we see an invalid one
 		if(else_if_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return print_and_return_error("Invalid conditional expression given as else if statement condition", current_line);
+			return print_and_return_error("Invalid conditional expression given as else if statement condition", parser_line_num);
 		}
 
 		//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
@@ -9046,12 +9073,12 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 
 		//If we don't see the R_Paren
 		if(lookahead.tok != R_PAREN){
-			return print_and_return_error("Right parenthesis expected after expression in else-if statement", current_line);
+			return print_and_return_error("Right parenthesis expected after expression in else-if statement", parser_line_num);
 		}
 
 		//Now let's check the stack, we need to have matching ones here
 		if(pop_token(&grouping_stack).tok != L_PAREN){
-			return print_and_return_error("Unmatched parenthesis detected", current_line);
+			return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
 		}
 
 		//If we make it here, we should be safe to add the conditional as an expression
@@ -9062,16 +9089,16 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 
 		//If this node fails, whole thing is bad
 		if(else_if_compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			num_errors++;
-			//It's already an error, so just send it back up
 			return else_if_compound_stmt_node;
 		}
 
 		//Add the compound statement as a child to this node
 		add_child_node(else_if_node, else_if_compound_stmt_node);
 
-		//And now that we know everything is good, we can add the else if node as a child
-		//to the if node
+		/**
+		 * And now that we know everything is good, we can add the else if node as a child
+		 * to the if node
+		 */
 		add_child_node(if_stmt, else_if_node);
 	
 		//Refresh the lookahead tokens for the next round
@@ -9089,7 +9116,6 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 		
 		//Let's see if it worked
 		if(else_compound_stmt->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			//It failed, send it up the chain
 			return else_compound_stmt;
 		}
 
@@ -9099,9 +9125,6 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 		//Otherwise there was no else token, so put it back
 		push_back_token(token_stream, &parser_line_num);
 	}
-
-	//Store the line number
-	if_stmt->line_number = current_line;
 
 	//Now that we're done, we'll pop this off of the stack
 	pop_nesting_level(&nesting_stack);
