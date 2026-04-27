@@ -93,36 +93,6 @@ static inline int32_t increment_and_get(){
 
 
 /**
- * Create a basic block and add it into the set of all function blocks
- */
-static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency, symtab_function_record_t* function){
-	//Allocate the block
-	basic_block_t* created = calloc(1, sizeof(basic_block_t));
-
-	//Put the block ID in
-	created->block_id = increment_and_get();
-
-	//By default we're normal here
-	created->block_type = BLOCK_TYPE_NORMAL;
-
-	//What is the estimated execution cost of this block?
-	created->estimated_execution_frequency = estimated_execution_frequency;
-
-	//Let's add in what function this block came from
-	created->function_defined_in = function;
-
-	//Add this into the dynamic array
-	dynamic_array_add(&(cfg_reference->created_blocks), created);
-
-	//Add it into the function's block array
-	dynamic_array_add(&(function->function_blocks), created);
-
-	//Give it back
-	return created;
-}
-
-
-/**
  * Reset all of the marked instructions for a given block
  */
 static inline void reset_marks_for_block(basic_block_t* block){
