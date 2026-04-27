@@ -3098,6 +3098,8 @@ static inline u_int8_t does_operator_set_condition_codes(ollie_token_t op){
 		case G_THAN_OR_EQ:
 		case DOUBLE_EQUALS:
 		case NOT_EQUALS:
+		//Logical not sets it
+		case EXCLAMATION:
 			return TRUE;
 		default:
 			return FALSE;
