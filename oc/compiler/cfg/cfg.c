@@ -7865,7 +7865,7 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	 * else
 	 * 	exit
 	 */
-	cfg_result_package_t branch_results = emit_branch(compound_stmt_end, ast_cursor->next_sibling, do_while_stmt_entry_block, do_while_stmt_exit_block, BRANCH_CATEGORY_NORMAL);
+	emit_branch(compound_stmt_end, ast_cursor->next_sibling, do_while_stmt_entry_block, do_while_stmt_exit_block, BRANCH_CATEGORY_NORMAL);
 
 	//Now that we're done here, pop the break/continue stacks to remove these blocks
 	pop(&continue_stack);
@@ -7941,7 +7941,7 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	 * If destination -> end of loop
 	 * Else destination -> loop body
 	 */
-	cfg_result_package_t branch_results = emit_branch(while_statement_entry_block, conditional_cursor, while_statement_end_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE);
+	emit_branch(while_statement_entry_block, conditional_cursor, while_statement_end_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE);
 
 	//Let's now find the end of the compound statement
 	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
