@@ -8077,8 +8077,8 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 					else_compound_statement_values.final_block = else_compound_statement_values.starting_block;
 				}
 
-				//IMPORTANT - the current entry needs to be chained into this else
-				emit_jump(current_entry_block, else_compound_statement_values.starting_block);
+				//Emit our branch for the if-else pattern
+				emit_branch(current_entry_block, conditional_node, if_compound_statement_results.starting_block, else_compound_statement_values.starting_block, BRANCH_CATEGORY_NORMAL);
 
 				/**
 				 * If the else if compound statement final block does not end in a return, we'll need to make
@@ -8099,6 +8099,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 					if_results_package.final_block = overall_exit_block;
 				}
 
+				//Terminal case - we're out after this
 				return if_results_package;
 
 			//Should never happen
@@ -8186,7 +8187,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 					current_entry_block = basic_block_alloc_and_estimate();
 
 					//Now branch out to the new current entry block
-					emit_branch(old_entry_block, conditional_node, if_compound_statement_results.starting_block, current_entry_block, BRANCH_CATEGORY_NORMAL);
+					emit_branch(old_entry_block, else_if_conditional, else_if_compound_statement_results.starting_block, current_entry_block, BRANCH_CATEGORY_NORMAL);
 
 					break;
 
@@ -8214,8 +8215,8 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 						else_compound_statement_values.final_block = else_compound_statement_values.starting_block;
 					}
 
-					//IMPORTANT - the current entry needs to be chained into this else
-					emit_jump(current_entry_block, else_compound_statement_values.starting_block);
+					//Emit the final branch out
+					emit_branch(current_entry_block, else_if_conditional, else_if_compound_statement_results.starting_block, else_compound_statement_values.starting_block, BRANCH_CATEGORY_NORMAL);
 
 					/**
 					 * If the else if compound statement final block does not end in a return, we'll need to make
