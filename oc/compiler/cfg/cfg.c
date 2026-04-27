@@ -3125,9 +3125,12 @@ static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, t
 		//Now we'll add it into the block
 		add_statement(basic_block, test_if_not_zero);
 
-		//If this is a floating point variable, update the pass-by-reference
-		//operator
+		/**
+		 * If this is a floating point variable, update the pass-by-reference
+		 * operator
+		 */
 		if(IS_FLOATING_POINT(tested_variable->type) == TRUE){
+			//This is needed for branching later on
 			*operator = NOT_EQUALS;
 
 			//Flag that this comes out of an FP comparsion
@@ -3212,10 +3215,10 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 
 		/**
 		 * If the given operator does not set condition codes appropriately, then
-		 * we'll need to make that happen here
+		 * we'll need to make that happen here. We pass the operator
+		 * in by reference so that we may change it later on
 		 */
 		if(does_operator_set_condition_codes(binary_results.operator) == FALSE){
-			//We'll need a test command for this
 			conditional_decider = emit_test_not_zero(current_block, conditional_decider, &(binary_results.operator));
 		}
 
