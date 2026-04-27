@@ -3463,9 +3463,6 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 	//Extract the actual result assignee
 	three_addr_var_t* conditional_decider = binary_results.assignee;
 
-	//TODO really don't like this
-	u_int8_t type_signed = is_type_signed(conditional_decider->type);
-
 	/**
 	 * If the given operator does not set condition codes appropriately, then
 	 * we'll need to make that happen here
@@ -3473,6 +3470,27 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 	if(does_operator_set_condition_codes(binary_results.operator) == FALSE){
 		//We'll need a test command for this
 		conditional_decider = emit_test_not_zero(current_block, conditional_decider, &(binary_results.operator));
+	}
+
+	/**
+	 * Let's try to grab the final result type. Remember that the comparison type may be different than
+	 * the actual assignee type. If we can grab it then we will use that, otherwise we will use
+	 * the assignee type
+	 */
+	u_int8_t type_signed;
+	if(current_block->exit_statement != NULL
+		&& is_binary_operation(current_block->exit_statement)
+		&& variables_equal(current_block->exit_statement->assignee, conditional_decider, FALSE) == TRUE){
+
+		//If we have a result type use that, otherwise take from op1
+		if(current_block->exit_statement->type_storage.result_type != NULL){
+			type_signed = is_type_signed(current_block->exit_statement->type_storage.result_type);
+		} else {
+			type_signed = is_type_signed(current_block->exit_statement->op1->type);
+		}
+
+	} else {
+		type_signed = is_type_signed(conditional_decider->type);
 	}
 
 	//Flag that this sets condition codes
