@@ -1981,6 +1981,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT 
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
 
+		//TODO HERE IS THIS STILL GONNA EXIST?
+		printf("HERE\n\n\n");
+		print_instruction_window_three_address_code(window);
+
 		//Grab this out for convenience
 		instruction_t* assign_operation = window->instruction2;
 

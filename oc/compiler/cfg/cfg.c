@@ -5957,6 +5957,13 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		/**
 		 * If this is not a binary operation, then we will just copy it over. If it is, then we will
 		 * use that binary operation for our own purposes here with the left hand var
+		 *
+		 *
+		 *
+		 * TODO ADD THE SAME LOGIC FOR ASSIGNMENT EXPR HERE
+		 *
+		 *
+		 *
 		 */
 		if(is_binary_operation(last_instruction) == FALSE){
 			//Finally we'll struct the whole thing
