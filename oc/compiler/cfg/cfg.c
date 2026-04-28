@@ -7972,6 +7972,8 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
  *
  * 	This is what we'll need to parse through and translate. This structure is chosen so that we have a minimal
  * 	memory footprint. We rely on this context being completely understood by the CFG converter here to work
+ *
+ * 	If we're clever about this, we can write the whole thing as one big do-while
  */
 static cfg_result_package_t visit_if_statement_v2(generic_ast_node_t* root_node){
 	//TODO
