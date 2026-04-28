@@ -7976,8 +7976,43 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
  * 	If we're clever about this, we can write the whole thing as one big do-while
  */
 static cfg_result_package_t visit_if_statement_v2(generic_ast_node_t* root_node){
-	//TODO
+	//Final result package
+	cfg_result_package_t if_results_package = {NULL, NULL, NULL, BLANK};
 
+	/**
+	 * The overall exit block is where everything goes to in the end to get out
+	 * of the if execution. This may change to be a function exit block if we return
+	 * through every single control path
+	 */
+	basic_block_t* overall_exit_block = basic_block_alloc_and_estimate();
+
+	//This cursor will help us traverse the overall if statement
+	generic_ast_node_t* cursor = root_node->first_child;
+
+	/**
+	 * Do while pattern so long as the cursor is not NULL;
+	 */
+	do {
+		//An internal cursor for traversing the statement
+		generic_ast_node_t* internal_cursor;
+
+		
+
+	} while(cursor != NULL);
+
+	/**
+	 * If we have an exit block that has no predecessors, that means that we return through every
+	 * control path. In this instance, we need to set the result package's final block to be the
+	 * exit block
+	 */
+	if(dynamic_array_is_empty(&(overall_exit_block->predecessors)) == TRUE){
+		if_results_package.final_block = function_exit_block;
+	} else {
+		if_results_package.final_block = overall_exit_block;
+	}
+
+	//Give back the results package here
+	return if_results_package;
 }
 
 
