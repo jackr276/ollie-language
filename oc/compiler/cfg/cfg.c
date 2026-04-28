@@ -8001,7 +8001,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	 * We will be using an infinite loop pattern for this. We have specific conditions
 	 * on when this is done
 	 */
-	do {
+	while(TRUE) {
 		//An internal cursor for traversing the statement
 		generic_ast_node_t* conditional_node = NULL;
 		generic_ast_node_t* compound_statement_node = NULL;
@@ -8158,9 +8158,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 
 			return if_results_package;
 		}
-
-	//Loop forever - the terminal cases are in the loop
-	} while(TRUE);
+	}
 }
 
 
@@ -8175,9 +8173,11 @@ static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_nod
 	//This is nesting inside of a case statement
 	push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
 
-	//For a default statement, it performs very similarly to a case statement. 
-	//It will be handled slightly differently in the jump table, but we'll get to that 
-	//later on
+	/**
+	 * For a default statement, it performs very similarly to a case statement. 
+	 * It will be handled slightly differently in the jump table, but we'll get to that 
+	 * later on
+	 */
 
 	//Grab a cursor to our default statement
 	generic_ast_node_t* default_stmt_cursor = root_node;
@@ -8970,14 +8970,11 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 			
 				//Once we have the if statement start, we'll add it in as a successor
 				if(starting_block == NULL){
-					//The starting block is the first one here
 					starting_block = generic_results.starting_block;
-					//And the final block is the end
 					current_block = generic_results.final_block;
+
 				} else {
-					//Emit a jump from current to the start
 					emit_jump(current_block, generic_results.starting_block);
-					//The current block is just whatever is at the end
 					current_block = generic_results.final_block;
 				}
 
@@ -9462,14 +9459,11 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 			
 				//Once we have the if statement start, we'll add it in as a successor
 				if(starting_block == NULL){
-					//The starting block is the first one here
 					starting_block = generic_results.starting_block;
-					//And the final block is the end
 					current_block = generic_results.final_block;
+
 				} else {
-					//Emit a jump from current to the start
 					emit_jump(current_block, generic_results.starting_block);
-					//The current block is just whatever is at the end
 					current_block = generic_results.final_block;
 				}
 
