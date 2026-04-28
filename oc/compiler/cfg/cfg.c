@@ -5688,6 +5688,8 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 			 */
 			if(current_block->exit_statement != NULL 
 				&& current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
+
+				//TODO ADD TEMP VAR CHECK
 				&& variables_equal(right_side.assignee, current_block->exit_statement->assignee, FALSE) == TRUE){
 				//Just assign the constant over
 				op1_const = current_block->exit_statement->op1_const;
@@ -10914,6 +10916,8 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 		 * be able to shrink our footprint here
 		 */
 		if(current_block->exit_statement != NULL
+			&& current_block->exit_statement->assignee != NULL
+			&& current_block->exit_statement->assignee->variable_type == VARIABLE_TYPE_TEMP
 			&& variables_equal_no_ssa(final_op1, current_block->exit_statement->assignee, FALSE) == TRUE){
 
 			switch(current_block->exit_statement->statement_type){
