@@ -2995,7 +2995,8 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 		
 		/**
 		 * If the variable is not a temp *or* we have a need for a converting move, we will emit
-		 * the extra assignment here
+		 * the extra assignment here. If it's already temp and we don't need a converting move, we won't
+		 * bother with inserting the extra statements
 		 */
 		if(return_variable->variable_type != VARIABLE_TYPE_TEMP
 			|| is_converting_move_required(ret_node->inferred_type, return_variable->type) == TRUE){
