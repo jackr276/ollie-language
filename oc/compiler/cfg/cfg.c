@@ -7993,8 +7993,65 @@ static cfg_result_package_t visit_if_statement_v2(generic_ast_node_t* root_node)
 	 * Do while pattern so long as the cursor is not NULL;
 	 */
 	do {
+
+
 		//An internal cursor for traversing the statement
-		generic_ast_node_t* internal_cursor;
+		generic_ast_node_t* conditional_node;
+		generic_ast_node_t* compound_statement_node;
+
+		/**
+		 * Look at the structure above - the way we traverse
+		 * the statement internally depends on whether the curosr is an
+		 * if or not
+		 */
+		switch(cursor->ast_node_type){
+			/**
+			 * For the else if we'll need to go into the child nodes
+			 * of the current cursor
+			 */
+			case AST_NODE_TYPE_ELSE_IF_STMT:
+				conditional_node = cursor->first_child;
+				compound_statement_node = conditional_node->next_sibling;
+				break;
+
+			/**
+			 * Otherwise we have our if statement. The conditional is the first
+			 * child, compound statement is the next one. Advance the cursor as 
+			 * we go
+			 */
+			default:
+				conditional_node = cursor;
+				cursor = cursor->next_sibling;
+				compound_statement_node = cursor;
+				break;
+		}
+
+		//Signify that this is happening inside of an IF
+		push_nesting_level(&nesting_stack, NESTING_IF_STATEMENT);
+
+		//Let the helper emit the entire compound statement
+		cfg_result_package_t compound_statement_results = visit_compound_statement(compound_statement_node);
+
+		//Remove the IF nester
+		pop_nesting_level(&nesting_stack);
+
+		/**
+		 * If we have an empty if statement(possible), then we'll just go about creating
+		 * a block here so we don't have any weird behavior
+		 */
+		if(compound_statement_results.starting_block == NULL){
+			compound_statement_results.starting_block = basic_block_alloc_and_estimate();
+			compound_statement_results.final_block = compound_statement_results.starting_block;
+		}
+
+		/**
+		 * If the compound statement final block does not end in a return, we'll need to make
+		 * it jump to the exit block. This is the overall exit block, not the current exit block
+		 * which is just where we go if something didn't work
+		 */
+		if(does_block_end_in_terminal_statement(compound_statement_results.final_block) == FALSE){
+			emit_jump(compound_statement_results.final_block, overall_exit_block);
+		}
 
 		
 
