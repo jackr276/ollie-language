@@ -52,10 +52,12 @@ static generic_type_t* i64 = NULL;
 static generic_type_t* f32 = NULL;
 static generic_type_t* f64 = NULL;
 static generic_type_t* immut_void_ptr = NULL;
-//The break and continue stack will
-//hold values that we can break & continue
-//to. This is done here to avoid the need
-//to send value packages at each rule
+/**
+ * The break and continue stack will
+ * hold values that we can break & continue
+ * to. This is done here to avoid the need
+ * to send value packages at each rule
+ */
 static heap_stack_t break_stack;
 static heap_stack_t continue_stack;
 //The overall nesting stack will tell us what level of nesting we're at(if, switch/case, loop)
@@ -99,20 +101,18 @@ typedef enum{
 } emit_dominance_frontier_selection_t;
 
 
-//An enum for declare and let statements letting us know what kind of variable
-//that we have
+/**
+ * An enum for declare and let statements letting us know what kind of variable
+ * that we have
+ */
 typedef enum{
 	VARIABLE_SCOPE_GLOBAL,
 	VARIABLE_SCOPE_LOCAL,
 } variable_scope_type_t;
 
-
 //We predeclare up here to avoid needing any rearrangements
-static void visit_declaration_statement(generic_ast_node_t* node);
 static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_let_statement(basic_block_t* basic_block, generic_ast_node_t* node);
-static void visit_static_let_statement(generic_ast_node_t* node);
-static inline void visit_static_declare_statement(generic_ast_node_t* node);
 static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_node);
@@ -121,16 +121,19 @@ static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node);
-
 static cfg_result_package_t emit_expression_chain(basic_block_t* basic_block, generic_ast_node_t* expression_chain_node, u_int8_t is_conditional);
 static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr);
 static cfg_result_package_t emit_ternary_expression(basic_block_t* basic_block, generic_ast_node_t* ternary_operation);
-static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_const_t* constant);
 static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node);
 static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression);
 static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_condition);
 static cfg_result_package_t emit_string_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* string_initializer);
 static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* struct_initializer);
+
+static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_const_t* constant);
+static void visit_declaration_statement(generic_ast_node_t* node);
+static void visit_static_let_statement(generic_ast_node_t* node);
+static inline void visit_static_declare_statement(generic_ast_node_t* node);
 static inline void handle_raise_statement(basic_block_t* basic_block, generic_ast_node_t* node);
 
 /**
