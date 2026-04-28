@@ -672,29 +672,6 @@ static basic_block_t* labeled_block_alloc(symtab_variable_record_t* label){
 
 
 /**
- * For certain variables in conditionals, we want to emit a temp assignment of said variable for optimization
- * reasons. This function will take a variable in and:
- *   If it's a temp, just give it back
- *   If it's not a temp, emit a temp assignment, add that to the block, then give the temp var back
- */
-static three_addr_var_t* handle_conditional_identifier_copy_if_needed(basic_block_t* block, three_addr_var_t* variable){
-	//Nothing more to see here
-	if(variable->variable_type == VARIABLE_TYPE_TEMP){
-		return variable;
-	}
-
-	//Otherwise we must copy
-	instruction_t* copy = emit_assignment_instruction(emit_temp_var(variable->type), variable);
-
-	//Add it into the block
-	add_statement(block, copy);
-
-	//Give back the copy var
-	return copy->assignee;
-}
-
-
-/**
  * We'll go through in the regular traversal, pushing each node onto the stack in
  * postorder. 
  */
@@ -5540,9 +5517,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	cursor = cursor->next_sibling;
 
 	//Emit this in our new if block
-	//
-	//TODO HERE
-	cfg_result_package_t if_branch = emit_expression(if_block, cursor, TRUE);
+	cfg_result_package_t if_branch = emit_expression(if_block, cursor);
 
 	//Again here we could have multiple blocks, so we'll need to account for this and reassign if necessary
 	if_block = if_branch.final_block;
@@ -5560,9 +5535,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	cursor = cursor->next_sibling;
 
 	//Emit this in our else block
-	//
-	//TODO HERE
-	cfg_result_package_t else_branch = emit_expression(else_block, cursor, TRUE);
+	cfg_result_package_t else_branch = emit_expression(else_block, cursor);
 
 	//Again here we could have multiple blocks, so we'll need to account for this and reassign if necessary
 	else_block = else_branch.final_block;
