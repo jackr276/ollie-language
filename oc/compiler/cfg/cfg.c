@@ -6020,7 +6020,7 @@ static cfg_result_package_t visit_paramcount_statement(basic_block_t* basic_bloc
  * These statements almost always involve some kind of assignment "<-" and generate temporary
  * variables
  */
-static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_conditional){
+static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node){
 	//Declare and initialize the results
 	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
 
@@ -6075,11 +6075,6 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			//Let this rule handle it
 			result_package = emit_unary_expression(basic_block, expr_node);
 			break;
-	}
-
-	//If this is a conditional, we can let the helper handle it
-	if(is_conditional == TRUE){
-		result_package.assignee = handle_conditional_identifier_copy_if_needed(result_package.final_block, result_package.assignee);
 	}
 
 	return result_package;
@@ -8526,8 +8521,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	generic_ast_node_t* cursor = root_node->first_child;
 
 	//We'll first need to emit the expression node
-	//TODO HERE
-	cfg_result_package_t input_results = emit_expression(root_level_block, cursor, TRUE);
+	cfg_result_package_t input_results = emit_expression(root_level_block, cursor);
 
 	//Update the block
 	root_level_block = input_results.final_block;
@@ -8649,11 +8643,15 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 			case THREE_ADDR_CODE_JUMP_STMT:
 				break;
 
-			//However if we have this, we need to ensure that we go from this final block
-			//directly to the end
+			/**
+			 * However if we have this, we need to ensure that we go from this final block
+			 * directly to the end
+			 */
 			default:
-				//Emit the direct jump. This may be optimized away in the optimizer, but we
-				//need to guarantee behavior
+				/**
+				 * Emit the direct jump. This may be optimized away in the optimizer, but we
+				 * need to guarantee behavior
+				 */
 				emit_jump(current_block, ending_block);
 
 				break;
@@ -8661,8 +8659,10 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 
 	//Otherwise it is null, so we definitely need a jump to the end here
 	} else {
-		//Emit the direct jump. This may be optimized away in the optimizer, but we
-		//need to guarantee behavior
+		/**
+		 * Emit the direct jump. This may be optimized away in the optimizer, but we
+		 * need to guarantee behavior
+		 */
 		emit_jump(current_block, ending_block);
 	}
 
@@ -8817,8 +8817,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	basic_block_t* default_block = NULL;
 	
 	//Let's first emit the expression. This will at least give us an assignee to work with
-	//TODO HERE
-	cfg_result_package_t input_results = emit_expression(root_level_block, case_stmt_cursor, TRUE);
+	cfg_result_package_t input_results = emit_expression(root_level_block, case_stmt_cursor);
 
 	//We could have had a ternary here, so we'll need to account for that possibility
 	root_level_block = input_results.final_block;
