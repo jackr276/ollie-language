@@ -7984,6 +7984,8 @@ static cfg_result_package_t visit_if_statement_v2(generic_ast_node_t* root_node)
 	 * of the if execution. This may change to be a function exit block if we return
 	 * through every single control path
 	 */
+	basic_block_t* old_entry_block;
+	basic_block_t* current_entry_block = basic_block_alloc_and_estimate();
 	basic_block_t* overall_exit_block = basic_block_alloc_and_estimate();
 
 	//This cursor will help us traverse the overall if statement
@@ -7993,8 +7995,6 @@ static cfg_result_package_t visit_if_statement_v2(generic_ast_node_t* root_node)
 	 * Do while pattern so long as the cursor is not NULL;
 	 */
 	do {
-
-
 		//An internal cursor for traversing the statement
 		generic_ast_node_t* conditional_node;
 		generic_ast_node_t* compound_statement_node;
@@ -8053,23 +8053,102 @@ static cfg_result_package_t visit_if_statement_v2(generic_ast_node_t* root_node)
 			emit_jump(compound_statement_results.final_block, overall_exit_block);
 		}
 
+		//Bump the cursor up to the next statement
+		cursor = cursor->next_sibling;
+
+		/**
+		 * Is the cursor NULL? If it is, then to get out of this if we just
+		 * need to jump to the final exit block. If it's not NULL, then we're going 
+		 * to need to jump to a new conditional block for the else-if/else that we
+		 * need to emit next
+		 *
+		 *
+		 * There are 2 options here: the cursor could be another chained else-if statement, *or* it could
+		 * be a final else statement. If the latter is the case, we will need to emit the final else case
+		 * here inside of our conditional
+		 */
+		if(cursor != NULL){
+			switch(cursor->ast_node_type){
+				/**
+				 * We have an else-if statement. If this is the case, we are safe to emit
+				 * a new block for the next conditional and jump to that
+				 */
+				case AST_NODE_TYPE_ELSE_IF_STMT:
+					//Hang onto the old "entry"
+					old_entry_block = current_entry_block;
+
+					//We'll make a fresh new entry block for our else-if/else
+					current_entry_block = basic_block_alloc_and_estimate();
+
+					//Now branch out to the new current entry block
+					emit_branch(old_entry_block, conditional_node, compound_statement_results.starting_block, current_entry_block, BRANCH_CATEGORY_NORMAL);
+
+					break;
+
+				/**
+				 * We have an if-else statement. If this is the case, we'll just emit the else here for ourselves
+				 * and then leave when it is appropriate. Note that this is a terminal case, we are out of here 
+				 * when this happens
+				 */
+				case AST_NODE_TYPE_COMPOUND_STMT:
+					//Push the if nesting level
+					push_nesting_level(&nesting_stack, NESTING_IF_STATEMENT);
+
+					//Get the results for the else statement
+					cfg_result_package_t else_compound_statement_values = visit_compound_statement(cursor);
+
+					//Pop it off
+					pop_nesting_level(&nesting_stack);
+
+					/**
+					 * If we have an empty if statement(possible), then we'll just go about creating
+					 * a block here so we don't have any weird behavior
+					 */
+					if(else_compound_statement_values.starting_block == NULL){
+						else_compound_statement_values.starting_block = basic_block_alloc_and_estimate();
+						else_compound_statement_values.final_block = else_compound_statement_values.starting_block;
+					}
+
+					//Emit the final branch out
+					emit_branch(current_entry_block, conditional_node, compound_statement_results.starting_block, else_compound_statement_values.starting_block, BRANCH_CATEGORY_NORMAL);
+
+					/**
+					 * If the else if compound statement final block does not end in a return, we'll need to make
+					 * it jump to the overall exit block
+					 */
+					if(does_block_end_in_terminal_statement(else_compound_statement_values.final_block) == FALSE){
+						emit_jump(else_compound_statement_values.final_block, overall_exit_block);
+					}
+
+					/**
+					 * If we have an exit block that has no predecessors, that means that we return through every
+					 * control path. In this instance, we need to set the result package's final block to be the
+					 * exit block
+					 */
+					if(overall_exit_block->predecessors.current_index == 0){
+						if_results_package.final_block = function_exit_block;
+					} else {
+						if_results_package.final_block = overall_exit_block;
+					}
+
+					return if_results_package;
+
+				//Should never happen
+				default:
+					fprintf(stderr, "Fatal internal compiler error: invalid node found in if statement processor\n");
+					exit(1);
+			}
 		
+		/**
+		 * This is a terminal case - we're done so we can set the final block and get out
+		 */
+		} else {
+			emit_branch(current_entry_block, conditional_node, compound_statement_results.starting_block, overall_exit_block, BRANCH_CATEGORY_NORMAL);
+			if_results_package.final_block = overall_exit_block;
+			return if_results_package;
+		}
 
-	} while(cursor != NULL);
-
-	/**
-	 * If we have an exit block that has no predecessors, that means that we return through every
-	 * control path. In this instance, we need to set the result package's final block to be the
-	 * exit block
-	 */
-	if(dynamic_array_is_empty(&(overall_exit_block->predecessors)) == TRUE){
-		if_results_package.final_block = function_exit_block;
-	} else {
-		if_results_package.final_block = overall_exit_block;
-	}
-
-	//Give back the results package here
-	return if_results_package;
+	} while(TRUE);
 }
 
 
