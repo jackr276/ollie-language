@@ -2992,18 +2992,25 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 
 		//Grab this out to look at
 		return_variable = expression_package.assignee;
-
+		
 		/**
-		 * The type of this final assignee will *always* be the inferred type of the node. We need to ensure that
-		 * the function is returning the type as promised, and not what is done through type coercion
+		 * If the variable is not a temp *or* we have a need for a converting move, we will emit
+		 * the extra assignment here
 		 */
-		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(ret_node->inferred_type), return_variable);
+		if(return_variable->variable_type != VARIABLE_TYPE_TEMP
+			|| is_converting_move_required(ret_node->inferred_type, return_variable->type) == TRUE){
+			/**
+			 * The type of this final assignee will *always* be the inferred type of the node. We need to ensure that
+			 * the function is returning the type as promised, and not what is done through type coercion
+			 */
+			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(ret_node->inferred_type), return_variable);
 
-		//Add it into the block
-		add_statement(current, assignment);
+			//Add it into the block
+			add_statement(current, assignment);
 
-		//The return variable is now what was assigned
-		return_variable	= assignment->assignee;
+			//The return variable is now what was assigned
+			return_variable	= assignment->assignee;
+		}
 
 		//Flag for later on in the compiler that this variable has been returned
 		return_variable->membership = RETURNED_VARIABLE;
