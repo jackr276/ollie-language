@@ -205,6 +205,22 @@ static inline u_int8_t is_binary_operation(instruction_t* statement){
 
 
 /**
+ * Is the given three address code statement a constant assignment
+ */
+static inline u_int8_t is_constant_assignment(instruction_t* statement){
+	if(statement == NULL){
+		return FALSE;
+	}
+
+	if(statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
+		return TRUE;
+	} else {
+		return FALSE;
+	}
+}
+
+
+/**
  * Do the values on the left and right hand side of the expression require a copy assignment? This is 
  * going to be true if we have structs or unions on both sides of the equation
  */
@@ -10891,6 +10907,8 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 	} else if(let_variable->linked_var == NULL || let_variable->linked_var->stack_variable == FALSE){
 		//If it's not a binary operation then we'll just assign over
 		if(is_binary_operation(current_block->exit_statement) == FALSE){
+			printf("HERE\n\n\n\n");
+
 			//The actual statement is the assignment of right to left
 			instruction_t* assignment_statement = emit_assignment_instruction(let_variable, final_op1);
 
@@ -10909,8 +10927,10 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 	 * Otherwise, we'll need to emit a store operation here
 	 */
 	} else {
-		//Store the "true" stored type. This will only change if our type is a reference, because
-		//we need to account for the implicit dereference that's happening
+		/**
+		 * Store the "true" stored type. This will only change if our type is a reference, because
+		 * we need to account for the implicit dereference that's happening
+		 */
 		generic_type_t* true_stored_type = let_variable->type;
 
 		//NOTE: We use the type of our let variable here for the address assignment
@@ -10926,8 +10946,10 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 			//This is now our op1
 			store_statement->op1 = final_op1;
 
-		//Otherwise, we can do a small optimization here by scrapping the 
-		//constant assignment and just putting the constant in directly
+		/**
+		 * Otherwise, we can do a small optimization here by scrapping the 
+		 * constant assignment and just putting the constant in directly
+		 */
 		} else {
 			//Extract it
 			three_addr_const_t* constant_assignee = last_instruction->op1_const;
