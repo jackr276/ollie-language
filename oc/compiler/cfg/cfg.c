@@ -10905,8 +10905,9 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 	 * emit a store operation
 	 */
 	} else if(let_variable->linked_var == NULL || let_variable->linked_var->stack_variable == FALSE){
-		//Final assignment if we need it
 		instruction_t* assignment_statement;
+		instruction_t* binary_operation;
+		instruction_t* const_assignment;
 
 		/**
 		 * If we have an exit statement *and* we are dealing with what the final_op1 is, we may
@@ -10916,11 +10917,33 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 			&& variables_equal_no_ssa(final_op1, current_block->exit_statement->assignee, FALSE) == TRUE){
 
 			switch(current_block->exit_statement->statement_type){
-
+				/**
+				 * For binary operations we can hijack the statement itself
+				 */
 				case THREE_ADDR_CODE_BIN_OP_STMT:
 				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+					binary_operation = current_block->exit_statement;
 
+					//Just replace it with our variable
+					binary_operation->assignee = let_variable;
 
+					break;
+
+				/**
+				 * Same with a constant assignment statement
+				 */
+				case THREE_ADDR_CODE_ASSN_CONST_STMT:
+					const_assignment = current_block->exit_statement;
+
+					//Just replace it with our variable
+					const_assignment->assignee = let_variable;
+
+					break;
+
+				/**
+				 * Something else here - don't know what it is but we play it safe
+				 * and assign things over
+				 */
 				default:
 					//The actual statement is the assignment of right to left
 					assignment_statement = emit_assignment_instruction(let_variable, final_op1);
@@ -10939,19 +10962,6 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 
 			//Finally we'll add this into the overall block
 			add_statement(current_block, assignment_statement);
-		}
-
-		//If it's not a binary operation then we'll just assign over
-		if(is_binary_operation(current_block->exit_statement) == FALSE){
-			printf("HERE\n\n\n\n");
-
-
-		//If it is then we can just hijack the statement and replace it's variable with ours
-		} else {
-			instruction_t* binary_operation = current_block->exit_statement;
-
-			//Just replace it with our variable
-			binary_operation->assignee = let_variable;
 		}
 			
 	/**
