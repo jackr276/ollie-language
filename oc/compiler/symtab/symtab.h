@@ -378,6 +378,8 @@ struct symtab_label_record_t {
 	dynamic_string_t name;
 	//For hashtable functionality
 	symtab_label_record_t* next;
+	//Line number for tracking reasons
+	u_int32_t line_number;
 };
 
 
@@ -509,6 +511,13 @@ symtab_type_record_t* create_type_record(generic_type_t* type);
  * Create a macro record for the macro table
  */
 symtab_macro_record_t* create_macro_record(dynamic_string_t name, u_int32_t line_number);
+
+/**
+ * Create a label record for the label symtab
+ *
+ * NOTE: The label symtab assumes ownership of the name dynamic string
+ */
+symtab_label_record_t* create_label_record(dynamic_string_t name, u_int32_t line_number);
 
 /**
  * Insert a function into the symbol table

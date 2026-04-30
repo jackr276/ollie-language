@@ -346,6 +346,46 @@ static inline u_int64_t hash_macro_name(char* name){
  *
  * 	return key
 */
+static inline u_int64_t hash_label_name(char* name){
+	//Char pointer for the name
+	char* cursor = name;
+
+	//The hash we have
+	u_int64_t hash = OFFSET_BASIS;
+
+	//Iterate through the cursor here
+	for(; *cursor != '\0'; cursor++){
+		hash ^= *cursor;
+		hash *= FNV_PRIME;
+	}
+
+	//We will perform avalanching here by shifting, multiplying and shifting. The shifting
+	//itself ensures that the higher order bits effect all of the lower order ones
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_1;
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_2;
+	hash ^= hash >> 33;
+
+	//Cut it down to our keyspace
+	return hash & (USER_DEFINED_LABELED_BLOCK_KEYSPACE - 1);
+}
+
+
+/**
+ * Hash a name before entry/search into the hash table
+ *
+ * FNV-1a 64 bit hash:
+ * 	hash <- FNV_prime
+ *
+ * 	for each hashable value:
+ * 		hash ^= value
+ * 		hash *= FNV_PRIME
+ * 		
+ * 	key % keyspace
+ *
+ * 	return key
+*/
 static inline u_int64_t hash_function(char* name){
 	//Char pointer for the name
 	char* cursor = name;
@@ -1025,6 +1065,31 @@ symtab_macro_record_t* create_macro_record(dynamic_string_t name, u_int32_t line
 
 	//And give back the record
 	return record;
+}
+
+
+/**
+ * Create a label record for the label symtab
+ *
+ * NOTE: The label symtab assumes ownership of the name dynamic string
+ */
+symtab_label_record_t* create_label_record(dynamic_string_t name, u_int32_t line_number){
+	//Allocate the needed space
+	symtab_label_record_t* label_record = calloc(1, sizeof(symtab_label_record_t));
+
+	//Hash the label name - it is assumed that the creation always does this
+	label_record->hash = hash_label_name(label_record->name.string);
+
+	/**
+	 * IMPORTANT: we assume complete ownership of the name here
+	 */
+	label_record->name = name;
+
+	//Line number for any/all error reporting
+	label_record->line_number = line_number;
+
+	//And that's about all - very simple record type
+	return label_record;
 }
 
 
@@ -2902,6 +2967,8 @@ void macro_symtab_dealloc(macro_symtab_t* symtab){
  * Destroy a label table. We assume that a lot of time
  * when this function is called we'll actually have a nonexistent
  * table so we will account for that here
+ *
+ * TODO DON'T KNOW ABOUT THIS and how we handle stuff in the CFG constructor
  */
 void label_symtab_dealloc(label_symtab_t* symtab){
 	//Totally valid and normal
