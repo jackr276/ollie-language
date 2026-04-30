@@ -380,11 +380,6 @@ type_symtab_t* type_symtab_alloc();
 macro_symtab_t* macro_symtab_alloc();
 
 /**
- * NOTE: Functions only have one scope, which is why they do not
- * have any initialize_scope routine
- */
-
-/**
  * Initialize the variable symbol table scope
  */
 void initialize_variable_scope(variable_symtab_t* symtab);
@@ -393,11 +388,6 @@ void initialize_variable_scope(variable_symtab_t* symtab);
  * Initialize the type symbol table scope
  */
 void initialize_type_scope(type_symtab_t* symtab);
-
-/**
- * NOTE: Functions only have one scope, which is why they do not
- * have any finalize_scope routine
- */
 
 /**
  * Finalize the variable scope and go back a level
@@ -412,7 +402,7 @@ void finalize_type_scope(type_symtab_t* symtab);
 /**
  * Create a record for the symbol table
  */
-symtab_variable_record_t* create_variable_record(dynamic_string_t name);
+symtab_variable_record_t* create_variable_record(dynamic_string_t name, symtab_function_record_t* function_declared_in);
 
 /**
  * Create a global variable record

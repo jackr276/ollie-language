@@ -105,7 +105,7 @@ struct generic_ast_node_t{
 	//These are the two pointers that make up the whole of the tree
 	generic_ast_node_t* first_child;
 	generic_ast_node_t* next_sibling;
-	//What variable do we have?
+	//Variable/jump label holder
 	symtab_variable_record_t* variable;
 	//The symtab function record
 	symtab_function_record_t* func_record;

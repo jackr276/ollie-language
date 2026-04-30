@@ -535,7 +535,7 @@ static inline u_int64_t hash_type(generic_type_t* type){
 /**
  * Dynamically allocate a variable record
 */
-symtab_variable_record_t* create_variable_record(dynamic_string_t name){
+symtab_variable_record_t* create_variable_record(dynamic_string_t name, symtab_function_record_t* function_declared_in){
 	//Allocate it
 	symtab_variable_record_t* record = calloc(1, sizeof(symtab_variable_record_t));
 
@@ -548,6 +548,12 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t name){
 
 	//This is just a regular variable(for now)
 	record->membership = NO_MEMBERSHIP;
+
+	/**
+	 * Very Important: it is mandatory that we know what function this variable is in. If it
+	 * is a global variable/type variable then use NULL
+	 */
+	record->function_declared_in = function_declared_in;
 
 	//For eventual SSA generation
 	record->counter_stack.stack = NULL;
@@ -1357,7 +1363,8 @@ symtab_variable_record_t* initialize_stack_pointer(type_symtab_t* types){
 	//Set to be stack pointer
 	dynamic_string_set(&variable_name, "stack_pointer");
 
-	symtab_variable_record_t* stack_pointer = create_variable_record(variable_name);
+	//Stack pointer has no current function
+	symtab_variable_record_t* stack_pointer = create_variable_record(variable_name, NULL);
 	//Set this type as a label(address)
 	stack_pointer->type_defined_as = lookup_type_name_only(types, "u64", NOT_MUTABLE)->type;
 
@@ -1376,7 +1383,8 @@ symtab_variable_record_t* initialize_instruction_pointer(type_symtab_t* types){
 	//Set to be instruction pointer(rip)
 	dynamic_string_set(&variable_name, "rip");
 
-	symtab_variable_record_t* instruction_pointer = create_variable_record(variable_name);
+	//Instruction pointer has no given function
+	symtab_variable_record_t* instruction_pointer = create_variable_record(variable_name, NULL);
 	//Set this type as a label(address)
 	instruction_pointer->type_defined_as = lookup_type_name_only(types, "u64", NOT_MUTABLE)->type;
 

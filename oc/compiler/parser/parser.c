@@ -44,6 +44,9 @@ static heap_queue_t current_function_jump_statements;
 //The BFS queue for namespaces
 static heap_queue_t namespace_bfs_queue;
 
+//Store the overall current function scope
+static symtab_variable_sheaf_t* top_level_function_variable_scope = NULL;
+
 //Our stack for storing variables, etc
 static lex_stack_t grouping_stack;
 static lex_stack_t assignment_grouping_stack;
@@ -6408,8 +6411,8 @@ static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t
 	//Now if we finally make it all of the way down here, we are actually set. We'll construct the
 	//node that we have and also add it into our symbol table
 	
-	//We'll first create the symtab record
-	symtab_variable_record_t* member_record = create_variable_record(name);
+	//We'll first create the symtab record. NULL for no specific function
+	symtab_variable_record_t* member_record = create_variable_record(name, NULL);
 	//Store the line number for error printing
 	member_record->line_number = parser_line_num;
 	//Store what the type is
@@ -7188,14 +7191,14 @@ static u_int8_t union_member(ollie_token_stream_t* token_stream, generic_type_t*
 
 	//Finally we can create our members
 	//First goes the mutable one
-	symtab_variable_record_t* mutable_union_member = create_variable_record(name);
+	symtab_variable_record_t* mutable_union_member = create_variable_record(name, NULL);
 	//Give it its type
 	mutable_union_member->type_defined_as = mutable_type;
 	//And we'll let the helper add it into the union type
 	add_union_member(mutable_union_type, mutable_union_member);
 
 	//Now the immutable version
-	symtab_variable_record_t* immutable_union_member = create_variable_record(clone_dynamic_string(&name));
+	symtab_variable_record_t* immutable_union_member = create_variable_record(clone_dynamic_string(&name), NULL);
 	//Give it its type
 	immutable_union_member->type_defined_as = immutable_type;
 	//And we'll let the helper add it into the union type
@@ -7512,7 +7515,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 
 		//If we make it here, then all of our checks passed and we don't have a duplicate name. We're now good
 		//to create the record and assign it a type
-		symtab_variable_record_t* member_record = create_variable_record(lookahead.lexeme);
+		symtab_variable_record_t* member_record = create_variable_record(lookahead.lexeme, NULL);
 
 		//Store the line number
 		member_record->line_number = parser_line_num;
@@ -8856,8 +8859,10 @@ static generic_ast_node_t* labeled_statement(ollie_token_stream_t* token_stream)
 	//Lookahead token
 	lexitem_t lookahead;
 
-	//Do we contain a defer at any point in here? If so, that is invalid because we could
-	//have the defer block duplicated multiple times. As such, a label would become ambiguous
+	/**
+	 * Do we contain a defer at any point in here? If so, that is invalid because we could
+	 * have the defer block duplicated multiple times. As such, a label would become ambiguous
+	 */
 	if(nesting_stack_contains_level(&nesting_stack, NESTING_DEFER_STATEMENT) == TRUE){
 		return print_and_return_error("Label statements cannot be placed inside of deferred blocks", parser_line_num);
 	}
@@ -8892,11 +8897,12 @@ static generic_ast_node_t* labeled_statement(ollie_token_stream_t* token_stream)
 	}
 
 	//We now need to make sure that it isn't a duplicate. We'll use a special search function to do this
+	//TODO TOTALLY BROKEN
 	symtab_variable_record_t* found_variable = lookup_variable_lower_scope(variable_symtab, label_name.string);
 
 	//If we did find it, that's bad
 	if(found_variable != NULL){
-		sprintf(info, "Identiifer %s has already been declared. First declared here: ", label_name.string); 
+		sprintf(info, "Identifier %s has already been declared. First declared here: ", label_name.string); 
 		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		print_variable_name(found_variable);
 		num_errors++;
@@ -8910,15 +8916,13 @@ static generic_ast_node_t* labeled_statement(ollie_token_stream_t* token_stream)
 	}
 
 	//Now that we know we didn't find it, we'll create it
-	symtab_variable_record_t* label = create_variable_record(label_name);
+	symtab_variable_record_t* label = create_variable_record(label_name, current_function);
 	//Store the type
 	label->type_defined_as = immut_u64;
 	//Store the fact that it is a label
 	label->membership = LABEL_VARIABLE;
 	//Store the line number
 	label->line_number = parser_line_num;
-	//Store what function it's defined in(important for later)
-	label->function_declared_in = current_function;
 
 	//Put into the symtab
 	insert_variable(variable_symtab, label);
@@ -11296,7 +11300,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 	if(is_static == FALSE){
 		//Go based on it's global status
 		if(is_global == FALSE){
-			declared_var = create_variable_record(name);
+			declared_var = create_variable_record(name, current_function);
 		} else {
 			declared_var = create_global_variable_record(name, visibility);
 		}
@@ -11308,8 +11312,6 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 	declared_var->type_defined_as = dealias_type(type_spec);
 	//It was declared
 	declared_var->declare_or_let = 0;
-	//What function are we in?
-	declared_var->function_declared_in = current_function;
 	//The line_number
 	declared_var->line_number = current_line;
 	//Now that we're all good, we can add it into the symbol table
@@ -11929,7 +11931,7 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	if(is_static == FALSE){
 		//Go based on it's global status
 		if(is_global == FALSE){
-			declared_var = create_variable_record(name);
+			declared_var = create_variable_record(name, current_function);
 		} else {
 			declared_var = create_global_variable_record(name, visibility);
 		}
@@ -11941,8 +11943,6 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	declared_var->type_defined_as = type_spec;
 	//It was initialized
 	declared_var->initialized = TRUE;
-	//Mark where it was declared
-	declared_var->function_declared_in = current_function;
 	//It was "letted" 
 	declared_var->declare_or_let = 1;
 	//Save the line num
@@ -12119,6 +12119,8 @@ static int8_t check_jump_labels(){
 
 		//We now need to lookup the name in here. We use a special function that allows
 		//us to look deeper into the scopes 
+		//
+		//TODO TOTALLY INCORRECT
 		symtab_variable_record_t* label = lookup_variable_lower_scope(variable_symtab, name);
 
 		//If we didn't find it, we fail out
@@ -12430,7 +12432,7 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 	 * declaration. It is now incumbent on us to store it in the variable 
 	 * symbol table
 	 */
-	symtab_variable_record_t* param_record = create_variable_record(name);
+	symtab_variable_record_t* param_record = create_variable_record(name, current_function);
 
 	/**
 	 * If we've seen the params keyword now is the time
@@ -12468,9 +12470,6 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 		//Bump it for the next go about
 		(*current_sse_param)++;
 	}
-
-	//This parameter was declared in whatever function we're currently in
-	param_record->function_declared_in = current_function;
 
 	//We've now built up our param record, so we'll give add it to the symtab
 	insert_variable(variable_symtab, param_record);
@@ -13423,6 +13422,12 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	//this once we leave
 	initialize_variable_scope(variable_symtab);
 
+	/**
+	 * IMPORTANT: we need to hang onto this overarching function scope
+	 * for future uses/lookups
+	 */
+	top_level_function_variable_scope = variable_symtab->current;
+
 	//Now we must ensure that we see a valid parameter list. It is important to note that
 	//parameter lists can be empty, but whatever we have here we'll have to add in
 	//Parameter list parent is the function node
@@ -13614,6 +13619,9 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 
 	//Close the variable scope that we opened for the parameter list/compound statement
 	finalize_variable_scope(variable_symtab);
+
+	//This is now out of date so scrap it
+	top_level_function_variable_scope = NULL;
 
 	//Remove the nesting level now that we're not in a function
 	pop_nesting_level(&nesting_stack);
