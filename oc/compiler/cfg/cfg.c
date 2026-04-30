@@ -11047,18 +11047,16 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 		//Emit the store code
 		instruction_t* store_statement = emit_store_ir_code(base_address, NULL, true_stored_type);
 
-		//If the last instruction is *not* a constant assignment, we can go ahead like this
-		if(last_instruction == NULL
-			|| last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
-
-			//This is now our op1
-			store_statement->op1 = final_op1;
-
 		/**
-		 * Otherwise, we can do a small optimization here by scrapping the 
-		 * constant assignment and just putting the constant in directly
+		 * If we have a constant assignment, then we can do a small optimization 
+		 * here by scrapping the  constant assignment and just putting the
+		 * constant in directly
 		 */
-		} else {
+		if(last_instruction != NULL
+			&& last_instruction->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
+			&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
+			&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
+
 			//Extract it
 			three_addr_const_t* constant_assignee = last_instruction->op1_const;
 
@@ -11067,6 +11065,12 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 
 			//Set the store statement's op1_const to be this
 			store_statement->op1_const = constant_assignee;
+
+		/**
+		 * Otherwise no fancy optimizations are possible, we'll just store this as the op1
+		 */
+		} else {
+			store_statement->op1 = final_op1;
 		}
 				
 		//Now add thi statement in here
