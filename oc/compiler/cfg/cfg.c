@@ -5690,7 +5690,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 				&& current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
 				&& current_block->exit_statement->assignee != NULL
 				&& current_block->exit_statement->assignee->variable_type == VARIABLE_TYPE_TEMP
-				&& variables_equal(right_side.assignee, current_block->exit_statement->assignee, FALSE) == TRUE){
+				&& variables_equal_no_ssa(right_side.assignee, current_block->exit_statement->assignee, FALSE) == TRUE){
 				//Just assign the constant over
 				op1_const = current_block->exit_statement->op1_const;
 
@@ -5728,7 +5728,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 				&& current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
 				&& current_block->exit_statement->assignee != NULL
 				&& current_block->exit_statement->assignee->variable_type == VARIABLE_TYPE_TEMP
-				&& variables_equal(right_side.assignee, current_block->exit_statement->assignee, FALSE) == TRUE){
+				&& variables_equal_no_ssa(right_side.assignee, current_block->exit_statement->assignee, FALSE) == TRUE){
 				op1_const = current_block->exit_statement->op1_const;
 
 			} else {
@@ -5861,6 +5861,8 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 
 		/**
 		 * Different store statement types have different areas where the operands go
+		 *
+		 * TODO WE SHOULD BE CHECKING FOR EQUALITY
 		 */
 		switch(store_statement->statement_type){
 			//Store statements have the storee in op1
@@ -5930,6 +5932,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		instruction_t* final_assignment = emit_store_ir_code(memory_address, NULL, left_hand_var->type);
 
 		//If the last instruction is *not* a constant assignment, we can go ahead like this
+		//TODO IS THIS RIGHT?
 		if(last_instruction == NULL
 			|| last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
 			//This is now our op1
@@ -5959,15 +5962,25 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		/**
 		 * If this is not a binary operation, then we will just copy it over. If it is, then we will
 		 * use that binary operation for our own purposes here with the left hand var
-		 *
-		 *
-		 *
-		 * TODO ADD THE SAME LOGIC FOR ASSIGNMENT EXPR HERE
-		 *
-		 *
-		 *
 		 */
-		if(is_binary_operation(last_instruction) == FALSE){
+		instruction_t* binary_expression;
+		instruction_t* constant_assignment;
+
+		if(last_instruction != NULL
+			&& last_instruction->assignee != NULL
+			&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
+			&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
+
+			switch(last_instruction->statement_type){
+
+			}
+
+
+		/**
+		 * Otherwise there is no clever optimization that we could do, so we'll need to emit an assignment
+		 * from the left hand var over to the final op1
+		 */
+		} else {
 			//Finally we'll struct the whole thing
 			instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
 
@@ -5976,10 +5989,6 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			
 			//Now add thi statement in here
 			add_statement(current_block, final_assignment);
-
-		} else {
-			//Just replace this
-			last_instruction->assignee = left_hand_var;
 		}
 	}
 
