@@ -5522,7 +5522,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	basic_block_t* current_block = starting_block;
 
 	//Create the ternary variable here
-	symtab_variable_record_t* ternary_variable = create_ssa_compatible_temp_var(ternary_operation->inferred_type, variable_symtab, increment_and_get_temp_id());
+	symtab_variable_record_t* ternary_variable = create_ssa_compatible_temp_var(current_function, ternary_operation->inferred_type, variable_symtab, increment_and_get_temp_id());
 
 	//Let's first create the final result variable here
 	three_addr_var_t* if_result = emit_var(ternary_variable);
@@ -6394,7 +6394,7 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 	 */
 	symtab_variable_record_t* function_result_var = NULL;
 	if(function_assignee != NULL){
-		function_result_var = create_ssa_compatible_temp_var(function_assignee->type, variable_symtab, increment_and_get_temp_id());
+		function_result_var = create_ssa_compatible_temp_var(current_function, function_assignee->type, variable_symtab, increment_and_get_temp_id());
 	}
 
 	/**
@@ -10132,7 +10132,7 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 		if(parameter->stack_variable == FALSE 
 			&& parameter->type_defined_as->type_class != TYPE_CLASS_ELABORATIVE){
 			//Create the aliased variable
-			symtab_variable_record_t* alias = create_parameter_alias_variable(parameter, variable_symtab, increment_and_get_temp_id());
+			symtab_variable_record_t* alias = create_parameter_alias_variable(current_function, parameter, variable_symtab, increment_and_get_temp_id());
 
 			//Very important that we emit this first for the below reason
 			three_addr_var_t* parameter_var = emit_var(parameter);
