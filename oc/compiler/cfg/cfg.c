@@ -52,10 +52,12 @@ static generic_type_t* i64 = NULL;
 static generic_type_t* f32 = NULL;
 static generic_type_t* f64 = NULL;
 static generic_type_t* immut_void_ptr = NULL;
-//The break and continue stack will
-//hold values that we can break & continue
-//to. This is done here to avoid the need
-//to send value packages at each rule
+/**
+ * The break and continue stack will
+ * hold values that we can break & continue
+ * to. This is done here to avoid the need
+ * to send value packages at each rule
+ */
 static heap_stack_t break_stack;
 static heap_stack_t continue_stack;
 //The overall nesting stack will tell us what level of nesting we're at(if, switch/case, loop)
@@ -99,20 +101,18 @@ typedef enum{
 } emit_dominance_frontier_selection_t;
 
 
-//An enum for declare and let statements letting us know what kind of variable
-//that we have
+/**
+ * An enum for declare and let statements letting us know what kind of variable
+ * that we have
+ */
 typedef enum{
 	VARIABLE_SCOPE_GLOBAL,
 	VARIABLE_SCOPE_LOCAL,
 } variable_scope_type_t;
 
-
 //We predeclare up here to avoid needing any rearrangements
-static void visit_declaration_statement(generic_ast_node_t* node);
 static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_let_statement(basic_block_t* basic_block, generic_ast_node_t* node);
-static void visit_static_let_statement(generic_ast_node_t* node);
-static inline void visit_static_declare_statement(generic_ast_node_t* node);
 static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_node);
@@ -121,16 +121,19 @@ static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node);
-
-static cfg_result_package_t emit_expression_chain(basic_block_t* basic_block, generic_ast_node_t* expression_chain_node, u_int8_t is_conditional);
+static cfg_result_package_t emit_expression_chain(basic_block_t* basic_block, generic_ast_node_t* expression_chain_node);
 static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr);
 static cfg_result_package_t emit_ternary_expression(basic_block_t* basic_block, generic_ast_node_t* ternary_operation);
-static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_const_t* constant);
 static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node);
 static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression);
-static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_condition);
+static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node);
 static cfg_result_package_t emit_string_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* string_initializer);
 static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* struct_initializer);
+
+static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_const_t* constant);
+static void visit_declaration_statement(generic_ast_node_t* node);
+static void visit_static_let_statement(generic_ast_node_t* node);
+static inline void visit_static_declare_statement(generic_ast_node_t* node);
 static inline void handle_raise_statement(basic_block_t* basic_block, generic_ast_node_t* node);
 
 /**
@@ -197,6 +200,22 @@ static inline u_int8_t is_binary_operation(instruction_t* statement){
 			return TRUE;
 		default:
 			return FALSE;
+	}
+}
+
+
+/**
+ * Is the given three address code statement a constant assignment
+ */
+static inline u_int8_t is_constant_assignment(instruction_t* statement){
+	if(statement == NULL){
+		return FALSE;
+	}
+
+	if(statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
+		return TRUE;
+	} else {
+		return FALSE;
 	}
 }
 
@@ -665,29 +684,6 @@ static basic_block_t* labeled_block_alloc(symtab_variable_record_t* label){
 
 	//Give it back
 	return created;
-}
-
-
-/**
- * For certain variables in conditionals, we want to emit a temp assignment of said variable for optimization
- * reasons. This function will take a variable in and:
- *   If it's a temp, just give it back
- *   If it's not a temp, emit a temp assignment, add that to the block, then give the temp var back
- */
-static three_addr_var_t* handle_conditional_identifier_copy_if_needed(basic_block_t* block, three_addr_var_t* variable){
-	//Nothing more to see here
-	if(variable->variable_type == VARIABLE_TYPE_TEMP){
-		return variable;
-	}
-
-	//Otherwise we must copy
-	instruction_t* copy = emit_assignment_instruction(emit_temp_var(variable->type), variable);
-
-	//Add it into the block
-	add_statement(block, copy);
-
-	//Give back the copy var
-	return copy->assignee;
 }
 
 
@@ -3005,25 +3001,33 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 	 */
 	if(ret_node->first_child != NULL){
 		//Perform the binary operation here
-		cfg_result_package_t expression_package = emit_expression(current, ret_node->first_child, FALSE);
+		cfg_result_package_t expression_package = emit_expression(current, ret_node->first_child);
 
 		//Reassign the block
 		current = expression_package.final_block;
 
 		//Grab this out to look at
 		return_variable = expression_package.assignee;
-
+		
 		/**
-		 * The type of this final assignee will *always* be the inferred type of the node. We need to ensure that
-		 * the function is returning the type as promised, and not what is done through type coercion
+		 * If the variable is not a temp *or* we have a need for a converting move, we will emit
+		 * the extra assignment here. If it's already temp and we don't need a converting move, we won't
+		 * bother with inserting the extra statements
 		 */
-		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(ret_node->inferred_type), return_variable);
+		if(return_variable->variable_type != VARIABLE_TYPE_TEMP
+			|| is_converting_move_required(ret_node->inferred_type, return_variable->type) == TRUE){
+			/**
+			 * The type of this final assignee will *always* be the inferred type of the node. We need to ensure that
+			 * the function is returning the type as promised, and not what is done through type coercion
+			 */
+			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(ret_node->inferred_type), return_variable);
 
-		//Add it into the block
-		add_statement(current, assignment);
+			//Add it into the block
+			add_statement(current, assignment);
 
-		//The return variable is now what was assigned
-		return_variable	= assignment->assignee;
+			//The return variable is now what was assigned
+			return_variable	= assignment->assignee;
+		}
 
 		//Flag for later on in the compiler that this variable has been returned
 		return_variable->membership = RETURNED_VARIABLE;
@@ -4083,7 +4087,7 @@ static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, g
 
 		//By default, we're emitting some kind of expression here
 		default:
-			return emit_expression(basic_block, primary_parent, FALSE);
+			return emit_expression(basic_block, primary_parent);
 	}
 }
 
@@ -4161,7 +4165,7 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 	}
 
 	//The first thing we'll see is the value in the brackets([value]). We'll let the helper emit this
-	cfg_result_package_t expression_package = emit_expression(current_block, array_accessor->first_child, FALSE);
+	cfg_result_package_t expression_package = emit_expression(current_block, array_accessor->first_child);
 
 	//Set this to be at the end
 	current_block = expression_package.final_block;
@@ -5537,7 +5541,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	cursor = cursor->next_sibling;
 
 	//Emit this in our new if block
-	cfg_result_package_t if_branch = emit_expression(if_block, cursor, TRUE);
+	cfg_result_package_t if_branch = emit_expression(if_block, cursor);
 
 	//Again here we could have multiple blocks, so we'll need to account for this and reassign if necessary
 	if_block = if_branch.final_block;
@@ -5555,7 +5559,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	cursor = cursor->next_sibling;
 
 	//Emit this in our else block
-	cfg_result_package_t else_branch = emit_expression(else_block, cursor, TRUE);
+	cfg_result_package_t else_branch = emit_expression(else_block, cursor);
 
 	//Again here we could have multiple blocks, so we'll need to account for this and reassign if necessary
 	else_block = else_branch.final_block;
@@ -5684,7 +5688,9 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 			 */
 			if(current_block->exit_statement != NULL 
 				&& current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-				&& variables_equal(right_side.assignee, current_block->exit_statement->assignee, FALSE) == TRUE){
+				&& current_block->exit_statement->assignee != NULL
+				&& current_block->exit_statement->assignee->variable_type == VARIABLE_TYPE_TEMP
+				&& variables_equal_no_ssa(right_side.assignee, current_block->exit_statement->assignee, FALSE) == TRUE){
 				//Just assign the constant over
 				op1_const = current_block->exit_statement->op1_const;
 
@@ -5720,7 +5726,9 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 			 */
 			if(current_block->exit_statement != NULL 
 				&& current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-				&& variables_equal(right_side.assignee, current_block->exit_statement->assignee, FALSE) == TRUE){
+				&& current_block->exit_statement->assignee != NULL
+				&& current_block->exit_statement->assignee->variable_type == VARIABLE_TYPE_TEMP
+				&& variables_equal_no_ssa(right_side.assignee, current_block->exit_statement->assignee, FALSE) == TRUE){
 				op1_const = current_block->exit_statement->op1_const;
 
 			} else {
@@ -5787,7 +5795,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	generic_ast_node_t* right_child = left_child->next_sibling;
 
 	//Now emit the right hand expression
-	cfg_result_package_t right_hand_package = emit_expression(current_block, right_child, FALSE);
+	cfg_result_package_t right_hand_package = emit_expression(current_block, right_child);
 
 	//Hold onto this for later
 	instruction_t* last_instruction = current_block->exit_statement;
@@ -5857,16 +5865,15 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		switch(store_statement->statement_type){
 			//Store statements have the storee in op1
 			case THREE_ADDR_CODE_STORE_STATEMENT:
-				//If the last instruction is *not* a constant assignment, we can go ahead like this
-				if(last_instruction == NULL
-					|| last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
+				/**
+				 * We can perform a small optimization by potentially scrapping the constant
+				 * assignment and just putting the constant in directly
+				 */
+				if(last_instruction != NULL
+					&& last_instruction->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
+					&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
 
-					//This is now our op1
-					current_block->exit_statement->op1 = final_op1;
-
-				//Otherwise, we can do a small optimization here by scrapping the 
-				//constant assignment and just putting the constant in directly
-				} else {
 					//Extract it
 					three_addr_const_t* constant_assignee = last_instruction->op1_const;
 
@@ -5875,6 +5882,13 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 
 					//Set the store statement's op1_const to be this
 					current_block->exit_statement->op1_const = constant_assignee;
+
+				/**
+				 * Otherwise there's no clever optimziation to do here, we just need
+				 * to emit this as is
+				 */
+				} else {
+					current_block->exit_statement->op1 = final_op1;
 				}
 
 				break;
@@ -5882,15 +5896,15 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			//When we have offsets, the storee goes into op2
 			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-				//If the last instruction is *not* a constant assignment, we can go ahead like this
-				if(last_instruction == NULL
-					|| last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
-					//This is now our op1
-					current_block->exit_statement->op2 = final_op1;
+				/**
+				 * We can perform a small optimization by potentially scrapping the constant
+				 * assignment and just putting the constant in directly
+				 */
+				if(last_instruction != NULL
+					&& last_instruction->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
+					&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
 
-				//Otherwise, we can do a small optimization here by scrapping the 
-				//constant assignment and just putting the constant in directly
-				} else {
 					//Extract it
 					three_addr_const_t* constant_assignee = last_instruction->op1_const;
 
@@ -5899,6 +5913,13 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 
 					//Set the store statement's op1_const to be this
 					current_block->exit_statement->op1_const = constant_assignee;
+
+				/**
+				 * Otherwise there's no clever optimziation to do here, we just need
+				 * to emit this as is
+				 */
+				} else {
+					current_block->exit_statement->op2 = final_op1;
 				}
 
 				break;
@@ -5921,15 +5942,14 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		//Now for the final store code
 		instruction_t* final_assignment = emit_store_ir_code(memory_address, NULL, left_hand_var->type);
 
-		//If the last instruction is *not* a constant assignment, we can go ahead like this
-		if(last_instruction == NULL
-			|| last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
-			//This is now our op1
-			final_assignment->op1 = final_op1;
-
-		//Otherwise, we can do a small optimization here by scrapping the 
-		//constant assignment and just putting the constant in directly
-		} else {
+		/**
+		 * If the last instruction was a constant assignment, we can just grab the constant
+		 * itself instead of dealing with the extra copy assignment
+		 */
+		if(last_instruction != NULL
+			&& last_instruction->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
+			&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
+			&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
 			//Extract it
 			three_addr_const_t* constant_assignee = last_instruction->op1_const;
 
@@ -5938,6 +5958,9 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 
 			//Set the store statement's op1_const to be this
 			final_assignment->op1_const = constant_assignee;
+
+		} else {
+			final_assignment->op1 = final_op1;
 		}
 		
 		//Now add thi statement in here
@@ -5952,19 +5975,68 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		 * If this is not a binary operation, then we will just copy it over. If it is, then we will
 		 * use that binary operation for our own purposes here with the left hand var
 		 */
-		if(is_binary_operation(last_instruction) == FALSE){
+		instruction_t* binary_expression;
+		instruction_t* constant_assignment;
+		instruction_t* final_assignment;
+
+		/**
+		 * Reach back into the block to see if the last instruction that we emitted for our op1
+		 * here is a constant assignment or a binary expression. If it's either, we can avoid
+		 * the copy assignment for this assignment expression and go to emitting directly
+		 */
+		if(last_instruction != NULL
+			&& last_instruction->assignee != NULL
+			&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
+			&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
+
+			switch(last_instruction->statement_type){
+				case THREE_ADDR_CODE_BIN_OP_STMT:
+				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+					binary_expression = last_instruction;
+
+					//Make this one's assignee the left hand var
+					binary_expression->assignee = left_hand_var;
+					
+					break;
+
+				case THREE_ADDR_CODE_ASSN_CONST_STMT:
+					constant_assignment = last_instruction;
+
+					//Make this one's assignee the left hand var
+					constant_assignment->assignee = left_hand_var;
+
+					break;
+					
+				/**
+				 * If we have this then there's no clever optimization that we can do, we'll
+				 * just emti a copy assignment
+				 */
+				default:
+					//Finally we'll struct the whole thing
+					final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
+
+					//Copy this over if there is one
+					left_hand_var->associated_memory_region.stack_region = final_op1->associated_memory_region.stack_region;
+					
+					//Now add thi statement in here
+					add_statement(current_block, final_assignment);
+
+					break;
+			}
+
+		/**
+		 * Otherwise there is no clever optimization that we could do, so we'll need to emit an assignment
+		 * from the left hand var over to the final op1
+		 */
+		} else {
 			//Finally we'll struct the whole thing
-			instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
+			final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
 
 			//Copy this over if there is one
 			left_hand_var->associated_memory_region.stack_region = final_op1->associated_memory_region.stack_region;
 			
 			//Now add thi statement in here
 			add_statement(current_block, final_assignment);
-
-		} else {
-			//Just replace this
-			last_instruction->assignee = left_hand_var;
 		}
 	}
 
@@ -6013,7 +6085,7 @@ static cfg_result_package_t visit_paramcount_statement(basic_block_t* basic_bloc
  * These statements almost always involve some kind of assignment "<-" and generate temporary
  * variables
  */
-static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_conditional){
+static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node){
 	//Declare and initialize the results
 	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
 
@@ -6043,9 +6115,7 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			result_package = visit_paramcount_statement(basic_block, expr_node);
 			break;
 
-		//Handle an assignment expression
 		case AST_NODE_TYPE_ASNMNT_EXPR:
-			//Let the helper deal with it
 			result_package = emit_assignment_expression(basic_block, expr_node);
 			break;
 	
@@ -6065,14 +6135,8 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 
 		//Default is a unary expression
 		default:
-			//Let this rule handle it
 			result_package = emit_unary_expression(basic_block, expr_node);
 			break;
-	}
-
-	//If this is a conditional, we can let the helper handle it
-	if(is_conditional == TRUE){
-		result_package.assignee = handle_conditional_identifier_copy_if_needed(result_package.final_block, result_package.assignee);
 	}
 
 	return result_package;
@@ -6083,7 +6147,7 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
  * Emit abstract machine code for a comma separated expression chain. This rule mainly just involves
  * invoking the lower level "emit-expression" over and over until we're done
  */
-static cfg_result_package_t emit_expression_chain(basic_block_t* basic_block, generic_ast_node_t* expression_chain_node, u_int8_t is_conditional){
+static cfg_result_package_t emit_expression_chain(basic_block_t* basic_block, generic_ast_node_t* expression_chain_node){
 	cfg_result_package_t result_package;
 
 	//Maintain a pointer to the current block
@@ -6097,7 +6161,7 @@ static cfg_result_package_t emit_expression_chain(basic_block_t* basic_block, ge
 
 	while(expression_cursor != NULL){
 		//Let the helper emit it
-		expression_result = emit_expression(current_block, expression_cursor, is_conditional);
+		expression_result = emit_expression(current_block, expression_cursor);
 
 		//Update the current block
 		current_block = expression_result.final_block;
@@ -6244,7 +6308,7 @@ static cfg_result_package_t emit_error_handle_statement(generic_ast_node_t* erro
 			break;
 
 		default:
-			results = emit_expression(handler_block, error_handle_node->first_child, FALSE);
+			results = emit_expression(handler_block, error_handle_node->first_child);
 			break;
 	}
 
@@ -6526,7 +6590,7 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 	 */
 	while(child_cursor != NULL){
 		//Emit each expression
-		cfg_result_package_t expression_results = emit_expression(current_block, child_cursor, FALSE);
+		cfg_result_package_t expression_results = emit_expression(current_block, child_cursor);
 
 		//Always reassign to be the final block that we got back
 		current_block = expression_results.final_block;
@@ -6830,7 +6894,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 */
 		if(param_cursor->ast_node_type != AST_NODE_TYPE_ELABORATIVE_PARAM_STMT){
 			//Emit whatever we have here into the basic block
-			cfg_result_package_t package = emit_expression(current_block, param_cursor, FALSE);
+			cfg_result_package_t package = emit_expression(current_block, param_cursor);
 
 			//Always reassign this
 			current_block = package.final_block;
@@ -7691,7 +7755,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	 * or may not be there. We will let our given rule handle it
 	 */
 	if(cursor->ast_node_type == AST_NODE_TYPE_EXPR_CHAIN){
-		cfg_result_package_t expression_chain_result = emit_expression_chain(for_stmt_entry_block, cursor, FALSE);
+		cfg_result_package_t expression_chain_result = emit_expression_chain(for_stmt_entry_block, cursor);
 
 		//Update the block if need be
 		for_stmt_entry_block = expression_chain_result.final_block;
@@ -7731,7 +7795,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 
 	//If we see an expression chain, we need to parse it out there
 	if(cursor->ast_node_type == AST_NODE_TYPE_EXPR_CHAIN){
-		cfg_result_package_t expression_chain_result = emit_expression_chain(for_stmt_update_block, cursor, FALSE);
+		cfg_result_package_t expression_chain_result = emit_expression_chain(for_stmt_update_block, cursor);
 
 		//Update the block if need be
 		for_stmt_update_block_end = expression_chain_result.final_block;
@@ -7967,17 +8031,50 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 
 
 /**
- * Process an if-else-if statement into CFG form, handling all possible contigencies
+ * Translate an if-else-if-else statement into CFG form, handling all possible contingencies
+ * and control flow situations
+ *
+ *
+ * Remember how a full if-else-if-else is handled, with the first child nodes being a conditional
+ * and a compound statement, followed by any else if and/or else compound statements. A full
+ * example is below
+ *
+ * 	if(x == 0) {
+ * 		x += 1;
+ *
+ * 	} else if (x == 1) {
+ * 		x += 2;
+ *
+ * 	} else if (x == 2) {
+ * 		x += 3;
+ *
+ * 	} else {
+ * 		x += 4;
+ * 	}
+ *
+ * 	In AST format:
+ * 										 <if - statement>
+ * 			/			/						|			 					\				\
+ * 	<conditional>	<compound-stmt>	 		<else-if>					   <else-if>		<compound-stmt>
+ * 											/	\						 / 	 		\
+ * 								<conditional>   <compound-stmt>		<conditional>  <compound-stmt>
+ *
+ * 	This is what we'll need to parse through and translate. This structure is chosen so that we have a minimal
+ * 	memory footprint. We rely on this context being completely understood by the CFG converter here to work
+ *
+ * 	If we're clever about this, we can write the whole thing as one big do-while
  */
 static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	//Final result package
 	cfg_result_package_t if_results_package = {NULL, NULL, NULL, BLANK};
 
 	/**
-	 * We will maintain a current entry block and a current entry block. The first
-	 * entry block we know for sure is our very first top guy
+	 * We maintain a current entry block for our uses. Since this is 
+	 * the very first one we know that it goes up front
 	 */
+	basic_block_t* old_entry_block;
 	basic_block_t* current_entry_block = basic_block_alloc_and_estimate();
+	if_results_package.starting_block = current_entry_block;
 
 	/**
 	 * The overall exit block is where everything goes to in the end to get out
@@ -7986,94 +8083,50 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	 */
 	basic_block_t* overall_exit_block = basic_block_alloc_and_estimate();
 
-	//This is definitely our starting block
-	if_results_package.starting_block = current_entry_block;
-
-	//We'll also need a cursor to traverse the entire thing
+	//This cursor will help us traverse the overall if statement
 	generic_ast_node_t* cursor = root_node->first_child;
 
-	//Hang onto this for later
-	generic_ast_node_t* conditional_node = cursor;
-	
-	//Signify that this is happening inside of an IF
-	push_nesting_level(&nesting_stack, NESTING_IF_STATEMENT);
-
-	//Advance the cursor up to get the compound statement 
-	cursor = cursor->next_sibling;
-
-	//Let the helper emit the entire compound statement
-	cfg_result_package_t if_compound_statement_results = visit_compound_statement(cursor);
-
-	//Remove the IF nester
-	pop_nesting_level(&nesting_stack);
-
 	/**
-	 * If we have an empty if statement(possible), then we'll just go about creating
-	 * a block here so we don't have any weird behavior
+	 * We will be using an infinite loop pattern for this. We have specific conditions
+	 * on when this is done
 	 */
-	if(if_compound_statement_results.starting_block == NULL){
-		if_compound_statement_results.starting_block = basic_block_alloc_and_estimate();
-		if_compound_statement_results.final_block = if_compound_statement_results.starting_block;
-	}
+	while(TRUE) {
+		//An internal cursor for traversing the statement
+		generic_ast_node_t* conditional_node = NULL;
+		generic_ast_node_t* compound_statement_node = NULL;
 
-	/**
-	 * If the if compound statement final block does not end in a return, we'll need to make
-	 * it jump to the exit block. This is the overall exit block, not the current exit block
-	 * which is just where we go if something didn't work
-	 */
-	if(does_block_end_in_terminal_statement(if_compound_statement_results.final_block) == FALSE){
-		emit_jump(if_compound_statement_results.final_block, overall_exit_block);
-	}
-	
-	//Bump the cursor up to the next statement
-	cursor = cursor->next_sibling;
+		/**
+		 * Look at the structure above - the way we traverse
+		 * the statement internally depends on whether the cursor is an
+		 * if or not
+		 */
+		switch(cursor->ast_node_type){
+			/**
+			 * For the else if we'll need to go into the child nodes
+			 * of the current cursor
+			 */
+			case AST_NODE_TYPE_ELSE_IF_STMT:
+				conditional_node = cursor->first_child;
+				compound_statement_node = conditional_node->next_sibling;
+				break;
 
-	/**
-	 * Is the cursor NULL? If it is, then to get out of this if we just
-	 * need to jump to the final exit block. If it's not NULL, then we're going 
-	 * to need to jump to a new conditional block for the else-if/else that we
-	 * need to emit next
-	 */
-	if(cursor != NULL){
-		//Hang onto the old "entry"
-		basic_block_t* old_entry_block_holder = current_entry_block;
-
-		//We'll make a fresh new entry block for our else-if/else
-		current_entry_block = basic_block_alloc_and_estimate();
-
-		//Now branch out to the new current entry block
-		emit_branch(old_entry_block_holder, conditional_node, if_compound_statement_results.starting_block, current_entry_block, BRANCH_CATEGORY_NORMAL);
-	
-	/**
-	 * This is a terminal case - we're done so we can set the final block and get out
-	 */
-	} else {
-		emit_branch(current_entry_block, conditional_node, if_compound_statement_results.starting_block, overall_exit_block, BRANCH_CATEGORY_NORMAL);
-		if_results_package.final_block = overall_exit_block;
-		return if_results_package;
-	}
-
-	/**
-	 * So long as we keep seeing else-if statements, we will keep processing here accordingly
-	 *
-	 * When we enter this loop, the current entry block is already pre-allocated and ready for
-	 * us to use
-	 */
-	while(cursor != NULL && cursor->ast_node_type == AST_NODE_TYPE_ELSE_IF_STMT){
-		//Grab a cursor for this specific traversal
-		generic_ast_node_t* else_if_cursor = cursor->first_child;
-
-		//Hang onto the conditional for us
-		generic_ast_node_t* else_if_conditional = else_if_cursor;
+			/**
+			 * Otherwise we have our if statement. The conditional is the first
+			 * child, compound statement is the next one. Advance the cursor as 
+			 * we go
+			 */
+			default:
+				conditional_node = cursor;
+				cursor = cursor->next_sibling;
+				compound_statement_node = cursor;
+				break;
+		}
 
 		//Signify that this is happening inside of an IF
 		push_nesting_level(&nesting_stack, NESTING_IF_STATEMENT);
 
-		//Advance the cursor up to get the compound statement 
-		else_if_cursor = else_if_cursor->next_sibling;
-
 		//Let the helper emit the entire compound statement
-		cfg_result_package_t else_if_compound_statement_results = visit_compound_statement(else_if_cursor);
+		cfg_result_package_t compound_statement_results = visit_compound_statement(compound_statement_node);
 
 		//Remove the IF nester
 		pop_nesting_level(&nesting_stack);
@@ -8082,100 +8135,121 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		 * If we have an empty if statement(possible), then we'll just go about creating
 		 * a block here so we don't have any weird behavior
 		 */
-		if(else_if_compound_statement_results.starting_block == NULL){
-			else_if_compound_statement_results.starting_block = basic_block_alloc_and_estimate();
-			else_if_compound_statement_results.final_block = else_if_compound_statement_results.starting_block;
+		if(compound_statement_results.starting_block == NULL){
+			compound_statement_results.starting_block = basic_block_alloc_and_estimate();
+			compound_statement_results.final_block = compound_statement_results.starting_block;
 		}
 
 		/**
-		 * If the else if compound statement final block does not end in a return, we'll need to make
-		 * it jump to the overall exit block
+		 * If the compound statement final block does not end in a return, we'll need to make
+		 * it jump to the exit block. This is the overall exit block, not the current exit block
+		 * which is just where we go if something didn't work
 		 */
-		if(does_block_end_in_terminal_statement(else_if_compound_statement_results.final_block) == FALSE){
-			emit_jump(else_if_compound_statement_results.final_block, overall_exit_block);
+		if(does_block_end_in_terminal_statement(compound_statement_results.final_block) == FALSE){
+			emit_jump(compound_statement_results.final_block, overall_exit_block);
 		}
 
 		//Bump the cursor up to the next statement
 		cursor = cursor->next_sibling;
 
 		/**
-		 * Is the cursor NULL? If it is, then to get out of this if we just
-		 * need to jump to the final exit block. If it's not NULL, then we're going 
-		 * to need to jump to a new conditional block for the else-if/else that we
-		 * need to emit next
+		 * CONDITIONS:
+		 * 	We have another else-if coming up:
+		 * 		allocate a new starting block, emit the branch, and repeat
+		 *
+		 * 	We have a compound statement(else condition) coming up
+		 * 		emit the else compound statement, emit the branch, TERMINATE
+		 *
+		 * 	We have nothing(think if{} or if{}else if{} with not else) coming pu
+		 * 		emit the branch to the overall exit block, TERMINATE
 		 */
 		if(cursor != NULL){
-			//Hang onto the old "entry"
-			basic_block_t* old_entry_block_holder = current_entry_block;
+			switch(cursor->ast_node_type){
+				/**
+				 * We have an else-if statement. If this is the case, we are safe to emit
+				 * a new block for the next conditional and jump to that
+				 */
+				case AST_NODE_TYPE_ELSE_IF_STMT:
+					//Hang onto the old "entry"
+					old_entry_block = current_entry_block;
 
-			//We'll make a fresh new entry block for our else-if/else
-			current_entry_block = basic_block_alloc_and_estimate();
+					//We'll make a fresh new entry block for our else-if/else
+					current_entry_block = basic_block_alloc_and_estimate();
 
-			//Now branch out to the new current entry block
-			emit_branch(old_entry_block_holder, else_if_conditional, else_if_compound_statement_results.starting_block, current_entry_block, BRANCH_CATEGORY_NORMAL);
+					//Now branch out to the new current entry block
+					emit_branch(old_entry_block, conditional_node, compound_statement_results.starting_block, current_entry_block, BRANCH_CATEGORY_NORMAL);
+
+					//Next iteration of the loop, break out of switch
+					break;
+
+				/**
+				 * We have an if-else statement. If this is the case, we'll just emit the else here for ourselves
+				 * and then leave when it is appropriate. Note that this is a terminal case, we are out of here 
+				 * when this happens
+				 */
+				case AST_NODE_TYPE_COMPOUND_STMT:
+					//Push the if nesting level
+					push_nesting_level(&nesting_stack, NESTING_IF_STATEMENT);
+
+					//Get the results for the else statement
+					cfg_result_package_t else_compound_statement_values = visit_compound_statement(cursor);
+
+					//Pop it off
+					pop_nesting_level(&nesting_stack);
+
+					/**
+					 * If we have an empty if statement(possible), then we'll just go about creating
+					 * a block here so we don't have any weird behavior
+					 */
+					if(else_compound_statement_values.starting_block == NULL){
+						else_compound_statement_values.starting_block = basic_block_alloc_and_estimate();
+						else_compound_statement_values.final_block = else_compound_statement_values.starting_block;
+					}
+
+					//Emit the final branch out
+					emit_branch(current_entry_block, conditional_node, compound_statement_results.starting_block, else_compound_statement_values.starting_block, BRANCH_CATEGORY_NORMAL);
+
+					/**
+					 * If the else if compound statement final block does not end in a return, we'll need to make
+					 * it jump to the overall exit block
+					 */
+					if(does_block_end_in_terminal_statement(else_compound_statement_values.final_block) == FALSE){
+						emit_jump(else_compound_statement_values.final_block, overall_exit_block);
+					}
+
+					/**
+					 * If we have an exit block that has no predecessors, that means that we return through every
+					 * control path. In this instance, we need to set the result package's final block to be the
+					 * exit block
+					 */
+					if(overall_exit_block->predecessors.current_index == 0){
+						if_results_package.final_block = function_exit_block;
+					} else {
+						if_results_package.final_block = overall_exit_block;
+					}
+
+					return if_results_package;
+
+				//Should never happen
+				default:
+					fprintf(stderr, "Fatal internal compiler error: invalid node found in if statement processor\n");
+					exit(1);
+			}
 		
 		/**
-		 * This is a terminal case - we're done so we can set the final block and get out
+		 * This is a terminal case - we're done so we can set the final block and get out. We'd get here if 
+		 * we had something like if(){} and then nothing else. Note that we don't need to check the overall
+		 * exit block here because we know that it's going to have at least one predecessor(this block)
 		 */
 		} else {
-			emit_branch(current_entry_block, else_if_conditional, else_if_compound_statement_results.starting_block, overall_exit_block, BRANCH_CATEGORY_NORMAL);
+			emit_branch(current_entry_block, conditional_node, compound_statement_results.starting_block, overall_exit_block, BRANCH_CATEGORY_NORMAL);
 			if_results_package.final_block = overall_exit_block;
+
 			return if_results_package;
 		}
 	}
-
-	/**
-	 * If we get here and the cursor is a compound statement, then we have
-	 * an else condition to deal with. Remember that we have a freshly
-	 * allocated "current_entry_block". To make this all work nicely,
-	 * we'll need to chain that into the compound statement here with a jump.
-	 * This will be optimized away later
-	 */
-	if(cursor != NULL && cursor->ast_node_type == AST_NODE_TYPE_COMPOUND_STMT){
-		//Push the if nesting level
-		push_nesting_level(&nesting_stack, NESTING_IF_STATEMENT);
-
-		//Get the results for the else statement
-		cfg_result_package_t else_compound_statement_values = visit_compound_statement(cursor);
-
-		//Pop it off
-		pop_nesting_level(&nesting_stack);
-
-		/**
-		 * If we have an empty if statement(possible), then we'll just go about creating
-		 * a block here so we don't have any weird behavior
-		 */
-		if(else_compound_statement_values.starting_block == NULL){
-			else_compound_statement_values.starting_block = basic_block_alloc_and_estimate();
-			else_compound_statement_values.final_block = else_compound_statement_values.starting_block;
-		}
-
-		//IMPORTANT - the current entry needs to be chained into this else
-		emit_jump(current_entry_block, else_compound_statement_values.starting_block);
-
-		/**
-		 * If the else if compound statement final block does not end in a return, we'll need to make
-		 * it jump to the overall exit block
-		 */
-		if(does_block_end_in_terminal_statement(else_compound_statement_values.final_block) == FALSE){
-			emit_jump(else_compound_statement_values.final_block, overall_exit_block);
-		}
-	}
-
-	/**
-	 * If we have an exit block that has no predecessors, that means that we return through every
-	 * control path. In this instance, we need to set the result package's final block to be the
-	 * exit block
-	 */
-	if(overall_exit_block->predecessors.current_index == 0){
-		if_results_package.final_block = function_exit_block;
-	} else {
-		if_results_package.final_block = overall_exit_block;
-	}
-
-	//Give back the results package here
-	return if_results_package;
 }
+
 
 /**
  * Visit a default statement.  These statements are also handled like individual blocks that can 
@@ -8188,9 +8262,11 @@ static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_nod
 	//This is nesting inside of a case statement
 	push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
 
-	//For a default statement, it performs very similarly to a case statement. 
-	//It will be handled slightly differently in the jump table, but we'll get to that 
-	//later on
+	/**
+	 * For a default statement, it performs very similarly to a case statement. 
+	 * It will be handled slightly differently in the jump table, but we'll get to that 
+	 * later on
+	 */
 
 	//Grab a cursor to our default statement
 	generic_ast_node_t* default_stmt_cursor = root_node;
@@ -8388,7 +8464,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	generic_ast_node_t* cursor = root_node->first_child;
 
 	//We'll first need to emit the expression node
-	cfg_result_package_t input_results = emit_expression(root_level_block, cursor, TRUE);
+	cfg_result_package_t input_results = emit_expression(root_level_block, cursor);
 
 	//Update the block
 	root_level_block = input_results.final_block;
@@ -8510,11 +8586,15 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 			case THREE_ADDR_CODE_JUMP_STMT:
 				break;
 
-			//However if we have this, we need to ensure that we go from this final block
-			//directly to the end
+			/**
+			 * However if we have this, we need to ensure that we go from this final block
+			 * directly to the end
+			 */
 			default:
-				//Emit the direct jump. This may be optimized away in the optimizer, but we
-				//need to guarantee behavior
+				/**
+				 * Emit the direct jump. This may be optimized away in the optimizer, but we
+				 * need to guarantee behavior
+				 */
 				emit_jump(current_block, ending_block);
 
 				break;
@@ -8522,8 +8602,10 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 
 	//Otherwise it is null, so we definitely need a jump to the end here
 	} else {
-		//Emit the direct jump. This may be optimized away in the optimizer, but we
-		//need to guarantee behavior
+		/**
+		 * Emit the direct jump. This may be optimized away in the optimizer, but we
+		 * need to guarantee behavior
+		 */
 		emit_jump(current_block, ending_block);
 	}
 
@@ -8678,7 +8760,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	basic_block_t* default_block = NULL;
 	
 	//Let's first emit the expression. This will at least give us an assignee to work with
-	cfg_result_package_t input_results = emit_expression(root_level_block, case_stmt_cursor, TRUE);
+	cfg_result_package_t input_results = emit_expression(root_level_block, case_stmt_cursor);
 
 	//We could have had a ternary here, so we'll need to account for that possibility
 	root_level_block = input_results.final_block;
@@ -8977,14 +9059,11 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 			
 				//Once we have the if statement start, we'll add it in as a successor
 				if(starting_block == NULL){
-					//The starting block is the first one here
 					starting_block = generic_results.starting_block;
-					//And the final block is the end
 					current_block = generic_results.final_block;
+
 				} else {
-					//Emit a jump from current to the start
 					emit_jump(current_block, generic_results.starting_block);
-					//The current block is just whatever is at the end
 					current_block = generic_results.final_block;
 				}
 
@@ -9336,7 +9415,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				}
 				
 				//Also emit the simplified machine code
-				generic_results = emit_expression_chain(current_block, ast_cursor, FALSE);
+				generic_results = emit_expression_chain(current_block, ast_cursor);
 
 				//Update the end block
 				current_block = generic_results.final_block;
@@ -9469,14 +9548,11 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 			
 				//Once we have the if statement start, we'll add it in as a successor
 				if(starting_block == NULL){
-					//The starting block is the first one here
 					starting_block = generic_results.starting_block;
-					//And the final block is the end
 					current_block = generic_results.final_block;
+
 				} else {
-					//Emit a jump from current to the start
 					emit_jump(current_block, generic_results.starting_block);
-					//The current block is just whatever is at the end
 					current_block = generic_results.final_block;
 				}
 
@@ -9830,7 +9906,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				}
 				
 				//Also emit the simplified machine code
-				generic_results = emit_expression_chain(current_block, ast_cursor, FALSE);
+				generic_results = emit_expression_chain(current_block, ast_cursor);
 
 				//Update the end block
 				current_block = generic_results.final_block;
@@ -10579,7 +10655,7 @@ static cfg_result_package_t emit_final_initialization(basic_block_t* current_blo
 	cfg_result_package_t final_results = {current_block, current_block, base_address, BLANK};
 
 	//Now let's emit the expression using the node
-	cfg_result_package_t expression_results = emit_expression(current_block, expression_node, FALSE);
+	cfg_result_package_t expression_results = emit_expression(current_block, expression_node);
 
 	//The type that we're after
 	generic_type_t* inferred_type = expression_node->inferred_type;
@@ -10836,7 +10912,7 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 	cfg_result_package_t let_results = {current_block, current_block, let_variable, BLANK};
 
 	//Emit the right hand expression here
-	cfg_result_package_t package = emit_expression(current_block, expression_node, FALSE);
+	cfg_result_package_t package = emit_expression(current_block, expression_node);
 
 	//Reassign what the current block is in case it's changed
 	current_block = package.final_block;
@@ -10894,28 +10970,75 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 	 * emit a store operation
 	 */
 	} else if(let_variable->linked_var == NULL || let_variable->linked_var->stack_variable == FALSE){
-		//If it's not a binary operation then we'll just assign over
-		if(is_binary_operation(current_block->exit_statement) == FALSE){
+		instruction_t* assignment_statement;
+		instruction_t* binary_operation;
+		instruction_t* const_assignment;
+
+		/**
+		 * If we have an exit statement *and* we are dealing with what the final_op1 is, we may
+		 * be able to shrink our footprint here
+		 */
+		if(current_block->exit_statement != NULL
+			&& current_block->exit_statement->assignee != NULL
+			&& current_block->exit_statement->assignee->variable_type == VARIABLE_TYPE_TEMP
+			&& variables_equal_no_ssa(final_op1, current_block->exit_statement->assignee, FALSE) == TRUE){
+
+			switch(current_block->exit_statement->statement_type){
+				/**
+				 * For binary operations we can hijack the statement itself
+				 */
+				case THREE_ADDR_CODE_BIN_OP_STMT:
+				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+					binary_operation = current_block->exit_statement;
+
+					//Just replace it with our variable
+					binary_operation->assignee = let_variable;
+
+					break;
+
+				/**
+				 * Same with a constant assignment statement
+				 */
+				case THREE_ADDR_CODE_ASSN_CONST_STMT:
+					const_assignment = current_block->exit_statement;
+
+					//Just replace it with our variable
+					const_assignment->assignee = let_variable;
+
+					break;
+
+				/**
+				 * Something else here - don't know what it is but we play it safe
+				 * and assign things over
+				 */
+				default:
+					//The actual statement is the assignment of right to left
+					assignment_statement = emit_assignment_instruction(let_variable, final_op1);
+
+					//Finally we'll add this into the overall block
+					add_statement(current_block, assignment_statement);
+			}
+
+		/**
+		 * No fancy optimizations here - just emit an assignment over and we'll be
+		 * fine here
+		 */
+		} else {
 			//The actual statement is the assignment of right to left
 			instruction_t* assignment_statement = emit_assignment_instruction(let_variable, final_op1);
 
 			//Finally we'll add this into the overall block
 			add_statement(current_block, assignment_statement);
-
-		//If it is then we can just hijack the statement and replace it's variable with ours
-		} else {
-			instruction_t* binary_operation = current_block->exit_statement;
-
-			//Just replace it with our variable
-			binary_operation->assignee = let_variable;
 		}
 			
 	/**
 	 * Otherwise, we'll need to emit a store operation here
 	 */
 	} else {
-		//Store the "true" stored type. This will only change if our type is a reference, because
-		//we need to account for the implicit dereference that's happening
+		/**
+		 * Store the "true" stored type. This will only change if our type is a reference, because
+		 * we need to account for the implicit dereference that's happening
+		 */
 		generic_type_t* true_stored_type = let_variable->type;
 
 		//NOTE: We use the type of our let variable here for the address assignment
@@ -10924,16 +11047,16 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 		//Emit the store code
 		instruction_t* store_statement = emit_store_ir_code(base_address, NULL, true_stored_type);
 
-		//If the last instruction is *not* a constant assignment, we can go ahead like this
-		if(last_instruction == NULL
-			|| last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
+		/**
+		 * If we have a constant assignment, then we can do a small optimization 
+		 * here by scrapping the  constant assignment and just putting the
+		 * constant in directly
+		 */
+		if(last_instruction != NULL
+			&& last_instruction->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
+			&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
+			&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
 
-			//This is now our op1
-			store_statement->op1 = final_op1;
-
-		//Otherwise, we can do a small optimization here by scrapping the 
-		//constant assignment and just putting the constant in directly
-		} else {
 			//Extract it
 			three_addr_const_t* constant_assignee = last_instruction->op1_const;
 
@@ -10942,6 +11065,12 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 
 			//Set the store statement's op1_const to be this
 			store_statement->op1_const = constant_assignee;
+
+		/**
+		 * Otherwise no fancy optimizations are possible, we'll just store this as the op1
+		 */
+		} else {
+			store_statement->op1 = final_op1;
 		}
 				
 		//Now add thi statement in here
