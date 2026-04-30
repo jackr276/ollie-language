@@ -5861,8 +5861,6 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 
 		/**
 		 * Different store statement types have different areas where the operands go
-		 *
-		 * TODO WE SHOULD BE CHECKING FOR EQUALITY
 		 */
 		switch(store_statement->statement_type){
 			//Store statements have the storee in op1
@@ -5894,15 +5892,15 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			//When we have offsets, the storee goes into op2
 			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-				//If the last instruction is *not* a constant assignment, we can go ahead like this
-				if(last_instruction == NULL
-					|| last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
-					//This is now our op1
-					current_block->exit_statement->op2 = final_op1;
+				/**
+				 * We can perform a small optimization by potentially scrapping the constant
+				 * assignment and just putting the constant in directly
+				 */
+				if(last_instruction != NULL
+					&& last_instruction->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
+					&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
 
-				//Otherwise, we can do a small optimization here by scrapping the 
-				//constant assignment and just putting the constant in directly
-				} else {
 					//Extract it
 					three_addr_const_t* constant_assignee = last_instruction->op1_const;
 
@@ -5911,6 +5909,13 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 
 					//Set the store statement's op1_const to be this
 					current_block->exit_statement->op1_const = constant_assignee;
+
+				/**
+				 * Otherwise there's no clever optimziation to do here, we just need
+				 * to emit this as is
+				 */
+				} else {
+					current_block->exit_statement->op2 = final_op1;
 				}
 
 				break;
