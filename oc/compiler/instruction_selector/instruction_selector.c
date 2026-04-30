@@ -1981,10 +1981,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT 
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
 
-		//TODO HERE IS THIS STILL GONNA EXIST?
-		printf("HERE\n\n\n");
-		print_instruction_window_three_address_code(window);
-
 		//Grab this out for convenience
 		instruction_t* assign_operation = window->instruction2;
 
@@ -2004,7 +2000,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		delete_statement(window->instruction1);
 
 		//Once we've deleted the statement, we'll need to completely rewire the block
-		//The binary operation is now the start
 		reconstruct_window(window, assign_operation);
 	
 		//Whatever happened here, we did change something
