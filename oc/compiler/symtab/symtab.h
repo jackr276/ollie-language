@@ -32,6 +32,9 @@
 //There's only one function keyspace per program, so it can be a bit larger
 #define FUNCTION_KEYSPACE 1024 
 
+//User defined jump statement keyspace(per function)
+#define USER_DEFINED_LABELED_BLOCK_KEYSPACE 64
+
 //A variable symtab
 typedef struct variable_symtab_t variable_symtab_t;
 //A function symtab
@@ -56,6 +59,12 @@ typedef struct symtab_variable_record_t symtab_variable_record_t;
 typedef struct symtab_type_record_t symtab_type_record_t;
 //The records in a macro symtab
 typedef struct symtab_macro_record_t symtab_macro_record_t;
+
+/**
+ * Label tables and label table nodes for GOTO statements
+ */
+typedef struct symtab_label_record_t symtab_label_record_t;
+typedef struct label_symtab_t label_symtab_t;
 
 //================================ Utility Macros ============================
 /**
@@ -359,6 +368,31 @@ struct function_symtab_t{
 
 
 /**
+ * For user defined labels, we simply need to store the hash, the function
+ * that it's in, the block(maybe) and the name
+ */
+struct symtab_label_record_t {
+	u_int64_t hash;
+	dynamic_string_t name;
+};
+
+
+/**
+ * All that is needed for the label table is an array to store
+ * our hashtable
+ */
+struct label_symtab_t {
+	symtab_label_record_t* labels[USER_DEFINED_LABELED_BLOCK_KEYSPACE];
+};
+
+
+/**
+ * Create a label table for us to use. These, unlike the other types of 
+ * symbol tables, are created on-demand on a per-function basis
+ */
+label_symtab_t* label_symtab_alloc();
+
+/**
  * Dynamically allocate a function symtab. Note that this allocation
  * automatically creates the default namespace
  */
@@ -567,12 +601,6 @@ symtab_macro_record_t* lookup_macro(macro_symtab_t* symtab, char* name);
 symtab_variable_record_t* lookup_variable_local_scope(variable_symtab_t* symtab, char* name);
 
 /**
- * Lookup a variable in all lower scopes. This is specifically and only intended for
- * jump statements
- */
-symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab, char* name);
-
-/**
  * Lookup a type name in the symtab
  */
 symtab_type_record_t* lookup_type(type_symtab_t* symtab, generic_type_t* type);
@@ -691,5 +719,10 @@ void type_symtab_dealloc(type_symtab_t* symtab);
  * Destroy a macro symtab
  */
 void macro_symtab_dealloc(macro_symtab_t* symtab);
+
+/**
+ * Destroy a label table
+ */
+void label_symtab_dealloc(label_symtab_t* symtab);
 
 #endif /* SYMTAB_H */

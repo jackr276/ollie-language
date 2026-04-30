@@ -39,8 +39,13 @@ static generic_ast_node_t* prog = NULL;
 static symtab_function_record_t* current_function = NULL;
 //Keep track of all of the errors that have been raised by the current function
 static dynamic_set_t errors_raised_by_current_function;
+
+
 //The queue that holds all of our jump statements for a given function
+//
+//TODO WHY IS THIS A QUEUE???
 static heap_queue_t current_function_jump_statements;
+
 //The BFS queue for namespaces
 static heap_queue_t namespace_bfs_queue;
 

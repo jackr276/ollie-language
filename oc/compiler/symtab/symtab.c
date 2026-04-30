@@ -1627,45 +1627,6 @@ symtab_variable_record_t* lookup_variable_local_scope(variable_symtab_t* symtab,
 
 
 /**
- * Lookup a variable in all lower scopes. This is specifically and only intended for
- * jump statements
- */
-symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab, char* name){
-	//Grab the hash
-	u_int64_t h = hash_variable(name);
-
-	//Define the cursor so we don't mess with the original reference
-	symtab_variable_sheaf_t* cursor;
-	//A cursor for records iterating
-	symtab_variable_record_t* records_cursor;
-
-	//So long as the cursor is not null
-	for(u_int16_t i = 0; i < symtab->sheafs.current_index; i++){
-		//Grab the current sheaf
-		cursor = dynamic_array_get_at(&(symtab->sheafs), i);
-
-		//Grab a records cursor
-		records_cursor = cursor->records[h];
-
-		//We could have had collisions so we'll hunt here
-		while(records_cursor != NULL){
-		
-			//If we find the right one, then we can get out
-			if(strncmp(records_cursor->var_name.string, name, records_cursor->var_name.current_length) == 0){
-				return records_cursor;
-			}
-
-			//Advance it
-			records_cursor = records_cursor->next;
-		}
-	}
-
-	//If we found nothing give back NULL
-	return NULL;
-}
-
-
-/**
  * Lookup a type name in the symtab by the name only. This does not
  * do the array bound comparison that we need for strict equality
  */
