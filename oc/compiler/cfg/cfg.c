@@ -5965,16 +5965,52 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		 */
 		instruction_t* binary_expression;
 		instruction_t* constant_assignment;
+		instruction_t* final_assignment;
 
+		/**
+		 * Reach back into the block to see if the last instruction that we emitted for our op1
+		 * here is a constant assignment or a binary expression. If it's either, we can avoid
+		 * the copy assignment for this assignment expression and go to emitting directly
+		 */
 		if(last_instruction != NULL
 			&& last_instruction->assignee != NULL
 			&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
 			&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
 
 			switch(last_instruction->statement_type){
+				case THREE_ADDR_CODE_BIN_OP_STMT:
+				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+					binary_expression = last_instruction;
 
+					//Make this one's assignee the left hand var
+					binary_expression->assignee = left_hand_var;
+					
+					break;
+
+				case THREE_ADDR_CODE_ASSN_CONST_STMT:
+					constant_assignment = last_instruction;
+
+					//Make this one's assignee the left hand var
+					constant_assignment->assignee = left_hand_var;
+
+					break;
+					
+				/**
+				 * If we have this then there's no clever optimization that we can do, we'll
+				 * just emti a copy assignment
+				 */
+				default:
+					//Finally we'll struct the whole thing
+					final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
+
+					//Copy this over if there is one
+					left_hand_var->associated_memory_region.stack_region = final_op1->associated_memory_region.stack_region;
+					
+					//Now add thi statement in here
+					add_statement(current_block, final_assignment);
+
+					break;
 			}
-
 
 		/**
 		 * Otherwise there is no clever optimization that we could do, so we'll need to emit an assignment
@@ -5982,7 +6018,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		 */
 		} else {
 			//Finally we'll struct the whole thing
-			instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
+			final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
 
 			//Copy this over if there is one
 			left_hand_var->associated_memory_region.stack_region = final_op1->associated_memory_region.stack_region;
@@ -6067,9 +6103,7 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			result_package = visit_paramcount_statement(basic_block, expr_node);
 			break;
 
-		//Handle an assignment expression
 		case AST_NODE_TYPE_ASNMNT_EXPR:
-			//Let the helper deal with it
 			result_package = emit_assignment_expression(basic_block, expr_node);
 			break;
 	
@@ -6089,7 +6123,6 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 
 		//Default is a unary expression
 		default:
-			//Let this rule handle it
 			result_package = emit_unary_expression(basic_block, expr_node);
 			break;
 	}
