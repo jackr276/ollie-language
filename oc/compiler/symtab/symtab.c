@@ -101,6 +101,17 @@ static inline u_int32_t increment_and_get_type_lexical_scope(){
 
 
 /**
+ * Create a label table for us to use. These, unlike the other types of 
+ * symbol tables, are created on-demand on a per-function basis
+ */
+label_symtab_t* label_symtab_alloc(){
+	//As easy as allocating and returning
+	label_symtab_t* symtab = calloc(1, sizeof(label_symtab_t));
+	return symtab;
+}
+
+
+/**
  * Dynamically allocate a function symtab. Note that this allocation
  * automatically creates the default namespace
  */
@@ -2848,5 +2859,39 @@ void macro_symtab_dealloc(macro_symtab_t* symtab){
 	}
 
 	//At the very end free the overall control structure
+	free(symtab);
+}
+
+
+/**
+ * Destroy a label table. We assume that a lot of time
+ * when this function is called we'll actually have a nonexistent
+ * table so we will account for that here
+ */
+void label_symtab_dealloc(label_symtab_t* symtab){
+	//Totally valid and normal
+	if(symtab == NULL){
+		return;
+	}
+
+	//Run through every record
+	for(u_int32_t i = 0; i < USER_DEFINED_LABELED_BLOCK_KEYSPACE; i++){
+		//Extract the record
+		symtab_label_record_t* label_record_cursor = symtab->labels[i];
+
+		//Remember that it's a hashtable, could be nested from collisions
+		while(label_record_cursor != NULL){
+			//Grab a holder
+			symtab_label_record_t* temp = label_record_cursor;
+
+			//Bump this up to the next one
+			label_record_cursor = label_record_cursor->next;
+
+			//Release the node
+			free(temp);
+		}
+	}
+
+	//At the very end destroy the whole thing
 	free(symtab);
 }

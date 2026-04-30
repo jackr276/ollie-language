@@ -32,6 +32,17 @@ static function_symtab_t* function_symtab = NULL;
 static variable_symtab_t* variable_symtab = NULL;
 static type_symtab_t* type_symtab = NULL;
 
+/**
+ * IMPORTANT: the user defined label symtab is to be used
+ * on a "per-function" basis. It *should not* be allocated
+ * unless we know for a fact that the function is going to
+ * need it(i.e. we encounter a jump or label statement)
+ *
+ * This will be destroyed at the end of every function definition in
+ * the parser
+ */
+static label_symtab_t* user_defined_label_symtab = NULL;
+
 //The entire AST is rooted here
 static generic_ast_node_t* prog = NULL;
 
@@ -13627,6 +13638,13 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 
 	//This is now out of date so scrap it
 	top_level_function_variable_scope = NULL;
+
+	/**
+	 * Completely wipe out the user defined jump symtab if it exists. Remember that these are per-funciton
+	 * only so there's no reason to hang onto this now
+	 */
+	label_symtab_dealloc(user_defined_label_symtab);
+	user_defined_label_symtab = NULL;
 
 	//Remove the nesting level now that we're not in a function
 	pop_nesting_level(&nesting_stack);

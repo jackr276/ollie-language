@@ -372,8 +372,12 @@ struct function_symtab_t{
  * that it's in, the block(maybe) and the name
  */
 struct symtab_label_record_t {
+	//Hash - most frequently used
 	u_int64_t hash;
+	//Name of the label
 	dynamic_string_t name;
+	//For hashtable functionality
+	symtab_label_record_t* next;
 };
 
 
