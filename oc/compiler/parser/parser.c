@@ -8914,7 +8914,11 @@ static generic_ast_node_t* labeled_statement(ollie_token_stream_t* token_stream)
 
 	//We now need to make sure that it isn't a duplicate. We'll use a special search function to do this
 	//TODO TOTALLY BROKEN
-	symtab_variable_record_t* found_variable = lookup_variable_lower_scope(variable_symtab, label_name.string);
+	//
+	//
+	//
+	//TODO FIXME, added just to force compilation
+	symtab_variable_record_t* found_variable = lookup_variable(variable_symtab, label_name.string);
 
 	//If we did find it, that's bad
 	if(found_variable != NULL){
@@ -12137,7 +12141,10 @@ static int8_t check_jump_labels(){
 		//us to look deeper into the scopes 
 		//
 		//TODO TOTALLY INCORRECT
-		symtab_variable_record_t* label = lookup_variable_lower_scope(variable_symtab, name);
+		//
+		//
+		//TODO FIXME, ADDED JUST FOR COMPUTATION
+		symtab_variable_record_t* label = lookup_variable(variable_symtab, name);
 
 		//If we didn't find it, we fail out
 		if(label == NULL){

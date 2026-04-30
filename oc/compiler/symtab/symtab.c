@@ -1046,17 +1046,17 @@ u_int8_t insert_function(function_symtab_t* symtab, symtab_function_record_t* re
 	//Store that this function is in this current namespace
 	record->namespace_contained_in = current;
 
+	//Get the record(or lack of one) at this hash
+	symtab_function_record_t* cursor = current->records[record->hash];
+
 	//If there's no collision
-	if(current->records[record->hash] == NULL){
+	if(cursor == NULL){
 		//Store it and get out
 		current->records[record->hash] = record;
 
 		//No collision
 		return 0;
 	}
-	
-	//Otherwise if we get here there was a collision
-	symtab_function_record_t* cursor = current->records[record->hash];
 
 	//Get to the very last node
 	while(cursor->next != NULL){
@@ -1134,6 +1134,8 @@ u_int8_t insert_label(label_symtab_t* label_symtab, symtab_label_record_t* label
 
 	//Add it in
 	cursor->next = label_record;
+	//Just to be extra safe
+	label_record->next = NULL;
 
 	//1 signifies that there was a collision
 	return 1;
@@ -1145,20 +1147,19 @@ u_int8_t insert_label(label_symtab_t* label_symtab, symtab_label_record_t* label
  * this record exists in the table
  */
 u_int8_t insert_variable(variable_symtab_t* symtab, symtab_variable_record_t* record){
+	//Grab the record(or lack of one) at the hash
+	symtab_variable_record_t* cursor = symtab->current->records[record->hash];
+
 	//Store the lexical scope it
 	record->lexical_scope_id =  symtab->current->lexical_scope_id;
 
 	//No collision here, just store and get out
-	if(symtab->current->records[record->hash] == NULL){
+	if(cursor == NULL){
 		//Store this and get out
 		symtab->current->records[record->hash] = record;
 		//0 = success, no collision
 		return 0;
 	}
-
-	//Otherwise, there is a collision
-	//Grab the head record
-	symtab_variable_record_t* cursor = symtab->current->records[record->hash];
 
 	//Get to the very last node
 	while(cursor->next != NULL){
@@ -1180,6 +1181,9 @@ u_int8_t insert_variable(variable_symtab_t* symtab, symtab_variable_record_t* re
  * this record exists in the table
  */
 u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record){
+	//Grab the record(or lack of one) at the current hash
+	symtab_type_record_t* cursor = symtab->current->records[record->hash];
+
 	//Store the lexical scope it
 	record->lexical_scope_id =  symtab->current->lexical_scope_id;
 
@@ -1194,16 +1198,12 @@ u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record){
 	}
 
 	//No collision here, just store and get out
-	if(symtab->current->records[record->hash] == NULL){
+	if(cursor == NULL){
 		//Store this and get out
 		symtab->current->records[record->hash] = record;
 		//0 = success, no collision
 		return 0;
 	}
-
-	//Otherwise, there is a collision
-	//Grab the head record
-	symtab_type_record_t* cursor = symtab->current->records[record->hash];
 
 	//Get to the very last node
 	while(cursor->next != NULL){
