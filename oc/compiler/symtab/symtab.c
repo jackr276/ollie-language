@@ -1106,6 +1106,41 @@ u_int8_t insert_macro(macro_symtab_t* symtab, symtab_macro_record_t* record){
 
 
 /**
+ * Insert a label into the symtab
+ *
+ * NOTE: we assume that the hash has already been computed as part of record creation
+ */
+u_int8_t insert_label(label_symtab_t* label_symtab, symtab_label_record_t* label_record){
+	//Grab the record(or NULL value) at this hash value
+	symtab_label_record_t* cursor = label_symtab->records[label_record->hash];
+
+	/**
+	 * Option 1: we have no collision. If this is the case then we will just insert
+	 * the label here and return 0 to indicate that nothing collided
+	 */
+	if(cursor == NULL){
+		label_symtab->records[label_record->hash] = label_record;
+		return 0;
+	}
+
+	/**
+	 * Option 2: there is a record here, so we need to advance down the
+	 * chain until there isn't one. Once we get to the bottom, we attach
+	 * the next record to the very end
+	 */
+	while(cursor->next != NULL){
+		cursor = cursor->next;
+	}
+
+	//Add it in
+	cursor->next = label_record;
+
+	//1 signifies that there was a collision
+	return 1;
+}
+
+
+/**
  * Inserts a variable record into the symtab. This assumes that the user has already checked to see if
  * this record exists in the table
  */
@@ -2877,7 +2912,7 @@ void label_symtab_dealloc(label_symtab_t* symtab){
 	//Run through every record
 	for(u_int32_t i = 0; i < USER_DEFINED_LABELED_BLOCK_KEYSPACE; i++){
 		//Extract the record
-		symtab_label_record_t* label_record_cursor = symtab->labels[i];
+		symtab_label_record_t* label_record_cursor = symtab->records[i];
 
 		//Remember that it's a hashtable, could be nested from collisions
 		while(label_record_cursor != NULL){

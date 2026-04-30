@@ -386,7 +386,7 @@ struct symtab_label_record_t {
  * our hashtable
  */
 struct label_symtab_t {
-	symtab_label_record_t* labels[USER_DEFINED_LABELED_BLOCK_KEYSPACE];
+	symtab_label_record_t* records[USER_DEFINED_LABELED_BLOCK_KEYSPACE];
 };
 
 
@@ -529,6 +529,11 @@ u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record);
  * Insert a macro into the symtab
  */
 u_int8_t insert_macro(macro_symtab_t* symtab, symtab_macro_record_t* record);
+
+/**
+ * Insert a label into the symtab
+ */
+u_int8_t insert_label(label_symtab_t* label, symtab_label_record_t* label_record);
 
 /**
  * Determine whether or not a function is directly recursive using the function
