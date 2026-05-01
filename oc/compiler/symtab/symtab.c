@@ -1078,7 +1078,7 @@ symtab_label_record_t* create_label_record(dynamic_string_t name, u_int32_t line
 	symtab_label_record_t* label_record = calloc(1, sizeof(symtab_label_record_t));
 
 	//Hash the label name - it is assumed that the creation always does this
-	label_record->hash = hash_label_name(label_record->name.string);
+	label_record->hash = hash_label_name(name.string);
 
 	/**
 	 * IMPORTANT: we assume complete ownership of the name here
