@@ -3454,7 +3454,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
  *
  * We'll leave out all of the successor logic here as well, until we reach the end
  */
-static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_block, generic_ast_node_t* conditional_node, symtab_label_record_t* if_destination_label, basic_block_t* else_destination){
+static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_block, generic_ast_node_t* conditional_node, symtab_label_record_t* if_destination_label, basic_block_t* else_block){
 	//Allcoate the results
 	cfg_result_package_t results = {starting_block, starting_block, NULL, BLANK};
 
@@ -3518,8 +3518,8 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 		//Now let's try to decide the branch type
 		branch_type_t branch_type = select_appropriate_branch_statement(conditional_results.operator, BRANCH_CATEGORY_NORMAL, type_signed);
 
-		//Now we can finall spit this one out
-		instruction_t* branch_statement = emit_branch_statement(NULL, else_destination, conditional_decider, branch_type);
+		//Now we can finally spit this one out
+		instruction_t* branch_statement = emit_branch_statement(NULL, else_block, conditional_decider, branch_type);
 		
 		//Store the if destination for later
 		branch_statement->optional_storage.jumping_to_label = if_destination_label;
@@ -3561,7 +3561,8 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 			generic_ast_node_t* child_cursor = conditional_node->first_child;
 
 			/**
-			 * Left side: IF FAIL -> else block, else secondary block
+			 * Left side: IF FAIL -> else block, else secondary block. We are using the regular branch
+			 * emitter here because we are not dealing with any user defined blocks in this branch
 			 */
 			emit_branch(current_block, child_cursor, else_block, secondary_block, BRANCH_CATEGORY_INVERSE);
 
@@ -3569,9 +3570,10 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 			current_block = secondary_block;
 
 			/**
-			 * Right side: IF SUCCESS -> if block, else else block
+			 * Right side: IF SUCCESS -> if block, else else block. We need to use the user defined version for this because
+			 * we are still using the if label
 			 */
-			cfg_result_package_t right_side_results = emit_branch(current_block, child_cursor->next_sibling, if_block, else_block, BRANCH_CATEGORY_NORMAL);
+			cfg_result_package_t right_side_results = emit_user_defined_branch(current_block, child_cursor->next_sibling, if_destination_label, else_block);
 
 			//Update the current block once again
 			current_block = right_side_results.final_block;
@@ -3601,17 +3603,19 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 			generic_ast_node_t* child_cursor = conditional_node->first_child;
 
 			/**
-			 * Left side: IF SUCCESS -> if block, else secondary block
+			 * Left side: IF SUCCESS -> if block, else secondary block. We need to use the user
+			 * defined version for this because we are going to a label
 			 */
-			emit_branch(current_block, child_cursor, if_block, secondary_block, BRANCH_CATEGORY_NORMAL);
+			emit_user_defined_branch(current_block, child_cursor, if_destination_label, secondary_block);
 
 			//Current block now is our secondary
 			current_block = secondary_block;
 
 			/**
-			 * Left Side: IF SUCCESS -> if block, else else block
+			 * Left Side: IF SUCCESS -> if block, else else block. We need to use our user defined block
+			 * helper for this because we are using the destination label
 			 */
-			cfg_result_package_t right_side_results = emit_branch(current_block, child_cursor->next_sibling, if_block, else_block, BRANCH_CATEGORY_NORMAL);
+			cfg_result_package_t right_side_results = emit_user_defined_branch(current_block, child_cursor->next_sibling, if_destination_label, else_block);
 
 			//Update the current block once again
 			current_block = right_side_results.final_block;
