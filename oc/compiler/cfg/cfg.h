@@ -132,8 +132,6 @@ struct basic_block_t{
 	jump_table_t* jump_table;
 	//The function that we're defined in
 	symtab_function_record_t* function_defined_in;
-	//The variable that this block's name draws from if this block is a label block
-	symtab_variable_record_t* label;
 	//The case statement value -- usually blank
 	int64_t case_stmt_val;
 	//An integer ID

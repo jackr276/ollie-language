@@ -380,6 +380,8 @@ struct symtab_label_record_t {
 	dynamic_string_t name;
 	//For hashtable functionality
 	symtab_label_record_t* next;
+	//The block that this label corresponds to after translation
+	void* block;
 	//Line number for tracking reasons
 	u_int32_t line_number;
 };

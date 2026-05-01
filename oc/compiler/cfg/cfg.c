@@ -64,8 +64,6 @@ static heap_stack_t continue_stack;
 static nesting_stack_t nesting_stack;
 //Pointer to the symtab region for all current function blocks
 static dynamic_array_t* current_function_blocks;
-//Keep a list of all lable statements in the function(block jumps are internal only)
-static dynamic_array_t current_function_labeled_blocks;
 //Also keep a list of all custom jumps in the function
 static dynamic_array_t current_function_user_defined_jump_statements;
 //The current stack offset for any given function
@@ -653,17 +651,11 @@ static basic_block_t* basic_block_alloc_and_estimate(){
 /**
  * Allocate a basic block that comes from a user-defined label statement
 */
-static basic_block_t* labeled_block_alloc(symtab_variable_record_t* label){
+static basic_block_t* labeled_block_alloc(symtab_label_record_t* label){
 	//Allocate the block
 	basic_block_t* created = calloc(1, sizeof(basic_block_t));
 
 	//Put the block ID in even though it is a labeled block
-	created->block_id = increment_and_get();
-
-	//This block's name will draw from the label
-	created->label = label;
-
-	//Put the block ID in
 	created->block_id = increment_and_get();
 
 	//We'll mark this to indicate that this is a labeled block
@@ -675,6 +667,13 @@ static basic_block_t* labeled_block_alloc(symtab_variable_record_t* label){
 
 	//Let's add in what function this block came from
 	created->function_defined_in = current_function;
+
+	/**
+	 * We will store the block itself alongside with the label. This
+	 * will make lookup/cross reference easier when we have to
+	 * match jump statements to labels
+	 */
+	label->block = created;
 
 	//Add this into the dynamic array
 	dynamic_array_add(&(cfg->created_blocks), created);
@@ -9259,14 +9258,14 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 				break;
 
-			//Label statements are unique because they'll force the creation of a new block with a
-			//given label name
+			/**
+			 * Label statements are unique because they'll force the creation of a new block with a
+			 * given label name. We will store the block with the label to make future correlations 
+			 * easier
+			 */
 			case AST_NODE_TYPE_LABEL_STMT:
 				//Allocate the label statement as the current block
-				labeled_block = labeled_block_alloc(ast_cursor->variable);
-
-				//Add this into the current function's labeled blocks
-				dynamic_array_add(&current_function_labeled_blocks, labeled_block);
+				labeled_block = labeled_block_alloc(ast_cursor->optional_storage.label_record);
 
 				//If the starting block is empty, then this is the starting block
 				if(starting_block == NULL){
@@ -9291,6 +9290,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				}
 
 				//The labeled block is inside of the variable area
+				//TODO BAD
 				emit_user_defined_jump(current_block, ast_cursor->variable);
 
 				//The new current block will be the block that comes after this one. It will
@@ -9755,10 +9755,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 			 */
 			case AST_NODE_TYPE_LABEL_STMT:
 				//Allocate the label statement as the current block
-				labeled_block = labeled_block_alloc(ast_cursor->variable);
-
-				//Add this into the current function's labeled blocks
-				dynamic_array_add(&current_function_labeled_blocks, labeled_block);
+				labeled_block = labeled_block_alloc(ast_cursor->optional_storage.label_record);
 
 				//If the starting block is empty, then this is the starting block
 				if(starting_block == NULL){
@@ -9782,6 +9779,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				}
 
 				//The labeled block is inside of the variable area
+				//TODO WRONG
 				emit_user_defined_jump(current_block, ast_cursor->variable);
 
 				//The new current block will be the block that comes after this one. It will
@@ -10191,9 +10189,11 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	current_function_blocks = &(func_record->function_blocks);
 	//We also need to zero out the current stack offset value
 	stack_offset = 0;
-	//We also need to set the labeled block array to be empty
-	current_function_labeled_blocks = dynamic_array_alloc();
+
+
+
 	//Keep an array for all of the jump statements as well
+	//TODO MAKE THIS AN AS NEEDED ALLOC
 	current_function_user_defined_jump_statements = dynamic_array_alloc();
 
 	//The starting block
@@ -10283,9 +10283,6 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 
 	//Mark this as NULL for the next go around
 	function_exit_block = NULL;
-
-	//Now we can scrap the labeled block array
-	dynamic_array_dealloc(&current_function_labeled_blocks);
 
 	//Deallocate the current function's user defined jumps as well
 	dynamic_array_dealloc(&current_function_user_defined_jump_statements);
