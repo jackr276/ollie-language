@@ -13,6 +13,7 @@
 */
 
 #include "cfg.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -3509,7 +3510,7 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 	instruction_t* branch_statement = emit_branch_statement(NULL, else_destination, conditional_decider, branch_type);
 	
 	//Store the if destination for later
-	branch_statement->var_record = if_destination;
+	branch_statement->optional_storage.jumping_to_label = if_destination_label;
 
 	//Add it into the block
 	add_statement(current_block, branch_statement);
@@ -9315,12 +9316,11 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				 * The if block comes from the ast cursor's variable, the else
 				 * block will be allocated fresh
 				 */
-				//TODO BAD
-				symtab_variable_record_t* if_block = ast_cursor->variable;
+				symtab_label_record_t* if_destination_label = ast_cursor->optional_storage.label_record; 
 				basic_block_t* else_block = basic_block_alloc_and_estimate();
 
 				//Let the helper emit the actual branch
-				emit_user_defined_branch(current_block, binary_expression_cursor, if_block, else_block, BRANCH_CATEGORY_NORMAL);
+				emit_user_defined_branch(current_block, binary_expression_cursor, if_destination_label, else_block, BRANCH_CATEGORY_NORMAL);
 
 				//The current block now is said jumping to block
 				current_block = else_block;
@@ -9806,12 +9806,11 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				 * The if block comes from the ast cursor's variable, the else
 				 * block will be allocated fresh
 				 */
-				symtab_variable_record_t* if_block = ast_cursor->variable;
+				symtab_label_record_t* if_destination_label = ast_cursor->optional_storage.label_record;
 				basic_block_t* else_block = basic_block_alloc_and_estimate();
 
 				//Let the helper emit the actual branch
-				//TODO BAD
-				emit_user_defined_branch(current_block, binary_expression_cursor, if_block, else_block, BRANCH_CATEGORY_NORMAL);
+				emit_user_defined_branch(current_block, binary_expression_cursor, if_destination_label, else_block, BRANCH_CATEGORY_NORMAL);
 
 				//The current block now is said jumping to block
 				current_block = else_block;
@@ -10027,35 +10026,34 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
  * Finalize all user defined jump statements by ensuring that these jumps are assigned the right block to go to. This
  * needs to be done after the fact because we could jump to a label statement that we have not yet seen
  */
-static void finalize_all_user_defined_jump_statements(dynamic_array_t* labeled_blocks, dynamic_array_t* user_defined_jumps){
-	//Run through every jump statement
-	while(dynamic_array_is_empty(user_defined_jumps) == FALSE){
-		//Delete from the back
-		instruction_t* instruction = dynamic_array_delete_from_back(user_defined_jumps);
+static inline void finalize_all_user_defined_jump_statements(dynamic_array_t* user_defined_jumps){
+	//Run through every jump statement in here
+	for(u_int32_t i = 0; i < user_defined_jumps->current_index; i++){
+		//Grab the jump/branch out
+		instruction_t* instruction = dynamic_array_get_at(user_defined_jumps, i);
 
-		//We'll now need to scan through the labeled blocks to find who this should point to
-		for(u_int16_t i = 0; i < labeled_blocks->current_index; i++){
-			//Grab the labeled block out
-			basic_block_t* labeled_block = dynamic_array_get_at(labeled_blocks, i);
+		/**
+		 * We expect that, by this point, all of our labeled blocks have been allocated. Label
+		 * records store the block inside of them, so all that we should need to do is
+		 * verify that there is a block, and replace internally if so
+		 */
+		symtab_label_record_t* jumping_to_label = instruction->optional_storage.jumping_to_label;
 
-			//If this labeled block doesn't have the same variable, we're out
-			if(labeled_block->label != instruction->var_record){
-				continue;
-			}
+		//Something went very wrong if this is the case
+		if(jumping_to_label->block == NULL){
+			fprintf(stderr, "Fatal internal compiler error: labeled block not properly handled\n");
+			exit(1);
+		}
 
-			//Otherwise if we get here we know that we found the correct label
-			instruction->if_block = labeled_block;
+		//Make this our if block
+		instruction->if_block = jumping_to_label->block;
 
-			//Add both of the successors so that we can maintain a nice order
-			add_successor(instruction->block_contained_in, labeled_block);
+		//Add this in as a successor
+		add_successor(instruction->block_contained_in, instruction->if_block);
 
-			//Take care of this as well if it is a branch statement
-			if(instruction->statement_type == THREE_ADDR_CODE_BRANCH_STMT){
-				add_successor(instruction->block_contained_in, instruction->else_block);
-			}
-			
-			//Break out of the for loop
-			break;
+		//If it was a branch, add the else block as a successor too
+		if(instruction->statement_type == THREE_ADDR_CODE_BRANCH_STMT){
+			add_successor(instruction->block_contained_in, instruction->else_block);
 		}
 	}
 }
@@ -10246,7 +10244,7 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	determine_and_insert_return_statements(function_exit_block);
 
 	//We'll need to go through and finalize all user defined jump statements if there are any
-	finalize_all_user_defined_jump_statements(&current_function_labeled_blocks, &current_function_user_defined_jump_statements);
+	finalize_all_user_defined_jump_statements(&current_function_user_defined_jump_statements);
 
 	//Add the start and end blocks to their respective arrays
 	dynamic_array_add(&(cfg->function_entry_blocks), function_starting_block);
