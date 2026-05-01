@@ -87,7 +87,6 @@ typedef enum variable_membership_t {
 	GLOBAL_VARIABLE,
 	STATIC_VARIABLE,
 	FUNCTION_PARAMETER,
-	LABEL_VARIABLE,
 	RETURNED_VARIABLE, //Is this returned by a function?
 } variable_membership_t;
 

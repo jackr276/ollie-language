@@ -2362,9 +2362,6 @@ void print_variable_name(symtab_variable_record_t* record){
 		case FUNCTION_PARAMETER:
 			print_function_name(record->function_declared_in);
 			break;
-		case LABEL_VARIABLE:
-			printf("\n---> %d | %s:\n", record->line_number, record->var_name.string);
-			break;
 		case ENUM_MEMBER:
 			//The var name
 			printf("{\n\t\t...\n\t\t...\t\t\n---> %d |\t %s", record->line_number, record->var_name.string);
@@ -2650,7 +2647,6 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 			while(record != NULL){
 				//If it's a label or struct, don't bother with it
 				switch(record->membership){
-					case LABEL_VARIABLE:
 					case STRUCT_MEMBER:
 						record = record->next;
 						continue;
