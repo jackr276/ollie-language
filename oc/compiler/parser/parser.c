@@ -8862,7 +8862,6 @@ static inline generic_ast_node_t* expression_statement(ollie_token_stream_t* tok
  * <labeled-statement> ::= #<label-identifier>: 
  */
 static generic_ast_node_t* labeled_statement(ollie_token_stream_t* token_stream){
-	//Lookahead token
 	lexitem_t lookahead;
 
 	/**
@@ -8876,6 +8875,15 @@ static generic_ast_node_t* labeled_statement(ollie_token_stream_t* token_stream)
 	//Let's create the label ident node
 	generic_ast_node_t* label_stmt = ast_node_alloc(AST_NODE_TYPE_LABEL_STMT, SIDE_TYPE_LEFT);
 	label_stmt->line_number = parser_line_num;
+
+	/**
+	 * To save space, we only allocate the label symtab if we know that we absolutely need
+	 * it. The label symtab is stored inside of the current_function record because this
+	 * symtab is function-specific. If we see that this is NULL then we create it now
+	 */
+	if(current_function->user_defined_labels == NULL){
+		current_function->user_defined_labels = label_symtab_alloc();
+	}
 
 	//Let's see if we can find one
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -8895,50 +8903,23 @@ static generic_ast_node_t* labeled_statement(ollie_token_stream_t* token_stream)
 	if(lookahead.tok != COLON){
 		return print_and_return_error("Colon required after label statement", parser_line_num);
 	}
-	
-	//If this function already exists, we fail out
-	if(do_duplicate_functions_exist(label_name.string) == TRUE){
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+
+	//Make sure we don't have duplicates
+	symtab_label_record_t* duplicate_label = lookup_label(current_function->user_defined_labels, label_name.string);
+
+	//Hard fail if this happens
+	if(duplicate_label != NULL){
+		sprintf(info, "Duplicate label #%s detected. First declared on line %d.", label_name.string, duplicate_label->line_number);
+		return print_and_return_error(info, parser_line_num);
 	}
 
-	//We now need to make sure that it isn't a duplicate. We'll use a special search function to do this
-	//TODO TOTALLY BROKEN
-	//
-	//
-	//
-	//TODO FIXME, added just to force compilation
-	symtab_variable_record_t* found_variable = lookup_variable(variable_symtab, label_name.string);
+	//Now let's build up the label record
+	symtab_label_record_t* new_record = create_label_record(label_name, parser_line_num);
 
-	//If we did find it, that's bad
-	if(found_variable != NULL){
-		sprintf(info, "Identifier %s has already been declared. First declared here: ", label_name.string); 
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		print_variable_name(found_variable);
-		num_errors++;
-		//give back an error node
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-	}
-	
-	//Check for duplicated types
-	if(do_duplicate_types_exist(label_name.string)){
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-	}
+	//Add it into the label symtab
+	insert_label(current_function->user_defined_labels, new_record);
 
-	//Now that we know we didn't find it, we'll create it
-	symtab_variable_record_t* label = create_variable_record(label_name, current_function);
-	//Store the type
-	label->type_defined_as = immut_u64;
-	//Store the fact that it is a label
-	label->membership = LABEL_VARIABLE;
-	//Store the line number
-	label->line_number = parser_line_num;
-
-	//Put into the symtab
-	insert_variable(variable_symtab, label);
-
-	//We'll also associate this variable with the node
-	label_stmt->variable = label;
-	label_stmt->inferred_type = immut_u64;
+	//TODO LABEL STORAGE
 
 	//Now we can get out
 	return label_stmt;

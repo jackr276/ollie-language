@@ -2840,7 +2840,7 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 				stack_data_area_dealloc(&(temp->local_stack));
 
 				//Destroy the label symtab if it exists
-				label_symtab_dealloc(temp->user_defined_lables);
+				label_symtab_dealloc(temp->user_defined_labels);
 
 				//Finally free the function
 				free(temp);
