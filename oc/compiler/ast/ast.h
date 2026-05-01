@@ -126,6 +126,8 @@ struct generic_ast_node_t{
 		u_int32_t elaborative_param_count;
 		//Store the number of bytes to copy for a copy assignment
 		u_int64_t bytes_to_copy;
+		//The label record that we're storing
+		symtab_label_record_t* label_record;
 	} optional_storage;
 	//Storing the constant values
 	union {

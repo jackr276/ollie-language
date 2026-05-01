@@ -39,16 +39,10 @@ static generic_ast_node_t* prog = NULL;
 static symtab_function_record_t* current_function = NULL;
 //Keep track of all of the errors that have been raised by the current function
 static dynamic_set_t errors_raised_by_current_function;
-
-
-//The queue that holds all of our jump statements for a given function
-//
-//TODO WHY IS THIS A QUEUE???
-static heap_queue_t current_function_jump_statements;
-
+//Array that holds all of the jump statements for our current function
+static dynamic_array_t current_function_jump_statements;
 //The BFS queue for namespaces
 static heap_queue_t namespace_bfs_queue;
-
 //Store the overall current function scope
 static symtab_variable_sheaf_t* top_level_function_variable_scope = NULL;
 
@@ -8919,7 +8913,8 @@ static generic_ast_node_t* labeled_statement(ollie_token_stream_t* token_stream)
 	//Add it into the label symtab
 	insert_label(current_function->user_defined_labels, new_record);
 
-	//TODO LABEL STORAGE
+	//Store it inside of the label statement itself
+	label_stmt->optional_storage.label_record = new_record;
 
 	//Now we can get out
 	return label_stmt;
@@ -9169,6 +9164,15 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 
 	//Holder for the jump statement type
 	generic_ast_node_t* jump_node;
+
+	/**
+	 * We will be hanging onto all of our jump statements for validation later on down
+	 * the road, but we only allocate if we absolutely need to. Now is the time
+	 * that we'll know that
+	 */
+	if(current_function_jump_statements.internal_array == NULL){
+		current_function_jump_statements = dynamic_array_alloc();
+	}
 
 	//One last tripping point befor we create the node, we do need to see a semicolon
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -13295,13 +13299,17 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	//We also need to mark that we're in a function using the nesting stack
 	push_nesting_level(&nesting_stack, NESTING_FUNCTION);
 
-	//We need a stack for storing jump statements. We need to check these later because if
-	//we check them as we go, we don't get full jump functionality
-	current_function_jump_statements = heap_queue_alloc();
+	/**
+	 * Since most functions do not use user defined jumps, we will initialize
+	 * this to be NULL here and only allocate when the need arises
+	 */
+	INITIALIZE_NULL_DYNAMIC_ARRAY(current_function_jump_statements);
 
-	//We also have the AST function node, this will be intialized immediately
-	//It also requires a symtab record of the function, but this will be assigned
-	//later once we have it
+	/**
+	 * We also have the AST function node, this will be intialized immediately
+	 * It also requires a symtab record of the function, but this will be assigned
+	 * later once we have it
+	 */
 	generic_ast_node_t* function_node = ast_node_alloc(AST_NODE_TYPE_FUNC_DEF, SIDE_TYPE_LEFT);
 
 	//Now we must see a valid identifier as the name
@@ -13604,8 +13612,8 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		function_record->called = TRUE;
 	}
 	
-	//We're done with this, so destroy it
-	heap_queue_dealloc(&current_function_jump_statements);
+	//Destroy the jump statements if need be
+	dynamic_array_dealloc(&current_function_jump_statements);
 
 	//Store the line number
 	function_node->line_number = current_line;
