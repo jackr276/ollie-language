@@ -2839,6 +2839,10 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 				//Deallocate the data area itself
 				stack_data_area_dealloc(&(temp->local_stack));
 
+				//Destroy the label symtab if it exists
+				label_symtab_dealloc(temp->user_defined_lables);
+
+				//Finally free the function
 				free(temp);
 			}
 		}
@@ -2993,8 +2997,6 @@ void macro_symtab_dealloc(macro_symtab_t* symtab){
  * Destroy a label table. We assume that a lot of time
  * when this function is called we'll actually have a nonexistent
  * table so we will account for that here
- *
- * TODO DON'T KNOW ABOUT THIS and how we handle stuff in the CFG constructor
  */
 void label_symtab_dealloc(label_symtab_t* symtab){
 	//Totally valid and normal

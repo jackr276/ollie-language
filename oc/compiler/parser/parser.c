@@ -32,28 +32,10 @@ static function_symtab_t* function_symtab = NULL;
 static variable_symtab_t* variable_symtab = NULL;
 static type_symtab_t* type_symtab = NULL;
 
-/**
- * IMPORTANT: the user defined label symtab is to be used
- * on a "per-function" basis. It *should not* be allocated
- * unless we know for a fact that the function is going to
- * need it(i.e. we encounter a jump or label statement)
- *
- * This will be destroyed at the end of every function definition in
- * the parser
- */
-static label_symtab_t* user_defined_label_symtab = NULL;
-
 //The entire AST is rooted here
 static generic_ast_node_t* prog = NULL;
 
 //What is the current function that we are "in"
-//
-//TODO - probably needs to be a part of the function itself because we'll need it to persist
-//all the way to the CFG
-//
-//
-//
-//
 static symtab_function_record_t* current_function = NULL;
 //Keep track of all of the errors that have been raised by the current function
 static dynamic_set_t errors_raised_by_current_function;
@@ -8870,15 +8852,16 @@ static inline generic_ast_node_t* expression_statement(ollie_token_stream_t* tok
 
 /**
  * A labeled statement allows the user in ollie to directly jump to where
- * they'd like to go, with some exceptions
+ * they'd like to go, with some exceptions. Since labels are handled completely
+ * separate from types, variables and functions, we actually don't need to check
+ * for duplicates on any of those. We'll only need to check for duplicate labels
+ * that exist within this current function
  *
  * NOTE: By the time we get here, we have already seen & consumed the #
  *
  * <labeled-statement> ::= #<label-identifier>: 
  */
 static generic_ast_node_t* labeled_statement(ollie_token_stream_t* token_stream){
-	//Freeze the line number
-	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -8892,7 +8875,6 @@ static generic_ast_node_t* labeled_statement(ollie_token_stream_t* token_stream)
 
 	//Let's create the label ident node
 	generic_ast_node_t* label_stmt = ast_node_alloc(AST_NODE_TYPE_LABEL_STMT, SIDE_TYPE_LEFT);
-	//Save our line number
 	label_stmt->line_number = parser_line_num;
 
 	//Let's see if we can find one
@@ -8900,7 +8882,7 @@ static generic_ast_node_t* labeled_statement(ollie_token_stream_t* token_stream)
 
 	//If it's bad we'll fail out here
 	if(lookahead.tok != IDENT){
-		return print_and_return_error("Invalid identifier given as label ident statement", current_line);
+		return print_and_return_error("Invalid identifier given as label ident statement", parser_line_num);
 	}
 
 	//Grab the name out for convenience
@@ -8911,7 +8893,7 @@ static generic_ast_node_t* labeled_statement(ollie_token_stream_t* token_stream)
 
 	//If we don't see one, we need to scrap it
 	if(lookahead.tok != COLON){
-		return print_and_return_error("Colon required after label statement", current_line);
+		return print_and_return_error("Colon required after label statement", parser_line_num);
 	}
 	
 	//If this function already exists, we fail out
@@ -13652,22 +13634,6 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 
 	//This is now out of date so scrap it
 	top_level_function_variable_scope = NULL;
-
-	/**
-	 * Completely wipe out the user defined jump symtab if it exists. Remember that these are per-funciton
-	 * only so there's no reason to hang onto this now
-	 */
-
-
-	//
-	//
-	//
-	//TODO - this probably needs to be a part of the actual function record due to the way the CFG currently does things
-	//
-	//
-	//
-	label_symtab_dealloc(user_defined_label_symtab);
-	user_defined_label_symtab = NULL;
 
 	//Remove the nesting level now that we're not in a function
 	pop_nesting_level(&nesting_stack);

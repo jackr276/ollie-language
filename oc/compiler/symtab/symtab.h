@@ -125,6 +125,8 @@ struct symtab_function_record_t{
 	dynamic_set_t called_functions;
 	//What's the return type?
 	generic_type_t* return_type;
+	//Hang onto all user defined labels for this function(may be null)
+	label_symtab_t* user_defined_lables;
 	//The line number
 	u_int32_t line_number;
 	//A bitmap for all assigned general purpose registers
