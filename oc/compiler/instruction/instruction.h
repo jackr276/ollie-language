@@ -324,6 +324,8 @@ struct instruction_t{
 		u_int64_t byte_amount_to_copy;
 		//Signedness forcing - used specifically for shifting
 		forced_signedness_type_t forced_signedness;
+		//The label that we are jumping to
+		symtab_label_record_t* jumping_to_label;
 	} optional_storage;
 	//Generic parameter list - could be used for phi functions or function calls
 	dynamic_array_t parameters;

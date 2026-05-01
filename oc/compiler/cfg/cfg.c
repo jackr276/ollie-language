@@ -3453,7 +3453,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
  *
  * We'll leave out all of the successor logic here as well, until we reach the end
  */
-static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_block, generic_ast_node_t* conditional_node, symtab_variable_record_t* if_destination, basic_block_t* else_destination, branch_category_t branch_category){
+static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_block, generic_ast_node_t* conditional_node, symtab_label_record_t* if_destination_label, basic_block_t* else_destination, branch_category_t branch_category){
 	//Allcoate the results
 	cfg_result_package_t results = {starting_block, starting_block, NULL, BLANK};
 
@@ -3527,12 +3527,12 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 /**
  * Emit a user defined jump statement that points to a label, not to a block
  */
-static inline void emit_user_defined_jump(basic_block_t* basic_block, symtab_variable_record_t* jump_target){
+static inline void emit_user_defined_jump(basic_block_t* basic_block, symtab_label_record_t* jump_target){
 	//Allocate it
 	instruction_t* jump_statement = emit_jmp_instruction(NULL);
 
 	//Jumps to the jump target
-	jump_statement->var_record = jump_target;
+	jump_statement->optional_storage.jumping_to_label = jump_target; 
 
 	//Add this to the array of user defined jumps
 	dynamic_array_add(&current_function_user_defined_jump_statements, jump_statement);
@@ -9289,12 +9289,13 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					current_block = starting_block;
 				}
 
-				//The labeled block is inside of the variable area
-				//TODO BAD
-				emit_user_defined_jump(current_block, ast_cursor->variable);
+				//Let the helper emit it
+				emit_user_defined_jump(current_block, ast_cursor->optional_storage.label_record);
 
-				//The new current block will be the block that comes after this one. It will
-				//be completely disconnected(at least on paper)
+				/**
+				 * The new current block will be the block that comes after this one. It will
+				 * be completely disconnected(at least on paper)
+				 */
 				current_block = basic_block_alloc_and_estimate();
 
 				break;
@@ -9314,6 +9315,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				 * The if block comes from the ast cursor's variable, the else
 				 * block will be allocated fresh
 				 */
+				//TODO BAD
 				symtab_variable_record_t* if_block = ast_cursor->variable;
 				basic_block_t* else_block = basic_block_alloc_and_estimate();
 
@@ -9778,12 +9780,13 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					current_block = starting_block;
 				}
 
-				//The labeled block is inside of the variable area
-				//TODO WRONG
-				emit_user_defined_jump(current_block, ast_cursor->variable);
+				//Let the helper emit it
+				emit_user_defined_jump(current_block, ast_cursor->optional_storage.label_record);
 
-				//The new current block will be the block that comes after this one. It will
-				//be completely disconnected(at least on paper)
+				/**
+				 * The new current block will be the block that comes after this one. It will
+				 * be completely disconnected(at least on paper)
+				 */
 				current_block = basic_block_alloc_and_estimate();
 
 				break;
@@ -9807,6 +9810,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				basic_block_t* else_block = basic_block_alloc_and_estimate();
 
 				//Let the helper emit the actual branch
+				//TODO BAD
 				emit_user_defined_branch(current_block, binary_expression_cursor, if_block, else_block, BRANCH_CATEGORY_NORMAL);
 
 				//The current block now is said jumping to block
@@ -10189,13 +10193,8 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	current_function_blocks = &(func_record->function_blocks);
 	//We also need to zero out the current stack offset value
 	stack_offset = 0;
-
-
-
-	//Keep an array for all of the jump statements as well
-	//TODO MAKE THIS AN AS NEEDED ALLOC
-	current_function_user_defined_jump_statements = dynamic_array_alloc();
-
+	//Set this to NULL initially - we will only allocate if we need it
+	INITIALIZE_NULL_DYNAMIC_ARRAY(current_function_user_defined_jump_statements);
 	//The starting block
 	basic_block_t* function_starting_block = basic_block_alloc_and_estimate();
 	//The function exit block
