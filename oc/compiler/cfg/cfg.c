@@ -3536,10 +3536,87 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 	 * when compared to our regular branch
 	 */
 	} else {
+		//We're going to need a second block so make it now
+		basic_block_t* secondary_block = basic_block_alloc_and_estimate();
 
+		/**
+		 * Logical and branch:
+		 * .L2
+		 * t5 <- x_0 < 3 
+		 * t7 <- x_0 != 1
+		 * t5 <- t5 && t7
+		 * cbranch_nz .L12 else .L13
+		 *
+		 * Turn this into:
+		 * .L2:
+		 * t5 <- x_0 < 3 <---- if this is false, we leave(inverse branch)
+		 * cbranch_ge .L13 else .L3
+		 *
+		 * .L3 <----- The *only* way we get here is if the first condition is true
+		 * t7 <- x_0 != 1 <------- If this is true, jump to if(regular branch)
+		 * cbranch_ne .L12 else .L13
+		 */
+		if(conditional_node->binary_operator == DOUBLE_AND){
+			//Get the first child for the left statement
+			generic_ast_node_t* child_cursor = conditional_node->first_child;
+
+			/**
+			 * Left side: IF FAIL -> else block, else secondary block
+			 */
+			emit_branch(current_block, child_cursor, else_block, secondary_block, BRANCH_CATEGORY_INVERSE);
+
+			//Current block now is our secondary
+			current_block = secondary_block;
+
+			/**
+			 * Right side: IF SUCCESS -> if block, else else block
+			 */
+			cfg_result_package_t right_side_results = emit_branch(current_block, child_cursor->next_sibling, if_block, else_block, BRANCH_CATEGORY_NORMAL);
+
+			//Update the current block once again
+			current_block = right_side_results.final_block;
+
+		/**
+		 * Logical or branch
+		 *
+		 * .L5:
+		 * t4 <- x + y
+		 * t5 <- x > t4
+		 * t6 <- y_0 || t5
+		 * cbranch_nz .L13 else .L12
+		 *
+		 * Transforms into
+		 *
+		 * .L5:
+		 * t8 <- test if not zero y_0
+		 * cbranch_nz .L13 else .L6 <-- go to if, else second block
+		 *
+		 * .L6:
+		 * t4 <- x + y
+		 * t5 <- x > t4
+		 * cbranch_nz .L13 else .L12 <-- go to if, else else block
+		 */
+		} else {
+			//Get the first child for the left statement
+			generic_ast_node_t* child_cursor = conditional_node->first_child;
+
+			/**
+			 * Left side: IF SUCCESS -> if block, else secondary block
+			 */
+			emit_branch(current_block, child_cursor, if_block, secondary_block, BRANCH_CATEGORY_NORMAL);
+
+			//Current block now is our secondary
+			current_block = secondary_block;
+
+			/**
+			 * Left Side: IF SUCCESS -> if block, else else block
+			 */
+			cfg_result_package_t right_side_results = emit_branch(current_block, child_cursor->next_sibling, if_block, else_block, BRANCH_CATEGORY_NORMAL);
+
+			//Update the current block once again
+			current_block = right_side_results.final_block;
+		}
 	}
-
-
 
 	//Update the final block
 	results.final_block = current_block;
