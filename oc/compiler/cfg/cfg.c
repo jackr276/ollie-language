@@ -3454,7 +3454,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
  *
  * We'll leave out all of the successor logic here as well, until we reach the end
  */
-static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_block, generic_ast_node_t* conditional_node, symtab_label_record_t* if_destination_label, basic_block_t* else_destination, branch_category_t branch_category){
+static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_block, generic_ast_node_t* conditional_node, symtab_label_record_t* if_destination_label, basic_block_t* else_destination){
 	//Allcoate the results
 	cfg_result_package_t results = {starting_block, starting_block, NULL, BLANK};
 
@@ -3469,62 +3469,77 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 	//Keep track of the current block
 	basic_block_t* current_block = starting_block;
 
-	//First let the helper emit it
-	cfg_result_package_t binary_results = emit_branch_conditional_expression(current_block, conditional_node);
-
-	//Update the final block
-	current_block = binary_results.final_block;
-
-	//Extract the actual result assignee
-	three_addr_var_t* conditional_decider = binary_results.assignee;
-
 	/**
-	 * If the given operator does not set condition codes appropriately, then
-	 * we'll need to make that happen here
+	 * Case 1: we are not at all eligible to short circuit. If this is the case then
+	 * we will just go through the motions here of a regular branch
 	 */
-	if(does_operator_set_condition_codes(binary_results.operator) == FALSE){
-		//We'll need a test command for this
-		conditional_decider = emit_test_not_zero(current_block, conditional_decider, &(binary_results.operator));
-	}
+	if(is_op_short_circuit_eligible(conditional_node->binary_operator) == FALSE){
+		//First let the helper emit it
+		cfg_result_package_t conditional_results = emit_branch_conditional_expression(current_block, conditional_node);
 
-	/**
-	 * Let's try to grab the final result type. Remember that the comparison type may be different than
-	 * the actual assignee type. If we can grab it then we will use that, otherwise we will use
-	 * the assignee type
-	 */
-	u_int8_t type_signed;
-	if(current_block->exit_statement != NULL
-		&& is_binary_operation(current_block->exit_statement)
-		&& variables_equal(current_block->exit_statement->assignee, conditional_decider, FALSE) == TRUE){
+		//Update the final block
+		current_block = conditional_results.final_block;
 
-		//If we have a result type use that, otherwise take from op1
-		if(current_block->exit_statement->type_storage.result_type != NULL){
-			type_signed = is_type_signed(current_block->exit_statement->type_storage.result_type);
-		} else {
-			type_signed = is_type_signed(current_block->exit_statement->op1->type);
+		//Extract the actual result assignee
+		three_addr_var_t* conditional_decider = conditional_results.assignee;
+
+		/**
+		 * If the given operator does not set condition codes appropriately, then
+		 * we'll need to make that happen here
+		 */
+		if(does_operator_set_condition_codes(conditional_results.operator) == FALSE){
+			conditional_decider = emit_test_not_zero(current_block, conditional_decider, &(conditional_results.operator));
 		}
 
+		/**
+		 * Let's try to grab the final result type. Remember that the comparison type may be different than
+		 * the actual assignee type. If we can grab it then we will use that, otherwise we will use
+		 * the assignee type
+		 */
+		u_int8_t type_signed;
+		if(current_block->exit_statement != NULL
+			&& is_binary_operation(current_block->exit_statement)
+			&& variables_equal(current_block->exit_statement->assignee, conditional_decider, FALSE) == TRUE){
+
+			//If we have a result type use that, otherwise take from op1
+			if(current_block->exit_statement->type_storage.result_type != NULL){
+				type_signed = is_type_signed(current_block->exit_statement->type_storage.result_type);
+			} else {
+				type_signed = is_type_signed(current_block->exit_statement->op1->type);
+			}
+
+		} else {
+			type_signed = is_type_signed(conditional_decider->type);
+		}
+
+		//Flag that this sets condition codes
+		conditional_decider->sets_cc = TRUE;
+
+		//Now let's try to decide the branch type
+		branch_type_t branch_type = select_appropriate_branch_statement(conditional_results.operator, BRANCH_CATEGORY_NORMAL, type_signed);
+
+		//Now we can finall spit this one out
+		instruction_t* branch_statement = emit_branch_statement(NULL, else_destination, conditional_decider, branch_type);
+		
+		//Store the if destination for later
+		branch_statement->optional_storage.jumping_to_label = if_destination_label;
+
+		//Add it into the block
+		add_statement(current_block, branch_statement);
+
+		//Add this into the array for later
+		dynamic_array_add(&current_function_user_defined_jump_statements, branch_statement);
+
+	/**
+	 * Otherwise we are eligible to short circuit. It is worth noting here that user defined
+	 * branches never perform any kind of inverse jumping, so the logic here is going to be simplified
+	 * when compared to our regular branch
+	 */
 	} else {
-		type_signed = is_type_signed(conditional_decider->type);
+
 	}
 
-	//Flag that this sets condition codes
-	conditional_decider->sets_cc = TRUE;
 
-	//Now let's try to decide the branch type
-	branch_type_t branch_type = select_appropriate_branch_statement(binary_results.operator, branch_category, type_signed);
-
-	//Now we can finall spit this one out
-	instruction_t* branch_statement = emit_branch_statement(NULL, else_destination, conditional_decider, branch_type);
-	
-	//Store the if destination for later
-	branch_statement->optional_storage.jumping_to_label = if_destination_label;
-
-	//Add it into the block
-	add_statement(current_block, branch_statement);
-
-	//Add this into the array for later
-	dynamic_array_add(&current_function_user_defined_jump_statements, branch_statement);
 
 	//Update the final block
 	results.final_block = current_block;
@@ -9336,7 +9351,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				basic_block_t* else_block = basic_block_alloc_and_estimate();
 
 				//Let the helper emit the actual branch
-				emit_user_defined_branch(current_block, binary_expression_cursor, if_destination_label, else_block, BRANCH_CATEGORY_NORMAL);
+				emit_user_defined_branch(current_block, binary_expression_cursor, if_destination_label, else_block);
 
 				//The current block now is said jumping to block
 				current_block = else_block;
@@ -9826,7 +9841,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				basic_block_t* else_block = basic_block_alloc_and_estimate();
 
 				//Let the helper emit the actual branch
-				emit_user_defined_branch(current_block, binary_expression_cursor, if_destination_label, else_block, BRANCH_CATEGORY_NORMAL);
+				emit_user_defined_branch(current_block, binary_expression_cursor, if_destination_label, else_block);
 
 				//The current block now is said jumping to block
 				current_block = else_block;
