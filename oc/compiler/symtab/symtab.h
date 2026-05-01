@@ -609,6 +609,11 @@ function_namespace_t* lookup_namespace_under_parent(function_namespace_t* parent
 symtab_variable_record_t* lookup_variable(variable_symtab_t* symtab, char* name);
 
 /**
+ * Lookup a label in the symtab
+ */
+symtab_label_record_t* lookup_label(label_symtab_t* label_symtab, char* name);
+
+/**
  * Lookup a macro in the symtab
  */
 symtab_macro_record_t* lookup_macro(macro_symtab_t* symtab, char* name);

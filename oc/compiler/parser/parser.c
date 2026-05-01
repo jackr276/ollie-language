@@ -47,6 +47,13 @@ static label_symtab_t* user_defined_label_symtab = NULL;
 static generic_ast_node_t* prog = NULL;
 
 //What is the current function that we are "in"
+//
+//TODO - probably needs to be a part of the function itself because we'll need it to persist
+//all the way to the CFG
+//
+//
+//
+//
 static symtab_function_record_t* current_function = NULL;
 //Keep track of all of the errors that have been raised by the current function
 static dynamic_set_t errors_raised_by_current_function;
@@ -13650,6 +13657,15 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 * Completely wipe out the user defined jump symtab if it exists. Remember that these are per-funciton
 	 * only so there's no reason to hang onto this now
 	 */
+
+
+	//
+	//
+	//
+	//TODO - this probably needs to be a part of the actual function record due to the way the CFG currently does things
+	//
+	//
+	//
 	label_symtab_dealloc(user_defined_label_symtab);
 	user_defined_label_symtab = NULL;
 

@@ -1777,6 +1777,32 @@ symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, m
 
 
 /**
+ * Lookup a label in the symtab
+ */
+symtab_label_record_t* lookup_label(label_symtab_t* label_symtab, char* name){
+	//Grab the hash first
+	u_int64_t h = hash_label_name(name);
+
+	//First just try to get this here
+	symtab_label_record_t* cursor = label_symtab->records[h];
+
+	//Crawl through and string compare
+	while(cursor != NULL){
+		//They have to be an exact match for this to work
+		if(strncmp(name, cursor->name.string, cursor->name.current_length) == 0){
+			return cursor;
+		}
+
+		//Otherwise bump it up to the next one
+		cursor = cursor->next;
+	}
+
+	//Either i
+	return cursor;
+}
+
+
+/**
  * Specifically look for a pointer type to the given type in the symtab
  *
  * This function exists so that we do not need to allocate memory in the parser
