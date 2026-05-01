@@ -12097,51 +12097,27 @@ static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_globa
  * We need to go through and check all of the jump statements that we have in the function. If any
  * one of these jump statements is trying to jump to a label that does not exist, then we need to fail out
  */
-static int8_t check_jump_labels(){
-	//Grab a reference to our current jump statement
-	generic_ast_node_t* current_jump_statement;
+static inline u_int8_t check_jump_labels(){
+	//Run through all of these statements
+	for(u_int32_t i=  0; i < current_function_jump_statements.current_index; i++){
+		//Extract the one we need
+		generic_ast_node_t* current_jump_statement = dynamic_array_get_at(&(current_function_jump_statements), i);
 
-	//So long as there are jump statements in the queue
-	while(queue_is_empty(&current_function_jump_statements) == FALSE){
-		//Grab the jump statement
-		current_jump_statement = dequeue(&current_function_jump_statements);
-
-		//Let's grab out the name for convenience
+		//Let's see if we can find the label that this one is jumping to
 		char* name = current_jump_statement->string_value.string;
 
-		//We now need to lookup the name in here. We use a special function that allows
-		//us to look deeper into the scopes 
-		//
-		//TODO TOTALLY INCORRECT
-		//
-		//
-		//TODO FIXME, ADDED JUST FOR COMPUTATION
-		symtab_variable_record_t* label = lookup_variable(variable_symtab, name);
+		symtab_label_record_t* jumping_to_label = lookup_label(current_function->user_defined_labels, name);
 
-		//If we didn't find it, we fail out
-		if(label == NULL){
-			sprintf(info, "Attempt to jump to nonexistent label \"%s\".", name);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			//Fail out
+		//Didn't find it, so we fail out
+		if(jumping_to_label == NULL){
+			sprintf(info, "No label %s exists in function %s", name, current_function->func_name.string);
+			num_errors++;
+			print_parse_message(MESSAGE_TYPE_ERROR, info, current_jump_statement->line_number);
 			return FAILURE;
 		}
 
-		//This can also happen - where we have a user trying to jump to a non-label
-		if(label->membership != LABEL_VARIABLE){
-			sprintf(info, "Variable %s exists but is not a label, so it cannot be jumped to", label->var_name.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			return FAILURE;
-		}
-
-		//We can also have a case where this is not null, but it isn't in the correct function scope(also bad)
-		if(strcmp(current_function->func_name.string, label->function_declared_in->func_name.string) != 0){
-			sprintf(info, "Label \"%s\" was declared in function \"%s\". You cannot jump outside of a function" , name, label->function_declared_in->func_name.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			return FAILURE;
-		}
-
-		//Otherwise it worked, so we'll add this as the function's jumping to label
-		current_jump_statement->variable = label;
+		//Store this label record inside of the jump node for later
+		current_jump_statement->optional_storage.label_record = jumping_to_label;
 	}
 
 	//If we get here then they all worked
@@ -13580,7 +13556,6 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	
 		//We now need to check and see if our jump statements are actually valid
 		if(check_jump_labels() == FAILURE){
-			//If this fails, we fail out here too
 			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
