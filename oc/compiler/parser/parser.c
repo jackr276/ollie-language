@@ -9159,8 +9159,8 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 		return print_and_return_error("Identifier expected after \"jump\" keyword", parser_line_num);
 	}
 
-	//Hang onto the name of the block that we'll be jumping to
-	char* jumping_to_block_name = lookahead.lexeme.string;
+	//We will be transferring this over to the jump node
+	dynamic_string_t jumping_to_block_name = lookahead.lexeme;
 
 	//Holder for the jump statement type
 	generic_ast_node_t* jump_node;
@@ -9182,9 +9182,8 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 		//We know that this will be a conditional jump, so allocate as such
 		jump_node = ast_node_alloc(AST_NODE_TYPE_CONDITIONAL_JUMP_STMT, SIDE_TYPE_LEFT);
 
-		//Create space for and store our identifier name
-		jump_node->string_value = dynamic_string_alloc();
-		dynamic_string_set(&(jump_node->string_value), jumping_to_block_name);
+		//Store the block name in here
+		jump_node->string_value = jumping_to_block_name;
 
 		//We now need to see an L_PAREN 
 		lookahead = get_next_token(token_stream, &parser_line_num);
@@ -9235,9 +9234,8 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 		//This is a direct jump so allocate accordingly
 		jump_node = ast_node_alloc(AST_NODE_TYPE_JUMP_STMT, SIDE_TYPE_LEFT);
 
-		//Create space for and store our identifier name
-		jump_node->string_value = dynamic_string_alloc();
-		dynamic_string_set(&(jump_node->string_value), jumping_to_block_name);
+		//Store the name in here
+		jump_node->string_value = jumping_to_block_name;
 	}
 
 	//If we don't see a semicolon we bail
@@ -9248,8 +9246,8 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 	//Store the line number
 	jump_node->line_number = parser_line_num;
 
-	//Add this jump statement into the queue for processing
-	enqueue(&current_function_jump_statements, jump_node);
+	//Add this into the array for later validation
+	dynamic_array_add(&current_function_jump_statements, jump_node);
 
 	//Finally we'll give back the root reference
 	return jump_node;
