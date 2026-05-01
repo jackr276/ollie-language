@@ -3458,6 +3458,14 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 	//Allcoate the results
 	cfg_result_package_t results = {starting_block, starting_block, NULL, BLANK};
 
+	/**
+	 * We only allocate this storage if it is needed. If we get here and it's unallocated, now
+	 * is the time to do that
+	 */
+	if(current_function_user_defined_jump_statements.internal_array == NULL){
+		current_function_user_defined_jump_statements = dynamic_array_alloc();
+	}
+
 	//Keep track of the current block
 	basic_block_t* current_block = starting_block;
 
@@ -3529,6 +3537,14 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
  * Emit a user defined jump statement that points to a label, not to a block
  */
 static inline void emit_user_defined_jump(basic_block_t* basic_block, symtab_label_record_t* jump_target){
+	/**
+	 * We only allocate this storage if it is needed. If we get here and it's unallocated, now
+	 * is the time to do that
+	 */
+	if(current_function_user_defined_jump_statements.internal_array == NULL){
+		current_function_user_defined_jump_statements = dynamic_array_alloc();
+	}
+
 	//Allocate it
 	instruction_t* jump_statement = emit_jmp_instruction(NULL);
 
