@@ -32,6 +32,9 @@
 //There's only one function keyspace per program, so it can be a bit larger
 #define FUNCTION_KEYSPACE 1024 
 
+//User defined jump statement keyspace(per function)
+#define USER_DEFINED_LABELED_BLOCK_KEYSPACE 64
+
 //A variable symtab
 typedef struct variable_symtab_t variable_symtab_t;
 //A function symtab
@@ -57,6 +60,12 @@ typedef struct symtab_type_record_t symtab_type_record_t;
 //The records in a macro symtab
 typedef struct symtab_macro_record_t symtab_macro_record_t;
 
+/**
+ * Label tables and label table nodes for GOTO statements
+ */
+typedef struct symtab_label_record_t symtab_label_record_t;
+typedef struct label_symtab_t label_symtab_t;
+
 //================================ Utility Macros ============================
 /**
  * Determine whether a given variable is a function parameter itself or is
@@ -78,7 +87,6 @@ typedef enum variable_membership_t {
 	GLOBAL_VARIABLE,
 	STATIC_VARIABLE,
 	FUNCTION_PARAMETER,
-	LABEL_VARIABLE,
 	RETURNED_VARIABLE, //Is this returned by a function?
 } variable_membership_t;
 
@@ -116,6 +124,8 @@ struct symtab_function_record_t{
 	dynamic_set_t called_functions;
 	//What's the return type?
 	generic_type_t* return_type;
+	//Hang onto all user defined labels for this function(may be null)
+	label_symtab_t* user_defined_labels;
 	//The line number
 	u_int32_t line_number;
 	//A bitmap for all assigned general purpose registers
@@ -359,6 +369,39 @@ struct function_symtab_t{
 
 
 /**
+ * For user defined labels, we simply need to store the hash, the function
+ * that it's in, the block(maybe) and the name
+ */
+struct symtab_label_record_t {
+	//Hash - most frequently used
+	u_int64_t hash;
+	//Name of the label
+	dynamic_string_t name;
+	//For hashtable functionality
+	symtab_label_record_t* next;
+	//The block that this label corresponds to after translation
+	void* block;
+	//Line number for tracking reasons
+	u_int32_t line_number;
+};
+
+
+/**
+ * All that is needed for the label table is an array to store
+ * our hashtable
+ */
+struct label_symtab_t {
+	symtab_label_record_t* records[USER_DEFINED_LABELED_BLOCK_KEYSPACE];
+};
+
+
+/**
+ * Create a label table for us to use. These, unlike the other types of 
+ * symbol tables, are created on-demand on a per-function basis
+ */
+label_symtab_t* label_symtab_alloc();
+
+/**
  * Dynamically allocate a function symtab. Note that this allocation
  * automatically creates the default namespace
  */
@@ -380,11 +423,6 @@ type_symtab_t* type_symtab_alloc();
 macro_symtab_t* macro_symtab_alloc();
 
 /**
- * NOTE: Functions only have one scope, which is why they do not
- * have any initialize_scope routine
- */
-
-/**
  * Initialize the variable symbol table scope
  */
 void initialize_variable_scope(variable_symtab_t* symtab);
@@ -393,11 +431,6 @@ void initialize_variable_scope(variable_symtab_t* symtab);
  * Initialize the type symbol table scope
  */
 void initialize_type_scope(type_symtab_t* symtab);
-
-/**
- * NOTE: Functions only have one scope, which is why they do not
- * have any finalize_scope routine
- */
 
 /**
  * Finalize the variable scope and go back a level
@@ -412,7 +445,7 @@ void finalize_type_scope(type_symtab_t* symtab);
 /**
  * Create a record for the symbol table
  */
-symtab_variable_record_t* create_variable_record(dynamic_string_t name);
+symtab_variable_record_t* create_variable_record(dynamic_string_t name, symtab_function_record_t* function_declared_in);
 
 /**
  * Create a global variable record
@@ -427,17 +460,17 @@ symtab_variable_record_t* create_static_variable_record(dynamic_string_t name);
 /**
  * Create a ternary variable record
  */
-symtab_variable_record_t* create_ssa_compatible_temp_var(generic_type_t* type, variable_symtab_t* variable_symtab, u_int32_t temp_id);
+symtab_variable_record_t* create_ssa_compatible_temp_var(symtab_function_record_t* function, generic_type_t* type, variable_symtab_t* variable_symtab, u_int32_t temp_id);
 
 /**
  * Create a parameter alias variable record
  */
-symtab_variable_record_t* create_parameter_alias_variable(symtab_variable_record_t* aliases, variable_symtab_t* variable_symtab, u_int32_t temp_id);
+symtab_variable_record_t* create_parameter_alias_variable(symtab_function_record_t* function, symtab_variable_record_t* aliases, variable_symtab_t* variable_symtab, u_int32_t temp_id);
 
 /**
  * Create a variable for a memory address that is not from an actual var
  */
-symtab_variable_record_t* create_temp_memory_address_variable(generic_type_t* type, variable_symtab_t* variable_symtab, stack_region_t* stack_region, u_int32_t temp_id);
+symtab_variable_record_t* create_temp_memory_address_variable(symtab_function_record_t* function, generic_type_t* type, variable_symtab_t* variable_symtab, stack_region_t* stack_region, u_int32_t temp_id);
 
 /**
  * Add a parameter to a function and perform all internal bookkeeping needed
@@ -483,6 +516,13 @@ symtab_type_record_t* create_type_record(generic_type_t* type);
 symtab_macro_record_t* create_macro_record(dynamic_string_t name, u_int32_t line_number);
 
 /**
+ * Create a label record for the label symtab
+ *
+ * NOTE: The label symtab assumes ownership of the name dynamic string
+ */
+symtab_label_record_t* create_label_record(dynamic_string_t name, u_int32_t line_number);
+
+/**
  * Insert a function into the symbol table
  */
 u_int8_t insert_function(function_symtab_t* symtab, symtab_function_record_t* record);
@@ -501,6 +541,11 @@ u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record);
  * Insert a macro into the symtab
  */
 u_int8_t insert_macro(macro_symtab_t* symtab, symtab_macro_record_t* record);
+
+/**
+ * Insert a label into the symtab
+ */
+u_int8_t insert_label(label_symtab_t* label, symtab_label_record_t* label_record);
 
 /**
  * Determine whether or not a function is directly recursive using the function
@@ -567,6 +612,11 @@ function_namespace_t* lookup_namespace_under_parent(function_namespace_t* parent
 symtab_variable_record_t* lookup_variable(variable_symtab_t* symtab, char* name);
 
 /**
+ * Lookup a label in the symtab
+ */
+symtab_label_record_t* lookup_label(label_symtab_t* label_symtab, char* name);
+
+/**
  * Lookup a macro in the symtab
  */
 symtab_macro_record_t* lookup_macro(macro_symtab_t* symtab, char* name);
@@ -575,12 +625,6 @@ symtab_macro_record_t* lookup_macro(macro_symtab_t* symtab, char* name);
  * Lookup a variable name in the symtab, only one scope
  */
 symtab_variable_record_t* lookup_variable_local_scope(variable_symtab_t* symtab, char* name);
-
-/**
- * Lookup a variable in all lower scopes. This is specifically and only intended for
- * jump statements
- */
-symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab, char* name);
 
 /**
  * Lookup a type name in the symtab
@@ -701,5 +745,10 @@ void type_symtab_dealloc(type_symtab_t* symtab);
  * Destroy a macro symtab
  */
 void macro_symtab_dealloc(macro_symtab_t* symtab);
+
+/**
+ * Destroy a label table
+ */
+void label_symtab_dealloc(label_symtab_t* symtab);
 
 #endif /* SYMTAB_H */

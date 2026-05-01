@@ -101,6 +101,17 @@ static inline u_int32_t increment_and_get_type_lexical_scope(){
 
 
 /**
+ * Create a label table for us to use. These, unlike the other types of 
+ * symbol tables, are created on-demand on a per-function basis
+ */
+label_symtab_t* label_symtab_alloc(){
+	//As easy as allocating and returning
+	label_symtab_t* symtab = calloc(1, sizeof(label_symtab_t));
+	return symtab;
+}
+
+
+/**
  * Dynamically allocate a function symtab. Note that this allocation
  * automatically creates the default namespace
  */
@@ -335,6 +346,46 @@ static inline u_int64_t hash_macro_name(char* name){
  *
  * 	return key
 */
+static inline u_int64_t hash_label_name(char* name){
+	//Char pointer for the name
+	char* cursor = name;
+
+	//The hash we have
+	u_int64_t hash = OFFSET_BASIS;
+
+	//Iterate through the cursor here
+	for(; *cursor != '\0'; cursor++){
+		hash ^= *cursor;
+		hash *= FNV_PRIME;
+	}
+
+	//We will perform avalanching here by shifting, multiplying and shifting. The shifting
+	//itself ensures that the higher order bits effect all of the lower order ones
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_1;
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_2;
+	hash ^= hash >> 33;
+
+	//Cut it down to our keyspace
+	return hash & (USER_DEFINED_LABELED_BLOCK_KEYSPACE - 1);
+}
+
+
+/**
+ * Hash a name before entry/search into the hash table
+ *
+ * FNV-1a 64 bit hash:
+ * 	hash <- FNV_prime
+ *
+ * 	for each hashable value:
+ * 		hash ^= value
+ * 		hash *= FNV_PRIME
+ * 		
+ * 	key % keyspace
+ *
+ * 	return key
+*/
 static inline u_int64_t hash_function(char* name){
 	//Char pointer for the name
 	char* cursor = name;
@@ -535,7 +586,7 @@ static inline u_int64_t hash_type(generic_type_t* type){
 /**
  * Dynamically allocate a variable record
 */
-symtab_variable_record_t* create_variable_record(dynamic_string_t name){
+symtab_variable_record_t* create_variable_record(dynamic_string_t name, symtab_function_record_t* function_declared_in){
 	//Allocate it
 	symtab_variable_record_t* record = calloc(1, sizeof(symtab_variable_record_t));
 
@@ -548,6 +599,12 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t name){
 
 	//This is just a regular variable(for now)
 	record->membership = NO_MEMBERSHIP;
+
+	/**
+	 * Very Important: it is mandatory that we know what function this variable is in. If it
+	 * is a global variable/type variable then use NULL
+	 */
+	record->function_declared_in = function_declared_in;
 
 	//For eventual SSA generation
 	record->counter_stack.stack = NULL;
@@ -625,7 +682,7 @@ symtab_variable_record_t* create_static_variable_record(dynamic_string_t name){
 /**
  * Create a variable for a memory address that is not from an actual var
  */
-symtab_variable_record_t* create_temp_memory_address_variable(generic_type_t* type, variable_symtab_t* variable_symtab, stack_region_t* stack_region, u_int32_t temp_id){
+symtab_variable_record_t* create_temp_memory_address_variable(symtab_function_record_t* function, generic_type_t* type, variable_symtab_t* variable_symtab, stack_region_t* stack_region, u_int32_t temp_id){
 	//And here is the special part - we'll need to make a symtab record
 	//for this variable and add it in
 	char variable_name[100];
@@ -639,7 +696,7 @@ symtab_variable_record_t* create_temp_memory_address_variable(generic_type_t* ty
 	dynamic_string_set(&string, variable_name);
 
 	//Now create and add the symtab record for this variable
-	symtab_variable_record_t* record = create_variable_record(string);
+	symtab_variable_record_t* record = create_variable_record(string, function);
 	//Store the type here
 	record->type_defined_as = type;
 
@@ -669,7 +726,7 @@ symtab_variable_record_t* create_temp_memory_address_variable(generic_type_t* ty
  * symtab record, and as such will be picked up by the phi function
  * inserted. It will also not be declared as temp
  */
-symtab_variable_record_t* create_ssa_compatible_temp_var(generic_type_t* type, variable_symtab_t* variable_symtab, u_int32_t temp_id){
+symtab_variable_record_t* create_ssa_compatible_temp_var(symtab_function_record_t* function, generic_type_t* type, variable_symtab_t* variable_symtab, u_int32_t temp_id){
 	//And here is the special part - we'll need to make a symtab record
 	//for this variable and add it in
 	char variable_name[100];
@@ -683,7 +740,7 @@ symtab_variable_record_t* create_ssa_compatible_temp_var(generic_type_t* type, v
 	dynamic_string_set(&string, variable_name);
 
 	//Now create and add the symtab record for this variable
-	symtab_variable_record_t* record = create_variable_record(string);
+	symtab_variable_record_t* record = create_variable_record(string, function);
 	//Store the type here
 	record->type_defined_as = type;
 
@@ -709,7 +766,7 @@ symtab_variable_record_t* create_ssa_compatible_temp_var(generic_type_t* type, v
  * symtab record, and as such will be picked up by the phi function
  * inserted. It will also not be declared as temp
  */
-symtab_variable_record_t* create_parameter_alias_variable(symtab_variable_record_t* aliases, variable_symtab_t* variable_symtab, u_int32_t temp_id){
+symtab_variable_record_t* create_parameter_alias_variable(symtab_function_record_t* function, symtab_variable_record_t* aliases, variable_symtab_t* variable_symtab, u_int32_t temp_id){
 	//And here is the special part - we'll need to make a symtab record
 	//for this variable and add it in
 	char variable_name[100];
@@ -723,7 +780,7 @@ symtab_variable_record_t* create_parameter_alias_variable(symtab_variable_record
 	dynamic_string_set(&string, variable_name);
 
 	//Now create and add the symtab record for this variable
-	symtab_variable_record_t* record = create_variable_record(string);
+	symtab_variable_record_t* record = create_variable_record(string, function);
 	//Store the type here
 	record->type_defined_as = aliases->type_defined_as;
 
@@ -1012,6 +1069,31 @@ symtab_macro_record_t* create_macro_record(dynamic_string_t name, u_int32_t line
 
 
 /**
+ * Create a label record for the label symtab
+ *
+ * NOTE: The label symtab assumes ownership of the name dynamic string
+ */
+symtab_label_record_t* create_label_record(dynamic_string_t name, u_int32_t line_number){
+	//Allocate the needed space
+	symtab_label_record_t* label_record = calloc(1, sizeof(symtab_label_record_t));
+
+	//Hash the label name - it is assumed that the creation always does this
+	label_record->hash = hash_label_name(name.string);
+
+	/**
+	 * IMPORTANT: we assume complete ownership of the name here
+	 */
+	label_record->name = name;
+
+	//Line number for any/all error reporting
+	label_record->line_number = line_number;
+
+	//And that's about all - very simple record type
+	return label_record;
+}
+
+
+/**
  * Insert a record into the function symbol table. This assumes that the user
  * has already checked to see if this record exists in the table
  *
@@ -1029,17 +1111,17 @@ u_int8_t insert_function(function_symtab_t* symtab, symtab_function_record_t* re
 	//Store that this function is in this current namespace
 	record->namespace_contained_in = current;
 
+	//Get the record(or lack of one) at this hash
+	symtab_function_record_t* cursor = current->records[record->hash];
+
 	//If there's no collision
-	if(current->records[record->hash] == NULL){
+	if(cursor == NULL){
 		//Store it and get out
 		current->records[record->hash] = record;
 
 		//No collision
 		return 0;
 	}
-	
-	//Otherwise if we get here there was a collision
-	symtab_function_record_t* cursor = current->records[record->hash];
 
 	//Get to the very last node
 	while(cursor->next != NULL){
@@ -1089,24 +1171,60 @@ u_int8_t insert_macro(macro_symtab_t* symtab, symtab_macro_record_t* record){
 
 
 /**
+ * Insert a label into the symtab
+ *
+ * NOTE: we assume that the hash has already been computed as part of record creation
+ */
+u_int8_t insert_label(label_symtab_t* label_symtab, symtab_label_record_t* label_record){
+	//Grab the record(or NULL value) at this hash value
+	symtab_label_record_t* cursor = label_symtab->records[label_record->hash];
+
+	/**
+	 * Option 1: we have no collision. If this is the case then we will just insert
+	 * the label here and return 0 to indicate that nothing collided
+	 */
+	if(cursor == NULL){
+		label_symtab->records[label_record->hash] = label_record;
+		return 0;
+	}
+
+	/**
+	 * Option 2: there is a record here, so we need to advance down the
+	 * chain until there isn't one. Once we get to the bottom, we attach
+	 * the next record to the very end
+	 */
+	while(cursor->next != NULL){
+		cursor = cursor->next;
+	}
+
+	//Add it in
+	cursor->next = label_record;
+	//Just to be extra safe
+	label_record->next = NULL;
+
+	//1 signifies that there was a collision
+	return 1;
+}
+
+
+/**
  * Inserts a variable record into the symtab. This assumes that the user has already checked to see if
  * this record exists in the table
  */
 u_int8_t insert_variable(variable_symtab_t* symtab, symtab_variable_record_t* record){
+	//Grab the record(or lack of one) at the hash
+	symtab_variable_record_t* cursor = symtab->current->records[record->hash];
+
 	//Store the lexical scope it
 	record->lexical_scope_id =  symtab->current->lexical_scope_id;
 
 	//No collision here, just store and get out
-	if(symtab->current->records[record->hash] == NULL){
+	if(cursor == NULL){
 		//Store this and get out
 		symtab->current->records[record->hash] = record;
 		//0 = success, no collision
 		return 0;
 	}
-
-	//Otherwise, there is a collision
-	//Grab the head record
-	symtab_variable_record_t* cursor = symtab->current->records[record->hash];
 
 	//Get to the very last node
 	while(cursor->next != NULL){
@@ -1128,6 +1246,9 @@ u_int8_t insert_variable(variable_symtab_t* symtab, symtab_variable_record_t* re
  * this record exists in the table
  */
 u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record){
+	//Grab the record(or lack of one) at the current hash
+	symtab_type_record_t* cursor = symtab->current->records[record->hash];
+
 	//Store the lexical scope it
 	record->lexical_scope_id =  symtab->current->lexical_scope_id;
 
@@ -1142,16 +1263,12 @@ u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record){
 	}
 
 	//No collision here, just store and get out
-	if(symtab->current->records[record->hash] == NULL){
+	if(cursor == NULL){
 		//Store this and get out
 		symtab->current->records[record->hash] = record;
 		//0 = success, no collision
 		return 0;
 	}
-
-	//Otherwise, there is a collision
-	//Grab the head record
-	symtab_type_record_t* cursor = symtab->current->records[record->hash];
 
 	//Get to the very last node
 	while(cursor->next != NULL){
@@ -1357,7 +1474,8 @@ symtab_variable_record_t* initialize_stack_pointer(type_symtab_t* types){
 	//Set to be stack pointer
 	dynamic_string_set(&variable_name, "stack_pointer");
 
-	symtab_variable_record_t* stack_pointer = create_variable_record(variable_name);
+	//Stack pointer has no current function
+	symtab_variable_record_t* stack_pointer = create_variable_record(variable_name, NULL);
 	//Set this type as a label(address)
 	stack_pointer->type_defined_as = lookup_type_name_only(types, "u64", NOT_MUTABLE)->type;
 
@@ -1376,7 +1494,8 @@ symtab_variable_record_t* initialize_instruction_pointer(type_symtab_t* types){
 	//Set to be instruction pointer(rip)
 	dynamic_string_set(&variable_name, "rip");
 
-	symtab_variable_record_t* instruction_pointer = create_variable_record(variable_name);
+	//Instruction pointer has no given function
+	symtab_variable_record_t* instruction_pointer = create_variable_record(variable_name, NULL);
 	//Set this type as a label(address)
 	instruction_pointer->type_defined_as = lookup_type_name_only(types, "u64", NOT_MUTABLE)->type;
 
@@ -1619,45 +1738,6 @@ symtab_variable_record_t* lookup_variable_local_scope(variable_symtab_t* symtab,
 
 
 /**
- * Lookup a variable in all lower scopes. This is specifically and only intended for
- * jump statements
- */
-symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab, char* name){
-	//Grab the hash
-	u_int64_t h = hash_variable(name);
-
-	//Define the cursor so we don't mess with the original reference
-	symtab_variable_sheaf_t* cursor;
-	//A cursor for records iterating
-	symtab_variable_record_t* records_cursor;
-
-	//So long as the cursor is not null
-	for(u_int16_t i = 0; i < symtab->sheafs.current_index; i++){
-		//Grab the current sheaf
-		cursor = dynamic_array_get_at(&(symtab->sheafs), i);
-
-		//Grab a records cursor
-		records_cursor = cursor->records[h];
-
-		//We could have had collisions so we'll hunt here
-		while(records_cursor != NULL){
-		
-			//If we find the right one, then we can get out
-			if(strncmp(records_cursor->var_name.string, name, records_cursor->var_name.current_length) == 0){
-				return records_cursor;
-			}
-
-			//Advance it
-			records_cursor = records_cursor->next;
-		}
-	}
-
-	//If we found nothing give back NULL
-	return NULL;
-}
-
-
-/**
  * Lookup a type name in the symtab by the name only. This does not
  * do the array bound comparison that we need for strict equality
  */
@@ -1693,6 +1773,32 @@ symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, m
 
 	//We found nothing
 	return NULL;
+}
+
+
+/**
+ * Lookup a label in the symtab
+ */
+symtab_label_record_t* lookup_label(label_symtab_t* label_symtab, char* name){
+	//Grab the hash first
+	u_int64_t h = hash_label_name(name);
+
+	//First just try to get this here
+	symtab_label_record_t* cursor = label_symtab->records[h];
+
+	//Crawl through and string compare
+	while(cursor != NULL){
+		//They have to be an exact match for this to work
+		if(strncmp(name, cursor->name.string, cursor->name.current_length) == 0){
+			return cursor;
+		}
+
+		//Otherwise bump it up to the next one
+		cursor = cursor->next;
+	}
+
+	//Either i
+	return cursor;
 }
 
 
@@ -2256,9 +2362,6 @@ void print_variable_name(symtab_variable_record_t* record){
 		case FUNCTION_PARAMETER:
 			print_function_name(record->function_declared_in);
 			break;
-		case LABEL_VARIABLE:
-			printf("\n---> %d | %s:\n", record->line_number, record->var_name.string);
-			break;
 		case ENUM_MEMBER:
 			//The var name
 			printf("{\n\t\t...\n\t\t...\t\t\n---> %d |\t %s", record->line_number, record->var_name.string);
@@ -2544,7 +2647,6 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 			while(record != NULL){
 				//If it's a label or struct, don't bother with it
 				switch(record->membership){
-					case LABEL_VARIABLE:
 					case STRUCT_MEMBER:
 						record = record->next;
 						continue;
@@ -2733,6 +2835,10 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 				//Deallocate the data area itself
 				stack_data_area_dealloc(&(temp->local_stack));
 
+				//Destroy the label symtab if it exists
+				label_symtab_dealloc(temp->user_defined_labels);
+
+				//Finally free the function
 				free(temp);
 			}
 		}
@@ -2879,5 +2985,39 @@ void macro_symtab_dealloc(macro_symtab_t* symtab){
 	}
 
 	//At the very end free the overall control structure
+	free(symtab);
+}
+
+
+/**
+ * Destroy a label table. We assume that a lot of time
+ * when this function is called we'll actually have a nonexistent
+ * table so we will account for that here
+ */
+void label_symtab_dealloc(label_symtab_t* symtab){
+	//Totally valid and normal
+	if(symtab == NULL){
+		return;
+	}
+
+	//Run through every record
+	for(u_int32_t i = 0; i < USER_DEFINED_LABELED_BLOCK_KEYSPACE; i++){
+		//Extract the record
+		symtab_label_record_t* label_record_cursor = symtab->records[i];
+
+		//Remember that it's a hashtable, could be nested from collisions
+		while(label_record_cursor != NULL){
+			//Grab a holder
+			symtab_label_record_t* temp = label_record_cursor;
+
+			//Bump this up to the next one
+			label_record_cursor = label_record_cursor->next;
+
+			//Release the node
+			free(temp);
+		}
+	}
+
+	//At the very end destroy the whole thing
 	free(symtab);
 }

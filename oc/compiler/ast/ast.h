@@ -105,7 +105,7 @@ struct generic_ast_node_t{
 	//These are the two pointers that make up the whole of the tree
 	generic_ast_node_t* first_child;
 	generic_ast_node_t* next_sibling;
-	//What variable do we have?
+	//Variable/jump label holder
 	symtab_variable_record_t* variable;
 	//The symtab function record
 	symtab_function_record_t* func_record;
@@ -126,6 +126,8 @@ struct generic_ast_node_t{
 		u_int32_t elaborative_param_count;
 		//Store the number of bytes to copy for a copy assignment
 		u_int64_t bytes_to_copy;
+		//The label record that we're storing
+		symtab_label_record_t* label_record;
 	} optional_storage;
 	//Storing the constant values
 	union {

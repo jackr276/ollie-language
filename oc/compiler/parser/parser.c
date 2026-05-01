@@ -39,10 +39,12 @@ static generic_ast_node_t* prog = NULL;
 static symtab_function_record_t* current_function = NULL;
 //Keep track of all of the errors that have been raised by the current function
 static dynamic_set_t errors_raised_by_current_function;
-//The queue that holds all of our jump statements for a given function
-static heap_queue_t current_function_jump_statements;
+//Array that holds all of the jump statements for our current function
+static dynamic_array_t current_function_jump_statements;
 //The BFS queue for namespaces
 static heap_queue_t namespace_bfs_queue;
+//Store the overall current function scope
+static symtab_variable_sheaf_t* top_level_function_variable_scope = NULL;
 
 //Our stack for storing variables, etc
 static lex_stack_t grouping_stack;
@@ -6408,8 +6410,8 @@ static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t
 	//Now if we finally make it all of the way down here, we are actually set. We'll construct the
 	//node that we have and also add it into our symbol table
 	
-	//We'll first create the symtab record
-	symtab_variable_record_t* member_record = create_variable_record(name);
+	//We'll first create the symtab record. NULL for no specific function
+	symtab_variable_record_t* member_record = create_variable_record(name, NULL);
 	//Store the line number for error printing
 	member_record->line_number = parser_line_num;
 	//Store what the type is
@@ -7188,14 +7190,14 @@ static u_int8_t union_member(ollie_token_stream_t* token_stream, generic_type_t*
 
 	//Finally we can create our members
 	//First goes the mutable one
-	symtab_variable_record_t* mutable_union_member = create_variable_record(name);
+	symtab_variable_record_t* mutable_union_member = create_variable_record(name, NULL);
 	//Give it its type
 	mutable_union_member->type_defined_as = mutable_type;
 	//And we'll let the helper add it into the union type
 	add_union_member(mutable_union_type, mutable_union_member);
 
 	//Now the immutable version
-	symtab_variable_record_t* immutable_union_member = create_variable_record(clone_dynamic_string(&name));
+	symtab_variable_record_t* immutable_union_member = create_variable_record(clone_dynamic_string(&name), NULL);
 	//Give it its type
 	immutable_union_member->type_defined_as = immutable_type;
 	//And we'll let the helper add it into the union type
@@ -7512,7 +7514,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 
 		//If we make it here, then all of our checks passed and we don't have a duplicate name. We're now good
 		//to create the record and assign it a type
-		symtab_variable_record_t* member_record = create_variable_record(lookahead.lexeme);
+		symtab_variable_record_t* member_record = create_variable_record(lookahead.lexeme, NULL);
 
 		//Store the line number
 		member_record->line_number = parser_line_num;
@@ -8844,35 +8846,45 @@ static inline generic_ast_node_t* expression_statement(ollie_token_stream_t* tok
 
 /**
  * A labeled statement allows the user in ollie to directly jump to where
- * they'd like to go, with some exceptions
+ * they'd like to go, with some exceptions. Since labels are handled completely
+ * separate from types, variables and functions, we actually don't need to check
+ * for duplicates on any of those. We'll only need to check for duplicate labels
+ * that exist within this current function
  *
  * NOTE: By the time we get here, we have already seen & consumed the #
  *
  * <labeled-statement> ::= #<label-identifier>: 
  */
 static generic_ast_node_t* labeled_statement(ollie_token_stream_t* token_stream){
-	//Freeze the line number
-	u_int32_t current_line = parser_line_num;
-	//Lookahead token
 	lexitem_t lookahead;
 
-	//Do we contain a defer at any point in here? If so, that is invalid because we could
-	//have the defer block duplicated multiple times. As such, a label would become ambiguous
+	/**
+	 * Do we contain a defer at any point in here? If so, that is invalid because we could
+	 * have the defer block duplicated multiple times. As such, a label would become ambiguous
+	 */
 	if(nesting_stack_contains_level(&nesting_stack, NESTING_DEFER_STATEMENT) == TRUE){
 		return print_and_return_error("Label statements cannot be placed inside of deferred blocks", parser_line_num);
 	}
 
 	//Let's create the label ident node
 	generic_ast_node_t* label_stmt = ast_node_alloc(AST_NODE_TYPE_LABEL_STMT, SIDE_TYPE_LEFT);
-	//Save our line number
 	label_stmt->line_number = parser_line_num;
+
+	/**
+	 * To save space, we only allocate the label symtab if we know that we absolutely need
+	 * it. The label symtab is stored inside of the current_function record because this
+	 * symtab is function-specific. If we see that this is NULL then we create it now
+	 */
+	if(current_function->user_defined_labels == NULL){
+		current_function->user_defined_labels = label_symtab_alloc();
+	}
 
 	//Let's see if we can find one
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
 	//If it's bad we'll fail out here
 	if(lookahead.tok != IDENT){
-		return print_and_return_error("Invalid identifier given as label ident statement", current_line);
+		return print_and_return_error("Invalid identifier given as label ident statement", parser_line_num);
 	}
 
 	//Grab the name out for convenience
@@ -8883,49 +8895,26 @@ static generic_ast_node_t* labeled_statement(ollie_token_stream_t* token_stream)
 
 	//If we don't see one, we need to scrap it
 	if(lookahead.tok != COLON){
-		return print_and_return_error("Colon required after label statement", current_line);
-	}
-	
-	//If this function already exists, we fail out
-	if(do_duplicate_functions_exist(label_name.string) == TRUE){
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		return print_and_return_error("Colon required after label statement", parser_line_num);
 	}
 
-	//We now need to make sure that it isn't a duplicate. We'll use a special search function to do this
-	symtab_variable_record_t* found_variable = lookup_variable_lower_scope(variable_symtab, label_name.string);
+	//Make sure we don't have duplicates
+	symtab_label_record_t* duplicate_label = lookup_label(current_function->user_defined_labels, label_name.string);
 
-	//If we did find it, that's bad
-	if(found_variable != NULL){
-		sprintf(info, "Identiifer %s has already been declared. First declared here: ", label_name.string); 
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		print_variable_name(found_variable);
-		num_errors++;
-		//give back an error node
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-	}
-	
-	//Check for duplicated types
-	if(do_duplicate_types_exist(label_name.string)){
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	//Hard fail if this happens
+	if(duplicate_label != NULL){
+		sprintf(info, "Duplicate label #%s detected. First declared on line %d.", label_name.string, duplicate_label->line_number);
+		return print_and_return_error(info, parser_line_num);
 	}
 
-	//Now that we know we didn't find it, we'll create it
-	symtab_variable_record_t* label = create_variable_record(label_name);
-	//Store the type
-	label->type_defined_as = immut_u64;
-	//Store the fact that it is a label
-	label->membership = LABEL_VARIABLE;
-	//Store the line number
-	label->line_number = parser_line_num;
-	//Store what function it's defined in(important for later)
-	label->function_declared_in = current_function;
+	//Now let's build up the label record
+	symtab_label_record_t* new_record = create_label_record(label_name, parser_line_num);
 
-	//Put into the symtab
-	insert_variable(variable_symtab, label);
+	//Add it into the label symtab
+	insert_label(current_function->user_defined_labels, new_record);
 
-	//We'll also associate this variable with the node
-	label_stmt->variable = label;
-	label_stmt->inferred_type = immut_u64;
+	//Store it inside of the label statement itself
+	label_stmt->optional_storage.label_record = new_record;
 
 	//Now we can get out
 	return label_stmt;
@@ -9170,11 +9159,20 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 		return print_and_return_error("Identifier expected after \"jump\" keyword", parser_line_num);
 	}
 
-	//Hang onto the name of the block that we'll be jumping to
-	char* jumping_to_block_name = lookahead.lexeme.string;
+	//We will be transferring this over to the jump node
+	dynamic_string_t jumping_to_block_name = lookahead.lexeme;
 
 	//Holder for the jump statement type
 	generic_ast_node_t* jump_node;
+
+	/**
+	 * We will be hanging onto all of our jump statements for validation later on down
+	 * the road, but we only allocate if we absolutely need to. Now is the time
+	 * that we'll know that
+	 */
+	if(current_function_jump_statements.internal_array == NULL){
+		current_function_jump_statements = dynamic_array_alloc();
+	}
 
 	//One last tripping point befor we create the node, we do need to see a semicolon
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -9184,9 +9182,8 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 		//We know that this will be a conditional jump, so allocate as such
 		jump_node = ast_node_alloc(AST_NODE_TYPE_CONDITIONAL_JUMP_STMT, SIDE_TYPE_LEFT);
 
-		//Create space for and store our identifier name
-		jump_node->string_value = dynamic_string_alloc();
-		dynamic_string_set(&(jump_node->string_value), jumping_to_block_name);
+		//Store the block name in here
+		jump_node->string_value = jumping_to_block_name;
 
 		//We now need to see an L_PAREN 
 		lookahead = get_next_token(token_stream, &parser_line_num);
@@ -9237,9 +9234,8 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 		//This is a direct jump so allocate accordingly
 		jump_node = ast_node_alloc(AST_NODE_TYPE_JUMP_STMT, SIDE_TYPE_LEFT);
 
-		//Create space for and store our identifier name
-		jump_node->string_value = dynamic_string_alloc();
-		dynamic_string_set(&(jump_node->string_value), jumping_to_block_name);
+		//Store the name in here
+		jump_node->string_value = jumping_to_block_name;
 	}
 
 	//If we don't see a semicolon we bail
@@ -9250,8 +9246,8 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 	//Store the line number
 	jump_node->line_number = parser_line_num;
 
-	//Add this jump statement into the queue for processing
-	enqueue(&current_function_jump_statements, jump_node);
+	//Add this into the array for later validation
+	dynamic_array_add(&current_function_jump_statements, jump_node);
 
 	//Finally we'll give back the root reference
 	return jump_node;
@@ -11296,7 +11292,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 	if(is_static == FALSE){
 		//Go based on it's global status
 		if(is_global == FALSE){
-			declared_var = create_variable_record(name);
+			declared_var = create_variable_record(name, current_function);
 		} else {
 			declared_var = create_global_variable_record(name, visibility);
 		}
@@ -11308,8 +11304,6 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 	declared_var->type_defined_as = dealias_type(type_spec);
 	//It was declared
 	declared_var->declare_or_let = 0;
-	//What function are we in?
-	declared_var->function_declared_in = current_function;
 	//The line_number
 	declared_var->line_number = current_line;
 	//Now that we're all good, we can add it into the symbol table
@@ -11929,7 +11923,7 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	if(is_static == FALSE){
 		//Go based on it's global status
 		if(is_global == FALSE){
-			declared_var = create_variable_record(name);
+			declared_var = create_variable_record(name, current_function);
 		} else {
 			declared_var = create_global_variable_record(name, visibility);
 		}
@@ -11941,8 +11935,6 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	declared_var->type_defined_as = type_spec;
 	//It was initialized
 	declared_var->initialized = TRUE;
-	//Mark where it was declared
-	declared_var->function_declared_in = current_function;
 	//It was "letted" 
 	declared_var->declare_or_let = 1;
 	//Save the line num
@@ -12105,46 +12097,27 @@ static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_globa
  * We need to go through and check all of the jump statements that we have in the function. If any
  * one of these jump statements is trying to jump to a label that does not exist, then we need to fail out
  */
-static int8_t check_jump_labels(){
-	//Grab a reference to our current jump statement
-	generic_ast_node_t* current_jump_statement;
+static inline u_int8_t check_jump_labels(){
+	//Run through all of these statements
+	for(u_int32_t i=  0; i < current_function_jump_statements.current_index; i++){
+		//Extract the one we need
+		generic_ast_node_t* current_jump_statement = dynamic_array_get_at(&(current_function_jump_statements), i);
 
-	//So long as there are jump statements in the queue
-	while(queue_is_empty(&current_function_jump_statements) == FALSE){
-		//Grab the jump statement
-		current_jump_statement = dequeue(&current_function_jump_statements);
-
-		//Let's grab out the name for convenience
+		//Let's see if we can find the label that this one is jumping to
 		char* name = current_jump_statement->string_value.string;
 
-		//We now need to lookup the name in here. We use a special function that allows
-		//us to look deeper into the scopes 
-		symtab_variable_record_t* label = lookup_variable_lower_scope(variable_symtab, name);
+		symtab_label_record_t* jumping_to_label = lookup_label(current_function->user_defined_labels, name);
 
-		//If we didn't find it, we fail out
-		if(label == NULL){
-			sprintf(info, "Attempt to jump to nonexistent label \"%s\".", name);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			//Fail out
+		//Didn't find it, so we fail out
+		if(jumping_to_label == NULL){
+			sprintf(info, "No label %s exists in function %s", name, current_function->func_name.string);
+			num_errors++;
+			print_parse_message(MESSAGE_TYPE_ERROR, info, current_jump_statement->line_number);
 			return FAILURE;
 		}
 
-		//This can also happen - where we have a user trying to jump to a non-label
-		if(label->membership != LABEL_VARIABLE){
-			sprintf(info, "Variable %s exists but is not a label, so it cannot be jumped to", label->var_name.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			return FAILURE;
-		}
-
-		//We can also have a case where this is not null, but it isn't in the correct function scope(also bad)
-		if(strcmp(current_function->func_name.string, label->function_declared_in->func_name.string) != 0){
-			sprintf(info, "Label \"%s\" was declared in function \"%s\". You cannot jump outside of a function" , name, label->function_declared_in->func_name.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			return FAILURE;
-		}
-
-		//Otherwise it worked, so we'll add this as the function's jumping to label
-		current_jump_statement->variable = label;
+		//Store this label record inside of the jump node for later
+		current_jump_statement->optional_storage.label_record = jumping_to_label;
 	}
 
 	//If we get here then they all worked
@@ -12430,7 +12403,7 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 	 * declaration. It is now incumbent on us to store it in the variable 
 	 * symbol table
 	 */
-	symtab_variable_record_t* param_record = create_variable_record(name);
+	symtab_variable_record_t* param_record = create_variable_record(name, current_function);
 
 	/**
 	 * If we've seen the params keyword now is the time
@@ -12468,9 +12441,6 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 		//Bump it for the next go about
 		(*current_sse_param)++;
 	}
-
-	//This parameter was declared in whatever function we're currently in
-	param_record->function_declared_in = current_function;
 
 	//We've now built up our param record, so we'll give add it to the symtab
 	insert_variable(variable_symtab, param_record);
@@ -13303,13 +13273,17 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	//We also need to mark that we're in a function using the nesting stack
 	push_nesting_level(&nesting_stack, NESTING_FUNCTION);
 
-	//We need a stack for storing jump statements. We need to check these later because if
-	//we check them as we go, we don't get full jump functionality
-	current_function_jump_statements = heap_queue_alloc();
+	/**
+	 * Since most functions do not use user defined jumps, we will initialize
+	 * this to be NULL here and only allocate when the need arises
+	 */
+	INITIALIZE_NULL_DYNAMIC_ARRAY(current_function_jump_statements);
 
-	//We also have the AST function node, this will be intialized immediately
-	//It also requires a symtab record of the function, but this will be assigned
-	//later once we have it
+	/**
+	 * We also have the AST function node, this will be intialized immediately
+	 * It also requires a symtab record of the function, but this will be assigned
+	 * later once we have it
+	 */
 	generic_ast_node_t* function_node = ast_node_alloc(AST_NODE_TYPE_FUNC_DEF, SIDE_TYPE_LEFT);
 
 	//Now we must see a valid identifier as the name
@@ -13422,6 +13396,12 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	//so that we include the function parameters in it. We need to remember to close
 	//this once we leave
 	initialize_variable_scope(variable_symtab);
+
+	/**
+	 * IMPORTANT: we need to hang onto this overarching function scope
+	 * for future uses/lookups
+	 */
+	top_level_function_variable_scope = variable_symtab->current;
 
 	//Now we must ensure that we see a valid parameter list. It is important to note that
 	//parameter lists can be empty, but whatever we have here we'll have to add in
@@ -13576,7 +13556,6 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	
 		//We now need to check and see if our jump statements are actually valid
 		if(check_jump_labels() == FAILURE){
-			//If this fails, we fail out here too
 			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
@@ -13606,14 +13585,17 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		function_record->called = TRUE;
 	}
 	
-	//We're done with this, so destroy it
-	heap_queue_dealloc(&current_function_jump_statements);
+	//Destroy the jump statements if need be
+	dynamic_array_dealloc(&current_function_jump_statements);
 
 	//Store the line number
 	function_node->line_number = current_line;
 
 	//Close the variable scope that we opened for the parameter list/compound statement
 	finalize_variable_scope(variable_symtab);
+
+	//This is now out of date so scrap it
+	top_level_function_variable_scope = NULL;
 
 	//Remove the nesting level now that we're not in a function
 	pop_nesting_level(&nesting_stack);
