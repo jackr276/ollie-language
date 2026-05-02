@@ -7828,6 +7828,35 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 
 
 /**
+ * Can two blocks actually be merged together? We need to check their block types
+ * to see that we're not violating any rules. The biggest case of this is loop
+ * entry blocks and function entry blocks. Currently I only know of the one restriction
+ * but we could have more get added on here as time goes on
+ */
+static inline u_int8_t can_blocks_be_merged(basic_block_t* a, basic_block_t* b){
+	switch(a->block_type){
+		/**
+		 * Main example that inspired all of this - we cannot merge a function entry
+		 * block and a loop block together as it creates confusion in the jump
+		 * system
+		 */
+		case BLOCK_TYPE_FUNC_ENTRY:
+			switch(b->block_type){
+				case BLOCK_TYPE_LOOP_ENTRY:
+					return FALSE;
+				default:
+					return TRUE;
+			}
+
+		case BLOCK_TYPE_NORMAL:
+			return TRUE;
+		default:
+			return TRUE;
+	}
+}
+
+
+/**
  * A for-statement is another kind of control flow construct
  *
  * 	For statement architecture
@@ -10331,6 +10360,8 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 		cfg_result_package_t compound_statement_results = visit_compound_statement(func_cursor);
 
 		//Once we're done with the compound statement, we will merge it into the function
+		//
+		//TODO HERE - BLOCKS NOT MERGEABLE
 	 	basic_block_t* compound_statement_exit_block = merge_blocks(function_starting_block, compound_statement_results.starting_block);
 
 		/**

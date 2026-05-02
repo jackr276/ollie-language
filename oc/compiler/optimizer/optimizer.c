@@ -1746,6 +1746,10 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			 * 	merge i and j
 			 */
 			if(jumping_to_block->predecessors.current_index == 1){
+				if(dynamic_array_get_at(&(jumping_to_block->predecessors), 0) == jumping_to_block){
+					printf("HERE\n\n\n\n\n\n\n");
+				}
+
 				//Delete the jump statement because it's now useless
 				delete_statement(current->exit_statement);
 
