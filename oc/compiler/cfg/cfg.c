@@ -100,6 +100,14 @@ typedef enum{
 } emit_dominance_frontier_selection_t;
 
 
+//Enum for branch conditional types
+typedef enum {
+	BRANCH_CONDITIONAL_UNKNOWN,
+	BRANCH_CONDITIONAL_ALWAYS_TRUE,
+	BRANCH_CONDITIONAL_ALWAYS_FALSE
+} branch_conditional_truthfullness_t;
+
+
 /**
  * An enum for declare and let statements letting us know what kind of variable
  * that we have
@@ -3190,6 +3198,28 @@ static inline cfg_result_package_t emit_branch_conditional_expression(basic_bloc
 
 
 /**
+ * Is a branch conditional always true? We can detect this by determining if something is a plain
+ * constant(think while(true)) or not.
+ */
+static inline branch_conditional_truthfullness_t get_branch_conditional_truthfullness(generic_ast_node_t* branch_conditional){
+	//Not a constant then don't care, just get out
+	if(branch_conditional->ast_node_type != AST_NODE_TYPE_CONSTANT){
+		return BRANCH_CONDITIONAL_UNKNOWN;
+	}
+
+	/**
+	 * If we know the result is 0, then we're always false. Otherwise
+	 * we know it's always true
+	 */
+	if(is_constant_node_value_0(branch_conditional) == TRUE){
+		return BRANCH_CONDITIONAL_ALWAYS_FALSE;
+	} else {
+		return BRANCH_CONDITIONAL_ALWAYS_TRUE;
+	}
+}
+
+
+/**
  * Emit a branch statement with an if destination and else destination. We will also handle the emittal of the conditional node here
  * for the purposes of doing the branch. The returned result package will include the starting & ending blocks for the branch. The
  * branch category is also given and will be used when we're accounting for how to place things
@@ -3208,6 +3238,10 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 	 * short circuit optimization here
 	 */
 	if(is_op_short_circuit_eligible(conditional_node->binary_operator) == FALSE){
+		if(get_branch_conditional_truthfullness(conditional_node) != BRANCH_CONDITIONAL_UNKNOWN){
+			printf("FOUND ONE TO OPTIMIZE\n\n\n");
+		}
+
 		//First let the helper emit it
 		cfg_result_package_t binary_results = emit_branch_conditional_expression(current_block, conditional_node);
 
