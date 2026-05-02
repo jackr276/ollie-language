@@ -3,6 +3,21 @@
 * This file checks the case where you have a constant as a conditional: i.e while(1) or something of the sort
 */
 
+pub fn do_while_infinit() -> i32 {
+	let x:mut i32 = 232;
+
+	//Checking do-while
+	do{
+		x--;
+
+		break when (x == 32);
+	} while(1);
+
+	ret x;
+}
+
+
+
 pub fn main() -> i32 {
 	let x:mut i32 = 232;
 

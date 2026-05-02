@@ -1746,10 +1746,6 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			 * 	merge i and j
 			 */
 			if(jumping_to_block->predecessors.current_index == 1){
-				if(dynamic_array_get_at(&(jumping_to_block->predecessors), 0) == jumping_to_block){
-					printf("HERE\n\n\n\n\n\n\n");
-				}
-
 				//Delete the jump statement because it's now useless
 				delete_statement(current->exit_statement);
 
@@ -2361,6 +2357,9 @@ cfg_t* optimize(cfg_t* cfg){
 		 */
 		mark(current_function_blocks);
 
+		printf("BEFORE SWEEP\n");
+		print_all_cfg_blocks(cfg);
+
 		/**
 		 * PASS 2: Sweep algorithm
 		 * Sweep follows directly after mark because it eliminates anything that is unmarked. If sweep
@@ -2368,6 +2367,10 @@ cfg_t* optimize(cfg_t* cfg){
 		 * nearest marked postdominator
 		 */
 		sweep(current_function_blocks, function_entry_block);
+
+		printf("AFTER SWEEP\n");
+		print_all_cfg_blocks(cfg);
+
 
 		/**
 		 * PASS 3: always true/false optimization
