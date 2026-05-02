@@ -3223,8 +3223,11 @@ static inline branch_conditional_truthfullness_t get_branch_conditional_truthful
  * Emit a branch statement with an if destination and else destination. We will also handle the emittal of the conditional node here
  * for the purposes of doing the branch. The returned result package will include the starting & ending blocks for the branch. The
  * branch category is also given and will be used when we're accounting for how to place things
+ *
+ * The "virtual_out_edge_required" will be used for loop statements, where we require, for dominator analysis, that a virtual
+ * edge(not a jump, but a successor) be added *if* we have a nonterminating loop(always true/false loop statement)
  */
-static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_ast_node_t* conditional_node, basic_block_t* if_block, basic_block_t* else_block, branch_category_t branch_category){
+static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_ast_node_t* conditional_node, basic_block_t* if_block, basic_block_t* else_block, branch_category_t branch_category, u_int8_t virtual_out_edge_required){
 	//Allcoate the results
 	cfg_result_package_t results = {starting_block, starting_block, NULL, BLANK};
 
@@ -3383,7 +3386,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 				/**
 				 * Left side: IF FAIL -> else block, else secondary block
 				 */
-				emit_branch(current_block, child_cursor, else_block, secondary_block, BRANCH_CATEGORY_INVERSE);
+				emit_branch(current_block, child_cursor, else_block, secondary_block, BRANCH_CATEGORY_INVERSE, virtual_out_edge_required);
 
 				//Current block now is our secondary
 				current_block = secondary_block;
@@ -3391,7 +3394,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 				/**
 				 * Right side: IF SUCCESS -> if block, else else block
 				 */
-				cfg_result_package_t right_side_results = emit_branch(current_block, child_cursor->next_sibling, if_block, else_block, BRANCH_CATEGORY_NORMAL);
+				cfg_result_package_t right_side_results = emit_branch(current_block, child_cursor->next_sibling, if_block, else_block, BRANCH_CATEGORY_NORMAL, virtual_out_edge_required);
 
 				//Update the current block once again
 				current_block = right_side_results.final_block;
@@ -3422,7 +3425,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 				/**
 				 * Left side: IF FAIL -> if block, else secondary block
 				 */
-				emit_branch(current_block, child_cursor, if_block, secondary_block, BRANCH_CATEGORY_INVERSE);
+				emit_branch(current_block, child_cursor, if_block, secondary_block, BRANCH_CATEGORY_INVERSE, virtual_out_edge_required);
 
 				//Current block now is our secondary
 				current_block = secondary_block;
@@ -3430,7 +3433,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 				/**
 				 * Left Side: IF FAIL -> if block, else else block
 				 */
-				cfg_result_package_t right_side_results = emit_branch(current_block, child_cursor->next_sibling, if_block, else_block, BRANCH_CATEGORY_INVERSE);
+				cfg_result_package_t right_side_results = emit_branch(current_block, child_cursor->next_sibling, if_block, else_block, BRANCH_CATEGORY_INVERSE, virtual_out_edge_required);
 
 				//Update the current block once again
 				current_block = right_side_results.final_block;
@@ -3462,7 +3465,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 				/**
 				 * Left side: IF SUCCESS -> if block, else secondary block
 				 */
-				emit_branch(current_block, child_cursor, if_block, secondary_block, BRANCH_CATEGORY_NORMAL);
+				emit_branch(current_block, child_cursor, if_block, secondary_block, BRANCH_CATEGORY_NORMAL, virtual_out_edge_required);
 
 				//Current block now is our secondary
 				current_block = secondary_block;
@@ -3470,7 +3473,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 				/**
 				 * Left Side: IF SUCCESS -> if block, else else block
 				 */
-				cfg_result_package_t right_side_results = emit_branch(current_block, child_cursor->next_sibling, if_block, else_block, BRANCH_CATEGORY_NORMAL);
+				cfg_result_package_t right_side_results = emit_branch(current_block, child_cursor->next_sibling, if_block, else_block, BRANCH_CATEGORY_NORMAL, virtual_out_edge_required);
 
 				//Update the current block once again
 				current_block = right_side_results.final_block;
@@ -3499,7 +3502,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 				/**
 				 * Left side: IF SUCCESS -> else, else secondary block
 				 */
-				emit_branch(current_block, child_cursor, else_block, secondary_block, BRANCH_CATEGORY_NORMAL);
+				emit_branch(current_block, child_cursor, else_block, secondary_block, BRANCH_CATEGORY_NORMAL, virtual_out_edge_required);
 
 				//Current block now is our secondary
 				current_block = secondary_block;
@@ -3507,7 +3510,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 				/**
 				 * Left Side: IF FAILS -> if block, else else block
 				 */
-				cfg_result_package_t right_side_results = emit_branch(current_block, child_cursor->next_sibling, if_block, else_block, BRANCH_CATEGORY_INVERSE);
+				cfg_result_package_t right_side_results = emit_branch(current_block, child_cursor->next_sibling, if_block, else_block, BRANCH_CATEGORY_INVERSE, virtual_out_edge_required);
 
 				//Update the current block once again
 				current_block = right_side_results.final_block;
@@ -3638,7 +3641,7 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 			 * Left side: IF FAIL -> else block, else secondary block. We are using the regular branch
 			 * emitter here because we are not dealing with any user defined blocks in this branch
 			 */
-			emit_branch(current_block, child_cursor, else_block, secondary_block, BRANCH_CATEGORY_INVERSE);
+			emit_branch(current_block, child_cursor, else_block, secondary_block, BRANCH_CATEGORY_INVERSE, FALSE);
 
 			//Current block now is our secondary
 			current_block = secondary_block;
@@ -5721,7 +5724,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	/**
 	 * Let the helper emit the normal if branch/conditional expression here
 	 */
-	emit_branch(current_block, cursor, if_block, else_block, BRANCH_CATEGORY_NORMAL);
+	emit_branch(current_block, cursor, if_block, else_block, BRANCH_CATEGORY_NORMAL, FALSE);
 	
 	//Now we'll go through and process the two children
 	cursor = cursor->next_sibling;
@@ -8050,7 +8053,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	 * 	goto update
 	 */
 	if(condition_block_node != NULL){
-		emit_branch(condition_block, condition_block_node, for_stmt_exit_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE);
+		emit_branch(condition_block, condition_block_node, for_stmt_exit_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE, TRUE);
 
 	//Otherwise - we're doing as the user wants here and just emitting a straight jump from this block to the body
 	} else {
@@ -8147,7 +8150,7 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	 * else
 	 * 	exit
 	 */
-	emit_branch(compound_stmt_end, ast_cursor->next_sibling, do_while_stmt_entry_block, do_while_stmt_exit_block, BRANCH_CATEGORY_NORMAL);
+	emit_branch(compound_stmt_end, ast_cursor->next_sibling, do_while_stmt_entry_block, do_while_stmt_exit_block, BRANCH_CATEGORY_NORMAL, TRUE);
 
 	//Now that we're done here, pop the break/continue stacks to remove these blocks
 	pop(&continue_stack);
@@ -8223,7 +8226,7 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	 * If destination -> end of loop
 	 * Else destination -> loop body
 	 */
-	emit_branch(while_statement_entry_block, conditional_cursor, while_statement_end_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE);
+	emit_branch(while_statement_entry_block, conditional_cursor, while_statement_end_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE, TRUE);
 
 	//Let's now find the end of the compound statement
 	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
@@ -8392,7 +8395,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 					current_entry_block = basic_block_alloc_and_estimate();
 
 					//Now branch out to the new current entry block
-					emit_branch(old_entry_block, conditional_node, compound_statement_results.starting_block, current_entry_block, BRANCH_CATEGORY_NORMAL);
+					emit_branch(old_entry_block, conditional_node, compound_statement_results.starting_block, current_entry_block, BRANCH_CATEGORY_NORMAL, FALSE);
 
 					//Next iteration of the loop, break out of switch
 					break;
@@ -8422,7 +8425,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 					}
 
 					//Emit the final branch out
-					emit_branch(current_entry_block, conditional_node, compound_statement_results.starting_block, else_compound_statement_values.starting_block, BRANCH_CATEGORY_NORMAL);
+					emit_branch(current_entry_block, conditional_node, compound_statement_results.starting_block, else_compound_statement_values.starting_block, BRANCH_CATEGORY_NORMAL, FALSE);
 
 					/**
 					 * If the else if compound statement final block does not end in a return, we'll need to make
@@ -8457,7 +8460,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		 * exit block here because we know that it's going to have at least one predecessor(this block)
 		 */
 		} else {
-			emit_branch(current_entry_block, conditional_node, compound_statement_results.starting_block, overall_exit_block, BRANCH_CATEGORY_NORMAL);
+			emit_branch(current_entry_block, conditional_node, compound_statement_results.starting_block, overall_exit_block, BRANCH_CATEGORY_NORMAL, FALSE);
 			if_results_package.final_block = overall_exit_block;
 
 			return if_results_package;
@@ -9385,7 +9388,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					 * else:
 					 * 	goto new block
 					 */
-					emit_branch(current_block, conditional_expression, continuing_to, new_block, BRANCH_CATEGORY_NORMAL);
+					emit_branch(current_block, conditional_expression, continuing_to, new_block, BRANCH_CATEGORY_NORMAL, TRUE);
 
 					//And as we go forward, this new block will be the current block
 					current_block = new_block;
@@ -9438,7 +9441,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					 * else 
 					 * 	goto new block
 					 */
-					emit_branch(current_block, conditional_node, breaking_to, new_block, BRANCH_CATEGORY_NORMAL);
+					emit_branch(current_block, conditional_node, breaking_to, new_block, BRANCH_CATEGORY_NORMAL, TRUE);
 
 					//Once we're out here, the current block is now the new one
 					current_block = new_block;
@@ -9876,7 +9879,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					 * else:
 					 * 	goto new block
 					 */
-					emit_branch(current_block, conditional_expression, continuing_to, new_block, BRANCH_CATEGORY_NORMAL);
+					emit_branch(current_block, conditional_expression, continuing_to, new_block, BRANCH_CATEGORY_NORMAL, TRUE);
 
 					//And as we go forward, this new block will be the current block
 					current_block = new_block;
@@ -9927,7 +9930,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					 * else 
 					 * 	goto new block
 					 */
-					emit_branch(current_block, conditional_node, breaking_to, new_block, BRANCH_CATEGORY_NORMAL);
+					emit_branch(current_block, conditional_node, breaking_to, new_block, BRANCH_CATEGORY_NORMAL, TRUE);
 
 					//Once we're out here, the current block is now the new one
 					current_block = new_block;
@@ -10496,6 +10499,10 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	 * block in the function
 	 */
 	compute_use_and_def_sets_for_function(current_function_blocks);
+
+	printf("\n\n\nBEFORE CONTROL REL\n\n\n\n");
+	print_all_cfg_blocks(cfg);
+	printf("BEFORE CONTROL REL\n\n\n\n");
 
 	/**
 	 * Now compute the dominance relations
