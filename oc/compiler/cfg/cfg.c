@@ -3238,8 +3238,48 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 	 * short circuit optimization here
 	 */
 	if(is_op_short_circuit_eligible(conditional_node->binary_operator) == FALSE){
-		if(get_branch_conditional_truthfullness(conditional_node) != BRANCH_CONDITIONAL_UNKNOWN){
-			printf("FOUND ONE TO OPTIMIZE\n\n\n");
+		/**
+		 * If we are able to off the bat determine whether or not this is true, then this
+		 * branch itself is going to be useless. Instead of emitting things, we will just
+		 * optimize as we go right here and jump either to if or else based on
+		 * the branch type and trutfulness
+		 */
+		branch_conditional_truthfullness_t truthfullness = get_branch_conditional_truthfullness(conditional_node);
+
+		switch(truthfullness){
+			/**
+			 * We have something that is provable to always be true. 
+			 *
+			 * If regular branch -> jump to if always
+			 * If inverse branch -> jump to else always
+			 */
+			case BRANCH_CONDITIONAL_ALWAYS_TRUE:
+				if(branch_category == BRANCH_CATEGORY_NORMAL){
+					emit_jump(current_block, if_block);
+				} else {
+					emit_jump(current_block, else_block);
+				}
+
+				return results;
+
+			/**
+			 * We have something that is provable to always be false. 
+			 *
+			 * If regular branch -> jump to else always
+			 * If inverse branch -> jump to if always
+			 */
+			case BRANCH_CONDITIONAL_ALWAYS_FALSE:
+				if(branch_category == BRANCH_CATEGORY_NORMAL){
+					emit_jump(current_block, else_block);
+				} else {
+					emit_jump(current_block, if_block);
+				}
+
+				return results;
+
+			//Anything else it's impossible to determine so we process normally
+			default:
+				break;
 		}
 
 		//First let the helper emit it
