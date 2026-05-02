@@ -470,6 +470,28 @@ static void mark(dynamic_array_t* function_blocks){
 					break;
 
 				/**
+				 * For jump statements, *if* we detect that
+				 * we have a virtual edge(i.e., we have a jump
+				 * but somehow have more than one successor), then
+				 * this jump is considered as important and needs
+				 * to have the consideration that normally happens
+				 * with marking. If this is not the case and it's a regular
+				 * jump, then we don't care and while it won't be swept,
+				 * it does not need to be marked like this one does
+				 */
+				case THREE_ADDR_CODE_JUMP_STMT:
+					if(current->successors.current_index > 1){
+						//Mark this as useful
+						current_stmt->mark = TRUE;
+						//Add it to the list
+						dynamic_array_add(&worklist, current_stmt);
+						//The block now has a mark
+						current->contains_mark = TRUE;
+					}
+
+					break;
+
+				/**
 				 * Raise statements are equivalent to ret statements
 				 * and are thus also always considered important
 				 */
