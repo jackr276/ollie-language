@@ -7291,7 +7291,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 				three_addr_var_t* variable_result = result->param_result.variable_result;
 
 				//We'll use a dummy variable for the stack region
-				three_addr_var_t* dummy_stack_region = emit_stack_param_memory_address_temp_var(parameter_type, call_side_region);
+				three_addr_var_t* dummy_stack_region = emit_memory_address_temp_var(parameter_type, call_side_region);
 
 				//Now we'll copy from the variable result into the dummy region
 				instruction_t* memory_copy = emit_memory_copy_instruction(dummy_stack_region, variable_result, call_side_region->size);

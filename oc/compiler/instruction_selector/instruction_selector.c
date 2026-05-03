@@ -12763,54 +12763,90 @@ static void handle_store_instruction(instruction_t* instruction){
 		 * on what the stack offset is
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
-			switch(instruction->assignee->linked_var->membership){
-				/**
-				 * Global or static variable, we will need to load these as rip-relative
-				 */
-				case GLOBAL_VARIABLE:
-				case STATIC_VARIABLE:
-					//This is going to be a global variable movement
-					instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
+			/**
+			 * If we actually have a linked var(most common), we'll use that
+			 */
+			if(instruction->assignee->linked_var != NULL){
+				switch(instruction->assignee->linked_var->membership){
+					/**
+					 * Global or static variable, we will need to load these as rip-relative
+					 */
+					case GLOBAL_VARIABLE:
+					case STATIC_VARIABLE:
+						//This is going to be a global variable movement
+						instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
 
-					//The address calc reg1 is the instruction pointer
-					instruction->address_calc_reg1 = instruction_pointer_variable;
+						//The address calc reg1 is the instruction pointer
+						instruction->address_calc_reg1 = instruction_pointer_variable;
 
-					//The global variable is held by the offset
-					instruction->rip_offset_variable = instruction->assignee;
-					
-					break;
+						//The global variable is held by the offset
+						instruction->rip_offset_variable = instruction->assignee;
+						
+						break;
 
-				/**
-				 * Non global variable - no special steps required
-				 */
-				default:
-					//Get the stack offset
-					stack_offset = instruction->assignee->linked_var->stack_region->function_local_base_address;
+					/**
+					 * Non global variable - no special steps required
+					 */
+					default:
+						//Get the stack offset
+						stack_offset = instruction->assignee->linked_var->stack_region->function_local_base_address;
 
-					//If it's not 0, we need to do some arithmetic
-					if(stack_offset != 0){
-						//Let's get the offset from this memory address
-						three_addr_const_t* offset = emit_direct_integer_or_char_constant(instruction->assignee->linked_var->stack_region->function_local_base_address, u64);
+						//If it's not 0, we need to do some arithmetic
+						if(stack_offset != 0){
+							//Let's get the offset from this memory address
+							three_addr_const_t* offset = emit_direct_integer_or_char_constant(stack_offset, u64);
 
-						//The first address calc register will be the stack pointer
-						instruction->address_calc_reg1 = stack_pointer_variable;
+							//The first address calc register will be the stack pointer
+							instruction->address_calc_reg1 = stack_pointer_variable;
 
-						//And we need to store the offset
-						instruction->offset = offset;
+							//And we need to store the offset
+							instruction->offset = offset;
 
-						//This counts for our destination only
-						instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+							//This counts for our destination only
+							instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
-					//If it is 0, we only need to deref the stack pointer
-					} else {
-						//This is the stack pointer, no offset is needed
-						instruction->destination_register = stack_pointer_variable;
+						//If it is 0, we only need to deref the stack pointer
+						} else {
+							//This is the stack pointer, no offset is needed
+							instruction->destination_register = stack_pointer_variable;
 
-						//Just dereference the destination here, nothing more
-						instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
-					}
+							//Just dereference the destination here, nothing more
+							instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
+						}
 
-					break;
+						break;
+				}
+
+			/**
+			 * Otherwise we have a temporary variable. If this is the case then we don't need to
+			 * worry about anything regarding global/static vars, we can just emit the region
+			 */
+			} else {
+				//Get the stack offset
+				stack_offset = instruction->assignee->associated_memory_region.stack_region->function_local_base_address;
+
+				//If it's not 0, we need to do some arithmetic
+				if(stack_offset != 0){
+					//Let's get the offset from this memory address
+					three_addr_const_t* offset = emit_direct_integer_or_char_constant(stack_offset, u64);
+
+					//The first address calc register will be the stack pointer
+					instruction->address_calc_reg1 = stack_pointer_variable;
+
+					//And we need to store the offset
+					instruction->offset = offset;
+
+					//This counts for our destination only
+					instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+				//If it is 0, we only need to deref the stack pointer
+				} else {
+					//This is the stack pointer, no offset is needed
+					instruction->destination_register = stack_pointer_variable;
+
+					//Just dereference the destination here, nothing more
+					instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
+				}
 			}
 
 			break;
