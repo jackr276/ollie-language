@@ -7161,10 +7161,12 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			three_addr_var_t* final_assignee = package.assignee;
 
 			/**
-			 * If we gave back a memory address var, there will be no associated assignment.
-			 * Let's do the assignment now
+			 * If we have a memory address var we'll need to do a copy here *unless*
+			 * we are dealing with something that is stack passed by copy. That memory
+			 * address value should be fine as is
 			 */
-			if(final_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+			if(final_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
+				&& is_type_stack_passed_by_copy(final_assignee->type) == FALSE){
 				//Emit the assignment
 				instruction_t* assignment_instruction = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
 
@@ -7235,6 +7237,9 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	//Now that we have all of this, we need to go through and emit our final assignments for the function calls
 	//themselves
 	for(u_int32_t i = 0; i < non_elaborative_parameter_results.current_index; i++){
+		//For any/all call side regions that we need
+		stack_region_t* call_side_region;
+
 		//Get the result
 		parameter_result_t* result = get_result_at_index(&non_elaborative_parameter_results, i);
 
@@ -7246,8 +7251,26 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 * is appropriate
 		 */
 		switch(parameter_type->type_class){
+			/**
+			 * Unions and structs are always, without exception, passed by copy. As such we don't need
+			 * to bother with anything else here. By this point we should have a memory region for these values
+			 * so we can copy from the local memory region to the struct memory region
+			 *
+			 * NOTE: structs/unions do not count as sse or gp params, so we don't need to increment either
+			 * of the counters
+			 */
 			case TYPE_CLASS_UNION:
 			case TYPE_CLASS_STRUCT:
+				//Create it
+				call_side_region = create_stack_region_for_type(&stack_passed_parameters, parameter_type);
+
+				//We only ever have variable results for this
+				three_addr_var_t* variable_result = result->param_result.variable_result;
+
+				printf("VARIABLE RESULT IS\n");
+				print_variable(stdout, variable_result, PRINTING_VAR_INLINE);
+				printf("\n\n\n\n");
+
 				printf("TODO NOT DONE\n\n\n\n\n\n");
 				exit(1);
 				break;
@@ -7301,10 +7324,10 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 						}
 
 						//Create it
-						stack_region_t* region = create_stack_region_for_type(&stack_passed_parameters, parameter_type);
+						call_side_region = create_stack_region_for_type(&stack_passed_parameters, parameter_type);
 
 						//The offset. Note that this comes from the function local base address because there is no offset to add here
-						three_addr_const_t* stack_offset = emit_direct_integer_or_char_constant(region->function_local_base_address, u64);
+						three_addr_const_t* stack_offset = emit_direct_integer_or_char_constant(call_side_region->function_local_base_address, u64);
 
 						//We need to emit a store statement now for our result
 						instruction_t* store_operation;
@@ -7371,11 +7394,11 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 						}
 
 						//Create it
-						stack_region_t* region = create_stack_region_for_type(&stack_passed_parameters, parameter_type);
+						call_side_region = create_stack_region_for_type(&stack_passed_parameters, parameter_type);
 
 						//The offset. Note that this comes from the function local base address because we are in the function that has
 						//allocated this value
-						three_addr_const_t* stack_offset = emit_direct_integer_or_char_constant(region->function_local_base_address, u64);
+						three_addr_const_t* stack_offset = emit_direct_integer_or_char_constant(call_side_region->function_local_base_address, u64);
 
 						//We need to emit a store statement now for our result
 						instruction_t* store_operation;
