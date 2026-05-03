@@ -7257,7 +7257,8 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			 * so we can copy from the local memory region to the struct memory region
 			 *
 			 * NOTE: structs/unions do not count as sse or gp params, so we don't need to increment either
-			 * of the counters
+			 * of the counters. We also don't need to add anything to the parameter list here, the storage
+			 * will be enough
 			 */
 			case TYPE_CLASS_UNION:
 			case TYPE_CLASS_STRUCT:
@@ -7267,12 +7268,20 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 				//We only ever have variable results for this
 				three_addr_var_t* variable_result = result->param_result.variable_result;
 
-				printf("VARIABLE RESULT IS\n");
-				print_variable(stdout, variable_result, PRINTING_VAR_INLINE);
-				printf("\n\n\n\n");
+				//We'll use a dummy variable for the stack region
+				three_addr_var_t* dummy_stack_region = emit_memory_address_temp_var(parameter_type, call_side_region);
 
-				printf("TODO NOT DONE\n\n\n\n\n\n");
-				exit(1);
+				//Now we'll copy from the variable result into the dummy region
+				instruction_t* memory_copy = emit_memory_copy_instruction(dummy_stack_region, variable_result, call_side_region->size);
+
+				//Add this into the block
+				add_statement(current_block, memory_copy);
+
+				//This is the first assignment if it's NULL
+				if(first_assignment_instruction == NULL){
+					first_assignment_instruction = memory_copy;
+				}
+
 				break;
 
 			/**
