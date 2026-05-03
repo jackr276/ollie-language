@@ -7527,7 +7527,23 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 * for it
 		 */
 		for(u_int32_t i = 0; i < pass_by_copy_index; i++){
-			pass_by_copy_statements[i]->pass_by_copy_base_adjustment = stack_passed_parameters.total_size;
+			//Extract the statement to use
+			instruction_t* memory_copy = pass_by_copy_statements[i];
+
+			/**
+			 * For certain variable types(memory addresses), we will need
+			 * to do this. If however we just have a normal variable(say
+			 * for example a pointer) then this is not needed
+			 */
+			switch(memory_copy->op1->variable_type){
+				case VARIABLE_TYPE_MEMORY_ADDRESS:
+				case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+					memory_copy->pass_by_copy_base_adjustment = stack_passed_parameters.total_size;
+					break;
+				//By default we don't need to do anything
+				default:
+					break;
+			}
 		}
 	}
 
