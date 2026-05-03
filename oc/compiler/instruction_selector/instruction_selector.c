@@ -12898,12 +12898,6 @@ static void handle_store_instruction(instruction_t* instruction){
 static void handle_store_with_constant_offset_instruction(instruction_t* instruction){
 	int64_t stack_offset;
 
-	//TODO APPLY SAME ASSIGNEE FIX
-	//
-	//
-	//
-	//
-
 	//For later use
 	symtab_variable_record_t* linked_var;
 
@@ -12920,55 +12914,93 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 			//Grab the linked var out
 			linked_var = instruction->assignee->linked_var;
 
-			switch(linked_var->membership){
-				/**
-				 * Global and static variable require special rip-relative addressing to be done
-				 */
-				case GLOBAL_VARIABLE:
-				case STATIC_VARIABLE:
-					//The first address calc register is the instruction pointer always
-					instruction->address_calc_reg1 = instruction_pointer_variable;
+			/**
+			 * Most of the time the linked var will not be NULL, but we need to account
+			 * for the cases(although rare) where it will be
+			 */
+			if(linked_var != NULL){
+				switch(linked_var->membership){
+					/**
+					 * Global and static variable require special rip-relative addressing to be done
+					 */
+					case GLOBAL_VARIABLE:
+					case STATIC_VARIABLE:
+						//The first address calc register is the instruction pointer always
+						instruction->address_calc_reg1 = instruction_pointer_variable;
 
-					//The offset is already in place, we just need to set the rip offset variable based on the assignee
-					instruction->rip_offset_variable = instruction->assignee;
+						//The offset is already in place, we just need to set the rip offset variable based on the assignee
+						instruction->rip_offset_variable = instruction->assignee;
 
-					//All that we need to do now is change the calculation mode to be rip with offset
-					instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET;
+						//All that we need to do now is change the calculation mode to be rip with offset
+						instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET;
 
-					break;
+						break;
 
-				/**
-				 * Not global or static - pure stack memory we're dealing with here
-				 */
-				default:
-					//Get the stack offset
-					stack_offset = instruction->assignee->linked_var->stack_region->function_local_base_address;
+					/**
+					 * Not global or static - pure stack memory we're dealing with here
+					 */
+					default:
+						//Get the stack offset
+						stack_offset = instruction->assignee->linked_var->stack_region->function_local_base_address;
 
-					//If it's not 0, we need to do some arithmetic with the constants
-					if(stack_offset != 0){
-						//This is still the stack pointer
-						instruction->address_calc_reg1 = stack_pointer_variable;
+						//If it's not 0, we need to do some arithmetic with the constants
+						if(stack_offset != 0){
+							//This is still the stack pointer
+							instruction->address_calc_reg1 = stack_pointer_variable;
 
-						//We'll now add the stack offset to the offset that we already have
-						//in the "offset variable"
-						sum_constant_with_raw_int64_value(instruction->offset, i64, stack_offset);
+							//We'll now add the stack offset to the offset that we already have
+							//in the "offset variable"
+							sum_constant_with_raw_int64_value(instruction->offset, i64, stack_offset);
 
-						//Once that's done, we just need to change the address calc mode
-						instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+							//Once that's done, we just need to change the address calc mode
+							instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
-					//Even if this is 0, we still need to account for the offset in the original
-					//statement
-					} else {
-						//The base address is the assignee
-						instruction->address_calc_reg1 = stack_pointer_variable;
+						//Even if this is 0, we still need to account for the offset in the original
+						//statement
+						} else {
+							//The base address is the assignee
+							instruction->address_calc_reg1 = stack_pointer_variable;
 
-						//The offset is already stored in the "offset" field
-						
-						//This has the address calc and the offset
-						instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
-					}
+							//The offset is already stored in the "offset" field
+							
+							//This has the address calc and the offset
+							instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+						}
 
-					break;
+						break;
+				}
+
+			/**
+			 * When the variable is NULL we know that the stack offset will be coming from the 
+			 * actual three address var itself
+			 */
+			} else {
+				//Get the stack offset
+				stack_offset = instruction->assignee->associated_memory_region.stack_region->function_local_base_address;
+
+				//If it's not 0, we need to do some arithmetic with the constants
+				if(stack_offset != 0){
+					//This is still the stack pointer
+					instruction->address_calc_reg1 = stack_pointer_variable;
+
+					//We'll now add the stack offset to the offset that we already have
+					//in the "offset variable"
+					sum_constant_with_raw_int64_value(instruction->offset, i64, stack_offset);
+
+					//Once that's done, we just need to change the address calc mode
+					instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+				//Even if this is 0, we still need to account for the offset in the original
+				//statement
+				} else {
+					//The base address is the assignee
+					instruction->address_calc_reg1 = stack_pointer_variable;
+
+					//The offset is already stored in the "offset" field
+					
+					//This has the address calc and the offset
+					instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+				}
 			}
 
 			break;
