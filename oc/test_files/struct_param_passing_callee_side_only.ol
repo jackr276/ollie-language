@@ -17,6 +17,13 @@ pub fn param_passed_struct(parameter_struct:struct my_struct) -> i32{
 }
 
 
+pub fn control_case() -> i32 {
+	let dummy:param_passed = {'a', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 3.33};
+	
+	ret dummy:x[2] + dummy:c + dummy:y;
+}
+
+
 //Dummy
 pub fn main() -> i32 {
 	ret 0;
