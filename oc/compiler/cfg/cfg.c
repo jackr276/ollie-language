@@ -7212,6 +7212,20 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		generic_type_t* parameter_type = dynamic_array_get_at(&(signature->function_parameters), i);
 
 		/**
+		 * Based on what the type here is we will add stack regions/copy assignments as
+		 * is appropriate
+		 *
+		 * TODO HERE FOR ALLOCATIONS
+		 */
+		switch(parameter_type->type_class){
+			case TYPE_CLASS_UNION:
+			case TYPE_CLASS_ARRAY:
+				break;
+			default:
+				break;
+		}
+
+		/**
 		 * Deconstruct our processing to be by-class. This is going to be important for tracking
 		 * when/for which parameter we need to start doing stack allocations for(if any)
 		 */
