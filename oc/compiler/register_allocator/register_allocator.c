@@ -4569,12 +4569,30 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 			after_stack_allocation = after_stack_allocation->next_statement;
 		}
 
-		//For each function entry block, we need to emit a stack subtraction that is the size of that given variable
-		instruction_t* stack_allocation = emit_stack_allocation_statement(cfg->stack_pointer, cfg->type_symtab, local_stack_size);
+		/**
+		 * Do we have something like:
+		 * subq $16, %rsp
+		 * subq $32, %rsp
+		 * ....
+		 *
+		 * In that case, we can save an instruction be combining the two into something like:
+		 * subq $48, %rsp
+		 * ...
+		 */
+		if(after_stack_allocation->instruction_type == SUBQ 
+			&& after_stack_allocation->destination_register == stack_pointer){
 
-		//Now that we have the stack allocation statement, we can add it in to be right before the current leader statement
-		insert_instruction_before_given(stack_allocation, after_stack_allocation);
+			//Instead of allocating just bump up the size
+			sum_constant_with_raw_int64_value(after_stack_allocation->source_immediate, u64_type, local_stack_size);
 
+		} else {
+			//For each function entry block, we need to emit a stack subtraction that is the size of that given variable
+			instruction_t* stack_allocation = emit_stack_allocation_statement(cfg->stack_pointer, cfg->type_symtab, local_stack_size);
+
+			//Now that we have the stack allocation statement, we can add it in to be right before the current leader statement
+			insert_instruction_before_given(stack_allocation, after_stack_allocation);
+		}
+		
 		//Now we need to go through every exit block and emit the stack deallocation
 		for(u_int32_t i = 0; i < function_exit->predecessors.current_index; i++){
 			//Get the predecessor out
