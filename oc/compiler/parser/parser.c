@@ -2110,6 +2110,38 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 					perform_constant_assignment_coercion(current_param, final_type);
 				}
 
+				/**
+				 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
+				 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
+				 * no dereference from said expression. Dereferencing would mess up the memory copying, we should just be
+				 * doing an address calculation.
+				 */
+				if(is_copy_assignment_required(param_type, current_param->inferred_type) == TRUE){
+					/**
+					 * If the right hand expression is a postfix expression *and* we are looking
+					 * to perform a memory copy assignment here, we need to flag that 
+					 * we do *not* require a dereference to make this work
+					 */
+					switch(current_param->ast_node_type){
+						case AST_NODE_TYPE_POSTFIX_EXPR:
+							current_param->dereference_needed = FALSE;
+							break;
+						/**
+						 * Copy assignment through ternaries produce undefined behavior
+						 */
+						case AST_NODE_TYPE_TERNARY_EXPRESSION:
+							current_param->dereference_needed = FALSE;
+
+							//This is unstable
+							print_parse_message(MESSAGE_TYPE_WARNING, "Copy assignment through ternary produces undefined behavior", parser_line_num);
+							num_warnings++;
+							break;
+
+						default:
+							break;
+					}
+				}
+
 				//Special checking here - if we have an enum type that is being assigned to, we need
 				//to make sure that it's being assigned to a valid value in it's range
 				if(is_enum_type(param_type) == TRUE && current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
@@ -3210,8 +3242,24 @@ loop_end:
 			 * to perform a memory copy assignment here, we need to flag that 
 			 * we do *not* require a dereference to make this work
 			 */
-			if(expr->ast_node_type == AST_NODE_TYPE_POSTFIX_EXPR){
-				expr->dereference_needed = FALSE;
+			switch(expr->ast_node_type){
+				case AST_NODE_TYPE_POSTFIX_EXPR:
+					expr->dereference_needed = FALSE;
+					break;
+
+				/**
+				 * Copy assignment through ternaries produce undefined behavior
+				 */
+				case AST_NODE_TYPE_TERNARY_EXPRESSION:
+					expr->dereference_needed = FALSE;
+
+					//This is unstable
+					print_parse_message(MESSAGE_TYPE_WARNING, "Copy assignment through ternary produces undefined behavior", parser_line_num);
+					num_warnings++;
+					break;
+
+				default:
+					break;
 			}
 
 			//Store this for down the road - how many bytes do we need to copy
@@ -11893,8 +11941,24 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 		 * to perform a memory copy assignment here, we need to flag that 
 		 * we do *not* require a dereference to make this work
 		 */
-		if(initializer_node->ast_node_type == AST_NODE_TYPE_POSTFIX_EXPR){
-			initializer_node->dereference_needed = FALSE;
+		switch(initializer_node->ast_node_type){
+			case AST_NODE_TYPE_POSTFIX_EXPR:
+				initializer_node->dereference_needed = FALSE;
+				break;
+
+			/**
+			 * Copy assignment through ternaries produce undefined behavior
+			 */
+			case AST_NODE_TYPE_TERNARY_EXPRESSION:
+				initializer_node->dereference_needed = FALSE;
+
+				//This is unstable
+				print_parse_message(MESSAGE_TYPE_WARNING, "Copy assignment through ternary produces undefined behavior", parser_line_num);
+				num_warnings++;
+				break;
+
+			default:
+				break;
 		}
 
 		//Store the bytes that we need to copy here
@@ -12870,7 +12934,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 	 * on the given stack data area. This ensures that the overall size is going to be 8-byte
 	 * aligned, and that all of the padding if needed is present
 	 */
-	if(sse_parameter_number > 6 || general_purpose_parameter_number > 6){
+	if(function_record->contains_stack_params == TRUE){
 		align_stack_data_area(&(function_record->stack_passed_parameters));
 	}
 

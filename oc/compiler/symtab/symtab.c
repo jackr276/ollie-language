@@ -812,14 +812,23 @@ symtab_variable_record_t* create_parameter_alias_variable(symtab_function_record
  * going to depend largely on if it's a floating point value or not *and*
  * if the current number of parameters is above the amount that are allowed. This
  * value is different for float/gp
+ *
+ * We also by default pass all structs and unions by copy, so if we see that
+ * this variable is one of them we'll also need to make space for it
  */
 static inline u_int8_t is_parameter_stack_passed(symtab_variable_record_t* variable){
-	//Non-float our max is 6 register
-	if(IS_FLOATING_POINT(variable->type_defined_as) == FALSE){
-		return variable->class_relative_function_parameter_order > MAX_GP_REGISTER_PASSED_PARAMS ? TRUE : FALSE;
-	//If it is a float then our max is 8 registers
-	} else {
-		return variable->class_relative_function_parameter_order > MAX_SSE_REGISTER_PASSED_PARAMS ? TRUE : FALSE;
+	switch(variable->type_defined_as->type_class){
+		case TYPE_CLASS_UNION:
+		case TYPE_CLASS_STRUCT:	
+			return TRUE;
+		default:
+			//Non-float our max is 6 register
+			if(IS_FLOATING_POINT(variable->type_defined_as) == FALSE){
+				return variable->class_relative_function_parameter_order > MAX_GP_REGISTER_PASSED_PARAMS ? TRUE : FALSE;
+			//If it is a float then our max is 8 registers
+			} else {
+				return variable->class_relative_function_parameter_order > MAX_SSE_REGISTER_PASSED_PARAMS ? TRUE : FALSE;
+			}
 	}
 }
 

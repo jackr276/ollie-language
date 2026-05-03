@@ -191,6 +191,8 @@ struct function_type_t{
 	u_int32_t general_purpose_param_count;
 	//SSE param count
 	u_int32_t SSE_param_count;
+	//The pass by copy param count
+	u_int32_t pass_by_copy_param_count;
 	//Does this return a void type?
 	u_int8_t returns_void;
 	//What is the visibility level of the given function

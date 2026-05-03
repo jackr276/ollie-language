@@ -189,7 +189,6 @@ struct three_addr_var_t{
 		local_constant_t* local_constant;
 		//Rip relative function name for loading function pointers
 		symtab_function_record_t* rip_relative_function;
-
 	} associated_memory_region;
 	//What is the ssa generation level?
 	u_int32_t ssa_generation;
@@ -353,6 +352,8 @@ struct instruction_t{
 	} type_storage;
 	//For lea multiplication
 	u_int64_t lea_multiplier;
+	//The base adjustment for a pass-by-copy-parameter
+	u_int32_t pass_by_copy_base_adjustment;
 	//The function called
 	symtab_function_record_t* called_function;
 	//The variable record
@@ -540,6 +541,13 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var);
  * "memory address vars" will represent the memory address of the variable in question
 */
 three_addr_var_t* emit_memory_address_temp_var(generic_type_t* type, stack_region_t* region);
+
+/**
+ * Create and return a three address variable that represents the memory address of a stack passed
+ * parameter. This is specifically used for copy assignment with pass by copy parameters like structs
+ * and unions
+ */
+three_addr_var_t* emit_stack_param_memory_address_temp_var(generic_type_t* type, stack_region_t* region);
 
 /**
  * Create and return a three address var from an existing variable. These special
