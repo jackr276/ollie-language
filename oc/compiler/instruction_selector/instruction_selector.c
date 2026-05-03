@@ -12898,6 +12898,12 @@ static void handle_store_instruction(instruction_t* instruction){
 static void handle_store_with_constant_offset_instruction(instruction_t* instruction){
 	int64_t stack_offset;
 
+	//TODO APPLY SAME ASSIGNEE FIX
+	//
+	//
+	//
+	//
+
 	//For later use
 	symtab_variable_record_t* linked_var;
 
@@ -13017,6 +13023,13 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 static void handle_store_with_variable_offset_instruction(instruction_t* instruction){
 	int64_t stack_offset;
 	instruction_t* global_variable_address;
+
+	//TODO APPLY SAME ASSIGNEE FIX
+	//
+	//
+	//
+	//
+
 
 	//For later use
 	symtab_variable_record_t* linked_var;
