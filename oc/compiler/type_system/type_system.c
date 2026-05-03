@@ -2735,6 +2735,9 @@ void add_parameter_to_function_type(generic_type_t* function_type, generic_type_
 			//Flag that we have stack params
 			internal_type->contains_stack_params = TRUE;
 
+			//These are passed by copy so bump it
+			internal_type->pass_by_copy_param_count++;
+
 			//Add this into the dynamic array
 			dynamic_array_add(&(internal_type->function_parameters), parameter);
 

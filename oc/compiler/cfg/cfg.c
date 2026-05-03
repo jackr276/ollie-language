@@ -7251,10 +7251,18 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	//Keep track of the indices for our specific counts. This will be important if we have to do stack-saving
 	u_int32_t current_sse_index = 1;
 	u_int32_t current_gp_index = 1;
+	u_int32_t pass_by_copy_index = 0;
 
 	//Keep track of the first assignment instruction. We're going to need to insert
 	//the stack allocation before it
 	instruction_t* first_assignment_instruction = NULL;
+
+	/**
+	 * If we have memory copied variables, we are going to need to emit adjustments after
+	 * we have a stack allocation statement. This will be done after the stack allocation
+	 * happens, but we will need to hold onto these variables in here
+	 */
+	three_addr_var_t* pass_by_copy_memory_addresses[signature->pass_by_copy_param_count];
 
 	//Now that we have all of this, we need to go through and emit our final assignments for the function calls
 	//themselves
@@ -7295,6 +7303,10 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 				//Now we'll copy from the variable result into the dummy region
 				instruction_t* memory_copy = emit_memory_copy_instruction(dummy_stack_region, variable_result, call_side_region->size);
+
+				//Store the memory address variable that we're going to need to adjust
+				pass_by_copy_memory_addresses[pass_by_copy_index] = variable_result;
+				pass_by_copy_index++;
 
 				//Add this into the block
 				add_statement(current_block, memory_copy);
@@ -7501,6 +7513,14 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 		//This goes right after the function call statement
 		insert_instruction_after_given(stack_deallocation, function_call_statement);
+
+		//Run through all of these
+		for(u_int32_t i = 0; i < pass_by_copy_index; i++){
+			printf("NEED TO ADJUST\n");
+			print_variable(stdout, pass_by_copy_memory_addresses[i], PRINTING_VAR_INLINE);
+			printf("\n");
+
+		}
 
 		//Once we've done all of that - this has served its purpose
 		stack_data_area_dealloc(&stack_passed_parameters);
