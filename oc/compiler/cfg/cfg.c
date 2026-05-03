@@ -194,6 +194,21 @@ static inline u_int8_t is_variable_data_segment_variable(symtab_variable_record_
 
 
 /**
+ * Does a given type require copy assignment? Structs and unions fall under this category
+ */
+static inline u_int8_t does_type_require_parameter_copy_assignment(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_UNION:
+			return TRUE;
+
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Is the given three address code statement a binary operation?
  */
 static inline u_int8_t is_binary_operation(instruction_t* statement){

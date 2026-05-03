@@ -2721,6 +2721,8 @@ void add_parameter_to_function_type(generic_type_t* function_type, generic_type_
 		//Early return to skip all of this other processing
 		return;
 	}
+
+	//TODO ADD HERE
 	
 	//Let's up our counts for parameter types before we add this in
 	if(IS_FLOATING_POINT(parameter) == FALSE){
