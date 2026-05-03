@@ -542,6 +542,13 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var);
 three_addr_var_t* emit_memory_address_temp_var(generic_type_t* type, stack_region_t* region);
 
 /**
+ * Create and return a three address variable that represents the memory address of a stack passed
+ * parameter. This is specifically used for copy assignment with pass by copy parameters like structs
+ * and unions
+ */
+three_addr_var_t* emit_stack_param_memory_address_temp_var(generic_type_t* type, stack_region_t* region);
+
+/**
  * Create and return a three address var from an existing variable. These special
  * "memory address vars" will represent the memory address of the variable in question
 */
