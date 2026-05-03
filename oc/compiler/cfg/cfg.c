@@ -7317,6 +7317,12 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 					first_assignment_instruction = memory_copy;
 				}
 
+				/**
+				 * This function performs a copy assignment, so we need to make sure everything here 
+				 * is going to be aligned
+				 */
+				current_function->requires_initial_alignment = TRUE;
+
 				break;
 
 			/**
