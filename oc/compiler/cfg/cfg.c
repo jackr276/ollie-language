@@ -178,6 +178,21 @@ static inline u_int8_t is_type_stack_passed_by_reference(generic_type_t* type){
 
 
 /**
+ * When we do stack passed parameters, struct and union types
+ * are always passed by copy whilst everything else is by reference
+ */
+static inline u_int8_t is_type_stack_passed_by_copy(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_UNION:
+		case TYPE_CLASS_STRUCT:	
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Is a given variable a data segment variable? These variables are not actually
  * stored in registers or in memory so we need to treat them a bit differently. In
  * ollie only static and global variables fit the bill for this
@@ -4082,6 +4097,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 					 * from memory in any way
 					 */
 					if(variable->stack_variable == TRUE){
+						printf("HERE\n\n\n");
 						//Let the helper emit our load from memory
 						return emit_automatic_load_from_memory(basic_block, variable);
 
@@ -4103,6 +4119,8 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 				 * dereference emitted because they can only be accessed via the array accessor
 				 */
 				if(side == SIDE_TYPE_RIGHT){
+					//TODO HERE - we need to account for when stack params are not passed by memory
+					printf("HERE2\n\n\n");
 					return emit_automatic_load_from_memory(basic_block, variable);
 
 				//Otherwise just emit a variable
