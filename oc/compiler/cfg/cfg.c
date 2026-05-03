@@ -4152,9 +4152,17 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 						return emit_memory_address_var(variable);
 					}
 
-				//Otherwise just emit a variable
 				} else {
-					return emit_var(variable);
+					/**
+					 * If we have a stack passed by copy variable, we need the memory address. This
+					 * will only happen for structs and unions. Otherwise we just have a regular 
+					 * variable(most common)
+					 */
+					if(is_type_stack_passed_by_copy(variable->type_defined_as) == FALSE){
+						return emit_var(variable);
+					} else {
+						return emit_memory_address_var(variable);
+					}
 				}
 			}
 
