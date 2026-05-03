@@ -5240,8 +5240,6 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 			exit(1);
 	}
 
-	//Now that we've handled all of the emitting, we need to check and see if we have any special cases here where 
-	//we need to do additional work to reassign this
 	/**
 	 * Logic here: if this is not some simple identifier(it could be array access, struct access, etc.), then
 	 * we'll need to perform this duplication. If it is just an identifier, then we're able to leave this be
