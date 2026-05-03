@@ -33,6 +33,6 @@ pub fn main() -> i32 {
 										{4, 8, '\0'}
 										];
 
-	//Should return 4 + 3 + 'a' which is 104 - coming from element 3 in the array
+	//Should return 5 + 3 + 'a' which is 105 - coming from element 3 in the array
 	ret @pass_by_copy_struct_pass_through(my_struct_arr);
 }
