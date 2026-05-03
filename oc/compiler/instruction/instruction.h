@@ -189,7 +189,6 @@ struct three_addr_var_t{
 		local_constant_t* local_constant;
 		//Rip relative function name for loading function pointers
 		symtab_function_record_t* rip_relative_function;
-
 	} associated_memory_region;
 	//What is the ssa generation level?
 	u_int32_t ssa_generation;
@@ -353,6 +352,8 @@ struct instruction_t{
 	} type_storage;
 	//For lea multiplication
 	u_int64_t lea_multiplier;
+	//The base adjustment for a pass-by-copy-parameter
+	u_int32_t pass_by_copy_base_adjustment;
 	//The function called
 	symtab_function_record_t* called_function;
 	//The variable record

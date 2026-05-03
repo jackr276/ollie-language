@@ -7262,7 +7262,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 * we have a stack allocation statement. This will be done after the stack allocation
 	 * happens, but we will need to hold onto these variables in here
 	 */
-	three_addr_var_t* pass_by_copy_memory_addresses[signature->pass_by_copy_param_count];
+	instruction_t* pass_by_copy_statements[signature->pass_by_copy_param_count];
 
 	//Now that we have all of this, we need to go through and emit our final assignments for the function calls
 	//themselves
@@ -7305,7 +7305,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 				instruction_t* memory_copy = emit_memory_copy_instruction(dummy_stack_region, variable_result, call_side_region->size);
 
 				//Store the memory address variable that we're going to need to adjust
-				pass_by_copy_memory_addresses[pass_by_copy_index] = variable_result;
+				pass_by_copy_statements[pass_by_copy_index] = memory_copy;
 				pass_by_copy_index++;
 
 				//Add this into the block
@@ -7514,16 +7514,14 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		//This goes right after the function call statement
 		insert_instruction_after_given(stack_deallocation, function_call_statement);
 
-		//Run through all of these
+		/**
+		 * If we have memory copy statements, we need to adjust the offset
+		 * of the source memory region because we've emitted new stack allocation statements
+		 * for it
+		 */
 		for(u_int32_t i = 0; i < pass_by_copy_index; i++){
-			printf("NEED TO ADJUST\n");
-			print_variable(stdout, pass_by_copy_memory_addresses[i], PRINTING_VAR_INLINE);
-			printf("\n");
-
+			pass_by_copy_statements[i]->pass_by_copy_base_adjustment = stack_passed_parameters.total_size;
 		}
-
-		//Once we've done all of that - this has served its purpose
-		stack_data_area_dealloc(&stack_passed_parameters);
 	}
 
 	/**

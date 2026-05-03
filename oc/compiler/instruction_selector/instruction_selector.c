@@ -1232,12 +1232,12 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
  * This function will update the last instruction reference so that we always maintain a pointer to the last instruction in
  * our work area
  */
-static inline void emit_16_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t current_offset){
+static inline void emit_16_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
 	//Double quad word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(double_quad_word);
 
 	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
-	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
+	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
 	three_addr_const_t* dest_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
 
 	//First load the 16 bytes out of memory
@@ -1271,12 +1271,12 @@ static inline void emit_16_byte_copy_pair(instruction_t** last_instruction, thre
  * This function will update the last instruction reference so that we always maintain a pointer to the last instruction in
  * our work area
  */
-static inline void emit_8_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t current_offset){
+static inline void emit_8_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
 	//Quad word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(i64);
 
 	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
-	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
+	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
 	three_addr_const_t* dest_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
 
 	//First load the 8 bytes out of memory
@@ -1310,12 +1310,12 @@ static inline void emit_8_byte_copy_pair(instruction_t** last_instruction, three
  * This function will update the last instruction reference so that we always maintain a pointer to the last instruction in
  * our work area
  */
-static inline void emit_4_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t current_offset){
+static inline void emit_4_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
 	//Double word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(i32);
 
 	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
-	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
+	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
 	three_addr_const_t* dest_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
 
 	//First load the 4 bytes out of memory
@@ -1349,12 +1349,12 @@ static inline void emit_4_byte_copy_pair(instruction_t** last_instruction, three
  * This function will update the last instruction reference so that we always maintain a pointer to the last instruction in
  * our work area
  */
-static inline void emit_2_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t current_offset){
+static inline void emit_2_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
 	//Word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(i16);
 
 	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
-	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
+	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
 	three_addr_const_t* dest_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
 
 	//First load the 2 bytes out of memory
@@ -1412,6 +1412,14 @@ static void convert_memory_copy_statement_into_loads_and_stores(instruction_wind
 
 	//Maintain the current offset. This is going to be the same for the source and destination
 	u_int64_t current_offset = 0;
+
+	/**
+	 * Due to unique situations that we may enounter(like pass by copy parameters), we may need
+	 * to adjust the memory address that the source has if we're copying after a new stack allocation
+	 * statement. We maintain a base adjustment amoutn just for this purpose
+	 */
+	u_int64_t source_adjustment = memory_copy_statement->pass_by_copy_base_adjustment;
+
 	//We always use the dedicated field to determine how many bytes we should be copying
 	u_int64_t remaining_copy_amount = memory_copy_statement->optional_storage.byte_amount_to_copy;
 
@@ -1424,7 +1432,7 @@ static void convert_memory_copy_statement_into_loads_and_stores(instruction_wind
 		 * byte copy
 		 */
 		if(remaining_copy_amount >= 16) {
-			emit_16_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, current_offset);
+			emit_16_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, current_offset, source_adjustment);
 
 			//We copied 16 so we knock down how much we have left
 			remaining_copy_amount -= 16;
@@ -1436,7 +1444,7 @@ static void convert_memory_copy_statement_into_loads_and_stores(instruction_wind
 		 * More than 8 but less than 16, we will use a regular movq for this
 		 */
 		} else if(remaining_copy_amount >= 8) {
-			emit_8_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, current_offset);
+			emit_8_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, current_offset, source_adjustment);
 
 			//We copied 8 so we knock down how much we have left
 			remaining_copy_amount -= 8;
@@ -1448,7 +1456,7 @@ static void convert_memory_copy_statement_into_loads_and_stores(instruction_wind
 		 * More than 4 but less than 8, we will use a movl for this
 		 */
 		} else if(remaining_copy_amount >= 4) {
-			emit_4_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, current_offset);
+			emit_4_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, current_offset, source_adjustment);
 
 			//We copied 4 so we knock down how much we have left
 			remaining_copy_amount -= 4;
@@ -1460,7 +1468,7 @@ static void convert_memory_copy_statement_into_loads_and_stores(instruction_wind
 		 * More than 2 but less than 4 - copy 2 at a time
 		 */
 		} else if(remaining_copy_amount >= 2) {
-			emit_2_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, current_offset);
+			emit_2_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, current_offset, source_adjustment);
 
 			//We copied 2 so we knock down how much we have left
 			remaining_copy_amount -= 2;
