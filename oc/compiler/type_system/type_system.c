@@ -2706,44 +2706,68 @@ void add_parameter_to_function_type(generic_type_t* function_type, generic_type_
 	function_type_t* internal_type = function_type->internal_types.function_type;
 
 	/**
-	 * Special case - handle adding if we have an elaborative param
+	 * Based on what kind of parameter we have here, we may need to flag
+	 * this function as having stack passed or elaborative parameters.
 	 */
-	if(parameter->type_class == TYPE_CLASS_ELABORATIVE){
-		//Flag that we do have stack params
-		internal_type->contains_stack_params = TRUE;
-
-		//Very important - we need to flag that we also have an elaborative stack param here
-		internal_type->contains_elaborative_stack_param = TRUE;
-
-		//Add this into the dynamic array
-		dynamic_array_add(&(internal_type->function_parameters), parameter);
-
-		//Early return to skip all of this other processing
-		return;
-	}
-
-	//TODO ADD HERE
-	
-	//Let's up our counts for parameter types before we add this in
-	if(IS_FLOATING_POINT(parameter) == FALSE){
-		internal_type->general_purpose_param_count++;
-
-		//If we have more than 6 that's stack params
-		if(internal_type->general_purpose_param_count > MAX_GP_REGISTER_PASSED_PARAMS){
+	switch(parameter->type_class){
+		/**
+		 * Special case - handle adding if we have an elaborative param
+		 */
+		case TYPE_CLASS_ELABORATIVE:
+			//Flag that we do have stack params
 			internal_type->contains_stack_params = TRUE;
-		}
 
-	} else {
-		internal_type->SSE_param_count++;
+			//Very important - we need to flag that we also have an elaborative stack param here
+			internal_type->contains_elaborative_stack_param = TRUE;
 
-		//If we have more than 6 that's stack params
-		if(internal_type->SSE_param_count > MAX_SSE_REGISTER_PASSED_PARAMS){
+			//Add this into the dynamic array
+			dynamic_array_add(&(internal_type->function_parameters), parameter);
+
+			return;
+
+		/**
+		 * Structs and unions - *not struct/union pionters*, require stack
+		 * space because we are assuming that the user is attempting to do a
+		 * copy assignment for this
+		 */
+		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_UNION:
+			//Flag that we have stack params
 			internal_type->contains_stack_params = TRUE;
-		}
-	}
 
-	//Add this into the dynamic array
-	dynamic_array_add(&(internal_type->function_parameters), parameter);
+			//Add this into the dynamic array
+			dynamic_array_add(&(internal_type->function_parameters), parameter);
+
+			return;
+
+		/**
+		 * Everything else falls under this category and is treated normally. There is
+		 * no copy assignment for arrays, arrays as function parameters decay to pointers
+		 */
+		default:
+			//Let's up our counts for parameter types before we add this in
+			if(IS_FLOATING_POINT(parameter) == FALSE){
+				internal_type->general_purpose_param_count++;
+
+				//If we have more than 6 that's stack params
+				if(internal_type->general_purpose_param_count > MAX_GP_REGISTER_PASSED_PARAMS){
+					internal_type->contains_stack_params = TRUE;
+				}
+
+			} else {
+				internal_type->SSE_param_count++;
+
+				//If we have more than 6 that's stack params
+				if(internal_type->SSE_param_count > MAX_SSE_REGISTER_PASSED_PARAMS){
+					internal_type->contains_stack_params = TRUE;
+				}
+			}
+
+			//Add this into the dynamic array
+			dynamic_array_add(&(internal_type->function_parameters), parameter);
+			
+			return;
+	}
 }
 
 
