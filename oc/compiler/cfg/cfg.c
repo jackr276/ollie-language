@@ -4097,7 +4097,6 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 					 * from memory in any way
 					 */
 					if(variable->stack_variable == TRUE){
-						printf("HERE\n\n\n");
 						//Let the helper emit our load from memory
 						return emit_automatic_load_from_memory(basic_block, variable);
 
@@ -4119,14 +4118,21 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 				 * dereference emitted because they can only be accessed via the array accessor
 				 */
 				if(side == SIDE_TYPE_RIGHT){
-					//TODO HERE - we need to account for when stack params are not passed by memory
-					printf("HERE2\n\n\n");
-					return emit_automatic_load_from_memory(basic_block, variable);
+					/**
+					 * If the given type is a struct or union, we expect it to be passed
+					 * via copy. As such, we do not need to do any kind of automatic
+					 * loading/unloading from memory, we can instead just emit the memory
+					 * address
+					 */
+					if(is_type_stack_passed_by_copy(variable->type_defined_as) == FALSE){
+						return emit_automatic_load_from_memory(basic_block, variable);
+					} else {
+						return emit_memory_address_var(variable);
+					}
 
 				//Otherwise just emit a variable
 				} else {
 					return emit_var(variable);
-
 				}
 			}
 
@@ -4858,7 +4864,6 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 		//Get this if there is one
 		symtab_variable_record_t* base_address_variable = assignee->linked_var;
 
-
 		/**
 		 * If we have a linked variable that is coming to us from the stack, we'll
 		 * need to automatically get this out of the stack for our uses here. Remember
@@ -4898,6 +4903,7 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 			 */
 			} else if(is_type_stack_passed_by_reference(base_address_variable->type_defined_as) == TRUE){
 				*base_address = emit_automatic_load_from_memory(basic_block, base_address_variable);
+
 			}
 
 		//Else just update the base address
