@@ -4904,6 +4904,12 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 			} else if(is_type_stack_passed_by_reference(base_address_variable->type_defined_as) == TRUE){
 				*base_address = emit_automatic_load_from_memory(basic_block, base_address_variable);
 
+			/**
+			 * Otherwise in our final case we'll need to account for the case where we have a struct
+			 * or union that is passed by copy. In that case no automatic load is needed
+			 */
+			} else {
+				*base_address = assignee;
 			}
 
 		//Else just update the base address
