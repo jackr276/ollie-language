@@ -6885,10 +6885,12 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 		three_addr_var_t* final_assignee = expression_results.assignee;
 
 		/**
-		 * If we gave back a memory address var, there will be no associated assignment.
-		 * Let's do the assignment now
+		 * If we are using the memory address var, we will need to be emitting an
+		 * additional copy *unless* the type is stack passed, in which case we'll
+		 * want the memory address to be doing a memory copy
 		 */
-		if(final_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+		if(final_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
+			&& is_type_stack_passed_by_copy(final_assignee->type) == FALSE){
 			//Emit the assignment
 			instruction_t* assignment_instruction = emit_assignment_instruction(emit_temp_var(expression_results.assignee->type), expression_results.assignee);
 
@@ -7115,7 +7117,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			exit(1);
 	}
 
-
 	//Does the function signature contain stack params or not?
 	u_int8_t has_stack_params = signature->contains_stack_params;
 
@@ -7133,7 +7134,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	
 	//We'll assign the first basic block to be "current" - this could change if we hit ternary operations
 	basic_block_t* current_block = basic_block;
-
 
 	/**
 	 * Our two result arrays will remain nulled out unless or until it can be determined
@@ -7258,7 +7258,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	//Keep track of the indices for our specific counts. This will be important if we have to do stack-saving
 	u_int32_t current_sse_index = 1;
 	u_int32_t current_gp_index = 1;
-	u_int32_t pass_by_copy_index = 0;
 
 	//Keep track of the first assignment instruction. We're going to need to insert
 	//the stack allocation before it
@@ -7269,7 +7268,8 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 * we have a stack allocation statement. This will be done after the stack allocation
 	 * happens, but we will need to hold onto these variables in here
 	 */
-	instruction_t* pass_by_copy_statements[signature->pass_by_copy_param_count];
+	dynamic_array_t pass_by_copy_statements;
+	INITIALIZE_NULL_DYNAMIC_ARRAY(pass_by_copy_statements);
 
 	//Now that we have all of this, we need to go through and emit our final assignments for the function calls
 	//themselves
@@ -7311,9 +7311,13 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 				//Now we'll copy from the variable result into the dummy region
 				instruction_t* memory_copy = emit_memory_copy_instruction(dummy_stack_region, variable_result, call_side_region->size);
 
-				//Store the memory address variable that we're going to need to adjust
-				pass_by_copy_statements[pass_by_copy_index] = memory_copy;
-				pass_by_copy_index++;
+				//Allocate it if need be
+				if(pass_by_copy_statements.internal_array == NULL){
+					pass_by_copy_statements = dynamic_array_alloc();
+				}
+
+				//Store this for later processing
+				dynamic_array_add(&pass_by_copy_statements, memory_copy);
 
 				//Add this into the block
 				add_statement(current_block, memory_copy);
@@ -7532,9 +7536,9 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 * of the source memory region because we've emitted new stack allocation statements
 		 * for it
 		 */
-		for(u_int32_t i = 0; i < pass_by_copy_index; i++){
+		for(u_int32_t i = 0; i < pass_by_copy_statements.current_index; i++){
 			//Extract the statement to use
-			instruction_t* memory_copy = pass_by_copy_statements[i];
+			instruction_t* memory_copy = dynamic_array_get_at(&pass_by_copy_statements, i);
 
 			/**
 			 * For certain variable types(memory addresses), we will need
@@ -7555,10 +7559,11 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 	/**
 	 * Deallocate the two function parameter result arrays now that we're
-	 * done
+	 * done. Also the pass by copy statements if need be
 	 */
 	parameter_results_array_dealloc(&non_elaborative_parameter_results);
 	parameter_results_array_dealloc(&elaborative_parameter_results);
+	dynamic_array_dealloc(&pass_by_copy_statements);
 
 	/**
 	 * If we get here and we have a handles statement, we will let our special rule
