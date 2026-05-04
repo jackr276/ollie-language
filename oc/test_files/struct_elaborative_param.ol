@@ -30,13 +30,13 @@ pub fn elaborative_param_structs(struct_arr:params param_passed) -> i32 {
 
 
 pub fn main() -> i32 {
-	let struct1:param_passed = {'a', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 3.33};
-	let struct2:param_passed = {'b', [2, 3, 5, 4, 5, 6, 7, 8, 9, 10], 3.33};
-	let struct3:param_passed = {'c', [1, 2, 7, 4, 5, 6, 7, 8, 9, 10], 3.33};
-	let struct4:param_passed = {'d', [1, 2, 8, 4, 5, 6, 7, 8, 9, 10], 3.33};
+	let struct1:param_passed = {2, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 3.33};
+	let struct2:param_passed = {3, [2, 3, 5, 4, 5, 6, 7, 8, 9, 10], 3.33};
+	let struct3:param_passed = {4, [1, 2, 7, 4, 5, 6, 7, 8, 9, 10], 3.33};
+	let struct4:param_passed = {5, [1, 2, 8, 4, 5, 6, 7, 8, 9, 10], 3.33};
 	
 	/**
-	 * Should return: 'a' + 3 + 'b' + 5 + 'c' + 7 + 'd' + 8 = 417
+	 * Should return: 2 + 3 + 3 + 5 + 4 + 7 + 5 + 8 = 37
 	 */
 	ret @elaborative_param_structs(struct1, struct2, struct3, struct4);
 }
