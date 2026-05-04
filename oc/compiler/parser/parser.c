@@ -12328,14 +12328,6 @@ static u_int8_t validate_main_function(generic_type_t* type){
  * an elaborative param of the given type to avoid duplicates
  */
 static inline generic_type_t* handle_elaborative_param_type(generic_type_t* elaborated_type){
-	//If the type cannot be used for an elaborative param, we leave
-	if(is_type_valid_for_elaborative_param(elaborated_type) == FALSE){
-		sprintf(info, "Type \"%s\" is invalid to be used as an elaborative param. Only pointers and primitive types may be elaborated. Remove the \"params\" keyword", elaborated_type->type_name.string);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		num_errors++;
-		return NULL;
-	}
-
 	//Let's construct the name that would exist if we had an identical elaborative param in the symtab
 	dynamic_string_t elaborative_param_name = dynamic_string_alloc();
 	dynamic_string_set(&elaborative_param_name, "params ");

@@ -32,7 +32,7 @@ pub fn elaborative_param_structs(struct_arr:params param_passed) -> i32 {
 pub fn main() -> i32 {
 	let struct1:param_passed = {'a', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 3.33};
 	let struct2:param_passed = {'b', [2, 3, 5, 4, 5, 6, 7, 8, 9, 10], 3.33};
-	let struct2:param_passed = {'c', [1, 2, 7, 4, 5, 6, 7, 8, 9, 10], 3.33};
+	let struct3:param_passed = {'c', [1, 2, 7, 4, 5, 6, 7, 8, 9, 10], 3.33};
 	let struct4:param_passed = {'d', [1, 2, 8, 4, 5, 6, 7, 8, 9, 10], 3.33};
 	
 	/**
