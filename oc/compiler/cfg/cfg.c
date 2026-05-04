@@ -6944,7 +6944,9 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
  * Handle the storage for elaborative stack params. This also includes handling of the first 4 byte "count" section
  * that we also need to account for
  */
-static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_block, parameter_results_array_t* elaborative_param_results, stack_data_area_t* stack_passed_parameters, instruction_t** first_assignment_instruction){
+static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_block, parameter_results_array_t* elaborative_param_results,
+														  	stack_data_area_t* stack_passed_parameters, dynamic_array_t* memory_copy_statements,
+														  	instruction_t** first_assignment_instruction){
 	//The very first thing that we need to do is emit the paramcount helper
 	u_int32_t paramcount = elaborative_param_results->current_index; 
 
@@ -6978,6 +6980,8 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 
 		three_addr_var_t* result_var;
 		three_addr_const_t* result_const;
+		stack_region_t* variable_result_region;
+		three_addr_const_t* var_storage_offset;
 
 		/**
 		 * Based on what kind of result that we have, we will handle
@@ -7008,17 +7012,34 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 				//Extract the constant
 				result_var = elaborative_param_result->param_result.variable_result;
 
-				//Create this one's stack region
-				stack_region_t* variable_result_region = create_stack_region_for_type(stack_passed_parameters, result_var->type);
+				switch(result_var->type->type_class){
+					/**
+					 * For unions and structs, we perform a parameter pass by copy, and that same logic
+					 * applies here for the elaborative parameter type
+					 */
+					case TYPE_CLASS_UNION:
+					case TYPE_CLASS_STRUCT:
+						printf("TODO NOT IMPLEMENTED\n");
+						exit(1);
 
-				//Emit the storage offset for this value
-				three_addr_const_t* var_storage_offset = emit_direct_integer_or_char_constant(variable_result_region->function_local_base_address, u64);
+					/**
+					 * Everything else we perform a normal store. There is no copy assignment required to make this happen
+					 */
+					default:
+						//Create this one's stack region
+						variable_result_region = create_stack_region_for_type(stack_passed_parameters, result_var->type);
 
-				//Now emit the store instruction for the result
-				instruction_t* var_elaborative_param_store = emit_store_with_constant_offset_ir_code(stack_pointer_variable, var_storage_offset, result_var, result_var->type); 
+						//Emit the storage offset for this value
+						var_storage_offset = emit_direct_integer_or_char_constant(variable_result_region->function_local_base_address, u64);
 
-				//Add it into the block
-				add_statement(basic_block, var_elaborative_param_store);
+						//Now emit the store instruction for the result
+						instruction_t* var_elaborative_param_store = emit_store_with_constant_offset_ir_code(stack_pointer_variable, var_storage_offset, result_var, result_var->type); 
+
+						//Add it into the block
+						add_statement(basic_block, var_elaborative_param_store);
+							
+						break;
+				}
 
 				break;
 		}
@@ -7495,7 +7516,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 * using the helper method
 	 */
 	if(signature->contains_elaborative_stack_param == TRUE){
-		handle_elaborative_stack_param_storage(current_block, &elaborative_parameter_results, &stack_passed_parameters, &first_assignment_instruction);
+		handle_elaborative_stack_param_storage(current_block, &elaborative_parameter_results, &stack_passed_parameters, &pass_by_copy_statements, &first_assignment_instruction);
 	}
 
 	//We can now add the function call statement in
