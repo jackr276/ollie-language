@@ -8116,7 +8116,7 @@ static inline instruction_type_t select_unsigned_mulitplication_instruction(vari
  *
  * NOTE: this is always the first instruction in the instruction window
  *
- * An important note - since we use the one operand signed multiplication instruction, we
+ * An important note - since we use the one operand unsigned multiplication instruction, we
  * clobber the %rdx register whenever we do this. Even though we do not use it, this is 
  * something that we need to account for
 */
@@ -8195,7 +8195,11 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 
 	//This is the assignee, we just don't see it
 	multiplication_instruction->destination_register = emit_temp_var(destination_type);
-	//For our clobbering
+
+	/**
+	 * Populate the second destination register for clobbering. This will be updated
+	 * to be %rdx by the precolorer by the time we reach the register allocator
+	 */
 	multiplication_instruction->destination_register2 = emit_temp_var(destination_type);
 
 	//Once we've done all that, we need one final movement operation
