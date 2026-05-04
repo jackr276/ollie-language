@@ -3636,6 +3636,8 @@ static void print_unsigned_multiplication_instruction(FILE* fl, instruction_t* i
 	//Print where this went
 	fprintf(fl, " -->  ");
 	//Print this mode
+	print_variable(fl, instruction->destination_register2, mode);
+	fprintf(fl, ":");
 	print_variable(fl, instruction->destination_register, mode);
 
 	fprintf(fl, " */\n");
