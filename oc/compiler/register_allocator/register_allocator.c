@@ -2096,6 +2096,9 @@ static void precolor_instruction(instruction_t* instruction){
 			//The destination must also be in RAX here
 			instruction->destination_register->associated_live_range->reg.gen_purpose = RAX;
 
+			//The implicit higher order bit destination is always RDX
+			instruction->destination_register2->associated_live_range->reg.gen_purpose = RDX;
+
 			break;
 
 		/**
