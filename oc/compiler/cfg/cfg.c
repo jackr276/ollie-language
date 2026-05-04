@@ -4908,14 +4908,36 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 			 * 4 byte offset to this base address that all stack passed parameters have to account
 			 * for the stored paramcount
 			 *
+			 *
+			 * We know that we have *at least* 4 bytes here on the end, and we may have more padding based
+			 * on what has been passed through the elaborative param
+			 *
 			 * TODO HERE - IT MAY BE MORE THAN JUST 4 BASED ON ALIGNMENT
 			 */
 			if(base_address_variable->type_defined_as->type_class == TYPE_CLASS_ELABORATIVE){
+				//Get the type that is being elaborated
+				generic_type_t* type_being_elaborated = base_address_variable->type_defined_as->internal_types.elaborates;
+
+				//First we'll need the type that we can align by
+				generic_type_t* base_alignment_type = get_base_alignment_type(type_being_elaborated);
+
+				//Get the alignment size
+				u_int64_t alignable_size = base_alignment_type->type_size;
+
+				//How much padding do we need? Initially we assume none
+				u_int64_t needed_padding = 4;
+
+				//We can just use the overall data area size for this
+				if(needed_padding % alignable_size != 0){
+					//Grab the needed padding
+					needed_padding += needed_padding % alignable_size;
+				}
+
 				//Emit a new current offset
 				three_addr_var_t* new_current_offset = emit_temp_var(u64);
 
 				//Emit the offset constant here
-				three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(4, u64);
+				three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(needed_padding, u64);
 
 				//Emit the constant assignment
 				instruction_t* current_offset_assignment = emit_assignment_with_const_instruction(new_current_offset, offset_constant);
