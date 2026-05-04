@@ -4,6 +4,9 @@
 */
 
 pub fn elaborative_param_arrays(arr_of_arr:params i32[4]) -> i32 {
+TODO BREAKER
+
+
 	let result:mut i32 = 0;
 
 	for(let i:mut i32 = 0; i < paramcount(arr_of_arr); i++){
@@ -15,6 +18,8 @@ pub fn elaborative_param_arrays(arr_of_arr:params i32[4]) -> i32 {
 
 
 pub fn main() -> i32 {	
+TODO BREAKER
+
 	let arr1:i32[] = [1, 2, 3, 4];
 	let arr2:i32[] = [1, 3, 3, 4];
 	let arr3:i32[] = [1, 4, 3, 4];
