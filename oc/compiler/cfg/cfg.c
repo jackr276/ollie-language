@@ -7019,8 +7019,33 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 					 */
 					case TYPE_CLASS_UNION:
 					case TYPE_CLASS_STRUCT:
-						printf("TODO NOT IMPLEMENTED\n");
-						exit(1);
+						//Allocate the memory copy dynamic array if it has not been already
+						if(memory_copy_statements->internal_array == NULL){
+							*memory_copy_statements = dynamic_array_alloc();
+						}
+
+						//Create this one's stack region
+						variable_result_region = create_stack_region_for_type(stack_passed_parameters, result_var->type);
+
+						//We'll use a dummy variable for the stack region
+						three_addr_var_t* dummy_stack_region = emit_memory_address_temp_var(result_var->type, variable_result_region);
+
+						//Now we'll copy from the variable result into the dummy region
+						instruction_t* memory_copy = emit_memory_copy_instruction(dummy_stack_region, result_var, variable_result_region->size);
+
+						//Store this for later processing
+						dynamic_array_add(memory_copy_statements, memory_copy);
+
+						//Add this into the block
+						add_statement(basic_block, memory_copy);
+
+						/**
+						 * This function performs a copy assignment, so we need to make sure everything here 
+						 * is going to be aligned
+						 */
+						current_function->requires_initial_alignment = TRUE;
+						
+						break;
 
 					/**
 					 * Everything else we perform a normal store. There is no copy assignment required to make this happen
