@@ -4860,6 +4860,59 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
 
 
 /**
+ * Get the base alignment type for an elaborative param. We have special rules for
+ * this to enable efficient struct copying
+ */
+static inline u_int64_t get_base_alignment_size_for_elaborative_param(generic_type_t* type_being_elaborated){
+	switch(type_being_elaborated->type_class){
+		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_UNION:
+			return 16;
+
+		default:
+			return get_base_alignment_type(type_being_elaborated)->type_size;
+	}
+}
+
+
+/**
+ * Fetch the initial padding for an elaborative parameter type. Remember that elaborative
+ * parameter types always have a 4 byte counter as the first element, followed by any needed 
+ * padding, which is then followed by anything else that needs to be added on
+ *
+ * Sample:
+ * 	count -> 4 bytes
+ * 	padding -> 12 bytes
+ * 	16 byte aligned struct -> 16 bytes
+ *
+ * 	So if we were doing "param[0]", we'd actually need to start by adding 16 bytes on to account 
+ *  for the counter and the padding
+ */
+static inline u_int64_t get_initial_padding_for_elaborative_type(generic_type_t* elaborative_type){
+	//We always start off with 4 bytes of padding
+	u_int64_t padding_before_first_element = 4;
+
+	//Get what type we are elaborating
+	generic_type_t* type_being_elaborated = elaborative_type->internal_types.elaborates;
+
+	//Get what we need to align by
+	u_int64_t alignment = get_base_alignment_size_for_elaborative_param(type_being_elaborated);
+
+	/**
+	 * If we don't have any additional padding needed, then that is fine. Otherwise, we will get
+	 * the padding that is needed and add it on here. Realistically that would mean that it has
+	 * to be 8 or 16 byte aligned, so we can actually just reassign what the first element padding is here
+	 */
+	if(padding_before_first_element % alignment != 0){
+		padding_before_first_element = alignment;
+	}
+
+	//Give back what we have before the first element
+	return padding_before_first_element;
+}
+
+
+/**
  * The helper will process the postfix expression for us in a recursive way. We will pass along the "base_address" variable which
  * will eventually be populated by the root level expression
  *
@@ -4908,36 +4961,20 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 			 * 4 byte offset to this base address that all stack passed parameters have to account
 			 * for the stored paramcount
 			 *
-			 *
 			 * We know that we have *at least* 4 bytes here on the end, and we may have more padding based
 			 * on what has been passed through the elaborative param
 			 *
 			 * TODO HERE - IT MAY BE MORE THAN JUST 4 BASED ON ALIGNMENT
 			 */
 			if(base_address_variable->type_defined_as->type_class == TYPE_CLASS_ELABORATIVE){
-				//Get the type that is being elaborated
-				generic_type_t* type_being_elaborated = base_address_variable->type_defined_as->internal_types.elaborates;
-
-				//First we'll need the type that we can align by
-				generic_type_t* base_alignment_type = get_base_alignment_type(type_being_elaborated);
-
-				//Get the alignment size
-				u_int64_t alignable_size = base_alignment_type->type_size;
-
-				//How much padding do we need? Initially we assume none
-				u_int64_t needed_padding = 4;
-
-				//We can just use the overall data area size for this
-				if(needed_padding % alignable_size != 0){
-					//Grab the needed padding
-					needed_padding += needed_padding % alignable_size;
-				}
+				//Get the starting alignment that we need to add
+				u_int64_t initial_padding = get_initial_padding_for_elaborative_type(base_address_variable->type_defined_as);
 
 				//Emit a new current offset
 				three_addr_var_t* new_current_offset = emit_temp_var(u64);
 
 				//Emit the offset constant here
-				three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(needed_padding, u64);
+				three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(initial_padding, u64);
 
 				//Emit the constant assignment
 				instruction_t* current_offset_assignment = emit_assignment_with_const_instruction(new_current_offset, offset_constant);
