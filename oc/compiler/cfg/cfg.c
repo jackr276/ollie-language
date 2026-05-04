@@ -4907,6 +4907,8 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 			 * Is this an elaborative param type? If so, we'll need to add on the automatic
 			 * 4 byte offset to this base address that all stack passed parameters have to account
 			 * for the stored paramcount
+			 *
+			 * TODO HERE - IT MAY BE MORE THAN JUST 4 BASED ON ALIGNMENT
 			 */
 			if(base_address_variable->type_defined_as->type_class == TYPE_CLASS_ELABORATIVE){
 				//Emit a new current offset
