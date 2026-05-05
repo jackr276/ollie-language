@@ -4093,8 +4093,6 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 				return emit_var(variable);
 			}
 
-
-
 		/**
 		 * Most function parameters are simple variable emittals. We do need to account for the case where
 		 * we have function parameters that are passed in via the stack however
@@ -7206,7 +7204,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	//So long as this isn't NULL
 	while(param_cursor != NULL 
 		&& param_cursor->ast_node_type != AST_NODE_TYPE_HANDLE_STMT){
-
 		/**
 		 * For everything that is not an elaborative param statement, we'll
 		 * handle it internally to this function
