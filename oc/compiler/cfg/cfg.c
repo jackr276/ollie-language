@@ -7216,6 +7216,14 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		elaborative_parameter_results = parameter_results_array_alloc_default_size();
 	}
 
+	/**
+	 * If we have memory address variables, we are going to need to emit adjustments after
+	 * we have a stack allocation statement. This will be done after the stack allocation
+	 * happens, but we will need to hold onto these variables in here
+	 */
+	dynamic_array_t memory_addresses_to_adjust;
+	INITIALIZE_NULL_DYNAMIC_ARRAY(memory_addresses_to_adjust);
+
 	//So long as this isn't NULL
 	while(param_cursor != NULL 
 		&& param_cursor->ast_node_type != AST_NODE_TYPE_HANDLE_STMT){
@@ -7233,6 +7241,22 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 			//What is the final assignee
 			three_addr_var_t* final_assignee = package.assignee;
+
+			/**
+			 * If we have a memory address variable *and* we have stack params, we'll need to
+			 * save this so that we can add the adjustment in later, after the stack allocation
+			 * happens
+			 */
+			if(final_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
+				&& has_stack_params == TRUE){
+				//Allocate it if need be
+				if(memory_addresses_to_adjust.internal_array == NULL){
+					memory_addresses_to_adjust = dynamic_array_alloc();
+				}
+
+				//Throw this into storage for later
+				dynamic_array_add(&memory_addresses_to_adjust, final_assignee);
+			}
 
 			/**
 			 * If we have a memory address var we'll need to do a copy here *unless*
@@ -7308,14 +7332,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	//Keep track of the first assignment instruction. We're going to need to insert
 	//the stack allocation before it
 	instruction_t* first_assignment_instruction = NULL;
-
-	/**
-	 * If we have memory copied variables, we are going to need to emit adjustments after
-	 * we have a stack allocation statement. This will be done after the stack allocation
-	 * happens, but we will need to hold onto these variables in here
-	 */
-	dynamic_array_t pass_by_copy_statements;
-	INITIALIZE_NULL_DYNAMIC_ARRAY(pass_by_copy_statements);
 
 	//Now that we have all of this, we need to go through and emit our final assignments for the function calls
 	//themselves
@@ -7578,13 +7594,13 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		insert_instruction_after_given(stack_deallocation, function_call_statement);
 
 		/**
-		 * If we have memory copy statements, we need to adjust the offset
+		 * If we have memory addresses before stack allocations, we need to adjust the offset
 		 * of the source memory region because we've emitted new stack allocation statements
 		 * for it
 		 */
-		for(u_int32_t i = 0; i < pass_by_copy_statements.current_index; i++){
+		for(u_int32_t i = 0; i < memory_addresses_to_adjust.current_index; i++){
 			//Extract the statement to use
-			instruction_t* memory_copy = dynamic_array_get_at(&pass_by_copy_statements, i);
+			instruction_t* memory_copy = dynamic_array_get_at(&memory_addresses_to_adjust, i);
 
 			/**
 			 * For certain variable types(memory addresses), we will need
@@ -7609,7 +7625,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 */
 	parameter_results_array_dealloc(&non_elaborative_parameter_results);
 	parameter_results_array_dealloc(&elaborative_parameter_results);
-	dynamic_array_dealloc(&pass_by_copy_statements);
+	dynamic_array_dealloc(&memory_addresses_to_adjust);
 
 	/**
 	 * If we get here and we have a handles statement, we will let our special rule
