@@ -192,6 +192,8 @@ struct three_addr_var_t{
 	} associated_memory_region;
 	//What is the ssa generation level?
 	u_int32_t ssa_generation;
+	//Base adjustment for stack passed memory address variables
+	u_int32_t memory_address_base_adjustment;
 	//What's the temp var number
 	u_int32_t temp_var_number;
 	//What's the reference count of this variable.
@@ -352,8 +354,6 @@ struct instruction_t{
 	} type_storage;
 	//For lea multiplication
 	u_int64_t lea_multiplier;
-	//The base adjustment for a pass-by-copy-parameter
-	u_int32_t pass_by_copy_base_adjustment;
 	//The function called
 	symtab_function_record_t* called_function;
 	//The variable record
