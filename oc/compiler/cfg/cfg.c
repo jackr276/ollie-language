@@ -6853,6 +6853,125 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 
 
 /**
+ * Handle the parsing for a normal function parameter. This is different than the parsing for an elaborative
+ * parameter, which is handled by an overloaded method
+ */
+static inline cfg_result_package_t emit_parameter_expression(basic_block_t* basic_block, generic_ast_node_t* parameter_node,
+																	  	parameter_results_array_t* parameter_results, dynamic_array_t* memory_addresses_to_adjust, u_int8_t has_stack_params){
+	//Keep track of our current block
+	basic_block_t* current_block = basic_block;
+
+	//Emit whatever we have here into the basic block
+	cfg_result_package_t results_package = emit_expression(current_block, parameter_node);
+
+	//Always reassign this
+	current_block = results_package.final_block;
+
+	//What is the final assignee
+	three_addr_var_t* final_assignee = results_package.assignee;
+
+	/**
+	 * If we have a memory address variable *and* we have stack params, we'll need to
+	 * save this so that we can add the adjustment in later, after the stack allocation
+	 * happens
+	 */
+	if((final_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
+		|| final_assignee->variable_type == VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS)
+		&& has_stack_params == TRUE){
+		//Allocate it if need be
+		if(memory_addresses_to_adjust->internal_array == NULL){
+			*memory_addresses_to_adjust = dynamic_array_alloc();
+		}
+
+		//Throw this into storage for later
+		dynamic_array_add(memory_addresses_to_adjust, final_assignee);
+	}
+
+	//For grabbing out the result types - by default assume var
+	parameter_result_type_t result_type = PARAM_RESULT_TYPE_VAR;
+	three_addr_var_t* final_assignee_var = final_assignee;
+	three_addr_const_t* final_assignee_const = NULL;
+
+	/**
+	 * Few scenarios that we want to watch out for here:
+	 * 	Temporary variable type and we have a memory address being assigned - we need to save the address in our array
+	 * 	Temporary variable type and we have a constant being assigned - optimize by just storing the constant
+	 */
+	if(final_assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& current_block->exit_statement != NULL){
+
+		switch(current_block->exit_statement->statement_type){
+			/**
+			 * Are we assigning a const? If so we can just grab that out now
+			 */
+			case THREE_ADDR_CODE_ASSN_CONST_STMT:
+				//Not equal - just leave
+				if(variables_equal(current_block->exit_statement->assignee, final_assignee, FALSE) == FALSE){
+					break;
+				}
+
+				//They are equal, so we have a const result type now
+				final_assignee_const = current_block->exit_statement->op1_const;
+
+				//Flag we have a const result
+				result_type = PARAM_RESULT_TYPE_CONST;
+				
+				break;
+
+			/**
+			 * Are we copying over a memory address? If so we need to flag it inside of our addresses
+			 * to adjust
+			 */
+			case THREE_ADDR_CODE_ASSN_STMT:
+				//Not equal - just leave
+				if(variables_equal(current_block->exit_statement->assignee, final_assignee, FALSE) == FALSE){
+					break;
+				}
+
+				//Grab this out
+				three_addr_var_t* copy_assignee = current_block->exit_statement->op1;
+
+				/**
+				 * If we do have a memory address then add it into the array
+				 */
+				if(copy_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
+					|| copy_assignee->variable_type == VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS){
+					//Allocate it if need be
+					if(memory_addresses_to_adjust->internal_array == NULL){
+						*memory_addresses_to_adjust = dynamic_array_alloc();
+					}
+
+					//Throw this into storage for later
+					dynamic_array_add(memory_addresses_to_adjust, copy_assignee);
+
+					//This now is our assignee
+					final_assignee_var = copy_assignee;
+				}
+
+				
+			//By default do nothing
+			default:
+				break;
+		}
+	}
+
+	//Now we can add to the array
+	switch(result_type){
+		case PARAM_RESULT_TYPE_VAR:
+			add_parameter_result_to_results_array(parameter_results, final_assignee_var, PARAM_RESULT_TYPE_VAR);
+			break;
+
+		case PARAM_RESULT_TYPE_CONST:
+			add_parameter_result_to_results_array(parameter_results, final_assignee_const, PARAM_RESULT_TYPE_CONST);
+			break;
+	}
+
+	//Give back the results in the end
+	return results_package;
+}
+
+
+/**
  * Handle the parsing for an elaborative parameter. This rule is just meant to help
  * neaten things up because it's going to involve looping over all of the children
  * inside of the elaborative param node and emitting them separately. Note that
@@ -7223,110 +7342,11 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 * handle it internally to this function
 		 */
 		if(param_cursor->ast_node_type != AST_NODE_TYPE_ELABORATIVE_PARAM_STMT){
-			//Emit whatever we have here into the basic block
-			cfg_result_package_t package = emit_expression(current_block, param_cursor);
+			//Let the helper do all of this - do note that there is not going to be anything in the "assignee" here - it's all handled internally
+			cfg_result_package_t results = emit_parameter_expression(current_block, param_cursor, &non_elaborative_parameter_results, &memory_addresses_to_adjust, has_stack_params);
 
-			//Always reassign this
-			current_block = package.final_block;
-
-			//What is the final assignee
-			three_addr_var_t* final_assignee = package.assignee;
-
-			/**
-			 * If we have a memory address variable *and* we have stack params, we'll need to
-			 * save this so that we can add the adjustment in later, after the stack allocation
-			 * happens
-			 */
-			if((final_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
-				|| final_assignee->variable_type == VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS)
-				&& has_stack_params == TRUE){
-				//Allocate it if need be
-				if(memory_addresses_to_adjust.internal_array == NULL){
-					memory_addresses_to_adjust = dynamic_array_alloc();
-				}
-
-				//Throw this into storage for later
-				dynamic_array_add(&memory_addresses_to_adjust, final_assignee);
-			}
-
-			//For grabbing out the result types - by default assume var
-			parameter_result_type_t result_type = PARAM_RESULT_TYPE_VAR;
-			three_addr_var_t* final_assignee_var = final_assignee;
-			three_addr_const_t* final_assignee_const = NULL;
-
-			/**
-			 * Few scenarios that we want to watch out for here:
-			 * 	Temporary variable type and we have a memory address being assigned - we need to save the address in our array
-			 * 	Temporary variable type and we have a constant being assigned - optimize by just storing the constant
-			 */
-			if(final_assignee->variable_type == VARIABLE_TYPE_TEMP
-				&& current_block->exit_statement != NULL){
-
-				switch(current_block->exit_statement->statement_type){
-					/**
-					 * Are we assigning a const? If so we can just grab that out now
-					 */
-					case THREE_ADDR_CODE_ASSN_CONST_STMT:
-						//Not equal - just leave
-						if(variables_equal(current_block->exit_statement->assignee, final_assignee, FALSE) == FALSE){
-							break;
-						}
-
-						//They are equal, so we have a const result type now
-						final_assignee_const = current_block->exit_statement->op1_const;
-
-						//Flag we have a const result
-						result_type = PARAM_RESULT_TYPE_CONST;
-						
-						break;
-
-					/**
-					 * Are we copying over a memory address? If so we need to flag it inside of our addresses
-					 * to adjust
-					 */
-					case THREE_ADDR_CODE_ASSN_STMT:
-						//Not equal - just leave
-						if(variables_equal(current_block->exit_statement->assignee, final_assignee, FALSE) == FALSE){
-							break;
-						}
-
-						//Grab this out
-						three_addr_var_t* copy_assignee = current_block->exit_statement->op1;
-
-						/**
-						 * If we do have a memory address then add it into the array
-						 */
-						if(copy_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
-							|| copy_assignee->variable_type == VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS){
-							//Allocate it if need be
-							if(memory_addresses_to_adjust.internal_array == NULL){
-								memory_addresses_to_adjust = dynamic_array_alloc();
-							}
-
-							//Throw this into storage for later
-							dynamic_array_add(&memory_addresses_to_adjust, copy_assignee);
-
-							//This now is our assignee
-							final_assignee_var = copy_assignee;
-						}
-
-						
-					//By default do nothing
-					default:
-						break;
-				}
-			}
-
-			//Now we can add to the array
-			switch(result_type){
-				case PARAM_RESULT_TYPE_VAR:
-					add_parameter_result_to_results_array(&non_elaborative_parameter_results, final_assignee_var, PARAM_RESULT_TYPE_VAR);
-					break;
-
-				case PARAM_RESULT_TYPE_CONST:
-					add_parameter_result_to_results_array(&non_elaborative_parameter_results, final_assignee_const, PARAM_RESULT_TYPE_CONST);
-					break;
-			}
+			//Update the final block
+			current_block = results.final_block;
 
 		/**
 		 * Otherwise we have an elaborative param. Unrelated but worth nothing that this will
@@ -7486,7 +7506,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 								 */
 								if(result_var->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
 									|| result_var->variable_type == VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS){
-									instruction_t* assignment = emit_assignment_instruction(emit_temp_var(result_var->type), result_var);
+									instruction_t* assignment = emit_assignment_instruction(emit_temp_var(parameter_type), result_var);
 
 									add_statement(basic_block, assignment);
 
