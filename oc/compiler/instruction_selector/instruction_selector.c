@@ -826,6 +826,8 @@ static inline u_int8_t binary_operator_valid_for_inplace_constant_match(ollie_to
 static void remediate_memory_address_variable_in_non_access_context(instruction_window_t* window, instruction_t* instruction){
 	//For later use
 	int64_t stack_offset;
+	//Additional offsets may come when we have stack params
+	int64_t additional_offset;
 	three_addr_const_t* stack_offset_constant;
 	instruction_t* address_instruction;
 
@@ -1418,7 +1420,7 @@ static void convert_memory_copy_statement_into_loads_and_stores(instruction_wind
 	 * to adjust the memory address that the source has if we're copying after a new stack allocation
 	 * statement. We maintain a base adjustment amoutn just for this purpose
 	 */
-	u_int64_t source_adjustment = memory_copy_statement->pass_by_copy_base_adjustment;
+	u_int64_t source_adjustment = memory_copy_statement->op1->memory_address_base_adjustment;
 
 	//We always use the dedicated field to determine how many bytes we should be copying
 	u_int64_t remaining_copy_amount = memory_copy_statement->optional_storage.byte_amount_to_copy;

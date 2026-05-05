@@ -6892,6 +6892,11 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 		 */
 		if(final_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
 			|| final_assignee->variable_type == VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS){
+			//Allocate if need be
+			if(memory_addresses_to_adjust->internal_array == NULL){
+				*memory_addresses_to_adjust = dynamic_array_alloc();
+			}
+
 			dynamic_array_add(memory_addresses_to_adjust, final_assignee);
 		}
 
