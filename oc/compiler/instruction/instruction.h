@@ -879,6 +879,11 @@ instruction_t* emit_global_variable_address_calculation_oir(three_addr_var_t* as
 instruction_t* emit_global_variable_address_calculation_x86(three_addr_var_t* global_variable, three_addr_var_t* instruction_pointer, generic_type_t* u64);
 
 /**
+ * Emit a starting offset calculation for the given elaborative param
+ */
+instruction_t* emit_elaborative_param_starting_offset_calculation(three_addr_var_t* result, three_addr_var_t* elaborative_param);
+
+/**
  * Are two variables equal? A helper method for searching
  */
 u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirection);

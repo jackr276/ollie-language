@@ -4977,8 +4977,11 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 				//Emit the constant assignment
 				instruction_t* current_offset_assignment = emit_assignment_with_const_instruction(new_current_offset, offset_constant);
 
+				//Emit a special instruction for IR clarity
+				instruction_t* elaborative_param_offset = emit_elaborative_param_starting_offset_calculation(new_current_offset, emit_var(base_address_variable));
+
 				//Put it into the block
-				add_statement(current, current_offset_assignment);
+				add_statement(current, elaborative_param_offset);
 
 				//This now is the current offset so we're going to denote that
 				*current_offset = new_current_offset;

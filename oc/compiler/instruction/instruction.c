@@ -6104,6 +6104,25 @@ instruction_t* emit_global_variable_address_calculation_x86(three_addr_var_t* gl
 
 
 /**
+ * Emit a starting offset calculation for the given elaborative param
+ */
+instruction_t* emit_elaborative_param_starting_offset_calculation(three_addr_var_t* result, three_addr_var_t* elaborative_param){
+	//Allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//This is an elaborative param type
+	stmt->statement_type = THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET;
+
+	//Store the result/op1
+	stmt->assignee = result;
+	stmt->op1 = elaborative_param;
+
+	//Give it back
+	return stmt;
+}
+
+
+/**
  * Duplicate a variable. This is used for copy instructions where we
  * need to maintain separation of variables
  */
