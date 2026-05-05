@@ -12278,8 +12278,6 @@ static void handle_load_instruction(instruction_window_t* window){
 		 * We have a regular function-local stack frame address. This is super
 		 * common and our most broad case. We will need to support global variables
 		 * as well as stack offsets in this case
-		 *
-		 * TODO HERE
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
 			//Go based on what kind of variable that we have
@@ -12342,8 +12340,6 @@ static void handle_load_instruction(instruction_window_t* window){
 		 * has a few more restrictions. We know that the stack offset will never be 0 due
 		 * to the way that stack passed parameters work, and we know that this will never
 		 * be a global variable
-		 *
-		 * TODO HERE
 		 */
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
 			//We now will have something like <offset>(%rsp)
@@ -12399,8 +12395,6 @@ static void handle_load_with_constant_offset_instruction(instruction_window_t* w
 		 * Memory address variables are the most common type that we will see here. We need
 		 * to translate these into either stack offsets or rip-relative offsets if we have a
 		 * global variable
-		 *
-		 * TODO HERE
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
 			switch(load_instruction->op1->linked_var->membership){
@@ -12461,8 +12455,6 @@ static void handle_load_with_constant_offset_instruction(instruction_window_t* w
 		 * A stack passed parameter memory address is treated differently than the regular address. We will
 		 * emit a specialized constant to handle this. Due to the way that these work, we don't need to worry
 		 * about global variables or stack offsets of 0 here
-		 *
-		 * TODO HERE
 		 */
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:	
 			//Emit the stack passed parameter offset
@@ -12524,8 +12516,6 @@ static void handle_load_with_variable_offset_instruction(instruction_window_t* w
 		 * The most common case is a memory address variable. These variables are function-local
 		 * so we can emit an offset here safely without having to worry about future adjustments. It
 		 * is possible that this is also a global variable memory address as well
-		 *
-		 * TODO HERE
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
 			switch(load_instruction->op1->linked_var->membership){
@@ -12623,8 +12613,6 @@ static void handle_load_with_variable_offset_instruction(instruction_window_t* w
 		 * A stack param memory address requires special treatment. It will never be 0, and it will never be a global
 		 * variable, so we can ignore those cases. The stack memory address will have a special constant emitted
 		 * that will be updated by the register allocator once all allocations are done
-		 *
-		 * TODO HERE
 		 */
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
 			//We'll have something like <offset>(%rsp, t4)
@@ -12917,8 +12905,6 @@ static void handle_store_instruction(instruction_t* instruction){
 		 * This is the most common case. When we have a memory address, we are going to need
 		 * to handle it differently based on whether or not it's a global variable, and based
 		 * on what the stack offset is
-		 *
-		 * TODO HERE
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
 			/**
@@ -13013,8 +12999,6 @@ static void handle_store_instruction(instruction_t* instruction){
 		 * A parameter address is a different type entirely. This will never be a global var
 		 * and it will never be 0. We need to emit a special kind of constant here to represent
 		 * what this is
-		 *
-		 * TODO HERE
 		 */
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
 			//The first address calc register will be the stack pointer
@@ -13069,8 +13053,6 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 		/**
 		 * This is by far the most common type. In this case, we will need to account
 		 * for when we have global variables or when we have stack offsets of 0
-		 *
-		 * TODO HERE
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
 			//Grab the linked var out
@@ -13170,8 +13152,6 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 		/**
 		 * A stack param address is different than a normal one. This address will never be 0 and it will
 		 * never be a global variable. We will emit a special kind of constant to handle this down the road
-		 *
-		 * TODO HERE
 		 */
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
 			//This is still the stack pointer
@@ -13232,8 +13212,6 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 		 * A regular function local stack address is the most commmon type that we can have here. We need
 		 * to account for this being a global variable or a regular address, and for the stack offset being
 		 * 0 or not
-		 *
-		 * TODO HERE
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
 			//Grab the linked var out
@@ -13382,8 +13360,6 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 		/**
 		 * A stack passed parameter address is different in that the offset can never be 0 and it will never be a global variable.
 		 * We will handle this by emitting a specialized constant that will be filled in later by the regiseter allocator
-		 *
-		 * TODO HERE
 		 */
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
 			//Once that's done, we just need to change the address calc mode
@@ -13446,7 +13422,6 @@ static void handle_store_statement_base_address(instruction_t* store_instruction
 	instruction_t* global_variable_address;
 
 	//Do we have a memory address variable(very common) or not?
-	//TODO HERE
 	if(store_instruction->assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
 		//Grab the linked var out
 		symtab_variable_record_t* linked_var = store_instruction->assignee->linked_var;
