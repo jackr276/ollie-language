@@ -4963,8 +4963,6 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 			 *
 			 * We know that we have *at least* 4 bytes here on the end, and we may have more padding based
 			 * on what has been passed through the elaborative param
-			 *
-			 * TODO HERE - IT MAY BE MORE THAN JUST 4 BASED ON ALIGNMENT
 			 */
 			if(base_address_variable->type_defined_as->type_class == TYPE_CLASS_ELABORATIVE){
 				//Get the starting alignment that we need to add

@@ -2826,6 +2826,13 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 			break;
 
+		case THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET:
+			print_variable(stdout, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- Starting Offset of Elaborative Param <");
+			print_variable(stdout, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, ">");
+			break;
+
 		default:
 			printf("UNKNOWN TYPE");
 			break;
