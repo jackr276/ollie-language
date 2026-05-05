@@ -5705,17 +5705,21 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					 * stack region and slap it into a variable
 					 */
 
+					//TODO HERE
+					//
+					//WE probably don't need to be doing all this, if we're just smarter down the line in the system
+
 					//The memory address itself
 					three_addr_var_t* memory_address_var = emit_memory_address_var(unary_expression_child->variable);
 
 					//Emit a custom assignment instruction for this
-					instruction_t* address_assignment = emit_assignment_instruction(emit_temp_var(u64), memory_address_var);
+					//instruction_t* address_assignment = emit_assignment_instruction(emit_temp_var(u64), memory_address_var);
 
 					//Add this into the block
-					add_statement(current_block, address_assignment);
+					//add_statement(current_block, address_assignment);
 
 					//And package the value up as what we want here
-					unary_package.assignee = address_assignment->assignee;
+					unary_package.assignee = memory_address_var;
 
 					break;
 
@@ -7023,7 +7027,6 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 		 * This avoids us needing to do an extra assignment down the road. Otherwise we just
 		 * take the assignee
 		 *
-		 *
 		 * TODO BAD HERE
 		 */
 		if(final_assignee->variable_type != VARIABLE_TYPE_TEMP
@@ -7399,6 +7402,8 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 						/**
 						 * If we have a memory address type, we'll need to emit an assignment here as we can't
 						 * have the memory address directly in the load
+						 *
+						 * TODO SHOULDN't NEED THIS NOW
 						 */
 						if(result_var->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
 							|| result_var->variable_type == VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS){
