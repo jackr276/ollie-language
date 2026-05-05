@@ -1882,15 +1882,30 @@ static inline u_int64_t get_initial_padding_for_elaborative_type(generic_type_t*
 	return padding_before_first_element;
 }
 
-				//Get the starting alignment that we need to add
-				u_int64_t initial_padding = get_initial_padding_for_elaborative_type(base_address_variable->type_defined_as);
 
-				//Emit the offset constant here
-				three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(initial_padding, u64);
+/**
+ * Convert a three_addr_code_elaborative_param_offset expression into a constant assignment for later optimizations. This
+ * only exists in the IR for clarity and prior work
+ */
+static void convert_elaborative_param_offset_to_constant_assignment(instruction_t* elaborative_param_offset){
+	//The base address comes from op1
+	three_addr_var_t* base_address_variable = elaborative_param_offset->op1;
 
-				//Emit the constant assignment
-				instruction_t* current_offset_assignment = emit_assignment_with_const_instruction(new_current_offset, offset_constant);
+	//We won't need it for later so wipe it out
+	elaborative_param_offset->op1 = NULL;
 
+	//Get the starting alignment that we need to add
+	u_int64_t initial_padding = get_initial_padding_for_elaborative_type(base_address_variable->type);
+
+	//Emit the offset constant here
+	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(initial_padding, u64);
+	
+	//We can convert this into a constant assignment now
+	elaborative_param_offset->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+	//And assign the constant in
+	elaborative_param_offset->op1_const = offset_constant;
+}
 
 
 /**
@@ -1941,6 +1956,16 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			break;
 
 		/**
+		 * If we have an elaborative param offset calculation, now is the time
+		 * where we will convert it into a constant assignment
+		 */
+		case THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET:
+			convert_elaborative_param_offset_to_constant_assignment(first);
+
+			changed = TRUE;
+			break;
+
+		/**
 		 * If we have a memory copy statement, we will need to convert it into the
 		 * loads/stores that we need now. This will reconstruct the window when done.
 		 */
@@ -1950,6 +1975,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			//This counts as a change
 			changed = TRUE;
 			break;
+
 
 		//By default do nothing
 		default:
@@ -1971,6 +1997,16 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					break;
 			}
 			
+			break;
+
+		/**
+		 * If we have an elaborative param offset calculation, now is the time
+		 * where we will convert it into a constant assignment
+		 */
+		case THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET:
+			convert_elaborative_param_offset_to_constant_assignment(second);
+
+			changed = TRUE;
 			break;
 
 		/**
@@ -2007,6 +2043,16 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				}
 				
 				break;
+
+		/**
+		 * If we have an elaborative param offset calculation, now is the time
+		 * where we will convert it into a constant assignment
+		 */
+		case THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET:
+			convert_elaborative_param_offset_to_constant_assignment(third);
+
+			changed = TRUE;
+			break;
 
 		/**
 		 * If we have a memory copy statement, we will need to convert it into the

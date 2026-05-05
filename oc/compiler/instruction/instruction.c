@@ -2830,7 +2830,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			print_variable(stdout, stmt->assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- Starting Offset of Elaborative Param <");
 			print_variable(stdout, stmt->op1, PRINTING_VAR_INLINE);
-			fprintf(fl, ">");
+			fprintf(fl, ">\n");
 			break;
 
 		default:
