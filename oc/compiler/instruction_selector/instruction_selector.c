@@ -923,9 +923,12 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 	 */
 	switch(instruction->op1->variable_type){
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
+			//The additional offset may come from stack passed parameters, and we need to account for it
+			additional_offset = instruction->op1->memory_address_base_adjustment;
+
 			//Extract the stack offset for our use. This will determine how 
 			//we process things down below
-			stack_offset = var->stack_region->function_local_base_address;
+			stack_offset = var->stack_region->function_local_base_address + additional_offset;
 
 			//Go based on what kind of statement that we've got here
 			switch(instruction->statement_type){
@@ -1077,6 +1080,9 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 		 * processing, but fundamentally we are limited here
 		 */
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+			//Grab the additional offset for processing
+			additional_offset = instruction->op1->memory_address_base_adjustment;
+
 			//Go based on what kind of statement that we've got here
 			switch(instruction->statement_type){
 				/**
@@ -1090,6 +1096,9 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				case THREE_ADDR_CODE_ASSN_STMT:
 					//op1_const is our offset
 					instruction->op1_const = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
+
+					//Add the additional offset in as an adjustment(it's usually 0)
+					instruction->op1_const->constant_adjustment = additional_offset;
 
 					//Turn it into a LEA
 					instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
@@ -1119,6 +1128,9 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 					//Emit the constant
 					stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
+
+					//Add the additional offset in as an adjustment(it's usually 0)
+					stack_offset_constant->constant_adjustment = additional_offset;
 
 					//Simplify based on what we have
 					switch(instruction->op){
@@ -1160,6 +1172,9 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				case THREE_ADDR_CODE_BIN_OP_STMT:
 					//Create the offset constant
 					stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
+
+					//Add the additional offset in as an adjustment(it's usually 0)
+					stack_offset_constant->constant_adjustment = additional_offset;
 
 					//This is now our op1_const
 					instruction->op1_const = stack_offset_constant;

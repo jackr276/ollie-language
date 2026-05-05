@@ -6905,6 +6905,9 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 		 * var, we can actually just optimize here and grab the const instead of the assignee.
 		 * This avoids us needing to do an extra assignment down the road. Otherwise we just
 		 * take the assignee
+		 *
+		 *
+		 * TODO BAD HERE
 		 */
 		if(final_assignee->variable_type != VARIABLE_TYPE_TEMP
 			|| current_block->exit_statement->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
@@ -7240,6 +7243,8 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			 * var, we can actually just optimize here and grab the const instead of the assignee.
 			 * This avoids us needing to do an extra assignment down the road. Otherwise we just
 			 * take the assignee
+			 *
+			 * TODO BAD HERE
 			 */
 			if(final_assignee->variable_type != VARIABLE_TYPE_TEMP
 				|| current_block->exit_statement->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
