@@ -16,6 +16,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 #include "../utils/queue/heap_queue.h"
 #include "../jump_table/jump_table.h"
@@ -6886,34 +6887,12 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 		three_addr_var_t* final_assignee = expression_results.assignee;
 
 		/**
-		 * If we are using the memory address var, we will need to be emitting an
-		 * additional copy *unless* the type is stack passed, in which case we'll
-		 * want the memory address to be doing a memory copy
+		 * If we have a memory address of stack param memory address, we'll need to adjust
+		 * the variables after the stack allocation so we will save that here
 		 */
 		if(final_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
-			&& is_type_stack_passed_by_copy(final_assignee->type) == FALSE){
-			//Emit the assignment
-			instruction_t* assignment_instruction = emit_assignment_instruction(emit_temp_var(expression_results.assignee->type), expression_results.assignee);
-
-			//Add it into the block
-			add_statement(current_block, assignment_instruction);
-
-			//This now is the final assignee
-			final_assignee = assignment_instruction->assignee;
-		}
-
-		/**
-		 * NOTE: it is very important that this final assignment is *never* coalesced. Doing so would bring 
-		 * the stack parameter that we originally set before  any function call related stack allocations to 
-		 * be after the allocation, which would cause invalid memory access on the callee-side
-		 */
-		if(current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_STMT
-			//Make sure that we're talking about the same thing
-			&& variables_equal(final_assignee, current_block->exit_statement->assignee, FALSE) == TRUE
-			&& current_block->exit_statement->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-
-			//Flag that it cannot be combined
-			current_block->exit_statement->cannot_be_combined = TRUE;
+			|| final_assignee->variable_type == VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS){
+			dynamic_array_add(memory_addresses_to_adjust, final_assignee);
 		}
 
 		/**
@@ -6946,8 +6925,7 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
  * that we also need to account for
  */
 static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_block, parameter_results_array_t* elaborative_param_results,
-														  	stack_data_area_t* stack_passed_parameters, dynamic_array_t* memory_addresses_to_adjust,
-														  	instruction_t** first_assignment_instruction){
+														  	stack_data_area_t* stack_passed_parameters, instruction_t** first_assignment_instruction){
 	//The very first thing that we need to do is emit the paramcount helper
 	u_int32_t paramcount = elaborative_param_results->current_index; 
 
@@ -7020,11 +6998,6 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 					 */
 					case TYPE_CLASS_UNION:
 					case TYPE_CLASS_STRUCT:
-						//Allocate the memory copy dynamic array if it has not been already
-						if(memory_copy_statements->internal_array == NULL){
-							*memory_copy_statements = dynamic_array_alloc();
-						}
-
 						//Create this one's stack region
 						variable_result_region = create_stack_region_for_type(stack_passed_parameters, result_var->type);
 
@@ -7033,9 +7006,6 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 
 						//Now we'll copy from the variable result into the dummy region
 						instruction_t* memory_copy = emit_memory_copy_instruction(dummy_stack_region, result_var, variable_result_region->size);
-
-						//Store this for later processing
-						dynamic_array_add(memory_copy_statements, memory_copy);
 
 						//Add this into the block
 						add_statement(basic_block, memory_copy);
@@ -7248,7 +7218,8 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			 * save this so that we can add the adjustment in later, after the stack allocation
 			 * happens
 			 */
-			if(final_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
+			if((final_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
+				|| final_assignee->variable_type == VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS)
 				&& has_stack_params == TRUE){
 				//Allocate it if need be
 				if(memory_addresses_to_adjust.internal_array == NULL){
@@ -7514,7 +7485,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 * using the helper method
 	 */
 	if(signature->contains_elaborative_stack_param == TRUE){
-		handle_elaborative_stack_param_storage(current_block, &elaborative_parameter_results, &stack_passed_parameters, &memory_addresses_to_adjust, &first_assignment_instruction);
+		handle_elaborative_stack_param_storage(current_block, &elaborative_parameter_results, &stack_passed_parameters, &first_assignment_instruction);
 	}
 
 	//We can now add the function call statement in
