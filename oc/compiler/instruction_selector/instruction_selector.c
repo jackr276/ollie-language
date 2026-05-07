@@ -830,6 +830,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 	int64_t additional_offset;
 	three_addr_const_t* stack_offset_constant;
 	instruction_t* address_instruction;
+	instruction_t* address_lea;
 
 	//Grab this out
 	symtab_variable_record_t* var = instruction->op1->linked_var;
@@ -1178,6 +1179,29 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					break;
 
 				/**
+				 * Store statements act very similarly to the assignment
+				 * statement, except for our need to put the assignment before the
+				 * actual statement. We do not need to account for cases where
+				 * the offset from %rsp is 0 because that will never happen
+				 */
+				case THREE_ADDR_CODE_STORE_STATEMENT:
+				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+					//Emit the special stack constant
+					stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
+
+					//Now emit the address calculation
+					address_instruction = emit_lea_offset_only(emit_temp_var(instruction->op1->type), stack_pointer_variable, stack_offset_constant);
+
+					//This goes in right before the store does
+					insert_instruction_before_given(address_instruction, instruction);
+
+					//The op1 now comes from this instruction
+					instruction->op1 = address_instruction->assignee;
+
+					break;
+
+				/**
 				 * For any binary operation instruction, we're just going to have to emit the extra assignment
 				 * here since again we cannot know what the offset is going to be
 				 *
@@ -1232,9 +1256,11 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 
 					break;
 
-				//Final and trickiest case. We need to have a memory calculation *and* a regular
-				//calculation stuffed into here, but we only have 2 operands to work with. We will
-				//need to use our special version of a lea for this in most cases
+				/**
+				 * Final and trickiest case. We need to have a memory calculation *and* a regular
+				 * calculation stuffed into here, but we only have 2 operands to work with. We will
+				 * need to use our special version of a lea for this in most cases
+				 */
 				case THREE_ADDR_CODE_BIN_OP_STMT:
 					//Create the offset constant
 					stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
@@ -1261,9 +1287,11 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 							//Nothing else to do here
 							break;
 						
-						//For a minus, we'll need to circumvent the system by using a -1 multiplier
-						//to make this still work for our lea. Since we have op1 - op2, we can rewrite
-						//this into op1 + op2 * -1
+						/**
+						 * For a minus, we'll need to circumvent the system by using a -1 multiplier
+						 * to make this still work for our lea. Since we have op1 - op2, we can rewrite
+						 * this into op1 + op2 * -1
+						 */
 						case MINUS:
 							//Full stack here
 							instruction->lea_statement_type = OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE;
