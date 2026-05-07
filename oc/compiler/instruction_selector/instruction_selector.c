@@ -2960,7 +2960,32 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 
 	/**
-	 * ------------------ Converting adjacent binary operations into LEA statements
+	 * Apply the same strategy for instructions 1 and 3
+	 * 
+	 *
+	 * Example:
+	 * t21 <- ^t8_0 * 4
+	 * ........
+	 * t22 <- t19 + 21
+	 *
+	 * Can become
+	 * t22 <- (t19, ^t8_0, 4)
+	 *
+	 * And we can delete the first instruction
+	 */
+	if(window->instruction3 != NULL
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& (window->instruction1->op == STAR || window->instruction1->op == PLUS)
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& window->instruction3->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
+		&& window->instruction3->op == PLUS
+		&& variables_equal(window->instruction3->op2, window->instruction1->assignee, TRUE) == TRUE) {
+
+	}
+
+
+	/**
+	 * ------------------ Converting adjacent binary operations into LEA statements ----------------------------------
 	 * If we have two adjacent binary operations where one is a bin_op_with_const
 	 * and one is a plain bin_op, there may be chances for us to convert them
 	 * into lea statements
