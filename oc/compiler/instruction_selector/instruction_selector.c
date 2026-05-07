@@ -944,15 +944,19 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 			//The additional offset may come from stack passed parameters, and we need to account for it
 			additional_offset = instruction->op1->memory_address_base_adjustment;
 
-			//Extract the stack offset for our use. This will determine how 
-			//we process things down below
+			/**
+			 * Extract the stack offset for our use. This will determine how 
+			 * we process things down below
+			 */
 			stack_offset = var->stack_region->function_local_base_address + additional_offset;
 
 			//Go based on what kind of statement that we've got here
 			switch(instruction->statement_type){
-				//If we have an assignment statement, we
-				//can turn this into a lea with an offset or a
-				//straight assignment depending on the offset
+				/**
+				 * If we have an assignment statement, we
+				 * can turn this into a lea with an offset or a
+				 * straight assignment depending on the offset
+				 */
 				case THREE_ADDR_CODE_ASSN_STMT:
 					//Make it a lea
 					if(stack_offset != 0){
@@ -967,18 +971,54 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						//This is a lea with an offset only
 						instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
 
-					//Otherwise, we'll just swap the var out with the stack pointer since
-					//they're one in the same
+					/**
+					 * Otherwise, we'll just swap the var out with the stack pointer since
+					 * they're one in the same
+					 */
 					} else {
 						instruction->op1 = stack_pointer_variable;
 					}
 
 					break;
 
-				//For a statement like this, we will merge the existing
-				//constant in. We know that the only two possible operands
-				//with a memory address are Plus/minus, so we only need to 
-				//account for 2 cases here
+				/**
+				 * Store statements act very similarly to assignment statements. We
+				 * just put the store right after the memory address assignment
+				 */
+				case THREE_ADDR_CODE_STORE_STATEMENT:
+				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+					//Make it a lea
+					if(stack_offset != 0){
+						//Emit the stack offset constant
+						three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
+
+						//Now the lea for our calculation
+						instruction_t* lea_statement = emit_lea_offset_only(emit_temp_var(instruction->op1->type), stack_pointer_variable, offset_constant);
+
+						//This lea goes in right before the store
+						insert_instruction_before_given(lea_statement, instruction);
+
+						//The op1 here is now what the lea calculated
+						instruction->op1 = lea_statement->assignee;
+
+					/**
+					 * Otherwise, we'll just swap the var out with the stack pointer since
+					 * they're one in the same. We don't need any extra instructions
+					 * before the store for this
+					 */
+					} else {
+						instruction->op1 = stack_pointer_variable;
+					}
+
+					break;
+					
+				/**
+				 * For a statement like this, we will merge the existing
+				 * constant in. We know that the only two possible operands
+				 * with a memory address are Plus/minus, so we only need to 
+				 * account for 2 cases here
+				 */
 				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 					//Make it a lea
 					if(stack_offset != 0){
@@ -1016,17 +1056,21 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						//This is an offset only
 						instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
 
-					//Otherwise, we'll just swap the var out with the stack pointer since
-					//they're one in the same
+					/**
+					 * Otherwise, we'll just swap the var out with the stack pointer since
+					 * they're one in the same
+					 */
 					} else {
 						instruction->op1 = stack_pointer_variable;
 					}
 
 					break;
 
-				//Final and trickiest case. We need to have a memory calculation *and* a regular
-				//calculation stuffed into here, but we only have 2 operands to work with. We will
-				//need to use our special version of a lea for this in most cases
+				/**
+				 * Final and trickiest case. We need to have a memory calculation *and* a regular
+				 * calculation stuffed into here, but we only have 2 operands to work with. We will
+				 * need to use our special version of a lea for this in most cases
+				 */
 				case THREE_ADDR_CODE_BIN_OP_STMT:
 					//Make it a lea, we'll need to use op2
 					//for the second variable
@@ -1053,9 +1097,11 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 								//Nothing else to do here
 								break;
 							
-							//For a minus, we'll need to circumvent the system by using a -1 multiplier
-							//to make this still work for our lea. Since we have op1 - op2, we can rewrite
-							//this into op1 + op2 * -1
+							/**
+							 * For a minus, we'll need to circumvent the system by using a -1 multiplier
+							 * to make this still work for our lea. Since we have op1 - op2, we can rewrite
+							 * this into op1 + op2 * -1
+							 */
 							case MINUS:
 								//Full stack here
 								instruction->lea_statement_type = OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE;
@@ -1074,8 +1120,10 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						//Wipe out the op once we're done
 						instruction->op = BLANK;
 						
-					//Then again all we need to do here is set the op1
-					//to be our stack pointer
+					/**
+					 * Then again all we need to do here is set the op1
+					 * to be our stack pointer
+					 */
 					} else {
 						instruction->op1 = stack_pointer_variable;
 					}
