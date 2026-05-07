@@ -1969,6 +1969,24 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				default:
 					break;
 			}
+
+		/**
+		 * If we are trying to store a memory address, then we'll also
+		 * need to do remediations here as the regular store area cannot handle that
+		 */
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+			if(first->op1 != NULL){
+				switch(first->op1->variable_type){
+					case VARIABLE_TYPE_MEMORY_ADDRESS:
+					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+						printf("HERE\n\n\n");
+						break;
+					default:
+						break;
+				}
+			}
 			
 			break;
 
@@ -2017,6 +2035,26 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			break;
 
 		/**
+		 * If we are trying to store a memory address, then we'll also
+		 * need to do remediations here as the regular store area cannot handle that
+		 */
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+			if(second->op1 != NULL){
+				switch(second->op1->variable_type){
+					case VARIABLE_TYPE_MEMORY_ADDRESS:
+					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+						printf("HERE\n\n\n");
+						break;
+					default:
+						break;
+				}
+			}
+			
+			break;
+
+		/**
 		 * If we have an elaborative param offset calculation, now is the time
 		 * where we will convert it into a constant assignment
 		 */
@@ -2060,6 +2098,26 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				}
 				
 				break;
+				
+		/**
+		 * If we are trying to store a memory address, then we'll also
+		 * need to do remediations here as the regular store area cannot handle that
+		 */
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+			if(third->op1 != NULL){
+				switch(third->op1->variable_type){
+					case VARIABLE_TYPE_MEMORY_ADDRESS:
+					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+						printf("HERE\n\n\n");
+						break;
+					default:
+						break;
+				}
+			}
+			
+			break;
 
 		/**
 		 * If we have an elaborative param offset calculation, now is the time
