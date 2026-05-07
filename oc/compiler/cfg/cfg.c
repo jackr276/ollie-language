@@ -6109,8 +6109,14 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	 * Do we have a pre-loaded up store statement ready for us to go? If so, then
 	 * we'll need to handle this appropriately. We need to be sure that we aren't
 	 * invalidly hitting this though
+	 *
+	 * NOTE: We check for 100% *exact* equality between the exit statement's assignee
+	 * and the left hand var here. That is the only way that we can know for sure 
+	 * that we aren't having a false positive
 	 */
-	} else if(is_store_operation(current_block->exit_statement) == TRUE){
+	} else if(current_block->exit_statement != NULL
+				&& is_store_operation(current_block->exit_statement) == TRUE
+				&& current_block->exit_statement->assignee == left_hand_var){
 		//This is our store statement
 		instruction_t* store_statement = current_block->exit_statement;
 
