@@ -902,6 +902,24 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 
 					break;
 
+				/**
+				 * For our store operations, to rememdiate we just need to do everything that we would normally do 
+				 * before the store operation and replace the op1 with what we had
+				 */
+				case THREE_ADDR_CODE_STORE_STATEMENT:
+				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+					//Let the helper emit the statement
+					address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(instruction->op1->type), instruction->op1, instruction_pointer_variable);
+
+					//Put this right before the store
+					insert_instruction_before_given(address_instruction, instruction);
+
+					//The assignee here now is our op1 variable
+					instruction->op1 = address_instruction->assignee;
+
+					break;
+
 				//This should never happen
 				default:
 					printf("Fatal internal compiler error: unreachable path hit in global/static variable memory address remediation\n");
@@ -1966,6 +1984,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
 					remediate_memory_address_variable_in_non_access_context(window, first);
 					break;
+
 				default:
 					break;
 			}
@@ -1981,7 +2000,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				switch(first->op1->variable_type){
 					case VARIABLE_TYPE_MEMORY_ADDRESS:
 					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-						printf("HERE\n\n\n");
+						remediate_memory_address_variable_in_non_access_context(window, first);
 						break;
 					default:
 						break;
@@ -2045,8 +2064,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				switch(second->op1->variable_type){
 					case VARIABLE_TYPE_MEMORY_ADDRESS:
 					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-						printf("HERE\n\n\n");
+						remediate_memory_address_variable_in_non_access_context(window, second);
 						break;
+
 					default:
 						break;
 				}
@@ -2110,8 +2130,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				switch(third->op1->variable_type){
 					case VARIABLE_TYPE_MEMORY_ADDRESS:
 					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-						printf("HERE\n\n\n");
+						remediate_memory_address_variable_in_non_access_context(window, third);
 						break;
+
 					default:
 						break;
 				}
