@@ -6947,84 +6947,25 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 		three_addr_const_t* final_assignee_const = NULL;
 
 		/**
-		 * Few scenarios that we want to watch out for here:
-		 * 	Temporary variable type and we have a memory address being assigned - we need to save the address in our array
-		 * 	Temporary variable type and we have a constant being assigned - optimize by just storing the constant
-		 *
-		 * 	TODO TOTALLY REWORK - anything besides the const is useless
+		 * One scenario that we want to watch out for here: Temporary variable type
+		 * and we have a constant being assigned - optimize by just storing the constant
 		 */
 		if(final_assignee->variable_type == VARIABLE_TYPE_TEMP
-			&& current_block->exit_statement != NULL){
+			&& current_block->exit_statement != NULL
+			&& current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
+			&& variables_equal_no_ssa(current_block->exit_statement->assignee, final_assignee, FALSE) == TRUE){
 
-			switch(current_block->exit_statement->statement_type){
-				/**
-				 * Are we assigning a const? If so we can just grab that out now
-				 */
-				case THREE_ADDR_CODE_ASSN_CONST_STMT:
-					//Not equal - just leave
-					if(variables_equal(current_block->exit_statement->assignee, final_assignee, FALSE) == FALSE){
-						break;
-					}
+			//They are equal, so we have a const result type now
+			final_assignee_const = current_block->exit_statement->op1_const;
 
-					//They are equal, so we have a const result type now
-					final_assignee_const = current_block->exit_statement->op1_const;
-
-					//Flag we have a const result
-					result_type = PARAM_RESULT_TYPE_CONST;
-					
-					break;
-
-				/**
-				 * Are we copying over a memory address? If so we need to flag it inside of our addresses
-				 * to adjust
-				 */
-				case THREE_ADDR_CODE_ASSN_STMT:
-					//Not equal - just leave
-					if(variables_equal(current_block->exit_statement->assignee, final_assignee, FALSE) == FALSE){
-						break;
-					}
-
-					//Grab this out
-					three_addr_var_t* copy_assignee = current_block->exit_statement->op1;
-
-					/**
-					 * If we do have a memory address then add it into the array
-					 *
-					 * TODO ARE WE GOING TO NEED THIS?
-					 */
-					if(copy_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
-						|| copy_assignee->variable_type == VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS){
-						printf("HERE2\n\n");
-
-						//Allocate it if need be
-						if(memory_addresses_to_adjust->internal_array == NULL){
-							*memory_addresses_to_adjust = dynamic_array_alloc();
-						}
-
-						//Throw this into storage for later
-						dynamic_array_add(memory_addresses_to_adjust, copy_assignee);
-
-						//This now is our assignee
-						final_assignee_var = copy_assignee;
-					}
-
-					
-				//By default do nothing
-				default:
-					break;
-			}
+			//Flag we have a const result
+			result_type = PARAM_RESULT_TYPE_CONST;
 		}
 
-		//Now we can add to the array
-		switch(result_type){
-			case PARAM_RESULT_TYPE_VAR:
-				add_parameter_result_to_results_array(elaborative_param_results, final_assignee_var, PARAM_RESULT_TYPE_VAR);
-				break;
-
-			case PARAM_RESULT_TYPE_CONST:
-				add_parameter_result_to_results_array(elaborative_param_results, final_assignee_const, PARAM_RESULT_TYPE_CONST);
-				break;
-		}
+		//Add the appropriate result into the result array 
+		add_parameter_result_to_results_array(elaborative_param_results, 
+												result_type == PARAM_RESULT_TYPE_VAR ? (void*)final_assignee_var : (void*)final_assignee_const,
+												result_type);
 
 		//Advance it up here
 		child_cursor = child_cursor->next_sibling;
