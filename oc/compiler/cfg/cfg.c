@@ -6873,6 +6873,8 @@ static inline cfg_result_package_t emit_parameter_expression(basic_block_t* basi
 	 * Few scenarios that we want to watch out for here:
 	 * 	Temporary variable type and we have a memory address being assigned - we need to save the address in our array
 	 * 	Temporary variable type and we have a constant being assigned - optimize by just storing the constant
+	 *
+	 * 	TODO TOTALLY REWORK - anything besides the const is useless
 	 */
 	if(final_assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& current_block->exit_statement != NULL){
@@ -6915,6 +6917,8 @@ static inline cfg_result_package_t emit_parameter_expression(basic_block_t* basi
 				 */
 				if(copy_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
 					|| copy_assignee->variable_type == VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS){
+					printf("HERE1\n\n\n");
+
 					//Allocate it if need be
 					if(memory_addresses_to_adjust->internal_array == NULL){
 						*memory_addresses_to_adjust = dynamic_array_alloc();
@@ -7005,6 +7009,8 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 		 * Few scenarios that we want to watch out for here:
 		 * 	Temporary variable type and we have a memory address being assigned - we need to save the address in our array
 		 * 	Temporary variable type and we have a constant being assigned - optimize by just storing the constant
+		 *
+		 * 	TODO TOTALLY REWORK - anything besides the const is useless
 		 */
 		if(final_assignee->variable_type == VARIABLE_TYPE_TEMP
 			&& current_block->exit_statement != NULL){
@@ -7047,6 +7053,8 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 					 */
 					if(copy_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
 						|| copy_assignee->variable_type == VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS){
+						printf("HERE2\n\n");
+
 						//Allocate it if need be
 						if(memory_addresses_to_adjust->internal_array == NULL){
 							*memory_addresses_to_adjust = dynamic_array_alloc();
@@ -7230,11 +7238,13 @@ static inline void handle_parameter_storage(basic_block_t* basic_block, paramete
 								 * If we have a memory address type, we'll need to emit an assignment here as we can't
 								 * have the memory address directly in the load
 								 *
-								 * TODO SHOULDN'T NEED
+								 * TODO SHOULDN'T NEED - because we don't need it for the load
 								 */
 								if(result_var->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
 									|| result_var->variable_type == VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS){
 									instruction_t* assignment = emit_assignment_instruction(emit_temp_var(parameter_type), result_var);
+
+									printf("HERE3\n\n\n");
 
 									add_statement(basic_block, assignment);
 
