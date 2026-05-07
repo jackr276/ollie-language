@@ -7111,9 +7111,6 @@ static inline void handle_parameter_storage(basic_block_t* basic_block, paramete
 	//Now that we have all of this, we need to go through and emit our final assignments for the function calls
 	//themselves
 	for(u_int32_t i = 0; i < non_elaborative_parameter_results->current_index; i++){
-		//For any result vars we need to grab
-		three_addr_var_t* result_var;
-
 		//For any/all call side regions that we need
 		stack_region_t* call_side_region;
 
@@ -7231,33 +7228,7 @@ static inline void handle_parameter_storage(basic_block_t* basic_block, paramete
 								break;
 
 							case PARAM_RESULT_TYPE_VAR:
-								//Extract for convenience
-								result_var = result->param_result.variable_result;
-
-								/**
-								 * If we have a memory address type, we'll need to emit an assignment here as we can't
-								 * have the memory address directly in the load
-								 *
-								 * TODO SHOULDN'T NEED - because we don't need it for the load
-								 */
-								if(result_var->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
-									|| result_var->variable_type == VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS){
-									instruction_t* assignment = emit_assignment_instruction(emit_temp_var(parameter_type), result_var);
-
-									printf("HERE3\n\n\n");
-
-									add_statement(basic_block, assignment);
-
-									//This is the first assignment if it's NULL
-									if(*first_assignment_instruction == NULL){
-										*first_assignment_instruction = assignment;
-									}
-
-									//This is the new result var
-									result_var = assignment->assignee;
-								}
-
-								store_operation = emit_store_with_constant_offset_ir_code(stack_pointer_variable, stack_offset, result_var, parameter_type);
+								store_operation = emit_store_with_constant_offset_ir_code(stack_pointer_variable, stack_offset, result->param_result.variable_result, parameter_type);
 								break;
 						}
 
