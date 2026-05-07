@@ -5704,19 +5704,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					 * all we need to do is take emit a specialized "memory address var" from the existing
 					 * stack region and slap it into a variable
 					 */
-
-					//TODO HERE
-					//
-					//WE probably don't need to be doing all this, if we're just smarter down the line in the system
-
 					//The memory address itself
 					three_addr_var_t* memory_address_var = emit_memory_address_var(unary_expression_child->variable);
-
-					//Emit a custom assignment instruction for this
-					//instruction_t* address_assignment = emit_assignment_instruction(emit_temp_var(u64), memory_address_var);
-
-					//Add this into the block
-					//add_statement(current_block, address_assignment);
 
 					//And package the value up as what we want here
 					unary_package.assignee = memory_address_var;
@@ -6103,6 +6092,8 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	 *
 	 * Note that we will skip this test if the memory address is for a struct or union. Those
 	 * types require copying which is a special operation that would be ruined by this temp assignment
+	 *
+	 * TODO RETHINK THIS LOGIC
 	 */
 	if(final_op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
 		&& does_type_require_copy_assignment(final_op1->type) == FALSE) {
@@ -11555,6 +11546,8 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 	 * NOTE: we will only do this if the final op1 type that we are after does not require a copy
 	 * assignment. If the type does require us to copy in order to assign, then doing this would mangle
 	 * the result that we need to do the actual copy
+	 *
+	 * TODO RETHINK THIS LOGIC
 	 */
 	if(final_op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
 		&& does_type_require_copy_assignment(final_op1->type) == FALSE){
