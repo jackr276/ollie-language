@@ -2981,8 +2981,93 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction3->op == PLUS
 		&& variables_equal(window->instruction3->op2, window->instruction1->assignee, TRUE) == TRUE) {
 
-	}
+		//Extract for convenience
+		instruction_t* constant_operation = window->instruction1;
+		instruction_t* binary_operation = window->instruction3;
 
+		//Grab the result type out
+		generic_type_t* result_type;
+
+		//If we can find it great, otherwise just use op1
+		if(binary_operation->type_storage.result_type != NULL){
+			result_type = binary_operation->type_storage.result_type;
+		} else {
+			result_type = binary_operation->op1->type;
+		}
+
+		/**
+		 * If the type here is actually compatible, then we can do this
+		 */
+		if(is_type_lea_compatible(result_type) == TRUE){
+			switch(constant_operation->op){
+				/**
+				 * For the case of a plus:
+				 * 	t21 <- t20 + 8
+				 * 	t22 <- t19 + t21
+				 *
+				 * 	t22 <- 8(t19, t20)
+				 */
+				case PLUS:
+					//Convert instruction2 into a lea
+					binary_operation->statement_type = THREE_ADDR_CODE_LEA_STMT;
+					binary_operation->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_OFFSET;
+
+					//The op2 now becomes the op1
+					binary_operation->op2 = constant_operation->op1;
+
+					//Store the constant over as well
+					binary_operation->op1_const = constant_operation->op1_const;
+					
+					//Once this is done we can scrap the first instruction
+					delete_statement(constant_operation);
+
+					//Rebuild the window around the binary operation
+					reconstruct_window(window, binary_operation);
+
+					//This is a change
+					changed = TRUE;
+					break;
+
+				/**
+				 * For the case of a *:
+				 * 	t21 <- t20 * 8
+				 * 	t22 <- t19 + t21
+				 *
+				 * 	t22 <- (t19, t20, 8)
+				 */
+				case STAR:
+					//We need to make sure that we have a compatible power of 2, otherwise this will all break down
+					if(is_constant_lea_compatible_power_of_2(constant_operation->op1_const) == FALSE){
+						break;
+					}
+
+					//Convert instruction2 into a lea
+					binary_operation->statement_type = THREE_ADDR_CODE_LEA_STMT;
+					binary_operation->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_SCALE;
+
+					//The op2 now becomes the op1
+					binary_operation->op2 = constant_operation->op1;
+
+					//Store the constant over as well
+					binary_operation->lea_multiplier = constant_operation->op1_const->constant_value.signed_long_constant;
+					
+					//Once this is done we can scrap the first instruction
+					delete_statement(constant_operation);
+
+					//Rebuild the window around the binary operation
+					reconstruct_window(window, binary_operation);
+
+					//This is a change
+					changed = TRUE;
+
+					break;
+
+				//By default do nothing
+				default:
+					break;
+			}
+		}
+	}
 
 	/**
 	 * ------------------ Converting adjacent binary operations into LEA statements ----------------------------------
