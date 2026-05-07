@@ -910,7 +910,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
 					//Let the helper emit the statement
-					address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(instruction->op1->type), instruction->op1, instruction_pointer_variable);
+					address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op1, instruction_pointer_variable);
 
 					//Put this right before the store
 					insert_instruction_before_given(address_instruction, instruction);
@@ -994,7 +994,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
 
 						//Now the lea for our calculation
-						instruction_t* lea_statement = emit_lea_offset_only(emit_temp_var(instruction->op1->type), stack_pointer_variable, offset_constant);
+						instruction_t* lea_statement = emit_lea_offset_only(emit_temp_var(u64), stack_pointer_variable, offset_constant);
 
 						//This lea goes in right before the store
 						insert_instruction_before_given(lea_statement, instruction);
@@ -1190,7 +1190,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
 
 					//Now emit the address calculation
-					address_instruction = emit_lea_offset_only(emit_temp_var(instruction->op1->type), stack_pointer_variable, stack_offset_constant);
+					address_instruction = emit_lea_offset_only(emit_temp_var(u64), stack_pointer_variable, stack_offset_constant);
 
 					//This goes in right before the store does
 					insert_instruction_before_given(address_instruction, instruction);
