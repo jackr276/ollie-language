@@ -830,7 +830,6 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 	int64_t additional_offset;
 	three_addr_const_t* stack_offset_constant;
 	instruction_t* address_instruction;
-	instruction_t* address_lea;
 
 	//Grab this out
 	symtab_variable_record_t* var = instruction->op1->linked_var;
@@ -3003,6 +3002,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				/**
 				 * For the case of a plus:
 				 * 	t21 <- t20 + 8
+				 * 	....
 				 * 	t22 <- t19 + t21
 				 *
 				 * 	t22 <- 8(t19, t20)
@@ -3026,11 +3026,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 					//This is a change
 					changed = TRUE;
+
 					break;
 
 				/**
 				 * For the case of a *:
 				 * 	t21 <- t20 * 8
+				 * 	....
 				 * 	t22 <- t19 + t21
 				 *
 				 * 	t22 <- (t19, t20, 8)

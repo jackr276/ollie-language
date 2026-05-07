@@ -6084,32 +6084,6 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	//The final first operand will be the expression package's assignee for now
 	three_addr_var_t* final_op1 = right_hand_package.assignee;
 
-	/**
-	 * If the final op1 is a memory address, we need to emit a temp assignment
-	 * to make it not one. This is because later on down in the instruction selector,
-	 * we will need to translate a memory address into an actual result and we can't
-	 * do that inside of a store.
-	 *
-	 * Note that we will skip this test if the memory address is for a struct or union. Those
-	 * types require copying which is a special operation that would be ruined by this temp assignment
-	 *
-	 * TODO RETHINK THIS LOGIC
-	 */
-	if(final_op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
-		&& does_type_require_copy_assignment(final_op1->type) == FALSE) {
-		//Emit the assignment
-		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(u64), final_op1);
-
-		//Insert this into the block before the store
-		insert_instruction_after_given(assignment, last_instruction);
-
-		//This is now the last instruction
-		last_instruction = assignment;
-
-		//Give back the temp assignee
-		final_op1 = assignment->assignee;
-	}
-
 	//Emit the left hand unary expression
 	cfg_result_package_t unary_package = emit_unary_expression(current_block, left_child);
 
@@ -6133,7 +6107,8 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 
 	/**
 	 * Do we have a pre-loaded up store statement ready for us to go? If so, then
-	 * we'll need to handle this appropriately
+	 * we'll need to handle this appropriately. We need to be sure that we aren't
+	 * invalidly hitting this though
 	 */
 	} else if(is_store_operation(current_block->exit_statement) == TRUE){
 		//This is our store statement
@@ -11536,34 +11511,6 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 
 	//Store the last instruction for later use
 	instruction_t* last_instruction = current_block->exit_statement;
-
-	/**
-	 * If the final op1 is a memory address, we need to emit a temp assignment
-	 * to make it not one. This is because later on down in the instruction selector,
-	 * we will need to translate a memory address into an actual result and we can't
-	 * do that inside of a store
-	 *
-	 * NOTE: we will only do this if the final op1 type that we are after does not require a copy
-	 * assignment. If the type does require us to copy in order to assign, then doing this would mangle
-	 * the result that we need to do the actual copy
-	 *
-	 * TODO RETHINK THIS LOGIC
-	 */
-	if(final_op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
-		&& does_type_require_copy_assignment(final_op1->type) == FALSE){
-		//Emit the assignment
-		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(u64), final_op1);
-
-		//Add this at the very end of the block. Remember - there is a chance that
-		//the last instruction is NULL so we'll dodge that here by doing this
-		add_statement(current_block, assignment);
-
-		//This is now the last instruction
-		last_instruction = assignment;
-
-		//And the final op1 is this one's assignee
-		final_op1 = last_instruction->assignee;
-	}
 
 	//Now update the final block
 	let_results.final_block = current_block;
