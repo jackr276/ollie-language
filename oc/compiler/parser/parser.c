@@ -1632,6 +1632,39 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 			}
 
 			/**
+			 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
+			 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
+			 * no dereference from said expression. Dereferencing would mess up the memory copying, we should just be
+			 * doing an address calculation.
+			 */
+			if(is_copy_assignment_required(type_being_elaborated, elaborated_param->inferred_type) == TRUE){
+				/**
+				 * If the right hand expression is a postfix expression *and* we are looking
+				 * to perform a memory copy assignment here, we need to flag that 
+				 * we do *not* require a dereference to make this work
+				 */
+				switch(elaborated_param->ast_node_type){
+					case AST_NODE_TYPE_POSTFIX_EXPR:
+						elaborated_param->dereference_needed = FALSE;
+						break;
+
+					/**
+					 * Copy assignment through ternaries produce undefined behavior
+					 */
+					case AST_NODE_TYPE_TERNARY_EXPRESSION:
+						elaborated_param->dereference_needed = FALSE;
+
+						//This is unstable
+						print_parse_message(MESSAGE_TYPE_WARNING, "Copy assignment through ternary produces undefined behavior", parser_line_num);
+						num_warnings++;
+						break;
+
+					default:
+						break;
+				}
+			}
+
+			/**
 			 * Special checking here - if we have an enum type that is being assigned to, we need
 			 * to make sure that it's being assigned to a valid value in it's range
 			 */
@@ -12328,14 +12361,6 @@ static u_int8_t validate_main_function(generic_type_t* type){
  * an elaborative param of the given type to avoid duplicates
  */
 static inline generic_type_t* handle_elaborative_param_type(generic_type_t* elaborated_type){
-	//If the type cannot be used for an elaborative param, we leave
-	if(is_type_valid_for_elaborative_param(elaborated_type) == FALSE){
-		sprintf(info, "Type \"%s\" is invalid to be used as an elaborative param. Only pointers and primitive types may be elaborated. Remove the \"params\" keyword", elaborated_type->type_name.string);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		num_errors++;
-		return NULL;
-	}
-
 	//Let's construct the name that would exist if we had an identical elaborative param in the symtab
 	dynamic_string_t elaborative_param_name = dynamic_string_alloc();
 	dynamic_string_set(&elaborative_param_name, "params ");

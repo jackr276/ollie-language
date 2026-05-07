@@ -192,6 +192,8 @@ struct three_addr_var_t{
 	} associated_memory_region;
 	//What is the ssa generation level?
 	u_int32_t ssa_generation;
+	//Base adjustment for stack passed memory address variables
+	u_int32_t memory_address_base_adjustment;
 	//What's the temp var number
 	u_int32_t temp_var_number;
 	//What's the reference count of this variable.
@@ -352,8 +354,6 @@ struct instruction_t{
 	} type_storage;
 	//For lea multiplication
 	u_int64_t lea_multiplier;
-	//The base adjustment for a pass-by-copy-parameter
-	u_int32_t pass_by_copy_base_adjustment;
 	//The function called
 	symtab_function_record_t* called_function;
 	//The variable record
@@ -877,6 +877,11 @@ instruction_t* emit_global_variable_address_calculation_oir(three_addr_var_t* as
  * Emit a fully formed global variable x86 address calculation lea
  */
 instruction_t* emit_global_variable_address_calculation_x86(three_addr_var_t* global_variable, three_addr_var_t* instruction_pointer, generic_type_t* u64);
+
+/**
+ * Emit a starting offset calculation for the given elaborative param
+ */
+instruction_t* emit_elaborative_param_starting_offset_calculation(three_addr_var_t* result, three_addr_var_t* elaborative_param);
 
 /**
  * Are two variables equal? A helper method for searching

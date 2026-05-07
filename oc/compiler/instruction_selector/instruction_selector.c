@@ -826,6 +826,8 @@ static inline u_int8_t binary_operator_valid_for_inplace_constant_match(ollie_to
 static void remediate_memory_address_variable_in_non_access_context(instruction_window_t* window, instruction_t* instruction){
 	//For later use
 	int64_t stack_offset;
+	//Additional offsets may come when we have stack params
+	int64_t additional_offset;
 	three_addr_const_t* stack_offset_constant;
 	instruction_t* address_instruction;
 
@@ -900,6 +902,24 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 
 					break;
 
+				/**
+				 * For our store operations, to rememdiate we just need to do everything that we would normally do 
+				 * before the store operation and replace the op1 with what we had
+				 */
+				case THREE_ADDR_CODE_STORE_STATEMENT:
+				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+					//Let the helper emit the statement
+					address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op1, instruction_pointer_variable);
+
+					//Put this right before the store
+					insert_instruction_before_given(address_instruction, instruction);
+
+					//The assignee here now is our op1 variable
+					instruction->op1 = address_instruction->assignee;
+
+					break;
+
 				//This should never happen
 				default:
 					printf("Fatal internal compiler error: unreachable path hit in global/static variable memory address remediation\n");
@@ -921,15 +941,22 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 	 */
 	switch(instruction->op1->variable_type){
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
-			//Extract the stack offset for our use. This will determine how 
-			//we process things down below
-			stack_offset = var->stack_region->function_local_base_address;
+			//The additional offset may come from stack passed parameters, and we need to account for it
+			additional_offset = instruction->op1->memory_address_base_adjustment;
+
+			/**
+			 * Extract the stack offset for our use. This will determine how 
+			 * we process things down below
+			 */
+			stack_offset = var->stack_region->function_local_base_address + additional_offset;
 
 			//Go based on what kind of statement that we've got here
 			switch(instruction->statement_type){
-				//If we have an assignment statement, we
-				//can turn this into a lea with an offset or a
-				//straight assignment depending on the offset
+				/**
+				 * If we have an assignment statement, we
+				 * can turn this into a lea with an offset or a
+				 * straight assignment depending on the offset
+				 */
 				case THREE_ADDR_CODE_ASSN_STMT:
 					//Make it a lea
 					if(stack_offset != 0){
@@ -944,18 +971,54 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						//This is a lea with an offset only
 						instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
 
-					//Otherwise, we'll just swap the var out with the stack pointer since
-					//they're one in the same
+					/**
+					 * Otherwise, we'll just swap the var out with the stack pointer since
+					 * they're one in the same
+					 */
 					} else {
 						instruction->op1 = stack_pointer_variable;
 					}
 
 					break;
 
-				//For a statement like this, we will merge the existing
-				//constant in. We know that the only two possible operands
-				//with a memory address are Plus/minus, so we only need to 
-				//account for 2 cases here
+				/**
+				 * Store statements act very similarly to assignment statements. We
+				 * just put the store right after the memory address assignment
+				 */
+				case THREE_ADDR_CODE_STORE_STATEMENT:
+				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+					//Make it a lea
+					if(stack_offset != 0){
+						//Emit the stack offset constant
+						three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
+
+						//Now the lea for our calculation
+						instruction_t* lea_statement = emit_lea_offset_only(emit_temp_var(u64), stack_pointer_variable, offset_constant);
+
+						//This lea goes in right before the store
+						insert_instruction_before_given(lea_statement, instruction);
+
+						//The op1 here is now what the lea calculated
+						instruction->op1 = lea_statement->assignee;
+
+					/**
+					 * Otherwise, we'll just swap the var out with the stack pointer since
+					 * they're one in the same. We don't need any extra instructions
+					 * before the store for this
+					 */
+					} else {
+						instruction->op1 = stack_pointer_variable;
+					}
+
+					break;
+					
+				/**
+				 * For a statement like this, we will merge the existing
+				 * constant in. We know that the only two possible operands
+				 * with a memory address are Plus/minus, so we only need to 
+				 * account for 2 cases here
+				 */
 				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 					//Make it a lea
 					if(stack_offset != 0){
@@ -993,17 +1056,21 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						//This is an offset only
 						instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
 
-					//Otherwise, we'll just swap the var out with the stack pointer since
-					//they're one in the same
+					/**
+					 * Otherwise, we'll just swap the var out with the stack pointer since
+					 * they're one in the same
+					 */
 					} else {
 						instruction->op1 = stack_pointer_variable;
 					}
 
 					break;
 
-				//Final and trickiest case. We need to have a memory calculation *and* a regular
-				//calculation stuffed into here, but we only have 2 operands to work with. We will
-				//need to use our special version of a lea for this in most cases
+				/**
+				 * Final and trickiest case. We need to have a memory calculation *and* a regular
+				 * calculation stuffed into here, but we only have 2 operands to work with. We will
+				 * need to use our special version of a lea for this in most cases
+				 */
 				case THREE_ADDR_CODE_BIN_OP_STMT:
 					//Make it a lea, we'll need to use op2
 					//for the second variable
@@ -1030,9 +1097,11 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 								//Nothing else to do here
 								break;
 							
-							//For a minus, we'll need to circumvent the system by using a -1 multiplier
-							//to make this still work for our lea. Since we have op1 - op2, we can rewrite
-							//this into op1 + op2 * -1
+							/**
+							 * For a minus, we'll need to circumvent the system by using a -1 multiplier
+							 * to make this still work for our lea. Since we have op1 - op2, we can rewrite
+							 * this into op1 + op2 * -1
+							 */
 							case MINUS:
 								//Full stack here
 								instruction->lea_statement_type = OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE;
@@ -1051,8 +1120,10 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						//Wipe out the op once we're done
 						instruction->op = BLANK;
 						
-					//Then again all we need to do here is set the op1
-					//to be our stack pointer
+					/**
+					 * Then again all we need to do here is set the op1
+					 * to be our stack pointer
+					 */
 					} else {
 						instruction->op1 = stack_pointer_variable;
 					}
@@ -1075,6 +1146,9 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 		 * processing, but fundamentally we are limited here
 		 */
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+			//Grab the additional offset for processing
+			additional_offset = instruction->op1->memory_address_base_adjustment;
+
 			//Go based on what kind of statement that we've got here
 			switch(instruction->statement_type){
 				/**
@@ -1089,6 +1163,9 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					//op1_const is our offset
 					instruction->op1_const = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
 
+					//Add the additional offset in as an adjustment(it's usually 0)
+					instruction->op1_const->constant_adjustment = additional_offset;
+
 					//Turn it into a LEA
 					instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
 
@@ -1097,6 +1174,29 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 
 					//This is a lea with an offset only
 					instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
+
+					break;
+
+				/**
+				 * Store statements act very similarly to the assignment
+				 * statement, except for our need to put the assignment before the
+				 * actual statement. We do not need to account for cases where
+				 * the offset from %rsp is 0 because that will never happen
+				 */
+				case THREE_ADDR_CODE_STORE_STATEMENT:
+				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+					//Emit the special stack constant
+					stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
+
+					//Now emit the address calculation
+					address_instruction = emit_lea_offset_only(emit_temp_var(u64), stack_pointer_variable, stack_offset_constant);
+
+					//This goes in right before the store does
+					insert_instruction_before_given(address_instruction, instruction);
+
+					//The op1 now comes from this instruction
+					instruction->op1 = address_instruction->assignee;
 
 					break;
 
@@ -1117,6 +1217,9 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 					//Emit the constant
 					stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
+
+					//Add the additional offset in as an adjustment(it's usually 0)
+					stack_offset_constant->constant_adjustment = additional_offset;
 
 					//Simplify based on what we have
 					switch(instruction->op){
@@ -1152,12 +1255,17 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 
 					break;
 
-				//Final and trickiest case. We need to have a memory calculation *and* a regular
-				//calculation stuffed into here, but we only have 2 operands to work with. We will
-				//need to use our special version of a lea for this in most cases
+				/**
+				 * Final and trickiest case. We need to have a memory calculation *and* a regular
+				 * calculation stuffed into here, but we only have 2 operands to work with. We will
+				 * need to use our special version of a lea for this in most cases
+				 */
 				case THREE_ADDR_CODE_BIN_OP_STMT:
 					//Create the offset constant
 					stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
+
+					//Add the additional offset in as an adjustment(it's usually 0)
+					stack_offset_constant->constant_adjustment = additional_offset;
 
 					//This is now our op1_const
 					instruction->op1_const = stack_offset_constant;
@@ -1178,9 +1286,11 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 							//Nothing else to do here
 							break;
 						
-						//For a minus, we'll need to circumvent the system by using a -1 multiplier
-						//to make this still work for our lea. Since we have op1 - op2, we can rewrite
-						//this into op1 + op2 * -1
+						/**
+						 * For a minus, we'll need to circumvent the system by using a -1 multiplier
+						 * to make this still work for our lea. Since we have op1 - op2, we can rewrite
+						 * this into op1 + op2 * -1
+						 */
 						case MINUS:
 							//Full stack here
 							instruction->lea_statement_type = OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE;
@@ -1418,7 +1528,7 @@ static void convert_memory_copy_statement_into_loads_and_stores(instruction_wind
 	 * to adjust the memory address that the source has if we're copying after a new stack allocation
 	 * statement. We maintain a base adjustment amoutn just for this purpose
 	 */
-	u_int64_t source_adjustment = memory_copy_statement->pass_by_copy_base_adjustment;
+	u_int64_t source_adjustment = memory_copy_statement->op1->memory_address_base_adjustment;
 
 	//We always use the dedicated field to determine how many bytes we should be copying
 	u_int64_t remaining_copy_amount = memory_copy_statement->optional_storage.byte_amount_to_copy;
@@ -1831,6 +1941,84 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 
 
 /**
+ * Get the base alignment type for an elaborative param. We have special rules for
+ * this to enable efficient struct copying
+ */
+static inline u_int64_t get_base_alignment_size_for_elaborative_param(generic_type_t* type_being_elaborated){
+	switch(type_being_elaborated->type_class){
+		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_UNION:
+			return 16;
+
+		default:
+			return get_base_alignment_type(type_being_elaborated)->type_size;
+	}
+}
+
+
+/**
+ * Fetch the initial padding for an elaborative parameter type. Remember that elaborative
+ * parameter types always have a 4 byte counter as the first element, followed by any needed 
+ * padding, which is then followed by anything else that needs to be added on
+ *
+ * Sample:
+ * 	count -> 4 bytes
+ * 	padding -> 12 bytes
+ * 	16 byte aligned struct -> 16 bytes
+ *
+ * 	So if we were doing "param[0]", we'd actually need to start by adding 16 bytes on to account 
+ *  for the counter and the padding
+ */
+static inline u_int64_t get_initial_padding_for_elaborative_type(generic_type_t* elaborative_type){
+	//We always start off with 4 bytes of padding
+	u_int64_t padding_before_first_element = 4;
+
+	//Get what type we are elaborating
+	generic_type_t* type_being_elaborated = elaborative_type->internal_types.elaborates;
+
+	//Get what we need to align by
+	u_int64_t alignment = get_base_alignment_size_for_elaborative_param(type_being_elaborated);
+
+	/**
+	 * If we don't have any additional padding needed, then that is fine. Otherwise, we will get
+	 * the padding that is needed and add it on here. Realistically that would mean that it has
+	 * to be 8 or 16 byte aligned, so we can actually just reassign what the first element padding is here
+	 */
+	if(padding_before_first_element % alignment != 0){
+		padding_before_first_element = alignment;
+	}
+
+	//Give back what we have before the first element
+	return padding_before_first_element;
+}
+
+
+/**
+ * Convert a three_addr_code_elaborative_param_offset expression into a constant assignment for later optimizations. This
+ * only exists in the IR for clarity and prior work
+ */
+static void convert_elaborative_param_offset_to_constant_assignment(instruction_t* elaborative_param_offset){
+	//The base address comes from op1
+	three_addr_var_t* base_address_variable = elaborative_param_offset->op1;
+
+	//We won't need it for later so wipe it out
+	elaborative_param_offset->op1 = NULL;
+
+	//Get the starting alignment that we need to add
+	u_int64_t initial_padding = get_initial_padding_for_elaborative_type(base_address_variable->type);
+
+	//Emit the offset constant here
+	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(initial_padding, u64);
+	
+	//We can convert this into a constant assignment now
+	elaborative_param_offset->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+	//And assign the constant in
+	elaborative_param_offset->op1_const = offset_constant;
+}
+
+
+/**
  * The pattern optimizer takes in a window and performs hyperlocal optimzations
  * on passing instructions. If we do end up deleting instructions, we'll need
  * to take care with how that affects the window that we take in
@@ -1871,10 +2059,39 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
 					remediate_memory_address_variable_in_non_access_context(window, first);
 					break;
+
 				default:
 					break;
 			}
+
+		/**
+		 * If we are trying to store a memory address, then we'll also
+		 * need to do remediations here as the regular store area cannot handle that
+		 */
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+			if(first->op1 != NULL){
+				switch(first->op1->variable_type){
+					case VARIABLE_TYPE_MEMORY_ADDRESS:
+					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+						remediate_memory_address_variable_in_non_access_context(window, first);
+						break;
+					default:
+						break;
+				}
+			}
 			
+			break;
+
+		/**
+		 * If we have an elaborative param offset calculation, now is the time
+		 * where we will convert it into a constant assignment
+		 */
+		case THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET:
+			convert_elaborative_param_offset_to_constant_assignment(first);
+
+			changed = TRUE;
 			break;
 
 		/**
@@ -1887,6 +2104,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			//This counts as a change
 			changed = TRUE;
 			break;
+
 
 		//By default do nothing
 		default:
@@ -1908,6 +2126,37 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					break;
 			}
 			
+			break;
+
+		/**
+		 * If we are trying to store a memory address, then we'll also
+		 * need to do remediations here as the regular store area cannot handle that
+		 */
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+			if(second->op1 != NULL){
+				switch(second->op1->variable_type){
+					case VARIABLE_TYPE_MEMORY_ADDRESS:
+					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+						remediate_memory_address_variable_in_non_access_context(window, second);
+						break;
+
+					default:
+						break;
+				}
+			}
+			
+			break;
+
+		/**
+		 * If we have an elaborative param offset calculation, now is the time
+		 * where we will convert it into a constant assignment
+		 */
+		case THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET:
+			convert_elaborative_param_offset_to_constant_assignment(second);
+
+			changed = TRUE;
 			break;
 
 		/**
@@ -1944,6 +2193,37 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				}
 				
 				break;
+				
+		/**
+		 * If we are trying to store a memory address, then we'll also
+		 * need to do remediations here as the regular store area cannot handle that
+		 */
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+			if(third->op1 != NULL){
+				switch(third->op1->variable_type){
+					case VARIABLE_TYPE_MEMORY_ADDRESS:
+					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+						remediate_memory_address_variable_in_non_access_context(window, third);
+						break;
+
+					default:
+						break;
+				}
+			}
+			
+			break;
+
+		/**
+		 * If we have an elaborative param offset calculation, now is the time
+		 * where we will convert it into a constant assignment
+		 */
+		case THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET:
+			convert_elaborative_param_offset_to_constant_assignment(third);
+
+			changed = TRUE;
+			break;
 
 		/**
 		 * If we have a memory copy statement, we will need to convert it into the
@@ -2679,7 +2959,120 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 
 	/**
-	 * ------------------ Converting adjacent binary operations into LEA statements
+	 * Apply the same strategy for instructions 1 and 3
+	 * 
+	 *
+	 * Example:
+	 * t21 <- ^t8_0 * 4
+	 * ........
+	 * t22 <- t19 + 21
+	 *
+	 * Can become
+	 * t22 <- (t19, ^t8_0, 4)
+	 *
+	 * And we can delete the first instruction
+	 */
+	if(window->instruction3 != NULL
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& (window->instruction1->op == STAR || window->instruction1->op == PLUS)
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& window->instruction3->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
+		&& window->instruction3->op == PLUS
+		&& variables_equal(window->instruction3->op2, window->instruction1->assignee, TRUE) == TRUE) {
+
+		//Extract for convenience
+		instruction_t* constant_operation = window->instruction1;
+		instruction_t* binary_operation = window->instruction3;
+
+		//Grab the result type out
+		generic_type_t* result_type;
+
+		//If we can find it great, otherwise just use op1
+		if(binary_operation->type_storage.result_type != NULL){
+			result_type = binary_operation->type_storage.result_type;
+		} else {
+			result_type = binary_operation->op1->type;
+		}
+
+		/**
+		 * If the type here is actually compatible, then we can do this
+		 */
+		if(is_type_lea_compatible(result_type) == TRUE){
+			switch(constant_operation->op){
+				/**
+				 * For the case of a plus:
+				 * 	t21 <- t20 + 8
+				 * 	....
+				 * 	t22 <- t19 + t21
+				 *
+				 * 	t22 <- 8(t19, t20)
+				 */
+				case PLUS:
+					//Convert instruction2 into a lea
+					binary_operation->statement_type = THREE_ADDR_CODE_LEA_STMT;
+					binary_operation->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_OFFSET;
+
+					//The op2 now becomes the op1
+					binary_operation->op2 = constant_operation->op1;
+
+					//Store the constant over as well
+					binary_operation->op1_const = constant_operation->op1_const;
+					
+					//Once this is done we can scrap the first instruction
+					delete_statement(constant_operation);
+
+					//Rebuild the window around the binary operation
+					reconstruct_window(window, binary_operation);
+
+					//This is a change
+					changed = TRUE;
+
+					break;
+
+				/**
+				 * For the case of a *:
+				 * 	t21 <- t20 * 8
+				 * 	....
+				 * 	t22 <- t19 + t21
+				 *
+				 * 	t22 <- (t19, t20, 8)
+				 */
+				case STAR:
+					//We need to make sure that we have a compatible power of 2, otherwise this will all break down
+					if(is_constant_lea_compatible_power_of_2(constant_operation->op1_const) == FALSE){
+						break;
+					}
+
+					//Convert instruction2 into a lea
+					binary_operation->statement_type = THREE_ADDR_CODE_LEA_STMT;
+					binary_operation->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_SCALE;
+
+					//The op2 now becomes the op1
+					binary_operation->op2 = constant_operation->op1;
+
+					//Store the constant over as well
+					binary_operation->lea_multiplier = constant_operation->op1_const->constant_value.signed_long_constant;
+					
+					//Once this is done we can scrap the first instruction
+					delete_statement(constant_operation);
+
+					//Rebuild the window around the binary operation
+					reconstruct_window(window, binary_operation);
+
+					//This is a change
+					changed = TRUE;
+
+					break;
+
+				//By default do nothing
+				default:
+					break;
+			}
+		}
+	}
+
+	/**
+	 * ------------------ Converting adjacent binary operations into LEA statements ----------------------------------
 	 * If we have two adjacent binary operations where one is a bin_op_with_const
 	 * and one is a plain bin_op, there may be chances for us to convert them
 	 * into lea statements
