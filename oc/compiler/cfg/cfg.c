@@ -7229,6 +7229,8 @@ static inline void handle_parameter_storage(basic_block_t* basic_block, paramete
 								/**
 								 * If we have a memory address type, we'll need to emit an assignment here as we can't
 								 * have the memory address directly in the load
+								 *
+								 * TODO SHOULDN'T NEED
 								 */
 								if(result_var->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
 									|| result_var->variable_type == VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS){
@@ -7440,22 +7442,6 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 					 * Everything else we perform a normal store. There is no copy assignment required to make this happen
 					 */
 					default:
-						/**
-						 * If we have a memory address type, we'll need to emit an assignment here as we can't
-						 * have the memory address directly in the load
-						 *
-						 * TODO SHOULDN't NEED THIS NOW
-						 */
-						if(result_var->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
-							|| result_var->variable_type == VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS){
-							instruction_t* assignment = emit_assignment_instruction(emit_temp_var(result_var->type), result_var);
-
-							add_statement(basic_block, assignment);
-
-							//This is the new result var
-							result_var = assignment->assignee;
-						}
-
 						//Create this one's stack region
 						variable_result_region = create_stack_region_for_type(stack_passed_parameters, result_var->type);
 
@@ -7672,8 +7658,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 * Now that we've emitted all of the parameters, we will let the helper deal with
 	 * the storage of them
 	 */
-	handle_parameter_storage(current_block, &non_elaborative_parameter_results, &stack_passed_parameters, signature, &(function_call_statement->parameters),
-						  		&first_assignment_instruction);
+	handle_parameter_storage(current_block, &non_elaborative_parameter_results, &stack_passed_parameters, signature, &(function_call_statement->parameters), &first_assignment_instruction);
 
 	/**
 	 * If we do have elaborative stack params to manage, we will do so here
