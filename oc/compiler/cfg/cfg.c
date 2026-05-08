@@ -3334,6 +3334,8 @@ static inline branch_conditional_truthfullness_t get_branch_conditional_truthful
  * edge(not a jump, but a successor) be added *if* we have a nonterminating loop(always true/false loop statement)
  */
 static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_ast_node_t* conditional_node, basic_block_t* if_block, basic_block_t* else_block, branch_category_t branch_category, u_int8_t virtual_out_edge_required){
+	instruction_t* constant_assignment;
+
 	//Allcoate the results
 	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
 
@@ -3421,8 +3423,28 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		//Update the final block
 		current_block = binary_results.final_block;
 
-		//Extract the actual result assignee
-		three_addr_var_t* conditional_decider = binary_results.assignee;
+		//The conditional decider comes from the result type itself
+		three_addr_var_t* conditional_decider;
+
+		switch(binary_results.type){
+			//For a constant type, we are going to need to emit an assignment
+			case CFG_RESULT_TYPE_CONST:
+				constant_assignment = emit_assignment_with_const_instruction(emit_temp_var(binary_results.result_value.result_const->type), binary_results.result_value.result_const);
+
+				//Get it in the block
+				add_statement(current_block, constant_assignment);
+
+				//This now is our decider
+				conditional_decider = constant_assignment->assignee;
+
+				break;
+
+			//For this we can extract the result var
+			case CFG_RESULT_TYPE_VAR:
+				conditional_decider = binary_results.result_value.result_var;
+
+				break;
+		}
 
 		/**
 		 * If the given operator does not set condition codes appropriately, then
@@ -3662,6 +3684,8 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
  * We'll leave out all of the successor logic here as well, until we reach the end
  */
 static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_block, generic_ast_node_t* conditional_node, symtab_label_record_t* if_destination_label, basic_block_t* else_block){
+	instruction_t* constant_assignment;
+
 	//Allcoate the results
 	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
 
@@ -3688,7 +3712,27 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 		current_block = conditional_results.final_block;
 
 		//Extract the actual result assignee
-		three_addr_var_t* conditional_decider = conditional_results.assignee;
+		three_addr_var_t* conditional_decider;
+
+		switch(conditional_results.type){
+			//For a constant type, we are going to need to emit an assignment
+			case CFG_RESULT_TYPE_CONST:
+				constant_assignment = emit_assignment_with_const_instruction(emit_temp_var(conditional_results.result_value.result_const->type), conditional_results.result_value.result_const);
+
+				//Get it in the block
+				add_statement(current_block, constant_assignment);
+
+				//This now is our decider
+				conditional_decider = constant_assignment->assignee;
+
+				break;
+
+			//For this we can extract the result var
+			case CFG_RESULT_TYPE_VAR:
+				conditional_decider = conditional_results.result_value.result_var;
+
+				break;
+		}
 
 		/**
 		 * If the given operator does not set condition codes appropriately, then
