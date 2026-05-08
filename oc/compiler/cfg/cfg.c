@@ -172,6 +172,35 @@ static void visit_static_let_statement(generic_ast_node_t* node);
 static inline void visit_static_declare_statement(generic_ast_node_t* node);
 static inline void handle_raise_statement(basic_block_t* basic_block, generic_ast_node_t* node);
 
+
+/**
+ * Unpack a result package. We assume that if this function is being called that the caller
+ * wants us to unpack the constant if we are able to.
+ */
+static inline three_addr_var_t* unpack_result_package(cfg_result_package_t* result_package, basic_block_t* block){
+	three_addr_const_t* constant_value;
+
+	switch(result_package->type){
+		//Variable - just give it back
+		case CFG_RESULT_TYPE_VAR:
+			return result_package->result_value.result_var;
+
+		//Constant - unpack with an assignment and give the temp var back
+		case CFG_RESULT_TYPE_CONST:
+			constant_value = result_package->result_value.result_const;
+
+			//Emit the assignment
+			instruction_t* const_assignment = emit_assignment_with_const_instruction(emit_temp_var(constant_value->type), constant_value);
+
+			//Throw it into the block
+			add_statement(block, const_assignment);
+
+			//Give back the variable that we generated
+			return const_assignment->assignee;
+	}
+}
+
+
 /**
  * Lea statements may only have: 1, 2, 4, or 8 as their scales
  * due to internal hardware constraints. This operation will find
@@ -5458,7 +5487,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	current_block = postfix_expression_results.final_block;
 
 	//This is the value that we will be modifying. It will always be a variable
-	three_addr_var_t* assignee = postfix_expression_results.result_value.result_var;
+	three_addr_var_t* assignee = unpack_result_package(&postfix_expression_results, current_block);
 
 	/**
 	 * Remember that for a postoperation, we save the value that we get before
@@ -5580,7 +5609,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 		//Otherwise we just have a regular assignment
 		} else {
 			//And finally, we'll emit the save instruction that stores the value that we've incremented into the location we got it from
-			instruction_t* assignment_instruction = emit_assignment_instruction(copied_package.result_value.result_var, assignee);
+			instruction_t* assignment_instruction = emit_assignment_instruction(unpack_result_package(&copied_package, current_block), assignee);
 
 			//Add this into the block
 			add_statement(current_block, assignment_instruction);
@@ -5615,8 +5644,6 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 
 /**
  * Handle a unary operator, in whatever form it may be
- *
- * HERE\n
  */
 static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, generic_ast_node_t* unary_expression_parent){
 	//Top level declarations to avoid using them in the switch statement
@@ -5654,7 +5681,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			current_block = unary_package.final_block;
 
 			//The assignee comes from our package. This is what we are ultimately using in the final result
-			assignee = unary_package.result_value.result_var;
+			assignee = unpack_result_package(&unary_package, current_block);
 		
 			//Go based on what we have here
 			switch(assignee->type->type_class){
@@ -5662,9 +5689,11 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					//Go based on the op here
 					switch(unary_operator_node->unary_operator){
 						case PLUSPLUS:
-							//Go based on the basic type. Since SSE variables are not
-							//compatible with normal inc instructions, we need to
-							//break out like this
+							/**
+							 * Go based on the basic type. Since SSE variables are not
+							 * compatible with normal inc instructions, we need to
+							 * break out like this
+							 */
 							switch(assignee->type->basic_type_token){
 								case F32:
 								case F64:
@@ -5681,9 +5710,11 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 							break;
 							
 						case MINUSMINUS:
-							//Go based on the basic type. Since SSE variables are not
-							//compatible with normal dec instructions, we need to
-							//break out like this
+							/**
+							 * Go based on the basic type. Since SSE variables are not
+							 * compatible with normal dec instructions, we need to
+							 * break out like this
+							 */
 							switch(assignee->type->basic_type_token){
 								case F32:
 								case F64:
@@ -5788,7 +5819,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			}
 
 			//Store the assignee as this
-			unary_package.assignee = assignee;
+			unary_package.type = CFG_RESULT_TYPE_VAR;
+			unary_package.result_value.result_var = assignee;
 			//Update the final block if it has change
 			unary_package.final_block = current_block;
 		
@@ -5799,11 +5831,12 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		case STAR:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
-			//The assignee comes from the package
-			assignee = unary_package.result_value.result_var;
 
 			//Update the block
 			current_block = unary_package.final_block;
+
+			//The assignee comes from the package
+			assignee = unpack_result_package(&unary_package, current_block);
 
 			//The pointer will be on the unary expression child
 			generic_type_t* pointer_type = unary_expression_child->inferred_type;
@@ -5860,7 +5893,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				add_statement(current_block, store_instruction);
 
 				//Add the assignee in here
-				unary_package.assignee = assignee;
+				unary_package.type = CFG_RESULT_TYPE_VAR;
+				unary_package.result_value.result_var = assignee;
 
 			/**
 			 * If we get here, we know that we either have a right hand operation or we're on the left hand
@@ -5874,7 +5908,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				add_statement(current_block, load_instruction);
 
 				//This one's assignee is our overall assignee
-				unary_package.assignee = load_instruction->assignee;
+				unary_package.type = CFG_RESULT_TYPE_VAR;
+				unary_package.result_value.result_var = load_instruction->assignee;
 			}
 
 			//Give back the final unary package
@@ -5884,14 +5919,16 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		case B_NOT:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
-			//The assignee comes from the package
-			assignee = unary_package.assignee;
 
 			//Update the current block
 			current_block = unary_package.final_block;
 
+			//The assignee comes from the package
+			assignee = unpack_result_package(&unary_package, current_block);
+
 			//The new assignee will come from this helper
-			unary_package.assignee = emit_bitwise_not_expr_code(current_block, assignee);
+			unary_package.type = CFG_RESULT_TYPE_VAR;
+			unary_package.result_value.result_var = emit_bitwise_not_expr_code(current_block, assignee);
 
 			//Give the package back
 			return unary_package;
@@ -5900,11 +5937,12 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		case EXCLAMATION:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
-			//The assignee comes from the package
-			assignee = unary_package.assignee;
 
 			//Update the current block
 			current_block = unary_package.final_block;
+
+			//The assignee comes from the package
+			assignee = unpack_result_package(&unary_package, current_block);
 
 			//This will always overwrite the other value
 			instruction_t* logical_not_statement = emit_logical_not_instruction(emit_temp_var(u8), assignee);
@@ -5920,7 +5958,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			add_statement(current_block, logical_not_statement);
 
 			//The package's assignee is now the result of this logical not instruction
-			unary_package.assignee = logical_not_statement->assignee;
+			unary_package.type = CFG_RESULT_TYPE_VAR;
+			unary_package.result_value.result_var = logical_not_statement->assignee;
 
 			//The operator here is logical not
 			unary_package.operator = EXCLAMATION;
@@ -5940,14 +5979,14 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		case MINUS:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
-			//The assignee comes from the package
-			assignee = unary_package.assignee;
 
 			//Update the current block
 			current_block = unary_package.final_block;
 
-			//We'll need to assign to a temp here, these are
-			//only ever on the RHS
+			//The assignee comes from the package
+			assignee = unpack_result_package(&unary_package, current_block);
+
+			//We'll need to assign to a temp here, these are only ever on the RHS
 			assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
 
 			//Add this into the block
@@ -5960,7 +5999,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			add_statement(current_block, negation_instruction);
 
 			//Rewrite the assignee to be this now
-			unary_package.assignee = negation_instruction->assignee;
+			unary_package.type = CFG_RESULT_TYPE_VAR;
+			unary_package.result_value.result_var = negation_instruction->assignee;
 			
 			//And give back the final value
 			return unary_package;
