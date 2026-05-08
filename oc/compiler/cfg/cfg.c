@@ -5049,10 +5049,12 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
 		*came_from_non_contiguous_region = FALSE;
 	}
 
-	//By the time we get out here, we have performed a dereference and loaded whatever our offset
-	//math was before into the new base address variable. The current offset will be NULL again
-	//because we need to start over if we have any more offsets
-	cfg_result_package_t return_package = {block, block, *base_address, BLANK};
+	/**
+	 * By the time we get out here, we have performed a dereference and loaded whatever our offset
+	 * math was before into the new base address variable. The current offset will be NULL again
+	 * because we need to start over if we have any more offsets
+	 */
+	cfg_result_package_t return_package = {block, block, {*base_address}, CFG_RESULT_TYPE_VAR, BLANK};
 	return return_package;
 }
 
@@ -5254,6 +5256,9 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	//This is whatever the final block is
 	current_block = postfix_results.final_block;
 
+	//IMPORTANT - the result of this is always going to be a variable
+	postfix_results.type = CFG_RESULT_TYPE_VAR;
+
 	//In case we need them - load and store
 	instruction_t* load_instruction;
 	instruction_t* store_instruction;
@@ -5273,7 +5278,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 					add_statement(current_block, store_instruction);
 
 					//Give back the base address as the assignee(even though it's not really)
-					postfix_results.assignee = base_address;
+					postfix_results.result_value.result_var = base_address;
 
 				//Otherwise, this means that the current offset is null
 				} else {
@@ -5285,7 +5290,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 					add_statement(current_block, store_instruction);
 
 					//Give back the base address as the assignee(even though it's not really)
-					postfix_results.assignee = base_address;
+					postfix_results.result_value.result_var = base_address;
 				}
 
 				break;
@@ -5301,10 +5306,9 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 					add_statement(current_block, load_instruction);
 
 					//Now the final assignee here is important - it's what we give it here
-					postfix_results.assignee = load_instruction->assignee;
+					postfix_results.result_value.result_var = load_instruction->assignee;
 
-				//Otherwise we have a null current offset, so we're just
-				//relying on the base address
+				//Otherwise we have a null current offset, so we're just relying on the base address
 				} else {
 					//Emit the load instruction between the base address and the parent node type
 					load_instruction = emit_load_ir_code(emit_temp_var(parent_node_type), base_address, original_memory_access_type);
@@ -5313,17 +5317,15 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 					add_statement(current_block, load_instruction);
 
 					//This is our final assignee
-					postfix_results.assignee = load_instruction->assignee;
+					postfix_results.result_value.result_var = load_instruction->assignee;
 				}
 
 				break;
 		}
 
-	//Otherwise it's just a memory address call, just emit the 
-	//base address plus the offset
+	//Otherwise it's just a memory address call, just emit the base address plus the offset
 	} else {
-		//If the current offset is not NULL, we'll need to do some calculations
-		//here
+		//If the current offset is not NULL, we'll need to do some calculations here
 		if(current_offset != NULL){
 			//Just do base address + offset
 			instruction_t* address_calculation = emit_binary_operation_instruction(emit_temp_var(base_address->type), base_address, PLUS, current_offset);
@@ -5332,11 +5334,11 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 			add_statement(current_block, address_calculation);
 
 			//This is what we're returning
-			postfix_results.assignee = address_calculation->assignee;
+			postfix_results.result_value.result_var = address_calculation->assignee;
 
 		//Otherwise it is null, so we can just use the base address
 		} else {
-			postfix_results.assignee = base_address;
+			postfix_results.result_value.result_var = base_address;
 		}
 	}
 
@@ -5368,8 +5370,8 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	//Update the end block
 	current_block = postfix_expression_results.final_block;
 
-	//This is the value that we will be modifying
-	three_addr_var_t* assignee = postfix_expression_results.assignee;
+	//This is the value that we will be modifying. It will always be a variable
+	three_addr_var_t* assignee = postfix_expression_results.result_value.result_var;
 
 	/**
 	 * Remember that for a postoperation, we save the value that we get before
@@ -5385,7 +5387,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	add_statement(current_block, temp_assignment);
 
 	//Initialize this off the bat
-	cfg_result_package_t postoperation_package = {basic_block, current_block, temp_assignment->assignee, BLANK};
+	cfg_result_package_t postoperation_package = {basic_block, current_block, {temp_assignment->assignee}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	//If the assignee is not a pointer, we'll handle the normal case
 	switch(assignee->type->type_class){
@@ -5491,7 +5493,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 		//Otherwise we just have a regular assignment
 		} else {
 			//And finally, we'll emit the save instruction that stores the value that we've incremented into the location we got it from
-			instruction_t* assignment_instruction = emit_assignment_instruction(copied_package.assignee, assignee);
+			instruction_t* assignment_instruction = emit_assignment_instruction(copied_package.result_value.result_var, assignee);
 
 			//Add this into the block
 			add_statement(current_block, assignment_instruction);
@@ -5532,7 +5534,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 	instruction_t* assignment;
 	three_addr_var_t* assignee;
 	//The unary expression package
-	cfg_result_package_t unary_package = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t unary_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	//We'll keep track of what the current block here is
 	basic_block_t* current_block = basic_block;
@@ -5563,7 +5565,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			current_block = unary_package.final_block;
 
 			//The assignee comes from our package. This is what we are ultimately using in the final result
-			assignee = unary_package.assignee;
+			assignee = unary_package.result_value.result_var;
 		
 			//Go based on what we have here
 			switch(assignee->type->type_class){
@@ -5671,7 +5673,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				//Otherwise we just have a regular assignment
 				} else {
 					//And finally, we'll emit the save instruction that stores the value that we've incremented into the location we got it from
-					instruction_t* assignment_instruction = emit_assignment_instruction(copied_package.assignee, assignee);
+					instruction_t* assignment_instruction = emit_assignment_instruction(copied_package.result_value.result_var, assignee);
 
 					//Add this into the block
 					add_statement(current_block, assignment_instruction);
@@ -5709,7 +5711,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
 			//The assignee comes from the package
-			assignee = unary_package.assignee;
+			assignee = unary_package.result_value.result_var;
 
 			//Update the block
 			current_block = unary_package.final_block;
@@ -5746,7 +5748,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				add_statement(current_block, assignment_instruction);
 
 				//Package this up and get out
-				unary_package.assignee = assignment_instruction->assignee;
+				unary_package.type = CFG_RESULT_TYPE_VAR;
+				unary_package.result_value.result_var = assignment_instruction->assignee;
 				return unary_package;
 			}
 
@@ -5952,10 +5955,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
  * 	
  * 	<postfix-expression> | <unary-operator> <cast-expression> | typesize(<type-specifier>) | sizeof(<logical-or-expression>) 
  */
-static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression){
+static inline cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression){
 	//Switch based on what class this node actually is
 	switch(unary_expression->ast_node_type){
-		//If it's actually a unary expression, we can do some processing
 		//If we see the actual node here, we know that we are actually doing a unary operation
 		case AST_NODE_TYPE_UNARY_EXPR:	
 			return emit_unary_operation(basic_block, unary_expression);
@@ -6056,6 +6058,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	return_package.starting_block = starting_block;
 	return_package.final_block = end_block;
 	//The final assignee is the temp var that we assigned to
+	return_package.type = CFG_RESULT_TYPE_VAR;
 	return_package.assignee =  final_result;
 	//Mark that we had a ternary here
 	return_package.operator = QUESTION;
