@@ -3887,7 +3887,7 @@ static cfg_result_package_t emit_constant_assignment(basic_block_t* basic_block,
 	constant_result_package.final_block = basic_block;
 
 	//Placeholders for constant/var values
-	three_addr_const_t* const_val;
+	three_addr_const_t* emitted_constant;
 	three_addr_var_t* local_constant_val;
 	three_addr_var_t* function_pointer_variable;
 	local_constant_t* local_constant;
@@ -4073,31 +4073,78 @@ static cfg_result_package_t emit_constant_assignment(basic_block_t* basic_block,
 		 * each area will allocate the constant itself
 		 */
 		case CHAR_CONST:
+			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+			emitted_constant->type = constant_node->inferred_type;
+			emitted_constant->const_type = CHAR_CONST;
+
 			constant->constant_value.char_constant = const_node->constant_value.char_value;
 			break;
+
 		case BYTE_CONST:
-			constant->constant_value.signed_byte_constant = const_node->constant_value.signed_byte_value;
+			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+			emitted_constant->type = constant_node->inferred_type;
+			emitted_constant->const_type = BYTE_CONST;
+
+			emitted_constant->constant_value.signed_byte_constant = const_node->constant_value.signed_byte_value;
+
 			break;
+
 		case BYTE_CONST_FORCE_U:
-			constant->constant_value.unsigned_byte_constant = const_node->constant_value.unsigned_byte_value;
+			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+			emitted_constant->type = constant_node->inferred_type;
+			emitted_constant->const_type = BYTE_CONST_FORCE_U;
+
+			emitted_constant->constant_value.unsigned_byte_constant = const_node->constant_value.unsigned_byte_value;
 			break;
+
 		case SHORT_CONST:
-			constant->constant_value.signed_short_constant = const_node->constant_value.signed_short_value;
+			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+			emitted_constant->type = constant_node->inferred_type;
+			emitted_constant->const_type = SHORT_CONST;
+
+			emitted_constant->constant_value.signed_short_constant = const_node->constant_value.signed_short_value;
 			break;
+
 		case SHORT_CONST_FORCE_U:
-			constant->constant_value.unsigned_short_constant = const_node->constant_value.unsigned_short_value;
+			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+			emitted_constant->type = constant_node->inferred_type;
+			emitted_constant->const_type = SHORT_CONST_FORCE_U;
+
+			emitted_constant->constant_value.unsigned_short_constant = const_node->constant_value.unsigned_short_value;
 			break;
+
 		case INT_CONST:
-			constant->constant_value.signed_integer_constant = const_node->constant_value.signed_int_value;
+			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+			emitted_constant->type = constant_node->inferred_type;
+			emitted_constant->const_type = INT_CONST;
+
+			emitted_constant->constant_value.signed_integer_constant = const_node->constant_value.signed_int_value;
 			break;
+
 		case INT_CONST_FORCE_U:
-			constant->constant_value.unsigned_integer_constant = const_node->constant_value.unsigned_int_value;
+			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+			emitted_constant->type = constant_node->inferred_type;
+			emitted_constant->const_type = INT_CONST_FORCE_U;
+
+			emitted_constant->constant_value.unsigned_integer_constant = const_node->constant_value.unsigned_int_value;
 			break;
+
 		case LONG_CONST:
-			constant->constant_value.signed_long_constant = const_node->constant_value.signed_long_value;
+			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+			emitted_constant->type = constant_node->inferred_type;
+			emitted_constant->const_type = LONG_CONST;
+
+			emitted_constant->constant_value.signed_long_constant = const_node->constant_value.signed_long_value;
+
 			break;
+
 		case LONG_CONST_FORCE_U:
-			constant->constant_value.unsigned_long_constant = const_node->constant_value.unsigned_long_value;
+			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+			emitted_constant->type = constant_node->inferred_type;
+			emitted_constant->const_type = LONG_CONST_FORCE_U;
+
+			emitted_constant->constant_value.unsigned_long_constant = const_node->constant_value.unsigned_long_value;
+
 			break;
 			
 		//Some weird error if we get here - hard exit
