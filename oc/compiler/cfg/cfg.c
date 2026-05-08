@@ -3880,7 +3880,12 @@ void emit_indirect_jump(basic_block_t* basic_block, three_addr_var_t* dest_addr)
 /**
  * Emit the abstract machine code for a constant to variable assignment. 
  */
-static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, generic_ast_node_t* constant_node){
+static cfg_result_package_t emit_constant_assignment(basic_block_t* basic_block, generic_ast_node_t* constant_node){
+	//Initialize the constant result package
+	cfg_result_package_t constant_result_package = INITIALIZE_BLANK_CFG_RESULT;
+	constant_result_package.starting_block = basic_block;
+	constant_result_package.final_block = basic_block;
+
 	//Placeholders for constant/var values
 	three_addr_const_t* const_val;
 	three_addr_var_t* local_constant_val;
@@ -3901,8 +3906,10 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 			//Let's first see if we already have it
 			local_constant = get_string_local_constant(&(cfg->local_string_constants), constant_node->string_value.string);
 
-			//If we couldn't find it, we'll create it. Otherwise, we'll just use what we found
-			//to get our temp var
+			/**
+			 * If we couldn't find it, we'll create it. Otherwise, we'll just use what we found
+			 * to get our temp var
+			 */
 			if(local_constant == NULL){
 				local_constant_val = emit_string_local_constant(cfg, constant_node);
 			} else {
@@ -3911,7 +3918,16 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 
 			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
 			const_assignment = emit_lea_rip_relative_constant(emit_temp_var(constant_node->inferred_type), local_constant_val, instruction_pointer_var);
-			break;
+
+			//Add this into the block
+			add_statement(basic_block, const_assignment);
+
+			/**
+			 * This is always a variable constant - we will package it up and return now
+			 */
+			constant_result_package.type = CFG_RESULT_TYPE_VAR;
+			constant_result_package.result_value.result_var = const_assignment->assignee;
+			return constant_result_package;
 
 		//For float constants, we need to emit the local constant equivalent via the helper
 		case FLOAT_CONST:
@@ -3924,15 +3940,21 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 				//Emit a temp var for this value
 				three_addr_var_t* cleared_var = emit_temp_var(constant_node->inferred_type);
 
-				//We will now use a specialized IR instruction to clear this variable out. In reality
-				//this clearing will be a PXOR statement
+				/**
+				 * We will now use a specialized IR instruction to clear this variable out. In reality
+				 * this clearing will be a PXOR statement
+				 */
 				instruction_t* clear_instruction = emit_floating_point_clear_instruction(cleared_var);
 
 				//Add it into the block
 				add_statement(basic_block, clear_instruction);
 
-				//We will now give back the created variable
-				return cleared_var;
+				/**
+				 * We are done - let's now package up and return the variable that we need to
+				 */
+				constant_result_package.type = CFG_RESULT_TYPE_VAR;
+				constant_result_package.result_value.result_var = cleared_var;
+				return constant_result_package;
 			}
 
 			//Let's first see if we can find it
@@ -3945,16 +3967,27 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 				local_constant_val = emit_local_constant_temp_var(local_constant);
 			}
 
-			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
-			//This only gets the address, we still need to do extra work for our constants
+			/**
+			 * We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
+			 * This only gets the address, we still need to do extra work for our constants
+			 */
 			address_load = emit_lea_rip_relative_constant(emit_temp_var(u64), local_constant_val, instruction_pointer_var);
+
 			//Add it into the block
 			add_statement(basic_block, address_load);
 
 			//Emit a load instruction to grab the constant from said address
 			const_assignment = emit_load_ir_code(emit_temp_var(f32), address_load->assignee, f32);
 
-			break;
+			//Now add the actual assignment into the block
+			add_statement(basic_block, const_assignment);
+
+			/**
+			 * Package up and get out of here with our final result
+			 */
+			constant_result_package.type = CFG_RESULT_TYPE_VAR;
+			constant_result_package.result_value.result_var = const_assignment->assignee;
+			return constant_result_package;
 
 		//For double constants, we need to emit the local constant equivalent via the helper
 		case DOUBLE_CONST:
@@ -4029,9 +4062,6 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 
 	//Add this into the basic block
 	add_statement(basic_block, const_assignment);
-
-	//Now give back the assignee variable
-	return const_assignment->assignee;
 }
 
 
