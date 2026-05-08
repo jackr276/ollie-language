@@ -138,6 +138,14 @@ typedef enum{
 	VARIABLE_SCOPE_LOCAL,
 } variable_scope_type_t;
 
+
+/**
+ * Define a simple initializer for a blank CFG
+ * result type. We usually stack allocate these
+ * so we can't wipe them out any other way
+ */
+#define INITIALIZE_BLANK_CFG_RESULT {NULL, NULL, {NULL}, CFG_RESULT_TYPE_VAR, BLANK}
+
 //We predeclare up here to avoid needing any rearrangements
 static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_let_statement(basic_block_t* basic_block, generic_ast_node_t* node);
@@ -3070,7 +3078,7 @@ static inline void emit_assembly_inline(basic_block_t* basic_block, generic_ast_
  */
 static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_node_t* ret_node){
 	//For holding our temporary return variable
-	cfg_result_package_t return_package = {basic_block, basic_block, NULL, BLANK};
+	cfg_result_package_t return_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	//Keep track of a current block here for our purposes
 	basic_block_t* current = basic_block;
@@ -6929,7 +6937,7 @@ static inline cfg_result_package_t emit_parameter_expression(basic_block_t* basi
 static inline cfg_result_package_t emit_elaborative_param_expressions(basic_block_t* basic_block, generic_ast_node_t* elaborative_param_node,
 																	  	parameter_results_array_t* elaborative_param_results, dynamic_array_t* memory_addresses_to_adjust){
 	//NOTE: we will never have an assignee here
-	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	//Keep track of the current block
 	basic_block_t* current_block = basic_block;
@@ -7385,7 +7393,7 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
  */
 static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node){
 	//Initially we'll emit this, though it may change
- 	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
+ 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	/**
 	 * Store a stack data area variable in the uppermost scope. This will only be acted upon if we see that we
@@ -8184,7 +8192,7 @@ static inline u_int8_t can_blocks_be_merged(basic_block_t* a, basic_block_t* b){
  */
 static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//Initialize the return package
-	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	//Create our entry block. The entry block also only executes once
 	basic_block_t* for_stmt_entry_block = basic_block_alloc_and_estimate();
@@ -8321,7 +8329,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
  */
 static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_node){
 	//First we'll allocate the result block
-	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	//The true ending block. We assume that the exit only happens once
 	basic_block_t* do_while_stmt_exit_block = basic_block_alloc_and_estimate();
@@ -8405,7 +8413,7 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
  */
 static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node){
 	//Initialize the result package
-	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	//Create our exit block. We assume that this executes once
 	basic_block_t* while_statement_end_block = basic_block_alloc_and_estimate();
@@ -8522,7 +8530,7 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
  */
 static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	//Final result package
-	cfg_result_package_t if_results_package = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t if_results_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	/**
 	 * We maintain a current entry block for our uses. Since this is 
@@ -8713,7 +8721,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
  */
 static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_node){
 	//Declare and prepack our results
-	cfg_result_package_t results = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
 
 	//This is nesting inside of a case statement
 	push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
@@ -8759,7 +8767,7 @@ static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_nod
  */
 static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node){
 	//Declare and prepack our results
-	cfg_result_package_t results = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
 
 	//This is nesting inside of a case statement
 	push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
@@ -8815,7 +8823,7 @@ static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node){
  */
 static cfg_result_package_t visit_c_style_case_statement(generic_ast_node_t* root_node){
 	//Declare and initialize off the bat
-	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	//This is nested in a C-style case statement
 	push_nesting_level(&nesting_stack, NESTING_C_STYLE_CASE_STATEMENT);
@@ -8857,7 +8865,7 @@ static cfg_result_package_t visit_c_style_case_statement(generic_ast_node_t* roo
  */
 static cfg_result_package_t visit_c_style_default_statement(generic_ast_node_t* root_node){
 	//Declare and initialize off the bat
-	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	//This is nested in a C-style case statement
 	push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
@@ -8897,7 +8905,7 @@ static cfg_result_package_t visit_c_style_default_statement(generic_ast_node_t* 
  */
 static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* root_node){
 	//Declare and initialize off the bat
-	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	//Th starting and ending blocks for the switch statements
 	basic_block_t* root_level_block = basic_block_alloc_and_estimate();
@@ -8937,7 +8945,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	int32_t offset = root_node->lower_bound;
 
 	//A generic result package for all of our case/default statements
-	cfg_result_package_t case_default_results = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t case_default_results = INITIALIZE_BLANK_CFG_RESULT;
 
 	//We will eventually need to know what the default block is,
 	//so reserve a variable here
@@ -9192,7 +9200,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
  */
 static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node){
 	//Declare the result package off the bat
-	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	//The starting block for the switch statement - we'll want this in a new
 	//block
@@ -9234,7 +9242,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	int32_t offset = root_node->lower_bound;
 
 	//Wipe this out here just in case
-	cfg_result_package_t case_default_results = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t case_default_results = INITIALIZE_BLANK_CFG_RESULT;
 
 	//Get to the next statement. This is the first actual case 
 	//statement
@@ -9599,7 +9607,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					emit_jump(current_block, continuing_to);
 
 					//Package and return
-					generic_results = (cfg_result_package_t){starting_block, current_block, NULL, BLANK};
+					generic_results = (cfg_result_package_t)INITIALIZE_BLANK_CFG_RESULT;
 
 					/**
 					 * We're done here, so return the starting block. There is no 
@@ -9653,7 +9661,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					emit_jump(current_block, breaking_to);
 
 					//Package and return
-					generic_results = (cfg_result_package_t){starting_block, current_block, NULL, BLANK};
+					generic_results = (cfg_result_package_t)INITIALIZE_BLANK_CFG_RESULT;
 
 					/**
 					 * For a regular break statement, this is it, so we just get out
@@ -9918,7 +9926,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
  */
 static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_node){
 	//Everything to begin with is completely null'd out
-	cfg_result_package_t results = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
 	//A generic results package that we can use in any of our processing
 	cfg_result_package_t generic_results;
 	//A defer statement cursor
@@ -10090,7 +10098,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					emit_jump(current_block, continuing_to);
 
 					//Package and return
-					results = (cfg_result_package_t){starting_block, current_block, NULL, BLANK};
+					results = (cfg_result_package_t)INITIALIZE_BLANK_CFG_RESULT;
 
 					/**
 					 * We're done here, so return the starting block. There is no 
@@ -10144,7 +10152,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					emit_jump(current_block, breaking_to);
 
 					//Package and return
-					results = (cfg_result_package_t){starting_block, current_block, NULL, BLANK};
+					results = (cfg_result_package_t)INITIALIZE_BLANK_CFG_RESULT;
 
 					//For a regular break statement, this is it, so we just get out
 					//Give back the starting block
@@ -11119,7 +11127,7 @@ static void visit_declaration_statement(generic_ast_node_t* node){
  */
 static cfg_result_package_t emit_final_initialization(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* expression_node){
 	//Initialize our final results
-	cfg_result_package_t final_results = {current_block, current_block, base_address, BLANK};
+	cfg_result_package_t final_results = {current_block, current_block, {base_address}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	//Now let's emit the expression using the node
 	cfg_result_package_t expression_results = emit_expression(current_block, expression_node);
