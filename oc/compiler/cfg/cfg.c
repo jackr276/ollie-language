@@ -6041,7 +6041,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					three_addr_var_t* memory_address_var = emit_memory_address_var(unary_expression_child->variable);
 
 					//And package the value up as what we want here
-					unary_package.assignee = memory_address_var;
+					unary_package.type = CFG_RESULT_TYPE_VAR;
+					unary_package.result_value.result_var = memory_address_var;
 
 					break;
 
@@ -6056,7 +6057,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					current_block = postfix_results.final_block;
 
 					//And package the value up as what we want here
-					unary_package.assignee = postfix_results.assignee;
+					unary_package.type = CFG_RESULT_TYPE_VAR;
+					unary_package.result_value.result_var = unpack_result_package(&postfix_results, current_block);
 					break;
 
 				//This should never occur
@@ -6118,6 +6120,8 @@ static inline cfg_result_package_t emit_unary_expression(basic_block_t* basic_bl
  * 	cmovne b, result
  */
 static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_block, generic_ast_node_t* ternary_operation){
+	instruction_t* if_assignment;
+	instruction_t* else_assignment;
 	//Expression return package that we need
 	cfg_result_package_t return_package;
 
@@ -6156,10 +6160,21 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	//Again here we could have multiple blocks, so we'll need to account for this and reassign if necessary
 	if_block = if_branch.final_block;
 
-	//We'll now create a conditional move for the if branch into the result
-	instruction_t* if_assignment = emit_assignment_instruction(if_result, if_branch.assignee);
+	/**
+	 * Unpack the result type accordingly for the if branch's
+	 * assignee
+	 */
+	switch(if_branch.type){
+		case CFG_RESULT_TYPE_VAR:
+			if_assignment = emit_assignment_instruction(if_result, if_branch.result_value.result_var);
+			break;
 
-	//Add this into the if block
+		case CFG_RESULT_TYPE_CONST:
+			if_assignment = emit_assignment_with_const_instruction(if_result, if_branch.result_value.result_const);
+			break;
+	}
+
+	//Add this into the if block regardless of the result
 	add_statement(if_block, if_assignment);
 
 	//Now add a direct jump to the end
@@ -6174,8 +6189,19 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	//Again here we could have multiple blocks, so we'll need to account for this and reassign if necessary
 	else_block = else_branch.final_block;
 
-	//We'll now create a conditional move for the else branch into the result
-	instruction_t* else_assignment = emit_assignment_instruction(else_result, else_branch.assignee);
+	/**
+	 * Unpack the result type accordingly for the else branch's
+	 * assignee
+	 */
+	switch(else_branch.type){
+		case CFG_RESULT_TYPE_VAR:
+			else_assignment = emit_assignment_instruction(else_result, else_branch.result_value.result_var);
+			break;
+
+		case CFG_RESULT_TYPE_CONST:
+			else_assignment = emit_assignment_with_const_instruction(else_result, else_branch.result_value.result_const);
+			break;
+	}
 
 	//Add this into the else block
 	add_statement(else_block, else_assignment);
@@ -6188,7 +6214,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	return_package.final_block = end_block;
 	//The final assignee is the temp var that we assigned to
 	return_package.type = CFG_RESULT_TYPE_VAR;
-	return_package.assignee =  final_result;
+	return_package.result_value.result_var =  final_result;
 	//Mark that we had a ternary here
 	return_package.operator = QUESTION;
 
