@@ -77,15 +77,39 @@ static heap_queue_t traversal_queue;
 //For any/all error printing
 char error_info[1500];
 
-//Define a package return struct that is used by the binary op expression code
+
+/**
+ * The actual result type that defines whether we have a struct
+ * or constant or variable result
+ */
+typedef enum {
+	CFG_RESULT_TYPE_VAR,
+	CFG_RESULT_TYPE_CONST,
+} cfg_result_type_t;
+
+
+/**
+ * CFG result packages are used to pass out the reult
+ * of translating an expression. They will contain:
+ * 	1.) Starting block of the statement
+ * 	2.) Ending block of the statement
+ * 	3.) A tagged union with either a variable or constant result
+ * 	4.) The operator that was used, if any
+ */
 typedef struct{
-	//The starting block of what we've made
+	//Blocks come first
 	basic_block_t* starting_block;
-	//The final block we end up with(only used for ternary operators)
 	basic_block_t* final_block;
-	//What is the final assignee
-	three_addr_var_t* assignee;
-	//What operator was used, if any
+
+	//We have a tagged union without it actually being a tagged union
+	union {
+		three_addr_var_t* result_var;
+		three_addr_const_t* result_const;
+	} result_value;
+
+	cfg_result_type_t type;
+
+	//The operator may or may not always be filled
 	ollie_token_t operator;
 } cfg_result_package_t;
 
