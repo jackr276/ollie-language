@@ -6235,7 +6235,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
  */
 static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr){
 	//The return package here
-	cfg_result_package_t package = {basic_block, basic_block, NULL, BLANK};
+	cfg_result_package_t package = {basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	//Current block may change as time goes on, so we'll use the term current block up here to refer to it
 	basic_block_t* current_block = basic_block;
@@ -6415,7 +6415,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
  */
 static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_block, generic_ast_node_t* parent_node){
 	//Final return package here - this will be updated as we go
-	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
+	cfg_result_package_t result_package = {basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	/**
 	 * We will start by emitting the right hand side first. This will allow
@@ -6675,7 +6675,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
  * param stack region. This is because those first 4 bytes are where we store the parameter count
  */
 static cfg_result_package_t visit_paramcount_statement(basic_block_t* basic_block, generic_ast_node_t* paramcount_node){
-	cfg_result_package_t results = {basic_block, basic_block, NULL, BLANK};
+	cfg_result_package_t results = {basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	//Extract the variable
 	symtab_variable_record_t* paramcount_var = paramcount_node->variable;
@@ -6693,7 +6693,8 @@ static cfg_result_package_t visit_paramcount_statement(basic_block_t* basic_bloc
 	add_statement(basic_block, paramcount_load);
 
 	//Package up the assignee inisde of these results
-	results.assignee = paramcount_result;
+	results.type = CFG_RESULT_TYPE_VAR; 
+	results.result_value.result_var = paramcount_result;
 
 	//Give back the results
 	return results;
@@ -6706,9 +6707,6 @@ static cfg_result_package_t visit_paramcount_statement(basic_block_t* basic_bloc
  * variables
  */
 static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node){
-	//Declare and initialize the results
-	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
-
 	//We'll process based on the class of our expression node
 	switch(expr_node->ast_node_type){
 		case AST_NODE_TYPE_DECL_STMT:
@@ -6719,47 +6717,37 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 				visit_static_declare_statement(expr_node);
 			}
 
-			break;
+			return (cfg_result_package_t)INITIALIZE_BLANK_CFG_RESULT;
 
 		case AST_NODE_TYPE_LET_STMT:
 			//Split based on the kind of variable that we have
 			if(expr_node->variable->membership != STATIC_VARIABLE){
-				result_package = visit_let_statement(basic_block, expr_node);
-			} else{
+				return visit_let_statement(basic_block, expr_node);
+			} else {
 				visit_static_let_statement(expr_node);
+				return (cfg_result_package_t)INITIALIZE_BLANK_CFG_RESULT;
 			}
-
-			break;
 		
 		case AST_NODE_TYPE_PARAMCOUNT_STMT:
-			result_package = visit_paramcount_statement(basic_block, expr_node);
-			break;
+			return visit_paramcount_statement(basic_block, expr_node);
 
 		case AST_NODE_TYPE_ASNMNT_EXPR:
-			result_package = emit_assignment_expression(basic_block, expr_node);
-			break;
+			return emit_assignment_expression(basic_block, expr_node);
 	
 		case AST_NODE_TYPE_BINARY_EXPR:
-			result_package = emit_binary_expression(basic_block, expr_node);
-			break;
+			return emit_binary_expression(basic_block, expr_node);
 
-		//We handle direct/indirect calls all in the same function
 		case AST_NODE_TYPE_FUNCTION_CALL:
 		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
-			result_package = emit_function_call(basic_block, expr_node);
-			break;
+			return emit_function_call(basic_block, expr_node);
 
 		case AST_NODE_TYPE_TERNARY_EXPRESSION:
-			result_package = emit_ternary_expression(basic_block, expr_node);
-			break; 
+			return emit_ternary_expression(basic_block, expr_node);
 
 		//Default is a unary expression
 		default:
-			result_package = emit_unary_expression(basic_block, expr_node);
-			break;
+			return emit_unary_expression(basic_block, expr_node);
 	}
-
-	return result_package;
 }
 
 
@@ -6768,8 +6756,6 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
  * invoking the lower level "emit-expression" over and over until we're done
  */
 static cfg_result_package_t emit_expression_chain(basic_block_t* basic_block, generic_ast_node_t* expression_chain_node){
-	cfg_result_package_t result_package;
-
 	//Maintain a pointer to the current block
 	basic_block_t* current_block = basic_block;
 
@@ -6790,14 +6776,14 @@ static cfg_result_package_t emit_expression_chain(basic_block_t* basic_block, ge
 		expression_cursor = expression_cursor->next_sibling;
 	}
 
-	//Package and return our valies. Note that we are always
-	//biased towards the *last* expression we saw
-	result_package.starting_block = basic_block;
-	result_package.final_block = current_block;
-	result_package.operator = expression_result.operator;
-	result_package.assignee = expression_result.assignee;
+	/**
+	 * We are completely biased towards the last expression that we saw. As such, we will
+	 * just hijack the starting block field here and use the expression result as-is
+	 */
+	expression_result.starting_block = basic_block;
+	expression_result.final_block = current_block;
 
-	return result_package;
+	return expression_result;
 }
 
 
@@ -6907,7 +6893,7 @@ static cfg_result_package_t emit_error_handle_statement(generic_ast_node_t* erro
 	basic_block_t* handler_block = basic_block_alloc_and_estimate();
 
 	//Our overall result package
-	cfg_result_package_t results = {handler_block, handler_block, NULL, BLANK};
+	cfg_result_package_t results = {handler_block, handler_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	/**
 	 * There are only 3 types that we could have - ret, raise or some expression. We will
