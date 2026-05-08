@@ -7094,11 +7094,23 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 					//Jump from the final block to the end block
 					emit_jump(handle_results.final_block, error_handling_ending_block);
 
-					//Now we'll assign the result to the result_var
-					instruction_t* assignment_instruction = emit_assignment_instruction(emit_var(function_result_var), handle_results.assignee);
+					/**
+					 * Based on what kind of type we got, we will emit either a constant
+					 * assignment or a regular variable assignment for the handles statement
+					 */
+					instruction_t* result_assignment;
+					switch(handle_results.type){
+						case CFG_RESULT_TYPE_CONST:
+							result_assignment = emit_assignment_with_const_instruction(emit_var(function_result_var), handle_results.result_value.result_const);
+							break;
+
+						case CFG_RESULT_TYPE_VAR:
+							result_assignment = emit_assignment_instruction(emit_var(function_result_var), handle_results.result_value.result_var);
+							break;
+					}
 
 					//Add this into the final block. It will go right before the exit
-					insert_instruction_before_given(assignment_instruction, handle_results.final_block->exit_statement);
+					insert_instruction_before_given(result_assignment, handle_results.final_block->exit_statement);
 					break;
 			}
 
@@ -7161,7 +7173,8 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 		add_statement(error_handling_ending_block, final_result_assingnment);
 
 		//This is the final assignee for the result package
-		result_package.assignee = final_result_assingnment->assignee;
+		result_package.type = CFG_RESULT_TYPE_VAR;
+		result_package.result_value.result_var = final_result_assingnment->assignee;
 	}
 
 	//We can already fill in the result package
@@ -7176,6 +7189,8 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 /**
  * Handle the parsing for a normal function parameter. This is different than the parsing for an elaborative
  * parameter, which is handled by an overloaded method
+ *
+ * TODO THE LOOKBACK NEEDS TO BE FIXED
  */
 static inline cfg_result_package_t emit_parameter_expression(basic_block_t* basic_block, generic_ast_node_t* parameter_node,
 															  	parameter_results_array_t* parameter_results, dynamic_array_t* memory_addresses_to_adjust,
@@ -7246,6 +7261,8 @@ static inline cfg_result_package_t emit_parameter_expression(basic_block_t* basi
  * inside of the elaborative param node and emitting them separately. Note that
  * we are not going to do any kind of stack management here, that all is going
  * to come afterwards when we do the final result assignment
+ *
+ * TODO THE LOOKBACK NEEDS TO BE FIXED
  */
 static inline cfg_result_package_t emit_elaborative_param_expressions(basic_block_t* basic_block, generic_ast_node_t* elaborative_param_node,
 																	  	parameter_results_array_t* elaborative_param_results, dynamic_array_t* memory_addresses_to_adjust){
