@@ -4696,15 +4696,65 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 	//The current type will always be what was inferred here
 	generic_type_t* member_type = array_accessor->inferred_type;
 
-	//This is whatever was emitted by the expression
-	three_addr_var_t* array_offset = expression_package.assignee;
-
 	/**
 	 * We may have a constant type here *or* a variable type. Either
 	 * way, we will emit what we are able to
 	 */
 	switch(expression_package.type){
+		/**
+		 * For a variable result type, we cannot rely on any constant optimizations
+		 * so we have to trust and emit the expression as-is
+		 */
 		case CFG_RESULT_TYPE_VAR:
+			/**
+			 * If this is not null, we'll be adding on top of it
+			 * with this rule and eventually reassigning what the current offset
+			 * actually is
+			 */
+			if(*current_offset != NULL){
+				//This is whatever was emitted by the expression
+				three_addr_var_t* array_offset = expression_package.result_value.result_var;
+
+				/**
+				 * The formula for array subscript is: base_address + type_size * subscript
+				 * 
+				 * However, if we're on our second or third round, the current var may be an address
+				 *
+				 * This can be done using a lea instruction, so we will emit that directly
+				 */
+				three_addr_var_t* address = emit_array_address_calculation(current_block, *current_offset, array_offset, member_type);
+
+				//And finally - our current offset is no longer the actual offset
+				*current_offset = address;
+
+			/**
+			 * If this is NULL, then we can just make the current offset be
+			 * the result + the array offset * member type
+			 */
+			} else {
+				//Emit the variable directly here
+				*current_offset = emit_temp_var(u64);
+				
+				//This is whatever was emitted by the expression
+				three_addr_var_t* array_offset = expression_package.result_value.result_var;
+
+				//We're using a lea if we can
+				if(is_lea_compatible_power_of_2(member_type->type_size) == TRUE){
+					//Emit the lea
+					instruction_t* lea = emit_lea_index_and_scale_only(*current_offset, array_offset, member_type->type_size);
+
+					//Add it in
+					add_statement(current_block, lea);
+
+				//Otherwise just a multiplication statement
+				} else {
+					three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(member_type->type_size, u64);
+
+					//Emit the binary operation directly with this. The current offset remains unchanged
+					emit_binary_operation_with_constant(current_block, *current_offset, array_offset, STAR, type_size_const);
+				}
+			}
+
 			break;
 
 		case CFG_RESULT_TYPE_CONST:
@@ -4762,77 +4812,6 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 			}
 
 			break;
-	}
-	
-
-	/**
-	 * If this is not null, we'll be adding on top of it
-	 * with this rule and eventually reassigning what the current offset
-	 * actually is
-	 */
-	if(*current_offset != NULL){
-		/**
-		 * The formula for array subscript is: base_address + type_size * subscript
-		 * 
-		 * However, if we're on our second or third round, the current var may be an address
-		 *
-		 * This can be done using a lea instruction, so we will emit that directly
-		 */
-		three_addr_var_t* address = emit_array_address_calculation(current_block, *current_offset, array_offset, member_type);
-
-		//And finally - our current offset is no longer the actual offset
-		*current_offset = address;
-
-	/**
-	 * If this is NULL, then we can just make the current offset be
-	 * the result + the array offset * member type
-	 */
-	} else {
-		//Emit the variable directly here
-		*current_offset = emit_temp_var(u64);
-
-		/**
-		 * If this is just a constant(which it often will be), we can skip all of the binary
-		 * arithmetic and just go right to this
-		 *
-		 * TODO NO LONGER NEED
-		 */
-		if(current_block->exit_statement != NULL
-			&& current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-			&& variables_equal(array_offset, current_block->exit_statement->assignee, TRUE) == TRUE){
-
-			//Extract the old constant out
-			three_addr_const_t* constant_value = current_block->exit_statement->op1_const;
-
-			//Emit the actual const over here
-			three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(member_type->type_size, u64);
-
-			//Multiply them together
-			multiply_constants(type_size_const, constant_value);
-
-			//This just becomes an assignment expression
-			instruction_t* assignment = emit_assignment_with_const_instruction(*current_offset, type_size_const);
-
-			//Add it into the block
-			add_statement(current_block, assignment);
-
-		} else {
-			//We're using a lea if we can
-			if(is_lea_compatible_power_of_2(member_type->type_size) == TRUE){
-				//Emit the lea
-				instruction_t* lea = emit_lea_index_and_scale_only(*current_offset, array_offset, member_type->type_size);
-
-				//Add it in
-				add_statement(current_block, lea);
-
-			//Otherwise just a multiplication statement
-			} else {
-				three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(member_type->type_size, u64);
-
-				//Emit the binary operation directly with this. The current offset remains unchanged
-				emit_binary_operation_with_constant(current_block, *current_offset, array_offset, STAR, type_size_const);
-			}
-		}
 	}
 
 	/**
@@ -5636,6 +5615,8 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 
 /**
  * Handle a unary operator, in whatever form it may be
+ *
+ * HERE\n
  */
 static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, generic_ast_node_t* unary_expression_parent){
 	//Top level declarations to avoid using them in the switch statement
