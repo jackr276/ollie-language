@@ -3096,30 +3096,51 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 		//Perform the binary operation here
 		cfg_result_package_t expression_package = emit_expression(current, ret_node->first_child);
 
-		//Reassign the block
+		//Update the current block
 		current = expression_package.final_block;
 
-		//Grab this out to look at
-		return_variable = expression_package.assignee;
-		
 		/**
-		 * If the variable is not a temp *or* we have a need for a converting move, we will emit
-		 * the extra assignment here. If it's already temp and we don't need a converting move, we won't
-		 * bother with inserting the extra statements
+		 * Since we have a result that could either be a constant or a variable,
+		 * we will need to unpack the result here and act accordingly
 		 */
-		if(return_variable->variable_type != VARIABLE_TYPE_TEMP
-			|| is_converting_move_required(ret_node->inferred_type, return_variable->type) == TRUE){
-			/**
-			 * The type of this final assignee will *always* be the inferred type of the node. We need to ensure that
-			 * the function is returning the type as promised, and not what is done through type coercion
-			 */
-			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(ret_node->inferred_type), return_variable);
+		switch(expression_package.type){
+			case CFG_RESULT_TYPE_VAR:
+				//Grab the return var that we need
+				return_variable = expression_package.result_value.result_var;
 
-			//Add it into the block
-			add_statement(current, assignment);
+				/**
+				 * If the variable is not a temp *or* we have a need for a converting move, we will emit
+				 * the extra assignment here. If it's already temp and we don't need a converting move, we won't
+				 * bother with inserting the extra statements
+				 */
+				if(return_variable->variable_type != VARIABLE_TYPE_TEMP
+					|| is_converting_move_required(ret_node->inferred_type, return_variable->type) == TRUE){
+					/**
+					 * The type of this final assignee will *always* be the inferred type of the node. We need to ensure that
+					 * the function is returning the type as promised, and not what is done through type coercion
+					 */
+					instruction_t* assignment = emit_assignment_instruction(emit_temp_var(ret_node->inferred_type), return_variable);
 
-			//The return variable is now what was assigned
-			return_variable	= assignment->assignee;
+					//Add it into the block
+					add_statement(current, assignment);
+
+					//The return variable is now what was assigned
+					return_variable	= assignment->assignee;
+				}
+
+				break;
+
+			case CFG_RESULT_TYPE_CONST:
+				//For a const type we'll need our own returned variable
+				return_variable = emit_temp_var(ret_node->inferred_type);
+
+				//Emit the assignment that we need
+				instruction_t* const_assignment = emit_assignment_with_const_instruction(return_variable, expression_package.result_value.result_const);
+
+				//And throw the assignment into the block
+				add_statement(current, const_assignment);
+
+				break;
 		}
 
 		//Flag for later on in the compiler that this variable has been returned
