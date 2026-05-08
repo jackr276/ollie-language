@@ -4693,15 +4693,77 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 
 	//Set this to be at the end
 	current_block = expression_package.final_block;
+	//The current type will always be what was inferred here
+	generic_type_t* member_type = array_accessor->inferred_type;
 
 	//This is whatever was emitted by the expression
 	three_addr_var_t* array_offset = expression_package.assignee;
 
-	//Let's check for a constant here we probably have one
-	
+	/**
+	 * We may have a constant type here *or* a variable type. Either
+	 * way, we will emit what we are able to
+	 */
+	switch(expression_package.type){
+		case CFG_RESULT_TYPE_VAR:
+			break;
 
-	//The current type will always be what was inferred here
-	generic_type_t* member_type = array_accessor->inferred_type;
+		case CFG_RESULT_TYPE_CONST:
+			/**
+			 * If this is not null, we'll be adding on top of it
+			 * with this rule and eventually reassigning what the current offset
+			 * actually is
+			 */
+			if(*current_offset != NULL){
+				/**
+				 * The formula for array subscript is: base_address + type_size * subscript
+				 * 
+				 * However, luckily for us, we know that the offset itself is a constant, so
+				 * we can skip a lot of the actual computation work here
+				 */
+				three_addr_const_t* constant_value = expression_package.result_value.result_const;
+
+				//Emit the actual const over here
+				three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(member_type->type_size, u64);
+				
+				//Multiply them together
+				multiply_constants(type_size_const, constant_value);
+
+				//Emit the calculation
+				instruction_t* address_calculation = emit_binary_operation_with_const_instruction(emit_temp_var(u64), *current_offset, PLUS, constant_value);
+
+				//Get it into the block
+				add_statement(current_block, address_calculation);
+
+				//And finally - our current offset is no longer the actual offset
+				*current_offset = address_calculation->assignee;
+
+			/**
+			 * Otherwise this is NULL, so we're starting from scratch. Again we know that this is 
+			 * a constant, so we are able to just emit that assignment here
+			 */
+			} else {
+				//Emit the variable directly here
+				*current_offset = emit_temp_var(u64);
+
+				//Extract the result constant out
+				three_addr_const_t* constant_value = expression_package.result_value.result_const;
+
+				//Emit the actual const over here
+				three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(member_type->type_size, u64);
+
+				//Multiply them together
+				multiply_constants(type_size_const, constant_value);
+
+				//This just becomes an assignment expression
+				instruction_t* assignment = emit_assignment_with_const_instruction(*current_offset, type_size_const);
+
+				//Add it into the block
+				add_statement(current_block, assignment);
+			}
+
+			break;
+	}
+	
 
 	/**
 	 * If this is not null, we'll be adding on top of it
@@ -4732,6 +4794,8 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 		/**
 		 * If this is just a constant(which it often will be), we can skip all of the binary
 		 * arithmetic and just go right to this
+		 *
+		 * TODO NO LONGER NEED
 		 */
 		if(current_block->exit_statement != NULL
 			&& current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
@@ -4883,7 +4947,7 @@ static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block
 	}
 
 	//Package & return the results
-	cfg_result_package_t results = {block, block, *current_offset, BLANK};
+	cfg_result_package_t results = {block, block, {*current_offset}, CFG_RESULT_TYPE_VAR, BLANK};
 	return results;
 }
 
@@ -4967,7 +5031,7 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 	}
 
 	//And we're done here, we can package and return what we have
-	cfg_result_package_t results = {block, block, *base_address, BLANK};
+	cfg_result_package_t results = {block, block, {*base_address}, CFG_RESULT_TYPE_VAR, BLANK};
 	return results;
 }
 
@@ -5028,7 +5092,7 @@ static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block,
 	}
 
 	//Very simple rule, we just have this for consistency
-	cfg_result_package_t accessor = {block, block, *base_address, BLANK};
+	cfg_result_package_t accessor = {block, block, {*base_address}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	//Give it back
 	return accessor;
