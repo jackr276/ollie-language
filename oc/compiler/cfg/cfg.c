@@ -3880,7 +3880,7 @@ void emit_indirect_jump(basic_block_t* basic_block, three_addr_var_t* dest_addr)
 /**
  * Emit the abstract machine code for a constant to variable assignment. 
  */
-static cfg_result_package_t emit_constant_assignment(basic_block_t* basic_block, generic_ast_node_t* constant_node){
+static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, generic_ast_node_t* constant_node){
 	//Initialize the constant result package
 	cfg_result_package_t constant_result_package = INITIALIZE_BLANK_CFG_RESULT;
 	constant_result_package.starting_block = basic_block;
@@ -4077,75 +4077,99 @@ static cfg_result_package_t emit_constant_assignment(basic_block_t* basic_block,
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = CHAR_CONST;
 
-			constant->constant_value.char_constant = const_node->constant_value.char_value;
-			break;
+			emitted_constant->constant_value.char_constant = constant_node->constant_value.char_value;
+
+			constant_result_package.type = CFG_RESULT_TYPE_CONST;
+			constant_result_package.result_value.result_const = emitted_constant;
+			return constant_result_package;
 
 		case BYTE_CONST:
 			emitted_constant = calloc(1, sizeof(three_addr_const_t));
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = BYTE_CONST;
 
-			emitted_constant->constant_value.signed_byte_constant = const_node->constant_value.signed_byte_value;
+			emitted_constant->constant_value.signed_byte_constant = constant_node->constant_value.signed_byte_value;
 
-			break;
+			constant_result_package.type = CFG_RESULT_TYPE_CONST;
+			constant_result_package.result_value.result_const = emitted_constant;
+			return constant_result_package;
 
 		case BYTE_CONST_FORCE_U:
 			emitted_constant = calloc(1, sizeof(three_addr_const_t));
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = BYTE_CONST_FORCE_U;
 
-			emitted_constant->constant_value.unsigned_byte_constant = const_node->constant_value.unsigned_byte_value;
-			break;
+			emitted_constant->constant_value.unsigned_byte_constant = constant_node->constant_value.unsigned_byte_value;
+
+			constant_result_package.type = CFG_RESULT_TYPE_CONST;
+			constant_result_package.result_value.result_const = emitted_constant;
+			return constant_result_package;
 
 		case SHORT_CONST:
 			emitted_constant = calloc(1, sizeof(three_addr_const_t));
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = SHORT_CONST;
 
-			emitted_constant->constant_value.signed_short_constant = const_node->constant_value.signed_short_value;
-			break;
+			emitted_constant->constant_value.signed_short_constant = constant_node->constant_value.signed_short_value;
+
+			constant_result_package.type = CFG_RESULT_TYPE_CONST;
+			constant_result_package.result_value.result_const = emitted_constant;
+			return constant_result_package;
 
 		case SHORT_CONST_FORCE_U:
 			emitted_constant = calloc(1, sizeof(three_addr_const_t));
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = SHORT_CONST_FORCE_U;
 
-			emitted_constant->constant_value.unsigned_short_constant = const_node->constant_value.unsigned_short_value;
-			break;
+			emitted_constant->constant_value.unsigned_short_constant = constant_node->constant_value.unsigned_short_value;
+
+			constant_result_package.type = CFG_RESULT_TYPE_CONST;
+			constant_result_package.result_value.result_const = emitted_constant;
+			return constant_result_package;
 
 		case INT_CONST:
 			emitted_constant = calloc(1, sizeof(three_addr_const_t));
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = INT_CONST;
 
-			emitted_constant->constant_value.signed_integer_constant = const_node->constant_value.signed_int_value;
-			break;
+			emitted_constant->constant_value.signed_integer_constant = constant_node->constant_value.signed_int_value;
+
+			constant_result_package.type = CFG_RESULT_TYPE_CONST;
+			constant_result_package.result_value.result_const = emitted_constant;
+			return constant_result_package;
 
 		case INT_CONST_FORCE_U:
 			emitted_constant = calloc(1, sizeof(three_addr_const_t));
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = INT_CONST_FORCE_U;
 
-			emitted_constant->constant_value.unsigned_integer_constant = const_node->constant_value.unsigned_int_value;
-			break;
+			emitted_constant->constant_value.unsigned_integer_constant = constant_node->constant_value.unsigned_int_value;
+
+			constant_result_package.type = CFG_RESULT_TYPE_CONST;
+			constant_result_package.result_value.result_const = emitted_constant;
+			return constant_result_package;
 
 		case LONG_CONST:
 			emitted_constant = calloc(1, sizeof(three_addr_const_t));
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = LONG_CONST;
 
-			emitted_constant->constant_value.signed_long_constant = const_node->constant_value.signed_long_value;
+			emitted_constant->constant_value.signed_long_constant = constant_node->constant_value.signed_long_value;
 
-			break;
+			constant_result_package.type = CFG_RESULT_TYPE_CONST;
+			constant_result_package.result_value.result_const = emitted_constant;
+			return constant_result_package;
 
 		case LONG_CONST_FORCE_U:
 			emitted_constant = calloc(1, sizeof(three_addr_const_t));
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = LONG_CONST_FORCE_U;
 
-			emitted_constant->constant_value.unsigned_long_constant = const_node->constant_value.unsigned_long_value;
+			emitted_constant->constant_value.unsigned_long_constant = constant_node->constant_value.unsigned_long_value;
 
-			break;
+			constant_result_package.type = CFG_RESULT_TYPE_CONST;
+			constant_result_package.result_value.result_const = emitted_constant;
+			return constant_result_package;
 			
 		//Some weird error if we get here - hard exit
 		default:
@@ -4534,7 +4558,7 @@ static inline cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_b
 
 		//Same in this case - just an assignee in basic block
 		case AST_NODE_TYPE_CONSTANT:
-			return emit_constant_assignment(basic_block, primary_parent);
+			return emit_constant_from_node(basic_block, primary_parent);
 
 		//We handle direct/indirect calls all in the same rule
 		case AST_NODE_TYPE_FUNCTION_CALL:
@@ -5056,14 +5080,14 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 	 * results from here to hang onto our base address
 	 */
 	if(root->ast_node_type != AST_NODE_TYPE_POSTFIX_EXPR){
-		//Run the primary results function
+		//Run the primary results function - we know that this is not going to be a constant
 		cfg_result_package_t primary_results = emit_primary_expr_code(basic_block, root);
 
 		//The current block now is this ones final block
 		current = primary_results.final_block;
 
 		//Extract for some analysis
-		three_addr_var_t* assignee = primary_results.assignee;
+		three_addr_var_t* assignee = primary_results.result_value.result_var;
 
 		//Get this if there is one
 		symtab_variable_record_t* base_address_variable = assignee->linked_var;
@@ -5181,7 +5205,7 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 	}
 
 	//Give back our final results(assignee is not needed here)
-	cfg_result_package_t final_results = {current, postfix_results.final_block, NULL, BLANK};
+	cfg_result_package_t final_results = {current, postfix_results.final_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 	return final_results;
 }
 
@@ -5219,9 +5243,11 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	generic_ast_node_t* left_child = root->first_child;
 	generic_ast_node_t* right_child = left_child->next_sibling;
 
-	//For this rule, we care about the parent node's type(after cast/coercion) and
-	//the original memory access type(before cast/coercion). We will use these 2 to 
-	//determine if a converting operation is needed
+	/**
+	 * For this rule, we care about the parent node's type(after cast/coercion) and
+	 * the original memory access type(before cast/coercion). We will use these 2 to 
+	 * determine if a converting operation is needed
+	 */
 	generic_type_t* parent_node_type = root->inferred_type;
 	generic_type_t* original_memory_access_type = right_child->inferred_type;
 
