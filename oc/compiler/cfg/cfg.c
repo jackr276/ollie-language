@@ -4066,24 +4066,44 @@ static cfg_result_package_t emit_constant_assignment(basic_block_t* basic_block,
 			constant_result_package.type = CFG_RESULT_TYPE_VAR;
 			constant_result_package.result_value.result_var = const_assignment->assignee;
 			return constant_result_package;
-			
-		//The most commmon case
-		default:
-			//Emit the constant value
-			const_val = emit_constant(constant_node);
 
-			//For later on
-			three_addr_var_t* assignee;
-
-			//These are all basic types
-			generic_type_t* type = constant_node->inferred_type;
-
-			//Emit the temp var here
-			assignee = emit_temp_var(type);
-
-			//We'll use the constant var feature here
-			const_assignment = emit_assignment_with_const_instruction(assignee, const_val);
+		/**
+		 * For every other constant type that we have, we will have a result type that
+		 * actually is a constant itself. To keep things as segmented as possible
+		 * each area will allocate the constant itself
+		 */
+		case CHAR_CONST:
+			constant->constant_value.char_constant = const_node->constant_value.char_value;
 			break;
+		case BYTE_CONST:
+			constant->constant_value.signed_byte_constant = const_node->constant_value.signed_byte_value;
+			break;
+		case BYTE_CONST_FORCE_U:
+			constant->constant_value.unsigned_byte_constant = const_node->constant_value.unsigned_byte_value;
+			break;
+		case SHORT_CONST:
+			constant->constant_value.signed_short_constant = const_node->constant_value.signed_short_value;
+			break;
+		case SHORT_CONST_FORCE_U:
+			constant->constant_value.unsigned_short_constant = const_node->constant_value.unsigned_short_value;
+			break;
+		case INT_CONST:
+			constant->constant_value.signed_integer_constant = const_node->constant_value.signed_int_value;
+			break;
+		case INT_CONST_FORCE_U:
+			constant->constant_value.unsigned_integer_constant = const_node->constant_value.unsigned_int_value;
+			break;
+		case LONG_CONST:
+			constant->constant_value.signed_long_constant = const_node->constant_value.signed_long_value;
+			break;
+		case LONG_CONST_FORCE_U:
+			constant->constant_value.unsigned_long_constant = const_node->constant_value.unsigned_long_value;
+			break;
+			
+		//Some weird error if we get here - hard exit
+		default:
+			sprintf(stderr, "Fatal internal compiler error: unrecognized constant type detected in CFG.\n");
+			exit(1);
 	}
 }
 
