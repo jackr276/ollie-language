@@ -4000,15 +4000,21 @@ static cfg_result_package_t emit_constant_assignment(basic_block_t* basic_block,
 				//Emit a temp var for this value
 				three_addr_var_t* cleared_var = emit_temp_var(constant_node->inferred_type);
 
-				//We will now use a specialized IR instruction to clear this variable out. In reality
-				//this clearing will be a PXOR statement
+				/**
+				 * We will now use a specialized IR instruction to clear this variable out. In reality
+				 * this clearing will be a PXOR statement
+				 */
 				instruction_t* clear_instruction = emit_floating_point_clear_instruction(cleared_var);
 
 				//Add it into the block
 				add_statement(basic_block, clear_instruction);
 
-				//We will now give back the created variable
-				return cleared_var;
+				/**
+				 * Package up and return the final result type
+				 */
+				constant_result_package.type = CFG_RESULT_TYPE_VAR;
+				constant_result_package.result_value.result_var = cleared_var;
+				return constant_result_package;
 			}
 
 			//Let's first see if we can find it
@@ -4021,16 +4027,27 @@ static cfg_result_package_t emit_constant_assignment(basic_block_t* basic_block,
 				local_constant_val = emit_local_constant_temp_var(local_constant);
 			}
 
-			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
-			//This only gets the address, we still need to do extra work for our constants
+			/**
+			 * We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
+			 * This only gets the address, we still need to do extra work for our constants
+			 */
 			address_load = emit_lea_rip_relative_constant(emit_temp_var(u64), local_constant_val, instruction_pointer_var);
+
 			//Add it into the block
 			add_statement(basic_block, address_load);
 
 			//Emit a load instruction to grab the constant from the above address
 			const_assignment = emit_load_ir_code(emit_temp_var(f64), address_load->assignee, f64);
 
-			break;
+			//Get this into the block
+			add_statement(basic_block, const_assignment);
+
+			/**
+			 * Now we can package up and return the entire result struct
+			 */
+			constant_result_package.type = CFG_RESULT_TYPE_VAR;
+			constant_result_package.result_value.result_var = const_assignment->assignee;
+			return constant_result_package;
 
 		//Special case here - we need to emit a variable for the function pointer itself
 		case FUNC_CONST:
@@ -4039,7 +4056,16 @@ static cfg_result_package_t emit_constant_assignment(basic_block_t* basic_block,
 
 			//Now emit the rip-relative assignment used to load the address
 			const_assignment = emit_lea_rip_relative_constant(emit_temp_var(constant_node->inferred_type), function_pointer_variable, instruction_pointer_var);
-			break;
+
+			//Get this into the block
+			add_statement(basic_block, const_assignment);
+
+			/**
+			 * Package up and return the resulting constant that we got
+			 */
+			constant_result_package.type = CFG_RESULT_TYPE_VAR;
+			constant_result_package.result_value.result_var = const_assignment->assignee;
+			return constant_result_package;
 			
 		//The most commmon case
 		default:
@@ -4059,9 +4085,6 @@ static cfg_result_package_t emit_constant_assignment(basic_block_t* basic_block,
 			const_assignment = emit_assignment_with_const_instruction(assignee, const_val);
 			break;
 	}
-
-	//Add this into the basic block
-	add_statement(basic_block, const_assignment);
 }
 
 
