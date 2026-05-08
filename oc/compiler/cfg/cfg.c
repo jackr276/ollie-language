@@ -3335,7 +3335,7 @@ static inline branch_conditional_truthfullness_t get_branch_conditional_truthful
  */
 static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_ast_node_t* conditional_node, basic_block_t* if_block, basic_block_t* else_block, branch_category_t branch_category, u_int8_t virtual_out_edge_required){
 	//Allcoate the results
-	cfg_result_package_t results = {starting_block, starting_block, NULL, BLANK};
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
 
 	//Keep track of the current block
 	basic_block_t* current_block = starting_block;
@@ -3663,7 +3663,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
  */
 static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_block, generic_ast_node_t* conditional_node, symtab_label_record_t* if_destination_label, basic_block_t* else_block){
 	//Allcoate the results
-	cfg_result_package_t results = {starting_block, starting_block, NULL, BLANK};
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
 
 	/**
 	 * We only allocate this storage if it is needed. If we get here and it's unallocated, now
@@ -4398,21 +4398,23 @@ static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basi
  * expression could be an identifier, a constant, a function call, or a nested expression
  * tree
  */
-static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, generic_ast_node_t* primary_parent){
-	//Initialize these results at first
-	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
+static inline cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, generic_ast_node_t* primary_parent){
+	//Holder for the result var/constant
+	three_addr_var_t* result_variable;
 
 	//Switch based on what kind of expression we have. This mainly just calls the appropriate rules
 	switch(primary_parent->ast_node_type){
-		//In this case we'll only worry about the assignee
 		case AST_NODE_TYPE_IDENTIFIER:
-		 	result_package.assignee = emit_identifier(basic_block, primary_parent);
+			//Let the helper do it
+		 	result_variable = emit_identifier(basic_block, primary_parent);
+
+			//Initialize and give back the result
+			cfg_result_package_t result_package = {basic_block, basic_block, {result_variable}, CFG_RESULT_TYPE_VAR, BLANK};
 			return result_package;
 
 		//Same in this case - just an assignee in basic block
 		case AST_NODE_TYPE_CONSTANT:
-			result_package.assignee = emit_constant_assignment(basic_block, primary_parent);
-			return result_package;
+			return emit_constant_assignment(basic_block, primary_parent);
 
 		//We handle direct/indirect calls all in the same rule
 		case AST_NODE_TYPE_FUNCTION_CALL:
