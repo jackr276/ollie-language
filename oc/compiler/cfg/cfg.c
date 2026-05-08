@@ -6290,9 +6290,13 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	switch(logical_or_expr->binary_operator){
 		case DOUBLE_AND:
 		case DOUBLE_OR:
-			//op1 always comes from the left side
-			op1 = left_side.assignee;
-			op2 = right_side.assignee;
+			/**
+			 * For op1 and op2, we always unpack any/all constants here if need be. That being
+			 * said there shouldn't even be any constants because of the way that the parser
+			 * works with these expressions, but either way we will do this for future-proofing
+			 */
+			op1 = unpack_result_package(&left_side, current_block);
+			op2 = unpack_result_package(&right_side, current_block);
 
 			/**
 			 * IMPORTANT - for operations like these, our final result type is always a boolean. However,
@@ -6315,30 +6319,39 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 		case G_THAN_OR_EQ:
 		case DOUBLE_EQUALS:
 		case NOT_EQUALS:
-			//The assignees are the same
-			op1 = left_side.assignee;
-
-			/*
-			 * As for op2, there is a chance that we actually have a constant assignment in the op2
-			 * slot. This only works if the variables are completely equal. If they are not then
-			 * this is a false positive which is possible
+			/**
+			 * Always unpack op1 - in all reality it shouldn't be a constant but just to be safe we will
 			 */
-			if(current_block->exit_statement != NULL 
-				&& current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-				&& current_block->exit_statement->assignee != NULL
-				&& current_block->exit_statement->assignee->variable_type == VARIABLE_TYPE_TEMP
-				&& variables_equal_no_ssa(right_side.assignee, current_block->exit_statement->assignee, FALSE) == TRUE){
-				//Just assign the constant over
-				op1_const = current_block->exit_statement->op1_const;
+			op1 = unpack_result_package(&left_side, current_block);
 
-				//We default to op1 for a constant
-				final_result_type = op1->type;
+			/**
+			 * For op2, OIR supports constants in the right operand of a binary expression
+			 * so we will unpack the value here and go for it from there
+			 */
+			switch(right_side.type){
+				/**
+				 * If we have a constant, we can go straight for a bin_op_with_const statement
+				 * and save the extra assignments and simplifications down the road
+				 */
+				case CFG_RESULT_TYPE_CONST:
+					op1_const = right_side.result_value.result_const;
 
-			} else {
-				op2 = right_side.assignee;
+					//We default to op1 for a constant
+					final_result_type = op1->type;
 
-				//Now use the helper to get the final result type
-				final_result_type = get_operand_type_for_relational_operation(type_symtab, op1->type, op2->type);
+					break;
+
+				/**
+				 * Otherwise we have a regular variable value so we will
+				 * unpack it accordingly and use it to help use get the result type
+				 */
+				case CFG_RESULT_TYPE_VAR:
+					op2 = right_side.result_value.result_var;
+
+					//Now use the helper to get the final result type
+					final_result_type = get_operand_type_for_relational_operation(type_symtab, op1->type, op2->type);
+
+					break;
 			}
 
 			/**
@@ -6353,25 +6366,36 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 		//Otherwise default rules are in effect
 		default:
-			//The op1 is the left side's assingee
-			op1 = left_side.assignee;
+			/**
+			 * We always unpack op1. In reality it should not be a constant but we will do this
+			 * just to be sure
+			 */
+			op1 = unpack_result_package(&left_side, current_block);
 
 			/**
-			 * As for op2, there is a chance that we actually have a constant assignment in the op2
-			 * slot. This only works if the variables are completely equal. If they are not then
-			 * this is a false positive which is possible
+			 * For op2, OIR supports constants in the right operand of a binary expression
+			 * so we will unpack the value here and go for it from there
 			 */
-			if(current_block->exit_statement != NULL 
-				&& current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-				&& current_block->exit_statement->assignee != NULL
-				&& current_block->exit_statement->assignee->variable_type == VARIABLE_TYPE_TEMP
-				&& variables_equal_no_ssa(right_side.assignee, current_block->exit_statement->assignee, FALSE) == TRUE){
-				op1_const = current_block->exit_statement->op1_const;
+			switch(right_side.type){
+				/**
+				 * If we have a constant, we can go straight for a bin_op_with_const statement
+				 * and save the extra assignments and simplifications down the road
+				 */
+				case CFG_RESULT_TYPE_CONST:
+					op1_const = right_side.result_value.result_const;
 
-			} else {
-				op2 = right_side.assignee;
+					break;
+
+				/**
+				 * Otherwise we have a regular variable value so we will
+				 * unpack it accordingly and use it to help use get the result type
+				 */
+				case CFG_RESULT_TYPE_VAR:
+					op2 = right_side.result_value.result_var;
+
+					break;
 			}
-				
+
 			break;
 	}
 
@@ -6402,7 +6426,8 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 	//Package up and return
 	package.final_block = current_block;
-	package.assignee = binary_operation->assignee;
+	package.type = CFG_RESULT_TYPE_VAR;
+	package.result_value.result_var = binary_operation->assignee;
 	package.operator = logical_or_expr->binary_operator;	
 
 	return package;
