@@ -6156,7 +6156,7 @@ static void simplify(cfg_t* cfg){
  * placed in front of the instruction *if* the destination is an XMM register to maintain
  * this "clean" register idea
  */
-static instruction_type_t select_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t destination_signed, u_int8_t source_clean, alignment_type_t alignment, memory_access_type_t memory_access_type){
+static instruction_type_t select_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t destination_signed, alignment_type_t alignment, memory_access_type_t memory_access_type){
 	//These two have the same size, we can select easily
 	//and be out of here
 	if(destination_size == source_size){
@@ -6174,18 +6174,10 @@ static instruction_type_t select_move_instruction(variable_size_t destination_si
 				return MOVQ;
 
 			case SINGLE_PRECISION:
-				if(source_clean == TRUE){
-					return MOVSS;
-				} else {
-					return MOVAPS;
-				}
+				return MOVSS;
 
 			case DOUBLE_PRECISION:
-				if(source_clean == TRUE){
-					return MOVSD;
-				} else {
-					return MOVAPD;
-				}
+				return MOVSD;
 
 			/**
 			 * For the double quad word type, we guarantee that the
@@ -6532,7 +6524,7 @@ static instruction_t* emit_and_insert_move_instruction(three_addr_var_t* destina
 	instruction_t* move_instruction = calloc(1, sizeof(instruction_t));
 
 	//Emit the actual move here
-	move_instruction->instruction_type = select_move_instruction(get_type_size(destination->type), get_type_size(true_source->type), is_type_signed(destination->type), is_source_register_clean(true_source), ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
+	move_instruction->instruction_type = select_move_instruction(get_type_size(destination->type), get_type_size(true_source->type), is_type_signed(destination->type), ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
 
 	//Update the source/dest
 	move_instruction->source_register = true_source;
@@ -6581,7 +6573,7 @@ static instruction_t* emit_move_instruction(three_addr_var_t* destination, three
 	}
 
 	//Link to the helper to select the instruction
-	instruction->instruction_type = select_move_instruction(get_type_size(destination->type), get_type_size(source->type), is_type_signed(destination->type), is_source_register_clean(source), ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
+	instruction->instruction_type = select_move_instruction(get_type_size(destination->type), get_type_size(source->type), is_type_signed(destination->type), ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
 
 	//Finally we set the destination
 	instruction->destination_register = destination;
@@ -6743,7 +6735,7 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 	variable_size_t source_size = get_type_size(op1->type);
 
 	//Let the helper rule determine what our instruction is
-	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_type_signed(assignee->type), is_source_register_clean(op1), ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
+	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_type_signed(assignee->type), ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
 
 	/**
 	 * If we have a conversion instruction that has an SSE destination, we need to emit
@@ -11752,7 +11744,7 @@ static instruction_t* emit_register_movement_instruction_directly(three_addr_var
 	generic_type_t* source_type = source_register->type;
 
 	//Now we will decide what the move instruction is
-	move_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type), is_source_register_clean(source_register), ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
+	move_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type), ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
 
 	//Give back the pointer
 	return move_instruction;
