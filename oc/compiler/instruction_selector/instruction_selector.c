@@ -340,40 +340,6 @@ static inline u_int8_t is_type_floating_point(generic_type_t* type){
 
 
 /**
- * Is the source register for a given move instruction "clean" or not. Clean means
- * that we know where it comes from *and* we know where it's going. For example, 
- * temporary variables that are not returned are known to be clean, as well as variables
- * that are entirely local. The only examples of "unclean" variables would be function
- * parameters & values that we're returning
- */
-static inline u_int8_t is_source_register_clean(three_addr_var_t* source_register){
-	switch(source_register->membership){
-		//These are considered dirty - require a full movement instruction
-		case RETURNED_VARIABLE:
-			return FALSE;
-		case FUNCTION_PARAMETER:
-			//No linked var - must be clean
-			if(source_register->linked_var == NULL){
-				return TRUE;
-			}
-
-			//If this itself is the original parameter, then it's dirty
-			if(IS_ORIGINAL_FUNCTION_PARAMETER(source_register->linked_var) == TRUE){
-				return FALSE;
-			}
-
-			//Otherwise this is just the alias of that function parameter - so there is nothing
-			//to clean up
-			return TRUE;
-
-		//Everything else - nothing to worry about
-		default:
-			return TRUE;
-	}
-}
-
-
-/**
  * Is the given instruction a conversion instruction with an SSE destination register?
  *
  * Examples are statements like CVTSI2SDL, which take an i32 and turn it into an f64 
