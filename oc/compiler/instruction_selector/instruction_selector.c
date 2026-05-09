@@ -340,40 +340,6 @@ static inline u_int8_t is_type_floating_point(generic_type_t* type){
 
 
 /**
- * Is the source register for a given move instruction "clean" or not. Clean means
- * that we know where it comes from *and* we know where it's going. For example, 
- * temporary variables that are not returned are known to be clean, as well as variables
- * that are entirely local. The only examples of "unclean" variables would be function
- * parameters & values that we're returning
- */
-static inline u_int8_t is_source_register_clean(three_addr_var_t* source_register){
-	switch(source_register->membership){
-		//These are considered dirty - require a full movement instruction
-		case RETURNED_VARIABLE:
-			return FALSE;
-		case FUNCTION_PARAMETER:
-			//No linked var - must be clean
-			if(source_register->linked_var == NULL){
-				return TRUE;
-			}
-
-			//If this itself is the original parameter, then it's dirty
-			if(IS_ORIGINAL_FUNCTION_PARAMETER(source_register->linked_var) == TRUE){
-				return FALSE;
-			}
-
-			//Otherwise this is just the alias of that function parameter - so there is nothing
-			//to clean up
-			return TRUE;
-
-		//Everything else - nothing to worry about
-		default:
-			return TRUE;
-	}
-}
-
-
-/**
  * Is the given instruction a conversion instruction with an SSE destination register?
  *
  * Examples are statements like CVTSI2SDL, which take an i32 and turn it into an f64 
@@ -6178,6 +6144,68 @@ static void simplify(cfg_t* cfg){
 
 
 /**
+ * Emit a PXOR instruction that's already been instruction selected. This is intended to
+ * be used by the instruction selector when we need to insert pxor functions for clearing
+ * SSE registers
+ *
+ * This is different from an actual PXOR. We are saying that this instruction exists exclusively
+ * to do register clearing, and nothing more. This will warrant special treatment
+ * in the register allocator because we are not counting any sources here
+ */
+static inline instruction_t* emit_sse_register_clear_instruction(three_addr_var_t* target){
+	//First allocate
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Set the type
+	instruction->instruction_type = PXOR_CLEAR;
+
+	//We just have something that we're clearing here
+	instruction->destination_register = target;
+
+	//Now give it back
+	return instruction;
+}
+
+
+/**
+ * Emit an XORQ instruction that's already been instruciton selected. This instruction exists specifically
+ * to wipe out a given register(usually the error register when a function returns). This warrants
+ * special treatment in the register allocator because we are not counting any sourced
+ */
+static inline instruction_t* emit_gp_register_clear_instruction(three_addr_var_t* target){
+	//First allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	switch(target->variable_size){
+		case QUAD_WORD:
+			instruction->instruction_type = XORQ_CLEAR;
+			break;
+
+		case DOUBLE_WORD:
+			instruction->instruction_type = XORL_CLEAR;
+			break;
+		
+		case WORD:
+			instruction->instruction_type = XORW_CLEAR;
+			break;
+
+		case BYTE:
+			instruction->instruction_type = XORB_CLEAR;
+			break;
+
+		//Should be unreachable
+		default:
+			fprintf(stderr, "Fatal internal compiler error, undefined variable type encountered in clear instruction\n");
+			exit(1);
+	}
+	
+	instruction->destination_register = target;
+
+	return instruction;
+}
+
+
+/**
  * Select the appropriate move instruction based on the source & destination
  * sizes, the destination signedness, and anything else that we may need
  *
@@ -6190,7 +6218,7 @@ static void simplify(cfg_t* cfg){
  * placed in front of the instruction *if* the destination is an XMM register to maintain
  * this "clean" register idea
  */
-static instruction_type_t select_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t destination_signed, u_int8_t source_clean, alignment_type_t alignment, memory_access_type_t memory_access_type){
+static instruction_type_t select_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t destination_signed, alignment_type_t alignment, memory_access_type_t memory_access_type){
 	//These two have the same size, we can select easily
 	//and be out of here
 	if(destination_size == source_size){
@@ -6208,18 +6236,10 @@ static instruction_type_t select_move_instruction(variable_size_t destination_si
 				return MOVQ;
 
 			case SINGLE_PRECISION:
-				if(source_clean == TRUE){
-					return MOVSS;
-				} else {
-					return MOVAPS;
-				}
+				return MOVSS;
 
 			case DOUBLE_PRECISION:
-				if(source_clean == TRUE){
-					return MOVSD;
-				} else {
-					return MOVAPD;
-				}
+				return MOVSD;
 
 			/**
 			 * For the double quad word type, we guarantee that the
@@ -6497,7 +6517,7 @@ static instruction_t* emit_and_insert_move_instruction(three_addr_var_t* destina
 				intermediate_move->source_register = true_source;
 
 				//Let the helper get the converting move for us
-				intermediate_move->instruction_type = select_move_instruction(get_type_size(intermediate_destination->type), get_type_size(true_source->type), FALSE, TRUE, ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
+				intermediate_move->instruction_type = select_move_instruction(get_type_size(intermediate_destination->type), get_type_size(true_source->type), FALSE, ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
 
 				//Based on the instructions, we will insert this appropriately
 				switch(insertion_order){
@@ -6507,8 +6527,10 @@ static instruction_t* emit_and_insert_move_instruction(three_addr_var_t* destina
 						break;
 
 					case INSERTION_ORDER_AFTER:
-						//Put this in after the given value, we'll need to update the relative 
-						//instruction for later
+						/**
+						 * Put this in after the given value, we'll need to update the relative 
+						 * instruction for later
+						 */
 						insert_instruction_after_given(intermediate_move, relative_instruction);
 						relative_instruction = intermediate_move;
 						break;
@@ -6534,7 +6556,7 @@ static instruction_t* emit_and_insert_move_instruction(three_addr_var_t* destina
 				intermediate_move->source_register = true_source;
 
 				//Let the helper get the converting move for us
-				intermediate_move->instruction_type = select_move_instruction(get_type_size(intermediate_destination->type), get_type_size(true_source->type), TRUE, TRUE, ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
+				intermediate_move->instruction_type = select_move_instruction(get_type_size(intermediate_destination->type), get_type_size(true_source->type), TRUE, ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
 
 				//Based on the instructions, we will insert this appropriately
 				switch(insertion_order){
@@ -6544,8 +6566,10 @@ static instruction_t* emit_and_insert_move_instruction(three_addr_var_t* destina
 						break;
 
 					case INSERTION_ORDER_AFTER:
-						//Put this in after the given value, we'll need to update the relative 
-						//instruction for later
+						/**
+						 * Put this in after the given value, we'll need to update the relative 
+						 * instruction for later
+						 */
 						insert_instruction_after_given(intermediate_move, relative_instruction);
 						relative_instruction = intermediate_move;
 						break;
@@ -6566,7 +6590,7 @@ static instruction_t* emit_and_insert_move_instruction(three_addr_var_t* destina
 	instruction_t* move_instruction = calloc(1, sizeof(instruction_t));
 
 	//Emit the actual move here
-	move_instruction->instruction_type = select_move_instruction(get_type_size(destination->type), get_type_size(true_source->type), is_type_signed(destination->type), is_source_register_clean(true_source), ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
+	move_instruction->instruction_type = select_move_instruction(get_type_size(destination->type), get_type_size(true_source->type), is_type_signed(destination->type), ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
 
 	//Update the source/dest
 	move_instruction->source_register = true_source;
@@ -6581,6 +6605,18 @@ static instruction_t* emit_and_insert_move_instruction(three_addr_var_t* destina
 		case INSERTION_ORDER_AFTER:
 			insert_instruction_after_given(move_instruction, relative_instruction);
 			break;
+	}
+
+	/**
+	 * If this is an integer to SSE conversion, we will need to emit a PXOR clear
+	 * instruction beforehand to wipe out the SSE register. We handle this here
+	 */
+	if(is_integer_to_sse_conversion_instruction(move_instruction->instruction_type) == TRUE){
+		//Emit a clear for the destination
+		instruction_t* pxor_clear = emit_sse_register_clear_instruction(destination);
+
+		//This goes in immediately before the move instruction itself
+		insert_instruction_before_given(pxor_clear, move_instruction);
 	}
 
 	//We always give back the last instruction we inserted, just in case the user wants to rebuild the window around it
@@ -6615,75 +6651,13 @@ static instruction_t* emit_move_instruction(three_addr_var_t* destination, three
 	}
 
 	//Link to the helper to select the instruction
-	instruction->instruction_type = select_move_instruction(get_type_size(destination->type), get_type_size(source->type), is_type_signed(destination->type), is_source_register_clean(source), ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
+	instruction->instruction_type = select_move_instruction(get_type_size(destination->type), get_type_size(source->type), is_type_signed(destination->type), ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
 
 	//Finally we set the destination
 	instruction->destination_register = destination;
 	instruction->source_register = source;
 
 	//And now we'll give it back
-	return instruction;
-}
-
-
-/**
- * Emit a PXOR instruction that's already been instruction selected. This is intended to
- * be used by the instruction selector when we need to insert pxor functions for clearing
- * SSE registers
- *
- * This is different from an actual PXOR. We are saying that this instruction exists exclusively
- * to do register clearing, and nothing more. This will warrant special treatment
- * in the register allocator because we are not counting any sources here
- */
-static inline instruction_t* emit_sse_register_clear_instruction(three_addr_var_t* target){
-	//First allocate
-	instruction_t* instruction = calloc(1, sizeof(instruction_t));
-
-	//Set the type
-	instruction->instruction_type = PXOR_CLEAR;
-
-	//We just have something that we're clearing here
-	instruction->destination_register = target;
-
-	//Now give it back
-	return instruction;
-}
-
-
-/**
- * Emit an XORQ instruction that's already been instruciton selected. This instruction exists specifically
- * to wipe out a given register(usually the error register when a function returns). This warrants
- * special treatment in the register allocator because we are not counting any sourced
- */
-static inline instruction_t* emit_gp_register_clear_instruction(three_addr_var_t* target){
-	//First allocate it
-	instruction_t* instruction = calloc(1, sizeof(instruction_t));
-
-	switch(target->variable_size){
-		case QUAD_WORD:
-			instruction->instruction_type = XORQ_CLEAR;
-			break;
-
-		case DOUBLE_WORD:
-			instruction->instruction_type = XORL_CLEAR;
-			break;
-		
-		case WORD:
-			instruction->instruction_type = XORW_CLEAR;
-			break;
-
-		case BYTE:
-			instruction->instruction_type = XORB_CLEAR;
-			break;
-
-		//Should be unreachable
-		default:
-			fprintf(stderr, "Fatal internal compiler error, undefined variable type encountered in clear instruction\n");
-			exit(1);
-	}
-	
-	instruction->destination_register = target;
-
 	return instruction;
 }
 
@@ -6777,7 +6751,7 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 	variable_size_t source_size = get_type_size(op1->type);
 
 	//Let the helper rule determine what our instruction is
-	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_type_signed(assignee->type), is_source_register_clean(op1), ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
+	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_type_signed(assignee->type), ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
 
 	/**
 	 * If we have a conversion instruction that has an SSE destination, we need to emit
@@ -11786,7 +11760,7 @@ static instruction_t* emit_register_movement_instruction_directly(three_addr_var
 	generic_type_t* source_type = source_register->type;
 
 	//Now we will decide what the move instruction is
-	move_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type), is_source_register_clean(source_register), ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
+	move_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type), ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
 
 	//Give back the pointer
 	return move_instruction;
@@ -12200,7 +12174,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 	}
 
 	//Once we've done all the above assignments, we need to determine what our instruction type is. The source here is always clean, we are moving to memory
-	store_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type), TRUE, destination_alignment, WRITE_TO_MEMORY);
+	store_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type), destination_alignment, WRITE_TO_MEMORY);
 }
 
 
@@ -12342,7 +12316,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 				is_destination_signed = is_type_signed(intermediary_destination->type);
 
 				//Let the helper select for us. We are passing clean as true, since we are coming from memory
-				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE, source_region_alignment, READ_FROM_MEMORY);
+				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, source_region_alignment, READ_FROM_MEMORY);
 
 				//Since we know that this is a floating point conversion, we will emit the PXOR here
 				pxor_instruction = emit_sse_register_clear_instruction(destination_register);
@@ -12374,7 +12348,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 				is_destination_signed = is_type_signed(intermediary_destination->type);
 
 				//Let the helper select for us. We are passing clean as true, since we are coming from memory
-				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE, source_region_alignment, READ_FROM_MEMORY);
+				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, source_region_alignment, READ_FROM_MEMORY);
 
 				//Since we know that this is a floating point conversion, we will emit the PXOR here
 				pxor_instruction = emit_sse_register_clear_instruction(destination_register);
@@ -12408,7 +12382,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 		is_destination_signed = is_type_signed(destination_register->type);
 
 		//Let the helper select for us. We are passing clean as true, since we are coming from memory
-		load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE, source_region_alignment, READ_FROM_MEMORY);
+		load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, source_region_alignment, READ_FROM_MEMORY);
 
 		/**
 		 * If we have a conversion instruction that has an SSE destination, we need to emit
