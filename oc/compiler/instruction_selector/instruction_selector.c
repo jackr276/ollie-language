@@ -6144,6 +6144,68 @@ static void simplify(cfg_t* cfg){
 
 
 /**
+ * Emit a PXOR instruction that's already been instruction selected. This is intended to
+ * be used by the instruction selector when we need to insert pxor functions for clearing
+ * SSE registers
+ *
+ * This is different from an actual PXOR. We are saying that this instruction exists exclusively
+ * to do register clearing, and nothing more. This will warrant special treatment
+ * in the register allocator because we are not counting any sources here
+ */
+static inline instruction_t* emit_sse_register_clear_instruction(three_addr_var_t* target){
+	//First allocate
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Set the type
+	instruction->instruction_type = PXOR_CLEAR;
+
+	//We just have something that we're clearing here
+	instruction->destination_register = target;
+
+	//Now give it back
+	return instruction;
+}
+
+
+/**
+ * Emit an XORQ instruction that's already been instruciton selected. This instruction exists specifically
+ * to wipe out a given register(usually the error register when a function returns). This warrants
+ * special treatment in the register allocator because we are not counting any sourced
+ */
+static inline instruction_t* emit_gp_register_clear_instruction(three_addr_var_t* target){
+	//First allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	switch(target->variable_size){
+		case QUAD_WORD:
+			instruction->instruction_type = XORQ_CLEAR;
+			break;
+
+		case DOUBLE_WORD:
+			instruction->instruction_type = XORL_CLEAR;
+			break;
+		
+		case WORD:
+			instruction->instruction_type = XORW_CLEAR;
+			break;
+
+		case BYTE:
+			instruction->instruction_type = XORB_CLEAR;
+			break;
+
+		//Should be unreachable
+		default:
+			fprintf(stderr, "Fatal internal compiler error, undefined variable type encountered in clear instruction\n");
+			exit(1);
+	}
+	
+	instruction->destination_register = target;
+
+	return instruction;
+}
+
+
+/**
  * Select the appropriate move instruction based on the source & destination
  * sizes, the destination signedness, and anything else that we may need
  *
@@ -6465,8 +6527,10 @@ static instruction_t* emit_and_insert_move_instruction(three_addr_var_t* destina
 						break;
 
 					case INSERTION_ORDER_AFTER:
-						//Put this in after the given value, we'll need to update the relative 
-						//instruction for later
+						/**
+						 * Put this in after the given value, we'll need to update the relative 
+						 * instruction for later
+						 */
 						insert_instruction_after_given(intermediate_move, relative_instruction);
 						relative_instruction = intermediate_move;
 						break;
@@ -6502,8 +6566,10 @@ static instruction_t* emit_and_insert_move_instruction(three_addr_var_t* destina
 						break;
 
 					case INSERTION_ORDER_AFTER:
-						//Put this in after the given value, we'll need to update the relative 
-						//instruction for later
+						/**
+						 * Put this in after the given value, we'll need to update the relative 
+						 * instruction for later
+						 */
 						insert_instruction_after_given(intermediate_move, relative_instruction);
 						relative_instruction = intermediate_move;
 						break;
@@ -6539,6 +6605,14 @@ static instruction_t* emit_and_insert_move_instruction(three_addr_var_t* destina
 		case INSERTION_ORDER_AFTER:
 			insert_instruction_after_given(move_instruction, relative_instruction);
 			break;
+	}
+
+	/**
+	 * If this is an integer to SSE conversion, we will need to emit a PXOR clear
+	 * instruction beforehand to wipe out the SSE register. We handle this here
+	 */
+	if(is_integer_to_sse_conversion_instruction(move_instruction->instruction_type) == TRUE){
+
 	}
 
 	//We always give back the last instruction we inserted, just in case the user wants to rebuild the window around it
@@ -6580,68 +6654,6 @@ static instruction_t* emit_move_instruction(three_addr_var_t* destination, three
 	instruction->source_register = source;
 
 	//And now we'll give it back
-	return instruction;
-}
-
-
-/**
- * Emit a PXOR instruction that's already been instruction selected. This is intended to
- * be used by the instruction selector when we need to insert pxor functions for clearing
- * SSE registers
- *
- * This is different from an actual PXOR. We are saying that this instruction exists exclusively
- * to do register clearing, and nothing more. This will warrant special treatment
- * in the register allocator because we are not counting any sources here
- */
-static inline instruction_t* emit_sse_register_clear_instruction(three_addr_var_t* target){
-	//First allocate
-	instruction_t* instruction = calloc(1, sizeof(instruction_t));
-
-	//Set the type
-	instruction->instruction_type = PXOR_CLEAR;
-
-	//We just have something that we're clearing here
-	instruction->destination_register = target;
-
-	//Now give it back
-	return instruction;
-}
-
-
-/**
- * Emit an XORQ instruction that's already been instruciton selected. This instruction exists specifically
- * to wipe out a given register(usually the error register when a function returns). This warrants
- * special treatment in the register allocator because we are not counting any sourced
- */
-static inline instruction_t* emit_gp_register_clear_instruction(three_addr_var_t* target){
-	//First allocate it
-	instruction_t* instruction = calloc(1, sizeof(instruction_t));
-
-	switch(target->variable_size){
-		case QUAD_WORD:
-			instruction->instruction_type = XORQ_CLEAR;
-			break;
-
-		case DOUBLE_WORD:
-			instruction->instruction_type = XORL_CLEAR;
-			break;
-		
-		case WORD:
-			instruction->instruction_type = XORW_CLEAR;
-			break;
-
-		case BYTE:
-			instruction->instruction_type = XORB_CLEAR;
-			break;
-
-		//Should be unreachable
-		default:
-			fprintf(stderr, "Fatal internal compiler error, undefined variable type encountered in clear instruction\n");
-			exit(1);
-	}
-	
-	instruction->destination_register = target;
-
 	return instruction;
 }
 
