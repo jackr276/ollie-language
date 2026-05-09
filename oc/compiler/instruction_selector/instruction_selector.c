@@ -6612,7 +6612,11 @@ static instruction_t* emit_and_insert_move_instruction(three_addr_var_t* destina
 	 * instruction beforehand to wipe out the SSE register. We handle this here
 	 */
 	if(is_integer_to_sse_conversion_instruction(move_instruction->instruction_type) == TRUE){
+		//Emit a clear for the destination
+		instruction_t* pxor_clear = emit_sse_register_clear_instruction(destination);
 
+		//This goes in immediately before the move instruction itself
+		insert_instruction_before_given(pxor_clear, move_instruction);
 	}
 
 	//We always give back the last instruction we inserted, just in case the user wants to rebuild the window around it
