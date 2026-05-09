@@ -6455,7 +6455,7 @@ static instruction_t* emit_and_insert_move_instruction(three_addr_var_t* destina
 				intermediate_move->source_register = true_source;
 
 				//Let the helper get the converting move for us
-				intermediate_move->instruction_type = select_move_instruction(get_type_size(intermediate_destination->type), get_type_size(true_source->type), FALSE, TRUE, ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
+				intermediate_move->instruction_type = select_move_instruction(get_type_size(intermediate_destination->type), get_type_size(true_source->type), FALSE, ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
 
 				//Based on the instructions, we will insert this appropriately
 				switch(insertion_order){
@@ -6492,7 +6492,7 @@ static instruction_t* emit_and_insert_move_instruction(three_addr_var_t* destina
 				intermediate_move->source_register = true_source;
 
 				//Let the helper get the converting move for us
-				intermediate_move->instruction_type = select_move_instruction(get_type_size(intermediate_destination->type), get_type_size(true_source->type), TRUE, TRUE, ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
+				intermediate_move->instruction_type = select_move_instruction(get_type_size(intermediate_destination->type), get_type_size(true_source->type), TRUE, ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
 
 				//Based on the instructions, we will insert this appropriately
 				switch(insertion_order){
@@ -12158,7 +12158,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 	}
 
 	//Once we've done all the above assignments, we need to determine what our instruction type is. The source here is always clean, we are moving to memory
-	store_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type), TRUE, destination_alignment, WRITE_TO_MEMORY);
+	store_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type), destination_alignment, WRITE_TO_MEMORY);
 }
 
 
@@ -12300,7 +12300,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 				is_destination_signed = is_type_signed(intermediary_destination->type);
 
 				//Let the helper select for us. We are passing clean as true, since we are coming from memory
-				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE, source_region_alignment, READ_FROM_MEMORY);
+				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, source_region_alignment, READ_FROM_MEMORY);
 
 				//Since we know that this is a floating point conversion, we will emit the PXOR here
 				pxor_instruction = emit_sse_register_clear_instruction(destination_register);
@@ -12332,7 +12332,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 				is_destination_signed = is_type_signed(intermediary_destination->type);
 
 				//Let the helper select for us. We are passing clean as true, since we are coming from memory
-				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE, source_region_alignment, READ_FROM_MEMORY);
+				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, source_region_alignment, READ_FROM_MEMORY);
 
 				//Since we know that this is a floating point conversion, we will emit the PXOR here
 				pxor_instruction = emit_sse_register_clear_instruction(destination_register);
@@ -12366,7 +12366,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 		is_destination_signed = is_type_signed(destination_register->type);
 
 		//Let the helper select for us. We are passing clean as true, since we are coming from memory
-		load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE, source_region_alignment, READ_FROM_MEMORY);
+		load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, source_region_alignment, READ_FROM_MEMORY);
 
 		/**
 		 * If we have a conversion instruction that has an SSE destination, we need to emit
