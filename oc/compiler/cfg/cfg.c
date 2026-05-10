@@ -230,7 +230,7 @@ static inline u_int8_t is_lea_compatible_power_of_2(int64_t value){
  * Is a given instruction a "terminal" statement. This will occur if 
  * we have a ret or raise statement
  */
-static inline u_int8_t is_terminal_instruction(instruction_t* instruction){
+static inline u_int8_t is_function_terminating_instruction(instruction_t* instruction){
 	if(instruction == NULL){
 		return FALSE;
 	}
@@ -7126,10 +7126,33 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 		instruction_t* last_instruction = handle_results.final_block->exit_statement;
 
 		/**
-		 * If the 
+		 * If the package here is *not* empty, we will need to emit
+		 * an assignment from the result variable/constant over to the
+		 * actual final result. Note that it should be impossible to
+		 * get a full result package *if* we have a void return type
+		 * in the function
 		 */
 		if(is_result_package_empty(&handle_results) == FALSE){
 
+
+		/**
+		 * Otherwise the result package is empty. This could mean a few things - we could
+		 * have a return or raise statment *or* we could have an ignore statement. We will
+		 * be able to tell by looking back at the last instruction and seeing if it is NULL
+		 * or not. If it is *not* a return or raise statement, we will have to emit a jump
+		 * from this given block to the end block
+		 */
+		} else {
+			//Extract the last instruction
+			instruction_t* last_instruction = handle_results.final_block->exit_statement;
+
+			/**
+			 * If it is *not* a terminal instruction, then we need to jump from the final
+			 * block over to the error handling block
+			 */
+			if(is_function_terminating_instruction(last_instruction) == FALSE){
+				emit_jump(handle_results.final_block, error_handling_ending_block);
+			}
 		}
 
 
@@ -7144,7 +7167,6 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 			 */
 			if(is_result_package_empty(&handle_results) == FALSE){
 				//Jump from the final block to the end block
-				emit_jump(handle_results.final_block, error_handling_ending_block);
 
 				/**
 				 * Based on what kind of type we got, we will emit either a constant
