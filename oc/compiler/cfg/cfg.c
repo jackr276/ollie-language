@@ -11814,7 +11814,62 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 				//
 				//
 			} else {
+				/**
+				 * If we have an exit statement *and* we are dealing with what the final_op1 is, we may
+				 * be able to shrink our footprint here
+				 */
+				if(current_block->exit_statement != NULL
+					&& current_block->exit_statement->assignee != NULL
+					&& current_block->exit_statement->assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& variables_equal_no_ssa(final_op1, current_block->exit_statement->assignee, FALSE) == TRUE){
 
+					switch(current_block->exit_statement->statement_type){
+						/**
+						 * For binary operations we can hijack the statement itself
+						 */
+						case THREE_ADDR_CODE_BIN_OP_STMT:
+						case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+							binary_operation = current_block->exit_statement;
+
+							//Just replace it with our variable
+							binary_operation->assignee = let_variable;
+
+							break;
+
+						/**
+						 * Same with a constant assignment statement
+						 */
+						case THREE_ADDR_CODE_ASSN_CONST_STMT:
+							const_assignment = current_block->exit_statement;
+
+							//Just replace it with our variable
+							const_assignment->assignee = let_variable;
+
+							break;
+
+						/**
+						 * Something else here - don't know what it is but we play it safe
+						 * and assign things over
+						 */
+						default:
+							//The actual statement is the assignment of right to left
+							assignment_statement = emit_assignment_instruction(let_variable, final_op1);
+
+							//Finally we'll add this into the overall block
+							add_statement(current_block, assignment_statement);
+					}
+
+				/**
+				 * No fancy optimizations here - just emit an assignment over and we'll be
+				 * fine here
+				 */
+				} else {
+					//The actual statement is the assignment of right to left
+					instruction_t* assignment_statement = emit_assignment_instruction(let_variable, final_op1);
+
+					//Finally we'll add this into the overall block
+					add_statement(current_block, assignment_statement);
+				}
 				//TODO FINAL ELSE IF HERE
 			}
 
