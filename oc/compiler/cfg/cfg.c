@@ -4246,7 +4246,7 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 			
 		//Some weird error if we get here - hard exit
 		default:
-			sprintf(stderr, "Fatal internal compiler error: unrecognized constant type detected in CFG.\n");
+			fprintf(stderr, "Fatal internal compiler error: unrecognized constant type detected in CFG.\n");
 			exit(1);
 	}
 }
@@ -10332,8 +10332,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//Package up the results package
 				results.starting_block = starting_block;
 				results.final_block = current_block;
-				results.operator = BLANK;
-				results.assignee = NULL;
 
 				//We're done here - get out
 				return results;
@@ -10361,8 +10359,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//Package up the values
 				results.starting_block = starting_block;
 				results.final_block = current_block;
-				results.operator = BLANK;
-				results.assignee = NULL;
 
 				//We're completely done here
 				return results;
@@ -10514,7 +10510,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					results = (cfg_result_package_t)INITIALIZE_BLANK_CFG_RESULT;
 
 					//For a regular break statement, this is it, so we just get out
-					//Give back the starting block
 					return results;
 
 				//Otherwise, we have a conditional break, which will generate a conditional jump instruction
@@ -10547,14 +10542,18 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//Grab a cursor here
 				defer_statement_cursor = ast_cursor->first_child;
 
-				//So long as this cursor is not null, we'll keep processing and adding
-				//compound statements
+				/**
+				 * So long as this cursor is not null, we'll keep processing and adding
+				 * compound statements
+				 */
 				while(defer_statement_cursor != NULL){
 					//Let the helper process this
 					cfg_result_package_t compound_statement_results = visit_compound_statement(defer_statement_cursor);
 
-					//The successor to the current block is this block
-					//If it's null then this is this block
+					/**
+					 * The successor to the current block is this block
+					 * If it's null then this is this block
+					 */
 					if(starting_block == NULL){
 						starting_block = compound_statement_results.starting_block;
 					} else {
@@ -11632,7 +11631,7 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* current_block,
  */
 static cfg_result_package_t emit_string_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* string_initializer ){
 	//Initialize the results package here to start
-	cfg_result_package_t results = {current_block, current_block, NULL, BLANK};
+	cfg_result_package_t results = {current_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	//The string index starts off at 0
 	u_int32_t current_index = 0;
@@ -11743,7 +11742,7 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
  */
 static cfg_result_package_t emit_simple_initialization(basic_block_t* current_block, three_addr_var_t* let_variable, generic_ast_node_t* expression_node){
 	//Allocate the return package here
-	cfg_result_package_t let_results = {current_block, current_block, let_variable, BLANK};
+	cfg_result_package_t let_results = {current_block, current_block, {let_variable}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	//Emit the right hand expression here
 	cfg_result_package_t package = emit_expression(current_block, expression_node);
