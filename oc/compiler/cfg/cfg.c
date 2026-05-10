@@ -4855,7 +4855,7 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 				multiply_constants(type_size_const, constant_value);
 
 				//Emit the calculation
-				instruction_t* address_calculation = emit_binary_operation_with_const_instruction(emit_temp_var(u64), *current_offset, PLUS, type_size_const);
+				instruction_t* address_calculation = emit_lea_offset_only(emit_temp_var(u64), *current_offset, type_size_const);
 
 				//Get it into the block
 				add_statement(current_block, address_calculation);
