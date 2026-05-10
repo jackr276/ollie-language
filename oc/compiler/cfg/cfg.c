@@ -9690,8 +9690,11 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	 * are in the range
 	 */
 
+	//Unpack the result to get our actual variable out
+	three_addr_var_t* input_result = unpack_result_package(&input_results, root_level_block);
+
 	//Grab the type our for convenience
-	generic_type_t* input_result_type = input_results.assignee->type;
+	generic_type_t* input_result_type = input_result->type;
 
 	//Grab the signedness of the result
 	u_int8_t is_signed = is_type_signed(input_result_type);
@@ -9701,7 +9704,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 	//Let's first do our lower than comparison
 	//First step -> if we're below the minimum, we jump to default 
-	emit_binary_operation_with_constant(root_level_block, lower_than_decider, input_results.assignee, L_THAN, lower_bound);
+	emit_binary_operation_with_constant(root_level_block, lower_than_decider, input_result, L_THAN, lower_bound);
 
 	//Select a branch for the lower type
 	branch_type_t branch_lower_than = select_appropriate_branch_statement(L_THAN, BRANCH_CATEGORY_NORMAL, is_signed);
@@ -9720,7 +9723,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	three_addr_var_t* higher_than_decider = emit_temp_var(input_result_type);
 
 	//Now we handle the case where we're above the upper bound
-	emit_binary_operation_with_constant(upper_bound_check_block, higher_than_decider, input_results.assignee, G_THAN, upper_bound);
+	emit_binary_operation_with_constant(upper_bound_check_block, higher_than_decider, input_result, G_THAN, upper_bound);
 
 	//Select a branch for the higher type
 	branch_type_t branch_greater_than = select_appropriate_branch_statement(G_THAN, BRANCH_CATEGORY_NORMAL, is_signed);
@@ -9736,7 +9739,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	emit_branch_for_switch_statement(upper_bound_check_block, default_block, jump_calculation_block, branch_greater_than, higher_than_decider);
 
 	//To avoid violating SSA rules, we'll emit a temporary assignment here
-	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_results.assignee);
+	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_result);
 
 	//Add it into the block
 	add_statement(jump_calculation_block, temporary_variable_assignent);
