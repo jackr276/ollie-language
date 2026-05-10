@@ -7133,7 +7133,24 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 		 * in the function
 		 */
 		if(is_result_package_empty(&handle_results) == FALSE){
+			//Final result assignment instruction
+			instruction_t* result_assignment;
 
+			//Emit our jump first - this is our anchor point for the assignment insertion
+			emit_jump(handle_results.final_block, error_handling_ending_block);
+
+			switch(handle_results.type){
+				case CFG_RESULT_TYPE_CONST:
+					result_assignment = emit_assignment_with_const_instruction(emit_var(function_result_var), handle_results.result_value.result_const);
+					break;
+
+				case CFG_RESULT_TYPE_VAR:
+					result_assignment = emit_assignment_instruction(emit_var(function_result_var), handle_results.result_value.result_var);
+					break;
+
+				//Insert this right before the final jump statement that we just emitted
+				insert_instruction_before_given(result_assignment, handle_results.final_block->exit_statement);
+			}
 
 		/**
 		 * Otherwise the result package is empty. This could mean a few things - we could
@@ -7151,44 +7168,6 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 			 * block over to the error handling block
 			 */
 			if(is_function_terminating_instruction(last_instruction) == FALSE){
-				emit_jump(handle_results.final_block, error_handling_ending_block);
-			}
-		}
-
-
-		/**
-		 * If we have a terminal instruction then we don't need to do anything. However if
-		 * we have some other kind of instruction, we'll need to do a final assignment
-		 */
-		if(is_terminal_instruction(last_instruction) == FALSE){
-			/**
-			 * If the result package is empty - it means that we have an ignore statement. If it's
-			 * not, then we have something to do here
-			 */
-			if(is_result_package_empty(&handle_results) == FALSE){
-				//Jump from the final block to the end block
-
-				/**
-				 * Based on what kind of type we got, we will emit either a constant
-				 * assignment or a regular variable assignment for the handles statement
-				 */
-				instruction_t* result_assignment;
-				switch(handle_results.type){
-					case CFG_RESULT_TYPE_CONST:
-						result_assignment = emit_assignment_with_const_instruction(emit_var(function_result_var), handle_results.result_value.result_const);
-						break;
-
-					case CFG_RESULT_TYPE_VAR:
-						result_assignment = emit_assignment_instruction(emit_var(function_result_var), handle_results.result_value.result_var);
-						break;
-				}
-
-				//Add this into the final block. It will go right before the exit
-				insert_instruction_before_given(result_assignment, handle_results.final_block->exit_statement);
-				break;
-
-			//Otherwise we still need to come here and emit the jump
-			} else {
 				emit_jump(handle_results.final_block, error_handling_ending_block);
 			}
 		}
