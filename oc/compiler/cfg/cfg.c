@@ -227,6 +227,25 @@ static inline u_int8_t is_lea_compatible_power_of_2(int64_t value){
 
 
 /**
+ * Is a given instruction a "terminal" statement. This will occur if 
+ * we have a ret or raise statement
+ */
+static inline u_int8_t is_terminal_instruction(instruction_t* instruction){
+	if(instruction == NULL){
+		return FALSE;
+	}
+
+	switch(instruction->instruction_type){
+		case THREE_ADDR_CODE_RET_STMT:
+		case THREE_ADDR_CODE_RAISE_STMT:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Is a given variable SSA eligible? We do this by looking at the type of the
  * variable and whether or not the linked var is NULL. If the linked var is NULL
  * we would get segfaults
@@ -7088,54 +7107,31 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 		instruction_t* last_instruction = handle_results.final_block->exit_statement;
 
 		/**
-		 * If we have a "raise" statement, then we may have a NULL last instruction. We'll
-		 * need to couch for this case here
+		 * If we have a terminal instruction then we don't need to do anything. However if
+		 * we have some other kind of instruction, we'll need to do a final assignment
 		 */
-		if(last_instruction != NULL){
+		if(is_terminal_instruction(last_instruction) == FALSE){
+			//Jump from the final block to the end block
+			emit_jump(handle_results.final_block, error_handling_ending_block);
+
 			/**
-			 * If we have a ret or raise statement, we don't need to do any
-			 * bookkeeping. However, if we have something else, we'll
-			 * need to do 2 things:
-			 * 	1.) Emit a final assignment from the result to the function_result_var
-			 * 	2.) Emit a jump to the end block
+			 * Based on what kind of type we got, we will emit either a constant
+			 * assignment or a regular variable assignment for the handles statement
 			 */
-			switch(last_instruction->statement_type){
-				case THREE_ADDR_CODE_RET_STMT:
-				case THREE_ADDR_CODE_RAISE_STMT:
+			instruction_t* result_assignment;
+			switch(handle_results.type){
+				case CFG_RESULT_TYPE_CONST:
+					result_assignment = emit_assignment_with_const_instruction(emit_var(function_result_var), handle_results.result_value.result_const);
 					break;
 
-				/**
-				 * Note that if the function result var is in fact NULL we will never hit this - the parser doesn't
-				 * allow anything besides ret, raise or ignore through for void returning functions
-				 */
-				default:
-					//Jump from the final block to the end block
-					emit_jump(handle_results.final_block, error_handling_ending_block);
-
-					/**
-					 * Based on what kind of type we got, we will emit either a constant
-					 * assignment or a regular variable assignment for the handles statement
-					 */
-					instruction_t* result_assignment;
-					switch(handle_results.type){
-						case CFG_RESULT_TYPE_CONST:
-							result_assignment = emit_assignment_with_const_instruction(emit_var(function_result_var), handle_results.result_value.result_const);
-							break;
-
-						case CFG_RESULT_TYPE_VAR:
-							result_assignment = emit_assignment_instruction(emit_var(function_result_var), handle_results.result_value.result_var);
-							break;
-					}
-
-					//Add this into the final block. It will go right before the exit
-					insert_instruction_before_given(result_assignment, handle_results.final_block->exit_statement);
+				case CFG_RESULT_TYPE_VAR:
+					result_assignment = emit_assignment_instruction(emit_var(function_result_var), handle_results.result_value.result_var);
 					break;
 			}
 
-		//It's NULL, all we need to do is emit the jump
-		} else {
-			//Jump from the final block to the end block
-			emit_jump(handle_results.final_block, error_handling_ending_block);
+			//Add this into the final block. It will go right before the exit
+			insert_instruction_before_given(result_assignment, handle_results.final_block->exit_statement);
+			break;
 		}
 
 		/**
