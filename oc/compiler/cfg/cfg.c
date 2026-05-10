@@ -7214,12 +7214,12 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 /**
  * Handle the parsing for a normal function parameter. This is different than the parsing for an elaborative
  * parameter, which is handled by an overloaded method
- *
- * TODO THE LOOKBACK NEEDS TO BE FIXED
  */
 static inline cfg_result_package_t emit_parameter_expression(basic_block_t* basic_block, generic_ast_node_t* parameter_node,
 															  	parameter_results_array_t* parameter_results, dynamic_array_t* memory_addresses_to_adjust,
 															 	u_int8_t has_stack_params){
+	//Holder for the result variable;
+	three_addr_var_t* result_var;
 	//Keep track of our current block
 	basic_block_t* current_block = basic_block;
 
@@ -7229,51 +7229,56 @@ static inline cfg_result_package_t emit_parameter_expression(basic_block_t* basi
 	//Always reassign this
 	current_block = results_package.final_block;
 
-	//What is the final assignee
-	three_addr_var_t* final_assignee = results_package.assignee;
-
 	/**
-	 * If we have a memory address variable *and* we have stack params, we'll need to
-	 * save this so that we can add the adjustment in later, after the stack allocation
-	 * happens
+	 * Based on the result package type, we will unpack and store
+	 * the results themselves accordingly
 	 */
-	if((final_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
-		|| final_assignee->variable_type == VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS)
-		&& has_stack_params == TRUE){
-		//Allocate it if need be
-		if(memory_addresses_to_adjust->internal_array == NULL){
-			*memory_addresses_to_adjust = dynamic_array_alloc();
-		}
+	switch(results_package.type){
+		/**
+		 * For a consant there are no other checks, we just throw
+		 * it into the parameter result array
+		 */
+		case CFG_RESULT_TYPE_CONST:
+			add_parameter_result_to_results_array(parameter_results, results_package.result_value.result_const, PARAM_RESULT_TYPE_CONST);
+			break;
 
-		//Throw this into storage for later
-		dynamic_array_add(memory_addresses_to_adjust, final_assignee);
+		/**
+		 * For a variable result type, there will be some more work to do around
+		 * memory addresses/special cases
+		 */
+		case CFG_RESULT_TYPE_VAR:
+			//Extract the result var
+			result_var = results_package.result_value.result_var;
+
+			/**
+			 * For future reference - we store all of the memory address
+			 * and stack param memory address variable results that we 
+			 * end up with
+			 */
+			if(has_stack_params == TRUE){
+				switch(result_var->variable_type){
+					case VARIABLE_TYPE_MEMORY_ADDRESS:
+					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+						//Allocate it if need be
+						if(memory_addresses_to_adjust->internal_array == NULL){
+							*memory_addresses_to_adjust = dynamic_array_alloc();
+						}
+
+						//Throw this into storage for later
+						dynamic_array_add(memory_addresses_to_adjust, result_var);
+
+						break;
+
+					//If it's not a memory address do nothing
+					default:	
+						break;
+				}
+			}
+
+			//Regardless of the type we now add this in as a result
+			add_parameter_result_to_results_array(parameter_results, result_var, PARAM_RESULT_TYPE_VAR);
+			break;
 	}
-
-	//For grabbing out the result types - by default assume var
-	parameter_result_type_t result_type = PARAM_RESULT_TYPE_VAR;
-	three_addr_var_t* final_assignee_var = final_assignee;
-	three_addr_const_t* final_assignee_const = NULL;
-
-	/**
-	 * One scenario that we want to watch out for here: Temporary variable type
-	 * and we have a constant being assigned - optimize by just storing the constant
-	 */
-	if(final_assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& current_block->exit_statement != NULL
-		&& current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-		&& variables_equal_no_ssa(current_block->exit_statement->assignee, final_assignee, FALSE) == TRUE){
-
-		//They are equal, so we have a const result type now
-		final_assignee_const = current_block->exit_statement->op1_const;
-
-		//Flag we have a const result
-		result_type = PARAM_RESULT_TYPE_CONST;
-	}
-
-	//Add the appropriate result into the result array 
-	add_parameter_result_to_results_array(parameter_results, 
-									   		result_type == PARAM_RESULT_TYPE_VAR ? (void*)final_assignee_var : (void*)final_assignee_const,
-									   		result_type);
 
 	//Give back the results in the end
 	return results_package;
