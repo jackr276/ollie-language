@@ -6465,17 +6465,72 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	//Reassign current to be at the end
 	current_block = right_hand_package.final_block;
 
-	//The final first operand will be the expression package's assignee for now
-	three_addr_var_t* final_op1 = right_hand_package.assignee;
-
 	//Emit the left hand unary expression
 	cfg_result_package_t unary_package = emit_unary_expression(current_block, left_child);
 
 	//Reassign current to be at the end
 	current_block = unary_package.final_block;
 
-	//The left hand var is the final assignee of the unary statement
-	three_addr_var_t* left_hand_var = unary_package.assignee;
+	//This is always a var but we call the unpacker for safety
+	three_addr_var_t* left_hand_var = unpack_result_package(&unary_package, current_block);
+
+	/**
+	 * Based on what kind of result we have on the right hand package,
+	 * we will process accordingly
+	 */
+	switch(right_hand_package.type){
+		case CFG_RESULT_TYPE_VAR:
+			
+			break;
+
+		/**
+		 * For constant result types, really the only thing that we have
+		 * to worry about is whether or not we have a store.
+		 */
+		case CFG_RESULT_TYPE_CONST:
+			/**
+			 * First case: we have a store statement that just needs a constant put to it
+			 */
+			if(current_block->exit_statement != NULL
+				&& is_store_operation(current_block->exit_statement)
+				&& current_block->exit_statement->assignee == left_hand_var){
+
+				//Simply give this one the constant that we had
+				current_block->exit_statement->op1_const = right_hand_package.result_value.result_const;
+
+			/**
+			 * Second case: If we have a variable that is on the stack or is a global variable, then a regular assignment won't
+			 * work. We'll need to do a store here and emit this one ourselves
+			 */
+			} else if(left_hand_var->linked_var != NULL
+						&& (left_hand_var->linked_var->stack_variable == TRUE 
+						|| is_variable_data_segment_variable(left_hand_var->linked_var) == TRUE)){
+				//Emit the memory address var for this variable
+				three_addr_var_t* memory_address = emit_memory_address_var(left_hand_var->linked_var);
+
+				//Now for the final store code
+				instruction_t* final_assignment = emit_store_ir_code(memory_address, NULL, left_hand_var->type);
+
+				//This guy's operand is the result constant
+				final_assignment->op1_const = right_hand_package.result_value.result_const;
+
+				//Now add thi statement in here
+				add_statement(current_block, final_assignment);
+
+			/**
+			 * Otherwise there is nothing else for us to do here but emit a regular
+			 * assign const from our result to the given one
+			 */
+			} else {
+				//Emit it
+				instruction_t* const_assignment = emit_assignment_with_const_instruction(left_hand_var, right_hand_package.result_value.result_const);
+
+				//Throw it into the block
+				add_statement(current_block, const_assignment);
+			}
+			
+			break;
+	}
 
 	/**
 	 * Is a copy assignment required between the destination and source types? This
@@ -6685,8 +6740,9 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		}
 	}
 
-	//Now pack the return value here
-	result_package.assignee = left_hand_var;
+	//Now pack the return value here - this is always a variable type
+	result_package.type = CFG_RESULT_TYPE_VAR;
+	result_package.result_value.result_var = left_hand_var;
 	//This is whatever the current block is
 	result_package.final_block = current_block;
 
