@@ -11760,14 +11760,50 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 	//Reassign what the current block is in case it's changed
 	current_block = package.final_block;
 
-	//What will our final op1 end up as?
-	three_addr_var_t* final_op1 = package.assignee;
-
 	//Store the last instruction for later use
 	instruction_t* last_instruction = current_block->exit_statement;
 
 	//Now update the final block
 	let_results.final_block = current_block;
+
+	/**
+	 * Go based on what the final result type is
+	 */
+	switch(let_results.type){
+		case CFG_RESULT_TYPE_VAR:
+			break;
+
+		case CFG_RESULT_TYPE_CONST:
+			/**
+			 * If we have a variable that requires a store assignment, we will
+			 * emit that now
+			 */
+			if(let_variable->linked_var != NULL
+				&& (let_variable->linked_var->stack_variable == TRUE)
+					|| is_variable_data_segment_variable(let_variable->linked_var) == TRUE){
+				/**
+				 * Store the "true" stored type. This will only change if our type is a reference, because
+				 * we need to account for the implicit dereference that's happening
+				 */
+				generic_type_t* true_stored_type = let_variable->type;
+
+				//NOTE: We use the type of our let variable here for the address assignment
+				three_addr_var_t* base_address = emit_memory_address_var(let_variable->linked_var);
+				
+				//Emit the store code
+				instruction_t* store_statement = emit_store_ir_code(base_address, NULL, true_stored_type);
+
+				//Set the store statement's op1_const to be this
+				store_statement->op1_const = let_results.result_value.result_const;
+
+				//Now add thi statement in here
+				add_statement(current_block, store_statement);
+			}
+
+
+			break;
+	}
+
 
 	/**
 	 * Is a copy assignment required between the two variables? This will only
