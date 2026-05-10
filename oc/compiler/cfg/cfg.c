@@ -178,12 +178,15 @@ static inline void handle_raise_statement(basic_block_t* basic_block, generic_as
  * wants us to unpack the constant if we are able to.
  */
 static inline three_addr_var_t* unpack_result_package(cfg_result_package_t* result_package, basic_block_t* block){
+	//The variable that we will always end up returning
+	three_addr_var_t* returned_variable;
 	three_addr_const_t* constant_value;
 
 	switch(result_package->type){
 		//Variable - just give it back
 		case CFG_RESULT_TYPE_VAR:
-			return result_package->result_value.result_var;
+			returned_variable = result_package->result_value.result_var;
+			break;
 
 		//Constant - unpack with an assignment and give the temp var back
 		case CFG_RESULT_TYPE_CONST:
@@ -195,9 +198,13 @@ static inline three_addr_var_t* unpack_result_package(cfg_result_package_t* resu
 			//Throw it into the block
 			add_statement(block, const_assignment);
 
-			//Give back the variable that we generated
-			return const_assignment->assignee;
+			//This is the variable that we end up returning
+			returned_variable = const_assignment->assignee;
+			break;
 	}
+
+	//Give back the returned variable in the end
+	return returned_variable;
 }
 
 
@@ -11929,7 +11936,7 @@ static inline cfg_result_package_t emit_complex_initialization(basic_block_t* cu
  */
 static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, generic_ast_node_t* node){
 	//Create the return package here
-	cfg_result_package_t let_results = {starting_block, starting_block, NULL, BLANK};
+	cfg_result_package_t let_results = {starting_block, starting_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	//The current block is the start block
 	basic_block_t* current_block = starting_block;
