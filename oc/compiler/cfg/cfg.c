@@ -6479,7 +6479,218 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	 * we will process accordingly
 	 */
 	switch(right_hand_package.type){
+		/**
+		 * For result types, there are many different things that we need to account
+		 * for like copy assignees, store operations, and optimizations for binary expressions
+		 */
 		case CFG_RESULT_TYPE_VAR:
+			/**
+			 * Is a copy assignment required between the destination and source types? This
+			 * is going to have to be our first case because it may be incorrectly
+			 * identified by the other checks down the road
+			 */
+			if(is_copy_assignment_required(left_child->inferred_type, right_child->inferred_type) == TRUE){
+				//Emit the copy from the left hand var to the final op1
+				instruction_t* copy_statement = emit_memory_copy_instruction(left_hand_var, final_op1, parent_node->optional_storage.bytes_to_copy);
+
+				//Get it into the block
+				add_statement(current_block, copy_statement);		
+
+			/**
+			 * Do we have a pre-loaded up store statement ready for us to go? If so, then
+			 * we'll need to handle this appropriately. We need to be sure that we aren't
+			 * invalidly hitting this though
+			 *
+			 * NOTE: We check for 100% *exact* equality between the exit statement's assignee
+			 * and the left hand var here. That is the only way that we can know for sure 
+			 * that we aren't having a false positive
+			 */
+			} else if(current_block->exit_statement != NULL
+						&& is_store_operation(current_block->exit_statement) == TRUE
+						&& current_block->exit_statement->assignee == left_hand_var){
+				//This is our store statement
+				instruction_t* store_statement = current_block->exit_statement;
+
+				/**
+				 * Different store statement types have different areas where the operands go
+				 */
+				switch(store_statement->statement_type){
+					//Store statements have the storee in op1
+					case THREE_ADDR_CODE_STORE_STATEMENT:
+						/**
+						 * We can perform a small optimization by potentially scrapping the constant
+						 * assignment and just putting the constant in directly
+						 */
+						if(last_instruction != NULL
+							&& last_instruction->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
+							&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
+							&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
+
+							//Extract it
+							three_addr_const_t* constant_assignee = last_instruction->op1_const;
+
+							//This is now useless
+							delete_statement(last_instruction);
+
+							//Set the store statement's op1_const to be this
+							current_block->exit_statement->op1_const = constant_assignee;
+
+						/**
+						 * Otherwise there's no clever optimziation to do here, we just need
+						 * to emit this as is
+						 */
+						} else {
+							current_block->exit_statement->op1 = final_op1;
+						}
+
+						break;
+
+					//When we have offsets, the storee goes into op2
+					case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+					case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+						/**
+						 * We can perform a small optimization by potentially scrapping the constant
+						 * assignment and just putting the constant in directly
+						 */
+						if(last_instruction != NULL
+							&& last_instruction->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
+							&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
+							&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
+
+							//Extract it
+							three_addr_const_t* constant_assignee = last_instruction->op1_const;
+
+							//This is now useless
+							delete_statement(last_instruction);
+
+							//Set the store statement's op1_const to be this
+							current_block->exit_statement->op1_const = constant_assignee;
+
+						/**
+						 * Otherwise there's no clever optimziation to do here, we just need
+						 * to emit this as is
+						 */
+						} else {
+							current_block->exit_statement->op2 = final_op1;
+						}
+
+						break;
+
+					//This is unreachable, just so the compiler is happy
+					default:
+						break;
+				}
+
+			/**
+			 * If we have a variable that is on the stack or is a global variable, then a regular assignment won't
+			 * work. We'll need to do a store here
+			 */
+			} else if(left_hand_var->linked_var != NULL
+						&& (left_hand_var->linked_var->stack_variable == TRUE || is_variable_data_segment_variable(left_hand_var->linked_var) == TRUE)){
+
+				//Emit the memory address var for this variable
+				three_addr_var_t* memory_address = emit_memory_address_var(left_hand_var->linked_var);
+
+				//Now for the final store code
+				instruction_t* final_assignment = emit_store_ir_code(memory_address, NULL, left_hand_var->type);
+
+				/**
+				 * If the last instruction was a constant assignment, we can just grab the constant
+				 * itself instead of dealing with the extra copy assignment
+				 */
+				if(last_instruction != NULL
+					&& last_instruction->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
+					&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
+					//Extract it
+					three_addr_const_t* constant_assignee = last_instruction->op1_const;
+
+					//This is now useless
+					delete_statement(last_instruction);
+
+					//Set the store statement's op1_const to be this
+					final_assignment->op1_const = constant_assignee;
+
+				} else {
+					final_assignment->op1 = final_op1;
+				}
+				
+				//Now add thi statement in here
+				add_statement(current_block, final_assignment);
+			
+			/**
+			 * If we get here, then we just have a regular variable that is not on the stack at all and is not a global variable,
+			 * so a regular assignment will work just fine
+			 */
+			} else {
+				/**
+				 * If this is not a binary operation, then we will just copy it over. If it is, then we will
+				 * use that binary operation for our own purposes here with the left hand var
+				 */
+				instruction_t* binary_expression;
+				instruction_t* constant_assignment;
+				instruction_t* final_assignment;
+
+				/**
+				 * Reach back into the block to see if the last instruction that we emitted for our op1
+				 * here is a constant assignment or a binary expression. If it's either, we can avoid
+				 * the copy assignment for this assignment expression and go to emitting directly
+				 */
+				if(last_instruction != NULL
+					&& last_instruction->assignee != NULL
+					&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
+
+					switch(last_instruction->statement_type){
+						case THREE_ADDR_CODE_BIN_OP_STMT:
+						case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+							binary_expression = last_instruction;
+
+							//Make this one's assignee the left hand var
+							binary_expression->assignee = left_hand_var;
+							
+							break;
+
+						case THREE_ADDR_CODE_ASSN_CONST_STMT:
+							constant_assignment = last_instruction;
+
+							//Make this one's assignee the left hand var
+							constant_assignment->assignee = left_hand_var;
+
+							break;
+							
+						/**
+						 * If we have this then there's no clever optimization that we can do, we'll
+						 * just emti a copy assignment
+						 */
+						default:
+							//Finally we'll struct the whole thing
+							final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
+
+							//Copy this over if there is one
+							left_hand_var->associated_memory_region.stack_region = final_op1->associated_memory_region.stack_region;
+							
+							//Now add thi statement in here
+							add_statement(current_block, final_assignment);
+
+							break;
+					}
+
+				/**
+				 * Otherwise there is no clever optimization that we could do, so we'll need to emit an assignment
+				 * from the left hand var over to the final op1
+				 */
+				} else {
+					//Finally we'll struct the whole thing
+					final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
+
+					//Copy this over if there is one
+					left_hand_var->associated_memory_region.stack_region = final_op1->associated_memory_region.stack_region;
+					
+					//Now add thi statement in here
+					add_statement(current_block, final_assignment);
+				}
+			}
 			
 			break;
 
@@ -6530,214 +6741,6 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			}
 			
 			break;
-	}
-
-	/**
-	 * Is a copy assignment required between the destination and source types? This
-	 * is going to have to be our first case because it may be incorrectly
-	 * identified by the other checks down the road
-	 */
-	if(is_copy_assignment_required(left_child->inferred_type, right_child->inferred_type) == TRUE){
-		//Emit the copy from the left hand var to the final op1
-		instruction_t* copy_statement = emit_memory_copy_instruction(left_hand_var, final_op1, parent_node->optional_storage.bytes_to_copy);
-
-		//Get it into the block
-		add_statement(current_block, copy_statement);		
-
-	/**
-	 * Do we have a pre-loaded up store statement ready for us to go? If so, then
-	 * we'll need to handle this appropriately. We need to be sure that we aren't
-	 * invalidly hitting this though
-	 *
-	 * NOTE: We check for 100% *exact* equality between the exit statement's assignee
-	 * and the left hand var here. That is the only way that we can know for sure 
-	 * that we aren't having a false positive
-	 */
-	} else if(current_block->exit_statement != NULL
-				&& is_store_operation(current_block->exit_statement) == TRUE
-				&& current_block->exit_statement->assignee == left_hand_var){
-		//This is our store statement
-		instruction_t* store_statement = current_block->exit_statement;
-
-		/**
-		 * Different store statement types have different areas where the operands go
-		 */
-		switch(store_statement->statement_type){
-			//Store statements have the storee in op1
-			case THREE_ADDR_CODE_STORE_STATEMENT:
-				/**
-				 * We can perform a small optimization by potentially scrapping the constant
-				 * assignment and just putting the constant in directly
-				 */
-				if(last_instruction != NULL
-					&& last_instruction->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-					&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
-
-					//Extract it
-					three_addr_const_t* constant_assignee = last_instruction->op1_const;
-
-					//This is now useless
-					delete_statement(last_instruction);
-
-					//Set the store statement's op1_const to be this
-					current_block->exit_statement->op1_const = constant_assignee;
-
-				/**
-				 * Otherwise there's no clever optimziation to do here, we just need
-				 * to emit this as is
-				 */
-				} else {
-					current_block->exit_statement->op1 = final_op1;
-				}
-
-				break;
-
-			//When we have offsets, the storee goes into op2
-			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-				/**
-				 * We can perform a small optimization by potentially scrapping the constant
-				 * assignment and just putting the constant in directly
-				 */
-				if(last_instruction != NULL
-					&& last_instruction->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-					&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
-
-					//Extract it
-					three_addr_const_t* constant_assignee = last_instruction->op1_const;
-
-					//This is now useless
-					delete_statement(last_instruction);
-
-					//Set the store statement's op1_const to be this
-					current_block->exit_statement->op1_const = constant_assignee;
-
-				/**
-				 * Otherwise there's no clever optimziation to do here, we just need
-				 * to emit this as is
-				 */
-				} else {
-					current_block->exit_statement->op2 = final_op1;
-				}
-
-				break;
-
-			//This is unreachable, just so the compiler is happy
-			default:
-				break;
-		}
-
-	/**
-	 * If we have a variable that is on the stack or is a global variable, then a regular assignment won't
-	 * work. We'll need to do a store here
-	 */
-	} else if(left_hand_var->linked_var != NULL
-				&& (left_hand_var->linked_var->stack_variable == TRUE || is_variable_data_segment_variable(left_hand_var->linked_var) == TRUE)){
-
-		//Emit the memory address var for this variable
-		three_addr_var_t* memory_address = emit_memory_address_var(left_hand_var->linked_var);
-
-		//Now for the final store code
-		instruction_t* final_assignment = emit_store_ir_code(memory_address, NULL, left_hand_var->type);
-
-		/**
-		 * If the last instruction was a constant assignment, we can just grab the constant
-		 * itself instead of dealing with the extra copy assignment
-		 */
-		if(last_instruction != NULL
-			&& last_instruction->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-			&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
-			&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
-			//Extract it
-			three_addr_const_t* constant_assignee = last_instruction->op1_const;
-
-			//This is now useless
-			delete_statement(last_instruction);
-
-			//Set the store statement's op1_const to be this
-			final_assignment->op1_const = constant_assignee;
-
-		} else {
-			final_assignment->op1 = final_op1;
-		}
-		
-		//Now add thi statement in here
-		add_statement(current_block, final_assignment);
-	
-	/**
-	 * If we get here, then we just have a regular variable that is not on the stack at all and is not a global variable,
-	 * so a regular assignment will work just fine
-	 */
-	} else {
-		/**
-		 * If this is not a binary operation, then we will just copy it over. If it is, then we will
-		 * use that binary operation for our own purposes here with the left hand var
-		 */
-		instruction_t* binary_expression;
-		instruction_t* constant_assignment;
-		instruction_t* final_assignment;
-
-		/**
-		 * Reach back into the block to see if the last instruction that we emitted for our op1
-		 * here is a constant assignment or a binary expression. If it's either, we can avoid
-		 * the copy assignment for this assignment expression and go to emitting directly
-		 */
-		if(last_instruction != NULL
-			&& last_instruction->assignee != NULL
-			&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
-			&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
-
-			switch(last_instruction->statement_type){
-				case THREE_ADDR_CODE_BIN_OP_STMT:
-				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-					binary_expression = last_instruction;
-
-					//Make this one's assignee the left hand var
-					binary_expression->assignee = left_hand_var;
-					
-					break;
-
-				case THREE_ADDR_CODE_ASSN_CONST_STMT:
-					constant_assignment = last_instruction;
-
-					//Make this one's assignee the left hand var
-					constant_assignment->assignee = left_hand_var;
-
-					break;
-					
-				/**
-				 * If we have this then there's no clever optimization that we can do, we'll
-				 * just emti a copy assignment
-				 */
-				default:
-					//Finally we'll struct the whole thing
-					final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
-
-					//Copy this over if there is one
-					left_hand_var->associated_memory_region.stack_region = final_op1->associated_memory_region.stack_region;
-					
-					//Now add thi statement in here
-					add_statement(current_block, final_assignment);
-
-					break;
-			}
-
-		/**
-		 * Otherwise there is no clever optimization that we could do, so we'll need to emit an assignment
-		 * from the left hand var over to the final op1
-		 */
-		} else {
-			//Finally we'll struct the whole thing
-			final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
-
-			//Copy this over if there is one
-			left_hand_var->associated_memory_region.stack_region = final_op1->associated_memory_region.stack_region;
-			
-			//Now add thi statement in here
-			add_statement(current_block, final_assignment);
-		}
 	}
 
 	//Now pack the return value here - this is always a variable type
