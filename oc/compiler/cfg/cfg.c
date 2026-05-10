@@ -3089,6 +3089,8 @@ static three_addr_var_t* emit_array_address_calculation(basic_block_t* basic_blo
 
 /**
  * Emit a struct access lea statement
+ *
+ * TODO CAN WE ENHANCE?
  */
 static three_addr_var_t* emit_struct_address_calculation(basic_block_t* basic_block, generic_type_t* struct_type, three_addr_var_t* current_offset, three_addr_const_t* offset){
 	//We need a new temp var for the assignee. We know it's an address always
@@ -4854,14 +4856,21 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 				//Multiply them together
 				multiply_constants(type_size_const, constant_value);
 
-				//Emit the calculation
-				instruction_t* address_calculation = emit_lea_offset_only(emit_temp_var(u64), *current_offset, type_size_const);
+				/**
+				 * If it's not 0, we'll just emit the lea. If it is zero, then
+				 * we don't need to reassign the current offset at all so we
+				 * will leave it as such
+				 */
+				if(is_constant_value_zero(type_size_const) == FALSE){
+					//Emit the calculation
+					instruction_t* address_calculation = emit_lea_offset_only(emit_temp_var(u64), *current_offset, type_size_const);
 
-				//Get it into the block
-				add_statement(current_block, address_calculation);
+					//Get it into the block
+					add_statement(current_block, address_calculation);
 
-				//And finally - our current offset is no longer the actual offset
-				*current_offset = address_calculation->assignee;
+					//And finally - our current offset is no longer the actual offset
+					*current_offset = address_calculation->assignee;
+				}
 
 			/**
 			 * Otherwise this is NULL, so we're starting from scratch. Again we know that this is 
