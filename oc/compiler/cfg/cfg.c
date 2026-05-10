@@ -7130,33 +7130,38 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 		 * If we have a terminal instruction then we don't need to do anything. However if
 		 * we have some other kind of instruction, we'll need to do a final assignment
 		 */
-		if(is_terminal_instruction(last_instruction) == FALSE
-			&& is_result_package_empty(&handle_results) == FALSE){
-			//Jump from the final block to the end block
-			emit_jump(handle_results.final_block, error_handling_ending_block);
-
+		if(is_terminal_instruction(last_instruction) == FALSE){
 			/**
-			 * Based on what kind of type we got, we will emit either a constant
-			 * assignment or a regular variable assignment for the handles statement
+			 * If the result package is empty - it means that we have an ignore statement. If it's
+			 * not, then we have something to do here
 			 */
-			instruction_t* result_assignment;
-			switch(handle_results.type){
-				case CFG_RESULT_TYPE_CONST:
-					result_assignment = emit_assignment_with_const_instruction(emit_var(function_result_var), handle_results.result_value.result_const);
-					break;
+			if(is_result_package_empty(&handle_results) == FALSE){
+				//Jump from the final block to the end block
+				emit_jump(handle_results.final_block, error_handling_ending_block);
 
-				case CFG_RESULT_TYPE_VAR:
-					result_assignment = emit_assignment_instruction(emit_var(function_result_var), handle_results.result_value.result_var);
-					break;
+				/**
+				 * Based on what kind of type we got, we will emit either a constant
+				 * assignment or a regular variable assignment for the handles statement
+				 */
+				instruction_t* result_assignment;
+				switch(handle_results.type){
+					case CFG_RESULT_TYPE_CONST:
+						result_assignment = emit_assignment_with_const_instruction(emit_var(function_result_var), handle_results.result_value.result_const);
+						break;
+
+					case CFG_RESULT_TYPE_VAR:
+						result_assignment = emit_assignment_instruction(emit_var(function_result_var), handle_results.result_value.result_var);
+						break;
+				}
+
+				//Add this into the final block. It will go right before the exit
+				insert_instruction_before_given(result_assignment, handle_results.final_block->exit_statement);
+				break;
+
+			//Otherwise we still need to come here and emit the jump
+			} else {
+				emit_jump(handle_results.final_block, error_handling_ending_block);
 			}
-
-			//Add this into the final block. It will go right before the exit
-			insert_instruction_before_given(result_assignment, handle_results.final_block->exit_statement);
-			break;
-
-		//Otherwise we still need to come here and emit the jump
-		} else {
-			emit_jump(handle_results.final_block, error_handling_ending_block);
 		}
 
 		/**
