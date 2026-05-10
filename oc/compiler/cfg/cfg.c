@@ -9808,7 +9808,7 @@ static inline void handle_raise_statement(basic_block_t* basic_block, generic_as
  */
 static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node){
 	//A generic results package that we can use in any of our processing
-	cfg_result_package_t generic_results;
+	cfg_result_package_t generic_results = INITIALIZE_BLANK_CFG_RESULT;
 	//A defer statement cursor
 	generic_ast_node_t* defer_statement_cursor;
 
@@ -9845,8 +9845,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				//Package up the results package
 				generic_results.starting_block = current_block;
 				generic_results.final_block = current_block;
-				generic_results.operator = BLANK;
-				generic_results.assignee = NULL;
 
 				//We're done here - get out
 				return generic_results;
@@ -9874,8 +9872,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				//Package up the values
 				generic_results.starting_block = starting_block;
 				generic_results.final_block = current_block;
-				generic_results.operator = BLANK;
-				generic_results.assignee = NULL;
 
 				//We're completely done here
 				return generic_results;
@@ -11568,7 +11564,7 @@ static cfg_result_package_t emit_final_initialization(basic_block_t* current_blo
  */
 static cfg_result_package_t emit_array_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t current_offset, generic_ast_node_t* array_initializer){
 	//Initialize the results package here to start
-	cfg_result_package_t results = {current_block, current_block, NULL, BLANK};
+	cfg_result_package_t results = {current_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	//Grab a cursor to the child
 	generic_ast_node_t* cursor = array_initializer->first_child;
@@ -11678,7 +11674,7 @@ static cfg_result_package_t emit_string_initializer(basic_block_t* current_block
  */
 static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* struct_initializer){
 	//Initialize the results package here to start
-	cfg_result_package_t results = {current_block, current_block, NULL, BLANK};
+	cfg_result_package_t results = {current_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	//Grab the struct type out for reference
 	generic_type_t* struct_type = struct_initializer->inferred_type;
