@@ -11491,6 +11491,8 @@ static void visit_declaration_statement(generic_ast_node_t* node){
  * store base_address[offset] <- emit_expression(node)
  */
 static cfg_result_package_t emit_final_initialization(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* expression_node){
+	//Holder for the final assignee
+	three_addr_var_t* final_assignee;
 	//Initialize our final results
 	cfg_result_package_t final_results = {current_block, current_block, {base_address}, CFG_RESULT_TYPE_VAR, BLANK};
 
@@ -11515,43 +11517,44 @@ static cfg_result_package_t emit_final_initialization(basic_block_t* current_blo
 	//Now we need to emit the store operation
 	instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(base_address, offset_constant, NULL, inferred_type);
 
-	//If the last instruction is *not* a constant assignment, we can go ahead like this
-	if(last_instruction == NULL
-		|| last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
-
-		//This may change below
-		three_addr_var_t* final_assignee = expression_results.assignee;
+	/**
+	 * Based on what result type we have we can process accordingly
+	 */
+	switch(expression_results.type){
+		/**
+		 * Constant type is simple - just assign over the result value
+		 */
+		case CFG_RESULT_TYPE_CONST:
+			store_instruction->op1_const = expression_results.result_value.result_const;
+			break;
 
 		/**
-		 * If we have a memory address variable, we need to emit a final assignment
-		 * to because our instruction selector is not designed to handle MEM<> variables
-		 * on the RHS of an initializer equation. This is an easy fix
+		 * For variable types we have some specialized rules around memory address variables
+		 * that we need to account for
 		 */
-		if(expression_results.assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-			//Emit a new var to use
-			final_assignee = emit_temp_var(expression_results.assignee->type);
+		case CFG_RESULT_TYPE_VAR:
+			//Extract the final assignee
+			final_assignee = expression_results.result_value.result_var;
 
-			//Assign this over
-			instruction_t* temp_assignment = emit_assignment_instruction(final_assignee, expression_results.assignee);
+			/**
+			 * If we have a memory address variable, we need to emit a final assignment
+			 * to because our instruction selector is not designed to handle MEM<> variables
+			 * on the RHS of an initializer equation. This is an easy fix
+			 */
+			if(final_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+				//Assign this over
+				instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(final_assignee->type), final_assignee);
 
-			//Add it into the block
-			add_statement(current_block, temp_assignment);
-		}
+				//Add it into the block
+				add_statement(current_block, temp_assignment);
 
-		//This is now our op2
-		store_instruction->op2 = final_assignee;
+				//This now is the final assignee
+				final_assignee = temp_assignment->assignee;
+			}
 
-	//Otherwise, we can do a small optimization here by scrapping the 
-	//constant assignment and just putting the constant in directly
-	} else {
-		//Extract it
-		three_addr_const_t* constant_assignee = last_instruction->op1_const;
-
-		//This is now useless
-		delete_statement(last_instruction);
-
-		//Set the store statement's op1_const to be this
-		store_instruction->op1_const = constant_assignee;
+			//This is now our op2
+			store_instruction->op2 = final_assignee;
+			break;
 	}
 
 	//Add it into the block
@@ -11964,7 +11967,8 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 			assignee = emit_memory_address_var(node->variable);
 
 			//The left hand var is our assigned var
-			let_results.assignee = assignee;
+			let_results.type = CFG_RESULT_TYPE_VAR;
+			let_results.result_value.result_var = assignee;
 
 			//We know that this will be the lead block
 			let_results.starting_block = current_block;
