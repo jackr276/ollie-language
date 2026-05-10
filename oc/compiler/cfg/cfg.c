@@ -7137,7 +7137,7 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 			instruction_t* result_assignment;
 
 			//Emit our jump first - this is our anchor point for the assignment insertion
-			emit_jump(handle_results.final_block, error_handling_ending_block);
+			last_instruction = emit_jump(handle_results.final_block, error_handling_ending_block);
 
 			switch(handle_results.type){
 				case CFG_RESULT_TYPE_CONST:
@@ -7147,10 +7147,10 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 				case CFG_RESULT_TYPE_VAR:
 					result_assignment = emit_assignment_instruction(emit_var(function_result_var), handle_results.result_value.result_var);
 					break;
-
-				//Insert this right before the final jump statement that we just emitted
-				insert_instruction_before_given(result_assignment, handle_results.final_block->exit_statement);
 			}
+
+			//This goes in right after the given last instruction
+			insert_instruction_before_given(result_assignment, last_instruction);
 
 		/**
 		 * Otherwise the result package is empty. This could mean a few things - we could
@@ -7160,14 +7160,12 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 		 * from this given block to the end block
 		 */
 		} else {
-			//Extract the last instruction
-			instruction_t* last_instruction = handle_results.final_block->exit_statement;
-
 			/**
 			 * If it is *not* a terminal instruction, then we need to jump from the final
 			 * block over to the error handling block
 			 */
 			if(is_function_terminating_instruction(last_instruction) == FALSE){
+			printf("HERE\n\n\n");
 				emit_jump(handle_results.final_block, error_handling_ending_block);
 			}
 		}
