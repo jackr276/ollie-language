@@ -7109,7 +7109,6 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 	 * its own block
 	 */
 	generic_ast_node_t* error_handle_cursor = handle_node->first_child;
-
 	while(error_handle_cursor != NULL){
 		//Let the helper do all of the emitting
 		cfg_result_package_t handle_results = emit_error_handle_statement(error_handle_cursor);
@@ -7123,8 +7122,16 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 		//Add it in as a successor to the start block as well
 		add_successor(jump_calculation_block, handle_results.starting_block);
 
-		//Grab a pointer to the last instruction here
+		//Grab a pointer to the last instruction here(this could be NULL!)
 		instruction_t* last_instruction = handle_results.final_block->exit_statement;
+
+		/**
+		 * If the 
+		 */
+		if(is_result_package_empty(&handle_results) == FALSE){
+
+		}
+
 
 		/**
 		 * If we have a terminal instruction then we don't need to do anything. However if
