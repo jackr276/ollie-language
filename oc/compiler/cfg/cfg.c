@@ -11751,6 +11751,8 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
  * No array/string/struct initializers here
  */
 static cfg_result_package_t emit_simple_initialization(basic_block_t* current_block, three_addr_var_t* let_variable, generic_ast_node_t* expression_node){
+	//Holder for the let result var
+	three_addr_var_t* let_result_var;
 	//Allocate the return package here
 	cfg_result_package_t let_results = {current_block, current_block, {let_variable}, CFG_RESULT_TYPE_VAR, BLANK};
 
@@ -11771,6 +11773,51 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 	 */
 	switch(let_results.type){
 		case CFG_RESULT_TYPE_VAR:
+			//Extract the variable now
+			let_result_var = let_results.result_value.result_var;
+
+			/**
+			 * Is a copy assignment required between the two variables? This will only
+			 * occur if we have a struct to struct or union to union assignment but if we do,
+			 * we'll need some special handling for it
+			 */
+			if(is_copy_assignment_required(let_variable->type, expression_node->inferred_type) == TRUE){
+				//Emit the copy from the left hand var to the final op1. The copy size is always the let variable's size
+				instruction_t* copy_statement = emit_memory_copy_instruction(let_variable, let_result_var, let_variable->type->type_size);
+
+				//Get it into the block
+				add_statement(current_block, copy_statement);
+			/**
+			 * If we have a variable that requires a store assignment, we will
+			 * emit that now
+			 */
+			} else  if(let_variable->linked_var != NULL
+				&& (let_variable->linked_var->stack_variable == TRUE)
+					|| is_variable_data_segment_variable(let_variable->linked_var) == TRUE){
+				/**
+				 * Store the "true" stored type. This will only change if our type is a reference, because
+				 * we need to account for the implicit dereference that's happening
+				 */
+				generic_type_t* true_stored_type = let_variable->type;
+
+				//NOTE: We use the type of our let variable here for the address assignment
+				three_addr_var_t* base_address = emit_memory_address_var(let_variable->linked_var);
+				
+				//Emit the store code
+				instruction_t* store_statement = emit_store_ir_code(base_address, let_result_var, true_stored_type);
+						
+				//Now add thi statement in here
+				add_statement(current_block, store_statement);
+
+				// TODO MORE
+				//
+				//
+				//
+			} else {
+
+				//TODO FINAL ELSE IF HERE
+			}
+
 			break;
 
 		/**
