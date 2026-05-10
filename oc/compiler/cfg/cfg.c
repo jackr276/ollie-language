@@ -246,6 +246,26 @@ static inline u_int8_t is_terminal_instruction(instruction_t* instruction){
 
 
 /**
+ * Determine whether or not a result type is empty
+ */
+static inline u_int8_t is_result_package_empty(cfg_result_package_t* result_package){
+	u_int8_t result;
+
+	switch(result_package->type){
+		case CFG_RESULT_TYPE_VAR:
+			result = result_package->result_value.result_var == NULL ? TRUE : FALSE;
+			break;
+
+		case CFG_RESULT_TYPE_CONST:
+			result = result_package->result_value.result_const == NULL ? TRUE : FALSE;
+			break;
+	}
+
+	return result;
+}
+
+
+/**
  * Is a given variable SSA eligible? We do this by looking at the type of the
  * variable and whether or not the linked var is NULL. If the linked var is NULL
  * we would get segfaults
@@ -7110,7 +7130,8 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 		 * If we have a terminal instruction then we don't need to do anything. However if
 		 * we have some other kind of instruction, we'll need to do a final assignment
 		 */
-		if(is_terminal_instruction(last_instruction) == FALSE){
+		if(is_terminal_instruction(last_instruction) == FALSE
+			&& is_result_package_empty(&handle_results) == FALSE){
 			//Jump from the final block to the end block
 			emit_jump(handle_results.final_block, error_handling_ending_block);
 
@@ -7132,6 +7153,10 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 			//Add this into the final block. It will go right before the exit
 			insert_instruction_before_given(result_assignment, handle_results.final_block->exit_statement);
 			break;
+
+		//Otherwise we still need to come here and emit the jump
+		} else {
+			emit_jump(handle_results.final_block, error_handling_ending_block);
 		}
 
 		/**
