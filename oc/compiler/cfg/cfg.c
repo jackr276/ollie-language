@@ -3192,7 +3192,8 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 	//This is always a predecessor of the function exit statement
 	add_successor(current, function_exit_block);
 
-	//Update the final block
+	//Update the final & starting blocks
+	return_package.starting_block = basic_block;
 	return_package.final_block = current;
 
 	//Give back the results
@@ -9973,7 +9974,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					emit_jump(current_block, continuing_to);
 
 					//Package and return
-					generic_results = (cfg_result_package_t)INITIALIZE_BLANK_CFG_RESULT;
+					generic_results = (cfg_result_package_t){current_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 					/**
 					 * We're done here, so return the starting block. There is no 
@@ -10027,7 +10028,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					emit_jump(current_block, breaking_to);
 
 					//Package and return
-					generic_results = (cfg_result_package_t)INITIALIZE_BLANK_CFG_RESULT;
+					generic_results = (cfg_result_package_t){current_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 					/**
 					 * For a regular break statement, this is it, so we just get out
@@ -10460,7 +10461,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					emit_jump(current_block, continuing_to);
 
 					//Package and return
-					results = (cfg_result_package_t)INITIALIZE_BLANK_CFG_RESULT;
+					results = (cfg_result_package_t){current_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 					/**
 					 * We're done here, so return the starting block. There is no 
@@ -10514,7 +10515,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					emit_jump(current_block, breaking_to);
 
 					//Package and return
-					results = (cfg_result_package_t)INITIALIZE_BLANK_CFG_RESULT;
+					results = (cfg_result_package_t){current_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 					//For a regular break statement, this is it, so we just get out
 					return results;
