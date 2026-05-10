@@ -220,11 +220,7 @@ void dynamic_array_set_at(dynamic_array_t* array, void* ptr, u_int16_t index){
 	//Let's just double check here
 	if(ptr == NULL){
 		printf("ERROR: Attempting to set index %d to a NULL pointer ino a dynamic array\n", index);
-		int* my_int = 0;
-
-		int x = *my_int;
-
-		exit(x);
+		exit(1);
 	}
 
 	//This is not allowed
