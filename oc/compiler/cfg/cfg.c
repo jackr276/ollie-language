@@ -3088,22 +3088,29 @@ static three_addr_var_t* emit_array_address_calculation(basic_block_t* basic_blo
 
 
 /**
- * Emit a struct access lea statement
- *
- * TODO CAN WE ENHANCE?
+ * Emit a struct access lea statement if one is needed(i.e. offset is not zero)
  */
-static three_addr_var_t* emit_struct_address_calculation(basic_block_t* basic_block, generic_type_t* struct_type, three_addr_var_t* current_offset, three_addr_const_t* offset){
-	//We need a new temp var for the assignee. We know it's an address always
-	three_addr_var_t* assignee = emit_temp_var(struct_type);
+static inline three_addr_var_t* emit_struct_address_calculation(basic_block_t* basic_block, generic_type_t* struct_type, three_addr_var_t* current_offset, three_addr_const_t* offset){
+	/**
+	 * If the constant is not zero then we will need to emit the lea. However, if it is
+	 * zero, we can save ourselves the hassle and just give back what we already had
+	 */
+	if(is_constant_value_zero(offset) == FALSE){
+		//We need a new temp var for the assignee. We know it's an address always
+		three_addr_var_t* assignee = emit_temp_var(struct_type);
 
-	//Use the lea helper to emit this
-	instruction_t* stmt = emit_lea_offset_only(assignee, current_offset, offset);
+		//Use the lea helper to emit this
+		instruction_t* stmt = emit_lea_offset_only(assignee, current_offset, offset);
 
-	//Now add the statement into the block
-	add_statement(basic_block, stmt);
+		//Now add the statement into the block
+		add_statement(basic_block, stmt);
 
-	//And give back the assignee
-	return assignee;
+		//And give back the assignee
+		return assignee;
+
+	} else {
+		return current_offset;
+	}
 }
 
 
