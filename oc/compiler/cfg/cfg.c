@@ -77,15 +77,39 @@ static heap_queue_t traversal_queue;
 //For any/all error printing
 char error_info[1500];
 
-//Define a package return struct that is used by the binary op expression code
+
+/**
+ * The actual result type that defines whether we have a struct
+ * or constant or variable result
+ */
+typedef enum {
+	CFG_RESULT_TYPE_VAR,
+	CFG_RESULT_TYPE_CONST,
+} cfg_result_type_t;
+
+
+/**
+ * CFG result packages are used to pass out the reult
+ * of translating an expression. They will contain:
+ * 	1.) Starting block of the statement
+ * 	2.) Ending block of the statement
+ * 	3.) A tagged union with either a variable or constant result
+ * 	4.) The operator that was used, if any
+ */
 typedef struct{
-	//The starting block of what we've made
+	//Blocks come first
 	basic_block_t* starting_block;
-	//The final block we end up with(only used for ternary operators)
 	basic_block_t* final_block;
-	//What is the final assignee
-	three_addr_var_t* assignee;
-	//What operator was used, if any
+
+	//We have a tagged union without it actually being a tagged union
+	union {
+		three_addr_var_t* result_var;
+		three_addr_const_t* result_const;
+	} result_value;
+
+	cfg_result_type_t type;
+
+	//The operator may or may not always be filled
 	ollie_token_t operator;
 } cfg_result_package_t;
 
@@ -114,6 +138,14 @@ typedef enum{
 	VARIABLE_SCOPE_LOCAL,
 } variable_scope_type_t;
 
+
+/**
+ * Define a simple initializer for a blank CFG
+ * result type. We usually stack allocate these
+ * so we can't wipe them out any other way
+ */
+#define INITIALIZE_BLANK_CFG_RESULT {NULL, NULL, {NULL}, CFG_RESULT_TYPE_VAR, BLANK}
+
 //We predeclare up here to avoid needing any rearrangements
 static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_let_statement(basic_block_t* basic_block, generic_ast_node_t* node);
@@ -140,6 +172,42 @@ static void visit_static_let_statement(generic_ast_node_t* node);
 static inline void visit_static_declare_statement(generic_ast_node_t* node);
 static inline void handle_raise_statement(basic_block_t* basic_block, generic_ast_node_t* node);
 
+
+/**
+ * Unpack a result package. We assume that if this function is being called that the caller
+ * wants us to unpack the constant if we are able to.
+ */
+static inline three_addr_var_t* unpack_result_package(cfg_result_package_t* result_package, basic_block_t* block){
+	//The variable that we will always end up returning
+	three_addr_var_t* returned_variable;
+	three_addr_const_t* constant_value;
+
+	switch(result_package->type){
+		//Variable - just give it back
+		case CFG_RESULT_TYPE_VAR:
+			returned_variable = result_package->result_value.result_var;
+			break;
+
+		//Constant - unpack with an assignment and give the temp var back
+		case CFG_RESULT_TYPE_CONST:
+			constant_value = result_package->result_value.result_const;
+
+			//Emit the assignment
+			instruction_t* const_assignment = emit_assignment_with_const_instruction(emit_temp_var(constant_value->type), constant_value);
+
+			//Throw it into the block
+			add_statement(block, const_assignment);
+
+			//This is the variable that we end up returning
+			returned_variable = const_assignment->assignee;
+			break;
+	}
+
+	//Give back the returned variable in the end
+	return returned_variable;
+}
+
+
 /**
  * Lea statements may only have: 1, 2, 4, or 8 as their scales
  * due to internal hardware constraints. This operation will find
@@ -155,6 +223,45 @@ static inline u_int8_t is_lea_compatible_power_of_2(int64_t value){
 		default:
 			return FALSE;
 	}
+}
+
+
+/**
+ * Is a given instruction a "terminal" statement. This will occur if 
+ * we have a ret or raise statement
+ */
+static inline u_int8_t is_function_terminating_instruction(instruction_t* instruction){
+	if(instruction == NULL){
+		return FALSE;
+	}
+
+	switch(instruction->statement_type){
+		case THREE_ADDR_CODE_RET_STMT:
+		case THREE_ADDR_CODE_RAISE_STMT:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Determine whether or not a result type is empty
+ */
+static inline u_int8_t is_result_package_empty(cfg_result_package_t* result_package){
+	u_int8_t result;
+
+	switch(result_package->type){
+		case CFG_RESULT_TYPE_VAR:
+			result = result_package->result_value.result_var == NULL ? TRUE : FALSE;
+			break;
+
+		case CFG_RESULT_TYPE_CONST:
+			result = result_package->result_value.result_const == NULL ? TRUE : FALSE;
+			break;
+	}
+
+	return result;
 }
 
 
@@ -2981,20 +3088,29 @@ static three_addr_var_t* emit_array_address_calculation(basic_block_t* basic_blo
 
 
 /**
- * Emit a struct access lea statement
+ * Emit a struct access lea statement if one is needed(i.e. offset is not zero)
  */
-static three_addr_var_t* emit_struct_address_calculation(basic_block_t* basic_block, generic_type_t* struct_type, three_addr_var_t* current_offset, three_addr_const_t* offset){
-	//We need a new temp var for the assignee. We know it's an address always
-	three_addr_var_t* assignee = emit_temp_var(struct_type);
+static inline three_addr_var_t* emit_struct_address_calculation(basic_block_t* basic_block, generic_type_t* struct_type, three_addr_var_t* current_offset, three_addr_const_t* offset){
+	/**
+	 * If the constant is not zero then we will need to emit the lea. However, if it is
+	 * zero, we can save ourselves the hassle and just give back what we already had
+	 */
+	if(is_constant_value_zero(offset) == FALSE){
+		//We need a new temp var for the assignee. We know it's an address always
+		three_addr_var_t* assignee = emit_temp_var(struct_type);
 
-	//Use the lea helper to emit this
-	instruction_t* stmt = emit_lea_offset_only(assignee, current_offset, offset);
+		//Use the lea helper to emit this
+		instruction_t* stmt = emit_lea_offset_only(assignee, current_offset, offset);
 
-	//Now add the statement into the block
-	add_statement(basic_block, stmt);
+		//Now add the statement into the block
+		add_statement(basic_block, stmt);
 
-	//And give back the assignee
-	return assignee;
+		//And give back the assignee
+		return assignee;
+
+	} else {
+		return current_offset;
+	}
 }
 
 
@@ -3046,7 +3162,7 @@ static inline void emit_assembly_inline(basic_block_t* basic_block, generic_ast_
  */
 static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_node_t* ret_node){
 	//For holding our temporary return variable
-	cfg_result_package_t return_package = {basic_block, basic_block, NULL, BLANK};
+	cfg_result_package_t return_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	//Keep track of a current block here for our purposes
 	basic_block_t* current = basic_block;
@@ -3064,30 +3180,51 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 		//Perform the binary operation here
 		cfg_result_package_t expression_package = emit_expression(current, ret_node->first_child);
 
-		//Reassign the block
+		//Update the current block
 		current = expression_package.final_block;
 
-		//Grab this out to look at
-		return_variable = expression_package.assignee;
-		
 		/**
-		 * If the variable is not a temp *or* we have a need for a converting move, we will emit
-		 * the extra assignment here. If it's already temp and we don't need a converting move, we won't
-		 * bother with inserting the extra statements
+		 * Since we have a result that could either be a constant or a variable,
+		 * we will need to unpack the result here and act accordingly
 		 */
-		if(return_variable->variable_type != VARIABLE_TYPE_TEMP
-			|| is_converting_move_required(ret_node->inferred_type, return_variable->type) == TRUE){
-			/**
-			 * The type of this final assignee will *always* be the inferred type of the node. We need to ensure that
-			 * the function is returning the type as promised, and not what is done through type coercion
-			 */
-			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(ret_node->inferred_type), return_variable);
+		switch(expression_package.type){
+			case CFG_RESULT_TYPE_VAR:
+				//Grab the return var that we need
+				return_variable = expression_package.result_value.result_var;
 
-			//Add it into the block
-			add_statement(current, assignment);
+				/**
+				 * If the variable is not a temp *or* we have a need for a converting move, we will emit
+				 * the extra assignment here. If it's already temp and we don't need a converting move, we won't
+				 * bother with inserting the extra statements
+				 */
+				if(return_variable->variable_type != VARIABLE_TYPE_TEMP
+					|| is_converting_move_required(ret_node->inferred_type, return_variable->type) == TRUE){
+					/**
+					 * The type of this final assignee will *always* be the inferred type of the node. We need to ensure that
+					 * the function is returning the type as promised, and not what is done through type coercion
+					 */
+					instruction_t* assignment = emit_assignment_instruction(emit_temp_var(ret_node->inferred_type), return_variable);
 
-			//The return variable is now what was assigned
-			return_variable	= assignment->assignee;
+					//Add it into the block
+					add_statement(current, assignment);
+
+					//The return variable is now what was assigned
+					return_variable	= assignment->assignee;
+				}
+
+				break;
+
+			case CFG_RESULT_TYPE_CONST:
+				//For a const type we'll need our own returned variable
+				return_variable = emit_temp_var(ret_node->inferred_type);
+
+				//Emit the assignment that we need
+				instruction_t* const_assignment = emit_assignment_with_const_instruction(return_variable, expression_package.result_value.result_const);
+
+				//And throw the assignment into the block
+				add_statement(current, const_assignment);
+
+				break;
 		}
 
 		//Flag for later on in the compiler that this variable has been returned
@@ -3103,7 +3240,8 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 	//This is always a predecessor of the function exit statement
 	add_successor(current, function_exit_block);
 
-	//Update the final block
+	//Update the final & starting blocks
+	return_package.starting_block = basic_block;
 	return_package.final_block = current;
 
 	//Give back the results
@@ -3281,8 +3419,10 @@ static inline branch_conditional_truthfullness_t get_branch_conditional_truthful
  * edge(not a jump, but a successor) be added *if* we have a nonterminating loop(always true/false loop statement)
  */
 static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_ast_node_t* conditional_node, basic_block_t* if_block, basic_block_t* else_block, branch_category_t branch_category, u_int8_t virtual_out_edge_required){
+	instruction_t* constant_assignment;
+
 	//Allcoate the results
-	cfg_result_package_t results = {starting_block, starting_block, NULL, BLANK};
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
 
 	//Keep track of the current block
 	basic_block_t* current_block = starting_block;
@@ -3368,8 +3508,28 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		//Update the final block
 		current_block = binary_results.final_block;
 
-		//Extract the actual result assignee
-		three_addr_var_t* conditional_decider = binary_results.assignee;
+		//The conditional decider comes from the result type itself
+		three_addr_var_t* conditional_decider;
+
+		switch(binary_results.type){
+			//For a constant type, we are going to need to emit an assignment
+			case CFG_RESULT_TYPE_CONST:
+				constant_assignment = emit_assignment_with_const_instruction(emit_temp_var(binary_results.result_value.result_const->type), binary_results.result_value.result_const);
+
+				//Get it in the block
+				add_statement(current_block, constant_assignment);
+
+				//This now is our decider
+				conditional_decider = constant_assignment->assignee;
+
+				break;
+
+			//For this we can extract the result var
+			case CFG_RESULT_TYPE_VAR:
+				conditional_decider = binary_results.result_value.result_var;
+
+				break;
+		}
 
 		/**
 		 * If the given operator does not set condition codes appropriately, then
@@ -3609,8 +3769,10 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
  * We'll leave out all of the successor logic here as well, until we reach the end
  */
 static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_block, generic_ast_node_t* conditional_node, symtab_label_record_t* if_destination_label, basic_block_t* else_block){
+	instruction_t* constant_assignment;
+
 	//Allcoate the results
-	cfg_result_package_t results = {starting_block, starting_block, NULL, BLANK};
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
 
 	/**
 	 * We only allocate this storage if it is needed. If we get here and it's unallocated, now
@@ -3635,7 +3797,27 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 		current_block = conditional_results.final_block;
 
 		//Extract the actual result assignee
-		three_addr_var_t* conditional_decider = conditional_results.assignee;
+		three_addr_var_t* conditional_decider;
+
+		switch(conditional_results.type){
+			//For a constant type, we are going to need to emit an assignment
+			case CFG_RESULT_TYPE_CONST:
+				constant_assignment = emit_assignment_with_const_instruction(emit_temp_var(conditional_results.result_value.result_const->type), conditional_results.result_value.result_const);
+
+				//Get it in the block
+				add_statement(current_block, constant_assignment);
+
+				//This now is our decider
+				conditional_decider = constant_assignment->assignee;
+
+				break;
+
+			//For this we can extract the result var
+			case CFG_RESULT_TYPE_VAR:
+				conditional_decider = conditional_results.result_value.result_var;
+
+				break;
+		}
 
 		/**
 		 * If the given operator does not set condition codes appropriately, then
@@ -3827,9 +4009,14 @@ void emit_indirect_jump(basic_block_t* basic_block, three_addr_var_t* dest_addr)
 /**
  * Emit the abstract machine code for a constant to variable assignment. 
  */
-static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, generic_ast_node_t* constant_node){
+static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, generic_ast_node_t* constant_node){
+	//Initialize the constant result package
+	cfg_result_package_t constant_result_package = INITIALIZE_BLANK_CFG_RESULT;
+	constant_result_package.starting_block = basic_block;
+	constant_result_package.final_block = basic_block;
+
 	//Placeholders for constant/var values
-	three_addr_const_t* const_val;
+	three_addr_const_t* emitted_constant;
 	three_addr_var_t* local_constant_val;
 	three_addr_var_t* function_pointer_variable;
 	local_constant_t* local_constant;
@@ -3848,8 +4035,10 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 			//Let's first see if we already have it
 			local_constant = get_string_local_constant(&(cfg->local_string_constants), constant_node->string_value.string);
 
-			//If we couldn't find it, we'll create it. Otherwise, we'll just use what we found
-			//to get our temp var
+			/**
+			 * If we couldn't find it, we'll create it. Otherwise, we'll just use what we found
+			 * to get our temp var
+			 */
 			if(local_constant == NULL){
 				local_constant_val = emit_string_local_constant(cfg, constant_node);
 			} else {
@@ -3858,7 +4047,16 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 
 			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
 			const_assignment = emit_lea_rip_relative_constant(emit_temp_var(constant_node->inferred_type), local_constant_val, instruction_pointer_var);
-			break;
+
+			//Add this into the block
+			add_statement(basic_block, const_assignment);
+
+			/**
+			 * This is always a variable constant - we will package it up and return now
+			 */
+			constant_result_package.type = CFG_RESULT_TYPE_VAR;
+			constant_result_package.result_value.result_var = const_assignment->assignee;
+			return constant_result_package;
 
 		//For float constants, we need to emit the local constant equivalent via the helper
 		case FLOAT_CONST:
@@ -3871,15 +4069,21 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 				//Emit a temp var for this value
 				three_addr_var_t* cleared_var = emit_temp_var(constant_node->inferred_type);
 
-				//We will now use a specialized IR instruction to clear this variable out. In reality
-				//this clearing will be a PXOR statement
+				/**
+				 * We will now use a specialized IR instruction to clear this variable out. In reality
+				 * this clearing will be a PXOR statement
+				 */
 				instruction_t* clear_instruction = emit_floating_point_clear_instruction(cleared_var);
 
 				//Add it into the block
 				add_statement(basic_block, clear_instruction);
 
-				//We will now give back the created variable
-				return cleared_var;
+				/**
+				 * We are done - let's now package up and return the variable that we need to
+				 */
+				constant_result_package.type = CFG_RESULT_TYPE_VAR;
+				constant_result_package.result_value.result_var = cleared_var;
+				return constant_result_package;
 			}
 
 			//Let's first see if we can find it
@@ -3892,16 +4096,27 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 				local_constant_val = emit_local_constant_temp_var(local_constant);
 			}
 
-			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
-			//This only gets the address, we still need to do extra work for our constants
+			/**
+			 * We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
+			 * This only gets the address, we still need to do extra work for our constants
+			 */
 			address_load = emit_lea_rip_relative_constant(emit_temp_var(u64), local_constant_val, instruction_pointer_var);
+
 			//Add it into the block
 			add_statement(basic_block, address_load);
 
 			//Emit a load instruction to grab the constant from said address
 			const_assignment = emit_load_ir_code(emit_temp_var(f32), address_load->assignee, f32);
 
-			break;
+			//Now add the actual assignment into the block
+			add_statement(basic_block, const_assignment);
+
+			/**
+			 * Package up and get out of here with our final result
+			 */
+			constant_result_package.type = CFG_RESULT_TYPE_VAR;
+			constant_result_package.result_value.result_var = const_assignment->assignee;
+			return constant_result_package;
 
 		//For double constants, we need to emit the local constant equivalent via the helper
 		case DOUBLE_CONST:
@@ -3914,15 +4129,21 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 				//Emit a temp var for this value
 				three_addr_var_t* cleared_var = emit_temp_var(constant_node->inferred_type);
 
-				//We will now use a specialized IR instruction to clear this variable out. In reality
-				//this clearing will be a PXOR statement
+				/**
+				 * We will now use a specialized IR instruction to clear this variable out. In reality
+				 * this clearing will be a PXOR statement
+				 */
 				instruction_t* clear_instruction = emit_floating_point_clear_instruction(cleared_var);
 
 				//Add it into the block
 				add_statement(basic_block, clear_instruction);
 
-				//We will now give back the created variable
-				return cleared_var;
+				/**
+				 * Package up and return the final result type
+				 */
+				constant_result_package.type = CFG_RESULT_TYPE_VAR;
+				constant_result_package.result_value.result_var = cleared_var;
+				return constant_result_package;
 			}
 
 			//Let's first see if we can find it
@@ -3935,16 +4156,27 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 				local_constant_val = emit_local_constant_temp_var(local_constant);
 			}
 
-			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
-			//This only gets the address, we still need to do extra work for our constants
+			/**
+			 * We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
+			 * This only gets the address, we still need to do extra work for our constants
+			 */
 			address_load = emit_lea_rip_relative_constant(emit_temp_var(u64), local_constant_val, instruction_pointer_var);
+
 			//Add it into the block
 			add_statement(basic_block, address_load);
 
 			//Emit a load instruction to grab the constant from the above address
 			const_assignment = emit_load_ir_code(emit_temp_var(f64), address_load->assignee, f64);
 
-			break;
+			//Get this into the block
+			add_statement(basic_block, const_assignment);
+
+			/**
+			 * Now we can package up and return the entire result struct
+			 */
+			constant_result_package.type = CFG_RESULT_TYPE_VAR;
+			constant_result_package.result_value.result_var = const_assignment->assignee;
+			return constant_result_package;
 
 		//Special case here - we need to emit a variable for the function pointer itself
 		case FUNC_CONST:
@@ -3953,32 +4185,126 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 
 			//Now emit the rip-relative assignment used to load the address
 			const_assignment = emit_lea_rip_relative_constant(emit_temp_var(constant_node->inferred_type), function_pointer_variable, instruction_pointer_var);
-			break;
+
+			//Get this into the block
+			add_statement(basic_block, const_assignment);
+
+			/**
+			 * Package up and return the resulting constant that we got
+			 */
+			constant_result_package.type = CFG_RESULT_TYPE_VAR;
+			constant_result_package.result_value.result_var = const_assignment->assignee;
+			return constant_result_package;
+
+		/**
+		 * For every other constant type that we have, we will have a result type that
+		 * actually is a constant itself. To keep things as segmented as possible
+		 * each area will allocate the constant itself
+		 */
+		case CHAR_CONST:
+			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+			emitted_constant->type = constant_node->inferred_type;
+			emitted_constant->const_type = CHAR_CONST;
+
+			emitted_constant->constant_value.char_constant = constant_node->constant_value.char_value;
+
+			constant_result_package.type = CFG_RESULT_TYPE_CONST;
+			constant_result_package.result_value.result_const = emitted_constant;
+			return constant_result_package;
+
+		case BYTE_CONST:
+			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+			emitted_constant->type = constant_node->inferred_type;
+			emitted_constant->const_type = BYTE_CONST;
+
+			emitted_constant->constant_value.signed_byte_constant = constant_node->constant_value.signed_byte_value;
+
+			constant_result_package.type = CFG_RESULT_TYPE_CONST;
+			constant_result_package.result_value.result_const = emitted_constant;
+			return constant_result_package;
+
+		case BYTE_CONST_FORCE_U:
+			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+			emitted_constant->type = constant_node->inferred_type;
+			emitted_constant->const_type = BYTE_CONST_FORCE_U;
+
+			emitted_constant->constant_value.unsigned_byte_constant = constant_node->constant_value.unsigned_byte_value;
+
+			constant_result_package.type = CFG_RESULT_TYPE_CONST;
+			constant_result_package.result_value.result_const = emitted_constant;
+			return constant_result_package;
+
+		case SHORT_CONST:
+			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+			emitted_constant->type = constant_node->inferred_type;
+			emitted_constant->const_type = SHORT_CONST;
+
+			emitted_constant->constant_value.signed_short_constant = constant_node->constant_value.signed_short_value;
+
+			constant_result_package.type = CFG_RESULT_TYPE_CONST;
+			constant_result_package.result_value.result_const = emitted_constant;
+			return constant_result_package;
+
+		case SHORT_CONST_FORCE_U:
+			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+			emitted_constant->type = constant_node->inferred_type;
+			emitted_constant->const_type = SHORT_CONST_FORCE_U;
+
+			emitted_constant->constant_value.unsigned_short_constant = constant_node->constant_value.unsigned_short_value;
+
+			constant_result_package.type = CFG_RESULT_TYPE_CONST;
+			constant_result_package.result_value.result_const = emitted_constant;
+			return constant_result_package;
+
+		case INT_CONST:
+			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+			emitted_constant->type = constant_node->inferred_type;
+			emitted_constant->const_type = INT_CONST;
+
+			emitted_constant->constant_value.signed_integer_constant = constant_node->constant_value.signed_int_value;
+
+			constant_result_package.type = CFG_RESULT_TYPE_CONST;
+			constant_result_package.result_value.result_const = emitted_constant;
+			return constant_result_package;
+
+		case INT_CONST_FORCE_U:
+			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+			emitted_constant->type = constant_node->inferred_type;
+			emitted_constant->const_type = INT_CONST_FORCE_U;
+
+			emitted_constant->constant_value.unsigned_integer_constant = constant_node->constant_value.unsigned_int_value;
+
+			constant_result_package.type = CFG_RESULT_TYPE_CONST;
+			constant_result_package.result_value.result_const = emitted_constant;
+			return constant_result_package;
+
+		case LONG_CONST:
+			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+			emitted_constant->type = constant_node->inferred_type;
+			emitted_constant->const_type = LONG_CONST;
+
+			emitted_constant->constant_value.signed_long_constant = constant_node->constant_value.signed_long_value;
+
+			constant_result_package.type = CFG_RESULT_TYPE_CONST;
+			constant_result_package.result_value.result_const = emitted_constant;
+			return constant_result_package;
+
+		case LONG_CONST_FORCE_U:
+			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+			emitted_constant->type = constant_node->inferred_type;
+			emitted_constant->const_type = LONG_CONST_FORCE_U;
+
+			emitted_constant->constant_value.unsigned_long_constant = constant_node->constant_value.unsigned_long_value;
+
+			constant_result_package.type = CFG_RESULT_TYPE_CONST;
+			constant_result_package.result_value.result_const = emitted_constant;
+			return constant_result_package;
 			
-		//The most commmon case
+		//Some weird error if we get here - hard exit
 		default:
-			//Emit the constant value
-			const_val = emit_constant(constant_node);
-
-			//For later on
-			three_addr_var_t* assignee;
-
-			//These are all basic types
-			generic_type_t* type = constant_node->inferred_type;
-
-			//Emit the temp var here
-			assignee = emit_temp_var(type);
-
-			//We'll use the constant var feature here
-			const_assignment = emit_assignment_with_const_instruction(assignee, const_val);
-			break;
+			fprintf(stderr, "Fatal internal compiler error: unrecognized constant type detected in CFG.\n");
+			exit(1);
 	}
-
-	//Add this into the basic block
-	add_statement(basic_block, const_assignment);
-
-	//Now give back the assignee variable
-	return const_assignment->assignee;
 }
 
 
@@ -4345,21 +4671,23 @@ static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basi
  * expression could be an identifier, a constant, a function call, or a nested expression
  * tree
  */
-static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, generic_ast_node_t* primary_parent){
-	//Initialize these results at first
-	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
+static inline cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, generic_ast_node_t* primary_parent){
+	//Holder for the result var/constant
+	three_addr_var_t* result_variable;
 
 	//Switch based on what kind of expression we have. This mainly just calls the appropriate rules
 	switch(primary_parent->ast_node_type){
-		//In this case we'll only worry about the assignee
 		case AST_NODE_TYPE_IDENTIFIER:
-		 	result_package.assignee = emit_identifier(basic_block, primary_parent);
+			//Let the helper do it
+		 	result_variable = emit_identifier(basic_block, primary_parent);
+
+			//Initialize and give back the result
+			cfg_result_package_t result_package = {basic_block, basic_block, {result_variable}, CFG_RESULT_TYPE_VAR, BLANK};
 			return result_package;
 
 		//Same in this case - just an assignee in basic block
 		case AST_NODE_TYPE_CONSTANT:
-			result_package.assignee = emit_constant_assignment(basic_block, primary_parent);
-			return result_package;
+			return emit_constant_from_node(basic_block, primary_parent);
 
 		//We handle direct/indirect calls all in the same rule
 		case AST_NODE_TYPE_FUNCTION_CALL:
@@ -4450,82 +4778,132 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 
 	//Set this to be at the end
 	current_block = expression_package.final_block;
-
-	//This is whatever was emitted by the expression
-	three_addr_var_t* array_offset = expression_package.assignee;
-
-	//Let's check for a constant here we probably have one
-	
-
 	//The current type will always be what was inferred here
 	generic_type_t* member_type = array_accessor->inferred_type;
 
 	/**
-	 * If this is not null, we'll be adding on top of it
-	 * with this rule and eventually reassigning what the current offset
-	 * actually is
+	 * We may have a constant type here *or* a variable type. Either
+	 * way, we will emit what we are able to
 	 */
-	if(*current_offset != NULL){
+	switch(expression_package.type){
 		/**
-		 * The formula for array subscript is: base_address + type_size * subscript
-		 * 
-		 * However, if we're on our second or third round, the current var may be an address
-		 *
-		 * This can be done using a lea instruction, so we will emit that directly
+		 * For a variable result type, we cannot rely on any constant optimizations
+		 * so we have to trust and emit the expression as-is
 		 */
-		three_addr_var_t* address = emit_array_address_calculation(current_block, *current_offset, array_offset, member_type);
+		case CFG_RESULT_TYPE_VAR:
+			/**
+			 * If this is not null, we'll be adding on top of it
+			 * with this rule and eventually reassigning what the current offset
+			 * actually is
+			 */
+			if(*current_offset != NULL){
+				//This is whatever was emitted by the expression
+				three_addr_var_t* array_offset = expression_package.result_value.result_var;
 
-		//And finally - our current offset is no longer the actual offset
-		*current_offset = address;
+				/**
+				 * The formula for array subscript is: base_address + type_size * subscript
+				 * 
+				 * However, if we're on our second or third round, the current var may be an address
+				 *
+				 * This can be done using a lea instruction, so we will emit that directly
+				 */
+				three_addr_var_t* address = emit_array_address_calculation(current_block, *current_offset, array_offset, member_type);
 
-	/**
-	 * If this is NULL, then we can just make the current offset be
-	 * the result + the array offset * member type
-	 */
-	} else {
-		//Emit the variable directly here
-		*current_offset = emit_temp_var(u64);
+				//And finally - our current offset is no longer the actual offset
+				*current_offset = address;
 
-		/**
-		 * If this is just a constant(which it often will be), we can skip all of the binary
-		 * arithmetic and just go right to this
-		 */
-		if(current_block->exit_statement != NULL
-			&& current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-			&& variables_equal(array_offset, current_block->exit_statement->assignee, TRUE) == TRUE){
-
-			//Extract the old constant out
-			three_addr_const_t* constant_value = current_block->exit_statement->op1_const;
-
-			//Emit the actual const over here
-			three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(member_type->type_size, u64);
-
-			//Multiply them together
-			multiply_constants(type_size_const, constant_value);
-
-			//This just becomes an assignment expression
-			instruction_t* assignment = emit_assignment_with_const_instruction(*current_offset, type_size_const);
-
-			//Add it into the block
-			add_statement(current_block, assignment);
-
-		} else {
-			//We're using a lea if we can
-			if(is_lea_compatible_power_of_2(member_type->type_size) == TRUE){
-				//Emit the lea
-				instruction_t* lea = emit_lea_index_and_scale_only(*current_offset, array_offset, member_type->type_size);
-
-				//Add it in
-				add_statement(current_block, lea);
-
-			//Otherwise just a multiplication statement
+			/**
+			 * If this is NULL, then we can just make the current offset be
+			 * the result + the array offset * member type
+			 */
 			} else {
+				//Emit the variable directly here
+				*current_offset = emit_temp_var(u64);
+				
+				//This is whatever was emitted by the expression
+				three_addr_var_t* array_offset = expression_package.result_value.result_var;
+
+				//We're using a lea if we can
+				if(is_lea_compatible_power_of_2(member_type->type_size) == TRUE){
+					//Emit the lea
+					instruction_t* lea = emit_lea_index_and_scale_only(*current_offset, array_offset, member_type->type_size);
+
+					//Add it in
+					add_statement(current_block, lea);
+
+				//Otherwise just a multiplication statement
+				} else {
+					three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(member_type->type_size, u64);
+
+					//Emit the binary operation directly with this. The current offset remains unchanged
+					emit_binary_operation_with_constant(current_block, *current_offset, array_offset, STAR, type_size_const);
+				}
+			}
+
+			break;
+
+		case CFG_RESULT_TYPE_CONST:
+			/**
+			 * If this is not null, we'll be adding on top of it
+			 * with this rule and eventually reassigning what the current offset
+			 * actually is
+			 */
+			if(*current_offset != NULL){
+				/**
+				 * The formula for array subscript is: base_address + type_size * subscript
+				 * 
+				 * However, luckily for us, we know that the offset itself is a constant, so
+				 * we can skip a lot of the actual computation work here
+				 */
+				three_addr_const_t* constant_value = expression_package.result_value.result_const;
+
+				//Emit the actual const over here
+				three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(member_type->type_size, u64);
+				
+				//Multiply them together
+				multiply_constants(type_size_const, constant_value);
+
+				/**
+				 * If it's not 0, we'll just emit the lea. If it is zero, then
+				 * we don't need to reassign the current offset at all so we
+				 * will leave it as such
+				 */
+				if(is_constant_value_zero(type_size_const) == FALSE){
+					//Emit the calculation
+					instruction_t* address_calculation = emit_lea_offset_only(emit_temp_var(u64), *current_offset, type_size_const);
+
+					//Get it into the block
+					add_statement(current_block, address_calculation);
+
+					//And finally - our current offset is no longer the actual offset
+					*current_offset = address_calculation->assignee;
+				}
+
+			/**
+			 * Otherwise this is NULL, so we're starting from scratch. Again we know that this is 
+			 * a constant, so we are able to just emit that assignment here
+			 */
+			} else {
+				//Emit the variable directly here
+				*current_offset = emit_temp_var(u64);
+
+				//Extract the result constant out
+				three_addr_const_t* constant_value = expression_package.result_value.result_const;
+
+				//Emit the actual const over here
 				three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(member_type->type_size, u64);
 
-				//Emit the binary operation directly with this. The current offset remains unchanged
-				emit_binary_operation_with_constant(current_block, *current_offset, array_offset, STAR, type_size_const);
+				//Multiply them together
+				multiply_constants(type_size_const, constant_value);
+
+				//This just becomes an assignment expression
+				instruction_t* assignment = emit_assignment_with_const_instruction(*current_offset, type_size_const);
+
+				//Add it into the block
+				add_statement(current_block, assignment);
 			}
-		}
+
+			break;
 	}
 
 	/**
@@ -4640,7 +5018,7 @@ static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block
 	}
 
 	//Package & return the results
-	cfg_result_package_t results = {block, block, *current_offset, BLANK};
+	cfg_result_package_t results = {block, block, {*current_offset}, CFG_RESULT_TYPE_VAR, BLANK};
 	return results;
 }
 
@@ -4724,7 +5102,7 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 	}
 
 	//And we're done here, we can package and return what we have
-	cfg_result_package_t results = {block, block, *base_address, BLANK};
+	cfg_result_package_t results = {block, block, {*base_address}, CFG_RESULT_TYPE_VAR, BLANK};
 	return results;
 }
 
@@ -4785,7 +5163,7 @@ static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block,
 	}
 
 	//Very simple rule, we just have this for consistency
-	cfg_result_package_t accessor = {block, block, *base_address, BLANK};
+	cfg_result_package_t accessor = {block, block, {*base_address}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	//Give it back
 	return accessor;
@@ -4850,10 +5228,12 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
 		*came_from_non_contiguous_region = FALSE;
 	}
 
-	//By the time we get out here, we have performed a dereference and loaded whatever our offset
-	//math was before into the new base address variable. The current offset will be NULL again
-	//because we need to start over if we have any more offsets
-	cfg_result_package_t return_package = {block, block, *base_address, BLANK};
+	/**
+	 * By the time we get out here, we have performed a dereference and loaded whatever our offset
+	 * math was before into the new base address variable. The current offset will be NULL again
+	 * because we need to start over if we have any more offsets
+	 */
+	cfg_result_package_t return_package = {block, block, {*base_address}, CFG_RESULT_TYPE_VAR, BLANK};
 	return return_package;
 }
 
@@ -4881,14 +5261,14 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 	 * results from here to hang onto our base address
 	 */
 	if(root->ast_node_type != AST_NODE_TYPE_POSTFIX_EXPR){
-		//Run the primary results function
+		//Run the primary results function - we know that this is not going to be a constant
 		cfg_result_package_t primary_results = emit_primary_expr_code(basic_block, root);
 
 		//The current block now is this ones final block
 		current = primary_results.final_block;
 
 		//Extract for some analysis
-		three_addr_var_t* assignee = primary_results.assignee;
+		three_addr_var_t* assignee = primary_results.result_value.result_var;
 
 		//Get this if there is one
 		symtab_variable_record_t* base_address_variable = assignee->linked_var;
@@ -5006,7 +5386,7 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 	}
 
 	//Give back our final results(assignee is not needed here)
-	cfg_result_package_t final_results = {current, postfix_results.final_block, NULL, BLANK};
+	cfg_result_package_t final_results = {current, postfix_results.final_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 	return final_results;
 }
 
@@ -5044,14 +5424,19 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	generic_ast_node_t* left_child = root->first_child;
 	generic_ast_node_t* right_child = left_child->next_sibling;
 
-	//For this rule, we care about the parent node's type(after cast/coercion) and
-	//the original memory access type(before cast/coercion). We will use these 2 to 
-	//determine if a converting operation is needed
+	/**
+	 * For this rule, we care about the parent node's type(after cast/coercion) and
+	 * the original memory access type(before cast/coercion). We will use these 2 to 
+	 * determine if a converting operation is needed
+	 */
 	generic_type_t* parent_node_type = root->inferred_type;
 	generic_type_t* original_memory_access_type = right_child->inferred_type;
 
 	//This is whatever the final block is
 	current_block = postfix_results.final_block;
+
+	//IMPORTANT - the result of this is always going to be a variable
+	postfix_results.type = CFG_RESULT_TYPE_VAR;
 
 	//In case we need them - load and store
 	instruction_t* load_instruction;
@@ -5072,7 +5457,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 					add_statement(current_block, store_instruction);
 
 					//Give back the base address as the assignee(even though it's not really)
-					postfix_results.assignee = base_address;
+					postfix_results.result_value.result_var = base_address;
 
 				//Otherwise, this means that the current offset is null
 				} else {
@@ -5084,7 +5469,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 					add_statement(current_block, store_instruction);
 
 					//Give back the base address as the assignee(even though it's not really)
-					postfix_results.assignee = base_address;
+					postfix_results.result_value.result_var = base_address;
 				}
 
 				break;
@@ -5100,10 +5485,9 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 					add_statement(current_block, load_instruction);
 
 					//Now the final assignee here is important - it's what we give it here
-					postfix_results.assignee = load_instruction->assignee;
+					postfix_results.result_value.result_var = load_instruction->assignee;
 
-				//Otherwise we have a null current offset, so we're just
-				//relying on the base address
+				//Otherwise we have a null current offset, so we're just relying on the base address
 				} else {
 					//Emit the load instruction between the base address and the parent node type
 					load_instruction = emit_load_ir_code(emit_temp_var(parent_node_type), base_address, original_memory_access_type);
@@ -5112,17 +5496,15 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 					add_statement(current_block, load_instruction);
 
 					//This is our final assignee
-					postfix_results.assignee = load_instruction->assignee;
+					postfix_results.result_value.result_var = load_instruction->assignee;
 				}
 
 				break;
 		}
 
-	//Otherwise it's just a memory address call, just emit the 
-	//base address plus the offset
+	//Otherwise it's just a memory address call, just emit the base address plus the offset
 	} else {
-		//If the current offset is not NULL, we'll need to do some calculations
-		//here
+		//If the current offset is not NULL, we'll need to do some calculations here
 		if(current_offset != NULL){
 			//Just do base address + offset
 			instruction_t* address_calculation = emit_binary_operation_instruction(emit_temp_var(base_address->type), base_address, PLUS, current_offset);
@@ -5131,11 +5513,11 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 			add_statement(current_block, address_calculation);
 
 			//This is what we're returning
-			postfix_results.assignee = address_calculation->assignee;
+			postfix_results.result_value.result_var = address_calculation->assignee;
 
 		//Otherwise it is null, so we can just use the base address
 		} else {
-			postfix_results.assignee = base_address;
+			postfix_results.result_value.result_var = base_address;
 		}
 	}
 
@@ -5167,8 +5549,8 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	//Update the end block
 	current_block = postfix_expression_results.final_block;
 
-	//This is the value that we will be modifying
-	three_addr_var_t* assignee = postfix_expression_results.assignee;
+	//This is the value that we will be modifying. It will always be a variable
+	three_addr_var_t* assignee = unpack_result_package(&postfix_expression_results, current_block);
 
 	/**
 	 * Remember that for a postoperation, we save the value that we get before
@@ -5184,7 +5566,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	add_statement(current_block, temp_assignment);
 
 	//Initialize this off the bat
-	cfg_result_package_t postoperation_package = {basic_block, current_block, temp_assignment->assignee, BLANK};
+	cfg_result_package_t postoperation_package = {basic_block, current_block, {temp_assignment->assignee}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	//If the assignee is not a pointer, we'll handle the normal case
 	switch(assignee->type->type_class){
@@ -5290,7 +5672,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 		//Otherwise we just have a regular assignment
 		} else {
 			//And finally, we'll emit the save instruction that stores the value that we've incremented into the location we got it from
-			instruction_t* assignment_instruction = emit_assignment_instruction(copied_package.assignee, assignee);
+			instruction_t* assignment_instruction = emit_assignment_instruction(unpack_result_package(&copied_package, current_block), assignee);
 
 			//Add this into the block
 			add_statement(current_block, assignment_instruction);
@@ -5331,7 +5713,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 	instruction_t* assignment;
 	three_addr_var_t* assignee;
 	//The unary expression package
-	cfg_result_package_t unary_package = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t unary_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	//We'll keep track of what the current block here is
 	basic_block_t* current_block = basic_block;
@@ -5362,7 +5744,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			current_block = unary_package.final_block;
 
 			//The assignee comes from our package. This is what we are ultimately using in the final result
-			assignee = unary_package.assignee;
+			assignee = unpack_result_package(&unary_package, current_block);
 		
 			//Go based on what we have here
 			switch(assignee->type->type_class){
@@ -5370,9 +5752,11 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					//Go based on the op here
 					switch(unary_operator_node->unary_operator){
 						case PLUSPLUS:
-							//Go based on the basic type. Since SSE variables are not
-							//compatible with normal inc instructions, we need to
-							//break out like this
+							/**
+							 * Go based on the basic type. Since SSE variables are not
+							 * compatible with normal inc instructions, we need to
+							 * break out like this
+							 */
 							switch(assignee->type->basic_type_token){
 								case F32:
 								case F64:
@@ -5389,9 +5773,11 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 							break;
 							
 						case MINUSMINUS:
-							//Go based on the basic type. Since SSE variables are not
-							//compatible with normal dec instructions, we need to
-							//break out like this
+							/**
+							 * Go based on the basic type. Since SSE variables are not
+							 * compatible with normal dec instructions, we need to
+							 * break out like this
+							 */
 							switch(assignee->type->basic_type_token){
 								case F32:
 								case F64:
@@ -5470,7 +5856,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				//Otherwise we just have a regular assignment
 				} else {
 					//And finally, we'll emit the save instruction that stores the value that we've incremented into the location we got it from
-					instruction_t* assignment_instruction = emit_assignment_instruction(copied_package.assignee, assignee);
+					instruction_t* assignment_instruction = emit_assignment_instruction(copied_package.result_value.result_var, assignee);
 
 					//Add this into the block
 					add_statement(current_block, assignment_instruction);
@@ -5496,7 +5882,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			}
 
 			//Store the assignee as this
-			unary_package.assignee = assignee;
+			unary_package.type = CFG_RESULT_TYPE_VAR;
+			unary_package.result_value.result_var = assignee;
 			//Update the final block if it has change
 			unary_package.final_block = current_block;
 		
@@ -5507,11 +5894,12 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		case STAR:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
-			//The assignee comes from the package
-			assignee = unary_package.assignee;
 
 			//Update the block
 			current_block = unary_package.final_block;
+
+			//The assignee comes from the package
+			assignee = unpack_result_package(&unary_package, current_block);
 
 			//The pointer will be on the unary expression child
 			generic_type_t* pointer_type = unary_expression_child->inferred_type;
@@ -5545,7 +5933,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				add_statement(current_block, assignment_instruction);
 
 				//Package this up and get out
-				unary_package.assignee = assignment_instruction->assignee;
+				unary_package.type = CFG_RESULT_TYPE_VAR;
+				unary_package.result_value.result_var = assignment_instruction->assignee;
 				return unary_package;
 			}
 
@@ -5567,7 +5956,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				add_statement(current_block, store_instruction);
 
 				//Add the assignee in here
-				unary_package.assignee = assignee;
+				unary_package.type = CFG_RESULT_TYPE_VAR;
+				unary_package.result_value.result_var = assignee;
 
 			/**
 			 * If we get here, we know that we either have a right hand operation or we're on the left hand
@@ -5581,7 +5971,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				add_statement(current_block, load_instruction);
 
 				//This one's assignee is our overall assignee
-				unary_package.assignee = load_instruction->assignee;
+				unary_package.type = CFG_RESULT_TYPE_VAR;
+				unary_package.result_value.result_var = load_instruction->assignee;
 			}
 
 			//Give back the final unary package
@@ -5591,14 +5982,16 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		case B_NOT:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
-			//The assignee comes from the package
-			assignee = unary_package.assignee;
 
 			//Update the current block
 			current_block = unary_package.final_block;
 
+			//The assignee comes from the package
+			assignee = unpack_result_package(&unary_package, current_block);
+
 			//The new assignee will come from this helper
-			unary_package.assignee = emit_bitwise_not_expr_code(current_block, assignee);
+			unary_package.type = CFG_RESULT_TYPE_VAR;
+			unary_package.result_value.result_var = emit_bitwise_not_expr_code(current_block, assignee);
 
 			//Give the package back
 			return unary_package;
@@ -5607,11 +6000,12 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		case EXCLAMATION:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
-			//The assignee comes from the package
-			assignee = unary_package.assignee;
 
 			//Update the current block
 			current_block = unary_package.final_block;
+
+			//The assignee comes from the package
+			assignee = unpack_result_package(&unary_package, current_block);
 
 			//This will always overwrite the other value
 			instruction_t* logical_not_statement = emit_logical_not_instruction(emit_temp_var(u8), assignee);
@@ -5627,7 +6021,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			add_statement(current_block, logical_not_statement);
 
 			//The package's assignee is now the result of this logical not instruction
-			unary_package.assignee = logical_not_statement->assignee;
+			unary_package.type = CFG_RESULT_TYPE_VAR;
+			unary_package.result_value.result_var = logical_not_statement->assignee;
 
 			//The operator here is logical not
 			unary_package.operator = EXCLAMATION;
@@ -5647,14 +6042,14 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		case MINUS:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
-			//The assignee comes from the package
-			assignee = unary_package.assignee;
 
 			//Update the current block
 			current_block = unary_package.final_block;
 
-			//We'll need to assign to a temp here, these are
-			//only ever on the RHS
+			//The assignee comes from the package
+			assignee = unpack_result_package(&unary_package, current_block);
+
+			//We'll need to assign to a temp here, these are only ever on the RHS
 			assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
 
 			//Add this into the block
@@ -5667,7 +6062,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			add_statement(current_block, negation_instruction);
 
 			//Rewrite the assignee to be this now
-			unary_package.assignee = negation_instruction->assignee;
+			unary_package.type = CFG_RESULT_TYPE_VAR;
+			unary_package.result_value.result_var = negation_instruction->assignee;
 			
 			//And give back the final value
 			return unary_package;
@@ -5708,7 +6104,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					three_addr_var_t* memory_address_var = emit_memory_address_var(unary_expression_child->variable);
 
 					//And package the value up as what we want here
-					unary_package.assignee = memory_address_var;
+					unary_package.type = CFG_RESULT_TYPE_VAR;
+					unary_package.result_value.result_var = memory_address_var;
 
 					break;
 
@@ -5723,7 +6120,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					current_block = postfix_results.final_block;
 
 					//And package the value up as what we want here
-					unary_package.assignee = postfix_results.assignee;
+					unary_package.type = CFG_RESULT_TYPE_VAR;
+					unary_package.result_value.result_var = unpack_result_package(&postfix_results, current_block);
 					break;
 
 				//This should never occur
@@ -5751,10 +6149,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
  * 	
  * 	<postfix-expression> | <unary-operator> <cast-expression> | typesize(<type-specifier>) | sizeof(<logical-or-expression>) 
  */
-static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression){
+static inline cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression){
 	//Switch based on what class this node actually is
 	switch(unary_expression->ast_node_type){
-		//If it's actually a unary expression, we can do some processing
 		//If we see the actual node here, we know that we are actually doing a unary operation
 		case AST_NODE_TYPE_UNARY_EXPR:	
 			return emit_unary_operation(basic_block, unary_expression);
@@ -5786,6 +6183,8 @@ static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, ge
  * 	cmovne b, result
  */
 static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_block, generic_ast_node_t* ternary_operation){
+	instruction_t* if_assignment;
+	instruction_t* else_assignment;
 	//Expression return package that we need
 	cfg_result_package_t return_package;
 
@@ -5824,10 +6223,21 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	//Again here we could have multiple blocks, so we'll need to account for this and reassign if necessary
 	if_block = if_branch.final_block;
 
-	//We'll now create a conditional move for the if branch into the result
-	instruction_t* if_assignment = emit_assignment_instruction(if_result, if_branch.assignee);
+	/**
+	 * Unpack the result type accordingly for the if branch's
+	 * assignee
+	 */
+	switch(if_branch.type){
+		case CFG_RESULT_TYPE_VAR:
+			if_assignment = emit_assignment_instruction(if_result, if_branch.result_value.result_var);
+			break;
 
-	//Add this into the if block
+		case CFG_RESULT_TYPE_CONST:
+			if_assignment = emit_assignment_with_const_instruction(if_result, if_branch.result_value.result_const);
+			break;
+	}
+
+	//Add this into the if block regardless of the result
 	add_statement(if_block, if_assignment);
 
 	//Now add a direct jump to the end
@@ -5842,8 +6252,19 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	//Again here we could have multiple blocks, so we'll need to account for this and reassign if necessary
 	else_block = else_branch.final_block;
 
-	//We'll now create a conditional move for the else branch into the result
-	instruction_t* else_assignment = emit_assignment_instruction(else_result, else_branch.assignee);
+	/**
+	 * Unpack the result type accordingly for the else branch's
+	 * assignee
+	 */
+	switch(else_branch.type){
+		case CFG_RESULT_TYPE_VAR:
+			else_assignment = emit_assignment_instruction(else_result, else_branch.result_value.result_var);
+			break;
+
+		case CFG_RESULT_TYPE_CONST:
+			else_assignment = emit_assignment_with_const_instruction(else_result, else_branch.result_value.result_const);
+			break;
+	}
 
 	//Add this into the else block
 	add_statement(else_block, else_assignment);
@@ -5855,7 +6276,8 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	return_package.starting_block = starting_block;
 	return_package.final_block = end_block;
 	//The final assignee is the temp var that we assigned to
-	return_package.assignee =  final_result;
+	return_package.type = CFG_RESULT_TYPE_VAR;
+	return_package.result_value.result_var =  final_result;
 	//Mark that we had a ternary here
 	return_package.operator = QUESTION;
 
@@ -5876,7 +6298,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
  */
 static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr){
 	//The return package here
-	cfg_result_package_t package = {basic_block, basic_block, NULL, BLANK};
+	cfg_result_package_t package = {basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	//Current block may change as time goes on, so we'll use the term current block up here to refer to it
 	basic_block_t* current_block = basic_block;
@@ -5931,9 +6353,13 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	switch(logical_or_expr->binary_operator){
 		case DOUBLE_AND:
 		case DOUBLE_OR:
-			//op1 always comes from the left side
-			op1 = left_side.assignee;
-			op2 = right_side.assignee;
+			/**
+			 * For op1 and op2, we always unpack any/all constants here if need be. That being
+			 * said there shouldn't even be any constants because of the way that the parser
+			 * works with these expressions, but either way we will do this for future-proofing
+			 */
+			op1 = unpack_result_package(&left_side, current_block);
+			op2 = unpack_result_package(&right_side, current_block);
 
 			/**
 			 * IMPORTANT - for operations like these, our final result type is always a boolean. However,
@@ -5956,30 +6382,39 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 		case G_THAN_OR_EQ:
 		case DOUBLE_EQUALS:
 		case NOT_EQUALS:
-			//The assignees are the same
-			op1 = left_side.assignee;
-
-			/*
-			 * As for op2, there is a chance that we actually have a constant assignment in the op2
-			 * slot. This only works if the variables are completely equal. If they are not then
-			 * this is a false positive which is possible
+			/**
+			 * Always unpack op1 - in all reality it shouldn't be a constant but just to be safe we will
 			 */
-			if(current_block->exit_statement != NULL 
-				&& current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-				&& current_block->exit_statement->assignee != NULL
-				&& current_block->exit_statement->assignee->variable_type == VARIABLE_TYPE_TEMP
-				&& variables_equal_no_ssa(right_side.assignee, current_block->exit_statement->assignee, FALSE) == TRUE){
-				//Just assign the constant over
-				op1_const = current_block->exit_statement->op1_const;
+			op1 = unpack_result_package(&left_side, current_block);
 
-				//We default to op1 for a constant
-				final_result_type = op1->type;
+			/**
+			 * For op2, OIR supports constants in the right operand of a binary expression
+			 * so we will unpack the value here and go for it from there
+			 */
+			switch(right_side.type){
+				/**
+				 * If we have a constant, we can go straight for a bin_op_with_const statement
+				 * and save the extra assignments and simplifications down the road
+				 */
+				case CFG_RESULT_TYPE_CONST:
+					op1_const = right_side.result_value.result_const;
 
-			} else {
-				op2 = right_side.assignee;
+					//We default to op1 for a constant
+					final_result_type = op1->type;
 
-				//Now use the helper to get the final result type
-				final_result_type = get_operand_type_for_relational_operation(type_symtab, op1->type, op2->type);
+					break;
+
+				/**
+				 * Otherwise we have a regular variable value so we will
+				 * unpack it accordingly and use it to help use get the result type
+				 */
+				case CFG_RESULT_TYPE_VAR:
+					op2 = right_side.result_value.result_var;
+
+					//Now use the helper to get the final result type
+					final_result_type = get_operand_type_for_relational_operation(type_symtab, op1->type, op2->type);
+
+					break;
 			}
 
 			/**
@@ -5994,25 +6429,36 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 		//Otherwise default rules are in effect
 		default:
-			//The op1 is the left side's assingee
-			op1 = left_side.assignee;
+			/**
+			 * We always unpack op1. In reality it should not be a constant but we will do this
+			 * just to be sure
+			 */
+			op1 = unpack_result_package(&left_side, current_block);
 
 			/**
-			 * As for op2, there is a chance that we actually have a constant assignment in the op2
-			 * slot. This only works if the variables are completely equal. If they are not then
-			 * this is a false positive which is possible
+			 * For op2, OIR supports constants in the right operand of a binary expression
+			 * so we will unpack the value here and go for it from there
 			 */
-			if(current_block->exit_statement != NULL 
-				&& current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-				&& current_block->exit_statement->assignee != NULL
-				&& current_block->exit_statement->assignee->variable_type == VARIABLE_TYPE_TEMP
-				&& variables_equal_no_ssa(right_side.assignee, current_block->exit_statement->assignee, FALSE) == TRUE){
-				op1_const = current_block->exit_statement->op1_const;
+			switch(right_side.type){
+				/**
+				 * If we have a constant, we can go straight for a bin_op_with_const statement
+				 * and save the extra assignments and simplifications down the road
+				 */
+				case CFG_RESULT_TYPE_CONST:
+					op1_const = right_side.result_value.result_const;
 
-			} else {
-				op2 = right_side.assignee;
+					break;
+
+				/**
+				 * Otherwise we have a regular variable value so we will
+				 * unpack it accordingly and use it to help use get the result type
+				 */
+				case CFG_RESULT_TYPE_VAR:
+					op2 = right_side.result_value.result_var;
+
+					break;
 			}
-				
+
 			break;
 	}
 
@@ -6043,7 +6489,8 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 	//Package up and return
 	package.final_block = current_block;
-	package.assignee = binary_operation->assignee;
+	package.type = CFG_RESULT_TYPE_VAR;
+	package.result_value.result_var = binary_operation->assignee;
 	package.operator = logical_or_expr->binary_operator;	
 
 	return package;
@@ -6055,8 +6502,10 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
  * with it
  */
 static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_block, generic_ast_node_t* parent_node){
+	//For unpacking
+	three_addr_var_t* result_var;
 	//Final return package here - this will be updated as we go
-	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
+	cfg_result_package_t result_package = {basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	/**
 	 * We will start by emitting the right hand side first. This will allow
@@ -6081,228 +6530,211 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	//Reassign current to be at the end
 	current_block = right_hand_package.final_block;
 
-	//The final first operand will be the expression package's assignee for now
-	three_addr_var_t* final_op1 = right_hand_package.assignee;
-
 	//Emit the left hand unary expression
 	cfg_result_package_t unary_package = emit_unary_expression(current_block, left_child);
 
 	//Reassign current to be at the end
 	current_block = unary_package.final_block;
 
-	//The left hand var is the final assignee of the unary statement
-	three_addr_var_t* left_hand_var = unary_package.assignee;
+	//This is always a var but we call the unpacker for safety
+	three_addr_var_t* left_hand_var = unpack_result_package(&unary_package, current_block);
 
 	/**
-	 * Is a copy assignment required between the destination and source types? This
-	 * is going to have to be our first case because it may be incorrectly
-	 * identified by the other checks down the road
+	 * Based on what kind of result we have on the right hand package,
+	 * we will process accordingly
 	 */
-	if(is_copy_assignment_required(left_child->inferred_type, right_child->inferred_type) == TRUE){
-		//Emit the copy from the left hand var to the final op1
-		instruction_t* copy_statement = emit_memory_copy_instruction(left_hand_var, final_op1, parent_node->optional_storage.bytes_to_copy);
-
-		//Get it into the block
-		add_statement(current_block, copy_statement);		
-
-	/**
-	 * Do we have a pre-loaded up store statement ready for us to go? If so, then
-	 * we'll need to handle this appropriately. We need to be sure that we aren't
-	 * invalidly hitting this though
-	 *
-	 * NOTE: We check for 100% *exact* equality between the exit statement's assignee
-	 * and the left hand var here. That is the only way that we can know for sure 
-	 * that we aren't having a false positive
-	 */
-	} else if(current_block->exit_statement != NULL
-				&& is_store_operation(current_block->exit_statement) == TRUE
-				&& current_block->exit_statement->assignee == left_hand_var){
-		//This is our store statement
-		instruction_t* store_statement = current_block->exit_statement;
-
+	switch(right_hand_package.type){
 		/**
-		 * Different store statement types have different areas where the operands go
+		 * For result types, there are many different things that we need to account
+		 * for like copy assignees, store operations, and optimizations for binary expressions
 		 */
-		switch(store_statement->statement_type){
-			//Store statements have the storee in op1
-			case THREE_ADDR_CODE_STORE_STATEMENT:
+		case CFG_RESULT_TYPE_VAR:
+			//Extract the result variable
+			result_var = right_hand_package.result_value.result_var;
+
+			/**
+			 * Is a copy assignment required between the destination and source types? This
+			 * is going to have to be our first case because it may be incorrectly
+			 * identified by the other checks down the road
+			 */
+			if(is_copy_assignment_required(left_child->inferred_type, right_child->inferred_type) == TRUE){
+				//Emit the copy from the left hand var to the final op1
+				instruction_t* copy_statement = emit_memory_copy_instruction(left_hand_var, result_var, parent_node->optional_storage.bytes_to_copy);
+
+				//Get it into the block
+				add_statement(current_block, copy_statement);		
+
+			/**
+			 * Do we have a pre-loaded up store statement ready for us to go? If so, then
+			 * we'll need to handle this appropriately. We need to be sure that we aren't
+			 * invalidly hitting this though
+			 *
+			 * NOTE: We check for 100% *exact* equality between the exit statement's assignee
+			 * and the left hand var here. That is the only way that we can know for sure 
+			 * that we aren't having a false positive
+			 */
+			} else if(current_block->exit_statement != NULL
+						&& is_store_operation(current_block->exit_statement) == TRUE
+						&& current_block->exit_statement->assignee == left_hand_var){
+				//This is our store statement
+				instruction_t* store_statement = current_block->exit_statement;
+
 				/**
-				 * We can perform a small optimization by potentially scrapping the constant
-				 * assignment and just putting the constant in directly
+				 * Different store statement types have different areas where the operands go
 				 */
-				if(last_instruction != NULL
-					&& last_instruction->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-					&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
+				switch(store_statement->statement_type){
+					//Store statements have the storee in op1
+					case THREE_ADDR_CODE_STORE_STATEMENT:
+						store_statement->op1 = result_var;
+						break;
 
-					//Extract it
-					three_addr_const_t* constant_assignee = last_instruction->op1_const;
+					//When we have offsets, the storee goes into op2
+					case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+					case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+						store_statement->op2 = result_var;
+						break;
 
-					//This is now useless
-					delete_statement(last_instruction);
-
-					//Set the store statement's op1_const to be this
-					current_block->exit_statement->op1_const = constant_assignee;
-
-				/**
-				 * Otherwise there's no clever optimziation to do here, we just need
-				 * to emit this as is
-				 */
-				} else {
-					current_block->exit_statement->op1 = final_op1;
+					//This is unreachable, just so the compiler is happy
+					default:
+						break;
 				}
 
-				break;
+			/**
+			 * If we have a variable that is on the stack or is a global variable, then a regular assignment won't
+			 * work. We'll need to do a store here
+			 */
+			} else if(left_hand_var->linked_var != NULL
+						&& (left_hand_var->linked_var->stack_variable == TRUE
+						|| is_variable_data_segment_variable(left_hand_var->linked_var) == TRUE)){
 
-			//When we have offsets, the storee goes into op2
-			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+				//Emit the memory address var for this variable
+				three_addr_var_t* memory_address = emit_memory_address_var(left_hand_var->linked_var);
+
+				//Now for the final store code
+				instruction_t* final_assignment = emit_store_ir_code(memory_address, result_var, left_hand_var->type);
+
+				//Now add thi statement in here
+				add_statement(current_block, final_assignment);
+			
+			/**
+			 * If we get here, then we just have a regular variable that is not on the stack at all and is not a global variable,
+			 * so a regular assignment will work just fine
+			 */
+			} else {
 				/**
-				 * We can perform a small optimization by potentially scrapping the constant
-				 * assignment and just putting the constant in directly
+				 * If this is not a binary operation, then we will just copy it over. If it is, then we will
+				 * use that binary operation for our own purposes here with the left hand var
+				 */
+				instruction_t* binary_expression;
+				instruction_t* final_assignment;
+
+				/**
+				 * Reach back into the block to see if the last instruction that we emitted for our op1
+				 * here is a constant assignment or a binary expression. If it's either, we can avoid
+				 * the copy assignment for this assignment expression and go to emitting directly
 				 */
 				if(last_instruction != NULL
-					&& last_instruction->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
+					&& last_instruction->assignee != NULL
 					&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
+					&& variables_equal_no_ssa(last_instruction->assignee, result_var, FALSE) == TRUE){
 
-					//Extract it
-					three_addr_const_t* constant_assignee = last_instruction->op1_const;
+					switch(last_instruction->statement_type){
+						case THREE_ADDR_CODE_BIN_OP_STMT:
+						case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+							binary_expression = last_instruction;
 
-					//This is now useless
-					delete_statement(last_instruction);
+							//Make this one's assignee the left hand var
+							binary_expression->assignee = left_hand_var;
+							
+							break;
 
-					//Set the store statement's op1_const to be this
-					current_block->exit_statement->op1_const = constant_assignee;
+						/**
+						 * If we have this then there's no clever optimization that we can do, we'll
+						 * just emti a copy assignment
+						 */
+						default:
+							//Finally we'll struct the whole thing
+							final_assignment = emit_assignment_instruction(left_hand_var, result_var);
+
+							//Copy this over if there is one
+							left_hand_var->associated_memory_region.stack_region = result_var->associated_memory_region.stack_region;
+							
+							//Now add thi statement in here
+							add_statement(current_block, final_assignment);
+
+							break;
+					}
 
 				/**
-				 * Otherwise there's no clever optimziation to do here, we just need
-				 * to emit this as is
+				 * Otherwise there is no clever optimization that we could do, so we'll need to emit an assignment
+				 * from the left hand var over to the final op1
 				 */
 				} else {
-					current_block->exit_statement->op2 = final_op1;
-				}
-
-				break;
-
-			//This is unreachable, just so the compiler is happy
-			default:
-				break;
-		}
-
-	/**
-	 * If we have a variable that is on the stack or is a global variable, then a regular assignment won't
-	 * work. We'll need to do a store here
-	 */
-	} else if(left_hand_var->linked_var != NULL
-				&& (left_hand_var->linked_var->stack_variable == TRUE || is_variable_data_segment_variable(left_hand_var->linked_var) == TRUE)){
-
-		//Emit the memory address var for this variable
-		three_addr_var_t* memory_address = emit_memory_address_var(left_hand_var->linked_var);
-
-		//Now for the final store code
-		instruction_t* final_assignment = emit_store_ir_code(memory_address, NULL, left_hand_var->type);
-
-		/**
-		 * If the last instruction was a constant assignment, we can just grab the constant
-		 * itself instead of dealing with the extra copy assignment
-		 */
-		if(last_instruction != NULL
-			&& last_instruction->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-			&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
-			&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
-			//Extract it
-			three_addr_const_t* constant_assignee = last_instruction->op1_const;
-
-			//This is now useless
-			delete_statement(last_instruction);
-
-			//Set the store statement's op1_const to be this
-			final_assignment->op1_const = constant_assignee;
-
-		} else {
-			final_assignment->op1 = final_op1;
-		}
-		
-		//Now add thi statement in here
-		add_statement(current_block, final_assignment);
-	
-	/**
-	 * If we get here, then we just have a regular variable that is not on the stack at all and is not a global variable,
-	 * so a regular assignment will work just fine
-	 */
-	} else {
-		/**
-		 * If this is not a binary operation, then we will just copy it over. If it is, then we will
-		 * use that binary operation for our own purposes here with the left hand var
-		 */
-		instruction_t* binary_expression;
-		instruction_t* constant_assignment;
-		instruction_t* final_assignment;
-
-		/**
-		 * Reach back into the block to see if the last instruction that we emitted for our op1
-		 * here is a constant assignment or a binary expression. If it's either, we can avoid
-		 * the copy assignment for this assignment expression and go to emitting directly
-		 */
-		if(last_instruction != NULL
-			&& last_instruction->assignee != NULL
-			&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
-			&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
-
-			switch(last_instruction->statement_type){
-				case THREE_ADDR_CODE_BIN_OP_STMT:
-				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-					binary_expression = last_instruction;
-
-					//Make this one's assignee the left hand var
-					binary_expression->assignee = left_hand_var;
-					
-					break;
-
-				case THREE_ADDR_CODE_ASSN_CONST_STMT:
-					constant_assignment = last_instruction;
-
-					//Make this one's assignee the left hand var
-					constant_assignment->assignee = left_hand_var;
-
-					break;
-					
-				/**
-				 * If we have this then there's no clever optimization that we can do, we'll
-				 * just emti a copy assignment
-				 */
-				default:
 					//Finally we'll struct the whole thing
-					final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
+					final_assignment = emit_assignment_instruction(left_hand_var, result_var);
 
 					//Copy this over if there is one
-					left_hand_var->associated_memory_region.stack_region = final_op1->associated_memory_region.stack_region;
+					left_hand_var->associated_memory_region.stack_region = result_var->associated_memory_region.stack_region;
 					
 					//Now add thi statement in here
 					add_statement(current_block, final_assignment);
-
-					break;
+				}
 			}
+			
+			break;
 
 		/**
-		 * Otherwise there is no clever optimization that we could do, so we'll need to emit an assignment
-		 * from the left hand var over to the final op1
+		 * For constant result types, really the only thing that we have
+		 * to worry about is whether or not we have a store.
 		 */
-		} else {
-			//Finally we'll struct the whole thing
-			final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
+		case CFG_RESULT_TYPE_CONST:
+			/**
+			 * First case: we have a store statement that just needs a constant put to it
+			 */
+			if(current_block->exit_statement != NULL
+				&& is_store_operation(current_block->exit_statement)
+				&& current_block->exit_statement->assignee == left_hand_var){
 
-			//Copy this over if there is one
-			left_hand_var->associated_memory_region.stack_region = final_op1->associated_memory_region.stack_region;
+				//Simply give this one the constant that we had
+				current_block->exit_statement->op1_const = right_hand_package.result_value.result_const;
+
+			/**
+			 * Second case: If we have a variable that is on the stack or is a global variable, then a regular assignment won't
+			 * work. We'll need to do a store here and emit this one ourselves
+			 */
+			} else if(left_hand_var->linked_var != NULL
+						&& (left_hand_var->linked_var->stack_variable == TRUE 
+						|| is_variable_data_segment_variable(left_hand_var->linked_var) == TRUE)){
+				//Emit the memory address var for this variable
+				three_addr_var_t* memory_address = emit_memory_address_var(left_hand_var->linked_var);
+
+				//Now for the final store code
+				instruction_t* final_assignment = emit_store_ir_code(memory_address, NULL, left_hand_var->type);
+
+				//This guy's operand is the result constant
+				final_assignment->op1_const = right_hand_package.result_value.result_const;
+
+				//Now add thi statement in here
+				add_statement(current_block, final_assignment);
+
+			/**
+			 * Otherwise there is nothing else for us to do here but emit a regular
+			 * assign const from our result to the given one
+			 */
+			} else {
+				//Emit it
+				instruction_t* const_assignment = emit_assignment_with_const_instruction(left_hand_var, right_hand_package.result_value.result_const);
+
+				//Throw it into the block
+				add_statement(current_block, const_assignment);
+			}
 			
-			//Now add thi statement in here
-			add_statement(current_block, final_assignment);
-		}
+			break;
 	}
 
-	//Now pack the return value here
-	result_package.assignee = left_hand_var;
+	//Now pack the return value here - this is always a variable type
+	result_package.type = CFG_RESULT_TYPE_VAR;
+	result_package.result_value.result_var = left_hand_var;
 	//This is whatever the current block is
 	result_package.final_block = current_block;
 
@@ -6316,7 +6748,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
  * param stack region. This is because those first 4 bytes are where we store the parameter count
  */
 static cfg_result_package_t visit_paramcount_statement(basic_block_t* basic_block, generic_ast_node_t* paramcount_node){
-	cfg_result_package_t results = {basic_block, basic_block, NULL, BLANK};
+	cfg_result_package_t results = {basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	//Extract the variable
 	symtab_variable_record_t* paramcount_var = paramcount_node->variable;
@@ -6334,7 +6766,8 @@ static cfg_result_package_t visit_paramcount_statement(basic_block_t* basic_bloc
 	add_statement(basic_block, paramcount_load);
 
 	//Package up the assignee inisde of these results
-	results.assignee = paramcount_result;
+	results.type = CFG_RESULT_TYPE_VAR; 
+	results.result_value.result_var = paramcount_result;
 
 	//Give back the results
 	return results;
@@ -6347,9 +6780,6 @@ static cfg_result_package_t visit_paramcount_statement(basic_block_t* basic_bloc
  * variables
  */
 static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node){
-	//Declare and initialize the results
-	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
-
 	//We'll process based on the class of our expression node
 	switch(expr_node->ast_node_type){
 		case AST_NODE_TYPE_DECL_STMT:
@@ -6360,47 +6790,37 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 				visit_static_declare_statement(expr_node);
 			}
 
-			break;
-
+			return (cfg_result_package_t){basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+ 
 		case AST_NODE_TYPE_LET_STMT:
 			//Split based on the kind of variable that we have
 			if(expr_node->variable->membership != STATIC_VARIABLE){
-				result_package = visit_let_statement(basic_block, expr_node);
-			} else{
+				return visit_let_statement(basic_block, expr_node);
+			} else {
 				visit_static_let_statement(expr_node);
+				return (cfg_result_package_t){basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 			}
-
-			break;
 		
 		case AST_NODE_TYPE_PARAMCOUNT_STMT:
-			result_package = visit_paramcount_statement(basic_block, expr_node);
-			break;
+			return visit_paramcount_statement(basic_block, expr_node);
 
 		case AST_NODE_TYPE_ASNMNT_EXPR:
-			result_package = emit_assignment_expression(basic_block, expr_node);
-			break;
+			return emit_assignment_expression(basic_block, expr_node);
 	
 		case AST_NODE_TYPE_BINARY_EXPR:
-			result_package = emit_binary_expression(basic_block, expr_node);
-			break;
+			return emit_binary_expression(basic_block, expr_node);
 
-		//We handle direct/indirect calls all in the same function
 		case AST_NODE_TYPE_FUNCTION_CALL:
 		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
-			result_package = emit_function_call(basic_block, expr_node);
-			break;
+			return emit_function_call(basic_block, expr_node);
 
 		case AST_NODE_TYPE_TERNARY_EXPRESSION:
-			result_package = emit_ternary_expression(basic_block, expr_node);
-			break; 
+			return emit_ternary_expression(basic_block, expr_node);
 
 		//Default is a unary expression
 		default:
-			result_package = emit_unary_expression(basic_block, expr_node);
-			break;
+			return emit_unary_expression(basic_block, expr_node);
 	}
-
-	return result_package;
 }
 
 
@@ -6409,8 +6829,6 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
  * invoking the lower level "emit-expression" over and over until we're done
  */
 static cfg_result_package_t emit_expression_chain(basic_block_t* basic_block, generic_ast_node_t* expression_chain_node){
-	cfg_result_package_t result_package;
-
 	//Maintain a pointer to the current block
 	basic_block_t* current_block = basic_block;
 
@@ -6431,14 +6849,14 @@ static cfg_result_package_t emit_expression_chain(basic_block_t* basic_block, ge
 		expression_cursor = expression_cursor->next_sibling;
 	}
 
-	//Package and return our valies. Note that we are always
-	//biased towards the *last* expression we saw
-	result_package.starting_block = basic_block;
-	result_package.final_block = current_block;
-	result_package.operator = expression_result.operator;
-	result_package.assignee = expression_result.assignee;
+	/**
+	 * We are completely biased towards the last expression that we saw. As such, we will
+	 * just hijack the starting block field here and use the expression result as-is
+	 */
+	expression_result.starting_block = basic_block;
+	expression_result.final_block = current_block;
 
-	return result_package;
+	return expression_result;
 }
 
 
@@ -6548,7 +6966,7 @@ static cfg_result_package_t emit_error_handle_statement(generic_ast_node_t* erro
 	basic_block_t* handler_block = basic_block_alloc_and_estimate();
 
 	//Our overall result package
-	cfg_result_package_t results = {handler_block, handler_block, NULL, BLANK};
+	cfg_result_package_t results = {handler_block, handler_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	/**
 	 * There are only 3 types that we could have - ret, raise or some expression. We will
@@ -6646,7 +7064,7 @@ static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, 
  */
 static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block, generic_ast_node_t* handle_node, three_addr_var_t* function_assignee, three_addr_var_t* error_assignee){
 	//Allocate the results
-	cfg_result_package_t result_package;
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	/**
 	 * We are going to use a pseudo temp var for our final result here. We will do this because we'll
@@ -6707,7 +7125,6 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 	 * its own block
 	 */
 	generic_ast_node_t* error_handle_cursor = handle_node->first_child;
-
 	while(error_handle_cursor != NULL){
 		//Let the helper do all of the emitting
 		cfg_result_package_t handle_results = emit_error_handle_statement(error_handle_cursor);
@@ -6721,46 +7138,51 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 		//Add it in as a successor to the start block as well
 		add_successor(jump_calculation_block, handle_results.starting_block);
 
-		//Grab a pointer to the last instruction here
+		//Grab a pointer to the last instruction here(this could be NULL!)
 		instruction_t* last_instruction = handle_results.final_block->exit_statement;
 
 		/**
-		 * If we have a "raise" statement, then we may have a NULL last instruction. We'll
-		 * need to couch for this case here
+		 * If the package here is *not* empty, we will need to emit
+		 * an assignment from the result variable/constant over to the
+		 * actual final result. Note that it should be impossible to
+		 * get a full result package *if* we have a void return type
+		 * in the function
 		 */
-		if(last_instruction != NULL){
-			/**
-			 * If we have a ret or raise statement, we don't need to do any
-			 * bookkeeping. However, if we have something else, we'll
-			 * need to do 2 things:
-			 * 	1.) Emit a final assignment from the result to the function_result_var
-			 * 	2.) Emit a jump to the end block
-			 */
-			switch(last_instruction->statement_type){
-				case THREE_ADDR_CODE_RET_STMT:
-				case THREE_ADDR_CODE_RAISE_STMT:
+		if(is_result_package_empty(&handle_results) == FALSE){
+			//Final result assignment instruction
+			instruction_t* result_assignment;
+
+			//Emit our jump first - this is our anchor point for the assignment insertion
+			last_instruction = emit_jump(handle_results.final_block, error_handling_ending_block);
+
+			switch(handle_results.type){
+				case CFG_RESULT_TYPE_CONST:
+					result_assignment = emit_assignment_with_const_instruction(emit_var(function_result_var), handle_results.result_value.result_const);
 					break;
 
-				/**
-				 * Note that if the function result var is in fact NULL we will never hit this - the parser doesn't
-				 * allow anything besides ret, raise or ignore through for void returning functions
-				 */
-				default:
-					//Jump from the final block to the end block
-					emit_jump(handle_results.final_block, error_handling_ending_block);
-
-					//Now we'll assign the result to the result_var
-					instruction_t* assignment_instruction = emit_assignment_instruction(emit_var(function_result_var), handle_results.assignee);
-
-					//Add this into the final block. It will go right before the exit
-					insert_instruction_before_given(assignment_instruction, handle_results.final_block->exit_statement);
+				case CFG_RESULT_TYPE_VAR:
+					result_assignment = emit_assignment_instruction(emit_var(function_result_var), handle_results.result_value.result_var);
 					break;
 			}
 
-		//It's NULL, all we need to do is emit the jump
+			//This goes in right after the given last instruction
+			insert_instruction_before_given(result_assignment, last_instruction);
+
+		/**
+		 * Otherwise the result package is empty. This could mean a few things - we could
+		 * have a return or raise statment *or* we could have an ignore statement. We will
+		 * be able to tell by looking back at the last instruction and seeing if it is NULL
+		 * or not. If it is *not* a return or raise statement, we will have to emit a jump
+		 * from this given block to the end block
+		 */
 		} else {
-			//Jump from the final block to the end block
-			emit_jump(handle_results.final_block, error_handling_ending_block);
+			/**
+			 * If it is *not* a terminal instruction, then we need to jump from the final
+			 * block over to the error handling block
+			 */
+			if(is_function_terminating_instruction(last_instruction) == FALSE){
+				emit_jump(handle_results.final_block, error_handling_ending_block);
+			}
 		}
 
 		/**
@@ -6816,7 +7238,8 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 		add_statement(error_handling_ending_block, final_result_assingnment);
 
 		//This is the final assignee for the result package
-		result_package.assignee = final_result_assingnment->assignee;
+		result_package.type = CFG_RESULT_TYPE_VAR;
+		result_package.result_value.result_var = final_result_assingnment->assignee;
 	}
 
 	//We can already fill in the result package
@@ -6835,6 +7258,8 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 static inline cfg_result_package_t emit_parameter_expression(basic_block_t* basic_block, generic_ast_node_t* parameter_node,
 															  	parameter_results_array_t* parameter_results, dynamic_array_t* memory_addresses_to_adjust,
 															 	u_int8_t has_stack_params){
+	//Holder for the result variable;
+	three_addr_var_t* result_var;
 	//Keep track of our current block
 	basic_block_t* current_block = basic_block;
 
@@ -6844,51 +7269,56 @@ static inline cfg_result_package_t emit_parameter_expression(basic_block_t* basi
 	//Always reassign this
 	current_block = results_package.final_block;
 
-	//What is the final assignee
-	three_addr_var_t* final_assignee = results_package.assignee;
-
 	/**
-	 * If we have a memory address variable *and* we have stack params, we'll need to
-	 * save this so that we can add the adjustment in later, after the stack allocation
-	 * happens
+	 * Based on the result package type, we will unpack and store
+	 * the results themselves accordingly
 	 */
-	if((final_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
-		|| final_assignee->variable_type == VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS)
-		&& has_stack_params == TRUE){
-		//Allocate it if need be
-		if(memory_addresses_to_adjust->internal_array == NULL){
-			*memory_addresses_to_adjust = dynamic_array_alloc();
-		}
+	switch(results_package.type){
+		/**
+		 * For a consant there are no other checks, we just throw
+		 * it into the parameter result array
+		 */
+		case CFG_RESULT_TYPE_CONST:
+			add_parameter_result_to_results_array(parameter_results, results_package.result_value.result_const, PARAM_RESULT_TYPE_CONST);
+			break;
 
-		//Throw this into storage for later
-		dynamic_array_add(memory_addresses_to_adjust, final_assignee);
+		/**
+		 * For a variable result type, there will be some more work to do around
+		 * memory addresses/special cases
+		 */
+		case CFG_RESULT_TYPE_VAR:
+			//Extract the result var
+			result_var = results_package.result_value.result_var;
+
+			/**
+			 * For future reference - we store all of the memory address
+			 * and stack param memory address variable results that we 
+			 * end up with
+			 */
+			if(has_stack_params == TRUE){
+				switch(result_var->variable_type){
+					case VARIABLE_TYPE_MEMORY_ADDRESS:
+					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+						//Allocate it if need be
+						if(memory_addresses_to_adjust->internal_array == NULL){
+							*memory_addresses_to_adjust = dynamic_array_alloc();
+						}
+
+						//Throw this into storage for later
+						dynamic_array_add(memory_addresses_to_adjust, result_var);
+
+						break;
+
+					//If it's not a memory address do nothing
+					default:	
+						break;
+				}
+			}
+
+			//Regardless of the type we now add this in as a result
+			add_parameter_result_to_results_array(parameter_results, result_var, PARAM_RESULT_TYPE_VAR);
+			break;
 	}
-
-	//For grabbing out the result types - by default assume var
-	parameter_result_type_t result_type = PARAM_RESULT_TYPE_VAR;
-	three_addr_var_t* final_assignee_var = final_assignee;
-	three_addr_const_t* final_assignee_const = NULL;
-
-	/**
-	 * One scenario that we want to watch out for here: Temporary variable type
-	 * and we have a constant being assigned - optimize by just storing the constant
-	 */
-	if(final_assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& current_block->exit_statement != NULL
-		&& current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-		&& variables_equal_no_ssa(current_block->exit_statement->assignee, final_assignee, FALSE) == TRUE){
-
-		//They are equal, so we have a const result type now
-		final_assignee_const = current_block->exit_statement->op1_const;
-
-		//Flag we have a const result
-		result_type = PARAM_RESULT_TYPE_CONST;
-	}
-
-	//Add the appropriate result into the result array 
-	add_parameter_result_to_results_array(parameter_results, 
-									   		result_type == PARAM_RESULT_TYPE_VAR ? (void*)final_assignee_var : (void*)final_assignee_const,
-									   		result_type);
 
 	//Give back the results in the end
 	return results_package;
@@ -6904,8 +7334,9 @@ static inline cfg_result_package_t emit_parameter_expression(basic_block_t* basi
  */
 static inline cfg_result_package_t emit_elaborative_param_expressions(basic_block_t* basic_block, generic_ast_node_t* elaborative_param_node,
 																	  	parameter_results_array_t* elaborative_param_results, dynamic_array_t* memory_addresses_to_adjust){
+	three_addr_var_t* result_var;
 	//NOTE: we will never have an assignee here
-	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	//Keep track of the current block
 	basic_block_t* current_block = basic_block;
@@ -6924,48 +7355,54 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 		//Always reassign to be the final block that we got back
 		current_block = expression_results.final_block;
 
-		//What is the final assignee
-		three_addr_var_t* final_assignee = expression_results.assignee;
-
 		/**
-		 * If we have a memory address of stack param memory address, we'll need to adjust
-		 * the variables after the stack allocation so we will save that here
+		 * Based on the result package type, we will unpack and store
+		 * the results themselves accordingly
 		 */
-		if(final_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS
-			|| final_assignee->variable_type == VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS){
-			//Allocate if need be
-			if(memory_addresses_to_adjust->internal_array == NULL){
-				*memory_addresses_to_adjust = dynamic_array_alloc();
-			}
+		switch(expression_results.type){
+			/**
+			 * For a consant there are no other checks, we just throw
+			 * it into the parameter result array
+			 */
+			case CFG_RESULT_TYPE_CONST:
+				add_parameter_result_to_results_array(elaborative_param_results, expression_results.result_value.result_const, PARAM_RESULT_TYPE_CONST);
+				break;
 
-			dynamic_array_add(memory_addresses_to_adjust, final_assignee);
+			/**
+			 * For a variable result type, there will be some more work to do around
+			 * memory addresses/special cases
+			 */
+			case CFG_RESULT_TYPE_VAR:
+				//Extract the result var
+				result_var = expression_results.result_value.result_var;
+
+				/**
+				 * For future reference - we store all of the memory address
+				 * and stack param memory address variable results that we 
+				 * end up with
+				 */
+				switch(result_var->variable_type){
+					case VARIABLE_TYPE_MEMORY_ADDRESS:
+					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+						//Allocate it if need be
+						if(memory_addresses_to_adjust->internal_array == NULL){
+							*memory_addresses_to_adjust = dynamic_array_alloc();
+						}
+
+						//Throw this into storage for later
+						dynamic_array_add(memory_addresses_to_adjust, result_var);
+
+						break;
+
+					//If it's not a memory address do nothing
+					default:	
+						break;
+				}
+
+				//Regardless of the type we now add this in as a result
+				add_parameter_result_to_results_array(elaborative_param_results, result_var, PARAM_RESULT_TYPE_VAR);
+				break;
 		}
-
-		//For grabbing out the result types - by default assume var
-		parameter_result_type_t result_type = PARAM_RESULT_TYPE_VAR;
-		three_addr_var_t* final_assignee_var = final_assignee;
-		three_addr_const_t* final_assignee_const = NULL;
-
-		/**
-		 * One scenario that we want to watch out for here: Temporary variable type
-		 * and we have a constant being assigned - optimize by just storing the constant
-		 */
-		if(final_assignee->variable_type == VARIABLE_TYPE_TEMP
-			&& current_block->exit_statement != NULL
-			&& current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-			&& variables_equal_no_ssa(current_block->exit_statement->assignee, final_assignee, FALSE) == TRUE){
-
-			//They are equal, so we have a const result type now
-			final_assignee_const = current_block->exit_statement->op1_const;
-
-			//Flag we have a const result
-			result_type = PARAM_RESULT_TYPE_CONST;
-		}
-
-		//Add the appropriate result into the result array 
-		add_parameter_result_to_results_array(elaborative_param_results, 
-												result_type == PARAM_RESULT_TYPE_VAR ? (void*)final_assignee_var : (void*)final_assignee_const,
-												result_type);
 
 		//Advance it up here
 		child_cursor = child_cursor->next_sibling;
@@ -7361,7 +7798,7 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
  */
 static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node){
 	//Initially we'll emit this, though it may change
- 	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
+ 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	/**
 	 * Store a stack data area variable in the uppermost scope. This will only be acted upon if we see that we
@@ -7631,9 +8068,12 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			add_statement(current_block, assignment);
 		}
 
-		//This is always the assignee we gave above. Note that this is nullable,
-		//we do 
-		result_package.assignee = function_assignee;
+		/**
+		 * This is always the assignee we gave above.
+		 * Note that this is nullable, but we do always have a variable type
+		 */
+		result_package.type = CFG_RESULT_TYPE_VAR;
+		result_package.result_value.result_var = function_assignee;
 
 		//Always bump this up too just in case
 		result_package.final_block = current_block;
@@ -8160,7 +8600,7 @@ static inline u_int8_t can_blocks_be_merged(basic_block_t* a, basic_block_t* b){
  */
 static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//Initialize the return package
-	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	//Create our entry block. The entry block also only executes once
 	basic_block_t* for_stmt_entry_block = basic_block_alloc_and_estimate();
@@ -8297,7 +8737,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
  */
 static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_node){
 	//First we'll allocate the result block
-	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	//The true ending block. We assume that the exit only happens once
 	basic_block_t* do_while_stmt_exit_block = basic_block_alloc_and_estimate();
@@ -8381,7 +8821,7 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
  */
 static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node){
 	//Initialize the result package
-	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	//Create our exit block. We assume that this executes once
 	basic_block_t* while_statement_end_block = basic_block_alloc_and_estimate();
@@ -8498,7 +8938,7 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
  */
 static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	//Final result package
-	cfg_result_package_t if_results_package = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t if_results_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	/**
 	 * We maintain a current entry block for our uses. Since this is 
@@ -8689,7 +9129,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
  */
 static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_node){
 	//Declare and prepack our results
-	cfg_result_package_t results = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
 
 	//This is nesting inside of a case statement
 	push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
@@ -8735,7 +9175,7 @@ static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_nod
  */
 static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node){
 	//Declare and prepack our results
-	cfg_result_package_t results = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
 
 	//This is nesting inside of a case statement
 	push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
@@ -8791,7 +9231,7 @@ static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node){
  */
 static cfg_result_package_t visit_c_style_case_statement(generic_ast_node_t* root_node){
 	//Declare and initialize off the bat
-	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	//This is nested in a C-style case statement
 	push_nesting_level(&nesting_stack, NESTING_C_STYLE_CASE_STATEMENT);
@@ -8833,7 +9273,7 @@ static cfg_result_package_t visit_c_style_case_statement(generic_ast_node_t* roo
  */
 static cfg_result_package_t visit_c_style_default_statement(generic_ast_node_t* root_node){
 	//Declare and initialize off the bat
-	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	//This is nested in a C-style case statement
 	push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
@@ -8873,7 +9313,7 @@ static cfg_result_package_t visit_c_style_default_statement(generic_ast_node_t* 
  */
 static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* root_node){
 	//Declare and initialize off the bat
-	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	//Th starting and ending blocks for the switch statements
 	basic_block_t* root_level_block = basic_block_alloc_and_estimate();
@@ -8913,7 +9353,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	int32_t offset = root_node->lower_bound;
 
 	//A generic result package for all of our case/default statements
-	cfg_result_package_t case_default_results = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t case_default_results = INITIALIZE_BLANK_CFG_RESULT;
 
 	//We will eventually need to know what the default block is,
 	//so reserve a variable here
@@ -9061,12 +9501,16 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 		emit_jump(default_block, result_package.final_block);
 	}
 
-	//Run through the entire jump table. Any nodes that are not occupied(meaning there's no case statement with that value)
-	//will be set to point to the default block. 
+	/**
+	 * Run through the entire jump table. Any nodes that are not occupied(meaning there's no case statement with that value)
+	 * will be set to point to the default block. 
+	 */
 	for(u_int16_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
-		//If it's null, we'll make it the default. This should only happen in switches
-		//that are non-exhaustive. For exhaustive switches, the parser has already ensured that we
-		//will have a block for every case value
+		/**
+		 * If it's null, we'll make it the default. This should only happen in switches
+		 * that are non-exhaustive. For exhaustive switches, the parser has already ensured that we
+		 * will have a block for every case value
+		 */
 		if(dynamic_array_get_at(&(jump_calculation_block->jump_table->nodes), i) == NULL){
 			dynamic_array_set_at(&(jump_calculation_block->jump_table->nodes), default_block, i);
 		}
@@ -9088,8 +9532,11 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	 * are in the range
 	 */
 
+	//Unpack the results from the result package
+	three_addr_var_t* input_result = unpack_result_package(&input_results, root_level_block);
+
 	//Grab the type our for convenience
-	generic_type_t* input_result_type = input_results.assignee->type;
+	generic_type_t* input_result_type = input_result->type;
 
 	//Grab the signedness of the result
 	u_int8_t is_signed = is_type_signed(input_result_type);
@@ -9099,7 +9546,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 
 	//Let's first do our lower than comparison
 	//First step -> if we're below the minimum, we jump to default 
-	emit_binary_operation_with_constant(root_level_block, lower_than_decider, input_results.assignee, L_THAN, lower_bound);
+	emit_binary_operation_with_constant(root_level_block, lower_than_decider, input_result, L_THAN, lower_bound);
 
 	//Select a branch for the lower type
 	branch_type_t branch_lower_than = select_appropriate_branch_statement(L_THAN, BRANCH_CATEGORY_NORMAL, is_signed);
@@ -9118,7 +9565,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	three_addr_var_t* higher_than_decider = emit_temp_var(input_result_type);
 
 	//Now we handle the case where we're above the upper bound
-	emit_binary_operation_with_constant(upper_bound_check_block, higher_than_decider, input_results.assignee, G_THAN, upper_bound);
+	emit_binary_operation_with_constant(upper_bound_check_block, higher_than_decider, input_result, G_THAN, upper_bound);
 
 	//Select a branch for the higher type
 	branch_type_t branch_greater_than = select_appropriate_branch_statement(G_THAN, BRANCH_CATEGORY_NORMAL, is_signed);
@@ -9134,7 +9581,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	emit_branch_for_switch_statement(upper_bound_check_block, default_block, jump_calculation_block, branch_greater_than, higher_than_decider);
 
 	//To avoid violating SSA rules, we'll emit a temporary assignment here
-	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_results.assignee);
+	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_result);
 
 	//Add it into the block
 	add_statement(jump_calculation_block, temporary_variable_assignent);
@@ -9168,7 +9615,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
  */
 static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node){
 	//Declare the result package off the bat
-	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	//The starting block for the switch statement - we'll want this in a new
 	//block
@@ -9210,7 +9657,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	int32_t offset = root_node->lower_bound;
 
 	//Wipe this out here just in case
-	cfg_result_package_t case_default_results = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t case_default_results = INITIALIZE_BLANK_CFG_RESULT;
 
 	//Get to the next statement. This is the first actual case 
 	//statement
@@ -9305,8 +9752,11 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	 * are in the range
 	 */
 
+	//Unpack the result to get our actual variable out
+	three_addr_var_t* input_result = unpack_result_package(&input_results, root_level_block);
+
 	//Grab the type our for convenience
-	generic_type_t* input_result_type = input_results.assignee->type;
+	generic_type_t* input_result_type = input_result->type;
 
 	//Grab the signedness of the result
 	u_int8_t is_signed = is_type_signed(input_result_type);
@@ -9316,7 +9766,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 	//Let's first do our lower than comparison
 	//First step -> if we're below the minimum, we jump to default 
-	emit_binary_operation_with_constant(root_level_block, lower_than_decider, input_results.assignee, L_THAN, lower_bound);
+	emit_binary_operation_with_constant(root_level_block, lower_than_decider, input_result, L_THAN, lower_bound);
 
 	//Select a branch for the lower type
 	branch_type_t branch_lower_than = select_appropriate_branch_statement(L_THAN, BRANCH_CATEGORY_NORMAL, is_signed);
@@ -9335,7 +9785,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	three_addr_var_t* higher_than_decider = emit_temp_var(input_result_type);
 
 	//Now we handle the case where we're above the upper bound
-	emit_binary_operation_with_constant(upper_bound_check_block, higher_than_decider, input_results.assignee, G_THAN, upper_bound);
+	emit_binary_operation_with_constant(upper_bound_check_block, higher_than_decider, input_result, G_THAN, upper_bound);
 
 	//Select a branch for the higher type
 	branch_type_t branch_greater_than = select_appropriate_branch_statement(G_THAN, BRANCH_CATEGORY_NORMAL, is_signed);
@@ -9351,7 +9801,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	emit_branch_for_switch_statement(upper_bound_check_block, default_block, jump_calculation_block, branch_greater_than, higher_than_decider);
 
 	//To avoid violating SSA rules, we'll emit a temporary assignment here
-	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_results.assignee);
+	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_result);
 
 	//Add it into the block
 	add_statement(jump_calculation_block, temporary_variable_assignent);
@@ -9413,7 +9863,7 @@ static inline void handle_raise_statement(basic_block_t* basic_block, generic_as
  */
 static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node){
 	//A generic results package that we can use in any of our processing
-	cfg_result_package_t generic_results;
+	cfg_result_package_t generic_results = INITIALIZE_BLANK_CFG_RESULT;
 	//A defer statement cursor
 	generic_ast_node_t* defer_statement_cursor;
 
@@ -9450,8 +9900,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				//Package up the results package
 				generic_results.starting_block = current_block;
 				generic_results.final_block = current_block;
-				generic_results.operator = BLANK;
-				generic_results.assignee = NULL;
 
 				//We're done here - get out
 				return generic_results;
@@ -9479,8 +9927,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				//Package up the values
 				generic_results.starting_block = starting_block;
 				generic_results.final_block = current_block;
-				generic_results.operator = BLANK;
-				generic_results.assignee = NULL;
 
 				//We're completely done here
 				return generic_results;
@@ -9575,7 +10021,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					emit_jump(current_block, continuing_to);
 
 					//Package and return
-					generic_results = (cfg_result_package_t){starting_block, current_block, NULL, BLANK};
+					generic_results = (cfg_result_package_t){current_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 					/**
 					 * We're done here, so return the starting block. There is no 
@@ -9629,7 +10075,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					emit_jump(current_block, breaking_to);
 
 					//Package and return
-					generic_results = (cfg_result_package_t){starting_block, current_block, NULL, BLANK};
+					generic_results = (cfg_result_package_t){current_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 					/**
 					 * For a regular break statement, this is it, so we just get out
@@ -9894,7 +10340,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
  */
 static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_node){
 	//Everything to begin with is completely null'd out
-	cfg_result_package_t results = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
 	//A generic results package that we can use in any of our processing
 	cfg_result_package_t generic_results;
 	//A defer statement cursor
@@ -9941,8 +10387,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//Package up the results package
 				results.starting_block = starting_block;
 				results.final_block = current_block;
-				results.operator = BLANK;
-				results.assignee = NULL;
 
 				//We're done here - get out
 				return results;
@@ -9970,8 +10414,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//Package up the values
 				results.starting_block = starting_block;
 				results.final_block = current_block;
-				results.operator = BLANK;
-				results.assignee = NULL;
 
 				//We're completely done here
 				return results;
@@ -10066,7 +10508,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					emit_jump(current_block, continuing_to);
 
 					//Package and return
-					results = (cfg_result_package_t){starting_block, current_block, NULL, BLANK};
+					results = (cfg_result_package_t){current_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 					/**
 					 * We're done here, so return the starting block. There is no 
@@ -10120,10 +10562,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					emit_jump(current_block, breaking_to);
 
 					//Package and return
-					results = (cfg_result_package_t){starting_block, current_block, NULL, BLANK};
+					results = (cfg_result_package_t){current_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 					//For a regular break statement, this is it, so we just get out
-					//Give back the starting block
 					return results;
 
 				//Otherwise, we have a conditional break, which will generate a conditional jump instruction
@@ -10156,14 +10597,18 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//Grab a cursor here
 				defer_statement_cursor = ast_cursor->first_child;
 
-				//So long as this cursor is not null, we'll keep processing and adding
-				//compound statements
+				/**
+				 * So long as this cursor is not null, we'll keep processing and adding
+				 * compound statements
+				 */
 				while(defer_statement_cursor != NULL){
 					//Let the helper process this
 					cfg_result_package_t compound_statement_results = visit_compound_statement(defer_statement_cursor);
 
-					//The successor to the current block is this block
-					//If it's null then this is this block
+					/**
+					 * The successor to the current block is this block
+					 * If it's null then this is this block
+					 */
 					if(starting_block == NULL){
 						starting_block = compound_statement_results.starting_block;
 					} else {
@@ -11094,8 +11539,10 @@ static void visit_declaration_statement(generic_ast_node_t* node){
  * store base_address[offset] <- emit_expression(node)
  */
 static cfg_result_package_t emit_final_initialization(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* expression_node){
+	//Holder for the final assignee
+	three_addr_var_t* final_assignee;
 	//Initialize our final results
-	cfg_result_package_t final_results = {current_block, current_block, base_address, BLANK};
+	cfg_result_package_t final_results = {current_block, current_block, {base_address}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	//Now let's emit the expression using the node
 	cfg_result_package_t expression_results = emit_expression(current_block, expression_node);
@@ -11106,9 +11553,6 @@ static cfg_result_package_t emit_final_initialization(basic_block_t* current_blo
 	//Update this
 	current_block = expression_results.final_block;
 
-	//Grab the last instruction - we'll need this for later
-	instruction_t* last_instruction = current_block->exit_statement;
-
 	//This is now the final block
 	final_results.final_block = current_block;
 
@@ -11118,43 +11562,44 @@ static cfg_result_package_t emit_final_initialization(basic_block_t* current_blo
 	//Now we need to emit the store operation
 	instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(base_address, offset_constant, NULL, inferred_type);
 
-	//If the last instruction is *not* a constant assignment, we can go ahead like this
-	if(last_instruction == NULL
-		|| last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
-
-		//This may change below
-		three_addr_var_t* final_assignee = expression_results.assignee;
+	/**
+	 * Based on what result type we have we can process accordingly
+	 */
+	switch(expression_results.type){
+		/**
+		 * Constant type is simple - just assign over the result value
+		 */
+		case CFG_RESULT_TYPE_CONST:
+			store_instruction->op1_const = expression_results.result_value.result_const;
+			break;
 
 		/**
-		 * If we have a memory address variable, we need to emit a final assignment
-		 * to because our instruction selector is not designed to handle MEM<> variables
-		 * on the RHS of an initializer equation. This is an easy fix
+		 * For variable types we have some specialized rules around memory address variables
+		 * that we need to account for
 		 */
-		if(expression_results.assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-			//Emit a new var to use
-			final_assignee = emit_temp_var(expression_results.assignee->type);
+		case CFG_RESULT_TYPE_VAR:
+			//Extract the final assignee
+			final_assignee = expression_results.result_value.result_var;
 
-			//Assign this over
-			instruction_t* temp_assignment = emit_assignment_instruction(final_assignee, expression_results.assignee);
+			/**
+			 * If we have a memory address variable, we need to emit a final assignment
+			 * to because our instruction selector is not designed to handle MEM<> variables
+			 * on the RHS of an initializer equation. This is an easy fix
+			 */
+			if(final_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+				//Assign this over
+				instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(final_assignee->type), final_assignee);
 
-			//Add it into the block
-			add_statement(current_block, temp_assignment);
-		}
+				//Add it into the block
+				add_statement(current_block, temp_assignment);
 
-		//This is now our op2
-		store_instruction->op2 = final_assignee;
+				//This now is the final assignee
+				final_assignee = temp_assignment->assignee;
+			}
 
-	//Otherwise, we can do a small optimization here by scrapping the 
-	//constant assignment and just putting the constant in directly
-	} else {
-		//Extract it
-		three_addr_const_t* constant_assignee = last_instruction->op1_const;
-
-		//This is now useless
-		delete_statement(last_instruction);
-
-		//Set the store statement's op1_const to be this
-		store_instruction->op1_const = constant_assignee;
+			//This is now our op2
+			store_instruction->op2 = final_assignee;
+			break;
 	}
 
 	//Add it into the block
@@ -11173,7 +11618,7 @@ static cfg_result_package_t emit_final_initialization(basic_block_t* current_blo
  */
 static cfg_result_package_t emit_array_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t current_offset, generic_ast_node_t* array_initializer){
 	//Initialize the results package here to start
-	cfg_result_package_t results = {current_block, current_block, NULL, BLANK};
+	cfg_result_package_t results = {current_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	//Grab a cursor to the child
 	generic_ast_node_t* cursor = array_initializer->first_child;
@@ -11241,7 +11686,7 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* current_block,
  */
 static cfg_result_package_t emit_string_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* string_initializer ){
 	//Initialize the results package here to start
-	cfg_result_package_t results = {current_block, current_block, NULL, BLANK};
+	cfg_result_package_t results = {current_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	//The string index starts off at 0
 	u_int32_t current_index = 0;
@@ -11283,7 +11728,7 @@ static cfg_result_package_t emit_string_initializer(basic_block_t* current_block
  */
 static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* struct_initializer){
 	//Initialize the results package here to start
-	cfg_result_package_t results = {current_block, current_block, NULL, BLANK};
+	cfg_result_package_t results = {current_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	//Grab the struct type out for reference
 	generic_type_t* struct_type = struct_initializer->inferred_type;
@@ -11351,148 +11796,160 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
  * No array/string/struct initializers here
  */
 static cfg_result_package_t emit_simple_initialization(basic_block_t* current_block, three_addr_var_t* let_variable, generic_ast_node_t* expression_node){
+	//Holder for the let result var
+	three_addr_var_t* let_result_var;
 	//Allocate the return package here
-	cfg_result_package_t let_results = {current_block, current_block, let_variable, BLANK};
+	cfg_result_package_t let_results = {current_block, current_block, {let_variable}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	//Emit the right hand expression here
-	cfg_result_package_t package = emit_expression(current_block, expression_node);
+	cfg_result_package_t expression_results = emit_expression(current_block, expression_node);
 
 	//Reassign what the current block is in case it's changed
-	current_block = package.final_block;
-
-	//What will our final op1 end up as?
-	three_addr_var_t* final_op1 = package.assignee;
-
-	//Store the last instruction for later use
-	instruction_t* last_instruction = current_block->exit_statement;
-
-	//Now update the final block
-	let_results.final_block = current_block;
+	current_block = expression_results.final_block;
 
 	/**
-	 * Is a copy assignment required between the two variables? This will only
-	 * occur if we have a struct to struct or union to union assignment but if we do,
-	 * we'll need some special handling for it
+	 * Go based on what the final result type is
 	 */
-	if(is_copy_assignment_required(let_variable->type, expression_node->inferred_type) == TRUE){
-		//Emit the copy from the left hand var to the final op1. The copy size is always the let variable's size
-		instruction_t* copy_statement = emit_memory_copy_instruction(let_variable, final_op1, let_variable->type->type_size);
+	switch(expression_results.type){
+		case CFG_RESULT_TYPE_VAR:
+			//Extract the variable now
+			let_result_var = expression_results.result_value.result_var;
 
-		//Get it into the block
-		add_statement(current_block, copy_statement);
+			/**
+			 * Is a copy assignment required between the two variables? This will only
+			 * occur if we have a struct to struct or union to union assignment but if we do,
+			 * we'll need some special handling for it
+			 */
+			if(is_copy_assignment_required(let_variable->type, expression_node->inferred_type) == TRUE){
+				//Emit the copy from the left hand var to the final op1. The copy size is always the let variable's size
+				instruction_t* copy_statement = emit_memory_copy_instruction(let_variable, let_result_var, let_variable->type->type_size);
 
-	/**
-	 * Is the left hand variable a regular variable or is it a stack address variable? If it's a
-	 * variable that is on the stack, then a regular assignment just won't do. We'll need to
-	 * emit a store operation
-	 */
-	} else if(let_variable->linked_var == NULL || let_variable->linked_var->stack_variable == FALSE){
-		instruction_t* assignment_statement;
-		instruction_t* binary_operation;
-		instruction_t* const_assignment;
-
-		/**
-		 * If we have an exit statement *and* we are dealing with what the final_op1 is, we may
-		 * be able to shrink our footprint here
-		 */
-		if(current_block->exit_statement != NULL
-			&& current_block->exit_statement->assignee != NULL
-			&& current_block->exit_statement->assignee->variable_type == VARIABLE_TYPE_TEMP
-			&& variables_equal_no_ssa(final_op1, current_block->exit_statement->assignee, FALSE) == TRUE){
-
-			switch(current_block->exit_statement->statement_type){
+				//Get it into the block
+				add_statement(current_block, copy_statement);
+			/**
+			 * If we have a variable that requires a store assignment, we will
+			 * emit that now
+			 */
+			} else if(let_variable->linked_var != NULL
+				&& (let_variable->linked_var->stack_variable == TRUE
+					|| is_variable_data_segment_variable(let_variable->linked_var) == TRUE)){
 				/**
-				 * For binary operations we can hijack the statement itself
+				 * Store the "true" stored type. This will only change if our type is a reference, because
+				 * we need to account for the implicit dereference that's happening
 				 */
-				case THREE_ADDR_CODE_BIN_OP_STMT:
-				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-					binary_operation = current_block->exit_statement;
+				generic_type_t* true_stored_type = let_variable->type;
 
-					//Just replace it with our variable
-					binary_operation->assignee = let_variable;
+				//NOTE: We use the type of our let variable here for the address assignment
+				three_addr_var_t* base_address = emit_memory_address_var(let_variable->linked_var);
+				
+				//Emit the store code
+				instruction_t* store_statement = emit_store_ir_code(base_address, let_result_var, true_stored_type);
+						
+				//Now add thi statement in here
+				add_statement(current_block, store_statement);
 
-					break;
-
-				/**
-				 * Same with a constant assignment statement
-				 */
-				case THREE_ADDR_CODE_ASSN_CONST_STMT:
-					const_assignment = current_block->exit_statement;
-
-					//Just replace it with our variable
-					const_assignment->assignee = let_variable;
-
-					break;
+			} else {
+				//Holders
+				instruction_t* binary_operation;
+				instruction_t* assignment_statement;
 
 				/**
-				 * Something else here - don't know what it is but we play it safe
-				 * and assign things over
+				 * If we have an exit statement *and* we are dealing with what the final_op1 is, we may
+				 * be able to shrink our footprint here
 				 */
-				default:
+				if(current_block->exit_statement != NULL
+					&& current_block->exit_statement->assignee != NULL
+					&& current_block->exit_statement->assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& current_block->exit_statement->assignee == let_result_var){
+
+					switch(current_block->exit_statement->statement_type){
+						/**
+						 * For binary operations we can hijack the statement itself
+						 */
+						case THREE_ADDR_CODE_BIN_OP_STMT:
+						case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+							binary_operation = current_block->exit_statement;
+
+							//Just replace it with our variable
+							binary_operation->assignee = let_variable;
+
+							break;
+
+						/**
+						 * Something else here - don't know what it is but we play it safe
+						 * and assign things over
+						 */
+						default:
+							//The actual statement is the assignment of right to left
+							assignment_statement = emit_assignment_instruction(let_variable, let_result_var);
+
+							//Finally we'll add this into the overall block
+							add_statement(current_block, assignment_statement);
+					}
+
+				/**
+				 * No fancy optimizations here - just emit an assignment over and we'll be
+				 * fine here
+				 */
+				} else {
 					//The actual statement is the assignment of right to left
-					assignment_statement = emit_assignment_instruction(let_variable, final_op1);
+					instruction_t* assignment_statement = emit_assignment_instruction(let_variable, let_result_var);
 
 					//Finally we'll add this into the overall block
 					add_statement(current_block, assignment_statement);
+				}
 			}
 
-		/**
-		 * No fancy optimizations here - just emit an assignment over and we'll be
-		 * fine here
-		 */
-		} else {
-			//The actual statement is the assignment of right to left
-			instruction_t* assignment_statement = emit_assignment_instruction(let_variable, final_op1);
-
-			//Finally we'll add this into the overall block
-			add_statement(current_block, assignment_statement);
-		}
-			
-	/**
-	 * Otherwise, we'll need to emit a store operation here
-	 */
-	} else {
-		/**
-		 * Store the "true" stored type. This will only change if our type is a reference, because
-		 * we need to account for the implicit dereference that's happening
-		 */
-		generic_type_t* true_stored_type = let_variable->type;
-
-		//NOTE: We use the type of our let variable here for the address assignment
-		three_addr_var_t* base_address = emit_memory_address_var(let_variable->linked_var);
-		
-		//Emit the store code
-		instruction_t* store_statement = emit_store_ir_code(base_address, NULL, true_stored_type);
+			break;
 
 		/**
-		 * If we have a constant assignment, then we can do a small optimization 
-		 * here by scrapping the  constant assignment and just putting the
-		 * constant in directly
+		 * Constant results can either require a store instruction or they can
+		 * require a simple initialization. We account for both of these cases
+		 * here
 		 */
-		if(last_instruction != NULL
-			&& last_instruction->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-			&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
-			&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
+		case CFG_RESULT_TYPE_CONST:
+			/**
+			 * If we have a variable that requires a store assignment, we will
+			 * emit that now
+			 */
+			if(let_variable->linked_var != NULL
+				&& (let_variable->linked_var->stack_variable == TRUE
+					|| is_variable_data_segment_variable(let_variable->linked_var) == TRUE)){
+				/**
+				 * Store the "true" stored type. This will only change if our type is a reference, because
+				 * we need to account for the implicit dereference that's happening
+				 */
+				generic_type_t* true_stored_type = let_variable->type;
 
-			//Extract it
-			three_addr_const_t* constant_assignee = last_instruction->op1_const;
-
-			//This is now useless
-			delete_statement(last_instruction);
-
-			//Set the store statement's op1_const to be this
-			store_statement->op1_const = constant_assignee;
-
-		/**
-		 * Otherwise no fancy optimizations are possible, we'll just store this as the op1
-		 */
-		} else {
-			store_statement->op1 = final_op1;
-		}
+				//NOTE: We use the type of our let variable here for the address assignment
+				three_addr_var_t* base_address = emit_memory_address_var(let_variable->linked_var);
 				
-		//Now add thi statement in here
-		add_statement(current_block, store_statement);
+				//Emit the store code
+				instruction_t* store_statement = emit_store_ir_code(base_address, NULL, true_stored_type);
+
+				//Set the store statement's op1_const to be this
+				store_statement->op1_const = expression_results.result_value.result_const;
+
+				//Now add thi statement in here
+				add_statement(current_block, store_statement);
+
+			/**
+			 * Otherwise we're just doing a regular assignment so we'll
+			 * emit that now
+			 */
+			} else {
+				//Get the assignment out
+				instruction_t* assignment = emit_assignment_with_const_instruction(let_variable, expression_results.result_value.result_const);
+
+				//Add it into the block
+				add_statement(current_block, assignment);
+			}
+
+			break;
 	}
+
+	//Now update the final block
+	let_results.final_block = current_block;
 
 	//And give it back
 	return let_results;
@@ -11539,7 +11996,7 @@ static inline cfg_result_package_t emit_complex_initialization(basic_block_t* cu
  */
 static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, generic_ast_node_t* node){
 	//Create the return package here
-	cfg_result_package_t let_results = {starting_block, starting_block, NULL, BLANK};
+	cfg_result_package_t let_results = {starting_block, starting_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	//The current block is the start block
 	basic_block_t* current_block = starting_block;
@@ -11567,7 +12024,8 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 			assignee = emit_memory_address_var(node->variable);
 
 			//The left hand var is our assigned var
-			let_results.assignee = assignee;
+			let_results.type = CFG_RESULT_TYPE_VAR;
+			let_results.result_value.result_var = assignee;
 
 			//We know that this will be the lead block
 			let_results.starting_block = current_block;
