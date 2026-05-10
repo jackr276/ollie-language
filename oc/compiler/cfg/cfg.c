@@ -235,7 +235,7 @@ static inline u_int8_t is_function_terminating_instruction(instruction_t* instru
 		return FALSE;
 	}
 
-	switch(instruction->instruction_type){
+	switch(instruction->statement_type){
 		case THREE_ADDR_CODE_RET_STMT:
 		case THREE_ADDR_CODE_RAISE_STMT:
 			return TRUE;
@@ -7048,7 +7048,7 @@ static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, 
  */
 static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block, generic_ast_node_t* handle_node, three_addr_var_t* function_assignee, three_addr_var_t* error_assignee){
 	//Allocate the results
-	cfg_result_package_t result_package;
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	/**
 	 * We are going to use a pseudo temp var for our final result here. We will do this because we'll
@@ -7165,7 +7165,6 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 			 * block over to the error handling block
 			 */
 			if(is_function_terminating_instruction(last_instruction) == FALSE){
-			printf("HERE\n\n\n");
 				emit_jump(handle_results.final_block, error_handling_ending_block);
 			}
 		}
