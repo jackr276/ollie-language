@@ -11773,6 +11773,11 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 		case CFG_RESULT_TYPE_VAR:
 			break;
 
+		/**
+		 * Constant results can either require a store instruction or they can
+		 * require a simple initialization. We account for both of these cases
+		 * here
+		 */
 		case CFG_RESULT_TYPE_CONST:
 			/**
 			 * If we have a variable that requires a store assignment, we will
@@ -11798,8 +11803,18 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 
 				//Now add thi statement in here
 				add_statement(current_block, store_statement);
-			}
 
+			/**
+			 * Otherwise we're just doing a regular assignment so we'll
+			 * emit that now
+			 */
+			} else {
+				//Get the assignment out
+				instruction_t* assignment = emit_assignment_with_const_instruction(let_variable, let_results.result_value.result_const);
+
+				//Add it into the block
+				add_statement(current_block, assignment);
+			}
 
 			break;
 	}
