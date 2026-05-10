@@ -4208,6 +4208,7 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 			return constant_result_package;
 
 		case INT_CONST:
+			printf("HERE\n\n\n");
 			emitted_constant = calloc(1, sizeof(three_addr_const_t));
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = INT_CONST;
@@ -11754,21 +11755,18 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 	cfg_result_package_t let_results = {current_block, current_block, {let_variable}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	//Emit the right hand expression here
-	cfg_result_package_t package = emit_expression(current_block, expression_node);
+	cfg_result_package_t expression_results = emit_expression(current_block, expression_node);
 
 	//Reassign what the current block is in case it's changed
-	current_block = package.final_block;
-
-	//Now update the final block
-	let_results.final_block = current_block;
+	current_block = expression_results.final_block;
 
 	/**
 	 * Go based on what the final result type is
 	 */
-	switch(let_results.type){
+	switch(expression_results.type){
 		case CFG_RESULT_TYPE_VAR:
 			//Extract the variable now
-			let_result_var = let_results.result_value.result_var;
+			let_result_var = expression_results.result_value.result_var;
 
 			/**
 			 * Is a copy assignment required between the two variables? This will only
@@ -11883,7 +11881,7 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 				instruction_t* store_statement = emit_store_ir_code(base_address, NULL, true_stored_type);
 
 				//Set the store statement's op1_const to be this
-				store_statement->op1_const = let_results.result_value.result_const;
+				store_statement->op1_const = expression_results.result_value.result_const;
 
 				//Now add thi statement in here
 				add_statement(current_block, store_statement);
@@ -11894,7 +11892,7 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 			 */
 			} else {
 				//Get the assignment out
-				instruction_t* assignment = emit_assignment_with_const_instruction(let_variable, let_results.result_value.result_const);
+				instruction_t* assignment = emit_assignment_with_const_instruction(let_variable, expression_results.result_value.result_const);
 
 				//Add it into the block
 				add_statement(current_block, assignment);
@@ -11902,6 +11900,9 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 
 			break;
 	}
+
+	//Now update the final block
+	let_results.final_block = current_block;
 
 	//And give it back
 	return let_results;
