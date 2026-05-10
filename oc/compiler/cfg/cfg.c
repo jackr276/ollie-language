@@ -6734,15 +6734,15 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 				visit_static_declare_statement(expr_node);
 			}
 
-			return (cfg_result_package_t)INITIALIZE_BLANK_CFG_RESULT;
-
+			return (cfg_result_package_t){basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+ 
 		case AST_NODE_TYPE_LET_STMT:
 			//Split based on the kind of variable that we have
 			if(expr_node->variable->membership != STATIC_VARIABLE){
 				return visit_let_statement(basic_block, expr_node);
 			} else {
 				visit_static_let_statement(expr_node);
-				return (cfg_result_package_t)INITIALIZE_BLANK_CFG_RESULT;
+				return (cfg_result_package_t){basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 			}
 		
 		case AST_NODE_TYPE_PARAMCOUNT_STMT:
@@ -11785,7 +11785,7 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 			 * If we have a variable that requires a store assignment, we will
 			 * emit that now
 			 */
-			} else  if(let_variable->linked_var != NULL
+			} else if(let_variable->linked_var != NULL
 				&& (let_variable->linked_var->stack_variable == TRUE
 					|| is_variable_data_segment_variable(let_variable->linked_var) == TRUE)){
 				/**
