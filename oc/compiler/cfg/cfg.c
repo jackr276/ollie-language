@@ -6439,6 +6439,8 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
  * with it
  */
 static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_block, generic_ast_node_t* parent_node){
+	//For unpacking
+	three_addr_var_t* result_var;
 	//Final return package here - this will be updated as we go
 	cfg_result_package_t result_package = {basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
@@ -6484,6 +6486,9 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		 * for like copy assignees, store operations, and optimizations for binary expressions
 		 */
 		case CFG_RESULT_TYPE_VAR:
+			//Extract the result variable
+			result_var = right_hand_package.result_value.result_var;
+
 			/**
 			 * Is a copy assignment required between the destination and source types? This
 			 * is going to have to be our first case because it may be incorrectly
@@ -6491,7 +6496,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			 */
 			if(is_copy_assignment_required(left_child->inferred_type, right_child->inferred_type) == TRUE){
 				//Emit the copy from the left hand var to the final op1
-				instruction_t* copy_statement = emit_memory_copy_instruction(left_hand_var, final_op1, parent_node->optional_storage.bytes_to_copy);
+				instruction_t* copy_statement = emit_memory_copy_instruction(left_hand_var, result_var, parent_node->optional_storage.bytes_to_copy);
 
 				//Get it into the block
 				add_statement(current_block, copy_statement);		
@@ -6517,63 +6522,13 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				switch(store_statement->statement_type){
 					//Store statements have the storee in op1
 					case THREE_ADDR_CODE_STORE_STATEMENT:
-						/**
-						 * We can perform a small optimization by potentially scrapping the constant
-						 * assignment and just putting the constant in directly
-						 */
-						if(last_instruction != NULL
-							&& last_instruction->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-							&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
-							&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
-
-							//Extract it
-							three_addr_const_t* constant_assignee = last_instruction->op1_const;
-
-							//This is now useless
-							delete_statement(last_instruction);
-
-							//Set the store statement's op1_const to be this
-							current_block->exit_statement->op1_const = constant_assignee;
-
-						/**
-						 * Otherwise there's no clever optimziation to do here, we just need
-						 * to emit this as is
-						 */
-						} else {
-							current_block->exit_statement->op1 = final_op1;
-						}
-
+						store_statement->op1 = result_var;
 						break;
 
 					//When we have offsets, the storee goes into op2
 					case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 					case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-						/**
-						 * We can perform a small optimization by potentially scrapping the constant
-						 * assignment and just putting the constant in directly
-						 */
-						if(last_instruction != NULL
-							&& last_instruction->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-							&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
-							&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
-
-							//Extract it
-							three_addr_const_t* constant_assignee = last_instruction->op1_const;
-
-							//This is now useless
-							delete_statement(last_instruction);
-
-							//Set the store statement's op1_const to be this
-							current_block->exit_statement->op1_const = constant_assignee;
-
-						/**
-						 * Otherwise there's no clever optimziation to do here, we just need
-						 * to emit this as is
-						 */
-						} else {
-							current_block->exit_statement->op2 = final_op1;
-						}
-
+						store_statement->op2 = result_var;
 						break;
 
 					//This is unreachable, just so the compiler is happy
@@ -6586,7 +6541,8 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			 * work. We'll need to do a store here
 			 */
 			} else if(left_hand_var->linked_var != NULL
-						&& (left_hand_var->linked_var->stack_variable == TRUE || is_variable_data_segment_variable(left_hand_var->linked_var) == TRUE)){
+						&& (left_hand_var->linked_var->stack_variable == TRUE
+						|| is_variable_data_segment_variable(left_hand_var->linked_var) == TRUE)){
 
 				//Emit the memory address var for this variable
 				three_addr_var_t* memory_address = emit_memory_address_var(left_hand_var->linked_var);
