@@ -7291,8 +7291,6 @@ static inline cfg_result_package_t emit_parameter_expression(basic_block_t* basi
  * inside of the elaborative param node and emitting them separately. Note that
  * we are not going to do any kind of stack management here, that all is going
  * to come afterwards when we do the final result assignment
- *
- * TODO THE LOOKBACK NEEDS TO BE FIXED
  */
 static inline cfg_result_package_t emit_elaborative_param_expressions(basic_block_t* basic_block, generic_ast_node_t* elaborative_param_node,
 																	  	parameter_results_array_t* elaborative_param_results, dynamic_array_t* memory_addresses_to_adjust){
@@ -8030,9 +8028,12 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			add_statement(current_block, assignment);
 		}
 
-		//This is always the assignee we gave above. Note that this is nullable,
-		//we do 
-		result_package.assignee = function_assignee;
+		/**
+		 * This is always the assignee we gave above.
+		 * Note that this is nullable, but we do always have a variable type
+		 */
+		result_package.type = CFG_RESULT_TYPE_VAR;
+		result_package.result_value.result_var = function_assignee;
 
 		//Always bump this up too just in case
 		result_package.final_block = current_block;
