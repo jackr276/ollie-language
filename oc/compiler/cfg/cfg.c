@@ -6548,29 +6548,8 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				three_addr_var_t* memory_address = emit_memory_address_var(left_hand_var->linked_var);
 
 				//Now for the final store code
-				instruction_t* final_assignment = emit_store_ir_code(memory_address, NULL, left_hand_var->type);
+				instruction_t* final_assignment = emit_store_ir_code(memory_address, result_var, left_hand_var->type);
 
-				/**
-				 * If the last instruction was a constant assignment, we can just grab the constant
-				 * itself instead of dealing with the extra copy assignment
-				 */
-				if(last_instruction != NULL
-					&& last_instruction->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-					&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
-					//Extract it
-					three_addr_const_t* constant_assignee = last_instruction->op1_const;
-
-					//This is now useless
-					delete_statement(last_instruction);
-
-					//Set the store statement's op1_const to be this
-					final_assignment->op1_const = constant_assignee;
-
-				} else {
-					final_assignment->op1 = final_op1;
-				}
-				
 				//Now add thi statement in here
 				add_statement(current_block, final_assignment);
 			
@@ -6584,7 +6563,6 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				 * use that binary operation for our own purposes here with the left hand var
 				 */
 				instruction_t* binary_expression;
-				instruction_t* constant_assignment;
 				instruction_t* final_assignment;
 
 				/**
@@ -6595,7 +6573,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				if(last_instruction != NULL
 					&& last_instruction->assignee != NULL
 					&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
+					&& variables_equal_no_ssa(last_instruction->assignee, result_var, FALSE) == TRUE){
 
 					switch(last_instruction->statement_type){
 						case THREE_ADDR_CODE_BIN_OP_STMT:
@@ -6607,24 +6585,16 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 							
 							break;
 
-						case THREE_ADDR_CODE_ASSN_CONST_STMT:
-							constant_assignment = last_instruction;
-
-							//Make this one's assignee the left hand var
-							constant_assignment->assignee = left_hand_var;
-
-							break;
-							
 						/**
 						 * If we have this then there's no clever optimization that we can do, we'll
 						 * just emti a copy assignment
 						 */
 						default:
 							//Finally we'll struct the whole thing
-							final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
+							final_assignment = emit_assignment_instruction(left_hand_var, result_var);
 
 							//Copy this over if there is one
-							left_hand_var->associated_memory_region.stack_region = final_op1->associated_memory_region.stack_region;
+							left_hand_var->associated_memory_region.stack_region = result_var->associated_memory_region.stack_region;
 							
 							//Now add thi statement in here
 							add_statement(current_block, final_assignment);
@@ -6638,10 +6608,10 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				 */
 				} else {
 					//Finally we'll struct the whole thing
-					final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
+					final_assignment = emit_assignment_instruction(left_hand_var, result_var);
 
 					//Copy this over if there is one
-					left_hand_var->associated_memory_region.stack_region = final_op1->associated_memory_region.stack_region;
+					left_hand_var->associated_memory_region.stack_region = result_var->associated_memory_region.stack_region;
 					
 					//Now add thi statement in here
 					add_statement(current_block, final_assignment);
