@@ -4208,7 +4208,6 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 			return constant_result_package;
 
 		case INT_CONST:
-			printf("HERE\n\n\n");
 			emitted_constant = calloc(1, sizeof(three_addr_const_t));
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = INT_CONST;
@@ -4816,7 +4815,7 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 				multiply_constants(type_size_const, constant_value);
 
 				//Emit the calculation
-				instruction_t* address_calculation = emit_binary_operation_with_const_instruction(emit_temp_var(u64), *current_offset, PLUS, constant_value);
+				instruction_t* address_calculation = emit_binary_operation_with_const_instruction(emit_temp_var(u64), *current_offset, PLUS, type_size_const);
 
 				//Get it into the block
 				add_statement(current_block, address_calculation);
