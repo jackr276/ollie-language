@@ -11505,9 +11505,6 @@ static cfg_result_package_t emit_final_initialization(basic_block_t* current_blo
 	//Update this
 	current_block = expression_results.final_block;
 
-	//Grab the last instruction - we'll need this for later
-	instruction_t* last_instruction = current_block->exit_statement;
-
 	//This is now the final block
 	final_results.final_block = current_block;
 
@@ -11762,9 +11759,6 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 	//Reassign what the current block is in case it's changed
 	current_block = package.final_block;
 
-	//Store the last instruction for later use
-	instruction_t* last_instruction = current_block->exit_statement;
-
 	//Now update the final block
 	let_results.final_block = current_block;
 
@@ -11792,8 +11786,8 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 			 * emit that now
 			 */
 			} else  if(let_variable->linked_var != NULL
-				&& (let_variable->linked_var->stack_variable == TRUE)
-					|| is_variable_data_segment_variable(let_variable->linked_var) == TRUE){
+				&& (let_variable->linked_var->stack_variable == TRUE
+					|| is_variable_data_segment_variable(let_variable->linked_var) == TRUE)){
 				/**
 				 * Store the "true" stored type. This will only change if our type is a reference, because
 				 * we need to account for the implicit dereference that's happening
@@ -11809,11 +11803,11 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 				//Now add thi statement in here
 				add_statement(current_block, store_statement);
 
-				// TODO MORE
-				//
-				//
-				//
 			} else {
+				//Holders
+				instruction_t* binary_operation;
+				instruction_t* assignment_statement;
+
 				/**
 				 * If we have an exit statement *and* we are dealing with what the final_op1 is, we may
 				 * be able to shrink our footprint here
@@ -11821,7 +11815,7 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 				if(current_block->exit_statement != NULL
 					&& current_block->exit_statement->assignee != NULL
 					&& current_block->exit_statement->assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& variables_equal_no_ssa(final_op1, current_block->exit_statement->assignee, FALSE) == TRUE){
+					&& current_block->exit_statement->assignee == let_result_var){
 
 					switch(current_block->exit_statement->statement_type){
 						/**
@@ -11837,23 +11831,12 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 							break;
 
 						/**
-						 * Same with a constant assignment statement
-						 */
-						case THREE_ADDR_CODE_ASSN_CONST_STMT:
-							const_assignment = current_block->exit_statement;
-
-							//Just replace it with our variable
-							const_assignment->assignee = let_variable;
-
-							break;
-
-						/**
 						 * Something else here - don't know what it is but we play it safe
 						 * and assign things over
 						 */
 						default:
 							//The actual statement is the assignment of right to left
-							assignment_statement = emit_assignment_instruction(let_variable, final_op1);
+							assignment_statement = emit_assignment_instruction(let_variable, let_result_var);
 
 							//Finally we'll add this into the overall block
 							add_statement(current_block, assignment_statement);
@@ -11865,12 +11848,11 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 				 */
 				} else {
 					//The actual statement is the assignment of right to left
-					instruction_t* assignment_statement = emit_assignment_instruction(let_variable, final_op1);
+					instruction_t* assignment_statement = emit_assignment_instruction(let_variable, let_result_var);
 
 					//Finally we'll add this into the overall block
 					add_statement(current_block, assignment_statement);
 				}
-				//TODO FINAL ELSE IF HERE
 			}
 
 			break;
@@ -11886,8 +11868,8 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 			 * emit that now
 			 */
 			if(let_variable->linked_var != NULL
-				&& (let_variable->linked_var->stack_variable == TRUE)
-					|| is_variable_data_segment_variable(let_variable->linked_var) == TRUE){
+				&& (let_variable->linked_var->stack_variable == TRUE
+					|| is_variable_data_segment_variable(let_variable->linked_var) == TRUE)){
 				/**
 				 * Store the "true" stored type. This will only change if our type is a reference, because
 				 * we need to account for the implicit dereference that's happening
@@ -11919,132 +11901,6 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 			}
 
 			break;
-	}
-
-
-	/**
-	 * Is a copy assignment required between the two variables? This will only
-	 * occur if we have a struct to struct or union to union assignment but if we do,
-	 * we'll need some special handling for it
-	 */
-	if(is_copy_assignment_required(let_variable->type, expression_node->inferred_type) == TRUE){
-		//Emit the copy from the left hand var to the final op1. The copy size is always the let variable's size
-		instruction_t* copy_statement = emit_memory_copy_instruction(let_variable, final_op1, let_variable->type->type_size);
-
-		//Get it into the block
-		add_statement(current_block, copy_statement);
-
-	/**
-	 * Is the left hand variable a regular variable or is it a stack address variable? If it's a
-	 * variable that is on the stack, then a regular assignment just won't do. We'll need to
-	 * emit a store operation
-	 */
-	} else if(let_variable->linked_var == NULL || let_variable->linked_var->stack_variable == FALSE){
-		instruction_t* assignment_statement;
-		instruction_t* binary_operation;
-		instruction_t* const_assignment;
-
-		/**
-		 * If we have an exit statement *and* we are dealing with what the final_op1 is, we may
-		 * be able to shrink our footprint here
-		 */
-		if(current_block->exit_statement != NULL
-			&& current_block->exit_statement->assignee != NULL
-			&& current_block->exit_statement->assignee->variable_type == VARIABLE_TYPE_TEMP
-			&& variables_equal_no_ssa(final_op1, current_block->exit_statement->assignee, FALSE) == TRUE){
-
-			switch(current_block->exit_statement->statement_type){
-				/**
-				 * For binary operations we can hijack the statement itself
-				 */
-				case THREE_ADDR_CODE_BIN_OP_STMT:
-				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-					binary_operation = current_block->exit_statement;
-
-					//Just replace it with our variable
-					binary_operation->assignee = let_variable;
-
-					break;
-
-				/**
-				 * Same with a constant assignment statement
-				 */
-				case THREE_ADDR_CODE_ASSN_CONST_STMT:
-					const_assignment = current_block->exit_statement;
-
-					//Just replace it with our variable
-					const_assignment->assignee = let_variable;
-
-					break;
-
-				/**
-				 * Something else here - don't know what it is but we play it safe
-				 * and assign things over
-				 */
-				default:
-					//The actual statement is the assignment of right to left
-					assignment_statement = emit_assignment_instruction(let_variable, final_op1);
-
-					//Finally we'll add this into the overall block
-					add_statement(current_block, assignment_statement);
-			}
-
-		/**
-		 * No fancy optimizations here - just emit an assignment over and we'll be
-		 * fine here
-		 */
-		} else {
-			//The actual statement is the assignment of right to left
-			instruction_t* assignment_statement = emit_assignment_instruction(let_variable, final_op1);
-
-			//Finally we'll add this into the overall block
-			add_statement(current_block, assignment_statement);
-		}
-			
-	/**
-	 * Otherwise, we'll need to emit a store operation here
-	 */
-	} else {
-		/**
-		 * Store the "true" stored type. This will only change if our type is a reference, because
-		 * we need to account for the implicit dereference that's happening
-		 */
-		generic_type_t* true_stored_type = let_variable->type;
-
-		//NOTE: We use the type of our let variable here for the address assignment
-		three_addr_var_t* base_address = emit_memory_address_var(let_variable->linked_var);
-		
-		//Emit the store code
-		instruction_t* store_statement = emit_store_ir_code(base_address, NULL, true_stored_type);
-
-		/**
-		 * If we have a constant assignment, then we can do a small optimization 
-		 * here by scrapping the  constant assignment and just putting the
-		 * constant in directly
-		 */
-		if(last_instruction != NULL
-			&& last_instruction->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-			&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
-			&& variables_equal_no_ssa(last_instruction->assignee, final_op1, FALSE) == TRUE){
-
-			//Extract it
-			three_addr_const_t* constant_assignee = last_instruction->op1_const;
-
-			//This is now useless
-			delete_statement(last_instruction);
-
-			//Set the store statement's op1_const to be this
-			store_statement->op1_const = constant_assignee;
-
-		/**
-		 * Otherwise no fancy optimizations are possible, we'll just store this as the op1
-		 */
-		} else {
-			store_statement->op1 = final_op1;
-		}
-				
-		//Now add thi statement in here
-		add_statement(current_block, store_statement);
 	}
 
 	//And give it back
