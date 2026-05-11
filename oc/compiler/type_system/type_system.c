@@ -1842,6 +1842,16 @@ generic_type_t* create_error_type(char* type_name, u_int32_t line_number){
  * Dynamically allocate and create an elaborative stack param type
  */
 generic_type_t* create_elaborative_type(generic_type_t* elaborates, u_int32_t line_number){
+	/**
+	 * If we are trying to elaborate an array type, we actually need to first convert
+	 * it to the equivalent pointer type. This will avoid any/all confusion with type
+	 * sizes
+	 */
+	if(elaborates->type_class == TYPE_CLASS_ARRAY){
+		//Convert over to a pointer
+		elaborates = convert_array_type_to_equivalent_pointer(elaborates);
+	}
+
 	//Allocate it first
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 

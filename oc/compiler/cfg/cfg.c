@@ -7754,12 +7754,10 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 					/**
 					 * Array types are always passed along by pointer. We will be using the generic pointer
 					 * type to do this(void*)
-					 *
-					 * TODO WE SHOULD UPDATE THIS TO BE A POINTER TYPE THAT'S AN ACTUAL REPRESENTATION
 					 */
 					case TYPE_CLASS_ARRAY:
 						//Create this one's stack region
-						variable_result_region = create_stack_region_for_type(stack_passed_parameters, immut_void_ptr);
+						variable_result_region = create_stack_region_for_type(stack_passed_parameters, convert_array_type_to_equivalent_pointer(result_var->type));
 
 						//Emit the storage offset for this value
 						var_storage_offset = emit_direct_integer_or_char_constant(variable_result_region->function_local_base_address, u64);
