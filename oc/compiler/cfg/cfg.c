@@ -5297,8 +5297,6 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 				//Emit a special instruction for IR clarity
 				instruction_t* elaborative_param_offset = emit_elaborative_param_starting_offset_calculation(new_current_offset, emit_var(base_address_variable));
 
-				//TODO DO WE NEED AUTOMATIC DEREF???
-
 				//Put it into the block
 				add_statement(current, elaborative_param_offset);
 
@@ -5343,8 +5341,6 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 	//The type of the memory region we're accessing is all we need here. This is always
 	//the left child's type
 	generic_type_t* memory_region_type = left_child->inferred_type;
-
-	printf("MEMORY REGION TYPE IS %s\n", memory_region_type->type_name.string);
 
 	//We need to first recursively emit the left child's postfix expression
 	cfg_result_package_t left_child_results = emit_postfix_expression_rec(basic_block, left_child, base_address, current_offset, came_from_non_contiguous_region);

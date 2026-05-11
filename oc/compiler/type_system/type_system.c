@@ -1867,11 +1867,19 @@ generic_type_t* create_elaborative_type(generic_type_t* elaborates, u_int32_t li
 	 * all non-pointer types, it's considered "contiguous". This means that
 	 * the memory is laid out flat, all next to eachother. If an array holds 
 	 * pointers, then this is a non-contiguous memory region
+	 *
+	 * Since arrays are always passed by pointer, they are also lumped in with
+	 * pointers in being non-contiguous
 	 */
-	if(elaborates->type_class != TYPE_CLASS_POINTER){
-		type->memory_layout_type = MEMORY_LAYOUT_TYPE_CONTIGUOUS;
-	} else {
-		type->memory_layout_type = MEMORY_LAYOUT_TYPE_NON_CONTIGUOUS;
+	switch(elaborates->type_class){
+		case TYPE_CLASS_POINTER:
+		case TYPE_CLASS_ARRAY:
+			type->memory_layout_type = MEMORY_LAYOUT_TYPE_NON_CONTIGUOUS;
+			break;
+
+		default:
+			type->memory_layout_type = MEMORY_LAYOUT_TYPE_CONTIGUOUS;
+			break;
 	}
 
 	//Give it back
