@@ -2119,6 +2119,22 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 
 
 /**
+ * Take in an array type and convert it to an equivalent pointer. The mutability will
+ * remain unchanged. This is meant to represent the array's decay into a pointer
+ */
+generic_type_t* convert_array_type_to_equivalent_pointer(generic_type_t* array_type){
+	//Extract the array's member type
+	generic_type_t* member_type = array_type->internal_types.member_type;
+
+	//Convert this into an array type
+	generic_type_t* resultant_array_type = create_pointer_type(member_type, array_type->line_number, array_type->mutability);
+
+	//And give it back - we will not be storing in the symtab
+	return resultant_array_type;
+}
+
+
+/**
  * Dynamically allocate and create an enumerated type
  */
 generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t line_number, mutability_type_t mutability){
