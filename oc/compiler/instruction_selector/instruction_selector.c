@@ -1346,9 +1346,78 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				break;
 		}
 
+		/**
+		 * There are two things that we need to account for here: regular memory address vars that
+		 * are stack local and variables that are stack passed parameters. The two take different
+		 * approaches which is why they are separated over here
+		 */
+		switch(instruction->op2->variable_type){
+			case VARIABLE_TYPE_MEMORY_ADDRESS:
+				//The additional offset may come from stack passed parameters, and we need to account for it
+				additional_offset = instruction->op2->memory_address_base_adjustment;
 
+				/**
+				 * Extract the stack offset for our use. This will determine how 
+				 * we process things down below
+				 */
+				stack_offset = var->stack_region->function_local_base_address + additional_offset;
+
+				//Make it a lea
+				if(stack_offset != 0){
+					//Emit the stack offset constant
+					three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
+
+					//Now the lea for our calculation
+					instruction_t* lea_statement = emit_lea_offset_only(emit_temp_var(u64), stack_pointer_variable, offset_constant);
+
+					//This lea goes in right before the store
+					insert_instruction_before_given(lea_statement, instruction);
+
+					//The op2 here is now what the lea calculated
+					instruction->op2 = lea_statement->assignee;
+
+				/**
+				 * Otherwise, we'll just swap the var out with the stack pointer since
+				 * they're one in the same. We don't need any extra instructions
+				 * before the store for this
+				 */
+				} else {
+					instruction->op2 = stack_pointer_variable;
+				}
+
+				break;
+
+			/**
+			 * A stack passed parameter address is different in a few ways. First off, we do not
+			 * know and cannot know what the actual constant value is until after register allocation.
+			 * This is a major limitation. We do however know that it will never be 0 due to the way
+			 * that the function return address is saved on the stack. We can use this to simpilify our
+			 * processing, but fundamentally we are limited here
+			 */
+			case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+				//Grab the additional offset for processing
+				additional_offset = instruction->op2->memory_address_base_adjustment;
+
+				//Emit the special stack constant
+				stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op2->associated_memory_region.stack_region, u64);
+
+				//Now emit the address calculation
+				address_instruction = emit_lea_offset_only(emit_temp_var(u64), stack_pointer_variable, stack_offset_constant);
+
+				//This goes in right before the store does
+				insert_instruction_before_given(address_instruction, instruction);
+
+				//The op1 now comes from this instruction
+				instruction->op2 = address_instruction->assignee;
+
+				break;
+
+			//This should be impossible
+			default:
+				printf("Fatal internal compiler error: invalid variable membership found in memory address remediator\n");
+				exit(1);
+		}
 	}
-
 }
 
 
