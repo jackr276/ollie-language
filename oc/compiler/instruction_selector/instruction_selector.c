@@ -2040,9 +2040,20 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
  */
 static inline u_int64_t get_base_alignment_size_for_elaborative_param(generic_type_t* type_being_elaborated){
 	switch(type_being_elaborated->type_class){
+		/**
+		 * To enable aligned copying, all structs and unions for elaborative params are
+		 * aligned to 16 byte boundaries
+		 */
 		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_UNION:
 			return 16;
+
+		/**
+		 * For arrays, we always pass by pointer so in reality we always
+		 * have 8 bytes to align by here
+		 */
+		case TYPE_CLASS_ARRAY:
+			return 8;
 
 		default:
 			return get_base_alignment_type(type_being_elaborated)->type_size;
