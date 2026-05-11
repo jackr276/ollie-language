@@ -3054,26 +3054,28 @@ static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, o
  * Emit the appropriate address calculation for a given array member, based on what is given in the parameters. This will
  * result in either a lea or a binary operation and then a lea
  */
-static three_addr_var_t* emit_array_address_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* member_type){
+static three_addr_var_t* emit_array_address_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, u_int64_t type_size){
 	//We need a new temp var for the assignee. We know it's an address always
 	three_addr_var_t* assignee = emit_temp_var(i64);
 
 	//Is this a lea compatible power of 2? If so we will use the lea shortcut
-	if(is_lea_compatible_power_of_2(member_type->type_size) == TRUE){
+	if(is_lea_compatible_power_of_2(type_size) == TRUE){
 		//Let the helper emit the lea
-		instruction_t* address_calculation = emit_lea_multiplier_and_operands(assignee, base_addr, offset, member_type->type_size);
+		instruction_t* address_calculation = emit_lea_multiplier_and_operands(assignee, base_addr, offset, type_size);
 
 		//Get this into the block
 		add_statement(basic_block, address_calculation);
 
-	//Otherwise, we can't fully do a lea here so we'll need to instead
-	//use a binary operation to multiply followed by a different kind of lea
+	/**
+	 * Otherwise, we can't fully do a lea here so we'll need to instead
+	 * use a binary operation to multiply followed by a different kind of lea
+	 */
 	} else {
 		//We'll need the size to multiply by
-		three_addr_const_t* type_size = emit_direct_integer_or_char_constant(member_type->type_size, u64);
+		three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(type_size, u64);
 
 		//Let the helper emit the entire thing. We'll store into a temp var there
-		three_addr_var_t* final_offset = emit_binary_operation_with_constant(basic_block, emit_temp_var(u64), offset, STAR, type_size);
+		three_addr_var_t* final_offset = emit_binary_operation_with_constant(basic_block, emit_temp_var(u64), offset, STAR, type_size_const);
 
 		//And now that we have the incompatible multiplication over with, we can use a lea to add
 		instruction_t* lea_statement = emit_lea_operands_only(assignee, base_addr, final_offset);
@@ -4811,7 +4813,7 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 				 *
 				 * This can be done using a lea instruction, so we will emit that directly
 				 */
-				three_addr_var_t* address = emit_array_address_calculation(current_block, *current_offset, array_offset, member_type);
+				three_addr_var_t* address = emit_array_address_calculation(current_block, *current_offset, array_offset, member_type->type_size);
 
 				//And finally - our current offset is no longer the actual offset
 				*current_offset = address;
