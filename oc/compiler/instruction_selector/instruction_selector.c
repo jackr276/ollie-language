@@ -797,225 +797,416 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 	three_addr_const_t* stack_offset_constant;
 	instruction_t* address_instruction;
 
-	//Grab this out
-	symtab_variable_record_t* var;
-
 	/**
 	 * If we do not have a store with offset, we grab from the op1 location. However if we
-	 * do then we need to grab from op2
+	 * do then we need to grab from op2. Since this causes such a big divergence in the flow
+	 * we will handle these two special cases separately in the else
 	 */
 	if(instruction->statement_type != THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET
 		&& instruction->statement_type != THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET){
-		var = instruction->op1->linked_var;
+		//Extract the variable
+		symtab_variable_record_t* var = instruction->op1->linked_var;
 
-	} else {
-		var = instruction->op2->linked_var;
-	}
+		/**
+		 * Special handling if this is a global variable. Global variables will generate 2 instructions on most occassions
+		 * the lea instruction to grab the address and then the actual address manipulation in the binary operation. Note that for these steps,
+		 * window reconstruction is required
+		 *
+		 * NOTE: since this is a global variable, it is impossible for a function parameter that is passed via the stack to get caught up in this
+		 */
+		switch(var->membership){
+			case GLOBAL_VARIABLE:
+			case STATIC_VARIABLE:
+				switch(instruction->statement_type){
+					/**
+					 * A global variable address assignment like this will turn into a leaq statement
+					 */
+					case THREE_ADDR_CODE_ASSN_STMT:
+						//Let the helper emit the statement
+						address_instruction = emit_global_variable_address_calculation_oir(instruction->assignee, instruction->op1, instruction_pointer_variable);
 
-	/**
-	 * Special handling if this is a global variable. Global variables will generate 2 instructions on most occassions
-	 * the lea instruction to grab the address and then the actual address manipulation in the binary operation. Note that for these steps,
-	 * window reconstruction is required
-	 *
-	 * NOTE: since this is a global variable, it is impossible for a function parameter that is passed via the stack to get caught up in this
-	 */
-	switch(var->membership){
-		case GLOBAL_VARIABLE:
-		case STATIC_VARIABLE:
-			switch(instruction->statement_type){
+						//Insert this after the given instruction
+						insert_instruction_after_given(address_instruction, instruction);
+
+						//Once we've done that, the old instruction is useless to us
+						delete_statement(instruction);
+
+						//Rebuild the window based around the new instruction
+						reconstruct_window(window, address_instruction);
+
+						break;
+
+					/**
+					 * A global var address assignment like this will generate
+					 * 2 separate instructions. One instruction will hold the global variable address,
+					 * while the other holds the actual binary operation
+					 */
+					case THREE_ADDR_CODE_BIN_OP_STMT:
+						//Let the helper emit the statement. We will use a temp destination for this
+						address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op1, instruction_pointer_variable);
+
+						//This goes in before the given one
+						insert_instruction_before_given(address_instruction, instruction);
+
+						//We'll now replace op1 with what our assignee here is
+						instruction->op1 = address_instruction->assignee;
+
+						//And now we'll reconstruct around our instruction just ot keep the window in order
+						reconstruct_window(window, instruction);
+
+						break;
+
+					/**
+					 * A global var address like this will generate one special instruction that is RIP relative
+					 * with a constant offset
+					 */
+					case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+						//Let the helper do all of the work
+						address_instruction = emit_global_variable_address_calculation_with_offset_oir(instruction->assignee, instruction->op1, instruction_pointer_variable, instruction->op1_const);
+
+						//This goes in before the given one
+						insert_instruction_before_given(address_instruction, instruction);
+
+						//Now we can delete the old one
+						delete_statement(instruction);
+						
+						//And reconstruct the window around the new one
+						reconstruct_window(window, address_instruction);
+
+						break;
+
+					/**
+					 * For our store operations, to rememdiate we just need to do everything that we would normally do 
+					 * before the store operation and replace the op1 with what we had
+					 */
+					case THREE_ADDR_CODE_STORE_STATEMENT:
+						//Let the helper emit the statement
+						address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op1, instruction_pointer_variable);
+
+						//Put this right before the store
+						insert_instruction_before_given(address_instruction, instruction);
+
+						//The assignee here now is our op1 variable
+						instruction->op1 = address_instruction->assignee;
+
+						break;
+
+					/**
+					 * Note that values here draw from op2, not op1
+					 */
+					case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+					case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+						//Let the helper emit the statement
+						address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op2, instruction_pointer_variable);
+
+						//Put this right before the store
+						insert_instruction_before_given(address_instruction, instruction);
+
+						//The assignee here now is our op1 variable
+						instruction->op2 = address_instruction->assignee;
+
+						break;
+
+					//This should never happen
+					default:
+						printf("Fatal internal compiler error: unreachable path hit in global/static variable memory address remediation\n");
+						exit(1);
+				}
+
+				//We're completely done once we get here
+				return;
+
+			//Otherwise we get out
+			default:
+				break;
+		}
+
+		/**
+		 * There are two things that we need to account for here: regular memory address vars that
+		 * are stack local and variables that are stack passed parameters. The two take different
+		 * approaches which is why they are separated over here
+		 */
+		switch(instruction->op1->variable_type){
+			case VARIABLE_TYPE_MEMORY_ADDRESS:
+				//The additional offset may come from stack passed parameters, and we need to account for it
+				additional_offset = instruction->op1->memory_address_base_adjustment;
+
 				/**
-				 * A global variable address assignment like this will turn into a leaq statement
+				 * Extract the stack offset for our use. This will determine how 
+				 * we process things down below
 				 */
-				case THREE_ADDR_CODE_ASSN_STMT:
-					//Let the helper emit the statement
-					address_instruction = emit_global_variable_address_calculation_oir(instruction->assignee, instruction->op1, instruction_pointer_variable);
+				stack_offset = var->stack_region->function_local_base_address + additional_offset;
 
-					//Insert this after the given instruction
-					insert_instruction_after_given(address_instruction, instruction);
+				//Go based on what kind of statement that we've got here
+				switch(instruction->statement_type){
+					/**
+					 * If we have an assignment statement, we
+					 * can turn this into a lea with an offset or a
+					 * straight assignment depending on the offset
+					 */
+					case THREE_ADDR_CODE_ASSN_STMT:
+						//Make it a lea
+						if(stack_offset != 0){
+							instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
 
-					//Once we've done that, the old instruction is useless to us
-					delete_statement(instruction);
+							//Op1 becomes that stack pointer
+							instruction->op1 = stack_pointer_variable;
 
-					//Rebuild the window based around the new instruction
-					reconstruct_window(window, address_instruction);
+							//And op1_const is our offset
+							instruction->op1_const = emit_direct_integer_or_char_constant(stack_offset, u64);
+
+							//This is a lea with an offset only
+							instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
+
+						/**
+						 * Otherwise, we'll just swap the var out with the stack pointer since
+						 * they're one in the same
+						 */
+						} else {
+							instruction->op1 = stack_pointer_variable;
+						}
+
+						break;
+
+					/**
+					 * Store statements act very similarly to assignment statements. We
+					 * just put the store right after the memory address assignment
+					 */
+					case THREE_ADDR_CODE_STORE_STATEMENT:
+					case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+					case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+						//Make it a lea
+						if(stack_offset != 0){
+							//Emit the stack offset constant
+							three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
+
+							//Now the lea for our calculation
+							instruction_t* lea_statement = emit_lea_offset_only(emit_temp_var(u64), stack_pointer_variable, offset_constant);
+
+							//This lea goes in right before the store
+							insert_instruction_before_given(lea_statement, instruction);
+
+							//The op1 here is now what the lea calculated
+							instruction->op1 = lea_statement->assignee;
+
+						/**
+						 * Otherwise, we'll just swap the var out with the stack pointer since
+						 * they're one in the same. We don't need any extra instructions
+						 * before the store for this
+						 */
+						} else {
+							instruction->op1 = stack_pointer_variable;
+						}
+
+						break;
+						
+					/**
+					 * For a statement like this, we will merge the existing
+					 * constant in. We know that the only two possible operands
+					 * with a memory address are Plus/minus, so we only need to 
+					 * account for 2 cases here
+					 */
+					case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+						//Make it a lea
+						if(stack_offset != 0){
+							//Emit the constant
+							stack_offset_constant = emit_direct_integer_or_char_constant(stack_offset, i64);
+
+							//Simplify based on what we have
+							switch(instruction->op){
+								case PLUS:
+									add_constants(stack_offset_constant, instruction->op1_const);
+									break;
+
+								case MINUS:
+									subtract_constants(stack_offset_constant, instruction->op1_const);
+									break;
+
+								//This should be impossible, if we get here it's a hard out
+								default:
+									printf("Fatal internal compiler error. Attempt to do a binary operation that is not +/- with a memory address\n");
+									exit(1);
+							}
+
+							//Wipe out the operator
+							instruction->op = BLANK;
+
+							//Op1 becomes that stack pointer
+							instruction->op1 = stack_pointer_variable;
+
+							//Op1 const is the lea constant
+							instruction->op1_const = stack_offset_constant;
+
+							//Change the instruction type to a lea
+							instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
+
+							//This is an offset only
+							instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
+
+						/**
+						 * Otherwise, we'll just swap the var out with the stack pointer since
+						 * they're one in the same
+						 */
+						} else {
+							instruction->op1 = stack_pointer_variable;
+						}
+
+						break;
+
+					/**
+					 * Final and trickiest case. We need to have a memory calculation *and* a regular
+					 * calculation stuffed into here, but we only have 2 operands to work with. We will
+					 * need to use our special version of a lea for this in most cases
+					 */
+					case THREE_ADDR_CODE_BIN_OP_STMT:
+						//Make it a lea, we'll need to use op2
+						//for the second variable
+						if(stack_offset != 0){
+							//Create the offset constant
+							three_addr_const_t* stack_offset_constant = emit_direct_integer_or_char_constant(stack_offset, i64);
+
+							//This is now our op1_const
+							instruction->op1_const = stack_offset_constant;
+
+							//Op1 becomes the stack pointer
+							instruction->op1 = stack_pointer_variable;
+
+							//Finally declare that this is a lea statement
+							instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
+
+							//Go based on the op here
+							switch(instruction->op){
+								//In this case, we'd have something like t5 <- <offset>(t4, t5)
+								case PLUS:
+									//This is a lea statement with registers and an offset
+									instruction->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_OFFSET;
+									
+									//Nothing else to do here
+									break;
+								
+								/**
+								 * For a minus, we'll need to circumvent the system by using a -1 multiplier
+								 * to make this still work for our lea. Since we have op1 - op2, we can rewrite
+								 * this into op1 + op2 * -1
+								 */
+								case MINUS:
+									//Full stack here
+									instruction->lea_statement_type = OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE;
+
+									//-1 to mimic the subtraction
+									instruction->lea_multiplier = -1;
+
+									break;
+								
+								//Unreachable path - hard fail if we somehow get to this
+								default:
+									printf("Fatal internal compiler error: Invalid binary operand found on address calculation\n");
+									exit(1);
+							}
+
+							//Wipe out the op once we're done
+							instruction->op = BLANK;
+							
+						/**
+						 * Then again all we need to do here is set the op1
+						 * to be our stack pointer
+						 */
+						} else {
+							instruction->op1 = stack_pointer_variable;
+						}
+
+						break;
+
+					//This should never happen
+					default:
+						printf("Fatal internal compiler error: unreachable path hit in memory address remediation\n");
+						exit(1);
+					}
 
 					break;
-
-				/**
-				 * A global var address assignment like this will generate
-				 * 2 separate instructions. One instruction will hold the global variable address,
-				 * while the other holds the actual binary operation
-				 */
-				case THREE_ADDR_CODE_BIN_OP_STMT:
-					//Let the helper emit the statement. We will use a temp destination for this
-					address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op1, instruction_pointer_variable);
-
-					//This goes in before the given one
-					insert_instruction_before_given(address_instruction, instruction);
-
-					//We'll now replace op1 with what our assignee here is
-					instruction->op1 = address_instruction->assignee;
-
-					//And now we'll reconstruct around our instruction just ot keep the window in order
-					reconstruct_window(window, instruction);
-
-					break;
-
-				/**
-				 * A global var address like this will generate one special instruction that is RIP relative
-				 * with a constant offset
-				 */
-				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-					//Let the helper do all of the work
-					address_instruction = emit_global_variable_address_calculation_with_offset_oir(instruction->assignee, instruction->op1, instruction_pointer_variable, instruction->op1_const);
-
-					//This goes in before the given one
-					insert_instruction_before_given(address_instruction, instruction);
-
-					//Now we can delete the old one
-					delete_statement(instruction);
-					
-					//And reconstruct the window around the new one
-					reconstruct_window(window, address_instruction);
-
-					break;
-
-				/**
-				 * For our store operations, to rememdiate we just need to do everything that we would normally do 
-				 * before the store operation and replace the op1 with what we had
-				 */
-				case THREE_ADDR_CODE_STORE_STATEMENT:
-					//Let the helper emit the statement
-					address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op1, instruction_pointer_variable);
-
-					//Put this right before the store
-					insert_instruction_before_given(address_instruction, instruction);
-
-					//The assignee here now is our op1 variable
-					instruction->op1 = address_instruction->assignee;
-
-					break;
-
-				/**
-				 * Note that values here draw from op2, not op1
-				 */
-				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-					//Let the helper emit the statement
-					address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op2, instruction_pointer_variable);
-
-					//Put this right before the store
-					insert_instruction_before_given(address_instruction, instruction);
-
-					//The assignee here now is our op1 variable
-					instruction->op2 = address_instruction->assignee;
-
-					break;
-
-				//This should never happen
-				default:
-					printf("Fatal internal compiler error: unreachable path hit in global/static variable memory address remediation\n");
-					exit(1);
-			}
-
-			//We're completely done once we get here
-			return;
-
-		//Otherwise we get out
-		default:
-			break;
-	}
-
-	/**
-	 * There are two things that we need to account for here: regular memory address vars that
-	 * are stack local and variables that are stack passed parameters. The two take different
-	 * approaches which is why they are separated over here
-	 */
-	switch(instruction->op1->variable_type){
-		case VARIABLE_TYPE_MEMORY_ADDRESS:
-			//The additional offset may come from stack passed parameters, and we need to account for it
-			additional_offset = instruction->op1->memory_address_base_adjustment;
 
 			/**
-			 * Extract the stack offset for our use. This will determine how 
-			 * we process things down below
+			 * A stack passed parameter address is different in a few ways. First off, we do not
+			 * know and cannot know what the actual constant value is until after register allocation.
+			 * This is a major limitation. We do however know that it will never be 0 due to the way
+			 * that the function return address is saved on the stack. We can use this to simpilify our
+			 * processing, but fundamentally we are limited here
 			 */
-			stack_offset = var->stack_region->function_local_base_address + additional_offset;
+			case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+				//Grab the additional offset for processing
+				additional_offset = instruction->op1->memory_address_base_adjustment;
 
-			//Go based on what kind of statement that we've got here
-			switch(instruction->statement_type){
-				/**
-				 * If we have an assignment statement, we
-				 * can turn this into a lea with an offset or a
-				 * straight assignment depending on the offset
-				 */
-				case THREE_ADDR_CODE_ASSN_STMT:
-					//Make it a lea
-					if(stack_offset != 0){
+				//Go based on what kind of statement that we've got here
+				switch(instruction->statement_type){
+					/**
+					 * Example:
+					 *   t4 <- PARAMATER_MEM<dd_0>
+					 *
+					 *   Turns into:
+					 * 	 t5 <- lea <Stack passed offset region 2>(%rsp)
+					 *
+					 */
+					case THREE_ADDR_CODE_ASSN_STMT:
+						//op1_const is our offset
+						instruction->op1_const = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
+
+						//Add the additional offset in as an adjustment(it's usually 0)
+						instruction->op1_const->constant_adjustment = additional_offset;
+
+						//Turn it into a LEA
 						instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
 
 						//Op1 becomes that stack pointer
 						instruction->op1 = stack_pointer_variable;
 
-						//And op1_const is our offset
-						instruction->op1_const = emit_direct_integer_or_char_constant(stack_offset, u64);
-
 						//This is a lea with an offset only
 						instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
 
-					/**
-					 * Otherwise, we'll just swap the var out with the stack pointer since
-					 * they're one in the same
-					 */
-					} else {
-						instruction->op1 = stack_pointer_variable;
-					}
-
-					break;
-
-				/**
-				 * Store statements act very similarly to assignment statements. We
-				 * just put the store right after the memory address assignment
-				 */
-				case THREE_ADDR_CODE_STORE_STATEMENT:
-				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-					//Make it a lea
-					if(stack_offset != 0){
-						//Emit the stack offset constant
-						three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
-
-						//Now the lea for our calculation
-						instruction_t* lea_statement = emit_lea_offset_only(emit_temp_var(u64), stack_pointer_variable, offset_constant);
-
-						//This lea goes in right before the store
-						insert_instruction_before_given(lea_statement, instruction);
-
-						//The op1 here is now what the lea calculated
-						instruction->op1 = lea_statement->assignee;
+						break;
 
 					/**
-					 * Otherwise, we'll just swap the var out with the stack pointer since
-					 * they're one in the same. We don't need any extra instructions
-					 * before the store for this
+					 * Store statements act very similarly to the assignment
+					 * statement, except for our need to put the assignment before the
+					 * actual statement. We do not need to account for cases where
+					 * the offset from %rsp is 0 because that will never happen
 					 */
-					} else {
-						instruction->op1 = stack_pointer_variable;
-					}
+					case THREE_ADDR_CODE_STORE_STATEMENT:
+					case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+					case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+						//Emit the special stack constant
+						stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
 
-					break;
-					
-				/**
-				 * For a statement like this, we will merge the existing
-				 * constant in. We know that the only two possible operands
-				 * with a memory address are Plus/minus, so we only need to 
-				 * account for 2 cases here
-				 */
-				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-					//Make it a lea
-					if(stack_offset != 0){
+						//Now emit the address calculation
+						address_instruction = emit_lea_offset_only(emit_temp_var(u64), stack_pointer_variable, stack_offset_constant);
+
+						//This goes in right before the store does
+						insert_instruction_before_given(address_instruction, instruction);
+
+						//The op1 now comes from this instruction
+						instruction->op1 = address_instruction->assignee;
+
+						break;
+
+					/**
+					 * For any binary operation instruction, we're just going to have to emit the extra assignment
+					 * here since again we cannot know what the offset is going to be
+					 *
+					 * Example:
+					 *
+					 *   t4 <- PARAMATER_MEM<dd_0> + 32
+					 *
+					 *   Turns into
+					 *
+					 * 	 t5 <- rsp + <Stack passed offset region 2>
+					 *   t4 <- t5 + 32
+					 *
+					 */
+					case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 						//Emit the constant
-						stack_offset_constant = emit_direct_integer_or_char_constant(stack_offset, i64);
+						stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
+
+						//Add the additional offset in as an adjustment(it's usually 0)
+						stack_offset_constant->constant_adjustment = additional_offset;
 
 						//Simplify based on what we have
 						switch(instruction->op){
@@ -1048,27 +1239,20 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						//This is an offset only
 						instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
 
+
+						break;
+
 					/**
-					 * Otherwise, we'll just swap the var out with the stack pointer since
-					 * they're one in the same
+					 * Final and trickiest case. We need to have a memory calculation *and* a regular
+					 * calculation stuffed into here, but we only have 2 operands to work with. We will
+					 * need to use our special version of a lea for this in most cases
 					 */
-					} else {
-						instruction->op1 = stack_pointer_variable;
-					}
-
-					break;
-
-				/**
-				 * Final and trickiest case. We need to have a memory calculation *and* a regular
-				 * calculation stuffed into here, but we only have 2 operands to work with. We will
-				 * need to use our special version of a lea for this in most cases
-				 */
-				case THREE_ADDR_CODE_BIN_OP_STMT:
-					//Make it a lea, we'll need to use op2
-					//for the second variable
-					if(stack_offset != 0){
+					case THREE_ADDR_CODE_BIN_OP_STMT:
 						//Create the offset constant
-						three_addr_const_t* stack_offset_constant = emit_direct_integer_or_char_constant(stack_offset, i64);
+						stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
+
+						//Add the additional offset in as an adjustment(it's usually 0)
+						stack_offset_constant->constant_adjustment = additional_offset;
 
 						//This is now our op1_const
 						instruction->op1_const = stack_offset_constant;
@@ -1111,211 +1295,31 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 
 						//Wipe out the op once we're done
 						instruction->op = BLANK;
-						
-					/**
-					 * Then again all we need to do here is set the op1
-					 * to be our stack pointer
-					 */
-					} else {
-						instruction->op1 = stack_pointer_variable;
+
+						break;
+
+					//This should never happen
+					default:
+						printf("Fatal internal compiler error: unreachable path hit in memory address remediation\n");
+						exit(1);
 					}
-
-					break;
-
-				//This should never happen
-				default:
-					printf("Fatal internal compiler error: unreachable path hit in memory address remediation\n");
-					exit(1);
-				}
 
 				break;
 
-		/**
-		 * A stack passed parameter address is different in a few ways. First off, we do not
-		 * know and cannot know what the actual constant value is until after register allocation.
-		 * This is a major limitation. We do however know that it will never be 0 due to the way
-		 * that the function return address is saved on the stack. We can use this to simpilify our
-		 * processing, but fundamentally we are limited here
-		 */
-		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-			//Grab the additional offset for processing
-			additional_offset = instruction->op1->memory_address_base_adjustment;
+			//This should be impossible
+			default:
+				printf("Fatal internal compiler error: invalid variable membership found in memory address remediator\n");
+				exit(1);
+		}
 
-			//Go based on what kind of statement that we've got here
-			switch(instruction->statement_type){
-				/**
-				 * Example:
-				 *   t4 <- PARAMATER_MEM<dd_0>
-				 *
-				 *   Turns into:
-				 * 	 t5 <- lea <Stack passed offset region 2>(%rsp)
-				 *
-				 */
-				case THREE_ADDR_CODE_ASSN_STMT:
-					//op1_const is our offset
-					instruction->op1_const = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
-
-					//Add the additional offset in as an adjustment(it's usually 0)
-					instruction->op1_const->constant_adjustment = additional_offset;
-
-					//Turn it into a LEA
-					instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-
-					//Op1 becomes that stack pointer
-					instruction->op1 = stack_pointer_variable;
-
-					//This is a lea with an offset only
-					instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
-
-					break;
-
-				/**
-				 * Store statements act very similarly to the assignment
-				 * statement, except for our need to put the assignment before the
-				 * actual statement. We do not need to account for cases where
-				 * the offset from %rsp is 0 because that will never happen
-				 */
-				case THREE_ADDR_CODE_STORE_STATEMENT:
-				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-					//Emit the special stack constant
-					stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
-
-					//Now emit the address calculation
-					address_instruction = emit_lea_offset_only(emit_temp_var(u64), stack_pointer_variable, stack_offset_constant);
-
-					//This goes in right before the store does
-					insert_instruction_before_given(address_instruction, instruction);
-
-					//The op1 now comes from this instruction
-					instruction->op1 = address_instruction->assignee;
-
-					break;
-
-				/**
-				 * For any binary operation instruction, we're just going to have to emit the extra assignment
-				 * here since again we cannot know what the offset is going to be
-				 *
-				 * Example:
-				 *
-				 *   t4 <- PARAMATER_MEM<dd_0> + 32
-				 *
-				 *   Turns into
-				 *
-				 * 	 t5 <- rsp + <Stack passed offset region 2>
-				 *   t4 <- t5 + 32
-				 *
-				 */
-				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-					//Emit the constant
-					stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
-
-					//Add the additional offset in as an adjustment(it's usually 0)
-					stack_offset_constant->constant_adjustment = additional_offset;
-
-					//Simplify based on what we have
-					switch(instruction->op){
-						case PLUS:
-							add_constants(stack_offset_constant, instruction->op1_const);
-							break;
-
-						case MINUS:
-							subtract_constants(stack_offset_constant, instruction->op1_const);
-							break;
-
-						//This should be impossible, if we get here it's a hard out
-						default:
-							printf("Fatal internal compiler error. Attempt to do a binary operation that is not +/- with a memory address\n");
-							exit(1);
-					}
-
-					//Wipe out the operator
-					instruction->op = BLANK;
-
-					//Op1 becomes that stack pointer
-					instruction->op1 = stack_pointer_variable;
-
-					//Op1 const is the lea constant
-					instruction->op1_const = stack_offset_constant;
-
-					//Change the instruction type to a lea
-					instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-
-					//This is an offset only
-					instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
-
-
-					break;
-
-				/**
-				 * Final and trickiest case. We need to have a memory calculation *and* a regular
-				 * calculation stuffed into here, but we only have 2 operands to work with. We will
-				 * need to use our special version of a lea for this in most cases
-				 */
-				case THREE_ADDR_CODE_BIN_OP_STMT:
-					//Create the offset constant
-					stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
-
-					//Add the additional offset in as an adjustment(it's usually 0)
-					stack_offset_constant->constant_adjustment = additional_offset;
-
-					//This is now our op1_const
-					instruction->op1_const = stack_offset_constant;
-
-					//Op1 becomes the stack pointer
-					instruction->op1 = stack_pointer_variable;
-
-					//Finally declare that this is a lea statement
-					instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-
-					//Go based on the op here
-					switch(instruction->op){
-						//In this case, we'd have something like t5 <- <offset>(t4, t5)
-						case PLUS:
-							//This is a lea statement with registers and an offset
-							instruction->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_OFFSET;
-							
-							//Nothing else to do here
-							break;
-						
-						/**
-						 * For a minus, we'll need to circumvent the system by using a -1 multiplier
-						 * to make this still work for our lea. Since we have op1 - op2, we can rewrite
-						 * this into op1 + op2 * -1
-						 */
-						case MINUS:
-							//Full stack here
-							instruction->lea_statement_type = OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE;
-
-							//-1 to mimic the subtraction
-							instruction->lea_multiplier = -1;
-
-							break;
-						
-						//Unreachable path - hard fail if we somehow get to this
-						default:
-							printf("Fatal internal compiler error: Invalid binary operand found on address calculation\n");
-							exit(1);
-					}
-
-					//Wipe out the op once we're done
-					instruction->op = BLANK;
-
-					break;
-
-				//This should never happen
-				default:
-					printf("Fatal internal compiler error: unreachable path hit in memory address remediation\n");
-					exit(1);
-				}
-
-			break;
-
-		//This should be impossible
-		default:
-			printf("Fatal internal compiler error: invalid variable membership found in memory address remediator\n");
-			exit(1);
+	/**
+	 * If we get here we have a store with an offset(constant or variable). They should both be handled in the same way
+	 * because the memory address var that we are after is going to be in op2 regardless
+	 */
+	} else {
+		var = instruction->op2->linked_var;
 	}
+
 }
 
 
