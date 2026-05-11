@@ -7744,6 +7744,8 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 					 * type to do this(void*)
 					 */
 					case TYPE_CLASS_ARRAY:
+						printf("HERE\n\n\n");
+
 						//Create this one's stack region
 						variable_result_region = create_stack_region_for_type(stack_passed_parameters, immut_void_ptr);
 
@@ -7751,7 +7753,7 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 						var_storage_offset = emit_direct_integer_or_char_constant(variable_result_region->function_local_base_address, u64);
 
 						//Now emit the store instruction for the result
-						var_elaborative_param_store = emit_store_with_constant_offset_ir_code(stack_pointer_variable, var_storage_offset, result_var, result_var->type); 
+						var_elaborative_param_store = emit_store_with_constant_offset_ir_code(stack_pointer_variable, var_storage_offset, result_var, immut_void_ptr); 
 
 						//Add it into the block
 						add_statement(basic_block, var_elaborative_param_store);
