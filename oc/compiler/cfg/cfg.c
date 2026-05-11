@@ -7744,8 +7744,6 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 					 * type to do this(void*)
 					 */
 					case TYPE_CLASS_ARRAY:
-						printf("HERE\n\n\n");
-
 						//Create this one's stack region
 						variable_result_region = create_stack_region_for_type(stack_passed_parameters, immut_void_ptr);
 
