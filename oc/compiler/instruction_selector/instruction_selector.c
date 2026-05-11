@@ -798,7 +798,19 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 	instruction_t* address_instruction;
 
 	//Grab this out
-	symtab_variable_record_t* var = instruction->op1->linked_var;
+	symtab_variable_record_t* var;
+
+	/**
+	 * If we do not have a store with offset, we grab from the op1 location. However if we
+	 * do then we need to grab from op2
+	 */
+	if(instruction->statement_type != THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET
+		&& instruction->statement_type != THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET){
+		var = instruction->op1->linked_var;
+
+	} else {
+		var = instruction->op2->linked_var;
+	}
 
 	/**
 	 * Special handling if this is a global variable. Global variables will generate 2 instructions on most occassions
@@ -871,12 +883,8 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				/**
 				 * For our store operations, to rememdiate we just need to do everything that we would normally do 
 				 * before the store operation and replace the op1 with what we had
-				 *
-				 * TODO WRONG!!!!
 				 */
 				case THREE_ADDR_CODE_STORE_STATEMENT:
-				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
 					//Let the helper emit the statement
 					address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op1, instruction_pointer_variable);
 
@@ -885,6 +893,22 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 
 					//The assignee here now is our op1 variable
 					instruction->op1 = address_instruction->assignee;
+
+					break;
+
+				/**
+				 * Note that values here draw from op2, not op1
+				 */
+				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+					//Let the helper emit the statement
+					address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op2, instruction_pointer_variable);
+
+					//Put this right before the store
+					insert_instruction_before_given(address_instruction, instruction);
+
+					//The assignee here now is our op1 variable
+					instruction->op2 = address_instruction->assignee;
 
 					break;
 
