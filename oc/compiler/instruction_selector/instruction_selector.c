@@ -1317,7 +1317,36 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 	 * because the memory address var that we are after is going to be in op2 regardless
 	 */
 	} else {
-		var = instruction->op2->linked_var;
+		symtab_variable_record_t* var = instruction->op2->linked_var;
+
+		/**
+		 * Special handling if this is a global variable. Global variables will generate 2 instructions on most occassions
+		 * the lea instruction to grab the address and then the actual address manipulation in the binary operation. Note that for these steps,
+		 * window reconstruction is required
+		 *
+		 * NOTE: since this is a global variable, it is impossible for a function parameter that is passed via the stack to get caught up in this
+		 */
+		switch(var->membership){
+			case GLOBAL_VARIABLE:
+			case STATIC_VARIABLE:
+				//Let the helper emit the statement
+				address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op2, instruction_pointer_variable);
+
+				//Put this right before the store
+				insert_instruction_before_given(address_instruction, instruction);
+
+				//The assignee here now is our op1 variable
+				instruction->op2 = address_instruction->assignee;
+
+				//We cna just bail out once done
+				return;
+
+			//Otherwise we get out
+			default:
+				break;
+		}
+
+
 	}
 
 }
