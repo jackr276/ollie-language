@@ -4805,6 +4805,12 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 				//TODO WE NEED TO DO SOMETHING FOR ELABORATIVE PARAMS - these aren't
 				//arrays they are always pointers, but the multiplier is treating
 				//them as full array sizes
+				/**
+				 * If we have an elaborative param type, we 
+				 */
+//				if((*base_address)->type->type_class == TYPE_CLASS_ELABORATIVE){
+//					printf("ELABORATIVE\n");
+//				}
 
 				/**
 				 * The formula for array subscript is: base_address + type_size * subscript
@@ -7748,6 +7754,8 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 					/**
 					 * Array types are always passed along by pointer. We will be using the generic pointer
 					 * type to do this(void*)
+					 *
+					 * TODO WE SHOULD UPDATE THIS TO BE A POINTER TYPE THAT'S AN ACTUAL REPRESENTATION
 					 */
 					case TYPE_CLASS_ARRAY:
 						//Create this one's stack region
