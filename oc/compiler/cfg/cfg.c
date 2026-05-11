@@ -7681,6 +7681,7 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 		three_addr_const_t* result_const;
 		stack_region_t* variable_result_region;
 		three_addr_const_t* var_storage_offset;
+		instruction_t* var_elaborative_param_store;
 
 		/**
 		 * Based on what kind of result that we have, we will handle
@@ -7739,6 +7740,25 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 						break;
 
 					/**
+					 * Array types are always passed along by pointer. We will be using the generic pointer
+					 * type to do this(void*)
+					 */
+					case TYPE_CLASS_ARRAY:
+						//Create this one's stack region
+						variable_result_region = create_stack_region_for_type(stack_passed_parameters, immut_void_ptr);
+
+						//Emit the storage offset for this value
+						var_storage_offset = emit_direct_integer_or_char_constant(variable_result_region->function_local_base_address, u64);
+
+						//Now emit the store instruction for the result
+						var_elaborative_param_store = emit_store_with_constant_offset_ir_code(stack_pointer_variable, var_storage_offset, result_var, result_var->type); 
+
+						//Add it into the block
+						add_statement(basic_block, var_elaborative_param_store);
+							
+						break;
+
+					/**
 					 * Everything else we perform a normal store. There is no copy assignment required to make this happen
 					 */
 					default:
@@ -7749,7 +7769,7 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 						var_storage_offset = emit_direct_integer_or_char_constant(variable_result_region->function_local_base_address, u64);
 
 						//Now emit the store instruction for the result
-						instruction_t* var_elaborative_param_store = emit_store_with_constant_offset_ir_code(stack_pointer_variable, var_storage_offset, result_var, result_var->type); 
+						var_elaborative_param_store = emit_store_with_constant_offset_ir_code(stack_pointer_variable, var_storage_offset, result_var, result_var->type); 
 
 						//Add it into the block
 						add_statement(basic_block, var_elaborative_param_store);
