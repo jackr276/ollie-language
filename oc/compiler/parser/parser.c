@@ -6392,6 +6392,8 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 	//Determine the compatibility of these ternary nodes, and coerce it
 	ternary_expression_node->inferred_type = determine_compatibility_and_coerce(type_symtab, &(if_branch->inferred_type), &(else_branch->inferred_type), QUESTION);
 
+	if(ternary_expression_node->inferred_type == NULL)printf("HERE\n\n\n");
+
 	//A ternary is not assignable
 	ternary_expression_node->is_assignable = FALSE;
 
@@ -11774,6 +11776,10 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 				sprintf(info, "Type \"%s\" may only be initialized using the appropriate initializer list syntax", target_type->type_name.string);
 				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				return NULL;
+			}
+
+			if(initializer_node->ast_node_type == AST_NODE_TYPE_TERNARY_EXPRESSION){
+				printf("HERE\n\n\n");
 			}
 
 			//Use the helper to determine if the types are assignable

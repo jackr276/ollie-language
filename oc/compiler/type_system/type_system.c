@@ -1253,6 +1253,30 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 		 * Very unique case - ternary operator
 		 */
 		case QUESTION:
+			/**
+			 * For structs/unions, we can copy them over to eachother but they'll have
+			 * to be the *exact* same type if we do
+			 */
+			if((*a)->type_class == TYPE_CLASS_STRUCT){
+				if(*a != *b){
+					return NULL;
+				} else {
+					return *a;
+				}
+			}
+
+			/**
+			 * Exact same situation for a union type class - they'll need to be the
+			 * exact same or else we aren't having it
+			 */
+			if((*a)->type_class == TYPE_CLASS_UNION){
+				if(*a != *b){
+					return NULL;
+				} else {
+					return *a;
+				}
+			}
+
 			//If a is a pointer type
 			if((*a)->type_class == TYPE_CLASS_POINTER){
 				//If b is a another pointer, then that's fine
