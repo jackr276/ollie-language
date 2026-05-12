@@ -53,7 +53,7 @@ static generic_type_t* u64 = NULL;
 static generic_type_t* i64 = NULL;
 static generic_type_t* f32 = NULL;
 static generic_type_t* f64 = NULL;
-static generic_type_t* immut_void_ptr = NULL;
+
 /**
  * The break and continue stack will
  * hold values that we can break & continue
@@ -7530,7 +7530,7 @@ static inline void handle_parameter_storage(basic_block_t* basic_block, paramete
 						 * this and it will be fine
 						 */
 						if(parameter_type->type_class == TYPE_CLASS_ARRAY){
-							parameter_type = immut_void_ptr;
+							parameter_type = convert_array_type_to_equivalent_pointer(parameter_type);
 						}
 
 						//Create it
@@ -7600,7 +7600,7 @@ static inline void handle_parameter_storage(basic_block_t* basic_block, paramete
 						 * this and it will be fine
 						 */
 						if(parameter_type->type_class == TYPE_CLASS_ARRAY){
-							parameter_type = immut_void_ptr;
+							parameter_type = convert_array_type_to_equivalent_pointer(parameter_type);
 						}
 
 						//Create it
@@ -7684,6 +7684,7 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 		stack_region_t* variable_result_region;
 		three_addr_const_t* var_storage_offset;
 		instruction_t* var_elaborative_param_store;
+		generic_type_t* equivalent_pointer_type;
 
 		/**
 		 * Based on what kind of result that we have, we will handle
@@ -7742,18 +7743,21 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 						break;
 
 					/**
-					 * Array types are always passed along by pointer. We will be using the generic pointer
-					 * type to do this(void*)
+					 * Array types are always passed along by pointer. We will be converting from the array type to a pointer
+					 * to do this
 					 */
 					case TYPE_CLASS_ARRAY:
+						//Conver
+						equivalent_pointer_type = convert_array_type_to_equivalent_pointer(result_var->type);
+
 						//Create this one's stack region
-						variable_result_region = create_stack_region_for_type(stack_passed_parameters, convert_array_type_to_equivalent_pointer(result_var->type));
+						variable_result_region = create_stack_region_for_type(stack_passed_parameters, equivalent_pointer_type);
 
 						//Emit the storage offset for this value
 						var_storage_offset = emit_direct_integer_or_char_constant(variable_result_region->function_local_base_address, u64);
 
 						//Now emit the store instruction for the result
-						var_elaborative_param_store = emit_store_with_constant_offset_ir_code(stack_pointer_variable, var_storage_offset, result_var, immut_void_ptr); 
+						var_elaborative_param_store = emit_store_with_constant_offset_ir_code(stack_pointer_variable, var_storage_offset, result_var, equivalent_pointer_type);
 
 						//Add it into the block
 						add_statement(basic_block, var_elaborative_param_store);
@@ -12390,7 +12394,6 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	i16 = lookup_type_name_only(type_symtab, "i16", NOT_MUTABLE)->type;
 	u8 = lookup_type_name_only(type_symtab, "u8", NOT_MUTABLE)->type;
 	i8 = lookup_type_name_only(type_symtab, "i8", NOT_MUTABLE)->type;
-	immut_void_ptr = lookup_type_name_only(type_symtab, "void*", NOT_MUTABLE)->type;
 	char_type = lookup_type_name_only(type_symtab, "char", NOT_MUTABLE)->type;
 
 	//We'll first create the fresh CFG here
