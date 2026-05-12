@@ -1696,28 +1696,7 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 				 * to perform a memory copy assignment here, we need to flag that 
 				 * we do *not* require a dereference to make this work
 				 */
-
-				switch(elaborated_param->ast_node_type){
-					case AST_NODE_TYPE_POSTFIX_EXPR:
-						elaborated_param->dereference_needed = FALSE;
-						break;
-
-					/**
-					 * Copy assignment through ternaries produce undefined behavior
-					 *
-					 * TODO WOULD NEED SOME KIND OF WAY TO PROPOGATE THE DEREF NEEDED FLAG
-					 */
-					case AST_NODE_TYPE_TERNARY_EXPRESSION:
-						elaborated_param->dereference_needed = FALSE;
-
-						//This is unstable
-						print_parse_message(MESSAGE_TYPE_WARNING, "Copy assignment through ternary produces undefined behavior", parser_line_num);
-						num_warnings++;
-						break;
-
-					default:
-						break;
-				}
+				flag_no_dereference_needed(elaborated_param);
 			}
 
 			/**
@@ -2211,27 +2190,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 					 * to perform a memory copy assignment here, we need to flag that 
 					 * we do *not* require a dereference to make this work
 					 */
-					switch(current_param->ast_node_type){
-						case AST_NODE_TYPE_POSTFIX_EXPR:
-							current_param->dereference_needed = FALSE;
-							break;
-
-						/**
-						 * Copy assignment through ternaries produce undefined behavior
-						 *
-						 * TODO COMPLETELY UNTESTED
-						 */
-						case AST_NODE_TYPE_TERNARY_EXPRESSION:
-							current_param->dereference_needed = FALSE;
-
-							//This is unstable
-							print_parse_message(MESSAGE_TYPE_WARNING, "Copy assignment through ternary produces undefined behavior", parser_line_num);
-							num_warnings++;
-							break;
-
-						default:
-							break;
-					}
+					flag_no_dereference_needed(current_param);
 				}
 
 				//Special checking here - if we have an enum type that is being assigned to, we need
@@ -3325,34 +3284,14 @@ loop_end:
 			 * to perform a memory copy assignment here, we need to flag that 
 			 * we do *not* require a dereference to make this work
 			 */
-			if(left_hand_unary->ast_node_type == AST_NODE_TYPE_POSTFIX_EXPR){
-				left_hand_unary->dereference_needed = FALSE;
-			}
+			flag_no_dereference_needed(left_hand_unary);
 
 			/**
 			 * If the right hand expression is a postfix expression *and* we are looking
 			 * to perform a memory copy assignment here, we need to flag that 
 			 * we do *not* require a dereference to make this work
 			 */
-			switch(expr->ast_node_type){
-				case AST_NODE_TYPE_POSTFIX_EXPR:
-					expr->dereference_needed = FALSE;
-					break;
-
-				/**
-				 * Copy assignment through ternaries produce undefined behavior
-				 */
-				case AST_NODE_TYPE_TERNARY_EXPRESSION:
-					expr->dereference_needed = FALSE;
-
-					//This is unstable
-					print_parse_message(MESSAGE_TYPE_WARNING, "Copy assignment through ternary produces undefined behavior", parser_line_num);
-					num_warnings++;
-					break;
-
-				default:
-					break;
-			}
+			flag_no_dereference_needed(expr);
 
 			//Store this for down the road - how many bytes do we need to copy
 			asn_expr_node->optional_storage.bytes_to_copy = final_type->type_size;
