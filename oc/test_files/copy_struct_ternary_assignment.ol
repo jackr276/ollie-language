@@ -15,11 +15,13 @@ define struct custom {
 * Simple tester for copying structs via a ternary expression
 */
 pub fn copy_structs_ternary(x:i32) -> i32 {
+	declare copy:mut small_struct;
+
 	let original1:small_struct = {1, 5, 3.33d, 'a'};
 	let original2:small_struct = {2, 6, 4.44d, 'b'};
 
-	//Triggers a ternary
-	let copy:small_struct = (x > 2) ? original1 else original2;
+	//Triggers a ternary copy
+	copy = (x > 2) ? original1 else original2;
 
 	ret copy:x + copy:y;
 }

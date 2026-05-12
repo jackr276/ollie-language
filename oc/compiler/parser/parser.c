@@ -1650,6 +1650,8 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 
 					/**
 					 * Copy assignment through ternaries produce undefined behavior
+					 *
+					 * TODO WOULD NEED SOME KIND OF WAY TO PROPOGATE THE DEREF NEEDED FLAG
 					 */
 					case AST_NODE_TYPE_TERNARY_EXPRESSION:
 						elaborated_param->dereference_needed = FALSE;
