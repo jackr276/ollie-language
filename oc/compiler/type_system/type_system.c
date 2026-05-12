@@ -1253,6 +1253,39 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 		 * Very unique case - ternary operator
 		 */
 		case QUESTION:
+			/**
+			 * For structs/unions, we can copy them over to eachother but they'll have
+			 * to be they have to be assignable to one another
+			 */
+			if((*a)->type_class == TYPE_CLASS_STRUCT || (*a)->type_class == TYPE_CLASS_UNION){
+				/**
+				 * If either way works(a to b or b to a), we will then go through and
+				 * perform mutability coercion on the two types. Mutability coercion
+				 * will ensure that we are maintaining the lowest level of mutability
+				 */
+				if(types_assignable(*a, *b) != NULL || types_assignable(*b, *a) != NULL){
+					/**
+					 * If a is mutable, then this all hinges on b being mutable or not. If 
+					 * b is also mutable, then we will have a mutable type. But if b is not
+					 * mutable, then we will have an immutable type. Either way it hinges
+					 * on b, so we just return b in the end regardless
+					 */
+					if((*a)->mutability == MUTABLE){
+						return *b;
+
+					/**
+					 * It's not mutable. Whatever b's mutability is, we preserve the lowest
+					 * mutability level which in this case is a's, so we return that
+					 */
+					} else {
+						return *a;
+					}
+
+				} else {
+					return NULL;
+				}
+			}
+
 			//If a is a pointer type
 			if((*a)->type_class == TYPE_CLASS_POINTER){
 				//If b is a another pointer, then that's fine

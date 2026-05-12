@@ -113,7 +113,7 @@ static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream);
 static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* function_type, u_int8_t defining_predeclared_function);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_global_scope);
-static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, variable_membership_t membership);
+static generic_type_t* validate_initializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, variable_membership_t membership);
 static inline generic_type_t* handle_elaborative_param_type(generic_type_t* elaborated_type);
 static u_int8_t validate_function_parameter_list(generic_type_t* function_type);
 
@@ -163,6 +163,59 @@ static inline u_int8_t does_enum_contain_integer_member(generic_type_t* enum_typ
 
 	//If we get down here we don't have it
 	return FALSE;
+}
+
+
+/**
+ * Propogate the dereference needed flag down recursively until we hit a postfix
+ * expression(our "root" in this case) or nothing. This is important because we cannot
+ * be dereferencing if we need to perform a copy assignment
+ *
+ * NOTE: This method is recursive which is why we are not inlining it
+ */
+static void propogate_no_dereference_required_flag(generic_ast_node_t* node){
+	//Base case - we have nothing so just leave
+	if(node == NULL){
+		return;
+	}
+
+	generic_ast_node_t* ternary_cursor;
+
+	switch(node->ast_node_type){
+		/**
+		 * For a ternary expression we need to flag the left and right children
+		 * as not requiring any kind of dereference
+		 */
+		case AST_NODE_TYPE_TERNARY_EXPRESSION:
+			//First we have the expression
+			ternary_cursor = node->first_child;
+
+			//Then the left child which we flag first
+			ternary_cursor = ternary_cursor->next_sibling;
+
+			//Flag the left child first
+			propogate_no_dereference_required_flag(ternary_cursor);
+
+			//Now advance to the right child
+			ternary_cursor = ternary_cursor->next_sibling;
+
+			//And flag the right child
+			propogate_no_dereference_required_flag(ternary_cursor);
+
+			return;
+
+		/**
+		 * Flag here that we do not need a dereference on the 
+		 * postfix expression if we have one
+		 */
+		case AST_NODE_TYPE_POSTFIX_EXPR:
+			node->dereference_needed = FALSE;
+			return;
+
+		//Whatever this is we aren't interested
+		default:
+			return;
+	}
 }
 
 
@@ -1643,25 +1696,7 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 				 * to perform a memory copy assignment here, we need to flag that 
 				 * we do *not* require a dereference to make this work
 				 */
-				switch(elaborated_param->ast_node_type){
-					case AST_NODE_TYPE_POSTFIX_EXPR:
-						elaborated_param->dereference_needed = FALSE;
-						break;
-
-					/**
-					 * Copy assignment through ternaries produce undefined behavior
-					 */
-					case AST_NODE_TYPE_TERNARY_EXPRESSION:
-						elaborated_param->dereference_needed = FALSE;
-
-						//This is unstable
-						print_parse_message(MESSAGE_TYPE_WARNING, "Copy assignment through ternary produces undefined behavior", parser_line_num);
-						num_warnings++;
-						break;
-
-					default:
-						break;
-				}
+				propogate_no_dereference_required_flag(elaborated_param);
 			}
 
 			/**
@@ -2155,24 +2190,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 					 * to perform a memory copy assignment here, we need to flag that 
 					 * we do *not* require a dereference to make this work
 					 */
-					switch(current_param->ast_node_type){
-						case AST_NODE_TYPE_POSTFIX_EXPR:
-							current_param->dereference_needed = FALSE;
-							break;
-						/**
-						 * Copy assignment through ternaries produce undefined behavior
-						 */
-						case AST_NODE_TYPE_TERNARY_EXPRESSION:
-							current_param->dereference_needed = FALSE;
-
-							//This is unstable
-							print_parse_message(MESSAGE_TYPE_WARNING, "Copy assignment through ternary produces undefined behavior", parser_line_num);
-							num_warnings++;
-							break;
-
-						default:
-							break;
-					}
+					propogate_no_dereference_required_flag(current_param);
 				}
 
 				//Special checking here - if we have an enum type that is being assigned to, we need
@@ -3266,34 +3284,14 @@ loop_end:
 			 * to perform a memory copy assignment here, we need to flag that 
 			 * we do *not* require a dereference to make this work
 			 */
-			if(left_hand_unary->ast_node_type == AST_NODE_TYPE_POSTFIX_EXPR){
-				left_hand_unary->dereference_needed = FALSE;
-			}
+			propogate_no_dereference_required_flag(left_hand_unary);
 
 			/**
 			 * If the right hand expression is a postfix expression *and* we are looking
 			 * to perform a memory copy assignment here, we need to flag that 
 			 * we do *not* require a dereference to make this work
 			 */
-			switch(expr->ast_node_type){
-				case AST_NODE_TYPE_POSTFIX_EXPR:
-					expr->dereference_needed = FALSE;
-					break;
-
-				/**
-				 * Copy assignment through ternaries produce undefined behavior
-				 */
-				case AST_NODE_TYPE_TERNARY_EXPRESSION:
-					expr->dereference_needed = FALSE;
-
-					//This is unstable
-					print_parse_message(MESSAGE_TYPE_WARNING, "Copy assignment through ternary produces undefined behavior", parser_line_num);
-					num_warnings++;
-					break;
-
-				default:
-					break;
-			}
+			propogate_no_dereference_required_flag(expr);
 
 			//Store this for down the road - how many bytes do we need to copy
 			asn_expr_node->optional_storage.bytes_to_copy = final_type->type_size;
@@ -11490,7 +11488,7 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 	//to the given array type
 	while(cursor != NULL){
 		//We'll use the same top level initialization check for this rule as well
-		generic_type_t* final_type = validate_intializer_types(member_type, cursor, membership);
+		generic_type_t* final_type = validate_initializer_types(member_type, cursor, membership);
 
 		//If these fail, then we're done here. No need for an error message, they'll have already been
 		//printed
@@ -11565,7 +11563,7 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
 		symtab_variable_record_t* variable = dynamic_array_get_at(&struct_table, seen_count);
 
 		//Recursively call the initializer processor rule. This allows us to handle nested initializations
-		generic_type_t* final_type = validate_intializer_types(variable->type_defined_as, cursor, membership);
+		generic_type_t* final_type = validate_initializer_types(variable->type_defined_as, cursor, membership);
 
 		//Let's check to see if the types are assignable
 		if(final_type == NULL){
@@ -11652,7 +11650,7 @@ static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic
 /**
  * Top level initializer value for type validation
  */
-static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, variable_membership_t membership){
+static generic_type_t* validate_initializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, variable_membership_t membership){
 	//Dealias this just to be safe
 	target_type = dealias_type(target_type);
 
@@ -11719,10 +11717,13 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 			
 		//Otherwise we'll just take the standard path
 		default:
-			//If we have a string constant, there's a chance that we could be seeing a string
-			//initializer of the form let a:char[] := "Hi";. If that's the case, we'll let
-			//the helper deal with it
-			if(initializer_node->ast_node_type == AST_NODE_TYPE_CONSTANT && initializer_node->constant_type == STR_CONST
+			/**
+			 * If we have a string constant, there's a chance that we could be seeing a string
+			 * initializer of the form let a:char[] := "Hi";. If that's the case, we'll let
+			 * the helper deal with it
+			 */
+			if(initializer_node->ast_node_type == AST_NODE_TYPE_CONSTANT 
+				&& initializer_node->constant_type == STR_CONST
 				&& target_type->type_class == TYPE_CLASS_ARRAY){
 				
 				//Dynamically set the initializer node here in the helper function
@@ -11734,8 +11735,10 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 					return NULL;
 				}
 
-				//Otherwise we'll just break out. The initializer node will have been properly
-				//set by the function above
+				/**
+				 * Otherwise we'll just break out. The initializer node will have been properly
+				 * set by the function above
+				 */
 				return return_type;
 			}
 
@@ -11944,7 +11947,7 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	 * Store the return type here after we do all needed validations. This rule allows 
 	 * for recursive validation, so that we can handle recursive initialization
 	 */
-	generic_type_t* return_type = validate_intializer_types(type_spec, initializer_node, membership);
+	generic_type_t* return_type = validate_initializer_types(type_spec, initializer_node, membership);
 
 	//If the return type is NULL, we fail out here
 	if(return_type == NULL){
@@ -11970,29 +11973,11 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	if(is_initializer_node(initializer_node) == FALSE
 		&& is_copy_assignment_required(type_spec, initializer_node->inferred_type) == TRUE){
 		/**
-		 * If the right hand expression is a postfix expression *and* we are looking
-		 * to perform a memory copy assignment here, we need to flag that 
-		 * we do *not* require a dereference to make this work
+		 * Propogate the dereference needed flag down recursively until we hit a postfix
+		 * expression(our "root" in this case) or nothing. This is important because we cannot
+		 * be dereferencing if we need to perform a copy assignment
 		 */
-		switch(initializer_node->ast_node_type){
-			case AST_NODE_TYPE_POSTFIX_EXPR:
-				initializer_node->dereference_needed = FALSE;
-				break;
-
-			/**
-			 * Copy assignment through ternaries produce undefined behavior
-			 */
-			case AST_NODE_TYPE_TERNARY_EXPRESSION:
-				initializer_node->dereference_needed = FALSE;
-
-				//This is unstable
-				print_parse_message(MESSAGE_TYPE_WARNING, "Copy assignment through ternary produces undefined behavior", parser_line_num);
-				num_warnings++;
-				break;
-
-			default:
-				break;
-		}
+		propogate_no_dereference_required_flag(initializer_node);
 
 		//Store the bytes that we need to copy here
 		let_stmt_node->optional_storage.bytes_to_copy = type_spec->type_size; 
