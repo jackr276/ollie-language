@@ -4802,16 +4802,6 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 				//This is whatever was emitted by the expression
 				three_addr_var_t* array_offset = expression_package.result_value.result_var;
 
-				//TODO WE NEED TO DO SOMETHING FOR ELABORATIVE PARAMS - these aren't
-				//arrays they are always pointers, but the multiplier is treating
-				//them as full array sizes
-				/**
-				 * If we have an elaborative param type, we 
-				 */
-//				if((*base_address)->type->type_class == TYPE_CLASS_ELABORATIVE){
-//					printf("ELABORATIVE\n");
-//				}
-
 				/**
 				 * The formula for array subscript is: base_address + type_size * subscript
 				 * 
