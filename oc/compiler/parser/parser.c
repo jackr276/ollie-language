@@ -113,7 +113,7 @@ static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream);
 static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* function_type, u_int8_t defining_predeclared_function);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_global_scope);
-static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, variable_membership_t membership);
+static generic_type_t* validate_initializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, variable_membership_t membership);
 static inline generic_type_t* handle_elaborative_param_type(generic_type_t* elaborated_type);
 static u_int8_t validate_function_parameter_list(generic_type_t* function_type);
 
@@ -11490,7 +11490,7 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 	//to the given array type
 	while(cursor != NULL){
 		//We'll use the same top level initialization check for this rule as well
-		generic_type_t* final_type = validate_intializer_types(member_type, cursor, membership);
+		generic_type_t* final_type = validate_initializer_types(member_type, cursor, membership);
 
 		//If these fail, then we're done here. No need for an error message, they'll have already been
 		//printed
@@ -11565,7 +11565,7 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
 		symtab_variable_record_t* variable = dynamic_array_get_at(&struct_table, seen_count);
 
 		//Recursively call the initializer processor rule. This allows us to handle nested initializations
-		generic_type_t* final_type = validate_intializer_types(variable->type_defined_as, cursor, membership);
+		generic_type_t* final_type = validate_initializer_types(variable->type_defined_as, cursor, membership);
 
 		//Let's check to see if the types are assignable
 		if(final_type == NULL){
@@ -11652,7 +11652,7 @@ static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic
 /**
  * Top level initializer value for type validation
  */
-static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, variable_membership_t membership){
+static generic_type_t* validate_initializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, variable_membership_t membership){
 	//Dealias this just to be safe
 	target_type = dealias_type(target_type);
 
@@ -11719,10 +11719,13 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 			
 		//Otherwise we'll just take the standard path
 		default:
-			//If we have a string constant, there's a chance that we could be seeing a string
-			//initializer of the form let a:char[] := "Hi";. If that's the case, we'll let
-			//the helper deal with it
-			if(initializer_node->ast_node_type == AST_NODE_TYPE_CONSTANT && initializer_node->constant_type == STR_CONST
+			/**
+			 * If we have a string constant, there's a chance that we could be seeing a string
+			 * initializer of the form let a:char[] := "Hi";. If that's the case, we'll let
+			 * the helper deal with it
+			 */
+			if(initializer_node->ast_node_type == AST_NODE_TYPE_CONSTANT 
+				&& initializer_node->constant_type == STR_CONST
 				&& target_type->type_class == TYPE_CLASS_ARRAY){
 				
 				//Dynamically set the initializer node here in the helper function
@@ -11734,8 +11737,10 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 					return NULL;
 				}
 
-				//Otherwise we'll just break out. The initializer node will have been properly
-				//set by the function above
+				/**
+				 * Otherwise we'll just break out. The initializer node will have been properly
+				 * set by the function above
+				 */
 				return return_type;
 			}
 
@@ -11944,7 +11949,7 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	 * Store the return type here after we do all needed validations. This rule allows 
 	 * for recursive validation, so that we can handle recursive initialization
 	 */
-	generic_type_t* return_type = validate_intializer_types(type_spec, initializer_node, membership);
+	generic_type_t* return_type = validate_initializer_types(type_spec, initializer_node, membership);
 
 	//If the return type is NULL, we fail out here
 	if(return_type == NULL){
@@ -11969,6 +11974,7 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	 */
 	if(is_initializer_node(initializer_node) == FALSE
 		&& is_copy_assignment_required(type_spec, initializer_node->inferred_type) == TRUE){
+		printf("HERE\n\n\n");
 		/**
 		 * If the right hand expression is a postfix expression *and* we are looking
 		 * to perform a memory copy assignment here, we need to flag that 
@@ -11981,6 +11987,8 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 
 			/**
 			 * Copy assignment through ternaries produce undefined behavior
+			 *
+			 * This is unstable
 			 */
 			case AST_NODE_TYPE_TERNARY_EXPRESSION:
 				initializer_node->dereference_needed = FALSE;
