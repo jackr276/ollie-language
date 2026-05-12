@@ -1255,25 +1255,34 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 		case QUESTION:
 			/**
 			 * For structs/unions, we can copy them over to eachother but they'll have
-			 * to be the *exact* same type if we do
+			 * to be they have to be assignable to one another
 			 */
-			if((*a)->type_class == TYPE_CLASS_STRUCT){
-				if(*a != *b){
-					return NULL;
-				} else {
-					return *a;
-				}
-			}
+			if((*a)->type_class == TYPE_CLASS_STRUCT || (*a)->type_class == TYPE_CLASS_UNION){
+				/**
+				 * If either way works(a to b or b to a), we will then go through and
+				 * perform mutability coercion on the two types. Mutability coercion
+				 * will ensure that we are maintaining the lowest level of mutability
+				 */
+				if(types_assignable(*a, *b) != NULL || types_assignable(*b, *a) != NULL){
+					/**
+					 * If a is mutable, then this all hinges on b being mutable or not. If 
+					 * b is also mutable, then we will have a mutable type. But if b is not
+					 * mutable, then we will have an immutable type. Either way it hinges
+					 * on b, so we just return b in the end regardless
+					 */
+					if((*a)->mutability == MUTABLE){
+						return *b;
 
-			/**
-			 * Exact same situation for a union type class - they'll need to be the
-			 * exact same or else we aren't having it
-			 */
-			if((*a)->type_class == TYPE_CLASS_UNION){
-				if(*a != *b){
-					return NULL;
+					/**
+					 * It's not mutable. Whatever b's mutability is, we preserve the lowest
+					 * mutability level which in this case is a's, so we return that
+					 */
+					} else {
+						return *a;
+					}
+
 				} else {
-					return *a;
+					return NULL;
 				}
 			}
 
