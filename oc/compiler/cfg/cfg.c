@@ -53,7 +53,7 @@ static generic_type_t* u64 = NULL;
 static generic_type_t* i64 = NULL;
 static generic_type_t* f32 = NULL;
 static generic_type_t* f64 = NULL;
-static generic_type_t* immut_void_ptr = NULL;
+
 /**
  * The break and continue stack will
  * hold values that we can break & continue
@@ -3054,26 +3054,28 @@ static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, o
  * Emit the appropriate address calculation for a given array member, based on what is given in the parameters. This will
  * result in either a lea or a binary operation and then a lea
  */
-static three_addr_var_t* emit_array_address_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* member_type){
+static three_addr_var_t* emit_array_address_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, u_int64_t type_size){
 	//We need a new temp var for the assignee. We know it's an address always
 	three_addr_var_t* assignee = emit_temp_var(i64);
 
 	//Is this a lea compatible power of 2? If so we will use the lea shortcut
-	if(is_lea_compatible_power_of_2(member_type->type_size) == TRUE){
+	if(is_lea_compatible_power_of_2(type_size) == TRUE){
 		//Let the helper emit the lea
-		instruction_t* address_calculation = emit_lea_multiplier_and_operands(assignee, base_addr, offset, member_type->type_size);
+		instruction_t* address_calculation = emit_lea_multiplier_and_operands(assignee, base_addr, offset, type_size);
 
 		//Get this into the block
 		add_statement(basic_block, address_calculation);
 
-	//Otherwise, we can't fully do a lea here so we'll need to instead
-	//use a binary operation to multiply followed by a different kind of lea
+	/**
+	 * Otherwise, we can't fully do a lea here so we'll need to instead
+	 * use a binary operation to multiply followed by a different kind of lea
+	 */
 	} else {
 		//We'll need the size to multiply by
-		three_addr_const_t* type_size = emit_direct_integer_or_char_constant(member_type->type_size, u64);
+		three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(type_size, u64);
 
 		//Let the helper emit the entire thing. We'll store into a temp var there
-		three_addr_var_t* final_offset = emit_binary_operation_with_constant(basic_block, emit_temp_var(u64), offset, STAR, type_size);
+		three_addr_var_t* final_offset = emit_binary_operation_with_constant(basic_block, emit_temp_var(u64), offset, STAR, type_size_const);
 
 		//And now that we have the incompatible multiplication over with, we can use a lea to add
 		instruction_t* lea_statement = emit_lea_operands_only(assignee, base_addr, final_offset);
@@ -4807,7 +4809,7 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 				 *
 				 * This can be done using a lea instruction, so we will emit that directly
 				 */
-				three_addr_var_t* address = emit_array_address_calculation(current_block, *current_offset, array_offset, member_type);
+				three_addr_var_t* address = emit_array_address_calculation(current_block, *current_offset, array_offset, member_type->type_size);
 
 				//And finally - our current offset is no longer the actual offset
 				*current_offset = address;
@@ -7528,7 +7530,7 @@ static inline void handle_parameter_storage(basic_block_t* basic_block, paramete
 						 * this and it will be fine
 						 */
 						if(parameter_type->type_class == TYPE_CLASS_ARRAY){
-							parameter_type = immut_void_ptr;
+							parameter_type = convert_array_type_to_equivalent_pointer(parameter_type);
 						}
 
 						//Create it
@@ -7598,7 +7600,7 @@ static inline void handle_parameter_storage(basic_block_t* basic_block, paramete
 						 * this and it will be fine
 						 */
 						if(parameter_type->type_class == TYPE_CLASS_ARRAY){
-							parameter_type = immut_void_ptr;
+							parameter_type = convert_array_type_to_equivalent_pointer(parameter_type);
 						}
 
 						//Create it
@@ -7681,6 +7683,8 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 		three_addr_const_t* result_const;
 		stack_region_t* variable_result_region;
 		three_addr_const_t* var_storage_offset;
+		instruction_t* var_elaborative_param_store;
+		generic_type_t* equivalent_pointer_type;
 
 		/**
 		 * Based on what kind of result that we have, we will handle
@@ -7739,6 +7743,28 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 						break;
 
 					/**
+					 * Array types are always passed along by pointer. We will be converting from the array type to a pointer
+					 * to do this
+					 */
+					case TYPE_CLASS_ARRAY:
+						//Conver
+						equivalent_pointer_type = convert_array_type_to_equivalent_pointer(result_var->type);
+
+						//Create this one's stack region
+						variable_result_region = create_stack_region_for_type(stack_passed_parameters, equivalent_pointer_type);
+
+						//Emit the storage offset for this value
+						var_storage_offset = emit_direct_integer_or_char_constant(variable_result_region->function_local_base_address, u64);
+
+						//Now emit the store instruction for the result
+						var_elaborative_param_store = emit_store_with_constant_offset_ir_code(stack_pointer_variable, var_storage_offset, result_var, equivalent_pointer_type);
+
+						//Add it into the block
+						add_statement(basic_block, var_elaborative_param_store);
+							
+						break;
+
+					/**
 					 * Everything else we perform a normal store. There is no copy assignment required to make this happen
 					 */
 					default:
@@ -7749,7 +7775,7 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 						var_storage_offset = emit_direct_integer_or_char_constant(variable_result_region->function_local_base_address, u64);
 
 						//Now emit the store instruction for the result
-						instruction_t* var_elaborative_param_store = emit_store_with_constant_offset_ir_code(stack_pointer_variable, var_storage_offset, result_var, result_var->type); 
+						var_elaborative_param_store = emit_store_with_constant_offset_ir_code(stack_pointer_variable, var_storage_offset, result_var, result_var->type); 
 
 						//Add it into the block
 						add_statement(basic_block, var_elaborative_param_store);
@@ -12368,7 +12394,6 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	i16 = lookup_type_name_only(type_symtab, "i16", NOT_MUTABLE)->type;
 	u8 = lookup_type_name_only(type_symtab, "u8", NOT_MUTABLE)->type;
 	i8 = lookup_type_name_only(type_symtab, "i8", NOT_MUTABLE)->type;
-	immut_void_ptr = lookup_type_name_only(type_symtab, "void*", NOT_MUTABLE)->type;
 	char_type = lookup_type_name_only(type_symtab, "char", NOT_MUTABLE)->type;
 
 	//We'll first create the fresh CFG here

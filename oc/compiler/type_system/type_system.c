@@ -1842,6 +1842,16 @@ generic_type_t* create_error_type(char* type_name, u_int32_t line_number){
  * Dynamically allocate and create an elaborative stack param type
  */
 generic_type_t* create_elaborative_type(generic_type_t* elaborates, u_int32_t line_number){
+	/**
+	 * If we are trying to elaborate an array type, we actually need to first convert
+	 * it to the equivalent pointer type. This will avoid any/all confusion with type
+	 * sizes
+	 */
+	if(elaborates->type_class == TYPE_CLASS_ARRAY){
+		//Convert over to a pointer
+		elaborates = convert_array_type_to_equivalent_pointer(elaborates);
+	}
+
 	//Allocate it first
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
@@ -1867,11 +1877,19 @@ generic_type_t* create_elaborative_type(generic_type_t* elaborates, u_int32_t li
 	 * all non-pointer types, it's considered "contiguous". This means that
 	 * the memory is laid out flat, all next to eachother. If an array holds 
 	 * pointers, then this is a non-contiguous memory region
+	 *
+	 * Since arrays are always passed by pointer, they are also lumped in with
+	 * pointers in being non-contiguous
 	 */
-	if(elaborates->type_class != TYPE_CLASS_POINTER){
-		type->memory_layout_type = MEMORY_LAYOUT_TYPE_CONTIGUOUS;
-	} else {
-		type->memory_layout_type = MEMORY_LAYOUT_TYPE_NON_CONTIGUOUS;
+	switch(elaborates->type_class){
+		case TYPE_CLASS_POINTER:
+		case TYPE_CLASS_ARRAY:
+			type->memory_layout_type = MEMORY_LAYOUT_TYPE_NON_CONTIGUOUS;
+			break;
+
+		default:
+			type->memory_layout_type = MEMORY_LAYOUT_TYPE_CONTIGUOUS;
+			break;
 	}
 
 	//Give it back
@@ -2107,6 +2125,22 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 	}
 
 	return type;
+}
+
+
+/**
+ * Take in an array type and convert it to an equivalent pointer. The mutability will
+ * remain unchanged. This is meant to represent the array's decay into a pointer
+ */
+generic_type_t* convert_array_type_to_equivalent_pointer(generic_type_t* array_type){
+	//Extract the array's member type
+	generic_type_t* member_type = array_type->internal_types.member_type;
+
+	//Convert this into an array type
+	generic_type_t* resultant_array_type = create_pointer_type(member_type, array_type->line_number, array_type->mutability);
+
+	//And give it back - we will not be storing in the symtab
+	return resultant_array_type;
 }
 
 
