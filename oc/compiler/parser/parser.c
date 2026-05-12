@@ -2161,8 +2161,11 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 						case AST_NODE_TYPE_POSTFIX_EXPR:
 							current_param->dereference_needed = FALSE;
 							break;
+
 						/**
 						 * Copy assignment through ternaries produce undefined behavior
+						 *
+						 * TODO COMPLETELY UNTESTED
 						 */
 						case AST_NODE_TYPE_TERNARY_EXPRESSION:
 							current_param->dereference_needed = FALSE;
@@ -6393,8 +6396,6 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 
 	//Determine the compatibility of these ternary nodes, and coerce it
 	ternary_expression_node->inferred_type = determine_compatibility_and_coerce(type_symtab, &(if_branch->inferred_type), &(else_branch->inferred_type), QUESTION);
-
-	if(ternary_expression_node->inferred_type == NULL)printf("HERE\n\n\n");
 
 	//A ternary is not assignable
 	ternary_expression_node->is_assignable = FALSE;
@@ -11839,6 +11840,57 @@ static inline u_int8_t is_initializer_node(generic_ast_node_t* initializer_node)
 
 
 /**
+ * Propogate the dereference needed flag down recursively until we hit a postfix
+ * expression(our "root" in this case) or nothing. This is important because we cannot
+ * be dereferencing if we need to perform a copy assignment
+ *
+ * NOTE: This method is recursive which is why we are not inlining it
+ */
+static void flag_no_dereference_needed(generic_ast_node_t* node){
+	//Base case - we have nothing so just leave
+	if(node == NULL){
+		return;
+	}
+
+	generic_ast_node_t* ternary_cursor;
+
+	switch(node->ast_node_type){
+		/**
+		 */
+		case AST_NODE_TYPE_TERNARY_EXPRESSION:
+			//First we have the expression
+			ternary_cursor = node->first_child;
+
+			//Then the left child which we flag first
+			ternary_cursor = ternary_cursor->next_sibling;
+
+			//Flag the left child first
+			flag_no_dereference_needed(ternary_cursor);
+
+			//Now advance to the right child
+			ternary_cursor = ternary_cursor->next_sibling;
+
+			//And flag the right child
+			flag_no_dereference_needed(ternary_cursor);
+
+			return;
+
+		/**
+		 * Flag here that we do not need a dereference on the 
+		 * postfix expression if we have one
+		 */
+		case AST_NODE_TYPE_POSTFIX_EXPR:
+			node->dereference_needed = FALSE;
+			return;
+
+		//Whatever this is we aren't interested
+		default:
+			return;
+	}
+}
+
+
+/**
  * A let statement is always the child of an overall declaration statement. Like a declare statement, it also
  * performs type checking and inference and all needed symbol table manipulation
  *
@@ -11982,6 +12034,14 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	 */
 	if(is_initializer_node(initializer_node) == FALSE
 		&& is_copy_assignment_required(type_spec, initializer_node->inferred_type) == TRUE){
+		/**
+		 * Propogate the dereference needed flag down recursively until we hit a postfix
+		 * expression(our "root" in this case) or nothing. This is important because we cannot
+		 * be dereferencing if we need to perform a copy assignment
+		 */
+		flag_no_dereference_required(initializer_node);
+
+
 		printf("HERE\n\n\n");
 		/**
 		 * If the right hand expression is a postfix expression *and* we are looking
