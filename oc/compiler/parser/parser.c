@@ -173,7 +173,7 @@ static inline u_int8_t does_enum_contain_integer_member(generic_type_t* enum_typ
  *
  * NOTE: This method is recursive which is why we are not inlining it
  */
-static void flag_no_dereference_needed(generic_ast_node_t* node){
+static void propogate_no_dereference_required_flag(generic_ast_node_t* node){
 	//Base case - we have nothing so just leave
 	if(node == NULL){
 		return;
@@ -194,13 +194,13 @@ static void flag_no_dereference_needed(generic_ast_node_t* node){
 			ternary_cursor = ternary_cursor->next_sibling;
 
 			//Flag the left child first
-			flag_no_dereference_needed(ternary_cursor);
+			propogate_no_dereference_required_flag(ternary_cursor);
 
 			//Now advance to the right child
 			ternary_cursor = ternary_cursor->next_sibling;
 
 			//And flag the right child
-			flag_no_dereference_needed(ternary_cursor);
+			propogate_no_dereference_required_flag(ternary_cursor);
 
 			return;
 
@@ -1696,7 +1696,7 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 				 * to perform a memory copy assignment here, we need to flag that 
 				 * we do *not* require a dereference to make this work
 				 */
-				flag_no_dereference_needed(elaborated_param);
+				propogate_no_dereference_required_flag(elaborated_param);
 			}
 
 			/**
@@ -2190,7 +2190,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 					 * to perform a memory copy assignment here, we need to flag that 
 					 * we do *not* require a dereference to make this work
 					 */
-					flag_no_dereference_needed(current_param);
+					propogate_no_dereference_required_flag(current_param);
 				}
 
 				//Special checking here - if we have an enum type that is being assigned to, we need
@@ -3284,14 +3284,14 @@ loop_end:
 			 * to perform a memory copy assignment here, we need to flag that 
 			 * we do *not* require a dereference to make this work
 			 */
-			flag_no_dereference_needed(left_hand_unary);
+			propogate_no_dereference_required_flag(left_hand_unary);
 
 			/**
 			 * If the right hand expression is a postfix expression *and* we are looking
 			 * to perform a memory copy assignment here, we need to flag that 
 			 * we do *not* require a dereference to make this work
 			 */
-			flag_no_dereference_needed(expr);
+			propogate_no_dereference_required_flag(expr);
 
 			//Store this for down the road - how many bytes do we need to copy
 			asn_expr_node->optional_storage.bytes_to_copy = final_type->type_size;
@@ -11977,7 +11977,7 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 		 * expression(our "root" in this case) or nothing. This is important because we cannot
 		 * be dereferencing if we need to perform a copy assignment
 		 */
-		flag_no_dereference_needed(initializer_node);
+		propogate_no_dereference_required_flag(initializer_node);
 
 		//Store the bytes that we need to copy here
 		let_stmt_node->optional_storage.bytes_to_copy = type_spec->type_size; 
