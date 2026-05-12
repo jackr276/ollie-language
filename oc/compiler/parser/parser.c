@@ -167,6 +167,59 @@ static inline u_int8_t does_enum_contain_integer_member(generic_type_t* enum_typ
 
 
 /**
+ * Propogate the dereference needed flag down recursively until we hit a postfix
+ * expression(our "root" in this case) or nothing. This is important because we cannot
+ * be dereferencing if we need to perform a copy assignment
+ *
+ * NOTE: This method is recursive which is why we are not inlining it
+ */
+static void flag_no_dereference_needed(generic_ast_node_t* node){
+	//Base case - we have nothing so just leave
+	if(node == NULL){
+		return;
+	}
+
+	generic_ast_node_t* ternary_cursor;
+
+	switch(node->ast_node_type){
+		/**
+		 * For a ternary expression we need to flag the left and right children
+		 * as not requiring any kind of dereference
+		 */
+		case AST_NODE_TYPE_TERNARY_EXPRESSION:
+			//First we have the expression
+			ternary_cursor = node->first_child;
+
+			//Then the left child which we flag first
+			ternary_cursor = ternary_cursor->next_sibling;
+
+			//Flag the left child first
+			flag_no_dereference_needed(ternary_cursor);
+
+			//Now advance to the right child
+			ternary_cursor = ternary_cursor->next_sibling;
+
+			//And flag the right child
+			flag_no_dereference_needed(ternary_cursor);
+
+			return;
+
+		/**
+		 * Flag here that we do not need a dereference on the 
+		 * postfix expression if we have one
+		 */
+		case AST_NODE_TYPE_POSTFIX_EXPR:
+			node->dereference_needed = FALSE;
+			return;
+
+		//Whatever this is we aren't interested
+		default:
+			return;
+	}
+}
+
+
+/**
  * Is a given variable a data segment variable? These variables are not actually
  * stored in registers or in memory so we need to treat them a bit differently. In
  * ollie only static and global variables fit the bill for this
@@ -1643,6 +1696,7 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 				 * to perform a memory copy assignment here, we need to flag that 
 				 * we do *not* require a dereference to make this work
 				 */
+
 				switch(elaborated_param->ast_node_type){
 					case AST_NODE_TYPE_POSTFIX_EXPR:
 						elaborated_param->dereference_needed = FALSE;
@@ -11781,10 +11835,6 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 				return NULL;
 			}
 
-			if(initializer_node->ast_node_type == AST_NODE_TYPE_TERNARY_EXPRESSION){
-				printf("HERE\n\n\n");
-			}
-
 			//Use the helper to determine if the types are assignable
 			generic_type_t* final_type = types_assignable(return_type, initializer_node->inferred_type);
 
@@ -11835,57 +11885,6 @@ static inline u_int8_t is_initializer_node(generic_ast_node_t* initializer_node)
 			return TRUE;
 		default:
 			return FALSE;
-	}
-}
-
-
-/**
- * Propogate the dereference needed flag down recursively until we hit a postfix
- * expression(our "root" in this case) or nothing. This is important because we cannot
- * be dereferencing if we need to perform a copy assignment
- *
- * NOTE: This method is recursive which is why we are not inlining it
- */
-static void flag_no_dereference_needed(generic_ast_node_t* node){
-	//Base case - we have nothing so just leave
-	if(node == NULL){
-		return;
-	}
-
-	generic_ast_node_t* ternary_cursor;
-
-	switch(node->ast_node_type){
-		/**
-		 */
-		case AST_NODE_TYPE_TERNARY_EXPRESSION:
-			//First we have the expression
-			ternary_cursor = node->first_child;
-
-			//Then the left child which we flag first
-			ternary_cursor = ternary_cursor->next_sibling;
-
-			//Flag the left child first
-			flag_no_dereference_needed(ternary_cursor);
-
-			//Now advance to the right child
-			ternary_cursor = ternary_cursor->next_sibling;
-
-			//And flag the right child
-			flag_no_dereference_needed(ternary_cursor);
-
-			return;
-
-		/**
-		 * Flag here that we do not need a dereference on the 
-		 * postfix expression if we have one
-		 */
-		case AST_NODE_TYPE_POSTFIX_EXPR:
-			node->dereference_needed = FALSE;
-			return;
-
-		//Whatever this is we aren't interested
-		default:
-			return;
 	}
 }
 
@@ -12039,36 +12038,7 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 		 * expression(our "root" in this case) or nothing. This is important because we cannot
 		 * be dereferencing if we need to perform a copy assignment
 		 */
-		flag_no_dereference_required(initializer_node);
-
-
-		printf("HERE\n\n\n");
-		/**
-		 * If the right hand expression is a postfix expression *and* we are looking
-		 * to perform a memory copy assignment here, we need to flag that 
-		 * we do *not* require a dereference to make this work
-		 */
-		switch(initializer_node->ast_node_type){
-			case AST_NODE_TYPE_POSTFIX_EXPR:
-				initializer_node->dereference_needed = FALSE;
-				break;
-
-			/**
-			 * Copy assignment through ternaries produce undefined behavior
-			 *
-			 * This is unstable
-			 */
-			case AST_NODE_TYPE_TERNARY_EXPRESSION:
-				initializer_node->dereference_needed = FALSE;
-
-				//This is unstable
-				print_parse_message(MESSAGE_TYPE_WARNING, "Copy assignment through ternary produces undefined behavior", parser_line_num);
-				num_warnings++;
-				break;
-
-			default:
-				break;
-		}
+		flag_no_dereference_needed(initializer_node);
 
 		//Store the bytes that we need to copy here
 		let_stmt_node->optional_storage.bytes_to_copy = type_spec->type_size; 
