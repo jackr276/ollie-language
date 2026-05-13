@@ -16,10 +16,8 @@
 #include <pthread.h>
 #include <time.h>
 //For any needed constants
+#include "../utils/dynamic_array/dynamic_array.h"
 #include "../utils/constants.h"
-
-//Generic amount of test files - up as we get more
-#define TEST_FILES 1000
 
 //Maximum size of a given file in linux
 #define MAX_FILE_SIZE 300
@@ -32,15 +30,14 @@ pthread_mutex_t result_mutex = PTHREAD_MUTEX_INITIALIZER;
 u_int32_t total_errors = 0;
 //Number of files in error
 u_int32_t number_of_error_files = 0;
-//The number of files in error
-char files_in_error[TEST_FILES][MAX_FILE_SIZE];
-//All test files that we have to deal with
-char test_files[TEST_FILES][MAX_FILE_SIZE];
 //The current test file index
 u_int32_t current_test_file_index;
 //The total number of actual test files
 u_int32_t total_test_files;
 
+//Dynamic arrays to hold the test files and the files in error
+dynamic_array_t test_files;
+dynamic_array_t files_in_error;
 
 /**
  * Worker thread:
@@ -185,19 +182,24 @@ int main(int argc, char** argv){
 	//Initialize the total test file counts
 	total_test_files = 0;
 
-	//So long as we can keep reading from the directory, we will stuff the
-	//queue with what we need
+	/**
+	 * So long as we can keep reading from the directory, we will stuff the
+	 * queue with what we need
+	 */
 	while((directory_entry = readdir(directory)) != NULL){
 		//If we see '.' or '..' bail out
 		if(directory_entry->d_name[0] == '.'){
 			continue;
 		}
 
-		//Grab a pointer to its region
-		char* file_name = test_files[total_test_files];
+		//Allocate space for the file name
+		char* file_name = calloc(300, sizeof(char));
 
 		//Copy it over
 		strncpy(file_name, directory_entry->d_name, MAX_FILE_SIZE);
+
+		//Add this into the dynamic array
+		dynamic_array_add(&test_files, file_name);
 
 		//Increment the test file number
 		total_test_files++;
@@ -246,7 +248,10 @@ int main(int argc, char** argv){
 
 		//Print out all of them
 		for(u_int32_t i = 0; i < number_of_error_files; i++){
-			printf("%d) %s\n", i, files_in_error[i]);
+			//Get the error file out
+			char* error_file_name = dynamic_array_get_at(&files_in_error, i);
+
+			printf("%d) %s\n", i, error_file_name);
 		}
 
 		//One final error for emphasis
