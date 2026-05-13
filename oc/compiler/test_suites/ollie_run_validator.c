@@ -134,7 +134,7 @@ int main(int argc, char** argv) {
 	u_int32_t files_per_thread = number_of_test_files / thread_count;
 
 	fprintf(stdout, "\n\n================================= Run Setup =================================\n");
-	fprintf(stdout, "%d threads requested for validate %d test files. Each thread will valid %d files\n", thread_count, number_of_test_files, files_per_thread);
+	fprintf(stdout, "%d threads requested to validate %d test files. Each thread will validate %d files\n", thread_count, number_of_test_files, files_per_thread);
 	fprintf(stdout, "================================= Run Setup =================================\n");
 
 	//Inclusive start index for our current thread

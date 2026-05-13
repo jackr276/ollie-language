@@ -381,6 +381,9 @@ instruction_selector_test.o: $(TEST_SUITE_PATH)/instruction_selector_test.c
 memory_checker.o: $(TEST_SUITE_PATH)/memory_test.c
 	$(CC) $(CFLAGS) -pthread -o $(OUT_LOCAL)/memory_checker.o $(TEST_SUITE_PATH)/memory_test.c
 
+ollie_run_validator.o: $(TEST_SUITE_PATH)/ollie_run_validator.c
+	$(CC) $(CFLAGS) -pthread -o $(OUT_LOCAL)/ollie_run_validator.o $(TEST_SUITE_PATH)/ollie_run_validator.c
+
 instruction_selector_testd.o: $(TEST_SUITE_PATH)/instruction_selector_test.c
 	$(CC) $(CFLAGS) -g -o $(OUT_LOCAL)/instruction_selector_testd.o $(TEST_SUITE_PATH)/instruction_selector_test.c
 
@@ -413,6 +416,9 @@ oc_debug: compilerd.o parserd.o lexerd.o symtabd.o heapstackd.o type_systemd.o a
 
 memory_checker: memory_checker.o dynamic_array.o
 	$(CC) -pthread -o $(OUT_LOCAL)/memory_checker $(OUT_LOCAL)/memory_checker.o $(OUT_LOCAL)/dynamic_array.o
+
+ollie_run_validator: ollie_run_validator.o dynamic_array.o
+	$(CC) -pthread -o $(OUT_LOCAL)/ollie_run_validator $(OUT_LOCAL)/ollie_run_validator.o $(OUT_LOCAL)/dynamic_array.o
 
 stest: symtab_test
 	$(OUT_LOCAL)/symtab_test
@@ -504,6 +510,11 @@ performance_test: oc
 # This can be slow but it runs as part of CI
 memory_check: oc_debug memory_checker
 	$(OUT_LOCAL)/memory_checker 16 $(TEST_FILE_DIR)
+
+# Ollie run validator checks the output of programs that expect a specific output. For more details
+# please see the top comment in the source code itself
+ollie_run_validation: oc ollie_run_validator
+	$(OUT_LOCAL)/ollie_run_validator 16 $(TEST_FILE_DIR)
 
 array_test: dynamic_array_test
 	$(OUT_LOCAL)/dynamic_array_test
