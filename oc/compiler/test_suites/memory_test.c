@@ -19,8 +19,8 @@
 #include "../utils/dynamic_array/dynamic_array.h"
 #include "../utils/constants.h"
 
-//Maximum size of a given file in linux
-#define MAX_FILE_SIZE 300
+//Maximum size of a given file name in linux
+#define MAX_FILE_NAME_SIZE 300
 
 //Mutices for shared states
 pthread_mutex_t file_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -73,9 +73,11 @@ void* worker(){
 		//Lock the queue mutex
 		pthread_mutex_lock(&file_queue_mutex);
 
-		//If we find that the queue is empty, we leave this
-		//thread. We need to make sure to unlock the mutex
-		//before leaving
+		/**
+		 * If we find that the queue is empty, we leave this
+		 * thread. We need to make sure to unlock the mutex
+		 * before leaving
+		 */
 		if(current_test_file_index >= total_test_files){
 			//Unlock the file queue mutex
 			pthread_mutex_unlock(&file_queue_mutex);
@@ -85,7 +87,7 @@ void* worker(){
 		}
 
 		//Get our file out of the queue
-		file_name = test_files[current_test_file_index];
+		file_name = dynamic_array_get_at(&test_files, current_test_file_index);
 
 		//Increment this for the next go around
 		current_test_file_index++;
@@ -98,10 +100,11 @@ void* worker(){
 
 		//Run the command in the system
 		return_code = system(command);
-		
 
-		//Lock the result mutex. This also doubles as a mutex for stdout. We delay
-		//printing anything until we're in here to keep results consistent
+		/**
+		 * Lock the result mutex. This also doubles as a mutex for stdout. We delay
+		 * printing anything until we're in here to keep results consistent
+		 */
 		pthread_mutex_lock(&result_mutex);
 
 		printf("\n=========== Checking %s =================\n", file_name);
@@ -119,8 +122,9 @@ void* worker(){
 
 		//Bookkeeping for final printing
 		if(num_errors > 0){
-			//Get this into the list
-			strncpy(files_in_error[number_of_error_files], file_name, 300);
+			//Add the pointer for this into the list - we do no memory management so this is fine
+			dynamic_array_add(&files_in_error, file_name);
+
 			//Bump up the count
 			number_of_error_files++;
 		}
@@ -173,6 +177,10 @@ int main(int argc, char** argv){
 		exit(1);
 	}
 
+	//Create our two dynamic arrays with initial sizes
+	test_files = dynamic_array_alloc_initial_size(1000);
+	files_in_error = dynamic_array_alloc_initial_size(1000);
+
 	//Start the time
 	clock_t start_time = clock();
 
@@ -193,10 +201,10 @@ int main(int argc, char** argv){
 		}
 
 		//Allocate space for the file name
-		char* file_name = calloc(300, sizeof(char));
+		char* file_name = calloc(MAX_FILE_NAME_SIZE, sizeof(char));
 
 		//Copy it over
-		strncpy(file_name, directory_entry->d_name, MAX_FILE_SIZE);
+		strncpy(file_name, directory_entry->d_name, MAX_FILE_NAME_SIZE);
 
 		//Add this into the dynamic array
 		dynamic_array_add(&test_files, file_name);
@@ -266,6 +274,9 @@ int main(int argc, char** argv){
 	//Destroy the mutices
 	pthread_mutex_destroy(&file_queue_mutex);
 	pthread_mutex_destroy(&result_mutex);
+
+	dynamic_array_dealloc(&test_files);
+	dynamic_array_dealloc(&files_in_error);
 	
 	//All went well
 	return total_errors;

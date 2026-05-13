@@ -411,8 +411,8 @@ oc: compiler.o parser.o lexer.o symtab.o heapstack.o type_system.o ast.o cfg.o l
 oc_debug: compilerd.o parserd.o lexerd.o symtabd.o heapstackd.o type_systemd.o astd.o cfgd.o lexstackd.o instructiond.o heap_queued.o preprocessord.o dependency_treed.o dynamic_arrayd.o lightstackd.o optimizerd.o instruction_selectord.o jump_tabled.o stack_data_aread.o register_allocatord.o instruction_schedulerd.o interference_graphd.o assemblerd.o dynamic_stringd.o nesting_stackd.o postprocessord.o data_dependency_graphd.o max_priority_queued.o min_priority_queued.o dynamic_setd.o ollie_token_arrayd.o local_constantd.o parameter_result_arrayd.o value_numbering_tabled.o
 	$(CC) -o $(OUT_LOCAL)/ocd $(OUT_LOCAL)/compilerd.o $(OUT_LOCAL)/parserd.o $(OUT_LOCAL)/lexerd.o $(OUT_LOCAL)/heapstackd.o $(OUT_LOCAL)/symtabd.o $(OUT_LOCAL)/lexstackd.o $(OUT_LOCAL)/type_systemd.o $(OUT_LOCAL)/astd.o $(OUT_LOCAL)/cfgd.o $(OUT_LOCAL)/instructiond.o $(OUT_LOCAL)/heap_queued.o $(OUT_LOCAL)/preprocessord.o $(OUT_LOCAL)/dependency_treed.o $(OUT_LOCAL)/dynamic_arrayd.o $(OUT_LOCAL)/lightstackd.o $(OUT_LOCAL)/optimizerd.o $(OUT_LOCAL)/instruction_selectord.o $(OUT_LOCAL)/jump_tabled.o $(OUT_LOCAL)/stack_data_aread.o $(OUT_LOCAL)/register_allocatord.o $(OUT_LOCAL)/instruction_schedulerd.o $(OUT_LOCAL)/interference_graphd.o $(OUT_LOCAL)/assemblerd.o $(OUT_LOCAL)/dynamic_stringd.o $(OUT_LOCAL)/nesting_stackd.o $(OUT_LOCAL)/postprocessord.o $(OUT_LOCAL)/data_dependency_graphd.o $(OUT_LOCAL)/max_priority_queued.o $(OUT_LOCAL)/min_priority_queued.o $(OUT_LOCAL)/dynamic_setd.o $(OUT_LOCAL)/ollie_token_arrayd.o $(OUT_LOCAL)/local_constantd.o $(OUT_LOCAL)/parameter_result_arrayd.o $(OUT_LOCAL)/value_numbering_tabled.o
 
-memory_checker: memory_checker.o
-	$(CC) -pthread -o $(OUT_LOCAL)/memory_checker $(OUT_LOCAL)/memory_checker.o
+memory_checker: memory_checker.o dynamic_array.o
+	$(CC) -pthread -o $(OUT_LOCAL)/memory_checker $(OUT_LOCAL)/memory_checker.o $(OUT_LOCAL)/dynamic_array.o
 
 stest: symtab_test
 	$(OUT_LOCAL)/symtab_test
