@@ -25,6 +25,14 @@
 #include <pthread.h>
 #include <sys/types.h>
 #include <time.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <dirent.h>
+
+//Default file array size to avoid excessive resizing
+#define DEFAULT_ARRAY_SIZE 1000
+//Max file name size on linux
+#define LINUX_MAX_FILE_NAME_LENGTH 300
 
 //We'll need a mutex for all of the files that we wish to operate on
 pthread_mutex_t output_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -50,5 +58,46 @@ u_int32_t number_of_error_files = 0;
  * number of threads to use
  */
 int main(int argc, char** argv) {
+	//Find the test file directory. It will have been passed in as a command line argument. If 
+	//it wasn't fail out
+	if(argc < 3){
+		fprintf(stderr, "Fatal error: please pass in an executable and a test directory as a command line argument\n");
+		exit(1);
+	}
+
+	//Get the thread count - very rough - I'm not really concerned about user-friendliness with this
+	int32_t thread_count = atoi(argv[1]);
+
+	//Extract it and open it
+	char* directory_path = argv[2];
+	DIR* directory = opendir(directory_path);
+
+	//Check that we got it
+	if(directory == NULL){
+		fprintf(stderr, "Fatal error: failed to open directory %s\n", directory_path);
+		exit(1);
+	}
+
+	//Create our two dynamic arrays with initial sizes
+	test_files = dynamic_array_alloc_initial_size(DEFAULT_ARRAY_SIZE);
+	error_files = dynamic_array_alloc_initial_size(DEFAULT_ARRAY_SIZE);
+
+	//Start the clock as we begin our run
+	clock_t start_time = clock();
+
+	//Directory entry
+	struct dirent* directory_entry;
+
+	//So long as we have directory entries to read
+	while((directory_entry = readdir(directory)) != NULL){
+		//If we see "." or ".." we leave
+		if(directory_entry->d_name[0] == '.'){
+			continue;
+		}
+
+		//Otherwise let's allocate the string for this
+		char* test_file = calloc(MAX_)
+
+	}
 
 }

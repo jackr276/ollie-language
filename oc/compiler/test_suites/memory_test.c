@@ -22,6 +22,9 @@
 //Maximum size of a given file name in linux
 #define MAX_FILE_NAME_SIZE 300
 
+//By default we'll allocate 1000 slots for our test file array
+#define DEFAULT_ARRAY_SIZE 1000
+
 //Mutices for shared states
 pthread_mutex_t file_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t result_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -178,8 +181,8 @@ int main(int argc, char** argv){
 	}
 
 	//Create our two dynamic arrays with initial sizes
-	test_files = dynamic_array_alloc_initial_size(1000);
-	files_in_error = dynamic_array_alloc_initial_size(1000);
+	test_files = dynamic_array_alloc_initial_size(DEFAULT_ARRAY_SIZE);
+	files_in_error = dynamic_array_alloc_initial_size(DEFAULT_ARRAY_SIZE);
 
 	//Start the time
 	clock_t start_time = clock();
