@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <dirent.h>
+#include <string.h>
 
 //Default file array size to avoid excessive resizing
 #define DEFAULT_ARRAY_SIZE 1000
@@ -58,8 +59,10 @@ u_int32_t number_of_error_files = 0;
  * number of threads to use
  */
 int main(int argc, char** argv) {
-	//Find the test file directory. It will have been passed in as a command line argument. If 
-	//it wasn't fail out
+	/**
+	 * Find the test file directory. It will have been passed in as a command line argument. If 
+	 * it wasn't fail out
+	 */
 	if(argc < 3){
 		fprintf(stderr, "Fatal error: please pass in an executable and a test directory as a command line argument\n");
 		exit(1);
@@ -96,7 +99,38 @@ int main(int argc, char** argv) {
 		}
 
 		//Otherwise let's allocate the string for this
-		char* test_file = calloc(MAX_)
+		char* test_file = calloc(LINUX_MAX_FILE_NAME_LENGTH, sizeof(char));
+
+		//Copy the directory name over to this
+		strncpy(test_file, directory_entry->d_name, LINUX_MAX_FILE_NAME_LENGTH * sizeof(char));
+		
+		//Add this to the array of all test files
+		dynamic_array_add(&test_files, test_file);
+
+		//One more test file seen
+		number_of_test_files++;
+	}
+
+	/**
+	 * Now that we have gathered everything that we are needing to validate, we will divide
+	 * up the dynamic array into equal(mostly) sized chunks of things to validate. The last
+	 * thread may have slightly less or slightly more work to do depending on how the division
+	 * works out but that is not a big deal
+	 */
+	u_int32_t files_per_thread = number_of_test_files / thread_count;
+
+	fprintf(stdout, "\n\n================================= Run Setup =================================\n");
+	fprintf(stdout, "%d threads requested for validate %d test files. Each thread will valid %d files\n", thread_count, number_of_test_files, files_per_thread);
+	fprintf(stdout, "================================= Run Setup =================================\n");
+
+	//Inclusive start index for our current thread
+	u_int32_t current_thread_file_index = 0;
+
+	/**
+	 * Spawn every thread with the appropriate start(inclusive)
+	 * index and end(exclusive) index for the array
+	 */
+	for(u_int32_t i = 0; i < thread_count; i++){
 
 	}
 

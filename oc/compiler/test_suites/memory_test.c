@@ -207,7 +207,7 @@ int main(int argc, char** argv){
 		char* file_name = calloc(MAX_FILE_NAME_SIZE, sizeof(char));
 
 		//Copy it over
-		strncpy(file_name, directory_entry->d_name, MAX_FILE_NAME_SIZE);
+		strncpy(file_name, directory_entry->d_name, MAX_FILE_NAME_SIZE * sizeof(char));
 
 		//Add this into the dynamic array
 		dynamic_array_add(&test_files, file_name);
