@@ -36,6 +36,7 @@
 #define LINUX_MAX_FILE_NAME_LENGTH 300
 
 //We'll need a mutex for all of the files that we wish to operate on
+pthread_mutex_t error_list_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t output_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /**
@@ -50,6 +51,19 @@ dynamic_array_t error_files;
 u_int32_t number_of_test_files = 0;
 u_int32_t number_of_error_files = 0;
 
+/**
+ * Each thread has a unique start and end index that 
+ * they need to iterate over. This struct contains
+ * that and will be passed along to each worker
+ * thread as a parameter
+ */
+typedef struct thread_parameters_t thread_parameters_t;
+struct thread_parameters_t {
+	//Start is inclusive
+	u_int32_t start_index;
+	//End is exclusive
+	u_int32_t end_index;
+};
 
 
 /**
@@ -134,4 +148,7 @@ int main(int argc, char** argv) {
 
 	}
 
+	//Destroy the two mutices
+	pthread_mutex_destroy(&error_list_mutex);
+	pthread_mutex_destroy(&output_mutex);
 }
