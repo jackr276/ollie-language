@@ -25,6 +25,6 @@ pub fn main() -> i32 {
 	outer:nested_inner = inner;
 
 	//OUNIT tester tells us that the console should return 5
-	[OUNIT: console ret 5]
+	OUNIT: [console ret 5]
 	ret outer:nested_inner:x;
 }

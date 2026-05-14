@@ -412,6 +412,49 @@ finalize_macro:
 
 
 /**
+ * Validate and skip past an OUNIT directive. OUNIT directives must be contained within L_BRACKETS that
+ * match up. We will not do any validation of what is inside of the OUNIT directive here(at least not
+ * yet), so this is just to make sure that there's no formatting exceptions. Once we've validated the
+ * format we will flag the entire directive to be ignored so that it does not end up in the final
+ * token stream
+ *
+ * NOTE: by the time we get here we have already seen the OUNIT token but we have not properly
+ * consumed it. We will do that here
+ */
+static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, u_int32_t* stream_index){
+	//Extract the token at the given index
+	lexitem_t* token = &(stream->token_stream.internal_array[*stream_index]);
+
+	//Some very weird failure here
+	if(token->tok != OUNIT){
+		fprintf(stderr, "Fatal internal compiler error: preprocessor expected OUNIT but got %s instead\n", lexitem_to_string(token));
+		exit(1);
+	}
+
+	//It was OUNIT so ignore it
+	token->ignore = TRUE;
+
+	//Bump the token index up and refresh the token
+	(*stream_index)++;
+	token = &(stream->token_stream.internal_array[*stream_index]);
+
+	//We need to now see a colon, if we don't then this is a failure
+	if(token->tok != COLON){
+		sprintf(info_message, "Expected \":\" after OUNIT directive but got \"%s\" instead", lexitem_to_string(token));
+		print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, token->line_num);
+		preprocessor_error_count++;
+		return FAILURE;
+	}
+
+	//Make it here then we're good, flag to ignore and continue
+	token->ignore = TRUE;
+
+	//If we get here then we have success
+	return SUCCESS;
+}
+
+
+/**
  * Put simply, the consumption pass will run through the entire token
  * stream looking for macros. When it finds a macro, it will flag that section
  * of the token stream to be ignored by future passes(in reality this means
@@ -468,13 +511,14 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 				return FAILURE;
 
 			/**
-			 * If we have an L_BRACKET, we may be seeing an "OUNIT" directive for the ollie compiler's
+			 * If we hit this then we are seeing an "OUNIT" directive for the ollie compiler's
 			 * integrated unit testing functionality. We will process this to be sure, but
 			 * if we are seeing it, it will need to be skipped because it's not valid to
 			 * actually be compiled. We will do both the validations and the skipping
 			 * here
 			 */
-			case L_BRACKET:
+			case OUNIT:
+				//Let the helper deal with it
 				result = validate_and_skip_ounit_directive(stream, &array_index);
 
 				//Invalid OUNIT directive so we fail out here
