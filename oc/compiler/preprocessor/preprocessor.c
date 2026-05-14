@@ -467,6 +467,23 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 				preprocessor_error_count++;
 				return FAILURE;
 
+			/**
+			 * If we have an L_BRACKET, we may be seeing an "OUNIT" directive for the ollie compiler's
+			 * integrated unit testing functionality. We will process this to be sure, but
+			 * if we are seeing it, it will need to be skipped because it's not valid to
+			 * actually be compiled. We will do both the validations and the skipping
+			 * here
+			 */
+			case L_BRACKET:
+				result = validate_and_skip_ounit_directive(stream, &array_index);
+
+				//Invalid OUNIT directive so we fail out here
+				if(result == FAILURE){
+					return FAILURE;
+				}
+
+				break;
+
 			//We haven't seen a macro, but the array index needs to be bumped
 			default:
 				array_index++;
