@@ -81,6 +81,9 @@ void* worker(void* thread_parameters) {
 	u_int32_t start_index = parameters->start_index;
 	u_int32_t end_index = parameters->end_index;
 
+	//Keep track of how many errors this exact thread has seen
+	u_int32_t errors_per_thread = 0;
+
 	//Display for debug info
 	pthread_mutex_lock(&output_mutex);
 	fprintf(stdout, "Thread %d has been assigned to files within range [%d, %d) and will now start working\n\n", parameters->thread_number, start_index, end_index);
@@ -95,6 +98,11 @@ void* worker(void* thread_parameters) {
 
 	}
 
+
+	//Print our final debug info and then get out
+	pthread_mutex_lock(&output_mutex);
+	fprintf(stdout, "Thread %d has finished working. Validated %d files, found %d in error\n", parameters->thread_number, end_index - start_index, errors_per_thread);
+	pthread_mutex_unlock(&output_mutex);
 
 	//We have nothing to give back
 	return NULL;
