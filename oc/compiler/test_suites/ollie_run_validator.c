@@ -86,7 +86,7 @@ void* worker(void* thread_parameters) {
 
 	//Display for debug info
 	pthread_mutex_lock(&output_mutex);
-	fprintf(stdout, "Thread %d has been assigned to files within range [%d, %d) and will now start working\n\n", parameters->thread_number, start_index, end_index);
+	fprintf(stdout, "Thread %d has been assigned to validate files with indices in range [%d, %d) and will now start working\n\n", parameters->thread_number, start_index, end_index);
 	pthread_mutex_unlock(&output_mutex);
 
 	/**

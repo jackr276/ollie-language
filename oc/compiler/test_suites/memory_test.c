@@ -230,6 +230,9 @@ int main(int argc, char** argv){
 	//Space for our threads
 	pthread_t* threads = calloc(thread_count, sizeof(pthread_t));
 
+	//TODO UPDATE TO USE ARRAY DIVISION
+	//This will stop us from locking, making this much more effective
+
 	//Spawn a worker for each thread
 	for(u_int16_t i = 0; i < thread_count; i++){
 		pthread_create(&(threads[i]), NULL, worker, NULL);
