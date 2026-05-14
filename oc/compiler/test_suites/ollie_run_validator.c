@@ -167,6 +167,7 @@ int main(int argc, char** argv) {
 	 * works out but that is not a big deal
 	 */
 	u_int32_t files_per_thread = number_of_test_files / thread_count;
+	u_int32_t files_covered = 0;
 
 	fprintf(stdout, "\n\n================================= Run Setup =================================\n");
 	fprintf(stdout, "%d threads requested to validate %d test files. Each thread will validate %d files\n", thread_count, number_of_test_files, files_per_thread);
@@ -175,9 +176,26 @@ int main(int argc, char** argv) {
 	//Inclusive start index for our current thread
 	u_int32_t current_thread_file_index = 0;
 
+	//==================== Thread Setup =========================
+	/**
+	 * Reserve heap space for our thread items and our parameters
+	 */
+	pthread_t* threads = calloc(thread_count, sizeof(pthread_t));
+	thread_parameters_t* parameters = calloc(thread_count, sizeof(thread_parameters_t));
+
 	/**
 	 * Spawn every thread with the appropriate start(inclusive)
 	 * index and end(exclusive) index for the array
+	 */
+	for(u_int32_t i = 0; i < thread_count; i++){
+
+	}
+
+
+	/**
+	 * Now that we have spawned all of our threads
+	 * we wait in this blocking loop for them
+	 * to finish
 	 */
 	for(u_int32_t i = 0; i < thread_count; i++){
 
