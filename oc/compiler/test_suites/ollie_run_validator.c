@@ -63,7 +63,42 @@ struct thread_parameters_t {
 	u_int32_t start_index;
 	//End is exclusive
 	u_int32_t end_index;
+	//Thread number
+	u_int8_t thread_number;
 };
+
+
+/**
+ * A worker thread operates over a given range of files before it completes. The thread
+ * parameters(passed in via reference through the void pointer) include the inclusive
+ * start index in the test file array and the exclusive end index in the test file array
+ */
+void* worker(void* thread_parameters) {
+	//Implicit case it over
+	thread_parameters_t* parameters = thread_parameters;
+
+	//Extract the two indices that we'll be using
+	u_int32_t start_index = parameters->start_index;
+	u_int32_t end_index = parameters->end_index;
+
+	//Display for debug info
+	pthread_mutex_lock(&output_mutex);
+	fprintf(stdout, "Thread %d has been assigned to files within range [%d, %d) and will now start working\n\n", parameters->thread_number, start_index, end_index);
+	pthread_mutex_unlock(&output_mutex);
+
+	/**
+	 * Now run through every file that is within this threads assignment.
+	 * All of the work for each file within this given range will be handled
+	 * by this thread
+	 */
+	for(u_int32_t i = start_index; i < end_index; i++){
+
+	}
+
+
+	//We have nothing to give back
+	return NULL;
+}
 
 
 /**
