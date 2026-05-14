@@ -200,9 +200,11 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 	//Let's get the first pointer here
 	lexitem_t* lookahead = get_token_pointer_and_increment(token_array, index);
 
-	//This really shouldn't happen because
-	//we've already seen the $macro to get here,
-	//but we'll catch it just in case
+	/**
+	 * This really shouldn't happen because
+	 * we've already seen the $macro to get here,
+	 * but we'll catch it just in case
+	 */
 	if(lookahead->tok != MACRO){
 		print_preprocessor_message(MESSAGE_TYPE_ERROR, "$macro keyword expected before macro declaration", lookahead->line_num);
 		preprocessor_error_count++;
@@ -212,8 +214,10 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 	//IMPORTANT - flag that this token needs to be ignored by the replacer
 	lookahead->ignore = TRUE;
 
-	//Now that we've seen the $macro keyword, we need to see the name
-	//of the macro via an identifier
+	/**
+	 * Now that we've seen the $macro keyword, we need to see the name
+	 * of the macro via an identifier
+	 */
 	lookahead = get_token_pointer_and_increment(token_array, index);
 
 	//If we did not see an identifier then we are in bad shape here
@@ -224,8 +228,10 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 		return FAILURE;
 	}
 
-	//Let's see if we're able to find this macro record. If we are, then we have an issue because that would
-	//be a duplicated name
+	/**
+	 * Let's see if we're able to find this macro record. If we are, then we have an issue because that would
+	 * be a duplicated name
+	 */
 	symtab_macro_record_t* found_macro = lookup_macro(macro_symtab, lookahead->lexeme.string);
 
 	//Fail case - we have a duplicate
@@ -385,8 +391,10 @@ end_parameter_processing:
 
 				break;
 
-			//In theory anything else that we see in here is valid, so we'll
-			//just do our bookkeeping and move along
+			/**
+			 * In theory anything else that we see in here is valid, so we'll
+			 * just do our bookkeeping and move along
+			 */
 			default:
 				//Add this into the token array
 				token_array_add(macro_token_array, lookahead);
@@ -421,23 +429,29 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 
 	//Loop through the entire structure
 	while(array_index < stream->token_stream.current_index){
-		//Get a pointer to the token that we are after.
-		//
-		//IMPORTANT - we want to modify this token in the stream, so a pointer
-		//is critical. We *cannot* use a local copy for this
+		/**
+		 * Get a pointer to the token that we are after.
+		 *
+		 * IMPORTANT - we want to modify this token in the stream, so a pointer
+		 * is critical. We *cannot* use a local copy for this
+		 */
 		lexitem_t* token = &(stream->token_stream.internal_array[array_index]);
 
 		//Go based on the kind of token that we have in here
 		switch(token->tok){
 			//We are seeing the beginning of a macro
 			case MACRO:
-				//Now we will invoke the helper to parse this entire token
-				//stream(until we see the ENDMACRO directive)
+				/**
+				 * Now we will invoke the helper to parse this entire token
+				 * stream(until we see the ENDMACRO directive)
+				 */
 				result = process_macro(stream, macro_symtab, &array_index);
 
-				//This indicates some kind of failure. The error message
-				//will have already been printed by the processor, so we just
-				//pass this along
+				/**
+				 * This indicates some kind of failure. The error message
+				 * will have already been printed by the processor, so we just
+				 * pass this along
+				 */
 				if(result == FAILURE){
 					return FAILURE;
 				}
