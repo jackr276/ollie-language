@@ -167,7 +167,6 @@ int main(int argc, char** argv) {
 	 * works out but that is not a big deal
 	 */
 	u_int32_t files_per_thread = number_of_test_files / thread_count;
-	u_int32_t files_covered = 0;
 
 	fprintf(stdout, "\n\n================================= Run Setup =================================\n");
 	fprintf(stdout, "%d threads requested to validate %d test files. Each thread will validate %d files\n", thread_count, number_of_test_files, files_per_thread);
@@ -188,7 +187,30 @@ int main(int argc, char** argv) {
 	 * index and end(exclusive) index for the array
 	 */
 	for(u_int32_t i = 0; i < thread_count; i++){
+		//This is the start index that we maintain
+		parameters[i].start_index = current_thread_file_index;
 
+		/**
+		 * If we are not the very last thread, we will increment
+		 * normally. If this is the very last thread, we'll
+		 * need to handle a bit more or a bit less because
+		 * odds are the division of files by threadcount is not
+		 * even
+		 */
+		if(i != thread_count - 1){
+			current_thread_file_index += files_per_thread;
+		} else {
+			current_thread_file_index = number_of_test_files;
+		}
+
+		//Whatever it ended up being give it to the parameter array
+		parameters[i].end_index = current_thread_file_index;
+
+		//Thread number is just for debugging but we do store it
+		parameters[i].thread_number = i;
+
+		//Now that we have done everything here, it is time to spawn the thread
+		pthread_create(&(threads[i]), NULL, worker, &(parameters[i]));
 	}
 
 
