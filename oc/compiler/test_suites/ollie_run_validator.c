@@ -213,15 +213,18 @@ int main(int argc, char** argv) {
 		pthread_create(&(threads[i]), NULL, worker, &(parameters[i]));
 	}
 
-
 	/**
 	 * Now that we have spawned all of our threads
 	 * we wait in this blocking loop for them
 	 * to finish
 	 */
 	for(u_int32_t i = 0; i < thread_count; i++){
-
+		pthread_join(threads[i], NULL);
 	}
+
+	//Now that the work has been done these are useless
+	free(threads);
+	free(parameters);
 
 	//Destroy the two mutices
 	pthread_mutex_destroy(&error_list_mutex);
