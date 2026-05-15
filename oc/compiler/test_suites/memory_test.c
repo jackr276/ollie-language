@@ -17,7 +17,6 @@
 #include <time.h>
 //For any needed constants
 #include "../utils/dynamic_array/dynamic_array.h"
-#include "../utils/constants.h"
 
 //Maximum size of a given file name in linux
 #define MAX_FILE_NAME_SIZE 300
@@ -227,27 +226,36 @@ int main(int argc, char** argv){
 	//Close the directory
 	closedir(directory);
 
+	/**
+	 * Each thread will have an equal amount of files, with the exception for the last
+	 * thread, which may have more or less because the division may be uneven
+	 */
+	u_int32_t files_per_thread = total_test_files / thread_count;
+
 	//Display for the user
-	printf("\n===================================== SETUP ================================\n");
-	printf("THREADS: %d\n", thread_count);
-	printf("DIRECTOR: %s\n", directory_path);
-	printf("\n===================================== SETUP ================================\n\n");
+	fprintf(stdout, "\n===================================== SETUP ================================\n");
+	fprintf(stdout, "THREADS: %d\n", thread_count);
+	fprintf(stdout, "DIRECTORY: %s\n", directory_path);
+	fprintf(stdout, "Memory Checker will spawn %d threads to work on %d files each\n", thread_count, files_per_thread);
+	fprintf(stdout, "\n===================================== SETUP ================================\n\n");
 
 	//=========================== Setup for threads ============================
 	
 	//Space for our threads
 	pthread_t* threads = calloc(thread_count, sizeof(pthread_t));
+	thread_parameters_t* parameters = calloc(thread_count, sizeof(thread_parameters_t));
 
-	//TODO UPDATE TO USE ARRAY DIVISION
-	//This will stop us from locking, making this much more effective
-
-	//Spawn a worker for each thread
-	for(u_int16_t i = 0; i < thread_count; i++){
+	/**
+	 * For each thread we will give a range of indices [start, end) to
+	 * work on. For the last thread, we will need to give whatever
+	 * is left to ensure that we actually get all of the files
+	 */
+	for(u_int32_t i = 0; i < thread_count; i++){
 		pthread_create(&(threads[i]), NULL, worker, NULL);
 	}
 
 	//Wait for them all to join
-	for(u_int16_t i = 0; i < thread_count; i++){
+	for(u_int32_t i = 0; i < thread_count; i++){
 		pthread_join(threads[i], NULL);
 	}
 
