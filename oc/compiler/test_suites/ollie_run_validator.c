@@ -49,9 +49,11 @@ pthread_mutex_t lexer_mutex = PTHREAD_MUTEX_INITIALIZER;
  */
 static dynamic_array_t test_files;
 static dynamic_array_t error_files;
+static dynamic_array_t failed_to_compile_files;
 
 //Keep track of the total number of files and the total error files
 static u_int32_t number_of_test_files = 0;
+static u_int32_t number_of_failed_to_compile = 0;
 static u_int32_t number_of_error_files = 0;
 
 //Hold onto the overall directory path
@@ -132,6 +134,8 @@ void* worker(void* thread_parameters) {
 		//Get the file that we're after
 		char* file_name = dynamic_array_get_at(&test_files, i);
 
+		//Generate the *.test file name for the compiled file
+		sprintf(output_file_name, "%s.test", file_name);
 
 		//Construct the fully qualified file name
 		sprintf(fully_qualified_file_name, "%s%s", test_file_dir, file_name);
@@ -168,8 +172,35 @@ void* worker(void* thread_parameters) {
 		 * Otherwise it is compatible so we will begin our testing
 		 * here by first compiling the actual item
 		 */
-		printf("HERE\n");
+		sprintf(compilation_command, "exit $(./oc/out/oc -f %s%s -o %s)", test_file_dir, file_name, output_file_name);
 
+		//Run the command in the system
+		int32_t compilation_result = system(compilation_command);
+
+		/**
+		 * If for any reason we have a failure here, then
+		 * we will note a compilation failure and move on
+		 */
+		if(compilation_result != 0){
+			pthread_mutex_lock(&output_mutex);
+			fprintf(stdout, "Ran compilation command: %s\n", compilation_command);
+			fprintf(stdout, "The OUNIT configured test %s failed to compile with exit code %d. Developer attention is required\n\n", file_name, compilation_result);
+
+			//Store this in the list of files that failed to compile when they should have
+			dynamic_array_add(&failed_to_compile_files, file_name);
+			number_of_failed_to_compile++;
+			pthread_mutex_unlock(&output_mutex);
+
+			//Onto the next one
+			continue;
+		}
+
+		/**
+		 * Display our output to the console as to what we ran
+		 * and what we got out of it
+		 */
+		pthread_mutex_lock(&output_mutex);
+		pthread_mutex_unlock(&output_mutex);
 	}
 
 
