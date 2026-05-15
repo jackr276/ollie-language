@@ -36,11 +36,27 @@ u_int32_t number_of_error_files = 0;
 //The current test file index
 u_int32_t current_test_file_index;
 //The total number of actual test files
-u_int32_t total_test_files;
+u_int32_t total_test_files = 0;
 
 //Dynamic arrays to hold the test files and the files in error
 dynamic_array_t test_files;
 dynamic_array_t files_in_error;
+
+/**
+ * The thread parameters will pass along the inclusive start index
+ * and exclusive end index to tell the thread where to focus its
+ * energy
+ */
+typedef struct thread_parameters_t thread_parameters_t;
+struct thread_parameters_t {
+	//Array start(inclusive)
+	u_int32_t start_index;
+	//Array end(exclusive)
+	u_int32_t end_index;
+	//Thread ID
+	u_int8_t thread_number;
+};
+
 
 /**
  * Worker thread:
@@ -58,12 +74,19 @@ dynamic_array_t files_in_error;
  *		Unlocks the result mutex
  * }
  */
-void* worker(){
+void* worker(void* thread_parameters){
 	//For creating our commands
 	char command[3000];
 	
 	//For holding our file name
 	char* file_name;
+
+	//Extract/cast our actual thread parameters
+	thread_parameters_t* parameters = thread_parameters;
+
+	//For ease of use extract the start and end indices
+	u_int32_t start_index;
+	u_int32_t end_index;
 
 	//The return code for our command
 	int32_t return_code;
