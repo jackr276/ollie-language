@@ -209,6 +209,22 @@ void* worker(void* thread_parameters) {
 		 */
 		pthread_mutex_lock(&output_mutex);
 		pthread_mutex_unlock(&output_mutex);
+
+		/**
+		 * Delete the output file now that we are done with it. Output file
+		 * names should be unique so in theory we should not have to lock this
+		 */
+		sprintf(compilation_command, "rm %s", output_file_name);
+		int32_t deletion_result = system(compilation_command);
+
+		/**
+		 * If somehow this didn't work we should flag it
+		 */
+		if(deletion_result != 0){
+			pthread_mutex_lock(&output_mutex);
+			fprintf(stderr, "Failed to delete output file %s\n", output_file_name);
+		   	pthread_mutex_unlock(&output_mutex);
+		}
 	}
 
 
