@@ -22,6 +22,7 @@
 //Use our own in-house dynamic array
 #include "../utils/dynamic_array/dynamic_array.h"
 #include "../lexer/lexer.h"
+#include "../utils/constants.h"
 //We will be doing this multithreaded
 #include <pthread.h>
 #include <sys/types.h>
@@ -74,11 +75,34 @@ struct thread_parameters_t {
 
 
 /**
+ * Is the given test compatible with OUNIT? We will determine
+ * this by scanning for the OUNIT token inside of the tests
+ * token array
+ */
+static inline u_int8_t is_test_OUNIT_compatible(ollie_token_stream_t* stream){
+	//Run through and see if we can find the OUNIT token
+	for(u_int32_t i = 0; i < stream->token_stream.current_index; i++){
+		//Extract the token pointer
+		lexitem_t* lexitem = token_array_get_pointer_at(&(stream->token_stream), i);
+
+		//We got one so we are done
+		if(lexitem->tok == OUNIT){
+			return TRUE;
+		}
+	}
+
+	//If we made it all the way down here then it is not OUNIT compatible
+	return FALSE;
+}
+
+/**
  * A worker thread operates over a given range of files before it completes. The thread
  * parameters(passed in via reference through the void pointer) include the inclusive
  * start index in the test file array and the exclusive end index in the test file array
  */
 void* worker(void* thread_parameters) {
+	//The output file name that we will be using
+	char output_file_name[1000];
 	//A path for the fully qualified file
 	char fully_qualified_file_name[1000];
 	//The command to use OC to compile
@@ -108,6 +132,7 @@ void* worker(void* thread_parameters) {
 		//Get the file that we're after
 		char* file_name = dynamic_array_get_at(&test_files, i);
 
+
 		//Construct the fully qualified file name
 		sprintf(fully_qualified_file_name, "%s%s", test_file_dir, file_name);
 
@@ -131,6 +156,19 @@ void* worker(void* thread_parameters) {
 			pthread_mutex_unlock(&output_mutex);
 			continue;
 		}
+
+		/**
+		 * It is not OUNIT compatible so we skip it
+		 */
+		if(is_test_OUNIT_compatible(&token_stream) == FALSE){
+			continue;
+		}
+
+		/**
+		 * Otherwise it is compatible so we will begin our testing
+		 * here by first compiling the actual item
+		 */
+		printf("HERE\n");
 
 	}
 
