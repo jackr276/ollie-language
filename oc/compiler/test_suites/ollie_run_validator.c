@@ -41,6 +41,7 @@
 pthread_mutex_t error_list_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t output_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t lexer_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t compiler_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /**
  * A generic array containing *all* of our test files that will be worked over
@@ -119,6 +120,7 @@ void* worker(void* thread_parameters) {
 
 	//Keep track of how many errors this exact thread has seen
 	u_int32_t errors_per_thread = 0;
+	u_int32_t failed_to_compile_per_thread = 0;
 
 	//Display for debug info
 	pthread_mutex_lock(&output_mutex);
@@ -172,10 +174,15 @@ void* worker(void* thread_parameters) {
 		 * Otherwise it is compatible so we will begin our testing
 		 * here by first compiling the actual item
 		 */
-		sprintf(compilation_command, "exit $(./oc/out/oc -f %s%s -o %s)", test_file_dir, file_name, output_file_name);
+		sprintf(compilation_command, "./oc/out/oc -f %s%s -o %s > /dev/null 2>&1", test_file_dir, file_name, output_file_name);
 
-		//Run the command in the system
+		/**
+		 * Run the compilation command. The compiler relies on a shared temporary output file, so we 
+		 * need to lock here to make this all work
+		 */
+		pthread_mutex_lock(&compiler_mutex);
 		int32_t compilation_result = system(compilation_command);
+		pthread_mutex_unlock(&compiler_mutex);
 
 		/**
 		 * If for any reason we have a failure here, then
@@ -189,6 +196,7 @@ void* worker(void* thread_parameters) {
 			//Store this in the list of files that failed to compile when they should have
 			dynamic_array_add(&failed_to_compile_files, file_name);
 			number_of_failed_to_compile++;
+			failed_to_compile_per_thread++;
 			pthread_mutex_unlock(&output_mutex);
 
 			//Onto the next one
@@ -206,7 +214,7 @@ void* worker(void* thread_parameters) {
 
 	//Print our final debug info and then get out
 	pthread_mutex_lock(&output_mutex);
-	fprintf(stdout, "Thread %d has finished working. Validated %d files, found %d in error\n", parameters->thread_number, end_index - start_index, errors_per_thread);
+	fprintf(stdout, "Thread %d has finished working. Validated %d files, %d failed to compile, %d ran but errored\n", parameters->thread_number, end_index - start_index, failed_to_compile_per_thread, errors_per_thread);
 	pthread_mutex_unlock(&output_mutex);
 
 	//We have nothing to give back
@@ -245,6 +253,7 @@ int main(int argc, char** argv) {
 
 	//Create our two dynamic arrays with initial sizes
 	test_files = dynamic_array_alloc_initial_size(DEFAULT_ARRAY_SIZE);
+	failed_to_compile_files = dynamic_array_alloc_initial_size(DEFAULT_ARRAY_SIZE);
 	error_files = dynamic_array_alloc_initial_size(DEFAULT_ARRAY_SIZE);
 
 	//Start the clock as we begin our run
@@ -343,4 +352,5 @@ int main(int argc, char** argv) {
 	pthread_mutex_destroy(&error_list_mutex);
 	pthread_mutex_destroy(&output_mutex);
 	pthread_mutex_destroy(&lexer_mutex);
+	pthread_mutex_destroy(&compiler_mutex);
 }
