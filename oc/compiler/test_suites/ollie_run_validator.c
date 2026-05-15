@@ -22,7 +22,6 @@
 //Use our own in-house dynamic array
 #include "../utils/dynamic_array/dynamic_array.h"
 #include "../lexer/lexer.h"
-#include "../utils/constants.h"
 //We will be doing this multithreaded
 #include <pthread.h>
 #include <sys/types.h>
@@ -38,7 +37,6 @@
 #define LINUX_MAX_FILE_NAME_LENGTH 300
 
 //We'll need a mutex for all of the files that we wish to operate on
-pthread_mutex_t error_list_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t output_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t lexer_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t compiler_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -76,26 +74,53 @@ struct thread_parameters_t {
 	u_int8_t thread_number;
 };
 
+/**
+ * For OUNIT compatibility, we have 3 possible
+ * scenarios:
+ * 	1.) Not at all compatible
+ * 	2.) Compatible
+ * 	3.) Compatible but incorrect syntax
+ * This enumeration represents all possible states
+ */
+typedef enum {
+	OUNIT_NOT_COMPATIBLE,
+	OUNIT_COMPATBILE,
+	OUNIT_COMPATIBLE_BUT_INVALID
+} ounit_compatibility_status_t;
+
+
+/**
+ * Parser the OUNIT test command. If the command is found to be invalid, we return a state 
+ * that represents said invalidity. Otherwise, we will store the result that we expect(must
+ * be an integer) inside of the passed parameter pointer
+ */
+static inline u_int8_t parse_OUNIT_test_command(ollie_token_stream_t* stream, int32_t* expected_result){
+
+	return OUNIT_COMPATBILE;
+}
+
 
 /**
  * Is the given test compatible with OUNIT? We will determine
  * this by scanning for the OUNIT token inside of the tests
- * token array
+ * token array. If the test is determined to be OUNIT compatible, we will
+ * also piggy-back off of this function to parse and get out what we
+ * expect the actual result of the test to be
  */
-static inline u_int8_t is_test_OUNIT_compatible(ollie_token_stream_t* stream){
+static ounit_compatibility_status_t is_test_OUNIT_compatible(ollie_token_stream_t* stream, int32_t* expected_result){
 	//Run through and see if we can find the OUNIT token
 	for(u_int32_t i = 0; i < stream->token_stream.current_index; i++){
 		//Extract the token pointer
 		lexitem_t* lexitem = token_array_get_pointer_at(&(stream->token_stream), i);
 
-		//We got one so we are done
+		//If we see the OUNIT token then we will let the helper determine its compatibilty
 		if(lexitem->tok == OUNIT){
-			return TRUE;
+			return parse_OUNIT_test_command(stream, expected_result);
 		}
 	}
 
 	//If we made it all the way down here then it is not OUNIT compatible
-	return FALSE;
+	return OUNIT_NOT_COMPATIBLE;
 }
 
 /**
@@ -164,10 +189,46 @@ void* worker(void* thread_parameters) {
 		}
 
 		/**
-		 * It is not OUNIT compatible so we skip it
+		 * The helper will parse the OUNIT test command(if one exists) and populate
+		 * the expected result for later validations
 		 */
-		if(is_test_OUNIT_compatible(&token_stream) == FALSE){
-			continue;
+		int32_t expected_result;
+		ounit_compatibility_status_t compatibility = is_test_OUNIT_compatible(&token_stream, &expected_result);
+
+		switch(compatibility){
+			/**
+			 * Easiest case just skip the whole thing
+			 */
+			case OUNIT_NOT_COMPATIBLE:
+				continue;
+
+			/**
+			 * Another easy case. The only thing that we want to validate is that the
+			 * expected result is actually a valid value. Remember that on UNIX, 
+			 * the highest return value from a shell is 255
+			 */
+			case OUNIT_COMPATBILE:
+				/**
+				 * We'll have this fail. We don't want to let the developer waste
+				 * time confused as to why this isn't working
+				 */
+				if(expected_result >= 255){
+					pthread_mutex_lock(&output_mutex);
+					fprintf(stderr, "Test %s: The expected return value of %d is higher than the maximum UNIX return value of %d. Please remediate your test\n", file_name, expected_result, 255);
+
+					//Add to the error array
+					dynamic_array_add(&error_files, file_name);
+					number_of_error_files++;
+					errors_per_thread++;
+					pthread_mutex_unlock(&output_mutex);
+
+					//Onto the next file
+					continue;
+				}
+
+				break;
+
+
 		}
 
 		/**
@@ -365,7 +426,6 @@ int main(int argc, char** argv) {
 	free(parameters);
 
 	//Destroy the three mutices
-	pthread_mutex_destroy(&error_list_mutex);
 	pthread_mutex_destroy(&output_mutex);
 	pthread_mutex_destroy(&lexer_mutex);
 	pthread_mutex_destroy(&compiler_mutex);
