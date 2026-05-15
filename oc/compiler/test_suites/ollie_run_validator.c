@@ -96,7 +96,8 @@ typedef enum {
  */
 static inline u_int8_t parse_OUNIT_test_command(ollie_token_stream_t* stream, int32_t* expected_result){
 
-	return OUNIT_COMPATBILE;
+	//TODO FIXME
+	return OUNIT_COMPATIBLE_BUT_INVALID;
 }
 
 
@@ -142,6 +143,7 @@ void* worker(void* thread_parameters) {
 	//Extract the two indices that we'll be using
 	u_int32_t start_index = parameters->start_index;
 	u_int32_t end_index = parameters->end_index;
+	u_int32_t thread_id = parameters->thread_number;
 
 	//Keep track of how many errors this exact thread has seen
 	u_int32_t errors_per_thread = 0;
@@ -149,7 +151,7 @@ void* worker(void* thread_parameters) {
 
 	//Display for debug info
 	pthread_mutex_lock(&output_mutex);
-	fprintf(stdout, "Thread %d has been assigned to validate files with indices in range [%d, %d) and will now start working\n\n", parameters->thread_number, start_index, end_index);
+	fprintf(stdout, "[Thread %d]: Thread has been assigned to validate files with indices in range [%d, %d) and will now start working\n\n", thread_id, start_index, end_index);
 	pthread_mutex_unlock(&output_mutex);
 
 	/**
@@ -183,7 +185,7 @@ void* worker(void* thread_parameters) {
 		 */
 		if(token_stream.status == STREAM_STATUS_FAILURE){
 			pthread_mutex_lock(&output_mutex);
-			fprintf(stdout, "File %s has failed to tokenize\n", file_name);
+			fprintf(stdout, "[Thread %d]: File %s has failed to tokenize\n", thread_id, file_name);
 			pthread_mutex_unlock(&output_mutex);
 			continue;
 		}
@@ -214,7 +216,7 @@ void* worker(void* thread_parameters) {
 				 */
 				if(expected_result >= 255){
 					pthread_mutex_lock(&output_mutex);
-					fprintf(stderr, "Test %s: The expected return value of %d is higher than the maximum UNIX return value of %d. Please remediate your test\n", file_name, expected_result, 255);
+					fprintf(stdout, "[Thread %d]: File \"%s\" - The OUNIT expected return value of %d is higher than the maximum UNIX return value of %d. Please remediate your test\n", thread_id, file_name, expected_result, 255);
 
 					//Add to the error array
 					dynamic_array_add(&error_files, file_name);
@@ -228,7 +230,22 @@ void* worker(void* thread_parameters) {
 
 				break;
 
+			/**
+			 * This means that the developer tried to make their test OUNIT compatible
+			 * but they messed it up somehow
+			 */
+			case OUNIT_COMPATIBLE_BUT_INVALID:
+				pthread_mutex_lock(&output_mutex);
+				fprintf(stdout, "[Thread %d]: The file \"%s\" has an incorrect OUNIT configuration and will not be processed\n", thread_id, file_name);
 
+				//Add to the error array
+				dynamic_array_add(&error_files, file_name);
+				number_of_error_files++;
+				errors_per_thread++;
+				pthread_mutex_unlock(&output_mutex);
+
+				//Onto the next file don't bother compiling
+				continue;
 		}
 
 		/**
@@ -251,8 +268,8 @@ void* worker(void* thread_parameters) {
 		 */
 		if(compilation_result != 0){
 			pthread_mutex_lock(&output_mutex);
-			fprintf(stdout, "Ran compilation command: %s\n", compilation_command);
-			fprintf(stdout, "The OUNIT configured test %s failed to compile with exit code %d. Developer attention is required\n\n", file_name, compilation_result);
+			fprintf(stdout, "[Thread %d]: Ran compilation command: %s\n", thread_id, compilation_command);
+			fprintf(stdout, "[Thread %d]: The OUNIT configured test %s failed to compile with exit code %d. Developer attention is required\n\n", thread_id, file_name, compilation_result);
 
 			//Store this in the list of files that failed to compile when they should have
 			dynamic_array_add(&failed_to_compile_files, file_name);
@@ -283,7 +300,7 @@ void* worker(void* thread_parameters) {
 		 */
 		if(deletion_result != 0){
 			pthread_mutex_lock(&output_mutex);
-			fprintf(stderr, "Failed to delete output file %s\n", output_file_name);
+			fprintf(stdout, "[Thread %d]: Failed to delete output file %s\n", thread_id, output_file_name);
 		   	pthread_mutex_unlock(&output_mutex);
 		}
 	}
@@ -291,7 +308,12 @@ void* worker(void* thread_parameters) {
 
 	//Print our final debug info and then get out
 	pthread_mutex_lock(&output_mutex);
-	fprintf(stdout, "Thread %d has finished working. Validated %d files, %d failed to compile, %d ran but errored\n", parameters->thread_number, end_index - start_index, failed_to_compile_per_thread, errors_per_thread);
+	fprintf(stdout, "\n-----------------------------------------------\n");
+	fprintf(stdout, "[Thread %d]: Work Finished\n", thread_id);
+	fprintf(stdout, "Files Processed: %d\n", end_index - start_index);
+	fprintf(stdout, "Failed to compile: %d\n", failed_to_compile_per_thread);
+	fprintf(stdout, "Ran but errored: %d\n", errors_per_thread);
+	fprintf(stdout, "-----------------------------------------------\n");
 	pthread_mutex_unlock(&output_mutex);
 
 	//We have nothing to give back
@@ -311,7 +333,7 @@ int main(int argc, char** argv) {
 	 * it wasn't fail out
 	 */
 	if(argc < 3){
-		fprintf(stderr, "Fatal error: please pass in an executable and a test directory as a command line argument\n");
+		fprintf(stdout, "Fatal error: please pass in an executable and a test directory as a command line argument\n");
 		exit(1);
 	}
 
@@ -324,7 +346,7 @@ int main(int argc, char** argv) {
 
 	//Check that we got it
 	if(directory == NULL){
-		fprintf(stderr, "Fatal error: failed to open directory %s\n", test_file_dir);
+		fprintf(stdout, "Fatal error: failed to open directory %s\n", test_file_dir);
 		exit(1);
 	}
 
