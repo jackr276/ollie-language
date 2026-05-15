@@ -27,6 +27,9 @@
 //Mutex for stdout/error file queue
 pthread_mutex_t result_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+//Hold onto the test directory path
+static char* test_directory_path;
+
 //Total number of errors we have
 u_int32_t total_errors = 0;
 //Number of files in error
@@ -105,7 +108,7 @@ void* worker(void* thread_parameters){
 		char* file_name = dynamic_array_get_at(&test_files, i);
 
 		//Our command. We use 2>&1 to write all errors to stdout so that we can grep it
-		sprintf(command, "exit $(valgrind ./oc/out/ocd -ditsa@ -f ./oc/test_files/%s 2>&1 | grep \"SUMMARY\" | sed -n 's/.*ERROR SUMMARY: \\([0-9]\\+\\).*/\\1/p')", file_name);
+		sprintf(command, "exit $(valgrind ./oc/out/ocd -ditsa@ -f %s%s 2>&1 | grep \"SUMMARY\" | sed -n 's/.*ERROR SUMMARY: \\([0-9]\\+\\).*/\\1/p')", test_directory_path, file_name);
 
 		//Run the command in the system
 		int32_t command_return_code = system(command);
@@ -192,12 +195,12 @@ int main(int argc, char** argv){
 	int thread_count = atoi(argv[1]);
 
 	//Extract it and open it
-	char* directory_path = argv[2];
-	DIR* directory = opendir(directory_path);
+	test_directory_path = argv[2];
+	DIR* directory = opendir(test_directory_path);
 
 	//Check that we got it
 	if(directory == NULL){
-		printf("Fatal error: failed to open directory %s\n", directory_path);
+		printf("Fatal error: failed to open directory %s\n", test_directory_path);
 		exit(1);
 	}
 
@@ -249,7 +252,7 @@ int main(int argc, char** argv){
 	//Display for the user
 	fprintf(stdout, "\n===================================== SETUP ================================\n");
 	fprintf(stdout, "THREADS: %d\n", thread_count);
-	fprintf(stdout, "DIRECTORY: %s\n", directory_path);
+	fprintf(stdout, "DIRECTORY: %s\n", test_directory_path);
 	fprintf(stdout, "Memory Checker will spawn %d threads to work on %d files each\n", thread_count, files_per_thread);
 	fprintf(stdout, "\n===================================== SETUP ================================\n\n");
 

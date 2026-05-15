@@ -39,18 +39,22 @@
 //We'll need a mutex for all of the files that we wish to operate on
 pthread_mutex_t error_list_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t output_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t lexer_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /**
  * A generic array containing *all* of our test files that will be worked over
  * by the threads. We then also maintain a list of all files that are found
  * to be in error. This is done for the final summary
  */
-dynamic_array_t test_files;
-dynamic_array_t error_files;
+static dynamic_array_t test_files;
+static dynamic_array_t error_files;
 
 //Keep track of the total number of files and the total error files
-u_int32_t number_of_test_files = 0;
-u_int32_t number_of_error_files = 0;
+static u_int32_t number_of_test_files = 0;
+static u_int32_t number_of_error_files = 0;
+
+//Hold onto the overall directory path
+static char* test_file_dir;
 
 /**
  * Each thread has a unique start and end index that 
@@ -75,6 +79,8 @@ struct thread_parameters_t {
  * start index in the test file array and the exclusive end index in the test file array
  */
 void* worker(void* thread_parameters) {
+	//A path for the fully qualified file
+	char fully_qualified_file_name[1000];
 	//The command to use OC to compile
 	char compilation_command[3000];
 
@@ -102,8 +108,18 @@ void* worker(void* thread_parameters) {
 		//Get the file that we're after
 		char* file_name = dynamic_array_get_at(&test_files, i);
 
-		//We need to tokenize the file to get to any OUNIT directives
-		ollie_token_stream_t token_stream = tokenize(file_name);
+		//Construct the fully qualified file name
+		sprintf(fully_qualified_file_name, "%s%s", test_file_dir, file_name);
+
+		/**
+		 * We need to tokenize the file to get to any OUNIT directives
+		 *
+		 * NOTE: the lexer is NOT thread safe!!!! We need to do this in a lock
+		 * to avoid bizarre errors
+		 */
+		pthread_mutex_lock(&lexer_mutex);
+		ollie_token_stream_t token_stream = tokenize(fully_qualified_file_name);
+		pthread_mutex_unlock(&lexer_mutex);
 
 		/**
 		 * If it failed(we have stuff that fails) then we need
@@ -149,12 +165,12 @@ int main(int argc, char** argv) {
 	int32_t thread_count = atoi(argv[1]);
 
 	//Extract it and open it
-	char* directory_path = argv[2];
-	DIR* directory = opendir(directory_path);
+	test_file_dir = argv[2];
+	DIR* directory = opendir(test_file_dir);
 
 	//Check that we got it
 	if(directory == NULL){
-		fprintf(stderr, "Fatal error: failed to open directory %s\n", directory_path);
+		fprintf(stderr, "Fatal error: failed to open directory %s\n", test_file_dir);
 		exit(1);
 	}
 
@@ -254,7 +270,8 @@ int main(int argc, char** argv) {
 	free(threads);
 	free(parameters);
 
-	//Destroy the two mutices
+	//Destroy the three mutices
 	pthread_mutex_destroy(&error_list_mutex);
 	pthread_mutex_destroy(&output_mutex);
+	pthread_mutex_destroy(&lexer_mutex);
 }
