@@ -21,6 +21,7 @@
 
 //Use our own in-house dynamic array
 #include "../utils/dynamic_array/dynamic_array.h"
+#include "../lexer/lexer.h"
 //We will be doing this multithreaded
 #include <pthread.h>
 #include <sys/types.h>
@@ -74,6 +75,9 @@ struct thread_parameters_t {
  * start index in the test file array and the exclusive end index in the test file array
  */
 void* worker(void* thread_parameters) {
+	//The command to use OC to compile
+	char compilation_command[3000];
+
 	//Implicit case it over
 	thread_parameters_t* parameters = thread_parameters;
 
@@ -95,6 +99,22 @@ void* worker(void* thread_parameters) {
 	 * by this thread
 	 */
 	for(u_int32_t i = start_index; i < end_index; i++){
+		//Get the file that we're after
+		char* file_name = dynamic_array_get_at(&test_files, i);
+
+		//We need to tokenize the file to get to any OUNIT directives
+		ollie_token_stream_t token_stream = tokenize(file_name);
+
+		/**
+		 * If it failed(we have stuff that fails) then we need
+		 * to skip this one. This is not a big deal for it to fail
+		 */
+		if(token_stream.status == STREAM_STATUS_FAILURE){
+			pthread_mutex_lock(&output_mutex);
+			fprintf(stdout, "File %s has failed to tokenize\n", file_name);
+			pthread_mutex_unlock(&output_mutex);
+			continue;
+		}
 
 	}
 
