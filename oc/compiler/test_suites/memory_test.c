@@ -24,8 +24,7 @@
 //By default we'll allocate 1000 slots for our test file array
 #define DEFAULT_ARRAY_SIZE 1000
 
-//Mutices for shared states
-pthread_mutex_t file_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
+//Mutex for stdout/error file queue
 pthread_mutex_t result_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 //Total number of errors we have
@@ -88,27 +87,25 @@ void* worker(void* thread_parameters){
 	u_int32_t end_index = parameters->end_index;
 
 	pthread_mutex_lock(&result_mutex);
-	fprintf(stdout, "Thread %d was assigned to work on files in range [%d, %d) and will now start working", parameters->thread_number, start_index, end_index);
+	fprintf(stdout, "Thread %d was assigned to work on files in range [%d, %d) and will now start working\n\n", parameters->thread_number, start_index, end_index);
 	pthread_mutex_unlock(&result_mutex);
+
+		//sprintf(command, "exit $(valgrind ./oc/out/ocd -ditsa@ -f ./oc/test_files/%s 2>&1 | grep \"SUMMARY\" | sed -n 's/.*ERROR SUMMARY: \\([0-9]\\+\\).*/\\1/p')", file_name);
 
 	/**
 	 * Run through every file that was assigned to use
 	 * in the file array
-	 */
 	for(u_int32_t i = start_index; i < end_index; i++){
 		//Extract the file at this index
 		char* file_name = dynamic_array_get_at(&test_files, i);
 
 		//Our command. We use 2>&1 to write all errors to stdout so that we can grep it
-		sprintf(command, "exit $(valgrind ./oc/out/ocd -ditsa@ -f ./oc/test_files/%s 2>&1 | grep \"SUMMARY\" | sed -n 's/.*ERROR SUMMARY: \\([0-9]\\+\\).*/\\1/p')", file_name);
 
 		//Run the command in the system
 		int32_t command_return_code = system(command);
 
-		/**
 		 * Lock the result mutex. This also doubles as a mutex for stdout. We delay
 		 * printing anything until we're in here to keep results consistent
-		 */
 		pthread_mutex_lock(&result_mutex);
 
 		printf("\n=========== Checking %s =================\n", file_name);
@@ -147,6 +144,7 @@ void* worker(void* thread_parameters){
 		pthread_mutex_unlock(&result_mutex);
 	}
 
+	 */
 	//Return value is not important
 	return NULL;
 }
@@ -250,8 +248,23 @@ int main(int argc, char** argv){
 	 * work on. For the last thread, we will need to give whatever
 	 * is left to ensure that we actually get all of the files
 	 */
+	u_int32_t current_start_index = 0;
 	for(u_int32_t i = 0; i < thread_count; i++){
-		pthread_create(&(threads[i]), NULL, worker, NULL);
+		//Unique thread id
+		parameters[i].thread_number = i;
+		parameters[i].start_index = current_start_index;
+
+		//Special handling is needed for the very last thread
+		if(i != thread_count - 1){
+			current_start_index += files_per_thread;
+			parameters[i].end_index = current_start_index;
+
+		} else {
+			parameters[i].end_index = total_test_files;
+		}
+
+		//Create the thread and pass along the parameters that we've just made
+		pthread_create(&(threads[i]), NULL, worker, &(parameters[i]));
 	}
 
 	//Wait for them all to join
@@ -294,7 +307,6 @@ int main(int argc, char** argv){
 	printf("================================ Ollie Memory Check Summary =================================== \n\n\n\n\n\n");
 
 	//Destroy the mutices
-	pthread_mutex_destroy(&file_queue_mutex);
 	pthread_mutex_destroy(&result_mutex);
 
 	dynamic_array_dealloc(&test_files);
