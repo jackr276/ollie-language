@@ -86,26 +86,34 @@ void* worker(void* thread_parameters){
 	u_int32_t start_index = parameters->start_index;
 	u_int32_t end_index = parameters->end_index;
 
+	//How many errors have we specifically seen in this thread
+	u_int32_t num_errors_for_thread = 0;
+
+	/**
+	 * Display for the user what files we are working on inside of this specific thread
+	 */
 	pthread_mutex_lock(&result_mutex);
 	fprintf(stdout, "Thread %d was assigned to work on files in range [%d, %d) and will now start working\n\n", parameters->thread_number, start_index, end_index);
 	pthread_mutex_unlock(&result_mutex);
 
-		//sprintf(command, "exit $(valgrind ./oc/out/ocd -ditsa@ -f ./oc/test_files/%s 2>&1 | grep \"SUMMARY\" | sed -n 's/.*ERROR SUMMARY: \\([0-9]\\+\\).*/\\1/p')", file_name);
-
 	/**
 	 * Run through every file that was assigned to use
 	 * in the file array
+	 */
 	for(u_int32_t i = start_index; i < end_index; i++){
 		//Extract the file at this index
 		char* file_name = dynamic_array_get_at(&test_files, i);
 
 		//Our command. We use 2>&1 to write all errors to stdout so that we can grep it
+		sprintf(command, "exit $(valgrind ./oc/out/ocd -ditsa@ -f ./oc/test_files/%s 2>&1 | grep \"SUMMARY\" | sed -n 's/.*ERROR SUMMARY: \\([0-9]\\+\\).*/\\1/p')", file_name);
 
 		//Run the command in the system
 		int32_t command_return_code = system(command);
 
+		/**
 		 * Lock the result mutex. This also doubles as a mutex for stdout. We delay
 		 * printing anything until we're in here to keep results consistent
+		 */
 		pthread_mutex_lock(&result_mutex);
 
 		printf("\n=========== Checking %s =================\n", file_name);
@@ -138,13 +146,22 @@ void* worker(void* thread_parameters){
 
 		//Get the error count out
 		printf("\nTEST FILE: %s -> %d ERRORS\n", file_name, num_errors_for_file);
-
 		printf("\n=========================================\n");
+
 		//Unlock the result mutex
 		pthread_mutex_unlock(&result_mutex);
+
+		//Update the number of errors that this thread has
+		num_errors_for_thread += num_errors_for_file;
 	}
 
+	/**
+	 * Display visually that the thread has completed it's work and will now exit
 	 */
+	pthread_mutex_lock(&result_mutex);
+	fprintf(stdout, "Thread %d has validated files in range [%d, %d] and found %d errors", parameters->thread_number, start_index, end_index, num_errors_for_thread);
+	pthread_mutex_unlock(&result_mutex);
+
 	//Return value is not important
 	return NULL;
 }
@@ -155,8 +172,7 @@ void* worker(void* thread_parameters){
 * on make to verify that certain rules are precompiled for us
 */
 int main(int argc, char** argv){
-	//Do we even have valgrind - if this returns 1 we don't so
-	//get out
+	//Do we even have valgrind - if this returns 1 we don't so get out
 	int valgrind_found = system("which valgrind");
 
 	//We can't go any further
@@ -274,6 +290,7 @@ int main(int argc, char** argv){
 
 	//Get rid of all these threads
 	free(threads);
+	free(parameters);
 
 	//Record the final time
 	clock_t stop_time = clock();
