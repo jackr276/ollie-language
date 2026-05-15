@@ -482,6 +482,9 @@ static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, 
 		if(token->tok == R_BRACKET){
 			break;
 		}
+
+		//Onto the next one
+		(*stream_index)++;
 	}
 
 	/**
@@ -516,7 +519,7 @@ static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, 
  * to do with macro replacement. This will come after in the replacement
  * pass
  */
-static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macro_symtab_t* macro_symtab, u_int32_t* num_macros){
+static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macro_symtab_t* macro_symtab, u_int32_t* num_macros, u_int32_t* num_OUNIT_directives){
 	//Standard holder for the result of each macro consumption
 	u_int8_t result;
 
@@ -571,6 +574,9 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 			 * here
 			 */
 			case OUNIT:
+				//We've seen another OUNIT directive
+				(*num_OUNIT_directives)++;
+
 				//Let the helper deal with it
 				result = validate_and_skip_ounit_directive(stream, &array_index);
 
@@ -1096,8 +1102,9 @@ preprocessor_results_t preprocess(compiler_options_t* options, ollie_token_strea
 	//This just holds a pointer to it
 	paren_grouping_stack = &stack;
 
-	//Keep trace of how many macros we've seen
+	//Keep trace of how many macros/directives we've seen
 	u_int32_t num_macros = 0;
+	u_int32_t num_ounit_directives = 0;
 
 	/**
 	 * Step 0: we need a customized macro symtab for ease of lookup. This symtab
@@ -1112,7 +1119,7 @@ preprocessor_results_t preprocess(compiler_options_t* options, ollie_token_strea
 	 * involved in that macro as "ignorable". This will cause the second replacement pass to ignore
 	 * those tokens when we go through the stream again, avoiding reconsumption
 	*/
-	u_int8_t consumption_pass_result = macro_consumption_pass(stream, macro_symtab, &num_macros);
+	u_int8_t consumption_pass_result = macro_consumption_pass(stream, macro_symtab, &num_macros, &num_ounit_directives);
 
 	//If we failed here then there's no point in going further
 	if(consumption_pass_result == FAILURE){
@@ -1123,10 +1130,10 @@ preprocessor_results_t preprocess(compiler_options_t* options, ollie_token_strea
 	}
 
 	/**
-	 * If we found no macros at all, then we do not need to do anything with a replacement
+	 * If we found no macros/OUNITS at all, then we do not need to do anything with a replacement
 	 * pass. This would just be wasteful. Instead, we will just go right to the end
 	 */
-	if(num_macros == 0){
+	if(num_macros == 0 && num_ounit_directives == 0){
 		goto finalizer;
 	}
 
