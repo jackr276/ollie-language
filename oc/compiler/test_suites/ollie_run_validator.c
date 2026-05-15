@@ -14,7 +14,7 @@
  *  so that every single thread is given it's own subset of test files to work with(index start(inclusive)
  *  to end(exclusive)). This should avoid the need for us to do any locks. Then each thread 
  *  is told to start. Internal to the thread, for each file, we will tokenize the file to see if
- *  we have a special tag TODO WHAT IS THE TAG. If so, we will compile the file using oc, run it
+ *  we have a special tag OUNIT. If so, we will compile the file using oc, run it
  *  inside of a subshell, and compare the result with the expected result. If they match we've succeeded,
  *  if they don't then we have a failure and we put it inside of the error file list
  */

@@ -449,6 +449,59 @@ static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, 
 	//Make it here then we're good, flag to ignore and continue
 	token->ignore = TRUE;
 
+	//Now we should see an opening bracket
+	(*stream_index)++;
+	token = &(stream->token_stream.internal_array[*stream_index]);
+
+	//Fail out if we don't have one
+	if(token->tok != L_BRACKET){
+		sprintf(info_message, "Expected \"[\" but got \"%s\" instead", lexitem_to_string(token));
+		print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, token->line_num);
+		preprocessor_error_count++;
+		return FAILURE;
+	}
+
+	//Flag to ignore
+	token->ignore = TRUE;
+
+	/**
+	 * Now for the purpose of the preprocessor, we will run through
+	 * everything inside of these brackets until we hit the closing
+	 * bracket. If we reach EOF without hitting the closing
+	 * bracket then we have an error
+	 */
+	(*stream_index)++;
+	while(*stream_index < stream->token_stream.current_index){
+		//Extract it
+		token = &(stream->token_stream.internal_array[*stream_index]);
+
+		//Flag to ignore this
+		token->ignore = TRUE;
+
+		//Get out
+		if(token->tok == R_BRACKET){
+			break;
+		}
+	}
+
+	/**
+	 * If we exited but didn't have the R_BRACKET then this is a
+	 * problem. Odds are we ran off the end of the file
+	 */
+	if(token->tok != R_BRACKET){
+		if(token->tok == DONE){
+			print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unterminated OUNIT directive detected", token->line_num);
+			preprocessor_error_count++;
+			return FAILURE;
+
+		//Some weird error here
+		} else {
+			print_preprocessor_message(MESSAGE_TYPE_ERROR, "Invalid OUNIT Directive", token->line_num);
+			preprocessor_error_count++;
+			return FAILURE;
+		}
+	}
+
 	//If we get here then we have success
 	return SUCCESS;
 }
