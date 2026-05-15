@@ -59,13 +59,14 @@ struct thread_parameters_t {
 
 
 /**
+ * Each worker thread is assigned its own range of files to work on. Since these ranges
+ * are unique, we do not need to worry about locking the file queue which is a big benefit
+ * to this approach
+ *
  * Worker thread:
  *
- * While(true){
- * 		Locks the file queue
- * 		if(queue is empty) -> exit
- * 		Polls the queue for a file(deletes from the queue)
- * 		Unlocks the file queue
+ * for i in range [start, end)
+ * 		Get file at i
  *
  * 		Does the work
  *
@@ -73,59 +74,37 @@ struct thread_parameters_t {
  *		Updates the results
  *		Unlocks the result mutex
  * }
+ *
+ * Thread exit
  */
 void* worker(void* thread_parameters){
 	//For creating our commands
 	char command[3000];
-	
-	//For holding our file name
-	char* file_name;
 
 	//Extract/cast our actual thread parameters
 	thread_parameters_t* parameters = thread_parameters;
 
 	//For ease of use extract the start and end indices
-	u_int32_t start_index;
-	u_int32_t end_index;
+	u_int32_t start_index = parameters->start_index;
+	u_int32_t end_index = parameters->end_index;
 
-	//The return code for our command
-	int32_t return_code;
-	
-	//The number of errors for each given file
-	int32_t num_errors;
+	pthread_mutex_lock(&result_mutex);
+	fprintf(stdout, "Thread %d was assigned to work on files in range [%d, %d) and will now start working", parameters->thread_number, start_index, end_index);
+	pthread_mutex_unlock(&result_mutex);
 
-	//Forever loop w5hile there is work to do
-	while(TRUE){
-		//Lock the queue mutex
-		pthread_mutex_lock(&file_queue_mutex);
-
-		/**
-		 * If we find that the queue is empty, we leave this
-		 * thread. We need to make sure to unlock the mutex
-		 * before leaving
-		 */
-		if(current_test_file_index >= total_test_files){
-			//Unlock the file queue mutex
-			pthread_mutex_unlock(&file_queue_mutex);
-
-			//Nothing of meaning to return here
-			return NULL;
-		}
-
-		//Get our file out of the queue
-		file_name = dynamic_array_get_at(&test_files, current_test_file_index);
-
-		//Increment this for the next go around
-		current_test_file_index++;
-
-		//Unlock the file queue mutex
-		pthread_mutex_unlock(&file_queue_mutex);
+	/**
+	 * Run through every file that was assigned to use
+	 * in the file array
+	 */
+	for(u_int32_t i = start_index; i < end_index; i++){
+		//Extract the file at this index
+		char* file_name = dynamic_array_get_at(&test_files, i);
 
 		//Our command. We use 2>&1 to write all errors to stdout so that we can grep it
 		sprintf(command, "exit $(valgrind ./oc/out/ocd -ditsa@ -f ./oc/test_files/%s 2>&1 | grep \"SUMMARY\" | sed -n 's/.*ERROR SUMMARY: \\([0-9]\\+\\).*/\\1/p')", file_name);
 
 		//Run the command in the system
-		return_code = system(command);
+		int32_t command_return_code = system(command);
 
 		/**
 		 * Lock the result mutex. This also doubles as a mutex for stdout. We delay
@@ -136,18 +115,21 @@ void* worker(void* thread_parameters){
 		printf("\n=========== Checking %s =================\n", file_name);
 		printf("Running test command: %s\n\n", command);
 
+		//Assume we have no errors
+		int32_t num_errors_for_file= 0;
+
 		//If we exited, get the exit code
-		if(WIFEXITED(return_code)){
+		if(WIFEXITED(command_return_code)){
 			//Get the actual exit code(this will be the error number)
-			num_errors = WEXITSTATUS(return_code);
+			num_errors_for_file = WEXITSTATUS(command_return_code);
 			
 		//If we got a bad signal, get out
-		} else if (WIFSIGNALED((return_code))){
-			printf("ERROR: command terminated with signal %d\n", WTERMSIG(return_code));
+		} else if (WIFSIGNALED((command_return_code))){
+			printf("ERROR: command terminated with signal %d\n", WTERMSIG(command_return_code));
 		}
 
 		//Bookkeeping for final printing
-		if(num_errors > 0){
+		if(num_errors_for_file > 0){
 			//Add the pointer for this into the list - we do no memory management so this is fine
 			dynamic_array_add(&files_in_error, file_name);
 
@@ -156,15 +138,18 @@ void* worker(void* thread_parameters){
 		}
 
 		//Update the total error count
-		total_errors += num_errors;
+		total_errors += num_errors_for_file;
 
 		//Get the error count out
-		printf("\nTEST FILE: %s -> %d ERRORS\n", file_name, num_errors);
+		printf("\nTEST FILE: %s -> %d ERRORS\n", file_name, num_errors_for_file);
 
 		printf("\n=========================================\n");
 		//Unlock the result mutex
 		pthread_mutex_unlock(&result_mutex);
 	}
+
+	//Return value is not important
+	return NULL;
 }
 
 
