@@ -39,7 +39,7 @@ pub fn hop1() ->i32 {
 }
 
 
-//Once we're done echo $? should be 6 if all is correct
 pub fn main() -> i32 {
+	OUNIT: [console = 6]
 	ret @hop1();
 }

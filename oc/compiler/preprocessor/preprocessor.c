@@ -200,9 +200,11 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 	//Let's get the first pointer here
 	lexitem_t* lookahead = get_token_pointer_and_increment(token_array, index);
 
-	//This really shouldn't happen because
-	//we've already seen the $macro to get here,
-	//but we'll catch it just in case
+	/**
+	 * This really shouldn't happen because
+	 * we've already seen the $macro to get here,
+	 * but we'll catch it just in case
+	 */
 	if(lookahead->tok != MACRO){
 		print_preprocessor_message(MESSAGE_TYPE_ERROR, "$macro keyword expected before macro declaration", lookahead->line_num);
 		preprocessor_error_count++;
@@ -212,8 +214,10 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 	//IMPORTANT - flag that this token needs to be ignored by the replacer
 	lookahead->ignore = TRUE;
 
-	//Now that we've seen the $macro keyword, we need to see the name
-	//of the macro via an identifier
+	/**
+	 * Now that we've seen the $macro keyword, we need to see the name
+	 * of the macro via an identifier
+	 */
 	lookahead = get_token_pointer_and_increment(token_array, index);
 
 	//If we did not see an identifier then we are in bad shape here
@@ -224,8 +228,10 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 		return FAILURE;
 	}
 
-	//Let's see if we're able to find this macro record. If we are, then we have an issue because that would
-	//be a duplicated name
+	/**
+	 * Let's see if we're able to find this macro record. If we are, then we have an issue because that would
+	 * be a duplicated name
+	 */
 	symtab_macro_record_t* found_macro = lookup_macro(macro_symtab, lookahead->lexeme.string);
 
 	//Fail case - we have a duplicate
@@ -385,8 +391,10 @@ end_parameter_processing:
 
 				break;
 
-			//In theory anything else that we see in here is valid, so we'll
-			//just do our bookkeeping and move along
+			/**
+			 * In theory anything else that we see in here is valid, so we'll
+			 * just do our bookkeeping and move along
+			 */
 			default:
 				//Add this into the token array
 				token_array_add(macro_token_array, lookahead);
@@ -404,6 +412,105 @@ finalize_macro:
 
 
 /**
+ * Validate and skip past an OUNIT directive. OUNIT directives must be contained within L_BRACKETS that
+ * match up. We will not do any validation of what is inside of the OUNIT directive here(at least not
+ * yet), so this is just to make sure that there's no formatting exceptions. Once we've validated the
+ * format we will flag the entire directive to be ignored so that it does not end up in the final
+ * token stream
+ *
+ * NOTE: by the time we get here we have already seen the OUNIT token but we have not properly
+ * consumed it. We will do that here
+ */
+static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, u_int32_t* stream_index){
+	//Extract the token at the given index
+	lexitem_t* token = &(stream->token_stream.internal_array[*stream_index]);
+
+	//Some very weird failure here
+	if(token->tok != OUNIT){
+		fprintf(stderr, "Fatal internal compiler error: preprocessor expected OUNIT but got %s instead\n", lexitem_to_string(token));
+		exit(1);
+	}
+
+	//It was OUNIT so ignore it
+	token->ignore = TRUE;
+
+	//Bump the token index up and refresh the token
+	(*stream_index)++;
+	token = &(stream->token_stream.internal_array[*stream_index]);
+
+	//We need to now see a colon, if we don't then this is a failure
+	if(token->tok != COLON){
+		sprintf(info_message, "Expected \":\" after OUNIT directive but got \"%s\" instead", lexitem_to_string(token));
+		print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, token->line_num);
+		preprocessor_error_count++;
+		return FAILURE;
+	}
+
+	//Make it here then we're good, flag to ignore and continue
+	token->ignore = TRUE;
+
+	//Now we should see an opening bracket
+	(*stream_index)++;
+	token = &(stream->token_stream.internal_array[*stream_index]);
+
+	//Fail out if we don't have one
+	if(token->tok != L_BRACKET){
+		sprintf(info_message, "Expected \"[\" but got \"%s\" instead", lexitem_to_string(token));
+		print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, token->line_num);
+		preprocessor_error_count++;
+		return FAILURE;
+	}
+
+	//Flag to ignore
+	token->ignore = TRUE;
+
+	/**
+	 * Now for the purpose of the preprocessor, we will run through
+	 * everything inside of these brackets until we hit the closing
+	 * bracket. If we reach EOF without hitting the closing
+	 * bracket then we have an error
+	 */
+	(*stream_index)++;
+	while(*stream_index < stream->token_stream.current_index){
+		//Extract it
+		token = &(stream->token_stream.internal_array[*stream_index]);
+
+		//Flag to ignore this
+		token->ignore = TRUE;
+
+		//Get out
+		if(token->tok == R_BRACKET){
+			break;
+		}
+
+		//Onto the next one
+		(*stream_index)++;
+	}
+
+	/**
+	 * If we exited but didn't have the R_BRACKET then this is a
+	 * problem. Odds are we ran off the end of the file
+	 */
+	if(token->tok != R_BRACKET){
+		if(token->tok == DONE){
+			print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unterminated OUNIT directive detected", token->line_num);
+			preprocessor_error_count++;
+			return FAILURE;
+
+		//Some weird error here
+		} else {
+			print_preprocessor_message(MESSAGE_TYPE_ERROR, "Invalid OUNIT Directive", token->line_num);
+			preprocessor_error_count++;
+			return FAILURE;
+		}
+	}
+
+	//If we get here then we have success
+	return SUCCESS;
+}
+
+
+/**
  * Put simply, the consumption pass will run through the entire token
  * stream looking for macros. When it finds a macro, it will flag that section
  * of the token stream to be ignored by future passes(in reality this means
@@ -412,7 +519,7 @@ finalize_macro:
  * to do with macro replacement. This will come after in the replacement
  * pass
  */
-static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macro_symtab_t* macro_symtab, u_int32_t* num_macros){
+static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macro_symtab_t* macro_symtab, u_int32_t* num_macros, u_int32_t* num_OUNIT_directives){
 	//Standard holder for the result of each macro consumption
 	u_int8_t result;
 
@@ -421,23 +528,29 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 
 	//Loop through the entire structure
 	while(array_index < stream->token_stream.current_index){
-		//Get a pointer to the token that we are after.
-		//
-		//IMPORTANT - we want to modify this token in the stream, so a pointer
-		//is critical. We *cannot* use a local copy for this
+		/**
+		 * Get a pointer to the token that we are after.
+		 *
+		 * IMPORTANT - we want to modify this token in the stream, so a pointer
+		 * is critical. We *cannot* use a local copy for this
+		 */
 		lexitem_t* token = &(stream->token_stream.internal_array[array_index]);
 
 		//Go based on the kind of token that we have in here
 		switch(token->tok){
 			//We are seeing the beginning of a macro
 			case MACRO:
-				//Now we will invoke the helper to parse this entire token
-				//stream(until we see the ENDMACRO directive)
+				/**
+				 * Now we will invoke the helper to parse this entire token
+				 * stream(until we see the ENDMACRO directive)
+				 */
 				result = process_macro(stream, macro_symtab, &array_index);
 
-				//This indicates some kind of failure. The error message
-				//will have already been printed by the processor, so we just
-				//pass this along
+				/**
+				 * This indicates some kind of failure. The error message
+				 * will have already been printed by the processor, so we just
+				 * pass this along
+				 */
 				if(result == FAILURE){
 					return FAILURE;
 				}
@@ -452,6 +565,27 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 				print_preprocessor_message(MESSAGE_TYPE_ERROR, "Floating $endmacro directive declared. Are you missing a $macro directive?", token->line_num);
 				preprocessor_error_count++;
 				return FAILURE;
+
+			/**
+			 * If we hit this then we are seeing an "OUNIT" directive for the ollie compiler's
+			 * integrated unit testing functionality. We will process this to be sure, but
+			 * if we are seeing it, it will need to be skipped because it's not valid to
+			 * actually be compiled. We will do both the validations and the skipping
+			 * here
+			 */
+			case OUNIT:
+				//We've seen another OUNIT directive
+				(*num_OUNIT_directives)++;
+
+				//Let the helper deal with it
+				result = validate_and_skip_ounit_directive(stream, &array_index);
+
+				//Invalid OUNIT directive so we fail out here
+				if(result == FAILURE){
+					return FAILURE;
+				}
+
+				break;
 
 			//We haven't seen a macro, but the array index needs to be bumped
 			default:
@@ -968,8 +1102,9 @@ preprocessor_results_t preprocess(compiler_options_t* options, ollie_token_strea
 	//This just holds a pointer to it
 	paren_grouping_stack = &stack;
 
-	//Keep trace of how many macros we've seen
+	//Keep trace of how many macros/directives we've seen
 	u_int32_t num_macros = 0;
+	u_int32_t num_ounit_directives = 0;
 
 	/**
 	 * Step 0: we need a customized macro symtab for ease of lookup. This symtab
@@ -984,7 +1119,7 @@ preprocessor_results_t preprocess(compiler_options_t* options, ollie_token_strea
 	 * involved in that macro as "ignorable". This will cause the second replacement pass to ignore
 	 * those tokens when we go through the stream again, avoiding reconsumption
 	*/
-	u_int8_t consumption_pass_result = macro_consumption_pass(stream, macro_symtab, &num_macros);
+	u_int8_t consumption_pass_result = macro_consumption_pass(stream, macro_symtab, &num_macros, &num_ounit_directives);
 
 	//If we failed here then there's no point in going further
 	if(consumption_pass_result == FAILURE){
@@ -995,10 +1130,10 @@ preprocessor_results_t preprocess(compiler_options_t* options, ollie_token_strea
 	}
 
 	/**
-	 * If we found no macros at all, then we do not need to do anything with a replacement
+	 * If we found no macros/OUNITS at all, then we do not need to do anything with a replacement
 	 * pass. This would just be wasteful. Instead, we will just go right to the end
 	 */
-	if(num_macros == 0){
+	if(num_macros == 0 && num_ounit_directives == 0){
 		goto finalizer;
 	}
 

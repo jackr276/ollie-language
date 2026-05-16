@@ -294,7 +294,7 @@ static u_int8_t compile(compiler_options_t* options){
 	}
 
 	//Invoke the lexer. This handles all file IO
-	ollie_token_stream_t token_stream = tokenize(options->file_name);
+	ollie_token_stream_t token_stream = tokenize(options->file_name, FALSE);
 
 	//If it failed, we need to leave immediately
 	if(token_stream.status == STREAM_STATUS_FAILURE){

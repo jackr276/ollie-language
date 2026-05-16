@@ -112,7 +112,7 @@ int main(int argc, char** argv){
 	clock_t begin = clock();
 
 	//Invoke the tokenizer
-	ollie_token_stream_t stream = tokenize(options->file_name);
+	ollie_token_stream_t stream = tokenize(options->file_name, FALSE);
 	
 	//Store it inside of the token stream
 	options->token_stream = &stream;

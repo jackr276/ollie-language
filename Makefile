@@ -381,6 +381,9 @@ instruction_selector_test.o: $(TEST_SUITE_PATH)/instruction_selector_test.c
 memory_checker.o: $(TEST_SUITE_PATH)/memory_test.c
 	$(CC) $(CFLAGS) -pthread -o $(OUT_LOCAL)/memory_checker.o $(TEST_SUITE_PATH)/memory_test.c
 
+ollie_run_validator.o: $(TEST_SUITE_PATH)/ollie_run_validator.c
+	$(CC) $(CFLAGS) -pthread -o $(OUT_LOCAL)/ollie_run_validator.o $(TEST_SUITE_PATH)/ollie_run_validator.c
+
 instruction_selector_testd.o: $(TEST_SUITE_PATH)/instruction_selector_test.c
 	$(CC) $(CFLAGS) -g -o $(OUT_LOCAL)/instruction_selector_testd.o $(TEST_SUITE_PATH)/instruction_selector_test.c
 
@@ -411,8 +414,11 @@ oc: compiler.o parser.o lexer.o symtab.o heapstack.o type_system.o ast.o cfg.o l
 oc_debug: compilerd.o parserd.o lexerd.o symtabd.o heapstackd.o type_systemd.o astd.o cfgd.o lexstackd.o instructiond.o heap_queued.o preprocessord.o dependency_treed.o dynamic_arrayd.o lightstackd.o optimizerd.o instruction_selectord.o jump_tabled.o stack_data_aread.o register_allocatord.o instruction_schedulerd.o interference_graphd.o assemblerd.o dynamic_stringd.o nesting_stackd.o postprocessord.o data_dependency_graphd.o max_priority_queued.o min_priority_queued.o dynamic_setd.o ollie_token_arrayd.o local_constantd.o parameter_result_arrayd.o value_numbering_tabled.o
 	$(CC) -o $(OUT_LOCAL)/ocd $(OUT_LOCAL)/compilerd.o $(OUT_LOCAL)/parserd.o $(OUT_LOCAL)/lexerd.o $(OUT_LOCAL)/heapstackd.o $(OUT_LOCAL)/symtabd.o $(OUT_LOCAL)/lexstackd.o $(OUT_LOCAL)/type_systemd.o $(OUT_LOCAL)/astd.o $(OUT_LOCAL)/cfgd.o $(OUT_LOCAL)/instructiond.o $(OUT_LOCAL)/heap_queued.o $(OUT_LOCAL)/preprocessord.o $(OUT_LOCAL)/dependency_treed.o $(OUT_LOCAL)/dynamic_arrayd.o $(OUT_LOCAL)/lightstackd.o $(OUT_LOCAL)/optimizerd.o $(OUT_LOCAL)/instruction_selectord.o $(OUT_LOCAL)/jump_tabled.o $(OUT_LOCAL)/stack_data_aread.o $(OUT_LOCAL)/register_allocatord.o $(OUT_LOCAL)/instruction_schedulerd.o $(OUT_LOCAL)/interference_graphd.o $(OUT_LOCAL)/assemblerd.o $(OUT_LOCAL)/dynamic_stringd.o $(OUT_LOCAL)/nesting_stackd.o $(OUT_LOCAL)/postprocessord.o $(OUT_LOCAL)/data_dependency_graphd.o $(OUT_LOCAL)/max_priority_queued.o $(OUT_LOCAL)/min_priority_queued.o $(OUT_LOCAL)/dynamic_setd.o $(OUT_LOCAL)/ollie_token_arrayd.o $(OUT_LOCAL)/local_constantd.o $(OUT_LOCAL)/parameter_result_arrayd.o $(OUT_LOCAL)/value_numbering_tabled.o
 
-memory_checker: memory_checker.o
-	$(CC) -pthread -o $(OUT_LOCAL)/memory_checker $(OUT_LOCAL)/memory_checker.o
+memory_checker: memory_checker.o dynamic_array.o
+	$(CC) -pthread -o $(OUT_LOCAL)/memory_checker $(OUT_LOCAL)/memory_checker.o $(OUT_LOCAL)/dynamic_array.o
+
+ollie_run_validator: ollie_run_validator.o dynamic_array.o lexer.o dynamic_string.o ollie_token_array.o
+	$(CC) -pthread -o $(OUT_LOCAL)/ollie_run_validator $(OUT_LOCAL)/ollie_run_validator.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/ollie_token_array.o
 
 stest: symtab_test
 	$(OUT_LOCAL)/symtab_test
@@ -504,6 +510,11 @@ performance_test: oc
 # This can be slow but it runs as part of CI
 memory_check: oc_debug memory_checker
 	$(OUT_LOCAL)/memory_checker 16 $(TEST_FILE_DIR)
+
+# Ollie run validator checks the output of programs that expect a specific output. For more details
+# please see the top comment in the source code itself
+ollie_run_validation: oc ollie_run_validator
+	$(OUT_LOCAL)/ollie_run_validator 16 $(TEST_FILE_DIR)
 
 array_test: dynamic_array_test
 	$(OUT_LOCAL)/dynamic_array_test
@@ -678,6 +689,9 @@ middle_end_test-CI.o: $(TEST_SUITE_PATH)/middle_end_test.c
 instruction_selector_test-CI.o: $(TEST_SUITE_PATH)/instruction_selector_test.c
 	$(CC) $(CFLAGS) -o $(OUT_CI)/instruction_selector_test.o $(TEST_SUITE_PATH)/instruction_selector_test.c
 
+ollie_run_validator-CI.o: $(TEST_SUITE_PATH)/ollie_run_validator.c
+	$(CC) $(CFLAGS) -pthread -o $(OUT_CI)/ollie_run_validator.o $(TEST_SUITE_PATH)/ollie_run_validator.c
+
 preprocessor_test-CI: preprocessor_test-CI.o preprocessor-CI.o symtab-CI.o lexer-CI.o type_system-CI.o lexstack-CI.o lightstack-CI.o stack_data_area-CI.o dynamic_array-CI.o heap_queue-CI.o heapstack-CI.o jump_table-CI.o dynamic_string-CI.o nesting_stack-CI.o min_priority_queue-CI.o dynamic_set-CI.o ollie_token_array-CI.o
 	$(CC) -o $(OUT_CI)/preprocessor_test $(OUT_CI)/lexer.o $(OUT_CI)/preprocessor_test.o $(OUT_CI)/preprocessor.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/lexstack.o $(OUT_CI)/lightstack.o $(OUT_CI)/stack_data_area.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/heap_queue.o $(OUT_CI)/heapstack.o $(OUT_CI)/jump_table.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/nesting_stack.o $(OUT_CI)/min_priority_queue.o $(OUT_CI)/dynamic_set.o $(OUT_CI)/ollie_token_array.o
 
@@ -695,6 +709,9 @@ middle_end_test-CI: middle_end_test-CI.o parser-CI.o lexer-CI.o symtab-CI.o heap
 
 instruction_selector_test-CI: parser-CI.o lexer-CI.o symtab-CI.o heapstack-CI.o type_system-CI.o ast-CI.o cfg-CI.o lexstack-CI.o instruction-CI.o heap_queue-CI.o preprocessor-CI.o dependency_tree-CI.o dynamic_array-CI.o lightstack-CI.o jump_table-CI.o optimizer-CI.o stack_data_area-CI.o dynamic_string-CI.o nesting_stack-CI.o instruction_selector-CI.o instruction_selector_test-CI.o min_priority_queue-CI.o dynamic_set-CI.o ollie_token_array-CI.o local_constant-CI.o parameter_result_array-CI.o value_numbering_table-CI.o data_dependency_graph-CI.o
 	$(CC) -o $(OUT_CI)/instruction_selector_test $(OUT_CI)/parser.o $(OUT_CI)/lexer.o $(OUT_CI)/heapstack.o $(OUT_CI)/lexstack.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/ast.o $(OUT_CI)/cfg.o $(OUT_CI)/instruction.o $(OUT_CI)/heap_queue.o $(OUT_CI)/preprocessor.o $(OUT_CI)/dependency_tree.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/lightstack.o $(OUT_CI)/optimizer.o $(OUT_CI)/jump_table.o $(OUT_CI)/stack_data_area.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/nesting_stack.o $(OUT_CI)/instruction_selector.o $(OUT_CI)/instruction_selector_test.o $(OUT_CI)/min_priority_queue.o $(OUT_CI)/dynamic_set.o $(OUT_CI)/ollie_token_array.o $(OUT_CI)/local_constant.o $(OUT_CI)/parameter_result_array.o $(OUT_CI)/value_numbering_table.o $(OUT_CI)/data_dependency_graph.o
+
+ollie_run_validator-CI: ollie_run_validator-CI.o dynamic_array-CI.o lexer-CI.o dynamic_string-CI.o ollie_token_array-CI.o
+		$(CC) -pthread -o $(OUT_CI)/ollie_run_validator $(OUT_CI)/ollie_run_validator.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/lexer.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/ollie_token_array.o
 
 oc-CI: compiler-CI.o parser-CI.o lexer-CI.o symtab-CI.o heapstack-CI.o type_system-CI.o ast-CI.o cfg-CI.o lexstack-CI.o instruction-CI.o heap_queue-CI.o preprocessor-CI.o dependency_tree-CI.o dynamic_array-CI.o lightstack-CI.o optimizer-CI.o instruction_selector-CI.o jump_table-CI.o stack_data_area-CI.o register_allocator-CI.o instruction_scheduler-CI.o interference_graph-CI.o assembler-CI.o dynamic_string-CI.o nesting_stack-CI.o postprocessor-CI.o data_dependency_graph-CI.o max_priority_queue-CI.o min_priority_queue-CI.o dynamic_set-CI.o ollie_token_array-CI.o local_constant-CI.o parameter_result_array-CI.o value_numbering_table-CI.o
 	$(CC) -o $(OUT_CI)/oc $(OUT_CI)/compiler.o $(OUT_CI)/parser.o $(OUT_CI)/lexer.o $(OUT_CI)/heapstack.o $(OUT_CI)/lexstack.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/ast.o $(OUT_CI)/cfg.o $(OUT_CI)/instruction.o $(OUT_CI)/heap_queue.o $(OUT_CI)/preprocessor.o $(OUT_CI)/dependency_tree.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/lightstack.o $(OUT_CI)/optimizer.o $(OUT_CI)/instruction_selector.o $(OUT_CI)/jump_table.o $(OUT_CI)/stack_data_area.o $(OUT_CI)/register_allocator.o $(OUT_CI)/instruction_scheduler.o $(OUT_CI)/interference_graph.o $(OUT_CI)/assembler-CI.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/nesting_stack.o $(OUT_CI)/postprocessor.o $(OUT_CI)/data_dependency_graph.o $(OUT_CI)/max_priority_queue.o $(OUT_CI)/min_priority_queue.o $(OUT_CI)/dynamic_set.o $(OUT_CI)/ollie_token_array.o $(OUT_CI)/local_constant.o $(OUT_CI)/parameter_result_array.o $(OUT_CI)/value_numbering_table.o
@@ -725,6 +742,9 @@ middle_test-CI: middle_end_test-CI
 
 selector_test-CI: instruction_selector_test-CI
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/instruction_selector_test -i -d -f
+
+ollie_run_validation-CI: ollie_run_validator-CI
+	$(OUT_CI)/ollie_run_validator 4 $(TEST_FILE_DIR)
 
 compiler_test-CI: oc-CI
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/oc -s -t -@ -i -d -f
