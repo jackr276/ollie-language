@@ -1286,9 +1286,28 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				}
 			}
 
-			//If a is a pointer type
+			/**
+			 * For reference type assignability, the mutability level is very important
+			 * We need to be sure that we we are not setting something that is immutable
+			 * to a reference that is mutable or that would violate the entire structure
+			 * of the mutability. For this reason, if we're assigning pointers in a ternary,
+			 * we always take the lowest mutability level
+			 */
 			if((*a)->type_class == TYPE_CLASS_POINTER){
-				//If b is a another pointer, then that's fine
+				switch((*b)->type_class){
+					case TYPE_CLASS_POINTER:
+
+					case TYPE_CLASS_BASIC:
+
+					/**
+					 * Something invalid here
+					 */
+					default:
+						return NULL;
+				}
+
+
+
 				if((*b)->type_class == TYPE_CLASS_POINTER){
 					//We'll return a final comparison type of u64
 					return lookup_type_name_only(symtab, "u64", (*a)->mutability)->type;
