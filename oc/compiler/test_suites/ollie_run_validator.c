@@ -22,6 +22,7 @@
 //Use our own in-house dynamic array
 #include "../utils/dynamic_array/dynamic_array.h"
 #include "../lexer/lexer.h"
+#include "../utils/constants.h"
 //We will be doing this multithreaded
 #include <pthread.h>
 #include <sys/types.h>
@@ -150,12 +151,101 @@ static inline u_int8_t parse_OUNIT_test_command(ollie_token_array_t* tokens, int
 		return OUNIT_COMPATIBLE_BUT_INVALID;
 	}
 
+	//Otherwise bump the index up
+	index++;
+	lexitem = token_array_get_pointer_at(tokens, index);
+
+	/**
+	 * Again another fail case here, we need to see an =
+	 */
+	if(lexitem->tok != EQUALS){
+		pthread_mutex_lock(&output_mutex);
+		fprintf(stdout, "Expected \"=\" but got \"%s\" instead\n", lexitem_to_string(lexitem));
+		pthread_mutex_unlock(&output_mutex);
+
+		return OUNIT_COMPATIBLE_BUT_INVALID;
+	}
+
+	//Otherwise bump the index up
+	index++;
+	lexitem = token_array_get_pointer_at(tokens, index);
+
+	/**
+	 * We now need to see any kind of integer equivalent constant. This means
+	 * that chars, shorts, longs, etc are fine. Floats and strings are not
+	 */
+	switch(lexitem->tok){
+		case SHORT_CONST:
+			*expected_result = lexitem->constant_values.signed_short_value;
+			break;
+
+		case SHORT_CONST_FORCE_U:
+			*expected_result = lexitem->constant_values.unsigned_short_value;
+			break;
+
+		case INT_CONST:
+			*expected_result = lexitem->constant_values.signed_int_value;
+			break;
+
+		case INT_CONST_FORCE_U:
+			*expected_result = lexitem->constant_values.unsigned_int_value;
+			break;
+
+		case LONG_CONST:
+			*expected_result = lexitem->constant_values.signed_long_value;
+			break;
+
+		case LONG_CONST_FORCE_U:
+			*expected_result = lexitem->constant_values.unsigned_long_value;
+			break;
+
+		case BYTE_CONST:
+			*expected_result = lexitem->constant_values.signed_byte_value;
+			break;
+
+		case BYTE_CONST_FORCE_U:
+			*expected_result = lexitem->constant_values.unsigned_byte_value;
+			break;
+
+		case CHAR_CONST:
+			*expected_result = lexitem->constant_values.char_value;
+			break;
+
+		case TRUE_CONST:
+			*expected_result = TRUE;
+			break;
+			
+		case FALSE_CONST:
+			*expected_result = FALSE;
+			break;
+
+		/**
+		 * Anything not listed above is an automatic fail
+		 * case. We will display the issue too
+		 */
+		default:
+			pthread_mutex_lock(&output_mutex);
+			fprintf(stdout, "An integer adjacent constant was expected after the =, instead saw \"%s\"\n", lexitem_to_string(lexitem));
+			pthread_mutex_unlock(&output_mutex);
+
+			return OUNIT_COMPATIBLE_BUT_INVALID;
+	}
+
+	/**
+	 * Again another fail case here, we need to see an =
+	 */
+	if(lexitem->tok != ){
+		pthread_mutex_lock(&output_mutex);
+		fprintf(stdout, "Expected \"=\" but got \"%s\" instead\n", lexitem_to_string(lexitem));
+		pthread_mutex_unlock(&output_mutex);
 
 
+		return OUNIT_COMPATIBLE_BUT_INVALID;
+	}
 
 
 	//TODO FIXME
-	return OUNIT_COMPATIBLE_BUT_INVALID;
+	return OUNIT_COMPATBILE;
 }
 
 
