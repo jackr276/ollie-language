@@ -776,6 +776,60 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 
 /**
+ * Are two pointer types compatible? We use the same logic as types assignable does except we completely ignore the mutability
+ */
+static inline generic_type_t* pointer_types_compatible_ignore_mutability(generic_type_t* pointer_a, generic_type_t* pointer_b){
+	//If a is a void pointer then just give back whatever b is
+	if(pointer_a->internal_values.is_void_pointer == TRUE){
+		return pointer_b;
+	}
+
+	//If b is a void pointer then just give back whatever a is
+	if(pointer_b->internal_values.is_void_pointer == TRUE){
+		return pointer_b;
+	}
+
+
+	/**
+	 * If the memory layout type of the source and destination are different, then we cannot
+	 * assign them to eachother because if we were eventually to go and do memory access
+	 * using the [] operator, we would produce entirely different assembly code. Using
+	 * non-contiguous access on a contiguous region is almost certain to cause segfaults
+	 */
+	if(pointer_a->memory_layout_type != pointer_b->memory_layout_type){
+		return NULL;
+	}
+
+	/**
+	 * If we have pointers that have different underlying sizes, that is invalid. When we go to dereference the larger
+	 * pointer, we are now either reading into/corrupting other memory. For this reason, pointers must point to 
+	 * memory regions of the same physical size
+	 */
+	u_int32_t type_a_size_bytes = convert_type_size_to_bytes(get_type_size(pointer_a->internal_types.points_to));
+	u_int32_t type_b_size_bytes = convert_type_size_to_bytes(get_type_size(pointer_b->internal_types.points_to));
+
+	if(type_a_size_bytes != type_b_size_bytes){
+		return NULL;
+	}
+
+	//Now let's get what they both point tp
+	generic_type_t* type_a_points_to = pointer_a->internal_types.points_to; 
+	generic_type_t* type_b_points_to = pointer_b->internal_types.points_to; 
+
+	if(type_a_points_to->type_class == TYPE_CLASS_POINTER || type_b_points_to->type_class == TYPE_CLASS_POINTER){
+		return pointer_types_compatible_ignore_mutability(type_a_points_to, type_b_points_to);
+	} else {
+		//If this works, return the destination type
+		if(types_assignable(type_a_points_to, type_b_points_to) != NULL){
+			return pointer_a;
+		}
+	}
+
+	return NULL;
+}
+
+
+/**
  * Are two types *exactly* equal or not? This will account for type aliasing as well
  */
 u_int8_t types_identical(generic_type_t* a, generic_type_t* b){
@@ -1296,8 +1350,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 			if((*a)->type_class == TYPE_CLASS_POINTER){
 				switch((*b)->type_class){
 					case TYPE_CLASS_POINTER:
-						//TODO NEEDS TO BE NO MUTABILITY
-						if(types_assignable(*a, *b) == NULL){
+						if(pointer_types_compatible_ignore_mutability(*a, *b) == NULL){
 							return NULL;
 						}
 
@@ -1344,8 +1397,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 			if((*b)->type_class == TYPE_CLASS_POINTER){
 				switch((*a)->type_class){
 					case TYPE_CLASS_POINTER:
-						//TODO NEEDS TO BE NO MUTABILITY
-						if(types_assignable(*b, *a) == NULL){
+						if(pointer_types_compatible_ignore_mutability(*b, *a) == NULL){
 							return NULL;
 						}
 
