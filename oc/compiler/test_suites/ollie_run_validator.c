@@ -231,20 +231,22 @@ static inline u_int8_t parse_OUNIT_test_command(ollie_token_array_t* tokens, int
 			return OUNIT_COMPATIBLE_BUT_INVALID;
 	}
 
-	/**
-	 * Again another fail case here, we need to see an =
-	 */
-	if(lexitem->tok != ){
-		pthread_mutex_lock(&output_mutex);
-		fprintf(stdout, "Expected \"=\" but got \"%s\" instead\n", lexitem_to_string(lexitem));
-		pthread_mutex_unlock(&output_mutex);
+	//Bump it up one last time
+	index++;
+	lexitem = token_array_get_pointer_at(tokens, index);
 
+	/**
+	 * Again another fail case here, we need to see an ]
+	 */
+	if(lexitem->tok != R_BRACKET){
+		pthread_mutex_lock(&output_mutex);
+		fprintf(stdout, "Expected \"]\" but got \"%s\" instead\n", lexitem_to_string(lexitem));
+		pthread_mutex_unlock(&output_mutex);
 
 		return OUNIT_COMPATIBLE_BUT_INVALID;
 	}
 
-
-	//TODO FIXME
+	//Otherwise if we survived to down here, we are good
 	return OUNIT_COMPATBILE;
 }
 
@@ -264,7 +266,7 @@ static ounit_compatibility_status_t is_test_OUNIT_compatible(ollie_token_stream_
 
 		//If we see the OUNIT token then we will let the helper determine its compatibilty
 		if(lexitem->tok == OUNIT){
-			return parse_OUNIT_test_command(stream, i + 1, expected_result);
+			return parse_OUNIT_test_command(&(stream->token_stream), i + 1, expected_result);
 		}
 	}
 
