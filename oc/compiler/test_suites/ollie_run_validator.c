@@ -117,6 +117,21 @@ static inline void add_error_file_threadsafe(char* error_file){
 
 
 /**
+ * Lockdown the failed to compile file array and add the given
+ * file pointer to it
+ */
+static inline void add_failed_to_compile_file_threadsafe(char* error_file){
+	pthread_mutex_lock(&error_queue_mutex);
+
+	//Add to the array and bump the count
+	dynamic_array_add(&failed_to_compile_files, error_file);
+	number_of_failed_to_compile++;
+
+	pthread_mutex_unlock(&error_queue_mutex);
+} 
+
+
+/**
  * Parser the OUNIT test command. If the command is found to be invalid, we return a state 
  * that represents said invalidity. Otherwise, we will store the result that we expect(must
  * be an integer) inside of the passed parameter pointer
@@ -310,8 +325,10 @@ void* worker(void* thread_parameters) {
 	char output_file_name[1000];
 	//A path for the fully qualified file
 	char fully_qualified_file_name[1000];
-	//The command to use OC to compile
-	char compilation_command[3000];
+	//Command buffer for our uses
+	char command_buffer[3000];
+	//Buffer for our actual run commands
+	char run_command_buffer[2000];
 
 	//Implicit case it over
 	thread_parameters_t* parameters = thread_parameters;
@@ -430,14 +447,14 @@ void* worker(void* thread_parameters) {
 		 * Otherwise it is compatible so we will begin our testing
 		 * here by first compiling the actual item
 		 */
-		sprintf(compilation_command, "./oc/out/oc -f %s%s -o %s > /dev/null 2>&1", test_file_dir, file_name, output_file_name);
+		sprintf(command_buffer, "./oc/out/oc -f %s%s -o %s > /dev/null 2>&1", test_file_dir, file_name, output_file_name);
 
 		/**
 		 * Run the compilation command. The compiler relies on a shared temporary output file, so we 
 		 * need to lock here to make this all work
 		 */
 		pthread_mutex_lock(&compiler_mutex);
-		int32_t compilation_result = system(compilation_command);
+		int32_t compilation_result = system(command_buffer);
 		pthread_mutex_unlock(&compiler_mutex);
 
 		/**
@@ -446,33 +463,48 @@ void* worker(void* thread_parameters) {
 		 */
 		if(compilation_result != 0){
 			pthread_mutex_lock(&stdout_mutex);
-			fprintf(stdout, "[Thread %d]: Ran compilation command: %s\n", thread_id, compilation_command);
+			fprintf(stdout, "[Thread %d]: Ran compilation command: %s\n", thread_id, command_buffer);
 			fprintf(stdout, "[Thread %d]: The OUNIT configured test %s failed to compile with exit code %d. Developer attention is required\n\n", thread_id, file_name, compilation_result);
 			pthread_mutex_unlock(&stdout_mutex);
 
 			//Store this in the list of files that failed to compile when they should have
-			dynamic_array_add(&failed_to_compile_files, file_name);
-			number_of_failed_to_compile++;
+			add_failed_to_compile_file_threadsafe(file_name);
+
+			//Bump up the per-thread result
 			failed_to_compile_per_thread++;
-			pthread_mutex_unlock(&output_mutex);
 
 			//Onto the next one
 			continue;
 		}
 
 		/**
+		 * Create the actual run command and get a result out
+		 */
+		sprintf(run_command_buffer, "./%s ", output_file_name);
+		int32_t runtime_result = system(run_command_buffer);
+
+		//
+		//
+		//
+		//
+		//TODO
+		//
+		//
+		//
+
+		/**
 		 * Display our output to the console as to what we ran
 		 * and what we got out of it
 		 */
-		pthread_mutex_lock(&output_mutex);
-		pthread_mutex_unlock(&output_mutex);
+		pthread_mutex_lock(&stdout_mutex);
+		pthread_mutex_unlock(&stdout_mutex);
 
 		/**
 		 * Delete the output file now that we are done with it. Output file
 		 * names should be unique so in theory we should not have to lock this
 		 */
-		sprintf(compilation_command, "rm %s", output_file_name);
-		int32_t deletion_result = system(compilation_command);
+		sprintf(command_buffer, "rm %s", output_file_name);
+		int32_t deletion_result = system(command_buffer);
 
 		/**
 		 * If somehow this didn't work we should flag it
