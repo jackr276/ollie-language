@@ -82,9 +82,12 @@ static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", 
 /**
  * Print a lexer message in a nicely formatted way
  */
-static inline void print_lexer_error(char* info, u_int32_t line_number){
-	//Print this out on a single line
-	fprintf(stdout, "\n[FILE: %s] --> [LINE %d | TOKENIZER ERROR]: %s\n", file_name, line_number, info);
+static inline void print_lexer_error(char* info, u_int32_t line_number, u_int8_t silent_mode){
+	//If we're not in silent mode then display
+	if(silent_mode == FALSE){
+		//Print this out on a single line
+		fprintf(stdout, "\n[FILE: %s] --> [LINE %d | TOKENIZER ERROR]: %s\n", file_name, line_number, info);
+	}
 }
 
 
@@ -621,7 +624,7 @@ void push_back_token(ollie_token_stream_t* stream, u_int32_t* parser_line_number
  * this function returns, we will either have a good stream with everything
  * needed in it or a stream in an error state
  */
-static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
+static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream, u_int8_t silent_mode){
 	//Start the line number off at 1
 	u_int32_t line_number = 1;
 
@@ -1079,7 +1082,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 							//Remember - we need to see the closing quote here
 							if(ch3 != '\''){
-								print_lexer_error("Char must be a single character or escape sequence character, followed by '''", line_number);
+								print_lexer_error("Char must be a single character or escape sequence character, followed by '''", line_number, silent_mode);
 								return FAILURE;
 							}
 
@@ -1094,7 +1097,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 							//We can't just see the escape backslash
 							if(ch2 == '\''){
-								print_lexer_error("Escape sequence requires a character after \\.", line_number);
+								print_lexer_error("Escape sequence requires a character after \\.", line_number, silent_mode);
 								return FAILURE;
 							}
 
@@ -1103,7 +1106,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 							//Remember - we need to see the closing quote here
 							if(ch3 != '\''){
-								print_lexer_error("Char must be a single character or escape sequence character, followed by '''", line_number);
+								print_lexer_error("Char must be a single character or escape sequence character, followed by '''", line_number, silent_mode);
 								return FAILURE;
 							}
 
@@ -1168,7 +1171,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 								//Hard fail in this case
 								default:
-									print_lexer_error("Invalid escape sequence character found. Please consult the ASCII manual(man ascii) for the list of escape characters", line_number);
+									print_lexer_error("Invalid escape sequence character found. Please consult the ASCII manual(man ascii) for the list of escape characters", line_number, silent_mode);
 									lex_item.tok = LEXER_ERROR;
 									lex_item.line_num = line_number;
 									return FAILURE;
@@ -1280,7 +1283,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							current_state = IN_INT;
 
 						} else {
-							print_lexer_error("Invalid character found", line_number);
+							print_lexer_error("Invalid character found", line_number, silent_mode);
 							return FAILURE;
 						}
 
@@ -1327,13 +1330,13 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						case 'X':
 							//If we've already seen the hex code this is bad
 							if(seen_hex == TRUE){
-								print_lexer_error("Hexadecimal numbers cannot have 'x' or 'X' in them twice", line_number);
+								print_lexer_error("Hexadecimal numbers cannot have 'x' or 'X' in them twice", line_number, silent_mode);
 								return FAILURE;
 							}
 
 							//If we haven't seen the 0 here it's bad
 							if(*(numeric_lexeme.string) != '0'){
-								print_lexer_error("Hexadecimal 'x' or 'X' must be preceeded by a '0'", line_number);
+								print_lexer_error("Hexadecimal 'x' or 'X' must be preceeded by a '0'", line_number, silent_mode);
 								return FAILURE;
 							}
 
@@ -1348,7 +1351,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						case '.':
 							//If we've already seen the hex code this is bad
 							if(seen_hex == TRUE){
-								print_lexer_error("The '.' character is not valid in hexadecimal constants", line_number);
+								print_lexer_error("The '.' character is not valid in hexadecimal constants", line_number, silent_mode);
 								return FAILURE;
 							}
 
@@ -1646,7 +1649,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 			//Some very weird error here
 			default:
-				print_lexer_error("Found a stateless token", line_number);
+				print_lexer_error("Found a stateless token", line_number, FALSE);
 				return FAILURE;
 		}
 	}
@@ -1673,7 +1676,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
  *
  * The tokenizer also handles all file input
  */
-ollie_token_stream_t tokenize(char* current_file_name){
+ollie_token_stream_t tokenize(char* current_file_name, u_int8_t silent_mode){
 	//Store the file name for any error printing
 	file_name = current_file_name;
 
@@ -1690,7 +1693,8 @@ ollie_token_stream_t tokenize(char* current_file_name){
 	//If we can't open, it's an autofailure
 	if(fl == NULL){
 		sprintf(info, "Failed to open file %s", file_name);
-		print_lexer_error(info, 0);
+		//Silent mode always false here
+		print_lexer_error(info, 0, FALSE);
 
 		//Print the failure out and leave
 		token_stream.status = STREAM_STATUS_FAILURE;
@@ -1698,7 +1702,7 @@ ollie_token_stream_t tokenize(char* current_file_name){
 	}
 
 	//Consume all of the tokens here using the helper
-	u_int8_t result = generate_all_tokens(fl, &token_stream);
+	u_int8_t result = generate_all_tokens(fl, &token_stream, silent_mode);
 
 	//Once we're done, we close the file
 	fclose(fl);

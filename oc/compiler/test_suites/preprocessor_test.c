@@ -106,7 +106,7 @@ int main(int argc, char** argv){
 	clock_t begin = clock();
 
 	//Invoke the tokenizer
-	ollie_token_stream_t stream = tokenize(options->file_name);
+	ollie_token_stream_t stream = tokenize(options->file_name, FALSE);
 
 	//Tokenizing failed, error out
 	if(stream.status == STREAM_STATUS_FAILURE){

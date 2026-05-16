@@ -367,9 +367,11 @@ void* worker(void* thread_parameters) {
 		 *
 		 * NOTE: the lexer is NOT thread safe!!!! We need to do this in a lock
 		 * to avoid bizarre errors
+		 *
+		 * We have silent mode turned on for this
 		 */
 		pthread_mutex_lock(&lexer_mutex);
-		ollie_token_stream_t token_stream = tokenize(fully_qualified_file_name);
+		ollie_token_stream_t token_stream = tokenize(fully_qualified_file_name, TRUE);
 		pthread_mutex_unlock(&lexer_mutex);
 
 		/**
