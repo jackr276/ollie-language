@@ -1296,8 +1296,35 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 			if((*a)->type_class == TYPE_CLASS_POINTER){
 				switch((*b)->type_class){
 					case TYPE_CLASS_POINTER:
+						//TODO NEEDS TO BE NO MUTABILITY
+						if(types_assignable(*a, *b) == NULL){
+							return NULL;
+						}
 
+						/**
+						 * If a is not mutable, then we just return that. If a
+						 * is mutable, then we return whatever b has in store
+						 * for us
+						 */
+						if((*a)->mutability == MUTABLE){
+							return *b;
+						} else {
+							return *a;
+						}
+
+					/**
+					 * For basic types it needs to be an integer. We return 
+					 * a's type
+					 */
 					case TYPE_CLASS_BASIC:
+						switch((*b)->basic_type_token){
+							case VOID:
+							case F32:
+							case F64:
+								return NULL;
+							default:
+								return *a;
+						}
 
 					/**
 					 * Something invalid here
@@ -1305,30 +1332,6 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 					default:
 						return NULL;
 				}
-
-
-
-				if((*b)->type_class == TYPE_CLASS_POINTER){
-					//We'll return a final comparison type of u64
-					return lookup_type_name_only(symtab, "u64", (*a)->mutability)->type;
-				}
-
-				//If this is not a basic type, all other conversion is bad
-				if((*b)->type_class != TYPE_CLASS_BASIC){
-					return NULL;
-				}
-
-				//Now once we get here, we know that we have a basic type
-
-				//Pointers are not compatible with floats in a comparison sense
-				if((*b)->basic_type_token == F32 || (*b)->basic_type_token == F64){
-					return NULL;
-				}
-
-				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
-				*b = lookup_type_name_only(symtab, "u64", (*a)->mutability)->type;
-
-				return *b;
 			}
 			
 			//If b is a pointer type. This is teh exact same scenario as a
