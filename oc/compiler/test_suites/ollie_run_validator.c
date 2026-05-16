@@ -93,8 +93,66 @@ typedef enum {
  * Parser the OUNIT test command. If the command is found to be invalid, we return a state 
  * that represents said invalidity. Otherwise, we will store the result that we expect(must
  * be an integer) inside of the passed parameter pointer
+ *
+ * NOTE: By the time we get here we've already seen and advanced the pointer past the OUNIT 
+ * token
+ *
+ * Example OUNIT command: OUNIT: [console = 5]
+ *
+ * This tells us that the final console return value(echo $?) of the test should be 5
+ *
+ * This is currently the only test type that OUNIT supports. More may be added later on
+ * if it is determined that other scenarios should be tested
  */
-static inline u_int8_t parse_OUNIT_test_command(ollie_token_stream_t* stream, int32_t* expected_result){
+static inline u_int8_t parse_OUNIT_test_command(ollie_token_array_t* tokens, int32_t index, int32_t* expected_result){
+	//Generic pointer for our lexitem
+	lexitem_t* lexitem = token_array_get_pointer_at(tokens, index);
+
+	/**
+	 * We need to see a colon here. If we don't then we fail 
+	 * out now
+	 */
+	if(lexitem->tok != COLON){
+		pthread_mutex_lock(&output_mutex);
+		fprintf(stdout, "Expected \":\" but got \"%s\" instead\n", lexitem_to_string(lexitem));
+		pthread_mutex_unlock(&output_mutex);
+
+		return OUNIT_COMPATIBLE_BUT_INVALID;
+	}
+
+	//Otherwise bump the index up
+	index++;
+	lexitem = token_array_get_pointer_at(tokens, index);
+
+	/**
+	 * Again another fail case here, we need to see an L_BRACKET
+	 */
+	if(lexitem->tok != L_BRACKET){
+		pthread_mutex_lock(&output_mutex);
+		fprintf(stdout, "Expected \"[\" but got \"%s\" instead\n", lexitem_to_string(lexitem));
+		pthread_mutex_unlock(&output_mutex);
+
+		return OUNIT_COMPATIBLE_BUT_INVALID;
+	}
+
+	index++;
+	lexitem = token_array_get_pointer_at(tokens, index);
+
+	/**
+	 * We now need to see an identifier that says "console". If we don't
+	 * then we are done with this
+	 */
+	if((lexitem->tok != IDENT) || (strcmp(lexitem->lexeme.string, "console") != 0)){
+		pthread_mutex_lock(&output_mutex);
+		fprintf(stdout, "Expected \"console\" but got \"%s\" instead\n", lexitem_to_string(lexitem));
+		pthread_mutex_unlock(&output_mutex);
+
+		return OUNIT_COMPATIBLE_BUT_INVALID;
+	}
+
+
+
+
 
 	//TODO FIXME
 	return OUNIT_COMPATIBLE_BUT_INVALID;
@@ -116,7 +174,7 @@ static ounit_compatibility_status_t is_test_OUNIT_compatible(ollie_token_stream_
 
 		//If we see the OUNIT token then we will let the helper determine its compatibilty
 		if(lexitem->tok == OUNIT){
-			return parse_OUNIT_test_command(stream, expected_result);
+			return parse_OUNIT_test_command(stream, i + 1, expected_result);
 		}
 	}
 
