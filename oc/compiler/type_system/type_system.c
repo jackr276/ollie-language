@@ -1334,31 +1334,52 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				}
 			}
 			
-			//If b is a pointer type. This is teh exact same scenario as a
+			/**
+			 * For reference type assignability, the mutability level is very important
+			 * We need to be sure that we we are not setting something that is immutable
+			 * to a reference that is mutable or that would violate the entire structure
+			 * of the mutability. For this reason, if we're assigning pointers in a ternary,
+			 * we always take the lowest mutability level
+			 */
 			if((*b)->type_class == TYPE_CLASS_POINTER){
-				//If b is a another pointer, then that's fine
-				if((*a)->type_class == TYPE_CLASS_POINTER){
-					//We'll return a final comparison type of bool 
-					return lookup_type_name_only(symtab, "u64", (*a)->mutability)->type;
+				switch((*a)->type_class){
+					case TYPE_CLASS_POINTER:
+						//TODO NEEDS TO BE NO MUTABILITY
+						if(types_assignable(*b, *a) == NULL){
+							return NULL;
+						}
+
+						/**
+						 * If a is not mutable, then we just return that. If a
+						 * is mutable, then we return whatever b has in store
+						 * for us
+						 */
+						if((*b)->mutability == MUTABLE){
+							return *a;
+						} else {
+							return *b;
+						}
+
+					/**
+					 * For basic types it needs to be an integer. We return 
+					 * a's type
+					 */
+					case TYPE_CLASS_BASIC:
+						switch((*a)->basic_type_token){
+							case VOID:
+							case F32:
+							case F64:
+								return NULL;
+							default:
+								return *b;
+						}
+
+					/**
+					 * Something invalid here
+					 */
+					default:
+						return NULL;
 				}
-
-				//If this is not a basic type, all other conversion is bad
-				if((*a)->type_class != TYPE_CLASS_BASIC){
-					return NULL;
-				}
-
-				//Now once we get here, we know that we have a basic type
-
-				//Pointers are not compatible with floats in a comparison sense
-				if((*a)->basic_type_token == F32 || (*a)->basic_type_token == F64){
-					return NULL;
-				}
-
-				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
-				*a = lookup_type_name_only(symtab, "u64", (*b)->mutability)->type;
-
-				//We'll return a final comparison type of bool 
-				return *a;
 			}
 
 			//At this point if these are not basic types, we're done
