@@ -37,10 +37,21 @@
 //Max file name size on linux
 #define LINUX_MAX_FILE_NAME_LENGTH 300
 
-//We'll need a mutex for all of the files that we wish to operate on
-pthread_mutex_t output_mutex = PTHREAD_MUTEX_INITIALIZER;
+/**
+ * There are 4 potential things that we need to lock. To avoid holding
+ * up other areas of the process with those locks unnecessarily, we will
+ * maintain a separate mutex for each given item. The items that we need
+ * to lock are
+ *
+ *  1.) STDOUT output
+ *  2.) Lexer - not thread safe in its implementation
+ *  3.) Compiler - not thread safe in its implementation
+ *  4.) Error file queue
+ */
+pthread_mutex_t stdout_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t lexer_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t compiler_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t error_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /**
  * A generic array containing *all* of our test files that will be worked over
@@ -91,6 +102,21 @@ typedef enum {
 
 
 /**
+ * Lockdown the error file array and add the given
+ * file pointer to it
+ */
+static inline void add_error_file_threadsafe(char* error_file){
+	pthread_mutex_lock(&error_queue_mutex);
+
+	//Add to the array and bump the count
+	dynamic_array_add(&error_files, error_file);
+	number_of_error_files++;
+
+	pthread_mutex_unlock(&error_queue_mutex);
+} 
+
+
+/**
  * Parser the OUNIT test command. If the command is found to be invalid, we return a state 
  * that represents said invalidity. Otherwise, we will store the result that we expect(must
  * be an integer) inside of the passed parameter pointer
@@ -114,9 +140,9 @@ static inline u_int8_t parse_OUNIT_test_command(ollie_token_array_t* tokens, int
 	 * out now
 	 */
 	if(lexitem->tok != COLON){
-		pthread_mutex_lock(&output_mutex);
+		pthread_mutex_lock(&stdout_mutex);
 		fprintf(stdout, "Expected \":\" but got \"%s\" instead\n", lexitem_to_string(lexitem));
-		pthread_mutex_unlock(&output_mutex);
+		pthread_mutex_unlock(&stdout_mutex);
 
 		return OUNIT_COMPATIBLE_BUT_INVALID;
 	}
@@ -129,9 +155,9 @@ static inline u_int8_t parse_OUNIT_test_command(ollie_token_array_t* tokens, int
 	 * Again another fail case here, we need to see an L_BRACKET
 	 */
 	if(lexitem->tok != L_BRACKET){
-		pthread_mutex_lock(&output_mutex);
+		pthread_mutex_lock(&stdout_mutex);
 		fprintf(stdout, "Expected \"[\" but got \"%s\" instead\n", lexitem_to_string(lexitem));
-		pthread_mutex_unlock(&output_mutex);
+		pthread_mutex_unlock(&stdout_mutex);
 
 		return OUNIT_COMPATIBLE_BUT_INVALID;
 	}
@@ -144,9 +170,9 @@ static inline u_int8_t parse_OUNIT_test_command(ollie_token_array_t* tokens, int
 	 * then we are done with this
 	 */
 	if((lexitem->tok != IDENT) || (strcmp(lexitem->lexeme.string, "console") != 0)){
-		pthread_mutex_lock(&output_mutex);
+		pthread_mutex_lock(&stdout_mutex);
 		fprintf(stdout, "Expected \"console\" but got \"%s\" instead\n", lexitem_to_string(lexitem));
-		pthread_mutex_unlock(&output_mutex);
+		pthread_mutex_unlock(&stdout_mutex);
 
 		return OUNIT_COMPATIBLE_BUT_INVALID;
 	}
@@ -159,9 +185,9 @@ static inline u_int8_t parse_OUNIT_test_command(ollie_token_array_t* tokens, int
 	 * Again another fail case here, we need to see an =
 	 */
 	if(lexitem->tok != EQUALS){
-		pthread_mutex_lock(&output_mutex);
+		pthread_mutex_lock(&stdout_mutex);
 		fprintf(stdout, "Expected \"=\" but got \"%s\" instead\n", lexitem_to_string(lexitem));
-		pthread_mutex_unlock(&output_mutex);
+		pthread_mutex_unlock(&stdout_mutex);
 
 		return OUNIT_COMPATIBLE_BUT_INVALID;
 	}
@@ -224,9 +250,9 @@ static inline u_int8_t parse_OUNIT_test_command(ollie_token_array_t* tokens, int
 		 * case. We will display the issue too
 		 */
 		default:
-			pthread_mutex_lock(&output_mutex);
+			pthread_mutex_lock(&stdout_mutex);
 			fprintf(stdout, "An integer adjacent constant was expected after the =, instead saw \"%s\"\n", lexitem_to_string(lexitem));
-			pthread_mutex_unlock(&output_mutex);
+			pthread_mutex_unlock(&stdout_mutex);
 
 			return OUNIT_COMPATIBLE_BUT_INVALID;
 	}
@@ -239,9 +265,9 @@ static inline u_int8_t parse_OUNIT_test_command(ollie_token_array_t* tokens, int
 	 * Again another fail case here, we need to see an ]
 	 */
 	if(lexitem->tok != R_BRACKET){
-		pthread_mutex_lock(&output_mutex);
+		pthread_mutex_lock(&stdout_mutex);
 		fprintf(stdout, "Expected \"]\" but got \"%s\" instead\n", lexitem_to_string(lexitem));
-		pthread_mutex_unlock(&output_mutex);
+		pthread_mutex_unlock(&stdout_mutex);
 
 		return OUNIT_COMPATIBLE_BUT_INVALID;
 	}
@@ -300,9 +326,9 @@ void* worker(void* thread_parameters) {
 	u_int32_t failed_to_compile_per_thread = 0;
 
 	//Display for debug info
-	pthread_mutex_lock(&output_mutex);
+	pthread_mutex_lock(&stdout_mutex);
 	fprintf(stdout, "[Thread %d]: Thread has been assigned to validate files with indices in range [%d, %d) and will now start working\n\n", thread_id, start_index, end_index);
-	pthread_mutex_unlock(&output_mutex);
+	pthread_mutex_unlock(&stdout_mutex);
 
 	/**
 	 * Now run through every file that is within this threads assignment.
@@ -334,9 +360,9 @@ void* worker(void* thread_parameters) {
 		 * to skip this one. This is not a big deal for it to fail
 		 */
 		if(token_stream.status == STREAM_STATUS_FAILURE){
-			pthread_mutex_lock(&output_mutex);
+			pthread_mutex_lock(&stdout_mutex);
 			fprintf(stdout, "[Thread %d]: File %s has failed to tokenize\n", thread_id, file_name);
-			pthread_mutex_unlock(&output_mutex);
+			pthread_mutex_unlock(&stdout_mutex);
 			continue;
 		}
 
@@ -365,14 +391,15 @@ void* worker(void* thread_parameters) {
 				 * time confused as to why this isn't working
 				 */
 				if(expected_result >= 255){
-					pthread_mutex_lock(&output_mutex);
+					pthread_mutex_lock(&stdout_mutex);
 					fprintf(stdout, "[Thread %d]: File \"%s\" - The OUNIT expected return value of %d is higher than the maximum UNIX return value of %d. Please remediate your test\n", thread_id, file_name, expected_result, 255);
+					pthread_mutex_unlock(&stdout_mutex);
 
 					//Add to the error array
-					dynamic_array_add(&error_files, file_name);
-					number_of_error_files++;
+					add_error_file_threadsafe(file_name);
+
+					//Per-thread tracking
 					errors_per_thread++;
-					pthread_mutex_unlock(&output_mutex);
 
 					//Onto the next file
 					continue;
@@ -385,14 +412,15 @@ void* worker(void* thread_parameters) {
 			 * but they messed it up somehow
 			 */
 			case OUNIT_COMPATIBLE_BUT_INVALID:
-				pthread_mutex_lock(&output_mutex);
+				pthread_mutex_lock(&stdout_mutex);
 				fprintf(stdout, "[Thread %d]: The file \"%s\" has an incorrect OUNIT configuration and will not be processed\n", thread_id, file_name);
+				pthread_mutex_unlock(&stdout_mutex);
 
 				//Add to the error array
-				dynamic_array_add(&error_files, file_name);
-				number_of_error_files++;
+				add_error_file_threadsafe(file_name);
+
+				//Per-thread tracking
 				errors_per_thread++;
-				pthread_mutex_unlock(&output_mutex);
 
 				//Onto the next file don't bother compiling
 				continue;
@@ -417,9 +445,10 @@ void* worker(void* thread_parameters) {
 		 * we will note a compilation failure and move on
 		 */
 		if(compilation_result != 0){
-			pthread_mutex_lock(&output_mutex);
+			pthread_mutex_lock(&stdout_mutex);
 			fprintf(stdout, "[Thread %d]: Ran compilation command: %s\n", thread_id, compilation_command);
 			fprintf(stdout, "[Thread %d]: The OUNIT configured test %s failed to compile with exit code %d. Developer attention is required\n\n", thread_id, file_name, compilation_result);
+			pthread_mutex_unlock(&stdout_mutex);
 
 			//Store this in the list of files that failed to compile when they should have
 			dynamic_array_add(&failed_to_compile_files, file_name);
@@ -449,22 +478,22 @@ void* worker(void* thread_parameters) {
 		 * If somehow this didn't work we should flag it
 		 */
 		if(deletion_result != 0){
-			pthread_mutex_lock(&output_mutex);
+			pthread_mutex_lock(&stdout_mutex);
 			fprintf(stdout, "[Thread %d]: Failed to delete output file %s\n", thread_id, output_file_name);
-		   	pthread_mutex_unlock(&output_mutex);
+		   	pthread_mutex_unlock(&stdout_mutex);
 		}
 	}
 
 
 	//Print our final debug info and then get out
-	pthread_mutex_lock(&output_mutex);
+	pthread_mutex_lock(&stdout_mutex);
 	fprintf(stdout, "\n-----------------------------------------------\n");
 	fprintf(stdout, "[Thread %d]: Work Finished\n", thread_id);
 	fprintf(stdout, "Files Processed: %d\n", end_index - start_index);
 	fprintf(stdout, "Failed to compile: %d\n", failed_to_compile_per_thread);
 	fprintf(stdout, "Ran but errored: %d\n", errors_per_thread);
 	fprintf(stdout, "-----------------------------------------------\n");
-	pthread_mutex_unlock(&output_mutex);
+	pthread_mutex_unlock(&stdout_mutex);
 
 	//We have nothing to give back
 	return NULL;
@@ -598,7 +627,8 @@ int main(int argc, char** argv) {
 	free(parameters);
 
 	//Destroy the three mutices
-	pthread_mutex_destroy(&output_mutex);
+	pthread_mutex_destroy(&stdout_mutex);
 	pthread_mutex_destroy(&lexer_mutex);
 	pthread_mutex_destroy(&compiler_mutex);
+	pthread_mutex_destroy(&error_queue_mutex);
 }
