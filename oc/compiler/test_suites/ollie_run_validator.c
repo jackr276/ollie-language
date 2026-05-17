@@ -485,21 +485,28 @@ void* worker(void* thread_parameters) {
 		sprintf(run_command_buffer, "./%s ", output_file_name);
 		int32_t runtime_result = system(run_command_buffer);
 
-		//
-		//
-		//
-		//
-		//TODO
-		//
-		//
-		//
-
 		/**
-		 * Display our output to the console as to what we ran
-		 * and what we got out of it
+		 * If the results match then we are all set here. If they
+		 * do not then we will need to display an error
 		 */
-		pthread_mutex_lock(&stdout_mutex);
-		pthread_mutex_unlock(&stdout_mutex);
+		if(runtime_result == expected_result){
+			pthread_mutex_lock(&stdout_mutex);
+			fprintf(stdout, "Compilation command ran: %s\n", command_buffer);
+			fprintf(stdout, "Execution result matched expected result. Test was a success.\n");
+			pthread_mutex_unlock(&stdout_mutex);
+
+		} else {
+			pthread_mutex_lock(&stdout_mutex);
+			fprintf(stdout, "Compilation command ran: %s\n", command_buffer);
+			fprintf(stdout, "Expected execution result was %d, but got %d instead\n", expected_result, runtime_result);
+			pthread_mutex_unlock(&stdout_mutex);
+
+			//This is an error file now
+			add_error_file_threadsafe(file_name);
+			
+			//Count it as one more error
+			errors_per_thread++;
+		}
 
 		/**
 		 * Delete the output file now that we are done with it. Output file
