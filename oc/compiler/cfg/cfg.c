@@ -3210,29 +3210,45 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 				//Grab the return var that we need
 				return_variable = expression_package.result_value.result_var;
 
-				if(is_type_returned_by_copy(return_variable->type) == TRUE){
-					printf("HERE\n\n\n");
-					//TODO CALLEE SIDE
-				}
+				/**
+				 * If the type is not returned by copy we go through the regular
+				 * steps to get the return value into %rax
+				 */
+				if(is_type_returned_by_copy(return_variable->type) == FALSE){
+					/**
+					 * If the variable is not a temp *or* we have a need for a converting move, we will emit
+					 * the extra assignment here. If it's already temp and we don't need a converting move, we won't
+					 * bother with inserting the extra statements
+					 */
+					if(return_variable->variable_type != VARIABLE_TYPE_TEMP
+						|| is_converting_move_required(ret_node->inferred_type, return_variable->type) == TRUE){
+						/**
+						 * The type of this final assignee will *always* be the inferred type of the node. We need to ensure that
+						 * the function is returning the type as promised, and not what is done through type coercion
+						 */
+						instruction_t* assignment = emit_assignment_instruction(emit_temp_var(ret_node->inferred_type), return_variable);
+
+						//Add it into the block
+						add_statement(current, assignment);
+
+						//The return variable is now what was assigned
+						return_variable	= assignment->assignee;
+					}
+
 
 				/**
-				 * If the variable is not a temp *or* we have a need for a converting move, we will emit
-				 * the extra assignment here. If it's already temp and we don't need a converting move, we won't
-				 * bother with inserting the extra statements
+				 * If a type is returned by copy, then by the Ollie convention we will store
+				 * that type inside of the %rdi register, which itself holds the stack base
+				 * address where we want to copy this in the *caller*. The caller is responsible 
+				 * for all stack management. All that the callee needs to do is emit a memory 
+				 * copy operation
 				 */
-				if(return_variable->variable_type != VARIABLE_TYPE_TEMP
-					|| is_converting_move_required(ret_node->inferred_type, return_variable->type) == TRUE){
-					/**
-					 * The type of this final assignee will *always* be the inferred type of the node. We need to ensure that
-					 * the function is returning the type as promised, and not what is done through type coercion
-					 */
-					instruction_t* assignment = emit_assignment_instruction(emit_temp_var(ret_node->inferred_type), return_variable);
-
-					//Add it into the block
-					add_statement(current, assignment);
-
-					//The return variable is now what was assigned
-					return_variable	= assignment->assignee;
+				} else {
+					printf("TODO\n\n\n");
+					exit(1);
+					//TODO CALLEE SIDE
+					//
+					//TODO WE NEED TO BOTH COPY AND THEN PUT THE RESULT VAR IN %RAX
 				}
 
 				break;
