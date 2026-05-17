@@ -70,6 +70,9 @@ static u_int32_t number_of_error_files = 0;
 //Hold onto the overall directory path
 static char* test_file_dir;
 
+//What is the compilation output directory that we are using
+static char* output_directory;
+
 /**
  * Each thread has a unique start and end index that 
  * they need to iterate over. This struct contains
@@ -455,7 +458,7 @@ void* worker(void* thread_parameters) {
 		 * Otherwise it is compatible so we will begin our testing
 		 * here by first compiling the actual item
 		 */
-		sprintf(command_buffer, "./oc/out/oc -f %s%s -o %s > /dev/null 2>&1", test_file_dir, file_name, output_file_name);
+		sprintf(command_buffer, "%s/oc -f %s%s -o %s > /dev/null 2>&1", output_directory, test_file_dir, file_name, output_file_name);
 
 		/**
 		 * Run the compilation command. The compiler relies on a shared temporary output file, so we 
@@ -562,8 +565,8 @@ int main(int argc, char** argv) {
 	 * Find the test file directory. It will have been passed in as a command line argument. If 
 	 * it wasn't fail out
 	 */
-	if(argc < 3){
-		fprintf(stdout, "Fatal error: please pass in an executable and a test directory as a command line argument\n");
+	if(argc < 4){
+		fprintf(stdout, "Fatal error: please pass in an executable, a test directory and an output directory as a command line argument\n");
 		exit(1);
 	}
 
@@ -579,6 +582,13 @@ int main(int argc, char** argv) {
 		fprintf(stdout, "Fatal error: failed to open directory %s\n", test_file_dir);
 		exit(1);
 	}
+
+	/**
+	 * Store the actual output directory. For local runs this should be
+	 * /oc/out/, for actual runs on the github runner it should be 
+	 * $$RUNNER_TEMP
+	 */
+	output_directory = argv[3];
 
 	//Create our two dynamic arrays with initial sizes
 	test_files = dynamic_array_alloc_initial_size(DEFAULT_ARRAY_SIZE);

@@ -514,7 +514,7 @@ memory_check: oc_debug memory_checker
 # Ollie run validator checks the output of programs that expect a specific output. For more details
 # please see the top comment in the source code itself
 ollie_run_validation: oc ollie_run_validator
-	$(OUT_LOCAL)/ollie_run_validator 16 $(TEST_FILE_DIR)
+	$(OUT_LOCAL)/ollie_run_validator 16 $(TEST_FILE_DIR) $(OUT_LOCAL)
 
 array_test: dynamic_array_test
 	$(OUT_LOCAL)/dynamic_array_test
@@ -744,7 +744,7 @@ selector_test-CI: instruction_selector_test-CI
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/instruction_selector_test -i -d -f
 
 ollie_run_validation-CI: ollie_run_validator-CI oc-CI
-	$(OUT_CI)/ollie_run_validator 4 $(TEST_FILE_DIR)
+	$(OUT_CI)/ollie_run_validator 4 $(TEST_FILE_DIR) $(OUT_CI)
 
 compiler_test-CI: oc-CI
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/oc -s -t -@ -i -d -f
