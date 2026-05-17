@@ -470,6 +470,16 @@ symtab_variable_record_t* create_temp_memory_address_variable(symtab_function_re
 void add_function_parameter(type_symtab_t* symtab, symtab_function_record_t* function_record, symtab_variable_record_t* variable_record);
 
 /**
+ * Since a returned-by-copy value will *always* have the memory address to copy to
+ * passed into the function via %rdi, it is essential that we go through and update
+ * the symtab_function_record here as well as all of the parameters. Edge case that
+ * we are looking out for: if we had 6 GP params, now we have 7, and the last one
+ * is pushed over the edge to be a stack param. We need to make the adjustment for all
+ * of them, as well as for their function_parameter_order
+ */
+void remediate_return_by_copy_gp_parameter_order(symtab_function_record_t* record, function_type_t* signature);
+
+/**
  * Make a function record
  */
 symtab_function_record_t* create_function_record(dynamic_string_t name, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number);

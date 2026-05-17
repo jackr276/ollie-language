@@ -147,6 +147,21 @@ static inline u_int8_t is_enum_type(generic_type_t* type){
 
 
 /**
+ * When we do stack passed parameters, struct and union types
+ * are always passed by copy whilst everything else is by reference
+ */
+static inline u_int8_t is_type_stack_passed_by_copy(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_UNION:
+		case TYPE_CLASS_STRUCT:	
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Does an enum list contain a given value for a member?
  */
 static inline u_int8_t does_enum_contain_integer_member(generic_type_t* enum_type, int32_t enum_member){
@@ -12519,8 +12534,10 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 	//Store the type as well, very important
 	param_record->type_defined_as = type;
 
-	//Most common case, not a floating point so
-	//it counts as general-purpose
+	/**
+	 * Most common case, not a floating point so
+	 * it counts as general-purpose
+	 */
 	if(IS_FLOATING_POINT(type) == FALSE){
 		param_record->class_relative_function_parameter_order = *current_gen_purpose_param;
 
@@ -13252,25 +13269,6 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	
 	//A null return means that we succeeded
 	return NULL;
-}
-
-
-/**
- * Since a returned-by-copy value will *always* have the memory address to copy to
- * passed into the function via %rdi, it is essential that we go through and update
- * the symtab_function_record here as well as all of the parameters. Edge case that
- * we are looking out for: if we had 6 GP params, now we have 7, and the last one
- * is pushed over the edge to be a stack param. We need to make the adjustment for all
- * of them, as well as for their function_parameter_order
- */
-static inline void remediate_return_by_copy_gp_parameter_order(symtab_function_record_t* record, function_type_t* signature){
-	for(u_int32_t i = 0; i < record->function_parameters.current_index; i++){
-		//Grab the parameter out
-		symtab_variable_record_t* parameter = dynamic_array_get_at(&(record->function_parameters), i);
-		//TODO
-
-	}
-
 }
 
 

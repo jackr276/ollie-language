@@ -885,6 +885,9 @@ void add_function_parameter(type_symtab_t* type_symtab, symtab_function_record_t
 
 	//Do we need to pass via stack? If so add it here
 	} else if(is_parameter_stack_passed(variable_record) == TRUE){
+		//For handling equivalent pointer types
+		generic_type_t* equivalent_pointer_type;
+
 		//Allocate it if need be
 		if(function_record->stack_passed_parameters.stack_regions.internal_array == NULL){
 			//This is specifically a parameter passing stack region. We must be sure to mention that
@@ -893,11 +896,17 @@ void add_function_parameter(type_symtab_t* type_symtab, symtab_function_record_t
 
 		//Special adjustments based on the types we have
 		switch(variable_record->type_defined_as->type_class){
-			//Array types are always passed by reference. We need to make sure that
-			//we represent this accurately inside of the stack region. We can use a generic pointer to do so
+			/**
+			 * Array types are always passed by reference. We need to make sure that
+			 * we represent this accurately inside of the stack region. We can use an
+			 * equivalent pointer type from the conversion helper to do this
+			 */
 			case TYPE_CLASS_ARRAY:
+				//Create the equivalent pointer type
+				equivalent_pointer_type = convert_array_type_to_equivalent_pointer(variable_record->type_defined_as);
+
 				//Add this type into said stack region
-				variable_record->stack_region = create_stack_region_for_type(&(function_record->stack_passed_parameters), lookup_type_name_only(type_symtab, "void*", NOT_MUTABLE)->type);
+				variable_record->stack_region = create_stack_region_for_type(&(function_record->stack_passed_parameters), equivalent_pointer_type);
 				break;
 			
 			default:
@@ -915,6 +924,27 @@ void add_function_parameter(type_symtab_t* type_symtab, symtab_function_record_t
 		//Flag that this function contains stack params
 		function_signature->contains_stack_params = TRUE;
 	}
+}
+
+
+/**
+ * Since a returned-by-copy value will *always* have the memory address to copy to
+ * passed into the function via %rdi, it is essential that we go through and update
+ * the symtab_function_record here as well as all of the parameters. Edge case that
+ * we are looking out for: if we had 6 GP params, now we have 7, and the last one
+ * is pushed over the edge to be a stack param. We need to make the adjustment for all
+ * of them, as well as for their function_parameter_order
+ */
+void remediate_return_by_copy_gp_parameter_order(symtab_function_record_t* record, function_type_t* signature){
+	for(u_int32_t i = 0; i < record->function_parameters.current_index; i++){
+		//Grab the parameter out
+		symtab_variable_record_t* parameter = dynamic_array_get_at(&(record->function_parameters), i);
+
+
+		//TODO
+
+	}
+
 }
 
 
