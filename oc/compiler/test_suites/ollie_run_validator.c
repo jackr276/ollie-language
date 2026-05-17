@@ -634,7 +634,7 @@ int main(int argc, char** argv) {
 	 * Spawn every thread with the appropriate start(inclusive)
 	 * index and end(exclusive) index for the array
 	 */
-	for(u_int32_t i = 0; i < thread_count; i++){
+	for(int32_t i = 0; i < thread_count; i++){
 		//This is the start index that we maintain
 		parameters[i].start_index = current_thread_file_index;
 
@@ -666,7 +666,7 @@ int main(int argc, char** argv) {
 	 * we wait in this blocking loop for them
 	 * to finish
 	 */
-	for(u_int32_t i = 0; i < thread_count; i++){
+	for(int32_t i = 0; i < thread_count; i++){
 		pthread_join(threads[i], NULL);
 	}
 
