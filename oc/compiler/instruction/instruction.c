@@ -73,6 +73,8 @@ const char* variable_type_to_string(variable_type_t type){
 			return "VARIABLE_TYPE_NON_TEMP";
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
 			return "VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS";
+		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
+			return "VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS";
 		default:
 			return "INVALID VARIABLE TYPE";
 	}
@@ -1909,6 +1911,18 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 					} else {
 						fprintf(fl, "PARAMETER_MEM<t%d>", variable->temp_var_number);
 					}
+
+					break;
+
+				case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
+					if(variable->linked_var != NULL){
+						//Print out the normal version, plus the MEM<> wrapper
+						fprintf(fl, "RETURN_BY_COPY<%s_%d>", variable->linked_var->var_name.string, variable->ssa_generation);
+					} else {
+						fprintf(fl, "RETURN_BY_COPY<t%d>", variable->temp_var_number);
+					}
+					
+					break;
 			}
 
 			break;

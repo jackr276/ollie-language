@@ -74,6 +74,8 @@ typedef enum {
 	VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS,
 	VARIABLE_TYPE_LOCAL_CONSTANT,
 	VARIABLE_TYPE_FUNCTION_ADDRESS, //For rip-relative function pointer loads
+	//A return-by-copy address variable designed for functions where we return structs/unions
+	VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS,
 } variable_type_t;
 
 

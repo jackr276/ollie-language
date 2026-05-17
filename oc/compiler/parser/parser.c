@@ -13498,9 +13498,11 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 */
 	top_level_function_variable_scope = variable_symtab->current;
 
-	//Now we must ensure that we see a valid parameter list. It is important to note that
-	//parameter lists can be empty, but whatever we have here we'll have to add in
-	//Parameter list parent is the function node
+	/**
+	 * Now we must ensure that we see a valid parameter list. It is important to note that
+	 * parameter lists can be empty, but whatever we have here we'll have to add in
+	 * Parameter list parent is the function node
+	 */
 	u_int8_t status = parameter_list(token_stream, function_record, defining_predeclared_function);
 
 	//We have a bad parameter list, we just fail out
@@ -13519,8 +13521,10 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		return print_and_return_error("Arrow(->) required after parameter-list in function", parser_line_num);
 	}
 
-	//Now if we get here, we must see a valid type specifier
-	//The type specifier rule already does existence checking for us
+	/**
+	 * Now if we get here, we must see a valid type specifier
+	 * The type specifier rule already does existence checking for us
+	 */
 	generic_type_t* return_type = type_specifier(token_stream);
 
 	//If we failed, bail out
@@ -13528,8 +13532,10 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		return print_and_return_error("Invalid return type given to function. All functions, even void ones, must have an explicit return type", parser_line_num);
 	}
 
-	//Grab the type record. A reference to this will be stored in the function symbol table. Make sure
-	//that we first dealias it
+	/**
+	 * Grab the type record. A reference to this will be stored in the function symbol table. Make sure
+	 * that we first dealias it
+	 */
 	generic_type_t* type = dealias_type(return_type);
 
 	//If we're defining a function that was previously implicit, the types have to match exactly
