@@ -13558,6 +13558,10 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 */
 	add_return_type_to_signature(function_record->signature->internal_types.function_type, type);
 
+	//TODO HERE - we need to do any/all adjustments to the stack param status of the variables
+	//after we add a copy return type. For example, if before we had 6 GP params, we now actually
+	//have 7 so one of them will have to go to the stack.
+
 	//We can optionally see the raises keyword here
 	lookahead = get_next_token(token_stream, &parser_line_num);
 

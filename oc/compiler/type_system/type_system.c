@@ -2772,6 +2772,12 @@ void add_return_type_to_signature(function_type_t* signature, generic_type_t* re
 		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_UNION:
 			signature->returns_by_copy = TRUE;
+			
+
+			//TODO IF THIS IS TRUE, we need to shift all GP params
+			//over by one
+
+
 			break;
 			
 		//Anything else we don't care - do nothing

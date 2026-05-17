@@ -285,6 +285,14 @@ static inline u_int8_t is_variable_ssa_eligible(three_addr_var_t* variable){
 			} else {
 				return FALSE;
 			}
+		
+		/**
+		 * Return by copy addresses are *never* SSA eligible. This
+		 * would actually case the SSA system to crash because there
+		 * is no real assignment for this kind of variable
+		 */
+		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
+			return FALSE;
 
 		default:
 			return FALSE;
