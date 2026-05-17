@@ -9586,8 +9586,14 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 
 	//If the current function's return type is not compatible with the return type here, we'll bail out
 	if(final_type == NULL){
-		sprintf(info, "Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"", current_function->func_name.string, current_function->return_type->type_name.string,
+		//Following that we'll generate another error message to make it more clear
+		sprintf(info, "Function \"%s\" expects a return type of \"%s%s\", but was given an incompatible type \"%s%s\"",
+		  		current_function->func_name.string,
+				(current_function->return_type->mutability == MUTABLE ? "mut " : ""),
+		  		current_function->return_type->type_name.string,
+		  		(expr_node->inferred_type->mutability == MUTABLE ? "mut " : ""),
 		  		expr_node->inferred_type->type_name.string);
+
 		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		//Also print out the function
 		print_function_name(current_function);

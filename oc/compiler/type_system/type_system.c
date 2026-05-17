@@ -776,6 +776,60 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 
 /**
+ * Are two pointer types compatible? We use the same logic as types assignable does except we completely ignore the mutability
+ */
+static inline generic_type_t* pointer_types_compatible_ignore_mutability(generic_type_t* pointer_a, generic_type_t* pointer_b){
+	//If a is a void pointer then just give back whatever b is
+	if(pointer_a->internal_values.is_void_pointer == TRUE){
+		return pointer_b;
+	}
+
+	//If b is a void pointer then just give back whatever a is
+	if(pointer_b->internal_values.is_void_pointer == TRUE){
+		return pointer_b;
+	}
+
+
+	/**
+	 * If the memory layout type of the source and destination are different, then we cannot
+	 * assign them to eachother because if we were eventually to go and do memory access
+	 * using the [] operator, we would produce entirely different assembly code. Using
+	 * non-contiguous access on a contiguous region is almost certain to cause segfaults
+	 */
+	if(pointer_a->memory_layout_type != pointer_b->memory_layout_type){
+		return NULL;
+	}
+
+	/**
+	 * If we have pointers that have different underlying sizes, that is invalid. When we go to dereference the larger
+	 * pointer, we are now either reading into/corrupting other memory. For this reason, pointers must point to 
+	 * memory regions of the same physical size
+	 */
+	u_int32_t type_a_size_bytes = convert_type_size_to_bytes(get_type_size(pointer_a->internal_types.points_to));
+	u_int32_t type_b_size_bytes = convert_type_size_to_bytes(get_type_size(pointer_b->internal_types.points_to));
+
+	if(type_a_size_bytes != type_b_size_bytes){
+		return NULL;
+	}
+
+	//Now let's get what they both point tp
+	generic_type_t* type_a_points_to = pointer_a->internal_types.points_to; 
+	generic_type_t* type_b_points_to = pointer_b->internal_types.points_to; 
+
+	if(type_a_points_to->type_class == TYPE_CLASS_POINTER || type_b_points_to->type_class == TYPE_CLASS_POINTER){
+		return pointer_types_compatible_ignore_mutability(type_a_points_to, type_b_points_to);
+	} else {
+		//If this works, return the destination type
+		if(types_assignable(type_a_points_to, type_b_points_to) != NULL){
+			return pointer_a;
+		}
+	}
+
+	return NULL;
+}
+
+
+/**
  * Are two types *exactly* equal or not? This will account for type aliasing as well
  */
 u_int8_t types_identical(generic_type_t* a, generic_type_t* b){
@@ -1286,57 +1340,98 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				}
 			}
 
-			//If a is a pointer type
+			/**
+			 * For reference type assignability, the mutability level is very important
+			 * We need to be sure that we we are not setting something that is immutable
+			 * to a reference that is mutable or that would violate the entire structure
+			 * of the mutability. For this reason, if we're assigning pointers in a ternary,
+			 * we always take the lowest mutability level
+			 */
 			if((*a)->type_class == TYPE_CLASS_POINTER){
-				//If b is a another pointer, then that's fine
-				if((*b)->type_class == TYPE_CLASS_POINTER){
-					//We'll return a final comparison type of u64
-					return lookup_type_name_only(symtab, "u64", (*a)->mutability)->type;
+				switch((*b)->type_class){
+					case TYPE_CLASS_POINTER:
+						if(pointer_types_compatible_ignore_mutability(*a, *b) == NULL){
+							return NULL;
+						}
+
+						/**
+						 * If a is not mutable, then we just return that. If a
+						 * is mutable, then we return whatever b has in store
+						 * for us
+						 */
+						if((*a)->mutability == MUTABLE){
+							return *b;
+						} else {
+							return *a;
+						}
+
+					/**
+					 * For basic types it needs to be an integer. We return 
+					 * a's type
+					 */
+					case TYPE_CLASS_BASIC:
+						switch((*b)->basic_type_token){
+							case VOID:
+							case F32:
+							case F64:
+								return NULL;
+							default:
+								return *a;
+						}
+
+					/**
+					 * Something invalid here
+					 */
+					default:
+						return NULL;
 				}
-
-				//If this is not a basic type, all other conversion is bad
-				if((*b)->type_class != TYPE_CLASS_BASIC){
-					return NULL;
-				}
-
-				//Now once we get here, we know that we have a basic type
-
-				//Pointers are not compatible with floats in a comparison sense
-				if((*b)->basic_type_token == F32 || (*b)->basic_type_token == F64){
-					return NULL;
-				}
-
-				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
-				*b = lookup_type_name_only(symtab, "u64", (*a)->mutability)->type;
-
-				return *b;
 			}
 			
-			//If b is a pointer type. This is teh exact same scenario as a
+			/**
+			 * For reference type assignability, the mutability level is very important
+			 * We need to be sure that we we are not setting something that is immutable
+			 * to a reference that is mutable or that would violate the entire structure
+			 * of the mutability. For this reason, if we're assigning pointers in a ternary,
+			 * we always take the lowest mutability level
+			 */
 			if((*b)->type_class == TYPE_CLASS_POINTER){
-				//If b is a another pointer, then that's fine
-				if((*a)->type_class == TYPE_CLASS_POINTER){
-					//We'll return a final comparison type of bool 
-					return lookup_type_name_only(symtab, "u64", (*a)->mutability)->type;
+				switch((*a)->type_class){
+					case TYPE_CLASS_POINTER:
+						if(pointer_types_compatible_ignore_mutability(*b, *a) == NULL){
+							return NULL;
+						}
+
+						/**
+						 * If a is not mutable, then we just return that. If a
+						 * is mutable, then we return whatever b has in store
+						 * for us
+						 */
+						if((*b)->mutability == MUTABLE){
+							return *a;
+						} else {
+							return *b;
+						}
+
+					/**
+					 * For basic types it needs to be an integer. We return 
+					 * a's type
+					 */
+					case TYPE_CLASS_BASIC:
+						switch((*a)->basic_type_token){
+							case VOID:
+							case F32:
+							case F64:
+								return NULL;
+							default:
+								return *b;
+						}
+
+					/**
+					 * Something invalid here
+					 */
+					default:
+						return NULL;
 				}
-
-				//If this is not a basic type, all other conversion is bad
-				if((*a)->type_class != TYPE_CLASS_BASIC){
-					return NULL;
-				}
-
-				//Now once we get here, we know that we have a basic type
-
-				//Pointers are not compatible with floats in a comparison sense
-				if((*a)->basic_type_token == F32 || (*a)->basic_type_token == F64){
-					return NULL;
-				}
-
-				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
-				*a = lookup_type_name_only(symtab, "u64", (*b)->mutability)->type;
-
-				//We'll return a final comparison type of bool 
-				return *a;
 			}
 
 			//At this point if these are not basic types, we're done
