@@ -6764,6 +6764,8 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	mutable_function_type->internal_types.function_type->return_type = return_type;
 	immutable_function_type->internal_types.function_type->return_type = return_type;
 
+	//TODO HERE AS WELL SIGNATURE
+
 	//Mark whether or not it's void as well
 	mutable_function_type->internal_types.function_type->returns_void = IS_VOID_TYPE(return_type);
 	immutable_function_type->internal_types.function_type->returns_void = IS_VOID_TYPE(return_type);
@@ -8102,6 +8104,8 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 	function_type->internal_types.function_type->return_type = return_type;
 	//Also add the void flag in here just in case
 	function_type->internal_types.function_type->returns_void = IS_VOID_TYPE(return_type);
+
+	//TODO HERE AS WELL SIGNATURE
 
 	//We can now optionally see the RAISES keyword
 	lookahead = get_next_token(stream, &parser_line_num);
@@ -9571,8 +9575,6 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 	//Otherwise if we get here, we need to see a valid conditional expression
 	generic_ast_node_t* expr_node = ternary_expression(token_stream, SIDE_TYPE_RIGHT);
 
-	//TODO - PROPOGATION OF NO DEREF NEEDED FOR COPY RET
-
 	//If this is bad, we fail out
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid expression given to return statement", parser_line_num);
@@ -9610,6 +9612,15 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 
 		//Coerce the constant
 		perform_constant_assignment_coercion(expr_node, final_type);
+	}
+
+	/**
+	 * If we are having a copy assignment, we need to propogate down the chain in the expression
+	 * node that we should not be doing any dereferencing. We do this to ensure that when we return
+	 * the value, we do not accidentally copy from already dereferenced memory
+	 */
+	if(is_copy_assignment_required(current_function->return_type, expr_node->inferred_type) == TRUE){
+		propogate_no_dereference_required_flag(expr_node);
 	}
 
 	//Special checking here - if we have an enum type that is being assigned to, we need
@@ -13538,6 +13549,10 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 
 	//Store the return type as well
 	function_record->signature->internal_types.function_type->return_type = type;
+
+	//TODO HERE
+	//
+	//SIGNATURE FOR STACK RET
 
 	//We can optionally see the raises keyword here
 	lookahead = get_next_token(token_stream, &parser_line_num);

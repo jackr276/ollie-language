@@ -3245,6 +3245,7 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 				 * copy operation
 				 */
 				} else {
+					//instruction_t* memory_copy
 					printf("TODO\n\n\n");
 					exit(1);
 					//TODO CALLEE SIDE
@@ -11032,6 +11033,8 @@ static inline void finalize_all_user_defined_jump_statements(dynamic_array_t* us
  * are going to copy those values inside of this parameter setup. We do this because we don't want to be unnecessarily grabbing
  * values out of the stack over and over again if we can help it. For non-primitive types *or* types whose memory address we
  * take, this is going to be a different story
+ *
+ * TODO HERE RET VARIABLE FOR STACK RETURN
  */
 static inline void setup_function_parameters(symtab_function_record_t* function_record, basic_block_t* function_entry_block){
 	/**

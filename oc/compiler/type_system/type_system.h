@@ -398,6 +398,13 @@ generic_type_t* create_aliased_type(char* type_name, generic_type_t* aliased_typ
 generic_type_t* create_function_pointer_type(visibilty_type_t visibility, u_int8_t is_inlined, u_int32_t line_number, u_int8_t raises_errors, mutability_type_t mutability);
 
 /**
+ * Handle all of the bookkeeping needed when adding a return value to a function type. This includes
+ * the is_void_type flag, as well as anything that needs to happen if we are returning a stack
+ * passed return value
+ */
+void add_return_type_to_signature(function_type_t* signature, generic_type_t* return_type);
+
+/**
  * Compute the operand type for a logical and/or operation
  */
 generic_type_t* get_operand_type_for_logical_operation(void* symtab, generic_type_t* type_a, generic_type_t* type_b);

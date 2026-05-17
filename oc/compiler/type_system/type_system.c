@@ -2745,6 +2745,16 @@ generic_type_t* create_function_pointer_type(visibilty_type_t visibility, u_int8
 
 
 /**
+ * Handle all of the bookkeeping needed when adding a return value to a function type. This includes
+ * the is_void_type flag, as well as anything that needs to happen if we are returning a stack
+ * passed return value
+ */
+void add_return_type_to_signature(function_type_t* signature, generic_type_t* return_type){
+	//TODO
+}
+
+
+/**
  * Compute the operand type for a logical and/or operation. We perform floating point
  * coercion here. j
  */
