@@ -2750,7 +2750,16 @@ generic_type_t* create_function_pointer_type(visibilty_type_t visibility, u_int8
  * passed return value
  */
 void add_return_type_to_signature(function_type_t* signature, generic_type_t* return_type){
-	//TODO
+	//If we've already added it then we're good to just move along
+	if(signature->return_type != NULL){
+		return;
+	}
+
+	//Flag whether or not it returns void and store the type
+	signature->returns_void = IS_VOID_TYPE(return_type);
+	signature->return_type = return_type;
+
+	//TODO UPDATES FOR COPIED
 }
 
 

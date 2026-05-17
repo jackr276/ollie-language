@@ -6760,15 +6760,12 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 		return FALSE;
 	}
 
-	//Let's now store the return type
-	mutable_function_type->internal_types.function_type->return_type = return_type;
-	immutable_function_type->internal_types.function_type->return_type = return_type;
-
-	//TODO HERE AS WELL SIGNATURE
-
-	//Mark whether or not it's void as well
-	mutable_function_type->internal_types.function_type->returns_void = IS_VOID_TYPE(return_type);
-	immutable_function_type->internal_types.function_type->returns_void = IS_VOID_TYPE(return_type);
+	/**
+	 * Store both of the given return types inside of the function signature. This handles all needed
+	 * bookkeeping for us already
+	 */
+	add_return_type_to_signature(mutable_function_type->internal_types.function_type, return_type);
+	add_return_type_to_signature(immutable_function_type->internal_types.function_type, return_type);
 
 	//Refresh the token
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -8100,12 +8097,11 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 		return NULL;
 	}
 
-	//Save the return type in here
-	function_type->internal_types.function_type->return_type = return_type;
-	//Also add the void flag in here just in case
-	function_type->internal_types.function_type->returns_void = IS_VOID_TYPE(return_type);
-
-	//TODO HERE AS WELL SIGNATURE
+	/**
+	 * Get the return type added to the signature. This handles all internal bookkeeping
+	 * related to the function's return type
+	 */
+	add_return_type_to_signature(function_type->internal_types.function_type, return_type);
 
 	//We can now optionally see the RAISES keyword
 	lookahead = get_next_token(stream, &parser_line_num);
@@ -13220,9 +13216,12 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 		return print_and_return_error("Invalid return type given", parser_line_num);
 	}
 
-	//Otherwise, this is the return type
+	/**
+	 * Add the return type to the function. The helper takes care of any/all internal
+	 * bookkeeping that needs to be done for it
+	 */
 	function_record->return_type = return_type;
-	function_record->signature->internal_types.function_type->return_type = return_type;
+	add_return_type_to_signature(function_record->signature->internal_types.function_type, return_type);
 
 	//We can now optionally see the RAISES keyword
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -13541,18 +13540,13 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		}
 	}
 
-	//Store the return type
+	/**
+	 * Store the return type inside of the function record *and* inside of the 
+	 * function's signature. The return type adder handles everything that
+	 * is needed for the internal bookkeeping
+	 */
 	function_record->return_type = type;
-
-	//Record whether or not it's a void type
-	function_record->signature->internal_types.function_type->returns_void = IS_VOID_TYPE(type);
-
-	//Store the return type as well
-	function_record->signature->internal_types.function_type->return_type = type;
-
-	//TODO HERE
-	//
-	//SIGNATURE FOR STACK RET
+	add_return_type_to_signature(function_record->signature->internal_types.function_type, type);
 
 	//We can optionally see the raises keyword here
 	lookahead = get_next_token(token_stream, &parser_line_num);
