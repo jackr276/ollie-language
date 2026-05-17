@@ -657,7 +657,7 @@ static inline void output_object_file_only(compiler_options_t* options, cfg_t* c
  * This inlined helper will perform all of the work, including management of the /tmp/oc/ directory
  * in order for us to compiler and link into a final executable
  */
-static inline void assemble_and_link_with_temp_files(compiler_options_t* options, cfg_t* cfg){
+static inline u_int8_t assemble_and_link_with_temp_files(compiler_options_t* options, cfg_t* cfg){
 	/**
 	 * Step 1: OC requires that we have a /tmp/oc/ directory to hold all of our temporary
 	 * compiled files. This is the first step that we need to take to ensure we're good
@@ -667,7 +667,7 @@ static inline void assemble_and_link_with_temp_files(compiler_options_t* options
 
 	//If this fails we're done
 	if(directory_management_result == FAILURE){
-		return;
+		return FAILURE;
 	}
 
 	/**
@@ -678,7 +678,7 @@ static inline void assemble_and_link_with_temp_files(compiler_options_t* options
 
 	//Fatal error here so we get out if it fails
 	if(directory_clean_result == FAILURE){
-		return;
+		return FAILURE;
 	}
 
 	/**
@@ -692,7 +692,7 @@ static inline void assemble_and_link_with_temp_files(compiler_options_t* options
 
 	//It didn't work so don't bother going on
 	if(assembly_outputter_result == FAILURE){
-		return;
+		return FAILURE;
 	}
 
 	/**
@@ -704,7 +704,7 @@ static inline void assemble_and_link_with_temp_files(compiler_options_t* options
 
 	//This means we generated incorrect assembly which would be bad
 	if(assembler_result == FAILURE){
-		return;
+		return FAILURE;
 	}
 
 	//Destroy the dynamic string for this
@@ -714,7 +714,15 @@ static inline void assemble_and_link_with_temp_files(compiler_options_t* options
 	 * Step 4: take all of the .o files in /tmp/oc and link them together into our final
 	 * executable
 	 */
-	link_and_produce_final_executable(options);
+	u_int8_t linker_result = link_and_produce_final_executable(options);
+
+	//Hard fail here
+	if(linker_result == FAILURE){
+		return FAILURE;
+	}
+	
+	//If we got to here it worked
+	return SUCCESS;
 }
 
 
@@ -726,6 +734,9 @@ void assemble_and_link(compiler_options_t* options, cfg_t* cfg, u_int32_t* num_e
 	//Save these so we can update easily
 	error_count = num_errors;
 	warning_count = num_warnings;
+
+	//Store the result
+	u_int8_t result;
 
 	/**
 	 * Based on what we were given, should be able to output things appropriately here
@@ -747,7 +758,14 @@ void assemble_and_link(compiler_options_t* options, cfg_t* cfg, u_int32_t* num_e
 
 		//This is the most common case - full compilation
 		case OUTPUT_TYPE_FULL_COMPILATION:
-			assemble_and_link_with_temp_files(options, cfg);
+			result = assemble_and_link_with_temp_files(options, cfg);
+
+			//Give a good exit code if we failed
+			if(result == FAILURE){
+				fprintf(stderr, "Program Compilation Failed\n");
+				exit(1);
+			}
+
 			break;
 	}
 }

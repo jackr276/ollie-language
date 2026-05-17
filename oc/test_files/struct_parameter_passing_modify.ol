@@ -26,5 +26,6 @@ pub fn main() -> i32 {
 	let my_struct:mut passing_struct = {1, 5, '\0'};
 
 	//Should return 8 + 5 + '\0' which is 13
+	OUNIT: [console = 13]
 	ret @pass_by_copy_struct_pass_through_mod(my_struct);
 }

@@ -25,5 +25,6 @@ pub fn main() -> i32 {
 	let inner_copy:inner_struct = outer1:nested_inner;
 
 	//Should return 1
+	OUNIT: [console = 1]
 	ret inner_copy:x;
 }

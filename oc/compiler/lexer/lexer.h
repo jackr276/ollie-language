@@ -53,8 +53,11 @@ struct ollie_token_stream_t {
  *
  * The tokenizer assumes that the fl file pointer
  * is 100% valid
+ *
+ * If we are running in silent mode, tokenizer errors will not appear
+ * on stdout
  */
-ollie_token_stream_t tokenize(char* current_file_name);
+ollie_token_stream_t tokenize(char* current_file_name, u_int8_t silent_mode);
 
 /**
  * Deallocate the entire token stream

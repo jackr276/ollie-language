@@ -29,6 +29,6 @@ pub fn copy_structs_ternary(x:i32) -> i32 {
 
 
 pub fn main() -> i32 {
-	//Should return 1 + 5 = 6
+	OUNIT: [console = 6]
 	ret @copy_structs_ternary(3);
 }

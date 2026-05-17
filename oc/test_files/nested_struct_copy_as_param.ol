@@ -34,5 +34,6 @@ pub fn main() -> i32 {
 	 * Use the ternary struct assignment as the parameter 
 	 * Should return 5 * 3 = 15
 	 */
+	 OUNIT: [console = 15]
 	ret @my_fn((x > 5 ? outer1:nested_inner else outer2:nested_inner));
 }

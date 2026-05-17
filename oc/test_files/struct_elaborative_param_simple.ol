@@ -35,5 +35,6 @@ pub fn main() -> i32 {
 	/**
 	 * Should return: 'a'(97) + 3 = 100
 	 */
+	OUNIT: [console = 100]
 	ret @elaborative_param_structs(struct1);
 }

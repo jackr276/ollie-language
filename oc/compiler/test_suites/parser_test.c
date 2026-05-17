@@ -79,7 +79,7 @@ int main(int argc, char** argv){
 	compiler_options_t* options = parse_and_store_options(argc, argv);
 
 	//First things first - run the lexer
-	ollie_token_stream_t token_stream = tokenize(options->file_name);
+	ollie_token_stream_t token_stream = tokenize(options->file_name, FALSE);
 
 	//If this fails, we need to leave
 	if(token_stream.status == STREAM_STATUS_FAILURE){

@@ -15,6 +15,6 @@ pub fn main() -> i32 {
 	//Small struct copy
 	let copy:small_struct = original;
 
-	//Should give us "a" - 97 as an int
+	OUNIT: [console = 'a']
 	ret copy:y;
 }

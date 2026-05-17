@@ -19,6 +19,6 @@ pub fn main() -> i32 {
 	let x_ptr:mut i32* = &x;
 	let y_ptr:mut i32* = &y;
 
-	//OUNIT: [console = 5]
+	OUNIT: [console = 5]
 	ret *(@ternary_assign(4, x_ptr, y_ptr));
 }

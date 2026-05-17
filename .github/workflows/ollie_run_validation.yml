@@ -1,0 +1,17 @@
+name: Ollie Run Validation
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Ollie Run Validation
+      run: make ollie_run_validation-CI
