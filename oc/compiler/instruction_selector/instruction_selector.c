@@ -11112,16 +11112,28 @@ static void handle_lea_statement(instruction_t* instruction){
 /**
  * Handle a ret instruction. This will also dynamically
  * insert XOR/PXOR to clear out the error register for us
- *
- * TODO HERE FOR CONVERSIONS
- */
+  */
 static inline void handle_ret_instruction(instruction_t* ret_instruction, symtab_function_record_t* function){
 	//First let's determine if we need to insert any error clearing or not
 	function_type_t* function_type = function->signature->internal_types.function_type;
 
+	//Extract the variable that we will be returning
+	three_addr_var_t* returned_variable = ret_instruction->op1;
+
+	/**
+	 * Any/all kind of converting moves that are required will be done here. The CFG does not 
+	 * consider this so it is all on us to do this. Remember that this field is nullable
+	 * so we need to verify that it's not NULL first
+	 */
+	if(returned_variable != NULL){
+		if(is_converting_move_required(function_type->return_type, returned_variable->type) == TRUE){
+			returned_variable = create_and_insert_converting_move_instruction(ret_instruction, returned_variable, function_type->return_type);
+		}
+	}
+
 	//Assign the type and the source register
 	ret_instruction->instruction_type = RET;
-	ret_instruction->source_register = ret_instruction->op1;
+	ret_instruction->source_register = returned_variable;
 
 	/**
 	 * If this function could raise errors, we need to clear out the
