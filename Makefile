@@ -743,7 +743,7 @@ middle_test-CI: middle_end_test-CI
 selector_test-CI: instruction_selector_test-CI
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/instruction_selector_test -i -d -f
 
-ollie_run_validation-CI: ollie_run_validator-CI
+ollie_run_validation-CI: ollie_run_validator-CI oc-CI
 	$(OUT_CI)/ollie_run_validator 4 $(TEST_FILE_DIR)
 
 compiler_test-CI: oc-CI
