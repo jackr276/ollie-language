@@ -10903,21 +10903,23 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 
 		//If the exit statement is not a return statement or is null, we need to know what's happening here
 		if(does_block_end_in_function_termination_statement(block) == FALSE){
+			function_type_t* defined_in_signature = function_defined_in->signature->internal_types.function_type;
+
 			//If this isn't void, then we need to throw a warning
-			if((function_defined_in->return_type->type_class != TYPE_CLASS_BASIC
-				|| function_defined_in->return_type->basic_type_token != VOID)
+			if((defined_in_signature->return_type->type_class != TYPE_CLASS_BASIC
+				|| defined_in_signature->return_type->basic_type_token != VOID)
 				//It's a technically supported use-case to not put a return on main
 				&& is_main_function == FALSE){
 				print_parse_message(MESSAGE_TYPE_WARNING, "Non-void function does not return in all control paths", 0);
 			}
 
 			//If it's not a void type, we do one thing
-			if(function_defined_in->return_type->basic_type_token != VOID){
+			if(defined_in_signature->return_type->basic_type_token != VOID){
 				//The appropriate type for the return variable
 				generic_type_t* return_var_type;
 
 				//Determine a type compatible for us to use
-				switch(function_defined_in->return_type->type_size){
+				switch(defined_in_signature->return_type->type_size){
 					case 1:
 						return_var_type = i8;
 						break;
