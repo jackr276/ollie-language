@@ -63,7 +63,7 @@ static dynamic_array_t error_files;
 static dynamic_array_t failed_to_compile_files;
 
 //Keep track of the total number of files and the total error files
-static u_int32_t number_of_test_files = 0;
+static u_int32_t number_of_files_eligible_for_run_validation = 0;
 static u_int32_t number_of_failed_to_compile = 0;
 static u_int32_t number_of_error_files = 0;
 
@@ -422,6 +422,12 @@ void* worker(void* thread_parameters) {
 
 					//Onto the next file
 					continue;
+
+				} else {
+					//Save that this was eligible to be run
+					pthread_mutex_lock(&stdout_mutex);
+					number_of_files_eligible_for_run_validation++;
+					pthread_mutex_unlock(&stdout_mutex);
 				}
 
 				break;
@@ -550,6 +556,8 @@ void* worker(void* thread_parameters) {
  * number of threads to use
  */
 int main(int argc, char** argv) {
+	u_int32_t return_value = 0;
+
 	/**
 	 * Find the test file directory. It will have been passed in as a command line argument. If 
 	 * it wasn't fail out
@@ -598,9 +606,6 @@ int main(int argc, char** argv) {
 		
 		//Add this to the array of all test files
 		dynamic_array_add(&test_files, test_file);
-
-		//One more test file seen
-		number_of_test_files++;
 	}
 
 	/**
@@ -609,10 +614,10 @@ int main(int argc, char** argv) {
 	 * thread may have slightly less or slightly more work to do depending on how the division
 	 * works out but that is not a big deal
 	 */
-	u_int32_t files_per_thread = number_of_test_files / thread_count;
+	u_int32_t files_per_thread = test_files.current_index / thread_count;
 
 	fprintf(stdout, "\n\n================================= Run Setup =================================\n");
-	fprintf(stdout, "%d threads requested to validate %d test files. Each thread will validate %d files\n", thread_count, number_of_test_files, files_per_thread);
+	fprintf(stdout, "%d threads requested to validate %d test files. Each thread will validate %d files\n", thread_count, test_files.current_index, files_per_thread);
 	fprintf(stdout, "================================= Run Setup =================================\n");
 
 	//Inclusive start index for our current thread
@@ -643,7 +648,7 @@ int main(int argc, char** argv) {
 		if(i != thread_count - 1){
 			current_thread_file_index += files_per_thread;
 		} else {
-			current_thread_file_index = number_of_test_files;
+			current_thread_file_index = test_files.current_index;
 		}
 
 		//Whatever it ended up being give it to the parameter array
@@ -669,9 +674,62 @@ int main(int argc, char** argv) {
 	free(threads);
 	free(parameters);
 
+	//Record the final time
+	clock_t stop_time = clock();
+	double time_taken = (double)(stop_time - start_time) / CLOCKS_PER_SEC;
+
+	printf("\n\n\n\n\n\n================================ Ollie Run Validation Summary =================================== \n");
+	printf("FILES CONSIDERED: %d\n", test_files.current_index);
+	printf("FILES ELIGIBLE FOR RUN VALIDATION: %d\n", number_of_files_eligible_for_run_validation);
+	printf("CPU TIME ELAPSED: %.4f seconds\n", time_taken);
+	printf("FILES FAILING RUNTIME VALIDATION: %d\n", number_of_error_files);
+	printf("FILES FAILING TO COMPILE: %d\n", number_of_failed_to_compile);
+
+	//Only print out if we need to
+	if(error_files.current_index > 0){
+		printf("\n\n===============================================\n");
+		printf("FILES FAILING RUNTIME VALIDATION:\n");
+
+		//Print out all of them
+		for(u_int32_t i = 0; i < error_files.current_index; i++){
+			//Get the error file out
+			char* error_file_name = dynamic_array_get_at(&error_files, i);
+
+			printf("%d) %s\n", i, error_file_name);
+		}
+		printf("\n\n===============================================\n");
+	}
+
+	//Only print out if we need to
+	if(failed_to_compile_files.current_index > 0){
+		printf("\n\n===============================================\n");
+		printf("FILES FAILING TO COMPILE:\n");
+
+		//Print out all of them
+		for(u_int32_t i = 0; i < failed_to_compile_files.current_index; i++){
+			//Get the error file out
+			char* failed_to_compile_file = dynamic_array_get_at(&failed_to_compile_files, i);
+
+			printf("%d) %s\n", i, failed_to_compile_file);
+		}
+		printf("\n\n===============================================\n");
+	}
+	
+	//Flag that the developer needs to look at this
+	if(error_files.current_index > 0 || failed_to_compile_files.current_index > 0){
+		printf("FAILURES DETECTED: DEVELOPER ATTENTION IS REQUIRED\n");
+
+		//1 for error
+		return_value = 1;
+	}
+
+	printf("\n\n\n\n\n\n================================ Ollie Run Validation Summary =================================== \n");
+
 	//Destroy the three mutices
 	pthread_mutex_destroy(&stdout_mutex);
 	pthread_mutex_destroy(&lexer_mutex);
 	pthread_mutex_destroy(&compiler_mutex);
 	pthread_mutex_destroy(&error_queue_mutex);
+
+	return return_value;
 }
