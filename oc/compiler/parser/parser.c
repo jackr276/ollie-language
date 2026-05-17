@@ -13464,11 +13464,11 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		if(function_record->inlined == TRUE && is_inlined == FALSE){
+		if(current_function_signature->is_inlined == TRUE && is_inlined == FALSE){
 			sprintf(info, "Function \"%s\" was predeclared as inline. Please add the inline keyword to the declaration", function_record->func_name.string);
 			return print_and_return_error(info, parser_line_num);
 
-		} else if(function_record->inlined == FALSE && is_inlined == TRUE){
+		} else if(current_function_signature->is_inlined == FALSE && is_inlined == TRUE){
 			sprintf(info, "Function \"%s\" was not predeclared as inline. Please add the inline keyword to the forward declaration", function_record->func_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
@@ -14145,8 +14145,11 @@ static inline u_int8_t validate_inlined_functions_are_non_recursive(function_sym
 
 			//Run through any collisions in the hashmap
 			while(cursor != NULL){
+				//Extract the signature from the cursor
+				function_type_t* cursor_signature = cursor->signature->internal_types.function_type;
+
 				//We only care if this is inlined(for now)
-				if(cursor->inlined == TRUE){
+				if(cursor_signature->is_inlined == TRUE){
 					//Is it recursive? use the helper
 					u_int8_t is_recursive = is_function_recursive(symtab, cursor);
 

@@ -948,9 +948,6 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, visibilt
 	//Allocate the list of all functions that this calls
 	record->called_functions = dynamic_set_alloc();
 
-	//Store the inline status
-	record->inlined = is_inlined;
-
 	//We know that we need to create this immediately
 	record->signature = create_function_pointer_type(visibility, is_inlined, line_number, raises_errors, NOT_MUTABLE);
 

@@ -102,6 +102,8 @@ typedef enum variable_membership_t {
 struct symtab_function_record_t{
 	//The hash that we have
 	u_int64_t hash;
+	//The type of the function - we access this *a lot*
+	generic_type_t* signature;
 	//In case of collisions, we can chain these records
 	symtab_function_record_t* next;
 	//What namespace is this function in?
@@ -118,8 +120,6 @@ struct symtab_function_record_t{
 	//An entire stack data area dedicated to parameters that are passed in. This is
 	//only allocated on an as-needed basis so it's normal for it to be blank
 	stack_data_area_t stack_passed_parameters;
-	//The type of the function
-	generic_type_t* signature;
 	//The list of all functions that this function calls out to
 	dynamic_set_t called_functions;
 	//Hang onto all user defined labels for this function(may be null)
@@ -152,8 +152,6 @@ struct symtab_function_record_t{
 	 * 	not require alignment like this
 	 */
 	u_int8_t requires_initial_alignment;
-	//Has this function been inlined?
-	u_int8_t inlined;
 	//Are we public or private
 	visibilty_type_t visibility;
 };
