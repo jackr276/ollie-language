@@ -483,7 +483,7 @@ void* worker(void* thread_parameters) {
 		 * Create the actual run command and get a result out
 		 */
 		sprintf(run_command_buffer, "./%s", output_file_name);
-		int32_t runtime_result = system(run_command_buffer);
+		int32_t runtime_result = WEXITSTATUS(system(run_command_buffer));
 
 		/**
 		 * If the results match then we are all set here. If they
@@ -493,7 +493,7 @@ void* worker(void* thread_parameters) {
 			pthread_mutex_lock(&stdout_mutex);
 			fprintf(stdout, "Compilation command ran: %s\n", command_buffer);
 			fprintf(stdout, "Execution command ran: %s\n", run_command_buffer);
-			fprintf(stdout, "Execution result matched expected result. Test was a success.\n");
+			fprintf(stdout, "Execution execution result of %d matched the expected result of %d. Test was a success.\n", runtime_result, expected_result);
 			pthread_mutex_unlock(&stdout_mutex);
 
 		} else {
@@ -515,16 +515,16 @@ void* worker(void* thread_parameters) {
 		 * names should be unique so in theory we should not have to lock this
 		 */
 		sprintf(command_buffer, "rm %s", output_file_name);
-	//	int32_t deletion_result = system(command_buffer);
+		int32_t deletion_result = system(command_buffer);
 
 		/**
 		 * If somehow this didn't work we should flag it
 		 */
-	//	if(deletion_result != 0){
-	//		pthread_mutex_lock(&stdout_mutex);
-	//		fprintf(stdout, "[Thread %d]: Failed to delete output file %s\n", thread_id, output_file_name);
-	//	   	pthread_mutex_unlock(&stdout_mutex);
-	//	}
+		if(deletion_result != 0){
+			pthread_mutex_lock(&stdout_mutex);
+			fprintf(stdout, "[Thread %d]: Failed to delete output file %s\n", thread_id, output_file_name);
+		   	pthread_mutex_unlock(&stdout_mutex);
+		}
 	}
 
 
