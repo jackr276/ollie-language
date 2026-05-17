@@ -12961,7 +12961,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 	 * on the given stack data area. This ensures that the overall size is going to be 8-byte
 	 * aligned, and that all of the padding if needed is present
 	 */
-	if(function_record->contains_stack_params == TRUE){
+	if(function_record->signature->internal_types.function_type->contains_stack_params == TRUE){
 		align_stack_data_area(&(function_record->stack_passed_parameters));
 	}
 

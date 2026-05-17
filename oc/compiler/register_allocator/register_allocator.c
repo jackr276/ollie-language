@@ -3683,6 +3683,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	 * whereas in an indirect call we are not
 	 */
 	symtab_function_record_t* callee = function_call->called_function;
+	function_type_t* callee_signature = callee->signature->internal_types.function_type;
 
 	/**
 	 * The total amount of caller saved space that we have. Remember this
@@ -3728,7 +3729,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	 * actual stack allocation/deallocation statements and ensure that we are
 	 * putting all of our saving logic *before and after* said statements
 	 */
-	if(callee->contains_stack_params == TRUE){
+	if(callee_signature->contains_stack_params == TRUE){
 		//Let's first find the stack allocation statement. Note that it *has to be here*
 		while(before_stack_param_setup->statement_type != THREE_ADDR_CODE_STACK_ALLOCATION_STMT){
 			//Go back
@@ -4514,6 +4515,9 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 	//Extract what function this is
 	symtab_function_record_t* function = function_entry->function_defined_in;
 
+	//Get the signature out too
+	function_type_t* signature = function->signature->internal_types.function_type;
+
 	//The first thing that we'll want to do is align the local stack
 	align_stack_data_area(&(function->local_stack));
 
@@ -4672,7 +4676,7 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 	 * grabbing these from the correct stack region when we're inside of 
 	 * the function
 	 */
-	if(function->contains_stack_params == TRUE){
+	if(signature->contains_stack_params == TRUE){
 		//Make use of the total stack frame size to recompute all of these offsets
 		recompute_stack_passed_parameter_region_offsets(&(function->stack_passed_parameters), total_stack_frame_size);
 

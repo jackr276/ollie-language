@@ -848,6 +848,9 @@ static inline u_int8_t is_parameter_stack_passed(symtab_variable_record_t* varia
 void add_function_parameter(type_symtab_t* type_symtab, symtab_function_record_t* function_record, symtab_variable_record_t* variable_record){
 	//Store it in the function's parameters
 	dynamic_array_add(&(function_record->function_parameters), variable_record);
+
+	//Extract the signature for ease of use
+	function_type_t* function_signature = function_record->signature->internal_types.function_type;
 	
 	//Store what function this came from
 	variable_record->function_declared_in = function_record;
@@ -875,10 +878,10 @@ void add_function_parameter(type_symtab_t* type_symtab, symtab_function_record_t
 		variable_record->passed_by_stack = TRUE;
 
 		//This function does contain stack variables
-		function_record->contains_stack_params = TRUE;
+		function_signature->contains_stack_params = TRUE;
 
 		//Flag that this contains the special elaborative stack param
-		function_record->contains_elaborative_param = TRUE;
+		function_signature->contains_elaborative_stack_param = TRUE;
 
 	//Do we need to pass via stack? If so add it here
 	} else if(is_parameter_stack_passed(variable_record) == TRUE){
@@ -910,7 +913,7 @@ void add_function_parameter(type_symtab_t* type_symtab, symtab_function_record_t
 		variable_record->passed_by_stack = TRUE;
 
 		//Flag that this function contains stack params
-		function_record->contains_stack_params = TRUE;
+		function_signature->contains_stack_params = TRUE;
 	}
 }
 

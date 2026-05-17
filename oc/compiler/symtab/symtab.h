@@ -154,10 +154,6 @@ struct symtab_function_record_t{
 	u_int8_t requires_initial_alignment;
 	//Has this function been inlined?
 	u_int8_t inlined;
-	//Does this function contain stack params?
-	u_int8_t contains_stack_params;
-	//Does this contain the special elaborative stack param?
-	u_int8_t contains_elaborative_param;
 	//Are we public or private
 	visibilty_type_t visibility;
 };
