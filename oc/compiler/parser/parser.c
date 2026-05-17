@@ -12861,9 +12861,6 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 			return FAILURE;;
 		}
 
-		//We will also store the "absolute" parameter number as well
-		parameter->absolute_function_parameter_order = absolute_parameter_number;
-
 		//If we're not defining a predeclared function, we need to add this parameter in
 		if(defining_predeclared_function == FALSE){
 			//Let the helper add it in
@@ -13258,6 +13255,24 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 }
 
 
+/**
+ * Since a returned-by-copy value will *always* have the memory address to copy to
+ * passed into the function via %rdi, it is essential that we go through and update
+ * the symtab_function_record here as well as all of the parameters. Edge case that
+ * we are looking out for: if we had 6 GP params, now we have 7, and the last one
+ * is pushed over the edge to be a stack param. We need to make the adjustment for all
+ * of them, as well as for their function_parameter_order
+ */
+static inline void remediate_return_by_copy_gp_parameter_order(symtab_function_record_t* record, function_type_t* signature){
+	for(u_int32_t i = 0; i < record->function_parameters.current_index; i++){
+		//Grab the parameter out
+		symtab_variable_record_t* parameter = dynamic_array_get_at(&(record->function_parameters), i);
+		//TODO
+
+	}
+
+}
+
 
 /**
  * Handle the case where we declare a function. A function will always be one of the children of a declaration
@@ -13487,9 +13502,14 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	//Associate this with the function node
 	function_node->func_record = function_record;
 
-	//We'll need to initialize a new variable scope here. This variable scope is designed
-	//so that we include the function parameters in it. We need to remember to close
-	//this once we leave
+	//Extract the signature for ease of use
+	function_type_t* function_signature = function_record->signature->internal_types.function_type;
+
+	/**
+	 * We'll need to initialize a new variable scope here. This variable scope is designed
+	 * so that we include the function parameters in it. We need to remember to close
+	 * this once we leave
+	 */
 	initialize_variable_scope(variable_symtab);
 
 	/**
@@ -13540,8 +13560,6 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 
 	//If we're defining a function that was previously implicit, the types have to match exactly
 	if(defining_predeclared_function == TRUE){
-		function_type_t* function_signature = function_record->signature->internal_types.function_type;
-
 		if(strcmp(type->type_name.string, function_signature->return_type->type_name.string) != 0){
 			sprintf(info, "Function \"%s\" was predeclared with a return type of \"%s\", this may not be altered. First defined here:", function_name.string, function_signature->return_type->type_name.string);
 			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
@@ -13556,7 +13574,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 * function's signature. The return type adder handles everything that
 	 * is needed for the internal bookkeeping
 	 */
-	add_return_type_to_signature(function_record->signature->internal_types.function_type, type);
+	add_return_type_to_signature(function_signature, type);
 
 	/**
 	 * Since a returned-by-copy value will *always* have the memory address to copy to
@@ -13566,12 +13584,9 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 * is pushed over the edge to be a stack param. We need to make the adjustment for all
 	 * of them, as well as for their function_parameter_order
 	 */
-
-	//TODO HERE - we need to do any/all adjustments to the stack param status of the variables
-	//after we add a copy return type. For example, if before we had 6 GP params, we now actually
-	//have 7 so one of them will have to go to the stack.
-	//
-	//TODO ALSO PARAMETER ORDER
+	if(function_signature->returns_by_copy == TRUE){
+		remediate_return_by_copy_gp_parameter_order(function_record, function_signature);
+	}
 
 	//We can optionally see the raises keyword here
 	lookahead = get_next_token(token_stream, &parser_line_num);
