@@ -23,5 +23,6 @@ namespace pred
 
 pub fn main() -> i32 {
 	//Should return 10
+	OUNIT: [console = 10]
 	ret @pred::succ::adder();
 }

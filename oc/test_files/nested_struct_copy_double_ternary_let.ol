@@ -43,5 +43,6 @@ pub fn main() -> i32 {
 	 * Use the ternary struct assignment as the parameter 
 	 * Should return 7 * 3 = 21
 	 */
+	 OUNIT: [console = 21]
 	ret @my_fn(final_struct);
 }
