@@ -2759,7 +2759,25 @@ void add_return_type_to_signature(function_type_t* signature, generic_type_t* re
 	signature->returns_void = IS_VOID_TYPE(return_type);
 	signature->return_type = return_type;
 
-	//TODO UPDATES FOR COPIED
+	switch(return_type->type_class){
+		/**
+		 * Struct and union types are *always* returned by copy. To 
+		 * represent a returned-by-copy value, the caller will always 
+		 * provide a pointer to the memory region where the value
+		 * will be copied to in the *caller's* stack frame. The
+		 * memory management is the *sole* responsibility of the
+		 * caller. We will flag that this function signature is going
+		 * to return by copy here
+		 */
+		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_UNION:
+			signature->returns_by_copy = TRUE;
+			break;
+			
+		//Anything else we don't care - do nothing
+		default:
+			break;
+	}
 }
 
 

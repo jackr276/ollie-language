@@ -195,6 +195,8 @@ struct function_type_t{
 	u_int32_t pass_by_copy_param_count;
 	//Does this return a void type?
 	u_int8_t returns_void;
+	//Does this function return by copy? This is true for structs and union return types
+	u_int8_t returns_by_copy;
 	//What is the visibility level of the given function
 	visibilty_type_t visibility;
 	//Is this function inlined:
