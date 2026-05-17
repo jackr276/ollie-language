@@ -13558,9 +13558,20 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 */
 	add_return_type_to_signature(function_record->signature->internal_types.function_type, type);
 
+	/**
+	 * Since a returned-by-copy value will *always* have the memory address to copy to
+	 * passed into the function via %rdi, it is essential that we go through and update
+	 * the symtab_function_record here as well as all of the parameters. Edge case that
+	 * we are looking out for: if we had 6 GP params, now we have 7, and the last one
+	 * is pushed over the edge to be a stack param. We need to make the adjustment for all
+	 * of them, as well as for their function_parameter_order
+	 */
+
 	//TODO HERE - we need to do any/all adjustments to the stack param status of the variables
 	//after we add a copy return type. For example, if before we had 6 GP params, we now actually
 	//have 7 so one of them will have to go to the stack.
+	//
+	//TODO ALSO PARAMETER ORDER
 
 	//We can optionally see the raises keyword here
 	lookahead = get_next_token(token_stream, &parser_line_num);

@@ -2772,11 +2772,20 @@ void add_return_type_to_signature(function_type_t* signature, generic_type_t* re
 		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_UNION:
 			signature->returns_by_copy = TRUE;
-			
 
-			//TODO IF THIS IS TRUE, we need to shift all GP params
-			//over by one
+			/**
+			 * If we're already on the edge with stack params and we
+			 * have to add one more, we now do have stack params. Remember
+			 * that a return-by-copy value always has the address to write
+			 * to passed in via %rdi
+			 */
+			if(signature->general_purpose_param_count == MAX_GP_REGISTER_PASSED_PARAMS){
+				//This now *does* contain stack params, we pushed it over the edge
+				signature->contains_stack_params = TRUE;
+			}
 
+			//Bump this up - one more GP param
+			signature->general_purpose_param_count++;
 
 			break;
 			
