@@ -3208,12 +3208,34 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 		 */
 		switch(expression_package.type){
 			case CFG_RESULT_TYPE_VAR:
+				//Extract the returned variable
+				return_variable = expression_package.result_value.result_var;
+
 				/**
 				 * If the type is not returned by copy we go through the regular
 				 * steps to get the return value into %rax
 				 */
 				if(is_type_returned_by_copy(ret_node->inferred_type) == FALSE){
-					return_variable = expression_package.result_value.result_var;
+					/**
+					 * If it's not a temp var or if we need a converting move, we
+					 * will emit that now. If it's already a temp and we don't need the converting
+					 * move then we will ignore
+					 */
+					if(return_variable->variable_type != VARIABLE_TYPE_TEMP
+						|| is_converting_move_required(ret_node->inferred_type, return_variable->type) == TRUE){
+						/**
+						 * The return type of the final assignee will *always* tbe the inferred type of the node.
+						 * We need to be sure that the function is always returning the type as promised, which is
+						 * done through type coercion
+						 */
+						instruction_t* assignment = emit_assignment_instruction(emit_temp_var(ret_node->inferred_type), return_variable);
+
+						//Add it into the blcok
+						add_statement(current, assignment);
+
+						//This is what we're actually returning
+						return_variable = assignment->assignee;
+					}
 
 				/**
 				 * If a type is returned by copy, then by the Ollie convention we will store
