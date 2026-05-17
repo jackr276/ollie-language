@@ -697,7 +697,7 @@ int main(int argc, char** argv) {
 
 			printf("%d) %s\n", i, error_file_name);
 		}
-		printf("\n\n===============================================\n");
+		printf("\n===============================================\n");
 	}
 
 	//Only print out if we need to
@@ -712,18 +712,18 @@ int main(int argc, char** argv) {
 
 			printf("%d) %s\n", i, failed_to_compile_file);
 		}
-		printf("\n\n===============================================\n");
+		printf("\n===============================================\n");
 	}
 	
 	//Flag that the developer needs to look at this
 	if(error_files.current_index > 0 || failed_to_compile_files.current_index > 0){
-		printf("FAILURES DETECTED: DEVELOPER ATTENTION IS REQUIRED\n");
+		printf("\n\nFAILURES DETECTED: DEVELOPER ATTENTION IS REQUIRED\n");
 
 		//1 for error
 		return_value = 1;
 	}
 
-	printf("\n\n\n\n\n\n================================ Ollie Run Validation Summary =================================== \n");
+	printf("\n================================ Ollie Run Validation Summary =================================== \n");
 
 	//Destroy the three mutices
 	pthread_mutex_destroy(&stdout_mutex);
