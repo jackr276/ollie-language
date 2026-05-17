@@ -192,7 +192,7 @@ int main(int argc, char** argv){
 	}
 
 	//Get the thread count - very rough - I'm not really concerned about user-friendliness with this
-	int thread_count = atoi(argv[1]);
+	int32_t thread_count = atoi(argv[1]);
 
 	//Extract it and open it
 	test_directory_path = argv[2];
@@ -268,7 +268,7 @@ int main(int argc, char** argv){
 	 * is left to ensure that we actually get all of the files
 	 */
 	u_int32_t current_start_index = 0;
-	for(u_int32_t i = 0; i < thread_count; i++){
+	for(int32_t i = 0; i < thread_count; i++){
 		//Unique thread id
 		parameters[i].thread_number = i;
 		parameters[i].start_index = current_start_index;
@@ -287,7 +287,7 @@ int main(int argc, char** argv){
 	}
 
 	//Wait for them all to join
-	for(u_int32_t i = 0; i < thread_count; i++){
+	for(int32_t i = 0; i < thread_count; i++){
 		pthread_join(threads[i], NULL);
 	}
 
