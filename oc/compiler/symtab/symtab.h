@@ -122,8 +122,6 @@ struct symtab_function_record_t{
 	generic_type_t* signature;
 	//The list of all functions that this function calls out to
 	dynamic_set_t called_functions;
-	//What's the return type?
-	generic_type_t* return_type;
 	//Hang onto all user defined labels for this function(may be null)
 	label_symtab_t* user_defined_labels;
 	//The line number

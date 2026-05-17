@@ -2186,12 +2186,10 @@ void print_function_name_to_buffer(char* buffer, symtab_function_record_t* recor
 		}
 	}
 
-	//Final closing paren and return type
-	if(record->return_type != NULL){
-		sprintf(internal_buffer, ") -> %s", record->return_type->type_name.string);
-	} else {
-		strcat(internal_buffer, ") -> (null)");
-	}
+	//Grab the signature out
+	function_type_t* signature = record->signature->internal_types.function_type;
+	sprintf(temp_buffer, ") -> %s", signature->return_type->type_name.string);
+	strcat(internal_buffer, temp_buffer);
 
 	//If it was defined implicitly, we'll print a semicol
 	if(record->defined == 0){
@@ -2231,12 +2229,9 @@ void print_function_name(symtab_function_record_t* record){
 		}
 	}
 
-	//Final closing paren and return type
-	if(record->return_type != NULL){
-		printf(") -> %s", record->return_type->type_name.string);
-	} else {
-		printf(") -> (null)");
-	}
+	//Extract the signature
+	function_type_t* signature = record->signature->internal_types.function_type;
+	printf(") -> %s", signature->return_type->type_name.string);
 
 	//If it was defined implicitly, we'll print a semicol
 	if(record->defined == 0){
