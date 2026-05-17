@@ -323,6 +323,22 @@ static inline u_int8_t is_type_stack_passed_by_copy(generic_type_t* type){
 
 
 /**
+ * Is a type returned via the stack using a copy? Structs and union 
+ * types are always returned by copy whilst everything else is by reference
+ * (unless it's a primitive type of course)
+ */
+static inline u_int8_t is_type_returned_by_copy(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_UNION:
+		case TYPE_CLASS_STRUCT:	
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Is a given variable a data segment variable? These variables are not actually
  * stored in registers or in memory so we need to treat them a bit differently. In
  * ollie only static and global variables fit the bill for this
@@ -3193,6 +3209,11 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 			case CFG_RESULT_TYPE_VAR:
 				//Grab the return var that we need
 				return_variable = expression_package.result_value.result_var;
+
+				if(is_type_returned_by_copy(return_variable->type) == TRUE){
+					printf("HERE\n\n\n");
+					//TODO CALLEE SIDE
+				}
 
 				/**
 				 * If the variable is not a temp *or* we have a need for a converting move, we will emit
