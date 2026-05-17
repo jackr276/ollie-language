@@ -11112,6 +11112,8 @@ static void handle_lea_statement(instruction_t* instruction){
 /**
  * Handle a ret instruction. This will also dynamically
  * insert XOR/PXOR to clear out the error register for us
+ *
+ * TODO HERE FOR CONVERSIONS
  */
 static inline void handle_ret_instruction(instruction_t* ret_instruction, symtab_function_record_t* function){
 	//First let's determine if we need to insert any error clearing or not

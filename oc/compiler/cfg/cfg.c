@@ -13,6 +13,7 @@
 */
 
 #include "cfg.h"
+#include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -3207,34 +3208,12 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 		 */
 		switch(expression_package.type){
 			case CFG_RESULT_TYPE_VAR:
-				//Grab the return var that we need
-				return_variable = expression_package.result_value.result_var;
-
 				/**
 				 * If the type is not returned by copy we go through the regular
 				 * steps to get the return value into %rax
 				 */
-				if(is_type_returned_by_copy(return_variable->type) == FALSE){
-					/**
-					 * If the variable is not a temp *or* we have a need for a converting move, we will emit
-					 * the extra assignment here. If it's already temp and we don't need a converting move, we won't
-					 * bother with inserting the extra statements
-					 */
-					if(return_variable->variable_type != VARIABLE_TYPE_TEMP
-						|| is_converting_move_required(ret_node->inferred_type, return_variable->type) == TRUE){
-						/**
-						 * The type of this final assignee will *always* be the inferred type of the node. We need to ensure that
-						 * the function is returning the type as promised, and not what is done through type coercion
-						 */
-						instruction_t* assignment = emit_assignment_instruction(emit_temp_var(ret_node->inferred_type), return_variable);
-
-						//Add it into the block
-						add_statement(current, assignment);
-
-						//The return variable is now what was assigned
-						return_variable	= assignment->assignee;
-					}
-
+				if(is_type_returned_by_copy(ret_node->inferred_type) == FALSE){
+					return_variable = expression_package.result_value.result_var;
 
 				/**
 				 * If a type is returned by copy, then by the Ollie convention we will store
@@ -3265,9 +3244,6 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 
 				break;
 		}
-
-		//Flag for later on in the compiler that this variable has been returned
-		return_variable->membership = RETURNED_VARIABLE;
 	}
 
 	//We'll use the ret stmt feature here

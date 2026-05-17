@@ -9571,6 +9571,8 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 	//Otherwise if we get here, we need to see a valid conditional expression
 	generic_ast_node_t* expr_node = ternary_expression(token_stream, SIDE_TYPE_RIGHT);
 
+	//TODO - PROPOGATION OF NO DEREF NEEDED FOR COPY RET
+
 	//If this is bad, we fail out
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid expression given to return statement", parser_line_num);
