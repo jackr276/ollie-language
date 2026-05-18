@@ -54,6 +54,7 @@ static generic_type_t* u64 = NULL;
 static generic_type_t* i64 = NULL;
 static generic_type_t* f32 = NULL;
 static generic_type_t* f64 = NULL;
+static generic_type_t* void_ptr = NULL;
 
 /**
  * The break and continue stack will
@@ -3253,12 +3254,34 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 				 * copy operation
 				 */
 				} else {
-					//instruction_t* memory_copy
-					printf("TODO\n\n\n");
-					exit(1);
-					//TODO CALLEE SIDE
-					//
-					//TODO WE NEED TO BOTH COPY AND THEN PUT THE RESULT VAR IN %RAX
+					//Emit the actual variable that will cause us to return by copy
+					three_addr_var_t* return_by_copy_address_var = emit_return_by_copy_var(ret_node->inferred_type);
+
+					/**
+					 * Now that we have the dummy variable, we will copy from the returned variable over into the return-by-copy
+					 * address variable. Remember that the caller is responsible for absolutely everything related to memory
+					 * management for this so we aren't worrying about that here
+					 */
+					instruction_t* copy_to_ret_region = emit_memory_copy_instruction(return_by_copy_address_var, return_variable, return_variable->associated_memory_region.stack_region->size);
+
+					//Add this into the block
+					add_statement(current, copy_to_ret_region);
+
+					/**
+					 * Now that we've actually done the memory copy, we will copy over the return_by_copy address variable
+					 * over into another variable(%rax). This is the variable that we will actually be returning when
+					 * the function is all done
+					 */
+					three_addr_var_t* copy_to_rax_var = emit_temp_var(void_ptr);
+
+					//Copy over into RAX(eventually)
+					instruction_t* copy_to_rax = emit_assignment_instruction(copy_to_rax_var, return_by_copy_address_var);
+
+					//Add this into the block
+					add_statement(current, copy_to_rax);
+
+					//Now the actual return variable is the new temp we have to represent the copy to %rax
+					return_variable = copy_to_rax_var;
 				}
 
 				break;
@@ -12432,6 +12455,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	traversal_queue = heap_queue_alloc();
 
 	//Keep these on hand
+	void_ptr = lookup_type_name_only(type_symtab, "void*", NOT_MUTABLE)->type;
 	f64 = lookup_type_name_only(type_symtab, "f64", NOT_MUTABLE)->type;
 	f32 = lookup_type_name_only(type_symtab, "f32", NOT_MUTABLE)->type;
 	u64 = lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type;
