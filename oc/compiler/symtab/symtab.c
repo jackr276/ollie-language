@@ -940,11 +940,34 @@ void remediate_return_by_copy_gp_parameter_order(symtab_function_record_t* recor
 		//Grab the parameter out
 		symtab_variable_record_t* parameter = dynamic_array_get_at(&(record->function_parameters), i);
 
+		//Stack passed parameters do not effect the count so skip it
+		if(is_parameter_stack_passed(parameter) == TRUE){
+			continue;
+		}
 
-		//TODO
+		//Floating piont params also do not impact it
+		if(IS_FLOATING_POINT(parameter->type_defined_as) == TRUE){
+			continue;;
+		}
+
+		/**
+		 * If we have a parameter that is at the limit(6 for GP registers), we are now going to
+		 * need to push it over the edge to make room for the return address passed in via
+		 * %rdi to copy to
+		 */
+		if(parameter->class_relative_function_parameter_order == MAX_GP_REGISTER_PASSED_PARAMS){
+			//This now is a stack variable
+			parameter->stack_variable = TRUE;
+
+			//This is going to be passed by stack
+			parameter->passed_by_stack = TRUE;
+
+			signature->contains_stack_params = TRUE;
+
+		}
+
 
 	}
-
 }
 
 
