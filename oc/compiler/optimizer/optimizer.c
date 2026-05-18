@@ -311,14 +311,27 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 		return;
 	}
 
-	//There is no point in trying to mark a variable like this, we will
-	//never find the definition since they exist by default
-	if(variable == stack_pointer_variable
-		|| variable == instruction_pointer_variable
-		|| variable->variable_type == VARIABLE_TYPE_LOCAL_CONSTANT
-		|| variable->variable_type == VARIABLE_TYPE_FUNCTION_ADDRESS
-		|| variable->variable_type == VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS){
+	/**
+	 * There is no point in trying to mark a variable like this, we will
+	 * never find the definition since they exist by default
+	 */
+	if(variable == stack_pointer_variable || variable == instruction_pointer_variable){
 		return;
+
+	}
+
+	/**
+	 * Same with any of these kind of variables. We will never find an assignment
+	 * spot for them so don't even bother
+	 */
+	switch(variable->variable_type){
+		case VARIABLE_TYPE_LOCAL_CONSTANT:
+		case VARIABLE_TYPE_FUNCTION_ADDRESS:
+		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
+			return;
+		default:
+			break;
 	}
 
 	/**
@@ -1135,14 +1148,27 @@ static void mark_and_add_definition_block_local(instruction_t* starting_point, t
 		return;
 	}
 
-	//There is no point in trying to mark a variable like this, we will
-	//never find the definition since they exist by default
-	if(variable == stack_pointer_variable
-		|| variable == instruction_pointer_variable
-		|| variable->variable_type == VARIABLE_TYPE_LOCAL_CONSTANT
-		|| variable->variable_type == VARIABLE_TYPE_FUNCTION_ADDRESS
-		|| variable->variable_type == VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS){
+	/**
+	 * There is no point in trying to mark a variable like this, we will
+	 * never find the definition since they exist by default
+	 */
+	if(variable == stack_pointer_variable || variable == instruction_pointer_variable){
 		return;
+
+	}
+
+	/**
+	 * Same with any of these kind of variables. We will never find an assignment
+	 * spot for them so don't even bother
+	 */
+	switch(variable->variable_type){
+		case VARIABLE_TYPE_LOCAL_CONSTANT:
+		case VARIABLE_TYPE_FUNCTION_ADDRESS:
+		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
+			return;
+		default:
+			break;
 	}
 
 	/**
