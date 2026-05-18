@@ -842,9 +842,6 @@ static inline void setup_stack_region_for_function_parameter(stack_data_area_t* 
 	//Equivalent pointer type for arrays
 	generic_type_t* equivalent_pointer_type;
 
-	//Thhe stack region that we will eventually give back
-	stack_region_t* region;	
-
 	//Special adjustments based on the types we have
 	switch(parameter->type_defined_as->type_class){
 		/**
@@ -886,7 +883,7 @@ static inline void setup_stack_region_for_function_parameter(stack_data_area_t* 
  * NOTE: In the event that we have an elaborative stack param, we will need to account for a different stack every
  * time. The only real constant here is the bottom 4 bytes which are effectively our "count" for the number of parameters
  */
-void add_function_parameter(type_symtab_t* type_symtab, symtab_function_record_t* function_record, symtab_variable_record_t* variable_record){
+void add_function_parameter(symtab_function_record_t* function_record, symtab_variable_record_t* variable_record){
 	//Store it in the function's parameters
 	dynamic_array_add(&(function_record->function_parameters), variable_record);
 
@@ -959,7 +956,7 @@ void remediate_return_by_copy_gp_parameter_order(symtab_function_record_t* recor
 			continue;
 		}
 
-		//Floating piont params also do not impact it
+		//Floating point params also do not impact it
 		if(IS_FLOATING_POINT(parameter->type_defined_as) == TRUE){
 			continue;
 		}
@@ -970,12 +967,7 @@ void remediate_return_by_copy_gp_parameter_order(symtab_function_record_t* recor
 		 * %rdi to copy to
 		 */
 		if(parameter->class_relative_function_parameter_order == MAX_GP_REGISTER_PASSED_PARAMS){
-			//This now is a stack variable
-			parameter->stack_variable = TRUE;
-
-			//This is going to be passed by stack
-			parameter->passed_by_stack = TRUE;
-
+			//Flag that the function itself now contains stack parameters
 			signature->contains_stack_params = TRUE;
 
 			/**
@@ -985,6 +977,8 @@ void remediate_return_by_copy_gp_parameter_order(symtab_function_record_t* recor
 			if(record->stack_passed_parameters.stack_regions.internal_array == NULL){
 				stack_data_area_alloc(&(record->stack_passed_parameters), STACK_TYPE_PARAMETER_PASSING, STACK_DATA_AREA_SIZE_TYPE_STATIC);
 			}
+
+			setup_stack_region_for_function_parameter(&(record->stack_passed_parameters), parameter);
 
 		}
 

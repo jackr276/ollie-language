@@ -467,7 +467,7 @@ symtab_variable_record_t* create_temp_memory_address_variable(symtab_function_re
 /**
  * Add a parameter to a function and perform all internal bookkeeping needed
  */
-void add_function_parameter(type_symtab_t* symtab, symtab_function_record_t* function_record, symtab_variable_record_t* variable_record);
+void add_function_parameter(symtab_function_record_t* function_record, symtab_variable_record_t* variable_record);
 
 /**
  * Since a returned-by-copy value will *always* have the memory address to copy to
