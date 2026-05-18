@@ -25,14 +25,13 @@ pub fn param_passed_struct(parameter_struct:struct my_struct, x:i32, y:i32) -> i
 }
 
 
-//Dummy
 pub fn main() -> i32 {
 	let param_struct:param_passed = {'a', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 3};
 
 	//Grab a function pointer to it
 	let func:fn(struct my_struct, i32, i32) -> i32 = param_passed_struct;
 
-	//Should give back: 3 + 97 + 2 + 3 = 116
-	OUNIT: [console = 116]
+	//Should give back: 3 + 'a' + 3 + 2 + 3 = 108
+	OUNIT: [console = 108]
 	ret @func(param_struct, 2, 3);
 }
