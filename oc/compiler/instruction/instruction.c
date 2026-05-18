@@ -998,6 +998,34 @@ three_addr_var_t* emit_stack_param_memory_address_temp_var(generic_type_t* type,
 
 
 /**
+ * A return by copy variable is a special kind of variable that represents the passing of %rdi
+ * as the struct return address when we do a return by copy
+ */
+three_addr_var_t* emit_return_by_copy_var(generic_type_t* type){
+	//Let's first create the non-temp variable
+	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
+
+	//Add into here for memory management
+	dynamic_array_add(&emitted_vars, emitted_var);
+
+	//Flag this as a return by copy varialbe
+	emitted_var->variable_type = VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS;
+
+	//We always store the type as the type with which this variable was defined in the CFG
+	emitted_var->type = type;
+
+	//Give it a temp var number
+	emitted_var->temp_var_number = increment_and_get_temp_id();
+
+	//Select the size of this variable
+	emitted_var->variable_size = get_type_size(emitted_var->type);
+
+	//And we're all done
+	return emitted_var;
+}
+
+
+/**
  * Emit a variable for an identifier node. This rule is designed to account for the fact that
  * some identifiers may have had their types casted / coerced, so we need to keep the actual
  * inferred type here

@@ -552,6 +552,12 @@ three_addr_var_t* emit_memory_address_temp_var(generic_type_t* type, stack_regio
 three_addr_var_t* emit_stack_param_memory_address_temp_var(generic_type_t* type, stack_region_t* region);
 
 /**
+ * A return by copy variable is a special kind of variable that represents the passing of %rdi
+ * as the struct return address when we do a return by copy
+ */
+three_addr_var_t* emit_return_by_copy_var(generic_type_t* type);
+
+/**
  * Create and return a three address var from an existing variable. These special
  * "memory address vars" will represent the memory address of the variable in question
 */
