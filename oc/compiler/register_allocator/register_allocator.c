@@ -2017,7 +2017,7 @@ static inline void precolor_in_body_function_parameters(dynamic_array_t* general
 		 * %rdi
 		 */
 		if(first_variable->variable_type == VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS){
-			printf("HERE\n\n\n");
+			general_purpose_lr->reg.gen_purpose = RDI;
 		}
 
 		//Extract for neatness
