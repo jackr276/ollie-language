@@ -158,8 +158,6 @@ struct live_range_t {
 	u_int16_t interference_graph_index;
 	//What is the function parameter order here?
 	u_int16_t class_relative_function_parameter_order;
-	//Does this carry a pre-colored value
-	u_int8_t is_precolored;
 	//Was this live range spilled?
 	u_int8_t was_spilled;
 	//What class of live range is this?

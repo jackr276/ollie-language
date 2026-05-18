@@ -605,9 +605,6 @@ static inline live_range_t* construct_stack_pointer_live_range(three_addr_var_t*
 	//And we absolutely *can not* spill it
 	stack_pointer_live_range->spill_cost = UINT32_MAX;
 
-	//This is precolor
-	stack_pointer_live_range->is_precolored = TRUE;
-
 	//Add the stack pointer to the dynamic array
 	dynamic_array_add(&(stack_pointer_live_range->variables), stack_pointer);
 	
@@ -633,9 +630,6 @@ static inline live_range_t* construct_instruction_pointer_live_range(three_addr_
 	instruction_pointer_live_range->reg.gen_purpose = RIP;
 	//And we absolutely *can not* spill it
 	instruction_pointer_live_range->spill_cost = UINT32_MAX;
-
-	//This is precolor
-	instruction_pointer_live_range->is_precolored = TRUE;
 
 	//Add the stack pointer to the dynamic array
 	dynamic_array_add(&(instruction_pointer_live_range->variables), instruction_pointer);
@@ -2014,6 +2008,18 @@ static inline void precolor_in_body_function_parameters(dynamic_array_t* general
 		//Extract it
 		live_range_t* general_purpose_lr = dynamic_array_get_at(general_purpose_live_ranges, i);
 
+		//Extract the first variable
+		three_addr_var_t* first_variable = dynamic_array_get_at(&(general_purpose_lr->variables), 0);
+
+		/**
+		 * If we have a return by copy variable, we *must*, without any exception ever,
+		 * precolor it to be in %rdi. There is never a case where a variable like this is not in
+		 * %rdi
+		 */
+		if(first_variable->variable_type == VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS){
+			printf("HERE\n\n\n");
+		}
+
 		//Extract for neatness
 		u_int16_t general_purpose_parameter_order = general_purpose_lr->class_relative_function_parameter_order;
 
@@ -2244,9 +2250,11 @@ static void precolor_instruction(instruction_t* instruction){
  * once per run
  */
 static void precolor_function(basic_block_t* function_entry, dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges){
-	//Before we crawl the instructions, we'll crawl the live range arrays 
-	//to precolor any function parameters that are in the function
-	//body that we have
+	/**
+	 * Before we crawl the instructions, we'll crawl the live range arrays 
+	 * to precolor any function parameters that are in the function
+	 * body that we have
+	 */
 	precolor_in_body_function_parameters(general_purpose_live_ranges, sse_live_ranges);
 
 	//Grab a cursor to the head block
