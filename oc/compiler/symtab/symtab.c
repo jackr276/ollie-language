@@ -834,6 +834,47 @@ static inline u_int8_t is_parameter_stack_passed(symtab_variable_record_t* varia
 
 
 /**
+ * Helper functio to create a stack region for a given function parameter
+ *
+ * NOTE: This assumes that the stack data area has already been properly allocated
+ */
+static inline void setup_stack_region_for_function_parameter(stack_data_area_t* parameter_data_area, symtab_variable_record_t* parameter){
+	//Equivalent pointer type for arrays
+	generic_type_t* equivalent_pointer_type;
+
+	//Thhe stack region that we will eventually give back
+	stack_region_t* region;	
+
+	//Special adjustments based on the types we have
+	switch(parameter->type_defined_as->type_class){
+		/**
+		 * Array types are always passed by reference. We need to make sure that
+		 * we represent this accurately inside of the stack region. We can use an
+		 * equivalent pointer type from the conversion helper to do this
+		 */
+		case TYPE_CLASS_ARRAY:
+			//Create the equivalent pointer type
+			equivalent_pointer_type = convert_array_type_to_equivalent_pointer(parameter->type_defined_as);
+
+			//Add this type into said stack region
+			parameter->stack_region = create_stack_region_for_type(parameter_data_area, equivalent_pointer_type);
+			break;
+		
+		default:
+			//Add this type into said stack region
+			parameter->stack_region = create_stack_region_for_type(parameter_data_area, parameter->type_defined_as);
+			break;
+	}
+
+	//This is a stack variable, we need to note it as such
+	parameter->stack_variable = TRUE;
+
+	//Flag that this is passed via the stack
+	parameter->passed_by_stack = TRUE;
+}
+
+
+/**
  * Add a parameter to a function and perform all internal bookkeeping needed
  *
  * *Stack Parameters*
@@ -885,41 +926,14 @@ void add_function_parameter(type_symtab_t* type_symtab, symtab_function_record_t
 
 	//Do we need to pass via stack? If so add it here
 	} else if(is_parameter_stack_passed(variable_record) == TRUE){
-		//For handling equivalent pointer types
-		generic_type_t* equivalent_pointer_type;
-
 		//Allocate it if need be
 		if(function_record->stack_passed_parameters.stack_regions.internal_array == NULL){
 			//This is specifically a parameter passing stack region. We must be sure to mention that
 			stack_data_area_alloc(&(function_record->stack_passed_parameters), STACK_TYPE_PARAMETER_PASSING, STACK_DATA_AREA_SIZE_TYPE_STATIC);
 		}
 
-		//Special adjustments based on the types we have
-		switch(variable_record->type_defined_as->type_class){
-			/**
-			 * Array types are always passed by reference. We need to make sure that
-			 * we represent this accurately inside of the stack region. We can use an
-			 * equivalent pointer type from the conversion helper to do this
-			 */
-			case TYPE_CLASS_ARRAY:
-				//Create the equivalent pointer type
-				equivalent_pointer_type = convert_array_type_to_equivalent_pointer(variable_record->type_defined_as);
-
-				//Add this type into said stack region
-				variable_record->stack_region = create_stack_region_for_type(&(function_record->stack_passed_parameters), equivalent_pointer_type);
-				break;
-			
-			default:
-				//Add this type into said stack region
-				variable_record->stack_region = create_stack_region_for_type(&(function_record->stack_passed_parameters), variable_record->type_defined_as);
-				break;
-		}
-
-		//This is a stack variable, we need to note it as such
-		variable_record->stack_variable = TRUE;
-
-		//Flag that this is passed via the stack
-		variable_record->passed_by_stack = TRUE;
+		//Let the helper deal with the setup
+		setup_stack_region_for_function_parameter(&(function_record->stack_passed_parameters), variable_record);
 
 		//Flag that this function contains stack params
 		function_signature->contains_stack_params = TRUE;
@@ -947,7 +961,7 @@ void remediate_return_by_copy_gp_parameter_order(symtab_function_record_t* recor
 
 		//Floating piont params also do not impact it
 		if(IS_FLOATING_POINT(parameter->type_defined_as) == TRUE){
-			continue;;
+			continue;
 		}
 
 		/**
@@ -964,9 +978,18 @@ void remediate_return_by_copy_gp_parameter_order(symtab_function_record_t* recor
 
 			signature->contains_stack_params = TRUE;
 
+			/**
+			 * If we don't yet have a stack data area then we need to allocate
+			 * one now
+			 */
+			if(record->stack_passed_parameters.stack_regions.internal_array == NULL){
+				stack_data_area_alloc(&(record->stack_passed_parameters), STACK_TYPE_PARAMETER_PASSING, STACK_DATA_AREA_SIZE_TYPE_STATIC);
+			}
+
 		}
 
-
+		//Regardless of what happened, bump the class relative function parameter order
+		parameter->class_relative_function_parameter_order++;
 	}
 }
 
