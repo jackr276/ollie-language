@@ -4949,6 +4949,22 @@ static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_st
 			break;
 
 		/**
+		 * For a return by copy address, we'll just print out
+		 * RBC<<scope>_<name>_<ssa_generation> if we have an actual
+		 * variable name. Otherwise we just use the temp var
+		 * number
+		 */
+		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
+			if(variable_record != NULL){
+				sprintf(buffer, "RBC<%d_%s_%d>", variable_record->lexical_scope_id, variable_record->var_name.string, variable->ssa_generation);
+			} else {
+				sprintf(buffer, "RBC<t%d>", variable->temp_var_number);
+			}
+
+			dynamic_string_concatenate(output, buffer);
+			break;
+
+		/**
 		 * Local constants are already unique so we can just print them
 		 * out as is
 		 */
