@@ -145,6 +145,21 @@ static inline u_int8_t is_enum_type(generic_type_t* type){
 
 
 /**
+ * When we do stack passed parameters, struct and union types
+ * are always passed by copy whilst everything else is by reference
+ */
+static inline u_int8_t is_type_stack_passed_by_copy(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_UNION:
+		case TYPE_CLASS_STRUCT:	
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Does an enum list contain a given value for a member?
  */
 static inline u_int8_t does_enum_contain_integer_member(generic_type_t* enum_type, int32_t enum_member){
@@ -12409,7 +12424,6 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 	}
 
 	//Now we must perform all needed duplication checks for the name
-	//Grab this for convenience
 	dynamic_string_t name = lookahead.lexeme;
 
 	//Check that it isn't some duplicated variable name
@@ -12508,18 +12522,23 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 	//Store the type as well, very important
 	param_record->type_defined_as = type;
 
-	//Most common case, not a floating point so
-	//it counts as general-purpose
-	if(IS_FLOATING_POINT(type) == FALSE){
-		param_record->class_relative_function_parameter_order = *current_gen_purpose_param;
+	/**
+	 * So long as this type is *not* passed by copy, we will include
+	 * it in our parameter counts
+	 */
+	if(is_type_stack_passed_by_copy(type) == FALSE){
+		//Most common case, not a floating point so it counts as general-purpose
+		if(IS_FLOATING_POINT(type) == FALSE){
+			param_record->class_relative_function_parameter_order = *current_gen_purpose_param;
 
-		//Bump it for the next go about
-		(*current_gen_purpose_param)++;
-	} else {
-		param_record->class_relative_function_parameter_order = *current_sse_param;
+			//Bump it for the next go about
+			(*current_gen_purpose_param)++;
+		} else {
+			param_record->class_relative_function_parameter_order = *current_sse_param;
 
-		//Bump it for the next go about
-		(*current_sse_param)++;
+			//Bump it for the next go about
+			(*current_sse_param)++;
+		}
 	}
 
 	//We've now built up our param record, so we'll give add it to the symtab
@@ -12777,8 +12796,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 				return FAILURE;
 			}
 
-			//If we're validating, let's check and ensure that the defined type also
-			//has no params
+			//If we're validating, let's check and ensure that the defined type also has no params
 			if(defining_predeclared_function == TRUE){
 				//If we have a mismatch, we fail out
 				if(internal_function_type->function_parameters.current_index != 0){
@@ -12811,8 +12829,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 				return FAILURE;
 			}
 
-			//If we're validating, let's check and ensure that the defined type also
-			//has no params
+			//If we're validating, let's check and ensure that the defined type also has no params
 			if(defining_predeclared_function == TRUE){
 				//If we have a mismatch, we fail out
 				if(internal_function_type->function_parameters.current_index != 0){
