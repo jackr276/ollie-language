@@ -12435,7 +12435,6 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 	}
 
 	//Now we must perform all needed duplication checks for the name
-	//Grab this for convenience
 	dynamic_string_t name = lookahead.lexeme;
 
 	//Check that it isn't some duplicated variable name
@@ -12535,19 +12534,22 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 	param_record->type_defined_as = type;
 
 	/**
-	 * Most common case, not a floating point so
-	 * it counts as general-purpose
+	 * So long as this type is *not* passed by copy, we will include
+	 * it in our parameter counts
 	 */
-	if(IS_FLOATING_POINT(type) == FALSE){
-		param_record->class_relative_function_parameter_order = *current_gen_purpose_param;
+	if(is_type_stack_passed_by_copy(type) == FALSE){
+		//Most common case, not a floating point so it counts as general-purpose
+		if(IS_FLOATING_POINT(type) == FALSE){
+			param_record->class_relative_function_parameter_order = *current_gen_purpose_param;
 
-		//Bump it for the next go about
-		(*current_gen_purpose_param)++;
-	} else {
-		param_record->class_relative_function_parameter_order = *current_sse_param;
+			//Bump it for the next go about
+			(*current_gen_purpose_param)++;
+		} else {
+			param_record->class_relative_function_parameter_order = *current_sse_param;
 
-		//Bump it for the next go about
-		(*current_sse_param)++;
+			//Bump it for the next go about
+			(*current_sse_param)++;
+		}
 	}
 
 	//We've now built up our param record, so we'll give add it to the symtab
@@ -12805,8 +12807,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 				return FAILURE;
 			}
 
-			//If we're validating, let's check and ensure that the defined type also
-			//has no params
+			//If we're validating, let's check and ensure that the defined type also has no params
 			if(defining_predeclared_function == TRUE){
 				//If we have a mismatch, we fail out
 				if(internal_function_type->function_parameters.current_index != 0){
@@ -12839,8 +12840,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 				return FAILURE;
 			}
 
-			//If we're validating, let's check and ensure that the defined type also
-			//has no params
+			//If we're validating, let's check and ensure that the defined type also has no params
 			if(defining_predeclared_function == TRUE){
 				//If we have a mismatch, we fail out
 				if(internal_function_type->function_parameters.current_index != 0){
