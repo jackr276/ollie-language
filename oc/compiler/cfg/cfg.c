@@ -7538,14 +7538,10 @@ static inline void handle_parameter_storage(basic_block_t* basic_block, function
 
 		//Bump this up
 		current_gp_index++;
-
-		printf("HERE\n\n\n");
 	}
 
 	//Now that we have all of this, we need to go through and emit our final assignments for the function calls themselves
 	for(u_int32_t i = result_index_adjustment; i < non_elaborative_parameter_results->current_index; i++){
-
-		printf("INSIDE HERE\n");
 		//For any/all call side regions that we need
 		stack_region_t* call_side_region;
 
@@ -8134,8 +8130,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 * assignment if we have a return by copy parameter
 	 */
 	handle_parameter_storage(current_block, signature, &non_elaborative_parameter_results, &stack_passed_parameters, &(function_call_statement->parameters), &first_assignment_instruction);
-
-	printf("MADE IT OUT\n");
 
 	/**
 	 * If we do have elaborative stack params to manage, we will do so here
