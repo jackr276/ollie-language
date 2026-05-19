@@ -5790,6 +5790,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 	three_addr_var_t* assignee;
 	//The unary expression package
 	cfg_result_package_t unary_package = INITIALIZE_BLANK_CFG_RESULT;
+	cfg_result_package_t generic_results = INITIALIZE_BLANK_CFG_RESULT;
 
 	//We'll keep track of what the current block here is
 	basic_block_t* current_block = basic_block;
@@ -6195,22 +6196,31 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				 */
 				case AST_NODE_TYPE_FUNCTION_CALL:
 				case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
-					printf("TODO NOT IMPLEMENTED\n");
-					exit(1);
+					//Let the dedicated translator handle the call
+					generic_results = emit_function_call(current_block, unary_expression_child);
+
+					//Bump the block up if need be
+					current_block = generic_results.final_block;
+
+					//All that we need to do now is package up the results here and move along our way
+					unary_package.type = CFG_RESULT_TYPE_VAR;
+					unary_package.result_value.result_var = generic_results.result_value.result_var;
+					
+					break;
 
 				//The other case here
 				case AST_NODE_TYPE_POSTFIX_EXPR:
 					//Set the deref flag to false so we don't deref
 					unary_expression_child->dereference_needed = FALSE;
 					//Emit the whole thing
-					cfg_result_package_t postfix_results = emit_postfix_expression(current_block, unary_expression_child);
+					generic_results = emit_postfix_expression(current_block, unary_expression_child);
 
 					//Update the current block
-					current_block = postfix_results.final_block;
+					current_block = generic_results.final_block;
 
 					//And package the value up as what we want here
 					unary_package.type = CFG_RESULT_TYPE_VAR;
-					unary_package.result_value.result_var = unpack_result_package(&postfix_results, current_block);
+					unary_package.result_value.result_var = unpack_result_package(&generic_results, current_block);
 					break;
 
 				//This should never occur
