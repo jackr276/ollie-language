@@ -803,7 +803,8 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 	 * we will handle these two special cases separately in the else
 	 */
 	if(instruction->statement_type != THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET
-		&& instruction->statement_type != THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET){
+		&& instruction->statement_type != THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET
+		&& instruction->op1->linked_var != NULL){
 		//Extract the variable
 		symtab_variable_record_t* var = instruction->op1->linked_var;
 
