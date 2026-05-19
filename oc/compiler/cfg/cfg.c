@@ -508,7 +508,6 @@ static inline u_int32_t get_non_elaborative_parameter_count(function_type_t* fun
 	 * be stored in %rdi. We need to bump the GP param count here for that
 	 */
 	if(function_type->returns_by_copy == TRUE){
-		printf("HERE\n");
 		count++;
 	}
 
@@ -7503,7 +7502,7 @@ static inline void handle_parameter_storage(basic_block_t* basic_block, function
 											parameter_results_array_t* non_elaborative_parameter_results, stack_data_area_t* stack_passed_parameters,
 											dynamic_array_t* function_call_statement_parameters, instruction_t** first_assignment_instruction){
 	//Keep track of the indices for our specific counts. This will be important if we have to do stack-saving
-	u_int32_t index = 0;
+	u_int32_t result_index_adjustment = 0;
 	u_int32_t current_sse_index = 1;
 	u_int32_t current_gp_index = 1;
 
@@ -7531,20 +7530,26 @@ static inline void handle_parameter_storage(basic_block_t* basic_block, function
 			*first_assignment_instruction = assignment;
 		}
 
+		//Add this into the function's results
+		dynamic_array_add(function_call_statement_parameters, return_variable);
+
+		//Bump the adjustment up so things all work out here
+		result_index_adjustment++;
+
 		//Bump this up
 		current_gp_index++;
 	}
 
 	//Now that we have all of this, we need to go through and emit our final assignments for the function calls themselves
-	for(u_int32_t i = 0; i < non_elaborative_parameter_results->current_index; i++){
+	for(u_int32_t i = result_index_adjustment; i < non_elaborative_parameter_results->current_index; i++){
 		//For any/all call side regions that we need
 		stack_region_t* call_side_region;
 
-		//Get the result
+		//Get the result with the adjustment to account for the return by copy result
 		parameter_result_t* result = get_result_at_index(non_elaborative_parameter_results, i);
 
-		//Extract the parameter type here
-		generic_type_t* parameter_type = dynamic_array_get_at(&(signature->function_parameters), i);
+		//Extract the parameter type here at an offset to account for the result index adjustment for return by copy
+		generic_type_t* parameter_type = dynamic_array_get_at(&(signature->function_parameters), i - result_index_adjustment);
 
 		/**
 		 * Based on what the type here is we will add stack regions/copy assignments as
@@ -8059,6 +8064,8 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 */
 	if(non_elaborative_parameter_count != 0){
 		 non_elaborative_parameter_results = parameter_results_array_alloc(non_elaborative_parameter_count); 
+	} else {
+		printf("COUNT IS 0\n");
 	}
 
 	/**
@@ -8173,6 +8180,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 * for it
 		 */
 		for(u_int32_t i = 0; i < memory_addresses_to_adjust.current_index; i++){
+			printf("HERE\n\n");
 			//Get the variable out
 			three_addr_var_t* memory_address = dynamic_array_get_at(&memory_addresses_to_adjust, i);
 
