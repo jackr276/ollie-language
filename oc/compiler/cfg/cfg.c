@@ -503,6 +503,7 @@ static inline u_int32_t get_non_elaborative_parameter_count(function_type_t* fun
 		}
 	}
 
+	//TODO HERE
 	return count;
 }
 
@@ -7493,50 +7494,11 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 static inline void handle_parameter_storage(basic_block_t* basic_block, function_type_t* signature,
 											parameter_results_array_t* non_elaborative_parameter_results, stack_data_area_t* stack_passed_parameters,
 											dynamic_array_t* function_call_statement_parameters, instruction_t** first_assignment_instruction){
-
-	//This is not always used - only in certain scenarios
-	stack_region_t* return_by_copy_region = NULL;
-
 	//Keep track of the indices for our specific counts. This will be important if we have to do stack-saving
 	u_int32_t current_sse_index = 1;
 	u_int32_t current_gp_index = 1;
 
-	/**
-	 * If we return by copy, then we need this stack region
-	 */
-	if(signature->returns_by_copy == TRUE){
-		//New region is needed
-		return_by_copy_region = create_stack_region_for_type(&(current_function->local_stack), signature->return_type);
-
-		//Emit the memory address var for the temp region
-		three_addr_var_t* return_by_copy_value = emit_memory_address_temp_var(signature->return_type, return_by_copy_region);
-
-		//Now the actual parameter. This will always end up in %rdi
-		three_addr_var_t* function_parameter = emit_temp_var(signature->return_type);
-
-		//Store the index so that it goes in %rsp
-		function_parameter->class_relative_parameter_order = current_gp_index;
-
-		//Emit the assignment
-		instruction_t* assignment_instruction = emit_assignment_instruction(function_parameter, return_by_copy_value);
-
-		//Get it in the block
-		add_statement(basic_block, assignment_instruction);
-
-		//Update the bookkeeping for the first assignment if need be
-		if(*first_assignment_instruction == NULL){
-			*first_assignment_instruction = assignment_instruction;
-		}
-
-		//Add this to the list of parameters
-		dynamic_array_add(function_call_statement_parameters, function_parameter);
-
-		//Bump the GP index up now that we've used one
-		current_gp_index++;
-	}
-
-	//Now that we have all of this, we need to go through and emit our final assignments for the function calls
-	//themselves
+	//Now that we have all of this, we need to go through and emit our final assignments for the function calls themselves
 	for(u_int32_t i = 0; i < non_elaborative_parameter_results->current_index; i++){
 		//For any/all call side regions that we need
 		stack_region_t* call_side_region;
@@ -7897,6 +7859,31 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 
 
 /**
+ * For functions that have a return by copy value, we will need to create a stack region
+ * and initialize the %rdi parameter(first GP parameter) to be the address of the region
+ * that the callee will copy into. We will do that in this function here
+ */
+static inline void handle_return_by_copy_parameter(function_type_t* signature, parameter_results_array_t* parameter_results, dynamic_array_t* memory_addresses_to_adjust){
+	//We will have one to adjust so add it now
+	if(memory_addresses_to_adjust->internal_array == NULL){
+		*memory_addresses_to_adjust = dynamic_array_alloc();
+	}
+
+	//Create the region that we will eventually copy back into
+	stack_region_t* return_by_copy_region = create_stack_region_for_type(&(current_function->local_stack), signature->return_type);
+
+	//Emit the memory address var for the temp region
+	three_addr_var_t* return_by_copy_var = emit_memory_address_temp_var(signature->return_type, return_by_copy_region);
+
+	//Add this into the results array for later processing
+	add_parameter_result_to_results_array(parameter_results, return_by_copy_var, PARAM_RESULT_TYPE_VAR);
+
+	//Add the memory addresses into the set of all addresses that need adjustment
+	dynamic_array_add(memory_addresses_to_adjust, return_by_copy_var);
+}
+
+
+/**
  * Emit a call statement like such:
  *
  * call *<function_name>
@@ -8053,6 +8040,15 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 */
 	dynamic_array_t memory_addresses_to_adjust;
 	INITIALIZE_NULL_DYNAMIC_ARRAY(memory_addresses_to_adjust);
+
+	/**
+	 * Since returning by copy requires the memory address of the return region to be passed in inside
+	 * of the first GP parameter, we will need to handle all of our return by copying now before anything
+	 * else
+	 */
+	if(signature->returns_by_copy == TRUE){
+		handle_return_by_copy_parameter(signature, &non_elaborative_parameter_results, &memory_addresses_to_adjust);
+	}
 
 	//So long as this isn't NULL
 	while(param_cursor != NULL 
