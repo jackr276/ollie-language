@@ -834,6 +834,44 @@ static inline u_int8_t is_parameter_stack_passed(symtab_variable_record_t* varia
 
 
 /**
+ * Helper functio to create a stack region for a given function parameter
+ *
+ * NOTE: This assumes that the stack data area has already been properly allocated
+ */
+static inline void setup_stack_region_for_function_parameter(stack_data_area_t* parameter_data_area, symtab_variable_record_t* parameter){
+	//Equivalent pointer type for arrays
+	generic_type_t* equivalent_pointer_type;
+
+	//Special adjustments based on the types we have
+	switch(parameter->type_defined_as->type_class){
+		/**
+		 * Array types are always passed by reference. We need to make sure that
+		 * we represent this accurately inside of the stack region. We can use an
+		 * equivalent pointer type from the conversion helper to do this
+		 */
+		case TYPE_CLASS_ARRAY:
+			//Create the equivalent pointer type
+			equivalent_pointer_type = convert_array_type_to_equivalent_pointer(parameter->type_defined_as);
+
+			//Add this type into said stack region
+			parameter->stack_region = create_stack_region_for_type(parameter_data_area, equivalent_pointer_type);
+			break;
+		
+		default:
+			//Add this type into said stack region
+			parameter->stack_region = create_stack_region_for_type(parameter_data_area, parameter->type_defined_as);
+			break;
+	}
+
+	//This is a stack variable, we need to note it as such
+	parameter->stack_variable = TRUE;
+
+	//Flag that this is passed via the stack
+	parameter->passed_by_stack = TRUE;
+}
+
+
+/**
  * Add a parameter to a function and perform all internal bookkeeping needed
  *
  * *Stack Parameters*
@@ -845,9 +883,12 @@ static inline u_int8_t is_parameter_stack_passed(symtab_variable_record_t* varia
  * NOTE: In the event that we have an elaborative stack param, we will need to account for a different stack every
  * time. The only real constant here is the bottom 4 bytes which are effectively our "count" for the number of parameters
  */
-void add_function_parameter(type_symtab_t* type_symtab, symtab_function_record_t* function_record, symtab_variable_record_t* variable_record){
+void add_function_parameter(symtab_function_record_t* function_record, symtab_variable_record_t* variable_record){
 	//Store it in the function's parameters
 	dynamic_array_add(&(function_record->function_parameters), variable_record);
+
+	//Extract the signature for ease of use
+	function_type_t* function_signature = function_record->signature->internal_types.function_type;
 	
 	//Store what function this came from
 	variable_record->function_declared_in = function_record;
@@ -875,10 +916,10 @@ void add_function_parameter(type_symtab_t* type_symtab, symtab_function_record_t
 		variable_record->passed_by_stack = TRUE;
 
 		//This function does contain stack variables
-		function_record->contains_stack_params = TRUE;
+		function_signature->contains_stack_params = TRUE;
 
 		//Flag that this contains the special elaborative stack param
-		function_record->contains_elaborative_param = TRUE;
+		function_signature->contains_elaborative_stack_param = TRUE;
 
 	//Do we need to pass via stack? If so add it here
 	} else if(is_parameter_stack_passed(variable_record) == TRUE){
@@ -888,29 +929,61 @@ void add_function_parameter(type_symtab_t* type_symtab, symtab_function_record_t
 			stack_data_area_alloc(&(function_record->stack_passed_parameters), STACK_TYPE_PARAMETER_PASSING, STACK_DATA_AREA_SIZE_TYPE_STATIC);
 		}
 
-		//Special adjustments based on the types we have
-		switch(variable_record->type_defined_as->type_class){
-			//Array types are always passed by reference. We need to make sure that
-			//we represent this accurately inside of the stack region. We can use a generic pointer to do so
-			case TYPE_CLASS_ARRAY:
-				//Add this type into said stack region
-				variable_record->stack_region = create_stack_region_for_type(&(function_record->stack_passed_parameters), lookup_type_name_only(type_symtab, "void*", NOT_MUTABLE)->type);
-				break;
-			
-			default:
-				//Add this type into said stack region
-				variable_record->stack_region = create_stack_region_for_type(&(function_record->stack_passed_parameters), variable_record->type_defined_as);
-				break;
-		}
-
-		//This is a stack variable, we need to note it as such
-		variable_record->stack_variable = TRUE;
-
-		//Flag that this is passed via the stack
-		variable_record->passed_by_stack = TRUE;
+		//Let the helper deal with the setup
+		setup_stack_region_for_function_parameter(&(function_record->stack_passed_parameters), variable_record);
 
 		//Flag that this function contains stack params
-		function_record->contains_stack_params = TRUE;
+		function_signature->contains_stack_params = TRUE;
+	}
+}
+
+
+/**
+ * Since a returned-by-copy value will *always* have the memory address to copy to
+ * passed into the function via %rdi, it is essential that we go through and update
+ * the symtab_function_record here as well as all of the parameters. Edge case that
+ * we are looking out for: if we had 6 GP params, now we have 7, and the last one
+ * is pushed over the edge to be a stack param. We need to make the adjustment for all
+ * of them, as well as for their function_parameter_order
+ */
+void remediate_return_by_copy_gp_parameter_order(symtab_function_record_t* record, function_type_t* signature){
+	for(u_int32_t i = 0; i < record->function_parameters.current_index; i++){
+		//Grab the parameter out
+		symtab_variable_record_t* parameter = dynamic_array_get_at(&(record->function_parameters), i);
+
+		//Stack passed parameters do not effect the count so skip it
+		if(is_parameter_stack_passed(parameter) == TRUE){
+			continue;
+		}
+
+		//Floating point params also do not impact it
+		if(IS_FLOATING_POINT(parameter->type_defined_as) == TRUE){
+			continue;
+		}
+
+		/**
+		 * If we have a parameter that is at the limit(6 for GP registers), we are now going to
+		 * need to push it over the edge to make room for the return address passed in via
+		 * %rdi to copy to
+		 */
+		if(parameter->class_relative_function_parameter_order == MAX_GP_REGISTER_PASSED_PARAMS){
+			//Flag that the function itself now contains stack parameters
+			signature->contains_stack_params = TRUE;
+
+			/**
+			 * If we don't yet have a stack data area then we need to allocate
+			 * one now
+			 */
+			if(record->stack_passed_parameters.stack_regions.internal_array == NULL){
+				stack_data_area_alloc(&(record->stack_passed_parameters), STACK_TYPE_PARAMETER_PASSING, STACK_DATA_AREA_SIZE_TYPE_STATIC);
+			}
+
+			setup_stack_region_for_function_parameter(&(record->stack_passed_parameters), parameter);
+
+		}
+
+		//Regardless of what happened, bump the class relative function parameter order
+		parameter->class_relative_function_parameter_order++;
 	}
 }
 
@@ -944,9 +1017,6 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, visibilt
 
 	//Allocate the list of all functions that this calls
 	record->called_functions = dynamic_set_alloc();
-
-	//Store the inline status
-	record->inlined = is_inlined;
 
 	//We know that we need to create this immediately
 	record->signature = create_function_pointer_type(visibility, is_inlined, line_number, raises_errors, NOT_MUTABLE);
@@ -2186,12 +2256,10 @@ void print_function_name_to_buffer(char* buffer, symtab_function_record_t* recor
 		}
 	}
 
-	//Final closing paren and return type
-	if(record->return_type != NULL){
-		sprintf(internal_buffer, ") -> %s", record->return_type->type_name.string);
-	} else {
-		strcat(internal_buffer, ") -> (null)");
-	}
+	//Grab the signature out
+	function_type_t* signature = record->signature->internal_types.function_type;
+	sprintf(temp_buffer, ") -> %s", signature->return_type->type_name.string);
+	strcat(internal_buffer, temp_buffer);
 
 	//If it was defined implicitly, we'll print a semicol
 	if(record->defined == 0){
@@ -2231,12 +2299,9 @@ void print_function_name(symtab_function_record_t* record){
 		}
 	}
 
-	//Final closing paren and return type
-	if(record->return_type != NULL){
-		printf(") -> %s", record->return_type->type_name.string);
-	} else {
-		printf(") -> (null)");
-	}
+	//Extract the signature
+	function_type_t* signature = record->signature->internal_types.function_type;
+	printf(") -> %s", signature->return_type->type_name.string);
 
 	//If it was defined implicitly, we'll print a semicol
 	if(record->defined == 0){

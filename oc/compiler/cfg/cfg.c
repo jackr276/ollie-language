@@ -53,6 +53,7 @@ static generic_type_t* u64 = NULL;
 static generic_type_t* i64 = NULL;
 static generic_type_t* f32 = NULL;
 static generic_type_t* f64 = NULL;
+static generic_type_t* void_ptr = NULL;
 
 /**
  * The break and continue stack will
@@ -284,6 +285,14 @@ static inline u_int8_t is_variable_ssa_eligible(three_addr_var_t* variable){
 			} else {
 				return FALSE;
 			}
+		
+		/**
+		 * Return by copy addresses are *never* SSA eligible. This
+		 * would actually case the SSA system to crash because there
+		 * is no real assignment for this kind of variable
+		 */
+		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
+			return FALSE;
 
 		default:
 			return FALSE;
@@ -312,6 +321,22 @@ static inline u_int8_t is_type_stack_passed_by_reference(generic_type_t* type){
  * are always passed by copy whilst everything else is by reference
  */
 static inline u_int8_t is_type_stack_passed_by_copy(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_UNION:
+		case TYPE_CLASS_STRUCT:	
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Is a type returned via the stack using a copy? Structs and union 
+ * types are always returned by copy whilst everything else is by reference
+ * (unless it's a primitive type of course)
+ */
+static inline u_int8_t is_type_returned_by_copy(generic_type_t* type){
 	switch(type->type_class){
 		case TYPE_CLASS_UNION:
 		case TYPE_CLASS_STRUCT:	
@@ -476,6 +501,14 @@ static inline u_int32_t get_non_elaborative_parameter_count(function_type_t* fun
 		if(parameter_type->type_class == TYPE_CLASS_ELABORATIVE){
 			count--;
 		}
+	}
+
+	/**
+	 * If we return by copy, the address for the callee to coyp into will
+	 * be stored in %rdi. We need to bump the GP param count here for that
+	 */
+	if(function_type->returns_by_copy == TRUE){
+		count++;
 	}
 
 	return count;
@@ -3191,27 +3224,71 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 		 */
 		switch(expression_package.type){
 			case CFG_RESULT_TYPE_VAR:
-				//Grab the return var that we need
+				//Extract the returned variable
 				return_variable = expression_package.result_value.result_var;
 
 				/**
-				 * If the variable is not a temp *or* we have a need for a converting move, we will emit
-				 * the extra assignment here. If it's already temp and we don't need a converting move, we won't
-				 * bother with inserting the extra statements
+				 * If the type is not returned by copy we go through the regular
+				 * steps to get the return value into %rax
 				 */
-				if(return_variable->variable_type != VARIABLE_TYPE_TEMP
-					|| is_converting_move_required(ret_node->inferred_type, return_variable->type) == TRUE){
+				if(is_type_returned_by_copy(ret_node->inferred_type) == FALSE){
 					/**
-					 * The type of this final assignee will *always* be the inferred type of the node. We need to ensure that
-					 * the function is returning the type as promised, and not what is done through type coercion
+					 * If it's not a temp var or if we need a converting move, we
+					 * will emit that now. If it's already a temp and we don't need the converting
+					 * move then we will ignore
 					 */
-					instruction_t* assignment = emit_assignment_instruction(emit_temp_var(ret_node->inferred_type), return_variable);
+					if(return_variable->variable_type != VARIABLE_TYPE_TEMP
+						|| is_converting_move_required(ret_node->inferred_type, return_variable->type) == TRUE){
+						/**
+						 * The return type of the final assignee will *always* tbe the inferred type of the node.
+						 * We need to be sure that the function is always returning the type as promised, which is
+						 * done through type coercion
+						 */
+						instruction_t* assignment = emit_assignment_instruction(emit_temp_var(ret_node->inferred_type), return_variable);
 
-					//Add it into the block
-					add_statement(current, assignment);
+						//Add it into the blcok
+						add_statement(current, assignment);
 
-					//The return variable is now what was assigned
-					return_variable	= assignment->assignee;
+						//This is what we're actually returning
+						return_variable = assignment->assignee;
+					}
+
+				/**
+				 * If a type is returned by copy, then by the Ollie convention we will store
+				 * that type inside of the %rdi register, which itself holds the stack base
+				 * address where we want to copy this in the *caller*. The caller is responsible 
+				 * for all stack management. All that the callee needs to do is emit a memory 
+				 * copy operation
+				 */
+				} else {
+					//Emit the actual variable that will cause us to return by copy
+					three_addr_var_t* return_by_copy_address_var = emit_return_by_copy_var(ret_node->inferred_type);
+
+					/**
+					 * Now that we have the dummy variable, we will copy from the returned variable over into the return-by-copy
+					 * address variable. Remember that the caller is responsible for absolutely everything related to memory
+					 * management for this so we aren't worrying about that here
+					 */
+					instruction_t* copy_to_ret_region = emit_memory_copy_instruction(return_by_copy_address_var, return_variable, return_variable->associated_memory_region.stack_region->size);
+
+					//Add this into the block
+					add_statement(current, copy_to_ret_region);
+
+					/**
+					 * Now that we've actually done the memory copy, we will copy over the return_by_copy address variable
+					 * over into another variable(%rax). This is the variable that we will actually be returning when
+					 * the function is all done
+					 */
+					three_addr_var_t* copy_to_rax_var = emit_temp_var(void_ptr);
+
+					//Copy over into RAX(eventually)
+					instruction_t* copy_to_rax = emit_assignment_instruction(copy_to_rax_var, return_by_copy_address_var);
+
+					//Add this into the block
+					add_statement(current, copy_to_rax);
+
+					//Now the actual return variable is the new temp we have to represent the copy to %rax
+					return_variable = copy_to_rax_var;
 				}
 
 				break;
@@ -3228,9 +3305,6 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 
 				break;
 		}
-
-		//Flag for later on in the compiler that this variable has been returned
-		return_variable->membership = RETURNED_VARIABLE;
 	}
 
 	//We'll use the ret stmt feature here
@@ -5716,6 +5790,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 	three_addr_var_t* assignee;
 	//The unary expression package
 	cfg_result_package_t unary_package = INITIALIZE_BLANK_CFG_RESULT;
+	cfg_result_package_t generic_results = INITIALIZE_BLANK_CFG_RESULT;
 
 	//We'll keep track of what the current block here is
 	basic_block_t* current_block = basic_block;
@@ -6070,8 +6145,10 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//And give back the final value
 			return unary_package;
 
-		//Handle the case of the address operator - this is a very unique case, we will not call the unary expression
-		//helper here, because we know that this must always be an identifier node
+		/**
+		 * Handle the case of the address operator - this is a very unique case, we will not call the unary expression
+		 * helper here, because we know that this must always be an identifier node
+		 */
 		case SINGLE_AND:
 			//Go based on the type here
 			switch(unary_expression_child->ast_node_type){
@@ -6111,19 +6188,39 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 					break;
 
+				/**
+				 * For function calls, there are some scenarios where we are able to take the memory address
+				 * of the return value. If a function returns a "return by copy" type - that being a struct 
+				 * or union, then it does have a memory address active that we can use. No extra
+				 * work is needed to actually use the memory address, we just need to assign it over
+				 */
+				case AST_NODE_TYPE_FUNCTION_CALL:
+				case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
+					//Let the dedicated translator handle the call
+					generic_results = emit_function_call(current_block, unary_expression_child);
+
+					//Bump the block up if need be
+					current_block = generic_results.final_block;
+
+					//All that we need to do now is package up the results here and move along our way
+					unary_package.type = CFG_RESULT_TYPE_VAR;
+					unary_package.result_value.result_var = generic_results.result_value.result_var;
+					
+					break;
+
 				//The other case here
 				case AST_NODE_TYPE_POSTFIX_EXPR:
 					//Set the deref flag to false so we don't deref
 					unary_expression_child->dereference_needed = FALSE;
 					//Emit the whole thing
-					cfg_result_package_t postfix_results = emit_postfix_expression(current_block, unary_expression_child);
+					generic_results = emit_postfix_expression(current_block, unary_expression_child);
 
 					//Update the current block
-					current_block = postfix_results.final_block;
+					current_block = generic_results.final_block;
 
 					//And package the value up as what we want here
 					unary_package.type = CFG_RESULT_TYPE_VAR;
-					unary_package.result_value.result_var = unpack_result_package(&postfix_results, current_block);
+					unary_package.result_value.result_var = unpack_result_package(&generic_results, current_block);
 					break;
 
 				//This should never occur
@@ -7422,24 +7519,58 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
  * Handle all of the storage for regular, non-elaborative parameters. This method handles everything involved, including the minutia
  * around memory address and stack parameter saving
  */
-static inline void handle_parameter_storage(basic_block_t* basic_block, parameter_results_array_t* non_elaborative_parameter_results,
-												stack_data_area_t* stack_passed_parameters, function_type_t* signature,
-												dynamic_array_t* function_call_statement_parameters, instruction_t** first_assignment_instruction){
+static inline void handle_parameter_storage(basic_block_t* basic_block, function_type_t* signature,
+											parameter_results_array_t* non_elaborative_parameter_results, stack_data_area_t* stack_passed_parameters,
+											dynamic_array_t* function_call_statement_parameters, instruction_t** first_assignment_instruction){
 	//Keep track of the indices for our specific counts. This will be important if we have to do stack-saving
+	u_int32_t result_index_adjustment = 0;
 	u_int32_t current_sse_index = 1;
 	u_int32_t current_gp_index = 1;
 
-	//Now that we have all of this, we need to go through and emit our final assignments for the function calls
-	//themselves
-	for(u_int32_t i = 0; i < non_elaborative_parameter_results->current_index; i++){
+	/**
+	 * If we have a return by copy value, then the very first element in our array is going
+	 * to be that return by copy address. We will process that separately instead of trying
+	 * to force it into the normal processing
+	 */
+	if(signature->returns_by_copy == TRUE){
+		//Extract it
+		parameter_result_t* return_by_copy_result = get_result_at_index(non_elaborative_parameter_results, 0);
+
+		//Create a return variable and give it the gp index
+		three_addr_var_t* return_variable = emit_temp_var(signature->return_type);
+		return_variable->class_relative_parameter_order = current_gp_index;
+
+		//Assign over into the newly created return variable
+		instruction_t* assignment = emit_assignment_instruction(return_variable, return_by_copy_result->param_result.variable_result);
+
+		//Add it into the block
+		add_statement(basic_block, assignment);
+
+		//Bookkeeping if need be
+		if(*first_assignment_instruction == NULL){
+			*first_assignment_instruction = assignment;
+		}
+
+		//Add this into the function's results
+		dynamic_array_add(function_call_statement_parameters, return_variable);
+
+		//Bump the adjustment up so things all work out here
+		result_index_adjustment++;
+
+		//Bump this up
+		current_gp_index++;
+	}
+
+	//Now that we have all of this, we need to go through and emit our final assignments for the function calls themselves
+	for(u_int32_t i = result_index_adjustment; i < non_elaborative_parameter_results->current_index; i++){
 		//For any/all call side regions that we need
 		stack_region_t* call_side_region;
 
-		//Get the result
+		//Get the result with the adjustment to account for the return by copy result
 		parameter_result_t* result = get_result_at_index(non_elaborative_parameter_results, i);
 
-		//Extract the parameter type here
-		generic_type_t* parameter_type = dynamic_array_get_at(&(signature->function_parameters), i);
+		//Extract the parameter type here at an offset to account for the result index adjustment for return by copy
+		generic_type_t* parameter_type = dynamic_array_get_at(&(signature->function_parameters), i - result_index_adjustment);
 
 		/**
 		 * Based on what the type here is we will add stack regions/copy assignments as
@@ -7791,6 +7922,31 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 
 
 /**
+ * For functions that have a return by copy value, we will need to create a stack region
+ * and initialize the %rdi parameter(first GP parameter) to be the address of the region
+ * that the callee will copy into. We will do that in this function here
+ */
+static inline void handle_return_by_copy_parameter(function_type_t* signature, parameter_results_array_t* parameter_results, dynamic_array_t* memory_addresses_to_adjust){
+	//We will have one to adjust so add it now
+	if(memory_addresses_to_adjust->internal_array == NULL){
+		*memory_addresses_to_adjust = dynamic_array_alloc();
+	}
+
+	//Create the region that we will eventually copy back into
+	stack_region_t* return_by_copy_region = create_stack_region_for_type(&(current_function->local_stack), signature->return_type);
+
+	//Emit the memory address var for the temp region
+	three_addr_var_t* return_by_copy_var = emit_memory_address_temp_var(signature->return_type, return_by_copy_region);
+
+	//Add this into the results array for later processing
+	add_parameter_result_to_results_array(parameter_results, return_by_copy_var, PARAM_RESULT_TYPE_VAR);
+
+	//Add the memory addresses into the set of all addresses that need adjustment
+	dynamic_array_add(memory_addresses_to_adjust, return_by_copy_var);
+}
+
+
+/**
  * Emit a call statement like such:
  *
  * call *<function_name>
@@ -7915,8 +8071,11 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	//Let's grab a param cursor for ourselves
 	generic_ast_node_t* param_cursor = function_call_node->first_child;
 
-	//If this isn't NULL, we have parameters
-	if(param_cursor != NULL){
+	/**
+	 * If the param cursor is not NULL *or* we have a return-by-copy
+	 * type that will use the function parameters, we need to allocate
+	 */
+	if(param_cursor != NULL || signature->returns_by_copy == TRUE){
 		function_call_statement->parameters = dynamic_array_alloc();
 	}
 
@@ -7947,6 +8106,15 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 */
 	dynamic_array_t memory_addresses_to_adjust;
 	INITIALIZE_NULL_DYNAMIC_ARRAY(memory_addresses_to_adjust);
+
+	/**
+	 * Since returning by copy requires the memory address of the return region to be passed in inside
+	 * of the first GP parameter, we will need to handle all of our return by copying now before anything
+	 * else
+	 */
+	if(signature->returns_by_copy == TRUE){
+		handle_return_by_copy_parameter(signature, &non_elaborative_parameter_results, &memory_addresses_to_adjust);
+	}
 
 	//So long as this isn't NULL
 	while(param_cursor != NULL 
@@ -7982,9 +8150,10 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 	/**
 	 * Now that we've emitted all of the parameters, we will let the helper deal with
-	 * the storage of them
+	 * the storage of them. This will also take care of setting up the stack region/parameter
+	 * assignment if we have a return by copy parameter
 	 */
-	handle_parameter_storage(current_block, &non_elaborative_parameter_results, &stack_passed_parameters, signature, &(function_call_statement->parameters), &first_assignment_instruction);
+	handle_parameter_storage(current_block, signature, &non_elaborative_parameter_results, &stack_passed_parameters, &(function_call_statement->parameters), &first_assignment_instruction);
 
 	/**
 	 * If we do have elaborative stack params to manage, we will do so here
@@ -8083,8 +8252,10 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	} else {
 		//If this is not a void return type, we'll need to emit this temp assignment
 		if(signature->returns_void == FALSE){
-			//Emit an assignment instruction. This will become very important way down the line in register
-			//allocation to avoid interference
+			/**
+			 * Emit an assignment instruction. This will become very important way down the line in register
+			 * allocation to avoid interference
+			 */
 			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(function_assignee->type), function_assignee);
 
 			//Reassign this value
@@ -10867,21 +11038,23 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 
 		//If the exit statement is not a return statement or is null, we need to know what's happening here
 		if(does_block_end_in_function_termination_statement(block) == FALSE){
+			function_type_t* defined_in_signature = function_defined_in->signature->internal_types.function_type;
+
 			//If this isn't void, then we need to throw a warning
-			if((function_defined_in->return_type->type_class != TYPE_CLASS_BASIC
-				|| function_defined_in->return_type->basic_type_token != VOID)
+			if((defined_in_signature->return_type->type_class != TYPE_CLASS_BASIC
+				|| defined_in_signature->return_type->basic_type_token != VOID)
 				//It's a technically supported use-case to not put a return on main
 				&& is_main_function == FALSE){
 				print_parse_message(MESSAGE_TYPE_WARNING, "Non-void function does not return in all control paths", 0);
 			}
 
 			//If it's not a void type, we do one thing
-			if(function_defined_in->return_type->basic_type_token != VOID){
+			if(defined_in_signature->return_type->basic_type_token != VOID){
 				//The appropriate type for the return variable
 				generic_type_t* return_var_type;
 
 				//Determine a type compatible for us to use
-				switch(function_defined_in->return_type->type_size){
+				switch(defined_in_signature->return_type->type_size){
 					case 1:
 						return_var_type = i8;
 						break;
@@ -12384,6 +12557,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	traversal_queue = heap_queue_alloc();
 
 	//Keep these on hand
+	void_ptr = lookup_type_name_only(type_symtab, "void*", NOT_MUTABLE)->type;
 	f64 = lookup_type_name_only(type_symtab, "f64", NOT_MUTABLE)->type;
 	f32 = lookup_type_name_only(type_symtab, "f32", NOT_MUTABLE)->type;
 	u64 = lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type;

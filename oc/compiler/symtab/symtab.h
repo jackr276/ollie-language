@@ -102,6 +102,8 @@ typedef enum variable_membership_t {
 struct symtab_function_record_t{
 	//The hash that we have
 	u_int64_t hash;
+	//The type of the function - we access this *a lot*
+	generic_type_t* signature;
 	//In case of collisions, we can chain these records
 	symtab_function_record_t* next;
 	//What namespace is this function in?
@@ -118,12 +120,8 @@ struct symtab_function_record_t{
 	//An entire stack data area dedicated to parameters that are passed in. This is
 	//only allocated on an as-needed basis so it's normal for it to be blank
 	stack_data_area_t stack_passed_parameters;
-	//The type of the function
-	generic_type_t* signature;
 	//The list of all functions that this function calls out to
 	dynamic_set_t called_functions;
-	//What's the return type?
-	generic_type_t* return_type;
 	//Hang onto all user defined labels for this function(may be null)
 	label_symtab_t* user_defined_labels;
 	//The line number
@@ -154,12 +152,6 @@ struct symtab_function_record_t{
 	 * 	not require alignment like this
 	 */
 	u_int8_t requires_initial_alignment;
-	//Has this function been inlined?
-	u_int8_t inlined;
-	//Does this function contain stack params?
-	u_int8_t contains_stack_params;
-	//Does this contain the special elaborative stack param?
-	u_int8_t contains_elaborative_param;
 	//Are we public or private
 	visibilty_type_t visibility;
 };
@@ -206,11 +198,11 @@ struct symtab_variable_record_t{
 	u_int16_t counter;
 	//What is the struct offset for this variable
 	u_int16_t struct_offset;
-	//What is the parameter order for this value?
-	u_int16_t absolute_function_parameter_order;
-	//What is the relative parameter order for this value? In other words,
-	//what is the SSE parameter number or the general purpose parameter number.
-	//This is what really matters to us in the register allocator
+	/**
+	 * What is the relative parameter order for this value? In other words,
+	 * what is the SSE parameter number or the general purpose parameter number.
+	 * This is what really matters to us in the register allocator
+	 */
 	u_int16_t class_relative_function_parameter_order;
 	//Was it initialized?
 	u_int8_t initialized;
@@ -475,7 +467,17 @@ symtab_variable_record_t* create_temp_memory_address_variable(symtab_function_re
 /**
  * Add a parameter to a function and perform all internal bookkeeping needed
  */
-void add_function_parameter(type_symtab_t* symtab, symtab_function_record_t* function_record, symtab_variable_record_t* variable_record);
+void add_function_parameter(symtab_function_record_t* function_record, symtab_variable_record_t* variable_record);
+
+/**
+ * Since a returned-by-copy value will *always* have the memory address to copy to
+ * passed into the function via %rdi, it is essential that we go through and update
+ * the symtab_function_record here as well as all of the parameters. Edge case that
+ * we are looking out for: if we had 6 GP params, now we have 7, and the last one
+ * is pushed over the edge to be a stack param. We need to make the adjustment for all
+ * of them, as well as for their function_parameter_order
+ */
+void remediate_return_by_copy_gp_parameter_order(symtab_function_record_t* record, function_type_t* signature);
 
 /**
  * Make a function record

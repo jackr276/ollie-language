@@ -225,7 +225,7 @@ void dynamic_array_set_at(dynamic_array_t* array, void* ptr, u_int16_t index){
 
 	//This is not allowed
 	if(array->current_max_size <= index){
-		printf("ERROR: Attempting to set index %d in an array of size %d", index, array->current_max_size);
+		printf("ERROR: Attempting to set index %d in an array of size %d\n", index, array->current_max_size);
 	}
 
 	//Now that we've taken care of all that, we'll perform the setting

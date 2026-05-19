@@ -74,6 +74,8 @@ typedef enum {
 	VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS,
 	VARIABLE_TYPE_LOCAL_CONSTANT,
 	VARIABLE_TYPE_FUNCTION_ADDRESS, //For rip-relative function pointer loads
+	//A return-by-copy address variable designed for functions where we return structs/unions
+	VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS,
 } variable_type_t;
 
 
@@ -156,8 +158,6 @@ struct live_range_t {
 	u_int16_t interference_graph_index;
 	//What is the function parameter order here?
 	u_int16_t class_relative_function_parameter_order;
-	//Does this carry a pre-colored value
-	u_int8_t is_precolored;
 	//Was this live range spilled?
 	u_int8_t was_spilled;
 	//What class of live range is this?
@@ -548,6 +548,12 @@ three_addr_var_t* emit_memory_address_temp_var(generic_type_t* type, stack_regio
  * and unions
  */
 three_addr_var_t* emit_stack_param_memory_address_temp_var(generic_type_t* type, stack_region_t* region);
+
+/**
+ * A return by copy variable is a special kind of variable that represents the passing of %rdi
+ * as the struct return address when we do a return by copy
+ */
+three_addr_var_t* emit_return_by_copy_var(generic_type_t* type);
 
 /**
  * Create and return a three address var from an existing variable. These special

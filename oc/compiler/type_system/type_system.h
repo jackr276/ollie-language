@@ -195,6 +195,8 @@ struct function_type_t{
 	u_int32_t pass_by_copy_param_count;
 	//Does this return a void type?
 	u_int8_t returns_void;
+	//Does this function return by copy? This is true for structs and union return types
+	u_int8_t returns_by_copy;
 	//What is the visibility level of the given function
 	visibilty_type_t visibility;
 	//Is this function inlined:
@@ -396,6 +398,13 @@ generic_type_t* create_aliased_type(char* type_name, generic_type_t* aliased_typ
  * Dynamically allocate and create a function pointer type
  */
 generic_type_t* create_function_pointer_type(visibilty_type_t visibility, u_int8_t is_inlined, u_int32_t line_number, u_int8_t raises_errors, mutability_type_t mutability);
+
+/**
+ * Handle all of the bookkeeping needed when adding a return value to a function type. This includes
+ * the is_void_type flag, as well as anything that needs to happen if we are returning a stack
+ * passed return value
+ */
+void add_return_type_to_signature(function_type_t* signature, generic_type_t* return_type);
 
 /**
  * Compute the operand type for a logical and/or operation

@@ -605,9 +605,6 @@ static inline live_range_t* construct_stack_pointer_live_range(three_addr_var_t*
 	//And we absolutely *can not* spill it
 	stack_pointer_live_range->spill_cost = UINT32_MAX;
 
-	//This is precolor
-	stack_pointer_live_range->is_precolored = TRUE;
-
 	//Add the stack pointer to the dynamic array
 	dynamic_array_add(&(stack_pointer_live_range->variables), stack_pointer);
 	
@@ -633,9 +630,6 @@ static inline live_range_t* construct_instruction_pointer_live_range(three_addr_
 	instruction_pointer_live_range->reg.gen_purpose = RIP;
 	//And we absolutely *can not* spill it
 	instruction_pointer_live_range->spill_cost = UINT32_MAX;
-
-	//This is precolor
-	instruction_pointer_live_range->is_precolored = TRUE;
 
 	//Add the stack pointer to the dynamic array
 	dynamic_array_add(&(instruction_pointer_live_range->variables), instruction_pointer);
@@ -2014,6 +2008,18 @@ static inline void precolor_in_body_function_parameters(dynamic_array_t* general
 		//Extract it
 		live_range_t* general_purpose_lr = dynamic_array_get_at(general_purpose_live_ranges, i);
 
+		//Extract the first variable
+		three_addr_var_t* first_variable = dynamic_array_get_at(&(general_purpose_lr->variables), 0);
+
+		/**
+		 * If we have a return by copy variable, we *must*, without any exception ever,
+		 * precolor it to be in %rdi. There is never a case where a variable like this is not in
+		 * %rdi
+		 */
+		if(first_variable->variable_type == VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS){
+			general_purpose_lr->reg.gen_purpose = RDI;
+		}
+
 		//Extract for neatness
 		u_int16_t general_purpose_parameter_order = general_purpose_lr->class_relative_function_parameter_order;
 
@@ -2244,9 +2250,11 @@ static void precolor_instruction(instruction_t* instruction){
  * once per run
  */
 static void precolor_function(basic_block_t* function_entry, dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges){
-	//Before we crawl the instructions, we'll crawl the live range arrays 
-	//to precolor any function parameters that are in the function
-	//body that we have
+	/**
+	 * Before we crawl the instructions, we'll crawl the live range arrays 
+	 * to precolor any function parameters that are in the function
+	 * body that we have
+	 */
 	precolor_in_body_function_parameters(general_purpose_live_ranges, sse_live_ranges);
 
 	//Grab a cursor to the head block
@@ -3683,6 +3691,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	 * whereas in an indirect call we are not
 	 */
 	symtab_function_record_t* callee = function_call->called_function;
+	function_type_t* callee_signature = callee->signature->internal_types.function_type;
 
 	/**
 	 * The total amount of caller saved space that we have. Remember this
@@ -3728,7 +3737,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	 * actual stack allocation/deallocation statements and ensure that we are
 	 * putting all of our saving logic *before and after* said statements
 	 */
-	if(callee->contains_stack_params == TRUE){
+	if(callee_signature->contains_stack_params == TRUE){
 		//Let's first find the stack allocation statement. Note that it *has to be here*
 		while(before_stack_param_setup->statement_type != THREE_ADDR_CODE_STACK_ALLOCATION_STMT){
 			//Go back
@@ -4514,6 +4523,9 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 	//Extract what function this is
 	symtab_function_record_t* function = function_entry->function_defined_in;
 
+	//Get the signature out too
+	function_type_t* signature = function->signature->internal_types.function_type;
+
 	//The first thing that we'll want to do is align the local stack
 	align_stack_data_area(&(function->local_stack));
 
@@ -4672,7 +4684,7 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 	 * grabbing these from the correct stack region when we're inside of 
 	 * the function
 	 */
-	if(function->contains_stack_params == TRUE){
+	if(signature->contains_stack_params == TRUE){
 		//Make use of the total stack frame size to recompute all of these offsets
 		recompute_stack_passed_parameter_region_offsets(&(function->stack_passed_parameters), total_stack_frame_size);
 

@@ -805,7 +805,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 	if(instruction->statement_type != THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET
 		&& instruction->statement_type != THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET){
 		//Extract the variable
-		symtab_variable_record_t* var = instruction->op1->linked_var;
+		symtab_variable_record_t* associated_variable = instruction->op1->linked_var;
 
 		/**
 		 * Special handling if this is a global variable. Global variables will generate 2 instructions on most occassions
@@ -814,111 +814,113 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 		 *
 		 * NOTE: since this is a global variable, it is impossible for a function parameter that is passed via the stack to get caught up in this
 		 */
-		switch(var->membership){
-			case GLOBAL_VARIABLE:
-			case STATIC_VARIABLE:
-				switch(instruction->statement_type){
-					/**
-					 * A global variable address assignment like this will turn into a leaq statement
-					 */
-					case THREE_ADDR_CODE_ASSN_STMT:
-						//Let the helper emit the statement
-						address_instruction = emit_global_variable_address_calculation_oir(instruction->assignee, instruction->op1, instruction_pointer_variable);
+		if(associated_variable != NULL){
+			switch(associated_variable->membership){
+				case GLOBAL_VARIABLE:
+				case STATIC_VARIABLE:
+					switch(instruction->statement_type){
+						/**
+						 * A global variable address assignment like this will turn into a leaq statement
+						 */
+						case THREE_ADDR_CODE_ASSN_STMT:
+							//Let the helper emit the statement
+							address_instruction = emit_global_variable_address_calculation_oir(instruction->assignee, instruction->op1, instruction_pointer_variable);
 
-						//Insert this after the given instruction
-						insert_instruction_after_given(address_instruction, instruction);
+							//Insert this after the given instruction
+							insert_instruction_after_given(address_instruction, instruction);
 
-						//Once we've done that, the old instruction is useless to us
-						delete_statement(instruction);
+							//Once we've done that, the old instruction is useless to us
+							delete_statement(instruction);
 
-						//Rebuild the window based around the new instruction
-						reconstruct_window(window, address_instruction);
+							//Rebuild the window based around the new instruction
+							reconstruct_window(window, address_instruction);
 
-						break;
+							break;
 
-					/**
-					 * A global var address assignment like this will generate
-					 * 2 separate instructions. One instruction will hold the global variable address,
-					 * while the other holds the actual binary operation
-					 */
-					case THREE_ADDR_CODE_BIN_OP_STMT:
-						//Let the helper emit the statement. We will use a temp destination for this
-						address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op1, instruction_pointer_variable);
+						/**
+						 * A global var address assignment like this will generate
+						 * 2 separate instructions. One instruction will hold the global variable address,
+						 * while the other holds the actual binary operation
+						 */
+						case THREE_ADDR_CODE_BIN_OP_STMT:
+							//Let the helper emit the statement. We will use a temp destination for this
+							address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op1, instruction_pointer_variable);
 
-						//This goes in before the given one
-						insert_instruction_before_given(address_instruction, instruction);
+							//This goes in before the given one
+							insert_instruction_before_given(address_instruction, instruction);
 
-						//We'll now replace op1 with what our assignee here is
-						instruction->op1 = address_instruction->assignee;
+							//We'll now replace op1 with what our assignee here is
+							instruction->op1 = address_instruction->assignee;
 
-						//And now we'll reconstruct around our instruction just ot keep the window in order
-						reconstruct_window(window, instruction);
+							//And now we'll reconstruct around our instruction just ot keep the window in order
+							reconstruct_window(window, instruction);
 
-						break;
+							break;
 
-					/**
-					 * A global var address like this will generate one special instruction that is RIP relative
-					 * with a constant offset
-					 */
-					case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-						//Let the helper do all of the work
-						address_instruction = emit_global_variable_address_calculation_with_offset_oir(instruction->assignee, instruction->op1, instruction_pointer_variable, instruction->op1_const);
+						/**
+						 * A global var address like this will generate one special instruction that is RIP relative
+						 * with a constant offset
+						 */
+						case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+							//Let the helper do all of the work
+							address_instruction = emit_global_variable_address_calculation_with_offset_oir(instruction->assignee, instruction->op1, instruction_pointer_variable, instruction->op1_const);
 
-						//This goes in before the given one
-						insert_instruction_before_given(address_instruction, instruction);
+							//This goes in before the given one
+							insert_instruction_before_given(address_instruction, instruction);
 
-						//Now we can delete the old one
-						delete_statement(instruction);
-						
-						//And reconstruct the window around the new one
-						reconstruct_window(window, address_instruction);
+							//Now we can delete the old one
+							delete_statement(instruction);
+							
+							//And reconstruct the window around the new one
+							reconstruct_window(window, address_instruction);
 
-						break;
+							break;
 
-					/**
-					 * For our store operations, to rememdiate we just need to do everything that we would normally do 
-					 * before the store operation and replace the op1 with what we had
-					 */
-					case THREE_ADDR_CODE_STORE_STATEMENT:
-						//Let the helper emit the statement
-						address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op1, instruction_pointer_variable);
+						/**
+						 * For our store operations, to rememdiate we just need to do everything that we would normally do 
+						 * before the store operation and replace the op1 with what we had
+						 */
+						case THREE_ADDR_CODE_STORE_STATEMENT:
+							//Let the helper emit the statement
+							address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op1, instruction_pointer_variable);
 
-						//Put this right before the store
-						insert_instruction_before_given(address_instruction, instruction);
+							//Put this right before the store
+							insert_instruction_before_given(address_instruction, instruction);
 
-						//The assignee here now is our op1 variable
-						instruction->op1 = address_instruction->assignee;
+							//The assignee here now is our op1 variable
+							instruction->op1 = address_instruction->assignee;
 
-						break;
+							break;
 
-					/**
-					 * Note that values here draw from op2, not op1
-					 */
-					case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-					case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-						//Let the helper emit the statement
-						address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op2, instruction_pointer_variable);
+						/**
+						 * Note that values here draw from op2, not op1
+						 */
+						case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+						case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+							//Let the helper emit the statement
+							address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op2, instruction_pointer_variable);
 
-						//Put this right before the store
-						insert_instruction_before_given(address_instruction, instruction);
+							//Put this right before the store
+							insert_instruction_before_given(address_instruction, instruction);
 
-						//The assignee here now is our op1 variable
-						instruction->op2 = address_instruction->assignee;
+							//The assignee here now is our op1 variable
+							instruction->op2 = address_instruction->assignee;
 
-						break;
+							break;
 
-					//This should never happen
-					default:
-						printf("Fatal internal compiler error: unreachable path hit in global/static variable memory address remediation\n");
-						exit(1);
-				}
+						//This should never happen
+						default:
+							printf("Fatal internal compiler error: unreachable path hit in global/static variable memory address remediation\n");
+							exit(1);
+					}
 
-				//We're completely done once we get here
-				return;
+					//We're completely done once we get here
+					return;
 
-			//Otherwise we get out
-			default:
-				break;
+				//Otherwise we get out
+				default:
+					break;
+			}
 		}
 
 		/**
@@ -935,7 +937,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 * Extract the stack offset for our use. This will determine how 
 				 * we process things down below
 				 */
-				stack_offset = var->stack_region->function_local_base_address + additional_offset;
+				stack_offset = instruction->op1->associated_memory_region.stack_region->function_local_base_address + additional_offset;
 
 				//Go based on what kind of statement that we've got here
 				switch(instruction->statement_type){
@@ -1317,7 +1319,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 	 * because the memory address var that we are after is going to be in op2 regardless
 	 */
 	} else {
-		symtab_variable_record_t* var = instruction->op2->linked_var;
+		symtab_variable_record_t* associated_variable = instruction->op2->linked_var;
 
 		/**
 		 * Special handling if this is a global variable. Global variables will generate 2 instructions on most occassions
@@ -1326,24 +1328,26 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 		 *
 		 * NOTE: since this is a global variable, it is impossible for a function parameter that is passed via the stack to get caught up in this
 		 */
-		switch(var->membership){
-			case GLOBAL_VARIABLE:
-			case STATIC_VARIABLE:
-				//Let the helper emit the statement
-				address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op2, instruction_pointer_variable);
+		if(associated_variable != NULL){
+			switch(associated_variable->membership){
+				case GLOBAL_VARIABLE:
+				case STATIC_VARIABLE:
+					//Let the helper emit the statement
+					address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op2, instruction_pointer_variable);
 
-				//Put this right before the store
-				insert_instruction_before_given(address_instruction, instruction);
+					//Put this right before the store
+					insert_instruction_before_given(address_instruction, instruction);
 
-				//The assignee here now is our op1 variable
-				instruction->op2 = address_instruction->assignee;
+					//The assignee here now is our op1 variable
+					instruction->op2 = address_instruction->assignee;
 
-				//We cna just bail out once done
-				return;
+					//We cna just bail out once done
+					return;
 
-			//Otherwise we get out
-			default:
-				break;
+				//Otherwise we get out
+				default:
+					break;
+			}
 		}
 
 		/**
@@ -1360,7 +1364,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 * Extract the stack offset for our use. This will determine how 
 				 * we process things down below
 				 */
-				stack_offset = var->stack_region->function_local_base_address + additional_offset;
+				stack_offset = instruction->op2->associated_memory_region.stack_region->function_local_base_address + additional_offset;
 
 				//Make it a lea
 				if(stack_offset != 0){
@@ -4949,6 +4953,22 @@ static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_st
 			break;
 
 		/**
+		 * For a return by copy address, we'll just print out
+		 * RBC<<scope>_<name>_<ssa_generation> if we have an actual
+		 * variable name. Otherwise we just use the temp var
+		 * number
+		 */
+		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
+			if(variable_record != NULL){
+				sprintf(buffer, "RBC<%d_%s_%d>", variable_record->lexical_scope_id, variable_record->var_name.string, variable->ssa_generation);
+			} else {
+				sprintf(buffer, "RBC<t%d>", variable->temp_var_number);
+			}
+
+			dynamic_string_concatenate(output, buffer);
+			break;
+
+		/**
 		 * Local constants are already unique so we can just print them
 		 * out as is
 		 */
@@ -5604,6 +5624,7 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 		case VARIABLE_TYPE_LOCAL_CONSTANT:
 		case VARIABLE_TYPE_FUNCTION_ADDRESS:
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
 			return;
 		default:
 			break;
@@ -11112,7 +11133,7 @@ static void handle_lea_statement(instruction_t* instruction){
 /**
  * Handle a ret instruction. This will also dynamically
  * insert XOR/PXOR to clear out the error register for us
- */
+  */
 static inline void handle_ret_instruction(instruction_t* ret_instruction, symtab_function_record_t* function){
 	//First let's determine if we need to insert any error clearing or not
 	function_type_t* function_type = function->signature->internal_types.function_type;

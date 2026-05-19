@@ -37,6 +37,8 @@ static generic_ast_node_t* prog = NULL;
 
 //What is the current function that we are "in"
 static symtab_function_record_t* current_function = NULL;
+static function_type_t* current_function_signature = NULL;
+
 //Keep track of all of the errors that have been raised by the current function
 static dynamic_set_t errors_raised_by_current_function;
 //Array that holds all of the jump statements for our current function
@@ -158,6 +160,20 @@ static inline u_int8_t is_type_stack_passed_by_copy(generic_type_t* type){
 	}
 }
 
+
+/**
+ * Is the given type returned by copy from a function? Stack and union
+ * types are eligible for this
+ */
+static inline u_int8_t is_type_returned_by_copy(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_UNION:
+		case TYPE_CLASS_STRUCT:	
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
 
 /**
  * Does an enum list contain a given value for a member?
@@ -1055,8 +1071,8 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 		case R_PAREN:
 		case COMMA:
 			//If this is the case, the return type had better be void
-			if(current_function->signature->internal_types.function_type->returns_void == FALSE){
-				sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name.string, current_function->return_type->type_name.string);
+			if(current_function_signature->returns_void == FALSE){
+				sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name.string, current_function_signature->return_type->type_name.string);
 				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				//Also print the function name
 				print_function_name(current_function);
@@ -1076,7 +1092,7 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 		 */
 		default:
 			//If we get here, but we do expect a void return, then this is an issue
-			if(current_function->signature->internal_types.function_type->returns_void == TRUE){
+			if(current_function_signature->returns_void == TRUE){
 				sprintf(info, "Function \"%s\" expects a return type of \"void\". Use \"ret;\" for return statements in this function", current_function->func_name.string);
 				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				//Also print the function name
@@ -1104,11 +1120,11 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 	}
 
 	//Figure out what the final type is here
-	generic_type_t* final_type = types_assignable(current_function->return_type, expr_node->inferred_type);
+	generic_type_t* final_type = types_assignable(current_function_signature->return_type, expr_node->inferred_type);
 
 	//If the current function's return type is not compatible with the return type here, we'll bail out
 	if(final_type == NULL){
-		sprintf(info, "Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"", current_function->func_name.string, current_function->return_type->type_name.string,
+		sprintf(info, "Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"", current_function->func_name.string, current_function_signature->return_type->type_name.string,
 		  		expr_node->inferred_type->type_name.string);
 		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		//Also print out the function
@@ -1128,10 +1144,10 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 
 	//Special checking here - if we have an enum type that is being assigned to, we need
 	//to make sure that it's being assigned to a valid value in it's range
-	if(is_enum_type(current_function->return_type) == TRUE && expr_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
-		if(does_enum_contain_integer_member(current_function->return_type, expr_node->constant_value.signed_int_value) == FALSE){
+	if(is_enum_type(current_function_signature->return_type) == TRUE && expr_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
+		if(does_enum_contain_integer_member(current_function_signature->return_type, expr_node->constant_value.signed_int_value) == FALSE){
 			sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-						current_function->return_type->type_name.string, expr_node->constant_value.signed_int_value);
+						current_function_signature->return_type->type_name.string, expr_node->constant_value.signed_int_value);
 			//Hard fail here
 			return print_and_return_error(info, parser_line_num);
 		}
@@ -4076,6 +4092,8 @@ static u_int8_t is_unary_operator(ollie_token_t tok){
  * 								| --
  */
 static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, side_type_t side){
+	//For function call validation
+	function_type_t* function_signature;
 	//The lookahead token
 	lexitem_t lookahead;
 	//Is this assignable
@@ -4168,11 +4186,52 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 					}
 
 					break;
+
+				/**
+				 * For indirect function calls, if we return the value by copy(i.e. structs and unions),
+				 * then we are able to take the memory address of these items.
+				 * Other items are completely ineligible
+				 */
+				case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
+					//Extract the function type from here
+					function_signature = cast_expr->variable->type_defined_as->internal_types.function_type;
+
+					/**
+					 * If this type is *not* returned by copy, then we can't be doing this
+					 * memory address here so we reject it
+					 */
+					if(is_type_returned_by_copy(function_signature->return_type) == FALSE){
+						return print_and_return_error("Invalid return value for address operator &", parser_line_num);
+					}
+
+					//Otherwise we are fine, just get out
+					break;
+
+				/**
+				 * For function calls, if we return the value by copy(i.e. structs and unions),
+				 * then we are able to take the memory address of these items.
+				 * Other items are completely ineligible
+				 */
+				case AST_NODE_TYPE_FUNCTION_CALL:
+					//Extract the function type from here
+					function_signature = cast_expr->func_record->signature->internal_types.function_type;
+
+					/**
+					 * If this type is *not* returned by copy, then we can't be doing this
+					 * memory address here so we reject it
+					 */
+					if(is_type_returned_by_copy(function_signature->return_type) == FALSE){
+						return print_and_return_error("Invalid return value for address operator &", parser_line_num);
+					}
+
+					//Otherwise we are fine, just get out
+					break;
+
 				//And we can handle a postfix expression
 				case AST_NODE_TYPE_POSTFIX_EXPR:
 					//If this fails then we leave
 					if(is_postfix_expression_tree_address_eligible(cast_expr) == FALSE){
-						return print_and_return_error("Invalid address operation attempt", parser_line_num);
+						return print_and_return_error("Invalid return value for address operator &", parser_line_num);
 					}
 					break;
 				
@@ -6775,13 +6834,12 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 		return FALSE;
 	}
 
-	//Let's now store the return type
-	mutable_function_type->internal_types.function_type->return_type = return_type;
-	immutable_function_type->internal_types.function_type->return_type = return_type;
-
-	//Mark whether or not it's void as well
-	mutable_function_type->internal_types.function_type->returns_void = IS_VOID_TYPE(return_type);
-	immutable_function_type->internal_types.function_type->returns_void = IS_VOID_TYPE(return_type);
+	/**
+	 * Store both of the given return types inside of the function signature. This handles all needed
+	 * bookkeeping for us already
+	 */
+	add_return_type_to_signature(mutable_function_type->internal_types.function_type, return_type);
+	add_return_type_to_signature(immutable_function_type->internal_types.function_type, return_type);
 
 	//Refresh the token
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -8113,10 +8171,11 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 		return NULL;
 	}
 
-	//Save the return type in here
-	function_type->internal_types.function_type->return_type = return_type;
-	//Also add the void flag in here just in case
-	function_type->internal_types.function_type->returns_void = IS_VOID_TYPE(return_type);
+	/**
+	 * Get the return type added to the signature. This handles all internal bookkeeping
+	 * related to the function's return type
+	 */
+	add_return_type_to_signature(function_type->internal_types.function_type, return_type);
 
 	//We can now optionally see the RAISES keyword
 	lookahead = get_next_token(stream, &parser_line_num);
@@ -9557,8 +9616,8 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 	//If we see a semicolon, we can just leave
 	if(lookahead.tok == SEMICOLON){
 		//If this is the case, the return type had better be void
-		if(current_function->signature->internal_types.function_type->returns_void == FALSE){
-			sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name.string, current_function->return_type->type_name.string);
+		if(current_function_signature->returns_void == FALSE){
+			sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name.string, current_function_signature->return_type->type_name.string);
 			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			//Also print the function name
 			print_function_name(current_function);
@@ -9571,7 +9630,7 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 
 	} else {
 		//If we get here, but we do expect a void return, then this is an issue
-		if(current_function->signature->internal_types.function_type->returns_void == TRUE){
+		if(current_function_signature->returns_void == TRUE){
 			sprintf(info, "Function \"%s\" expects a return type of \"void\". Use \"ret;\" for return statements in this function", current_function->func_name.string);
 			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			//Also print the function name
@@ -9597,15 +9656,15 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 	}
 
 	//Figure out what the final type is here
-	generic_type_t* final_type = types_assignable(current_function->return_type, expr_node->inferred_type);
+	generic_type_t* final_type = types_assignable(current_function_signature->return_type, expr_node->inferred_type);
 
 	//If the current function's return type is not compatible with the return type here, we'll bail out
 	if(final_type == NULL){
 		//Following that we'll generate another error message to make it more clear
 		sprintf(info, "Function \"%s\" expects a return type of \"%s%s\", but was given an incompatible type \"%s%s\"",
 		  		current_function->func_name.string,
-				(current_function->return_type->mutability == MUTABLE ? "mut " : ""),
-		  		current_function->return_type->type_name.string,
+				(current_function_signature->return_type->mutability == MUTABLE ? "mut " : ""),
+		  		current_function_signature->return_type->type_name.string,
 		  		(expr_node->inferred_type->mutability == MUTABLE ? "mut " : ""),
 		  		expr_node->inferred_type->type_name.string);
 
@@ -9625,12 +9684,21 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 		perform_constant_assignment_coercion(expr_node, final_type);
 	}
 
+	/**
+	 * If we are having a copy assignment, we need to propogate down the chain in the expression
+	 * node that we should not be doing any dereferencing. We do this to ensure that when we return
+	 * the value, we do not accidentally copy from already dereferenced memory
+	 */
+	if(is_copy_assignment_required(current_function_signature->return_type, expr_node->inferred_type) == TRUE){
+		propogate_no_dereference_required_flag(expr_node);
+	}
+
 	//Special checking here - if we have an enum type that is being assigned to, we need
 	//to make sure that it's being assigned to a valid value in it's range
-	if(is_enum_type(current_function->return_type) == TRUE && expr_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
-		if(does_enum_contain_integer_member(current_function->return_type, expr_node->constant_value.signed_int_value) == FALSE){
+	if(is_enum_type(current_function_signature->return_type) == TRUE && expr_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
+		if(does_enum_contain_integer_member(current_function_signature->return_type, expr_node->constant_value.signed_int_value) == FALSE){
 			sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-						current_function->return_type->type_name.string, expr_node->constant_value.signed_int_value);
+						current_function_signature->return_type->type_name.string, expr_node->constant_value.signed_int_value);
 			//Hard fail here
 			return print_and_return_error(info, parser_line_num);
 		}
@@ -12867,9 +12935,6 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 			return FAILURE;;
 		}
 
-		//We will also store the "absolute" parameter number as well
-		parameter->absolute_function_parameter_order = absolute_parameter_number;
-
 		//If we're not defining a predeclared function, we need to add this parameter in
 		if(defining_predeclared_function == FALSE){
 			//Let the helper add it in
@@ -12929,7 +12994,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 		}
 
 		//Once we're here, we can add the function parameter in
-		add_function_parameter(type_symtab, function_record, parameter);
+		add_function_parameter(function_record, parameter);
 
 		//We made it here, so we've seen one more absolute number
 		absolute_parameter_number++;
@@ -12967,7 +13032,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 	 * on the given stack data area. This ensures that the overall size is going to be 8-byte
 	 * aligned, and that all of the padding if needed is present
 	 */
-	if(function_record->contains_stack_params == TRUE){
+	if(function_record->signature->internal_types.function_type->contains_stack_params == TRUE){
 		align_stack_data_area(&(function_record->stack_passed_parameters));
 	}
 
@@ -13224,9 +13289,11 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 		return print_and_return_error("Invalid return type given", parser_line_num);
 	}
 
-	//Otherwise, this is the return type
-	function_record->return_type = return_type;
-	function_record->signature->internal_types.function_type->return_type = return_type;
+	/**
+	 * Add the return type to the function. The helper takes care of any/all internal
+	 * bookkeeping that needs to be done for it
+	 */
+	add_return_type_to_signature(function_record->signature->internal_types.function_type, return_type);
 
 	//We can now optionally see the RAISES keyword
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -13260,7 +13327,6 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	//A null return means that we succeeded
 	return NULL;
 }
-
 
 
 /**
@@ -13438,6 +13504,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 
 		//We'll also flag that this is the current function
 		current_function = function_record;
+		current_function_signature = function_record->signature->internal_types.function_type;
 
 		/**
 		 * If this is the main function, we will record it as having been called by the operating 
@@ -13454,6 +13521,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		defining_predeclared_function = TRUE;
 		//Set this as well
 		current_function = function_record;
+		current_function_signature = function_record->signature->internal_types.function_type;
 
 		//Let's now check - if the is_public's don't match here, we can fail already
 		if(function_record->signature->internal_types.function_type->visibility == VISIBILITY_TYPE_PUBLIC && visibility == VISIBILITY_TYPE_PRIVATE){
@@ -13466,11 +13534,11 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		if(function_record->inlined == TRUE && is_inlined == FALSE){
+		if(current_function_signature->is_inlined == TRUE && is_inlined == FALSE){
 			sprintf(info, "Function \"%s\" was predeclared as inline. Please add the inline keyword to the declaration", function_record->func_name.string);
 			return print_and_return_error(info, parser_line_num);
 
-		} else if(function_record->inlined == FALSE && is_inlined == TRUE){
+		} else if(current_function_signature->is_inlined == FALSE && is_inlined == TRUE){
 			sprintf(info, "Function \"%s\" was not predeclared as inline. Please add the inline keyword to the forward declaration", function_record->func_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
@@ -13489,9 +13557,14 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	//Associate this with the function node
 	function_node->func_record = function_record;
 
-	//We'll need to initialize a new variable scope here. This variable scope is designed
-	//so that we include the function parameters in it. We need to remember to close
-	//this once we leave
+	//Extract the signature for ease of use
+	function_type_t* function_signature = function_record->signature->internal_types.function_type;
+
+	/**
+	 * We'll need to initialize a new variable scope here. This variable scope is designed
+	 * so that we include the function parameters in it. We need to remember to close
+	 * this once we leave
+	 */
 	initialize_variable_scope(variable_symtab);
 
 	/**
@@ -13500,9 +13573,11 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 */
 	top_level_function_variable_scope = variable_symtab->current;
 
-	//Now we must ensure that we see a valid parameter list. It is important to note that
-	//parameter lists can be empty, but whatever we have here we'll have to add in
-	//Parameter list parent is the function node
+	/**
+	 * Now we must ensure that we see a valid parameter list. It is important to note that
+	 * parameter lists can be empty, but whatever we have here we'll have to add in
+	 * Parameter list parent is the function node
+	 */
 	u_int8_t status = parameter_list(token_stream, function_record, defining_predeclared_function);
 
 	//We have a bad parameter list, we just fail out
@@ -13521,8 +13596,10 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		return print_and_return_error("Arrow(->) required after parameter-list in function", parser_line_num);
 	}
 
-	//Now if we get here, we must see a valid type specifier
-	//The type specifier rule already does existence checking for us
+	/**
+	 * Now if we get here, we must see a valid type specifier
+	 * The type specifier rule already does existence checking for us
+	 */
 	generic_type_t* return_type = type_specifier(token_stream);
 
 	//If we failed, bail out
@@ -13530,14 +13607,16 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		return print_and_return_error("Invalid return type given to function. All functions, even void ones, must have an explicit return type", parser_line_num);
 	}
 
-	//Grab the type record. A reference to this will be stored in the function symbol table. Make sure
-	//that we first dealias it
+	/**
+	 * Grab the type record. A reference to this will be stored in the function symbol table. Make sure
+	 * that we first dealias it
+	 */
 	generic_type_t* type = dealias_type(return_type);
 
 	//If we're defining a function that was previously implicit, the types have to match exactly
 	if(defining_predeclared_function == TRUE){
-		if(strcmp(type->type_name.string, function_record->return_type->type_name.string) != 0){
-			sprintf(info, "Function \"%s\" was predeclared with a return type of \"%s\", this may not be altered. First defined here:", function_name.string, function_record->return_type->type_name.string);
+		if(strcmp(type->type_name.string, function_signature->return_type->type_name.string) != 0){
+			sprintf(info, "Function \"%s\" was predeclared with a return type of \"%s\", this may not be altered. First defined here:", function_name.string, function_signature->return_type->type_name.string);
 			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			print_function_name(function_record);
 			num_errors++;
@@ -13545,14 +13624,24 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		}
 	}
 
-	//Store the return type
-	function_record->return_type = type;
+	/**
+	 * Store the return type inside of the function record *and* inside of the 
+	 * function's signature. The return type adder handles everything that
+	 * is needed for the internal bookkeeping
+	 */
+	add_return_type_to_signature(function_signature, type);
 
-	//Record whether or not it's a void type
-	function_record->signature->internal_types.function_type->returns_void = IS_VOID_TYPE(type);
-
-	//Store the return type as well
-	function_record->signature->internal_types.function_type->return_type = type;
+	/**
+	 * Since a returned-by-copy value will *always* have the memory address to copy to
+	 * passed into the function via %rdi, it is essential that we go through and update
+	 * the symtab_function_record here as well as all of the parameters. Edge case that
+	 * we are looking out for: if we had 6 GP params, now we have 7, and the last one
+	 * is pushed over the edge to be a stack param. We need to make the adjustment for all
+	 * of them, as well as for their function_parameter_order
+	 */
+	if(function_signature->returns_by_copy == TRUE){
+		remediate_return_by_copy_gp_parameter_order(function_record, function_signature);
+	}
 
 	//We can optionally see the raises keyword here
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -14147,8 +14236,11 @@ static inline u_int8_t validate_inlined_functions_are_non_recursive(function_sym
 
 			//Run through any collisions in the hashmap
 			while(cursor != NULL){
+				//Extract the signature from the cursor
+				function_type_t* cursor_signature = cursor->signature->internal_types.function_type;
+
 				//We only care if this is inlined(for now)
-				if(cursor->inlined == TRUE){
+				if(cursor_signature->is_inlined == TRUE){
 					//Is it recursive? use the helper
 					u_int8_t is_recursive = is_function_recursive(symtab, cursor);
 

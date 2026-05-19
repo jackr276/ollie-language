@@ -2745,6 +2745,58 @@ generic_type_t* create_function_pointer_type(visibilty_type_t visibility, u_int8
 
 
 /**
+ * Handle all of the bookkeeping needed when adding a return value to a function type. This includes
+ * the is_void_type flag, as well as anything that needs to happen if we are returning a stack
+ * passed return value
+ */
+void add_return_type_to_signature(function_type_t* signature, generic_type_t* return_type){
+	//If we've already added it then we're good to just move along
+	if(signature->return_type != NULL){
+		return;
+	}
+
+	//Flag whether or not it returns void and store the type
+	signature->returns_void = IS_VOID_TYPE(return_type);
+	signature->return_type = return_type;
+
+	switch(return_type->type_class){
+		/**
+		 * Struct and union types are *always* returned by copy. To 
+		 * represent a returned-by-copy value, the caller will always 
+		 * provide a pointer to the memory region where the value
+		 * will be copied to in the *caller's* stack frame. The
+		 * memory management is the *sole* responsibility of the
+		 * caller. We will flag that this function signature is going
+		 * to return by copy here
+		 */
+		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_UNION:
+			signature->returns_by_copy = TRUE;
+
+			/**
+			 * If we're already on the edge with stack params and we
+			 * have to add one more, we now do have stack params. Remember
+			 * that a return-by-copy value always has the address to write
+			 * to passed in via %rdi
+			 */
+			if(signature->general_purpose_param_count == MAX_GP_REGISTER_PASSED_PARAMS){
+				//This now *does* contain stack params, we pushed it over the edge
+				signature->contains_stack_params = TRUE;
+			}
+
+			//Bump this up - one more GP param
+			signature->general_purpose_param_count++;
+
+			break;
+			
+		//Anything else we don't care - do nothing
+		default:
+			break;
+	}
+}
+
+
+/**
  * Compute the operand type for a logical and/or operation. We perform floating point
  * coercion here. j
  */
