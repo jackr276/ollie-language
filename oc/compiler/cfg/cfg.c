@@ -503,7 +503,15 @@ static inline u_int32_t get_non_elaborative_parameter_count(function_type_t* fun
 		}
 	}
 
-	//TODO HERE
+	/**
+	 * If we return by copy, the address for the callee to coyp into will
+	 * be stored in %rdi. We need to bump the GP param count here for that
+	 */
+	if(function_type->returns_by_copy == TRUE){
+		printf("HERE\n");
+		count++;
+	}
+
 	return count;
 }
 
@@ -7495,8 +7503,37 @@ static inline void handle_parameter_storage(basic_block_t* basic_block, function
 											parameter_results_array_t* non_elaborative_parameter_results, stack_data_area_t* stack_passed_parameters,
 											dynamic_array_t* function_call_statement_parameters, instruction_t** first_assignment_instruction){
 	//Keep track of the indices for our specific counts. This will be important if we have to do stack-saving
+	u_int32_t index = 0;
 	u_int32_t current_sse_index = 1;
 	u_int32_t current_gp_index = 1;
+
+	/**
+	 * If we have a return by copy value, then the very first element in our array is going
+	 * to be that return by copy address. We will process that separately instead of trying
+	 * to force it into the normal processing
+	 */
+	if(signature->returns_by_copy == TRUE){
+		//Extract it
+		parameter_result_t* return_by_copy_result = get_result_at_index(non_elaborative_parameter_results, 0);
+
+		//Create a return variable and give it the gp index
+		three_addr_var_t* return_variable = emit_temp_var(signature->return_type);
+		return_variable->class_relative_parameter_order = current_gp_index;
+
+		//Assign over into the newly created return variable
+		instruction_t* assignment = emit_assignment_instruction(return_variable, return_by_copy_result->param_result.variable_result);
+
+		//Add it into the block
+		add_statement(basic_block, assignment);
+
+		//Bookkeeping if need be
+		if(*first_assignment_instruction == NULL){
+			*first_assignment_instruction = assignment;
+		}
+
+		//Bump this up
+		current_gp_index++;
+	}
 
 	//Now that we have all of this, we need to go through and emit our final assignments for the function calls themselves
 	for(u_int32_t i = 0; i < non_elaborative_parameter_results->current_index; i++){
