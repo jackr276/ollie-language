@@ -7493,9 +7493,20 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 static inline void handle_parameter_storage(basic_block_t* basic_block, function_type_t* signature,
 											parameter_results_array_t* non_elaborative_parameter_results, stack_data_area_t* stack_passed_parameters,
 											dynamic_array_t* function_call_statement_parameters, instruction_t** first_assignment_instruction){
+
+	//This is not always used - only in certain scenarios
+	stack_region_t* return_by_copy_region = NULL;
+
 	//Keep track of the indices for our specific counts. This will be important if we have to do stack-saving
 	u_int32_t current_sse_index = 1;
 	u_int32_t current_gp_index = 1;
+
+	/**
+	 * If we return by copy, then we need this stack region
+	 */
+	if(signature->returns_by_copy == TRUE){
+		return_by_copy_region = create_stack_region_for_type(&(current_function->local_stack), signature->return_type);
+	}
 
 	//Now that we have all of this, we need to go through and emit our final assignments for the function calls
 	//themselves
