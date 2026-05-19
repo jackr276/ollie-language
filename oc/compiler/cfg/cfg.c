@@ -7490,9 +7490,9 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
  * Handle all of the storage for regular, non-elaborative parameters. This method handles everything involved, including the minutia
  * around memory address and stack parameter saving
  */
-static inline void handle_parameter_storage(basic_block_t* basic_block, parameter_results_array_t* non_elaborative_parameter_results,
-												stack_data_area_t* stack_passed_parameters, function_type_t* signature,
-												dynamic_array_t* function_call_statement_parameters, instruction_t** first_assignment_instruction){
+static inline void handle_parameter_storage(basic_block_t* basic_block, function_type_t* signature,
+											parameter_results_array_t* non_elaborative_parameter_results, stack_data_area_t* stack_passed_parameters,
+											dynamic_array_t* function_call_statement_parameters, instruction_t** first_assignment_instruction){
 	//Keep track of the indices for our specific counts. This will be important if we have to do stack-saving
 	u_int32_t current_sse_index = 1;
 	u_int32_t current_gp_index = 1;
@@ -7925,22 +7925,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 			//May be NULL or not based on what we have as the return type
 			if(signature->returns_void == FALSE){
-				/**
-				 * For regular return types, we just need to emit a temp var
-				 * that holds said return type. For return by copy types(struct/union),
-				 * we need to emit a special variable that represents the return by
-				 * copy *and* give that variable a stack region
-				 */
-				if(signature->returns_by_copy == FALSE){
-					function_assignee = emit_temp_var(signature->return_type);
-
-				} else {
-					//Emit the return by copy var here
-					function_assignee = emit_return_by_copy_var(signature->return_type);
-
-					//This does have it's own stack region specifically inside of the local stack, *not* the parameter stack
-					function_assignee->associated_memory_region.stack_region = create_stack_region_for_type(&(current_function->local_stack), signature->return_type);
-				}
+				function_assignee = emit_temp_var(signature->return_type);
 			}
 
 			//We first need to emit the function pointer variable
@@ -7956,22 +7941,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 			//May be NULL or not based on what we have as the return type
 			if(signature->returns_void == FALSE){
-				/**
-				 * For regular return types, we just need to emit a temp var
-				 * that holds said return type. For return by copy types(struct/union),
-				 * we need to emit a special variable that represents the return by
-				 * copy *and* give that variable a stack region
-				 */
-				if(signature->returns_by_copy == FALSE){
-					function_assignee = emit_temp_var(signature->return_type);
-
-				} else {
-					//Emit the return by copy var here
-					function_assignee = emit_return_by_copy_var(signature->return_type);
-
-					//This does have it's own stack region specifically inside of the local stack, *not* the parameter stack
-					function_assignee->associated_memory_region.stack_region = create_stack_region_for_type(&(current_function->local_stack), signature->return_type);
-				}
+				function_assignee = emit_temp_var(signature->return_type);
 			}
 
 			//Now we can emit the direct call statement
@@ -8080,9 +8050,10 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 	/**
 	 * Now that we've emitted all of the parameters, we will let the helper deal with
-	 * the storage of them
+	 * the storage of them. This will also take care of setting up the stack region/parameter
+	 * assignment if we have a return by copy parameter
 	 */
-	handle_parameter_storage(current_block, &non_elaborative_parameter_results, &stack_passed_parameters, signature, &(function_call_statement->parameters), &first_assignment_instruction);
+	handle_parameter_storage(current_block, signature, &non_elaborative_parameter_results, &stack_passed_parameters, &(function_call_statement->parameters), &first_assignment_instruction);
 
 	/**
 	 * If we do have elaborative stack params to manage, we will do so here
@@ -11097,8 +11068,6 @@ static inline void finalize_all_user_defined_jump_statements(dynamic_array_t* us
  * are going to copy those values inside of this parameter setup. We do this because we don't want to be unnecessarily grabbing
  * values out of the stack over and over again if we can help it. For non-primitive types *or* types whose memory address we
  * take, this is going to be a different story
- *
- * TODO HERE RET VARIABLE FOR STACK RETURN
  */
 static inline void setup_function_parameters(symtab_function_record_t* function_record, basic_block_t* function_entry_block){
 	/**
