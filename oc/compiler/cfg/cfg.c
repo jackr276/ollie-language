@@ -8050,8 +8050,11 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	//Let's grab a param cursor for ourselves
 	generic_ast_node_t* param_cursor = function_call_node->first_child;
 
-	//If this isn't NULL, we have parameters
-	if(param_cursor != NULL){
+	/**
+	 * If the param cursor is not NULL *or* we have a return-by-copy
+	 * type that will use the function parameters, we need to allocate
+	 */
+	if(param_cursor != NULL || signature->returns_by_copy == TRUE){
 		function_call_statement->parameters = dynamic_array_alloc();
 	}
 
