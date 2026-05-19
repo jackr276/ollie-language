@@ -7505,7 +7505,34 @@ static inline void handle_parameter_storage(basic_block_t* basic_block, function
 	 * If we return by copy, then we need this stack region
 	 */
 	if(signature->returns_by_copy == TRUE){
+		//New region is needed
 		return_by_copy_region = create_stack_region_for_type(&(current_function->local_stack), signature->return_type);
+
+		//Emit the memory address var for the temp region
+		three_addr_var_t* return_by_copy_value = emit_memory_address_temp_var(signature->return_type, return_by_copy_region);
+
+		//Now the actual parameter. This will always end up in %rdi
+		three_addr_var_t* function_parameter = emit_temp_var(signature->return_type);
+
+		//Store the index so that it goes in %rsp
+		function_parameter->class_relative_parameter_order = current_gp_index;
+
+		//Emit the assignment
+		instruction_t* assignment_instruction = emit_assignment_instruction(function_parameter, return_by_copy_value);
+
+		//Get it in the block
+		add_statement(basic_block, assignment_instruction);
+
+		//Update the bookkeeping for the first assignment if need be
+		if(*first_assignment_instruction == NULL){
+			*first_assignment_instruction = assignment_instruction;
+		}
+
+		//Add this to the list of parameters
+		dynamic_array_add(function_call_statement_parameters, function_parameter);
+
+		//Bump the GP index up now that we've used one
+		current_gp_index++;
 	}
 
 	//Now that we have all of this, we need to go through and emit our final assignments for the function calls
