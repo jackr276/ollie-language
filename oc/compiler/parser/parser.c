@@ -162,6 +162,20 @@ static inline u_int8_t is_type_stack_passed_by_copy(generic_type_t* type){
 
 
 /**
+ * Is the given type returned by copy from a function? Stack and union
+ * types are eligible for this
+ */
+static inline u_int8_t is_type_returned_by_copy(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_UNION:
+		case TYPE_CLASS_STRUCT:	
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+/**
  * Does an enum list contain a given value for a member?
  */
 static inline u_int8_t does_enum_contain_integer_member(generic_type_t* enum_type, int32_t enum_member){
@@ -4078,6 +4092,8 @@ static u_int8_t is_unary_operator(ollie_token_t tok){
  * 								| --
  */
 static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, side_type_t side){
+	//For function call validation
+	function_type_t* function_signature;
 	//The lookahead token
 	lexitem_t lookahead;
 	//Is this assignable
@@ -4177,8 +4193,19 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 				 * Other items are completely ineligible
 				 */
 				case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
-					printf("TODO NOT IMPLEMENTED\n");
-					exit(1);
+					//Extract the function type from here
+					function_signature = cast_expr->variable->type_defined_as->internal_types.function_type;
+
+					/**
+					 * If this type is *not* returned by copy, then we can't be doing this
+					 * memory address here so we reject it
+					 */
+					if(is_type_returned_by_copy(function_signature->return_type) == FALSE){
+						return print_and_return_error("Invalid return value for address operator &", parser_line_num);
+					}
+
+					//Otherwise we are fine, just get out
+					break;
 
 				/**
 				 * For function calls, if we return the value by copy(i.e. structs and unions),
@@ -4186,14 +4213,25 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 				 * Other items are completely ineligible
 				 */
 				case AST_NODE_TYPE_FUNCTION_CALL:
-					printf("TODO NOT IMPLEMENTED\n");
-					exit(1);
+					//Extract the function type from here
+					function_signature = cast_expr->func_record->signature->internal_types.function_type;
+
+					/**
+					 * If this type is *not* returned by copy, then we can't be doing this
+					 * memory address here so we reject it
+					 */
+					if(is_type_returned_by_copy(function_signature->return_type) == FALSE){
+						return print_and_return_error("Invalid return value for address operator &", parser_line_num);
+					}
+
+					//Otherwise we are fine, just get out
+					break;
 
 				//And we can handle a postfix expression
 				case AST_NODE_TYPE_POSTFIX_EXPR:
 					//If this fails then we leave
 					if(is_postfix_expression_tree_address_eligible(cast_expr) == FALSE){
-						return print_and_return_error("Invalid address operation attempt", parser_line_num);
+						return print_and_return_error("Invalid return value for address operator &", parser_line_num);
 					}
 					break;
 				
