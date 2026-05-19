@@ -6136,8 +6136,10 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//And give back the final value
 			return unary_package;
 
-		//Handle the case of the address operator - this is a very unique case, we will not call the unary expression
-		//helper here, because we know that this must always be an identifier node
+		/**
+		 * Handle the case of the address operator - this is a very unique case, we will not call the unary expression
+		 * helper here, because we know that this must always be an identifier node
+		 */
 		case SINGLE_AND:
 			//Go based on the type here
 			switch(unary_expression_child->ast_node_type){
@@ -7923,7 +7925,22 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 			//May be NULL or not based on what we have as the return type
 			if(signature->returns_void == FALSE){
-				function_assignee = emit_temp_var(signature->return_type);
+				/**
+				 * For regular return types, we just need to emit a temp var
+				 * that holds said return type. For return by copy types(struct/union),
+				 * we need to emit a special variable that represents the return by
+				 * copy *and* give that variable a stack region
+				 */
+				if(signature->returns_by_copy == FALSE){
+					function_assignee = emit_temp_var(signature->return_type);
+
+				} else {
+					//Emit the return by copy var here
+					function_assignee = emit_return_by_copy_var(signature->return_type);
+
+					//This does have it's own stack region specifically inside of the local stack, *not* the parameter stack
+					function_assignee->associated_memory_region.stack_region = create_stack_region_for_type(&(current_function->local_stack), signature->return_type);
+				}
 			}
 
 			//We first need to emit the function pointer variable
@@ -7939,7 +7956,22 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 			//May be NULL or not based on what we have as the return type
 			if(signature->returns_void == FALSE){
-				function_assignee = emit_temp_var(signature->return_type);
+				/**
+				 * For regular return types, we just need to emit a temp var
+				 * that holds said return type. For return by copy types(struct/union),
+				 * we need to emit a special variable that represents the return by
+				 * copy *and* give that variable a stack region
+				 */
+				if(signature->returns_by_copy == FALSE){
+					function_assignee = emit_temp_var(signature->return_type);
+
+				} else {
+					//Emit the return by copy var here
+					function_assignee = emit_return_by_copy_var(signature->return_type);
+
+					//This does have it's own stack region specifically inside of the local stack, *not* the parameter stack
+					function_assignee->associated_memory_region.stack_region = create_stack_region_for_type(&(current_function->local_stack), signature->return_type);
+				}
 			}
 
 			//Now we can emit the direct call statement
