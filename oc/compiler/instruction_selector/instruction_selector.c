@@ -805,7 +805,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 	if(instruction->statement_type != THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET
 		&& instruction->statement_type != THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET){
 		//Extract the variable
-		symtab_variable_record_t* var = instruction->op1->linked_var;
+		symtab_variable_record_t* associated_variable = instruction->op1->linked_var;
 
 		/**
 		 * Special handling if this is a global variable. Global variables will generate 2 instructions on most occassions
@@ -814,8 +814,8 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 		 *
 		 * NOTE: since this is a global variable, it is impossible for a function parameter that is passed via the stack to get caught up in this
 		 */
-		if(var != NULL){
-			switch(var->membership){
+		if(associated_variable != NULL){
+			switch(associated_variable->membership){
 				case GLOBAL_VARIABLE:
 				case STATIC_VARIABLE:
 					switch(instruction->statement_type){
@@ -937,7 +937,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 * Extract the stack offset for our use. This will determine how 
 				 * we process things down below
 				 */
-				stack_offset = var->stack_region->function_local_base_address + additional_offset;
+				stack_offset = instruction->op1->associated_memory_region.stack_region->function_local_base_address + additional_offset;
 
 				//Go based on what kind of statement that we've got here
 				switch(instruction->statement_type){
@@ -1319,7 +1319,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 	 * because the memory address var that we are after is going to be in op2 regardless
 	 */
 	} else {
-		symtab_variable_record_t* var = instruction->op2->linked_var;
+		symtab_variable_record_t* associated_variable = instruction->op2->linked_var;
 
 		/**
 		 * Special handling if this is a global variable. Global variables will generate 2 instructions on most occassions
@@ -1328,8 +1328,8 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 		 *
 		 * NOTE: since this is a global variable, it is impossible for a function parameter that is passed via the stack to get caught up in this
 		 */
-		if(var != NULL){
-			switch(var->membership){
+		if(associated_variable != NULL){
+			switch(associated_variable->membership){
 				case GLOBAL_VARIABLE:
 				case STATIC_VARIABLE:
 					//Let the helper emit the statement
@@ -1364,7 +1364,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 * Extract the stack offset for our use. This will determine how 
 				 * we process things down below
 				 */
-				stack_offset = var->stack_region->function_local_base_address + additional_offset;
+				stack_offset = instruction->op2->associated_memory_region.stack_region->function_local_base_address + additional_offset;
 
 				//Make it a lea
 				if(stack_offset != 0){
