@@ -6187,6 +6187,17 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 					break;
 
+				/**
+				 * For function calls, there are some scenarios where we are able to take the memory address
+				 * of the return value. If a function returns a "return by copy" type - that being a struct 
+				 * or union, then it does have a memory address active that we can use. No extra
+				 * work is needed to actually use the memory address, we just need to assign it over
+				 */
+				case AST_NODE_TYPE_FUNCTION_CALL:
+				case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
+					printf("TODO NOT IMPLEMENTED\n");
+					exit(1);
+
 				//The other case here
 				case AST_NODE_TYPE_POSTFIX_EXPR:
 					//Set the deref flag to false so we don't deref

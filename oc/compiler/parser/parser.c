@@ -4171,8 +4171,23 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 
 					break;
 
-				//TOOD ADD FUNCTION RETURN ADDRESS IF NEED BE
+				/**
+				 * For indirect function calls, if we return the value by copy(i.e. structs and unions),
+				 * then we are able to take the memory address of these items.
+				 * Other items are completely ineligible
+				 */
+				case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
+					printf("TODO NOT IMPLEMENTED\n");
+					exit(1);
 
+				/**
+				 * For function calls, if we return the value by copy(i.e. structs and unions),
+				 * then we are able to take the memory address of these items.
+				 * Other items are completely ineligible
+				 */
+				case AST_NODE_TYPE_FUNCTION_CALL:
+					printf("TODO NOT IMPLEMENTED\n");
+					exit(1);
 
 				//And we can handle a postfix expression
 				case AST_NODE_TYPE_POSTFIX_EXPR:
