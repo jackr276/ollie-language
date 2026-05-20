@@ -9,9 +9,7 @@
 
 pub fn main() -> i32 {
 	let x:f32 = -0.0;
-	//Get the 1 in the x spot
-	let mask:i32 = 1 << 31;
 
 	OUNIT: [console = 1]
-	ret *(<i32*>(&x)) & mask;
+	ret (*(<u32*>(&x))) >> 31;
 }

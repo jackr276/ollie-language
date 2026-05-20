@@ -210,6 +210,22 @@ static inline three_addr_var_t* unpack_result_package(cfg_result_package_t* resu
 
 
 /**
+ * Is the given f32 negative? We need to use bit manipulation to deterine
+ * this because regular float equality will not detect cases like -0.0 == 0.0
+ */
+static inline u_int8_t is_f32_negative(float value){
+	//Get the float as an int without going through a conversion
+	u_int32_t float_as_int = *(u_int32_t*)(&value);
+
+	//We can extract the sign bit by getting MSB
+	u_int32_t sign_bit = (float_as_int >> 31);
+
+	return sign_bit == 1 ? TRUE : FALSE;
+}
+
+
+
+/**
  * Lea statements may only have: 1, 2, 4, or 8 as their scales
  * due to internal hardware constraints. This operation will find
  * if a given value is compatible
@@ -4139,9 +4155,10 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 			/**
 			 * For a floating point constant, if the value is 0 we can avoid all of this mess by emitting a PXOR clear
 			 * instruction on a variable. That will allow us to avoid emitting a constant here if we don't need to. Let's
-			 * first check if the constant value is 0 to see if that's a viable option
+			 * first check if the constant value is 0 to see if that's a viable option. We do *not* count -0.0 in this
+			 * because that would have the sign bit set
 			 */
-			if(constant_node->constant_value.float_value == 0.0f){
+			if(constant_node->constant_value.float_value == 0.0f && is_f32_negative(constant_node->constant_value.float_value) == FALSE){
 				//Emit a temp var for this value
 				three_addr_var_t* cleared_var = emit_temp_var(constant_node->inferred_type);
 
@@ -4196,6 +4213,10 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 
 		//For double constants, we need to emit the local constant equivalent via the helper
 		case DOUBLE_CONST:
+			if(constant_node->constant_value.float_value < 0){
+				printf("HERE\n");
+			}
+
 			/**
 			 * For a floating point constant, if the value is 0 we can avoid all of this mess by emitting a PXOR clear
 			 * instruction on a variable. That will allow us to avoid emitting a constant here if we don't need to. Let's
