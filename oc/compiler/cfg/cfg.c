@@ -224,6 +224,21 @@ static inline u_int8_t is_f32_negative(float value){
 }
 
 
+/**
+ * Is the given f64 negative? We need to use bit manipulation to deterine
+ * this because regular float equality will not detect cases like -0.0 == 0.0
+ */
+static inline u_int8_t is_f64_negative(double value){
+	//Get the double as a long without going through a conversion
+	u_int64_t double_as_long = *(u_int64_t*)(&value);
+
+	//We can extract the sign bit by getting MSB
+	u_int64_t sign_bit = (double_as_long >> 63);
+
+	return sign_bit == 1 ? TRUE : FALSE;
+}
+
+
 
 /**
  * Lea statements may only have: 1, 2, 4, or 8 as their scales
@@ -4213,16 +4228,14 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 
 		//For double constants, we need to emit the local constant equivalent via the helper
 		case DOUBLE_CONST:
-			if(constant_node->constant_value.float_value < 0){
-				printf("HERE\n");
-			}
-
 			/**
 			 * For a floating point constant, if the value is 0 we can avoid all of this mess by emitting a PXOR clear
 			 * instruction on a variable. That will allow us to avoid emitting a constant here if we don't need to. Let's
-			 * first check if the constant value is 0 to see if that's a viable option
+			 * first check if the constant value is 0 to see if that's a viable option. Note that if we have -0.0, it does
+			 * not count because -0.0 would still have the sign bit set, so doing a PXOR_CLEAR would not represent that
+			 * properly
 			 */
-			if(constant_node->constant_value.double_value == 0.0){
+			if(constant_node->constant_value.double_value == 0.0 && is_f64_negative(constant_node->constant_value.double_value) == FALSE){
 				//Emit a temp var for this value
 				three_addr_var_t* cleared_var = emit_temp_var(constant_node->inferred_type);
 
