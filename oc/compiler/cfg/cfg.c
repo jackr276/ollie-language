@@ -1371,9 +1371,6 @@ static void add_phi_statement(basic_block_t* target, instruction_t* phi_statemen
 		exit(1);
 	}
 
-	//This needs to match up for later processing
-	phi_statement->function = target->function_defined_in;
-
 	//Special case -- we're adding the head
 	if(target->leader_statement == NULL || target->exit_statement == NULL){
 		//Assign this to be the head and the tail
@@ -1426,9 +1423,6 @@ void add_statement(basic_block_t* target, instruction_t* statement_node){
 
 	//No matter what - we are adding a statement to this block
 	target->number_of_instructions++;
-
-	//Store the function as well
-	statement_node->function = target->function_defined_in;
 
 	//Special case--we're adding the head
 	if(target->leader_statement == NULL || target->exit_statement == NULL){

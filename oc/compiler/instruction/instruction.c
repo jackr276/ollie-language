@@ -150,9 +150,6 @@ void insert_instruction_before_given(instruction_t* insertee, instruction_t* giv
 	//The insertee is before the given, so its next is the given
 	insertee->next_statement = given;
 	given->previous_statement = insertee;
-
-	//Save the function as well
-	insertee->function = block->function_defined_in;
 }
 
 
@@ -187,9 +184,6 @@ void insert_instruction_after_given(instruction_t* insertee, instruction_t* give
 	} else {
 		block->exit_statement = insertee;
 	}
-
-	//Save the function as well
-	insertee->function = block->function_defined_in;
 }
 
 

@@ -2995,7 +2995,7 @@ static generic_type_t* get_largest_type_in_live_range(live_range_t* target){
 /**
  * Handle all source spilling that we need to do
  */
-static void handle_source_spill(dynamic_array_t* live_ranges, three_addr_var_t* target_source, live_range_t* spill_range, live_range_t** currently_spilled, instruction_t* target, u_int32_t offset){
+static void handle_source_spill(symtab_function_record_t* function, dynamic_array_t* live_ranges, three_addr_var_t* target_source, live_range_t* spill_range, live_range_t** currently_spilled, instruction_t* target, u_int32_t offset){
 	//Do we even need to bother here? If not, just leave
 	if(target_source == NULL || target_source->associated_live_range != spill_range){
 		return;
@@ -3008,7 +3008,7 @@ static void handle_source_spill(dynamic_array_t* live_ranges, three_addr_var_t* 
 		three_addr_var_t* dummy = emit_temp_var(target_source->type);
 
 		//Once we have the dummy, we can create the new LR
-		*currently_spilled = live_range_alloc(target->function, spill_range->live_range_class);
+		*currently_spilled = live_range_alloc(function, spill_range->live_range_class);
 
 		//Flag that this was once spilled
 		(*currently_spilled)->was_spilled = TRUE;
@@ -3121,7 +3121,7 @@ static void handle_constant_assignment_destination_spill(instruction_t* instruct
  * Handle all spilling for a given instruction. This includes source & destination
  * spilling
  */
-static instruction_t* handle_instruction_level_spilling(instruction_t* instruction, dynamic_array_t* live_ranges, live_range_t* spill_range, live_range_t** currently_spilled, stack_region_t* spill_region){
+static instruction_t* handle_instruction_level_spilling(symtab_function_record_t* function, instruction_t* instruction, dynamic_array_t* live_ranges, live_range_t* spill_range, live_range_t** currently_spilled, stack_region_t* spill_region){
 	/**
 	 * Optimization: if we have pure copy instructions where we have the source as
 	 * our spill range, we do not need to emit any extra instructions. All that we
@@ -3159,10 +3159,10 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
 	instruction_t* latest = instruction;
 
 	//Handle all source spills first
-	handle_source_spill(live_ranges, instruction->source_register, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
-	handle_source_spill(live_ranges, instruction->source_register2, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
-	handle_source_spill(live_ranges, instruction->address_calc_reg1, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
-	handle_source_spill(live_ranges, instruction->address_calc_reg2, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
+	handle_source_spill(function, live_ranges, instruction->source_register, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
+	handle_source_spill(function, live_ranges, instruction->source_register2, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
+	handle_source_spill(function, live_ranges, instruction->address_calc_reg1, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
+	handle_source_spill(function, live_ranges, instruction->address_calc_reg2, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
 
 	//Run through all function parameters
 	if(instruction->instruction_type != PHI_FUNCTION){
@@ -3175,7 +3175,7 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
 			three_addr_var_t* parameter = dynamic_array_get_at(&parameters, i);
 
 			//Invoke the helper
-			handle_source_spill(live_ranges, parameter, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
+			handle_source_spill(function, live_ranges, parameter, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
 		}
 	}
 
@@ -3193,7 +3193,7 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
 			//In this case, we need to handle a source spill and a destination store
 			if(is_destination_also_operand(instruction) == TRUE){
 				//Handle the source first
-				handle_source_spill(live_ranges, instruction->destination_register, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
+				handle_source_spill(function, live_ranges, instruction->destination_register, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
 
 				//Emit the store instruction for this now
 				handle_destination_spill(instruction->destination_register, instruction, spill_region->function_local_base_address);
@@ -3204,7 +3204,7 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
 			//In the case like this, we just need to emit the load
 			} else if(is_move_instruction_destination_assigned(instruction) == FALSE){
 				//Handle the source spill only
-				handle_source_spill(live_ranges, instruction->destination_register, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
+				handle_source_spill(function, live_ranges, instruction->destination_register, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
 
 			//In all other cases, we just have the store
 			} else {
@@ -3289,7 +3289,7 @@ static void spill_in_function(basic_block_t* function_entry_block, dynamic_array
 		//So long as this is not NULL, keep going
 		while(cursor != NULL){
 			//Let the helper deal with it
-			cursor = handle_instruction_level_spilling(cursor, live_ranges, spill_range, &currently_spilled, spill_region);
+			cursor = handle_instruction_level_spilling(function, cursor, live_ranges, spill_range, &currently_spilled, spill_region);
 
 			//Push it up to the next instruction
 			cursor = cursor->next_statement;

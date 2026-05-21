@@ -318,8 +318,7 @@ struct instruction_t{
 	union {
 		//Store inlined assembly in a string
 		dynamic_string_t inlined_assembly;
-		//The second error assignee for an errorable
-		//function
+		//The second error assignee for an errorable function
 		three_addr_var_t* error_assignee;
 		//Store the byte amount that we want to copy by
 		u_int64_t byte_amount_to_copy;
@@ -358,8 +357,6 @@ struct instruction_t{
 	symtab_function_record_t* called_function;
 	//The variable record
 	symtab_variable_record_t* var_record;
-	//What function are we currently in?
-	symtab_function_record_t* function;
 	//What is the three address code type
 	instruction_stmt_type_t statement_type;
 	//What is the x86-64 instruction
