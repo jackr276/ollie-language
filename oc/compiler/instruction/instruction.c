@@ -3862,11 +3862,22 @@ static void print_subtraction_instruction(FILE* fl, instruction_t* instruction, 
 			break;
 	}
 
-	//Print the appropriate variable here
-	if(instruction->source_register != NULL){
-		print_variable(fl, instruction->source_register, mode);
+	/**
+	 * Since subtraction instructions are eligible to be combined with
+	 * addressing modes, we will print out the addressing mode
+	 * here *if* we have a calculation mode other than none. Otherwise,
+	 * we will print everything out normally
+	 */
+	if(instruction->calculation_mode == ADDRESS_CALCULATION_MODE_NONE){
+		//Print the appropriate variable here
+		if(instruction->source_register != NULL){
+			print_variable(fl, instruction->source_register, mode);
+		} else {
+			print_immediate_value(fl, instruction->source_immediate);
+		}
+
 	} else {
-		print_immediate_value(fl, instruction->source_immediate);
+		print_addressing_mode_expression(fl, instruction,  mode);
 	}
 
 	//Needed comma
@@ -4952,6 +4963,8 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 			break;
 
+
+		//TODO MAKE IT'S OWN HELPER
 		case ADDSS:
 			fprintf(fl, "addss ");
 			print_variable(fl, instruction->source_register, mode);
@@ -4970,6 +4983,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 			break;
 
+		//TODO MAKE ITS OWN HELPER
 		case SUBSS:
 			fprintf(fl, "subss ");
 			print_variable(fl, instruction->source_register, mode);
@@ -4988,6 +5002,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 			break;
 
+		//TODO MAKE ITS OWN HELPER
 		case MULSS:
 			fprintf(fl, "mulss ");
 			print_variable(fl, instruction->source_register, mode);
@@ -5015,6 +5030,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 			break;
 
+		//TODO MAKE ITS OWN HELPER
 		case DIVSD:
 			fprintf(fl, "DIVSD ");
 			print_variable(fl, instruction->source_register, mode);
