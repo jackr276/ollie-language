@@ -7568,6 +7568,7 @@ static inline generic_type_t* get_destination_type_for_binary_operation_instruct
 			case CARROT:
 			case MOD:
 			case STAR:
+			case F_SLASH:
 				destination_type = instruction->assignee->type;
 				break;
 
@@ -9056,30 +9057,19 @@ static inline void handle_multiplication_instruction(instruction_window_t* windo
  * As such, this will generate additional instructions for us, making it not
  * a "single instruction" pattern
  *
+ * We already have the destination type by the time we get here so we pass it along
+ * as a parameter
+ *
  * NOTE: We guarantee that the instruction we're after is always the first
  * instruction in the window
- *
  */
-static void handle_signed_division(instruction_window_t* window){
+static void handle_signed_division(instruction_window_t* window, generic_type_t* destination_type){
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* division_instruction = window->instruction1;
 
 	//A temp holder for the final second source variable
 	three_addr_var_t* dividend;
 	three_addr_var_t* divisor;
-
-	//The destination type
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(division_instruction->type_storage.result_type != NULL){
-		destination_type = division_instruction->type_storage.result_type;
-	} else {
-		destination_type = division_instruction->assignee->type;
-	}
 
 	//If we need to convert, we'll do that here
 	if(is_converting_move_required(destination_type, division_instruction->op1->type) == TRUE){
@@ -9179,29 +9169,19 @@ static void handle_signed_division(instruction_window_t* window){
  * As such, this will generate additional instructions for us, making it not
  * a "single instruction" pattern
  *
+ * We already have the destination type by the time we get here, so we pass
+ * it along as a parameter
+ *
  * NOTE: We guarantee that the instruction we're after is always the first
  * instruction in the window
  */
-static void handle_unsigned_division(instruction_window_t* window){
+static void handle_unsigned_division(instruction_window_t* window, generic_type_t* destination_type){
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* division_instruction = window->instruction1;
 
 	//A temp holder for the final second source variable
 	three_addr_var_t* dividend;
 	three_addr_var_t* divisor;
-
-	//The destination type
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(division_instruction->type_storage.result_type != NULL){
-		destination_type = division_instruction->type_storage.result_type;
-	} else {
-		destination_type = division_instruction->assignee->type;
-	}
 
 	//If we need to convert, we'll do that here
 	if(is_converting_move_required(destination_type, division_instruction->op1->type) == TRUE){
@@ -9308,23 +9288,13 @@ static inline instruction_type_t select_sse_division_instruction(variable_size_t
  * Handle an SSE multiplication instruction. By the time we get here, we already
  * know that we're dealing with an SSE operation. This instruction will generate
  * converting moves if such moves are required
+ *
+ * We already have the destination type by the time we get here so we pass it along
+ * as a parameter
  */
-static void handle_sse_division_instruction(instruction_window_t* window){
+static void handle_sse_division_instruction(instruction_window_t* window, generic_type_t* destination_type){
 	//Grab out the first one
 	instruction_t* division_instruction = window->instruction1;
-
-	//This is the type that everything is targeting
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(division_instruction->type_storage.result_type != NULL){
-		destination_type = division_instruction->type_storage.result_type;
-	} else {
-		destination_type = division_instruction->assignee->type;
-	}
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -9415,20 +9385,11 @@ static void handle_sse_division_instruction(instruction_window_t* window){
  * we really want to be using
  */
 static inline void handle_division_instruction(instruction_window_t* window){
+	//Assume it is instruction 1 always
 	instruction_t* division_instruction = window->instruction1;
-	generic_type_t* destination_type = NULL;
 
-
-	//TODO SOMETHING HERE TOO
-	/**
-	 * If we are given a result type we *always* use that. Otherwise
-	 * we default to the assignee
-	 */
-	if(division_instruction->type_storage.result_type != NULL){
-		destination_type = division_instruction->type_storage.result_type;
-	} else {
-		destination_type = division_instruction->assignee->type;
-	}
+	//Grab the destination type from the helper
+	generic_type_t* destination_type = get_destination_type_for_binary_operation_instruction(division_instruction);
 
 	/**
 	 * To dispatch properly here - if we don't have a floating point
@@ -9439,13 +9400,13 @@ static inline void handle_division_instruction(instruction_window_t* window){
 		u_int8_t is_signed = is_type_signed(destination_type);
 
 		if(is_signed == TRUE){
-			handle_signed_division(window);
+			handle_signed_division(window, destination_type);
 		} else {
-			handle_unsigned_division(window);
+			handle_unsigned_division(window, destination_type);
 		}
 
 	} else {
-		handle_sse_division_instruction(window);
+		handle_sse_division_instruction(window, destination_type);
 	}
 }
 
