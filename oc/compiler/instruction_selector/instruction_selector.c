@@ -306,19 +306,33 @@ static inline u_int8_t is_binary_operation_capable_of_memory_source_argument(ins
 	 * if op2 needs a converting move
 	 */
 	generic_type_t* destination_type = get_destination_type_for_binary_operation_instruction(instruction);
-	
 
 	//Check 2: if op2 needs a converting move then we are out of here
 	if(is_converting_move_required(destination_type, instruction->op2->type) == TRUE){
 		printf("CONVERTING IS REQUIRED\n");
-	printf("DESTINATION TYPE %s\n", destination_type->type_name.string);
-	printf("OP2 TYPE %s\n", instruction->op2->type->type_name.string);
+		printf("DESTINATION TYPE %s\n", destination_type->type_name.string);
+		printf("OP2 TYPE %s\n", instruction->op2->type->type_name.string);
 		print_instruction_window_three_address_code(window);
 		return FALSE;
 	}
 
 	//If we survived to down here then we are all set
 	return TRUE;
+}
+
+
+/**
+ * Is the given load instruction going to require any kind of converting move between the 
+ * memory read/write type and the destination type? If so, we cannot use it for any
+ * kind of binary operation condensation optimization
+ */
+static inline u_int8_t does_load_operation_require_converting_move(instruction_t* instruction){
+	//Extract the region/destination type
+	generic_type_t* memory_region_type = instruction->type_storage.memory_read_write_type;
+	generic_type_t* destination_type = instruction->assignee->type;
+
+	//Give back whether or not the converting move is needed
+	return is_converting_move_required(destination_type, memory_region_type);
 }
 
 
@@ -4945,7 +4959,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& is_load_operation(window->instruction1) == TRUE
 		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE 
-		//This is a more costly check which is why it is last
+		//These are more costly checks which is why they are last
+		&& does_load_operation_require_converting_move(window->instruction1) == FALSE
 		&& is_binary_operation_capable_of_memory_source_argument(window->instruction2, window) == TRUE){
 
 		//Grab these two out for convenience
