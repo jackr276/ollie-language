@@ -4875,7 +4875,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE ){
 
-		printf("HERE\n\n\n");
+		//printf("HERE\n\n\n");
 	}
 
 
@@ -9966,6 +9966,28 @@ static inline instruction_type_t select_add_instruction(variable_size_t size){
 
 
 /**
+ * For binary operation instructions, we store their overall "destination type" inside of the "result_type" field.
+ * However, due to legacy implementations, this field is not always going to be populated. This special unpacker
+ * function here will contain all the logic for every kind of binary operation to unpack and return that field
+ */
+static inline generic_type_t* get_destination_type_for_binary_operation_instruction(instruction_t* instruction){
+	//First thing we do is default to using the type storage field
+	generic_type_t* destination_type = instruction->type_storage.result_type;
+
+	/**
+	 * If that ended up being NULL, now we'll have to go into our specific
+	 * decision logic based on what kind of binary operation it is
+	 */
+	if(destination_type == NULL){
+		//TODO
+		destination_type = instruction->assignee->type;
+	}
+
+	return destination_type;
+}
+
+
+/**
  * Handle an addition operation
  *
  * There are 2 varieties of addition instructions, we can split based on if
@@ -9988,18 +10010,8 @@ static void handle_addition_instruction(instruction_window_t* window){
 	//Grab out the first one
 	instruction_t* original_addition = window->instruction1;
 
-	//The destination type
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(original_addition->type_storage.result_type != NULL){
-		destination_type = original_addition->type_storage.result_type;
-	} else {
-		destination_type = original_addition->assignee->type;
-	}
+	//Let the helper unpack/decide what the destination type is
+	generic_type_t* destination_type = get_destination_type_for_binary_operation_instruction(original_addition);
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
