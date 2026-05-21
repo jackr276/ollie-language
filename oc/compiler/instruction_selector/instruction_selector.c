@@ -7567,6 +7567,7 @@ static inline generic_type_t* get_destination_type_for_binary_operation_instruct
 			case SINGLE_AND:
 			case CARROT:
 			case MOD:
+			case STAR:
 				destination_type = instruction->assignee->type;
 				break;
 
@@ -8635,6 +8636,8 @@ static inline void handle_modulus_instruction(instruction_window_t* window){
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* modulus_instruction = window->instruction1;
 
+
+	//TODO MAYBE ANOTHER HELPER HERE
 	//Is the type signed
 	u_int8_t is_signed;
 
@@ -8650,8 +8653,10 @@ static inline void handle_modulus_instruction(instruction_window_t* window){
 
 	//Dynamic dispatch based on what we need
 	if(is_signed == TRUE){
+		//TODO UPDATe
 		handle_signed_modulus(window);
 	} else {
+		//TODO UPDATE
 		handle_unsigned_modulus(window);
 	}
 }
@@ -8694,26 +8699,16 @@ static inline instruction_type_t select_unsigned_mulitplication_instruction(vari
  *
  * NOTE: this is always the first instruction in the instruction window
  *
+ * We've already determined the destination type when we did the dynamic dispatch into here,
+ * so we will pass that along as a parameter to avoid redoing work
+ *
  * An important note - since we use the one operand unsigned multiplication instruction, we
  * clobber the %rdx register whenever we do this. Even though we do not use it, this is 
  * something that we need to account for
 */
-static void handle_unsigned_multiplication_instruction(instruction_window_t* window){
+static void handle_unsigned_multiplication_instruction(instruction_window_t* window, generic_type_t* destination_type){
 	//Instruction 1 is the multiplication instruction
 	instruction_t* multiplication_instruction = window->instruction1;
-
-	//The destination type
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(multiplication_instruction->type_storage.result_type != NULL){
-		destination_type = multiplication_instruction->type_storage.result_type;
-	} else {
-		destination_type = multiplication_instruction->assignee->type;
-	}
 
 	//We'll need to know the variables size
 	variable_size_t size = get_type_size(destination_type);
@@ -8823,23 +8818,13 @@ static inline instruction_type_t select_signed_multiplication_instruction(variab
  * Handle a signed multiplication operation
  *
  * A multiplication operation can be different based on size and sign
+ *
+ * We've already determined the destination type by the time we get here, so we'll just pass that along
+ * as a second parameter
  */
-static void handle_signed_multiplication_instruction(instruction_window_t* window){
+static void handle_signed_multiplication_instruction(instruction_window_t* window, generic_type_t* destination_type){
 	//Grab out the first one
 	instruction_t* multiplication_instruction = window->instruction1;
-
-	//The actual destination type that we are after
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(multiplication_instruction->type_storage.result_type != NULL){
-		destination_type = multiplication_instruction->type_storage.result_type;
-	} else {
-		destination_type = multiplication_instruction->assignee->type;
-	}
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -8955,24 +8940,14 @@ static inline instruction_type_t select_sse_multiplication_instruction(variable_
  * know that we're dealing with an SSE operation. This instruction will generate
  * converting moves if such moves are required
  *
+ * We've already determine the result type by the time we get in here, so why not just use that? We pass
+ * that in as a second argument
+ *
  * NOTE: SSE multiplication instructions never contain constants
  */
-static void handle_sse_multiplication_instruction(instruction_window_t* window){
+static void handle_sse_multiplication_instruction(instruction_window_t* window, generic_type_t* destination_type){
 	//Grab out the first one
 	instruction_t* multiplication_instruction = window->instruction1;
-
-	//The destination type
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(multiplication_instruction->type_storage.result_type != NULL){
-		destination_type = multiplication_instruction->type_storage.result_type;
-	} else {
-		destination_type = multiplication_instruction->assignee->type;
-	}
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -9063,33 +9038,24 @@ static inline void handle_multiplication_instruction(instruction_window_t* windo
 	//We'll need to extract what our result actually is
 	instruction_t* multiplication_instruction = window->instruction1;
 
-	generic_type_t* result_type = NULL;
-
-	/**
-	 * If the result type is here, we'll use that. Otherwise we will default
-	 * to the assignee type
-	 */
-	if(multiplication_instruction->type_storage.result_type != NULL){
-		result_type = multiplication_instruction->type_storage.result_type;
-	} else {
-		result_type = multiplication_instruction->assignee->type;
-	}
+	//Let the helper extract the result type
+	generic_type_t* result_type = get_destination_type_for_binary_operation_instruction(multiplication_instruction);
 
 	switch(result_type->basic_type_token){
 		case F32:
 		case F64:
-			handle_sse_multiplication_instruction(window);
+			handle_sse_multiplication_instruction(window, result_type);
 			break;
 
 		case I8:
 		case I16:
 		case I32:
 		case I64:
-			handle_signed_multiplication_instruction(window);
+			handle_signed_multiplication_instruction(window, result_type);
 			break;
 
 		default:
-			handle_unsigned_multiplication_instruction(window);
+			handle_unsigned_multiplication_instruction(window, result_type);
 			break;
 	}
 }
@@ -9469,6 +9435,8 @@ static inline void handle_division_instruction(instruction_window_t* window){
 	instruction_t* division_instruction = window->instruction1;
 	generic_type_t* destination_type = NULL;
 
+
+	//TODO SOMETHING HERE TOO
 	/**
 	 * If we are given a result type we *always* use that. Otherwise
 	 * we default to the assignee
