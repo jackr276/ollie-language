@@ -7594,6 +7594,15 @@ static inline generic_type_t* get_destination_type_for_binary_operation_instruct
 
 				break;
 
+			/**
+			 * For logical and/or, we will be grabbing the *assignee* type if we are unable to determine the
+			 * destination type from the type storage field on the instruction
+			 */
+			case DOUBLE_AND:
+			case DOUBLE_OR:
+				destination_type = instruction->assignee->type;
+				break;
+
 			default:
 				fprintf(stderr, "Fatal interal compiler error: unrecognzied binary operatore in destination type determinator\n");
 				exit(1);
@@ -10208,19 +10217,8 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 	//Grab it out for convenience
 	instruction_t* logical_or = window->instruction1;
 
-	//The destination type
-	//TODO HERE
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(logical_or->type_storage.result_type != NULL){
-		destination_type = logical_or->type_storage.result_type;
-	} else {
-		destination_type = logical_or->assignee->type;
-	}
+	//Let the helper determine the destination type
+	generic_type_t* destination_type = get_destination_type_for_binary_operation_instruction(logical_or);
 
 	//Is this a floating point operation or not? This will determine how we handle things
 	u_int8_t is_floating_point = IS_FLOATING_POINT(destination_type);
@@ -10427,20 +10425,8 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 	//Grab it out for convenience
 	instruction_t* logical_and = window->instruction1;
 
-	//The destination type
-	//
-	//TODO HERE
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(logical_and->type_storage.result_type != NULL){
-		destination_type = logical_and->type_storage.result_type;
-	} else {
-		destination_type = logical_and->assignee->type;
-	}
+	//The destination type is determined by the helper
+	generic_type_t* destination_type = get_destination_type_for_binary_operation_instruction(logical_and);
 
 	/**
 	 * Create and insert converting moves if it is required for op1
