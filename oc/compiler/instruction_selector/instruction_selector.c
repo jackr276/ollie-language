@@ -8417,15 +8417,12 @@ static void handle_bitwise_exclusive_or_instruction(instruction_window_t* window
  * NOTE: We guarantee that the instruction we're after is always the first
  * instruction in the window
  */
-static inline void handle_signed_modulus(instruction_window_t* window){
+static inline void handle_signed_modulus(instruction_window_t* window, generic_type_t* result_type){
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* modulus_instruction = window->instruction1;
 
 	three_addr_var_t* dividend;
 	three_addr_var_t* divisor;
-
-	//Let the helper get the destination type for us
-	generic_type_t* result_type = get_destination_type_for_binary_operation_instruction(modulus_instruction);
 
 	//If we need to convert, we'll do that here
 	if(is_converting_move_required(result_type, modulus_instruction->op1->type) == TRUE){
@@ -8526,12 +8523,9 @@ static inline void handle_signed_modulus(instruction_window_t* window){
  * NOTE: We guarantee that the instruction we're after is always the first
  * instruction in the window
  */
-static inline void handle_unsigned_modulus(instruction_window_t* window){
+static inline void handle_unsigned_modulus(instruction_window_t* window, generic_type_t* result_type){
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* modulus_instruction = window->instruction1;
-
-	//Let the helper get the destination type for us
-	generic_type_t* result_type = get_destination_type_for_binary_operation_instruction(modulus_instruction);
 
 	three_addr_var_t* dividend;
 	three_addr_var_t* divisor;
@@ -8636,28 +8630,17 @@ static inline void handle_modulus_instruction(instruction_window_t* window){
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* modulus_instruction = window->instruction1;
 
+	//Determine the result type here
+	generic_type_t* result_type = get_destination_type_for_binary_operation_instruction(modulus_instruction);
 
-	//TODO MAYBE ANOTHER HELPER HERE
 	//Is the type signed
-	u_int8_t is_signed;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(modulus_instruction->type_storage.result_type != NULL){
-		 is_signed = is_type_signed(modulus_instruction->type_storage.result_type);
-	} else {
-		is_signed = is_type_signed(modulus_instruction->assignee->type);
-	}
+	u_int8_t is_signed = is_type_signed(result_type);
 
 	//Dynamic dispatch based on what we need
 	if(is_signed == TRUE){
-		//TODO UPDATe
-		handle_signed_modulus(window);
+		handle_signed_modulus(window, result_type);
 	} else {
-		//TODO UPDATE
-		handle_unsigned_modulus(window);
+		handle_unsigned_modulus(window, result_type);
 	}
 }
 
