@@ -189,6 +189,75 @@ static inline u_int8_t is_binary_operation_capable_of_memory_source_argument(ins
 
 
 /**
+ * For binary operation instructions, we store their overall "destination type" inside of the "result_type" field.
+ * However, due to legacy implementations, this field is not always going to be populated. This special unpacker
+ * function here will contain all the logic for every kind of binary operation to unpack and return that field
+ */
+static inline generic_type_t* get_destination_type_for_binary_operation_instruction(instruction_t* instruction){
+	//First thing we do is default to using the type storage field
+	generic_type_t* destination_type = instruction->type_storage.result_type;
+
+	/**
+	 * If that ended up being NULL, now we'll have to go into our specific
+	 * decision logic based on what kind of binary operation it is
+	 */
+	if(destination_type == NULL){
+		switch(instruction->op){
+			case PLUS:
+			case MINUS:
+			case L_SHIFT:
+			case R_SHIFT:
+			case SINGLE_OR:
+			case SINGLE_AND:
+			case CARROT:
+			case MOD:
+			case STAR:
+			case F_SLASH:
+				destination_type = instruction->assignee->type;
+				break;
+
+			/**
+			 * Relational operators follow a different pattern than above. We still
+			 * attempt to get the result type from the type storage, but if we cannot
+			 * find it, then we have to rely on a special helper to get the operand
+			 * type for a logical operation. Still this relies on acutal three address
+			 * variables, and if we don't have those, then we have to resort to exclusively
+			 * using the op1 type
+			 */
+			case L_THAN:
+			case G_THAN:
+			case L_THAN_OR_EQ:
+			case G_THAN_OR_EQ:
+			case DOUBLE_EQUALS:
+			case NOT_EQUALS:
+				if(instruction->op2 != NULL){
+					destination_type = get_operand_type_for_logical_operation(cfg_reference->type_symtab, instruction->op1->type, instruction->op2->type);
+				} else {
+					destination_type = instruction->op1->type;
+				}
+
+				break;
+
+			/**
+			 * For logical and/or, we will be grabbing the *assignee* type if we are unable to determine the
+			 * destination type from the type storage field on the instruction
+			 */
+			case DOUBLE_AND:
+			case DOUBLE_OR:
+				destination_type = instruction->assignee->type;
+				break;
+
+			default:
+				fprintf(stderr, "Fatal interal compiler error: unrecognzied binary operatore in destination type determinator\n");
+				exit(1);
+		}
+	}
+
+	return destination_type;
+}
+
+
+/**
  * Is this instruction going to be used to set condition codes? If so, we
  * don't want to accidentally value number the thing and remove it
  */
@@ -2782,14 +2851,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		three_addr_const_t* simplification_constant;
 
 		//We will also need the result type, especially for float determination
-		generic_type_t* result_type;
-
-		//If we have it stored then use that, otherwise use op1
-		if(binary_operation->type_storage.result_type != NULL){
-			result_type = binary_operation->type_storage.result_type;
-		} else {
-			result_type = binary_operation->op1->type;
-		}
+		generic_type_t* result_type = get_destination_type_for_binary_operation_instruction(binary_operation);
 
 		// The binary operation determines the optimization
 		switch(binary_operation->op){
@@ -3052,14 +3114,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		instruction_t* binary_operation = window->instruction2;
 
 		//Grab the result type out
-		generic_type_t* result_type;
-
-		//If we can find it great, otherwise just use op1
-		if(binary_operation->type_storage.result_type != NULL){
-			result_type = binary_operation->type_storage.result_type;
-		} else {
-			result_type = binary_operation->op1->type;
-		}
+		generic_type_t* result_type = get_destination_type_for_binary_operation_instruction(binary_operation);
 
 		/**
 		 * If the type here is actually compatible, then we can do this
@@ -3163,14 +3218,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		instruction_t* binary_operation = window->instruction3;
 
 		//Grab the result type out
-		generic_type_t* result_type;
-
-		//If we can find it great, otherwise just use op1
-		if(binary_operation->type_storage.result_type != NULL){
-			result_type = binary_operation->type_storage.result_type;
-		} else {
-			result_type = binary_operation->op1->type;
-		}
+		generic_type_t* result_type = get_destination_type_for_binary_operation_instruction(binary_operation);
 
 		/**
 		 * If the type here is actually compatible, then we can do this
@@ -3275,14 +3323,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		instruction_t* constant_operation = window->instruction2;
 
 		//Grab the result type out
-		generic_type_t* result_type;
-
-		//If we can find it great, otherwise just use op1
-		if(binary_operation->type_storage.result_type != NULL){
-			result_type = binary_operation->type_storage.result_type;
-		} else {
-			result_type = binary_operation->op1->type;
-		}
+		generic_type_t* result_type = get_destination_type_for_binary_operation_instruction(binary_operation);
 
 		/**
 		 * If we are lea compatible, we will convert
@@ -7546,74 +7587,6 @@ static inline u_int8_t is_type_valid_for_addition_to_lea_conversion(variable_siz
 
 
 /**
- * For binary operation instructions, we store their overall "destination type" inside of the "result_type" field.
- * However, due to legacy implementations, this field is not always going to be populated. This special unpacker
- * function here will contain all the logic for every kind of binary operation to unpack and return that field
- */
-static inline generic_type_t* get_destination_type_for_binary_operation_instruction(instruction_t* instruction){
-	//First thing we do is default to using the type storage field
-	generic_type_t* destination_type = instruction->type_storage.result_type;
-
-	/**
-	 * If that ended up being NULL, now we'll have to go into our specific
-	 * decision logic based on what kind of binary operation it is
-	 */
-	if(destination_type == NULL){
-		switch(instruction->op){
-			case PLUS:
-			case L_SHIFT:
-			case R_SHIFT:
-			case SINGLE_OR:
-			case SINGLE_AND:
-			case CARROT:
-			case MOD:
-			case STAR:
-			case F_SLASH:
-				destination_type = instruction->assignee->type;
-				break;
-
-			/**
-			 * Relational operators follow a different pattern than above. We still
-			 * attempt to get the result type from the type storage, but if we cannot
-			 * find it, then we have to rely on a special helper to get the operand
-			 * type for a logical operation. Still this relies on acutal three address
-			 * variables, and if we don't have those, then we have to resort to exclusively
-			 * using the op1 type
-			 */
-			case L_THAN:
-			case G_THAN:
-			case L_THAN_OR_EQ:
-			case G_THAN_OR_EQ:
-			case DOUBLE_EQUALS:
-			case NOT_EQUALS:
-				if(instruction->op2 != NULL){
-					destination_type = get_operand_type_for_logical_operation(cfg_reference->type_symtab, instruction->op1->type, instruction->op2->type);
-				} else {
-					destination_type = instruction->op1->type;
-				}
-
-				break;
-
-			/**
-			 * For logical and/or, we will be grabbing the *assignee* type if we are unable to determine the
-			 * destination type from the type storage field on the instruction
-			 */
-			case DOUBLE_AND:
-			case DOUBLE_OR:
-				destination_type = instruction->assignee->type;
-				break;
-
-			default:
-				fprintf(stderr, "Fatal interal compiler error: unrecognzied binary operatore in destination type determinator\n");
-				exit(1);
-		}
-	}
-
-	return destination_type;
-}
-
-
-/**
  * A very simple helper function that selects the right add instruction based
  * solely on variable size. Done to avoid code duplication
  */
@@ -9724,17 +9697,7 @@ static void handle_subtraction_instruction(instruction_window_t* window){
 	instruction_t* subtraction_instruction = window->instruction1;
 
 	//The destination type
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(subtraction_instruction->type_storage.result_type != NULL){
-		destination_type = subtraction_instruction->type_storage.result_type;
-	} else {
-		destination_type = subtraction_instruction->assignee->type;
-	}
+	generic_type_t* destination_type = get_destination_type_for_binary_operation_instruction(subtraction_instruction);
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
