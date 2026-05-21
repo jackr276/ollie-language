@@ -166,6 +166,10 @@ static void print_instruction_window(instruction_window_t* window){
  * TODO NOT COMPLETE
  */
 static inline u_int8_t is_binary_operation_capable_of_memory_source_argument(instruction_t* instruction){
+	if(instruction == NULL){
+		return FALSE;
+	}
+
 	switch(instruction->instruction_type){
 		case THREE_ADDR_CODE_BIN_OP_STMT:
 			switch(instruction->op){
@@ -4860,10 +4864,15 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	}
 
 
-	if(window->instruction2 != NULL
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
-		&& window->instruction2->op == PLUS
+	/**
+	 * ================================ Combining binary operations with loads =====================================
+	 * There are several binary operation instruction types in x86 that are eligible to have their source be a memory
+	 * read. Some examples are addition and subtraction. If we detect that we have such a binary operation here, we 
+	 * should combine the two equations into one.
+	 */
+	if(is_binary_operation_capable_of_memory_source_argument(window->instruction2) == TRUE
 		&& is_load_operation(window->instruction1) == TRUE
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE ){
 
 		printf("HERE\n\n\n");
