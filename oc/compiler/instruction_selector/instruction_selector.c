@@ -270,7 +270,7 @@ static inline u_int8_t does_instruction_set_condition_codes(instruction_t* instr
  *
  * TODO NOT COMPLETE
  */
-static inline u_int8_t is_binary_operation_capable_of_memory_source_argument(instruction_t* instruction, instruction_window_t* window){
+static inline u_int8_t is_binary_operation_capable_of_memory_source_argument(instruction_t* instruction){
 	if(instruction == NULL){
 		return FALSE;
 	}
@@ -299,20 +299,18 @@ static inline u_int8_t is_binary_operation_capable_of_memory_source_argument(ins
 	}
 
 	/**
-	 * Validation part 2: we know that we have a valid operator, but are the given
-	 * operand(s) valid? If we need to do any kind of converting moves before using
-	 * either operand, then this is not worth it to begin with. We will check this by using the helper
-	 * to determine the operator type for the binary operation, and then determining
-	 * if op2 needs a converting move
+	 * There is a possibility that we could have survived the load instruction optimization check, but still
+	 * have a converting move being set as required by the binary operation. Here's an example:
+	 *
+	 * t6(i16) <- load from i16 region
+	 * result(i32) <- t7(i32) + t6(i16)
+	 *
+	 * This will not be caught by our original check, and as such we need to check again here to make extra
+	 * sure. There is nothing that we could do to "fix" this for our optimization, we just have to skip
+	 * this(it's pretty rare anyways)
 	 */
 	generic_type_t* destination_type = get_destination_type_for_binary_operation_instruction(instruction);
-
-	//Check 2: if op2 needs a converting move then we are out of here
 	if(is_converting_move_required(destination_type, instruction->op2->type) == TRUE){
-		printf("CONVERTING IS REQUIRED\n");
-		printf("DESTINATION TYPE %s\n", destination_type->type_name.string);
-		printf("OP2 TYPE %s\n", instruction->op2->type->type_name.string);
-		print_instruction_window_three_address_code(window);
 		return FALSE;
 	}
 
@@ -4961,14 +4959,15 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE 
 		//These are more costly checks which is why they are last
 		&& does_load_operation_require_converting_move(window->instruction1) == FALSE
-		&& is_binary_operation_capable_of_memory_source_argument(window->instruction2, window) == TRUE){
+		&& is_binary_operation_capable_of_memory_source_argument(window->instruction2) == TRUE){
 
 		//Grab these two out for convenience
 		instruction_t* load_operation = window->instruction1;
 		instruction_t* binary_operation = window->instruction2;
 
 
-		//printf("HERE\n\n\n");
+		printf("HERE\n\n\n");
+		print_instruction_window_three_address_code(window);
 	}
 
 
