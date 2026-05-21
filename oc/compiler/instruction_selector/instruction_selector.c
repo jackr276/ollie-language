@@ -7563,6 +7563,10 @@ static inline generic_type_t* get_destination_type_for_binary_operation_instruct
 			case PLUS:
 			case L_SHIFT:
 			case R_SHIFT:
+			case SINGLE_OR:
+			case SINGLE_AND:
+			case CARROT:
+			case MOD:
 				destination_type = instruction->assignee->type;
 				break;
 
@@ -8041,17 +8045,7 @@ static void handle_bitwise_inclusive_or_instruction(instruction_window_t* window
 	instruction_t* bitwise_or = window->instruction1;
 
 	//The destination type
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(bitwise_or->type_storage.result_type != NULL){
-		destination_type = bitwise_or->type_storage.result_type;
-	} else {
-		destination_type = bitwise_or->assignee->type;
-	}
+	generic_type_t* destination_type = get_destination_type_for_binary_operation_instruction(bitwise_or);
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -8178,18 +8172,8 @@ static void handle_bitwise_and_instruction(instruction_window_t* window){
 	//Grab out the first one
 	instruction_t* bitwise_and = window->instruction1;
 
-	//The destination type
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(bitwise_and->type_storage.result_type != NULL){
-		destination_type = bitwise_and->type_storage.result_type;
-	} else {
-		destination_type = bitwise_and->assignee->type;
-	}
+	//Let the helper determine what the destination type is
+	generic_type_t* destination_type = get_destination_type_for_binary_operation_instruction(bitwise_and);
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -8317,18 +8301,8 @@ static void handle_bitwise_exclusive_or_instruction(instruction_window_t* window
 	//Grab out the first one
 	instruction_t* bitwise_xor = window->instruction1;
 
-	//The destination type
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(bitwise_xor->type_storage.result_type != NULL){
-		destination_type = bitwise_xor->type_storage.result_type;
-	} else {
-		destination_type = bitwise_xor->assignee->type;
-	}
+	//Let the helper determine the destination type
+	generic_type_t* destination_type = get_destination_type_for_binary_operation_instruction(bitwise_xor);
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -8449,18 +8423,8 @@ static inline void handle_signed_modulus(instruction_window_t* window){
 	three_addr_var_t* dividend;
 	three_addr_var_t* divisor;
 
-	//The destination type
-	generic_type_t* result_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(modulus_instruction->type_storage.result_type != NULL){
-		result_type = modulus_instruction->type_storage.result_type;
-	} else {
-		result_type = modulus_instruction->assignee->type;
-	}
+	//Let the helper get the destination type for us
+	generic_type_t* result_type = get_destination_type_for_binary_operation_instruction(modulus_instruction);
 
 	//If we need to convert, we'll do that here
 	if(is_converting_move_required(result_type, modulus_instruction->op1->type) == TRUE){
@@ -8565,18 +8529,8 @@ static inline void handle_unsigned_modulus(instruction_window_t* window){
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* modulus_instruction = window->instruction1;
 
-	//The destination type
-	generic_type_t* result_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(modulus_instruction->type_storage.result_type != NULL){
-		result_type = modulus_instruction->type_storage.result_type;
-	} else {
-		result_type = modulus_instruction->assignee->type;
-	}
+	//Let the helper get the destination type for us
+	generic_type_t* result_type = get_destination_type_for_binary_operation_instruction(modulus_instruction);
 
 	three_addr_var_t* dividend;
 	three_addr_var_t* divisor;
