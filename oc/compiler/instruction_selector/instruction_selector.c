@@ -159,34 +159,6 @@ static void print_instruction_window(instruction_window_t* window){
 	printf("-------------------------------------------\n");
 }
 
-/**
- * Is an instruction valid for a memory read source argument? Some examples
- * include add and sub instructions.
- *
- * TODO NOT COMPLETE
- */
-static inline u_int8_t is_binary_operation_capable_of_memory_source_argument(instruction_t* instruction){
-	if(instruction == NULL){
-		return FALSE;
-	}
-
-	switch(instruction->instruction_type){
-		case THREE_ADDR_CODE_BIN_OP_STMT:
-			switch(instruction->op){
-				case PLUS:
-				case MINUS:
-					return TRUE;
-				//TODO ELABORATE MORE
-				default:
-					return FALSE;
-			}
-
-		//Anything else is (for now) not eligible
-		default:
-			return FALSE;
-	}
-}
-
 
 /**
  * For binary operation instructions, we store their overall "destination type" inside of the "result_type" field.
@@ -289,6 +261,64 @@ static inline u_int8_t does_instruction_set_condition_codes(instruction_t* instr
 		default:
 			return FALSE;
 	}
+}
+
+
+/**
+ * Is an instruction valid for a memory read source argument? Some examples
+ * include add and sub instructions.
+ *
+ * TODO NOT COMPLETE
+ */
+static inline u_int8_t is_binary_operation_capable_of_memory_source_argument(instruction_t* instruction, instruction_window_t* window){
+	if(instruction == NULL){
+		return FALSE;
+	}
+
+	/**
+	 * Validation part 1: only certain binary operations are going to be valid for/worth bothering
+	 * with for this optimization. We will first weed out anything not worth dealing with here
+	 */
+	switch(instruction->instruction_type){
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+			switch(instruction->op){
+				//If something is eligible we break out into part 2 of validations
+				case PLUS:
+				case MINUS:
+					break;
+				//TODO ELABORATE MORE
+				default:
+					return FALSE;
+			}
+
+			break;
+
+		//Anything else is (for now) not eligible
+		default:
+			return FALSE;
+	}
+
+	/**
+	 * Validation part 2: we know that we have a valid operator, but are the given
+	 * operand(s) valid? If we need to do any kind of converting moves before using
+	 * either operand, then this is not worth it to begin with. We will check this by using the helper
+	 * to determine the operator type for the binary operation, and then determining
+	 * if op2 needs a converting move
+	 */
+	generic_type_t* destination_type = get_destination_type_for_binary_operation_instruction(instruction);
+	
+
+	//Check 2: if op2 needs a converting move then we are out of here
+	if(is_converting_move_required(destination_type, instruction->op2->type) == TRUE){
+		printf("CONVERTING IS REQUIRED\n");
+	printf("DESTINATION TYPE %s\n", destination_type->type_name.string);
+	printf("OP2 TYPE %s\n", instruction->op2->type->type_name.string);
+		print_instruction_window_three_address_code(window);
+		return FALSE;
+	}
+
+	//If we survived to down here then we are all set
+	return TRUE;
 }
 
 
@@ -4911,10 +4941,17 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * read. Some examples are addition and subtraction. If we detect that we have such a binary operation here, we 
 	 * should combine the two equations into one.
 	 */
-	if(is_binary_operation_capable_of_memory_source_argument(window->instruction2) == TRUE
+	if(is_instruction_binary_operation(window->instruction2) == TRUE
 		&& is_load_operation(window->instruction1) == TRUE
 		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE ){
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE 
+		//This is a more costly check which is why it is last
+		&& is_binary_operation_capable_of_memory_source_argument(window->instruction2, window) == TRUE){
+
+		//Grab these two out for convenience
+		instruction_t* load_operation = window->instruction1;
+		instruction_t* binary_operation = window->instruction2;
+
 
 		//printf("HERE\n\n\n");
 	}
