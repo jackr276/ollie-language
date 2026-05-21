@@ -7546,6 +7546,37 @@ static inline u_int8_t is_type_valid_for_addition_to_lea_conversion(variable_siz
 
 
 /**
+ * For binary operation instructions, we store their overall "destination type" inside of the "result_type" field.
+ * However, due to legacy implementations, this field is not always going to be populated. This special unpacker
+ * function here will contain all the logic for every kind of binary operation to unpack and return that field
+ */
+static inline generic_type_t* get_destination_type_for_binary_operation_instruction(instruction_t* instruction){
+	//First thing we do is default to using the type storage field
+	generic_type_t* destination_type = instruction->type_storage.result_type;
+
+	/**
+	 * If that ended up being NULL, now we'll have to go into our specific
+	 * decision logic based on what kind of binary operation it is
+	 */
+	if(destination_type == NULL){
+		switch(instruction->op){
+			case PLUS:
+			case L_SHIFT:
+			case R_SHIFT:
+				destination_type = instruction->assignee->type;
+				break;
+
+			default:
+				fprintf(stderr, "Fatal interal compiler error: unrecognzied binary operatore in destination type determinator\n");
+				exit(1);
+		}
+	}
+
+	return destination_type;
+}
+
+
+/**
  * A very simple helper function that selects the right add instruction based
  * solely on variable size. Done to avoid code duplication
  */
@@ -7659,18 +7690,8 @@ static void handle_left_shift_instruction(instruction_window_t* window){
 	//Get the actual left shift
 	instruction_t* left_shift_instruction = window->instruction1;
 
-	//The destination type
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(left_shift_instruction->type_storage.result_type != NULL){
-		destination_type = left_shift_instruction->type_storage.result_type;
-	} else {
-		destination_type = left_shift_instruction->assignee->type;
-	}
+	//Let the helper determine the destination type
+	generic_type_t* destination_type = get_destination_type_for_binary_operation_instruction(left_shift_instruction);
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -7851,18 +7872,8 @@ static void handle_right_shift_instruction(instruction_window_t* window){
 	//Get the actual right shift
 	instruction_t* right_shift_instruction = window->instruction1;
 
-	//The destination type
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(right_shift_instruction->type_storage.result_type != NULL){
-		destination_type = right_shift_instruction->type_storage.result_type;
-	} else {
-		destination_type = right_shift_instruction->assignee->type;
-	}
+	//Let the helper determine the destination type
+	generic_type_t* destination_type = get_destination_type_for_binary_operation_instruction(right_shift_instruction);
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -9962,28 +9973,6 @@ static inline instruction_type_t select_add_instruction(variable_size_t size){
 			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in add instruction\n");
 			exit(1);
 	}
-}
-
-
-/**
- * For binary operation instructions, we store their overall "destination type" inside of the "result_type" field.
- * However, due to legacy implementations, this field is not always going to be populated. This special unpacker
- * function here will contain all the logic for every kind of binary operation to unpack and return that field
- */
-static inline generic_type_t* get_destination_type_for_binary_operation_instruction(instruction_t* instruction){
-	//First thing we do is default to using the type storage field
-	generic_type_t* destination_type = instruction->type_storage.result_type;
-
-	/**
-	 * If that ended up being NULL, now we'll have to go into our specific
-	 * decision logic based on what kind of binary operation it is
-	 */
-	if(destination_type == NULL){
-		//TODO
-		destination_type = instruction->assignee->type;
-	}
-
-	return destination_type;
 }
 
 
