@@ -159,6 +159,30 @@ static void print_instruction_window(instruction_window_t* window){
 	printf("-------------------------------------------\n");
 }
 
+/**
+ * Is an instruction valid for a memory read source argument? Some examples
+ * include add and sub instructions.
+ *
+ * TODO NOT COMPLETE
+ */
+static inline u_int8_t is_binary_operation_capable_of_memory_source_argument(instruction_t* instruction){
+	switch(instruction->instruction_type){
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+			switch(instruction->op){
+				case PLUS:
+				case MINUS:
+					return TRUE;
+				//TODO ELABORATE MORE
+				default:
+					return FALSE;
+			}
+
+		//Anything else is (for now) not eligible
+		default:
+			return FALSE;
+	}
+}
+
 
 /**
  * Is this instruction going to be used to set condition codes? If so, we
@@ -4834,6 +4858,18 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		//Counts as a change
 		changed = TRUE;
 	}
+
+
+	if(window->instruction2 != NULL
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
+		&& window->instruction2->op == PLUS
+		&& is_load_operation(window->instruction1) == TRUE
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE ){
+
+		printf("HERE\n\n\n");
+	}
+
+
 
 	//Return whether or not we changed the block return changed;
 	return changed;
