@@ -7572,6 +7572,28 @@ static inline generic_type_t* get_destination_type_for_binary_operation_instruct
 				destination_type = instruction->assignee->type;
 				break;
 
+			/**
+			 * Relational operators follow a different pattern than above. We still
+			 * attempt to get the result type from the type storage, but if we cannot
+			 * find it, then we have to rely on a special helper to get the operand
+			 * type for a logical operation. Still this relies on acutal three address
+			 * variables, and if we don't have those, then we have to resort to exclusively
+			 * using the op1 type
+			 */
+			case L_THAN:
+			case G_THAN:
+			case L_THAN_OR_EQ:
+			case G_THAN_OR_EQ:
+			case DOUBLE_EQUALS:
+			case NOT_EQUALS:
+				if(instruction->op2 != NULL){
+					destination_type = get_operand_type_for_logical_operation(cfg_reference->type_symtab, instruction->op1->type, instruction->op2->type);
+				} else {
+					destination_type = instruction->op1->type;
+				}
+
+				break;
+
 			default:
 				fprintf(stderr, "Fatal interal compiler error: unrecognzied binary operatore in destination type determinator\n");
 				exit(1);
@@ -9525,24 +9547,7 @@ static void handle_cmp_instruction(instruction_window_t* window){
 	u_int8_t used_by_branch_only = instruction->assignee->sets_cc;
 
 	//Store the result type
-	generic_type_t* operator_type;
-
-	/**
-	 * If we have an operator type use that, otherwise we can find it out on the fly
-	 */
-	if(instruction->type_storage.result_type != NULL){
-		operator_type = instruction->type_storage.result_type;
-	} else {
-		/**
-		 * If we have 2 operands, we will find what they both go into. Otherwise
-		 * if we have a const we're just defaulting to the non-const
-		 */
-		if(instruction->op2 != NULL){
-			operator_type = get_operand_type_for_logical_operation(cfg_reference->type_symtab, instruction->op1->type, instruction->op2->type);
-		} else {
-			operator_type = instruction->op1->type;
-		}
-	}
+	generic_type_t* operator_type = get_destination_type_for_binary_operation_instruction(instruction);
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(operator_type);
@@ -10204,6 +10209,7 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 	instruction_t* logical_or = window->instruction1;
 
 	//The destination type
+	//TODO HERE
 	generic_type_t* destination_type;
 
 	/**
@@ -10422,6 +10428,8 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 	instruction_t* logical_and = window->instruction1;
 
 	//The destination type
+	//
+	//TODO HERE
 	generic_type_t* destination_type;
 
 	/**
