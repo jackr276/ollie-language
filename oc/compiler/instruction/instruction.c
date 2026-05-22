@@ -2430,7 +2430,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			//Then the constant offset
 			fprintf(fl, "["); 
 			//TODO JUST FOR NOW
-			print_three_addr_constant(fl, stmt->OIR_offset);
+			print_three_addr_constant(fl, stmt->operands.oir.addressing_mode_offset);
 			fprintf(fl, "] <- "); 
 
 			//Finally the storee(op2 or op1_const)
@@ -2501,7 +2501,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			//Then the constant offset
 			fprintf(fl, "["); 
 			//TODO JUST FOR NOW
-			print_three_addr_constant(fl, stmt->OIR_offset);
+			print_three_addr_constant(fl, stmt->operands.oir.addressing_mode_offset);
 			fprintf(fl, "]"); 
 
 			fprintf(fl, "\n");
@@ -5567,7 +5567,7 @@ instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_ad
 
 	//The offset placeholder is used for our offset, not op1_const 
 	//TODO WILL BE FIXED
-	stmt->OIR_offset = offset;
+	stmt->operands.oir.addressing_mode_offset = offset;
 
 	//What we're storing
 	stmt->op2 = storee;
@@ -5598,7 +5598,7 @@ instruction_t* emit_store_const_with_constant_offset_ir_code(three_addr_var_t* b
 
 	//The offset placeholder is used for our offset, not op1_const 
 	//TODO WILL BE FIXED
-	stmt->OIR_offset = offset;
+	stmt->operands.oir.addressing_mode_offset = offset;
 
 	//What we're storing
 	stmt->op1_const = storee;
@@ -5674,7 +5674,7 @@ instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee
 	stmt->op1 = base_address;
 
 	//Our offset is stored in "offset", not op1_const
-	stmt->OIR_offset = offset;
+	stmt->operands.oir.addressing_mode_offset = offset;
 
 	//Important - store the type that we expect to be getting out of memory
 	stmt->type_storage.memory_read_write_type = memory_read_type;
@@ -6212,7 +6212,7 @@ instruction_t* copy_instruction(instruction_t* copied){
 	copy->assignee = duplicate_variable(copied->assignee);
 	copy->op1 = duplicate_variable(copied->op1);
 	copy->op2 = duplicate_variable(copied->op2);
-	copy->OIR_offset = duplicate_constant(copied->OIR_offset);
+	copy->operands.oir.addressing_mode_offset = duplicate_constant(copied->operands.oir.addressing_mode_offset);
 	copy->op1_const = duplicate_constant(copied->op1_const);
 
 	//If we have function call parameters, emit a copy of them

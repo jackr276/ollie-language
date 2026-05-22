@@ -353,8 +353,6 @@ struct instruction_t{
 	three_addr_var_t* op2;
 	//For convenience: op1 can also be a const sometimes
 	three_addr_const_t* op1_const;
-	//TODO FOR NOW - we will scrap later
-	three_addr_const_t* OIR_offset;
 	three_addr_var_t* assignee;
 	//The RIP offset variable
 	three_addr_var_t* rip_offset_variable;

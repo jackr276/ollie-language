@@ -1564,8 +1564,7 @@ static instruction_t* clone_instruction(instruction_t* cloned, temporary_variabl
 	copy->assignee = clone_variable(cloned->assignee, mapping, mapping_current_index, mapping_max_size);
 	copy->op1 = clone_variable(cloned->op1, mapping, mapping_current_index, mapping_max_size);
 	copy->op2 = clone_variable(cloned->op2, mapping, mapping_current_index, mapping_max_size);
-	//TODO WILL BE FIXED
-	copy->OIR_offset = clone_constant(cloned->OIR_offset);
+	copy->operands.oir.addressing_mode_offset = clone_constant(cloned->operands.oir.addressing_mode_offset);
 	copy->op1_const = clone_constant(cloned->op1_const);
 
 	//If we have function call parameters, emit a copy of them
