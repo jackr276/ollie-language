@@ -6361,7 +6361,7 @@ static inline instruction_t* emit_sse_register_clear_instruction(three_addr_var_
 	instruction->instruction_type = PXOR_CLEAR;
 
 	//We just have something that we're clearing here
-	instruction->destination_register = target;
+	instruction->operands.x86.destination_register = target;
 
 	//Now give it back
 	return instruction;
@@ -6400,7 +6400,7 @@ static inline instruction_t* emit_gp_register_clear_instruction(three_addr_var_t
 			exit(1);
 	}
 	
-	instruction->destination_register = target;
+	instruction->operands.x86.destination_register = target;
 
 	return instruction;
 }
@@ -6658,8 +6658,8 @@ static inline instruction_t* emit_direct_xmm_xorpX_instruction(three_addr_var_t*
 
 	//Preselected means that this is happening at the selector level, so we will be
 	//populating destination/source slots off the bat
-	instruction->destination_register = destination;
-	instruction->source_register = source;
+	instruction->operands.x86.destination_register = destination;
+	instruction->operands.x86.source_register1 = source;
 
 	return instruction;
 }
@@ -6714,8 +6714,8 @@ static instruction_t* emit_and_insert_move_instruction(three_addr_var_t* destina
 				intermediate_destination = emit_temp_var(u32);
 
 				//We will go from the true source to the intermediary destination
-				intermediate_move->destination_register = intermediate_destination;
-				intermediate_move->source_register = true_source;
+				intermediate_move->operands.x86.destination_register = intermediate_destination;
+				intermediate_move->operands.x86.source_register1 = true_source;
 
 				//Let the helper get the converting move for us
 				intermediate_move->instruction_type = select_move_instruction(get_type_size(intermediate_destination->type), get_type_size(true_source->type), FALSE, ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
@@ -6753,8 +6753,8 @@ static instruction_t* emit_and_insert_move_instruction(three_addr_var_t* destina
 				intermediate_destination = emit_temp_var(i32);
 
 				//We will go from the true source to the intermediary destination
-				intermediate_move->destination_register = intermediate_destination;
-				intermediate_move->source_register = true_source;
+				intermediate_move->operands.x86.destination_register = intermediate_destination;
+				intermediate_move->operands.x86.source_register1 = true_source;
 
 				//Let the helper get the converting move for us
 				intermediate_move->instruction_type = select_move_instruction(get_type_size(intermediate_destination->type), get_type_size(true_source->type), TRUE, ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
@@ -6794,8 +6794,8 @@ static instruction_t* emit_and_insert_move_instruction(three_addr_var_t* destina
 	move_instruction->instruction_type = select_move_instruction(get_type_size(destination->type), get_type_size(true_source->type), is_type_signed(destination->type), ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
 
 	//Update the source/dest
-	move_instruction->source_register = true_source;
-	move_instruction->destination_register = destination;
+	move_instruction->operands.x86.source_register1 = true_source;
+	move_instruction->operands.x86.destination_register = destination;
 
 	//Now based on the insertion type we put this in
 	switch(insertion_order){
@@ -6855,8 +6855,8 @@ static instruction_t* emit_move_instruction(three_addr_var_t* destination, three
 	instruction->instruction_type = select_move_instruction(get_type_size(destination->type), get_type_size(source->type), is_type_signed(destination->type), ALIGNMENT_TYPE_DONT_CARE, NO_MEMORY_ACCESS);
 
 	//Finally we set the destination
-	instruction->destination_register = destination;
-	instruction->source_register = source;
+	instruction->operands.x86.destination_register = destination;
+	instruction->operands.x86.source_register1 = source;
 
 	//And now we'll give it back
 	return instruction;
@@ -6921,7 +6921,7 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 				insert_instruction_before_given(converting_move, instruction);
 
 				//Our real op1 is now where this one came from
-				op1 = converting_move->destination_register;
+				op1 = converting_move->operands.x86.destination_register;
 
 				break;
 
@@ -6937,7 +6937,7 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 				insert_instruction_before_given(converting_move, instruction);
 
 				//Our real op1 is now where this one came from
-				op1 = converting_move->destination_register;
+				op1 = converting_move->operands.x86.destination_register;
 
 				break;
 
@@ -6968,9 +6968,9 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 	}
 
 	//Set the sources and destinations
-	instruction->destination_register = instruction->assignee;
+	instruction->operands.x86.destination_register = instruction->assignee;
 	//We need to ensure that we're using the real op1 here
-	instruction->source_register = op1;
+	instruction->operands.x86.source_register1 = op1;
 }
 
 
@@ -7006,7 +7006,7 @@ instruction_t* emit_constant_move_instruction(three_addr_var_t* destination, thr
 	}
 
 	//Finally we set the destination
-	instruction->destination_register = destination;
+	instruction->operands.x86.destination_register = destination;
 	instruction->source_immediate = source;
 
 	//And now we'll give it back
@@ -7072,7 +7072,7 @@ static inline three_addr_var_t* create_and_insert_converting_move_instruction(in
 				insert_instruction_before_given(converting_move, after_instruction);
 
 				//Our real op1 is now where this one came from
-				source = converting_move->destination_register;
+				source = converting_move->operands.x86.destination_register;
 
 				break;
 
@@ -7087,7 +7087,7 @@ static inline three_addr_var_t* create_and_insert_converting_move_instruction(in
 				insert_instruction_before_given(converting_move, after_instruction);
 
 				//Our real op1 is now where this one came from
-				source = converting_move->destination_register;
+				source = converting_move->operands.x86.destination_register;
 
 				break;
 
@@ -7135,7 +7135,7 @@ static inline void insert_pxor_clear_if_needed(instruction_t* move_instruction){
 		 * We need to completely zero out the destination register here, so we will emit a pxor to do
 		 * just that. The destination register is our final output
 		 */
-		instruction_t* pxor_instruction = emit_sse_register_clear_instruction(move_instruction->destination_register);
+		instruction_t* pxor_instruction = emit_sse_register_clear_instruction(move_instruction->operands.x86.destination_register);
 
 		//Get this in right before the move instruction
 		insert_instruction_before_given(pxor_instruction, move_instruction);
@@ -7176,11 +7176,11 @@ static instruction_t* emit_conversion_instruction(three_addr_var_t* converted){
 
 	//The source register is the so-called "converted" register. In reality,
 	//this will always be %rax or a lower bit field in it
-	instruction->source_register = converted;
+	instruction->operands.x86.source_register1 = converted;
 
 	//There are 2 destinations here, it will always take the value in %rax and convert it to %rdx:%rax
-	instruction->destination_register = emit_temp_var(converted->type);
-	instruction->destination_register2 = emit_temp_var(converted->type);
+	instruction->operands.x86.destination_register = emit_temp_var(converted->type);
+	instruction->operands.x86.destination_register2 = emit_temp_var(converted->type);
 
 	//There are actually 2 destination registers here. They occupy RDX:RAX respectively
 
@@ -7202,7 +7202,7 @@ static inline instruction_t* emit_sete_instruction(three_addr_var_t* destination
 	instruction->instruction_type = SETE;
 
 	//Finally we set the destination
-	instruction->destination_register = destination;
+	instruction->operands.x86.destination_register = destination;
 
 	//And now we'll give it back
 	return instruction;
@@ -7228,7 +7228,7 @@ static inline instruction_t* emit_setne_instruction(three_addr_var_t* destinatio
 	instruction->op1 = relies_on;
 
 	//Finally we set the destination
-	instruction->destination_register = destination;
+	instruction->operands.x86.destination_register = destination;
 
 	//And now we'll give it back
 	return instruction;
@@ -7254,7 +7254,7 @@ static inline instruction_t* emit_setnp_instruction(three_addr_var_t* destinatio
 	instruction->op1 = relies_on;
 
 	//Finally we set the destination
-	instruction->destination_register = destination;
+	instruction->operands.x86.destination_register = destination;
 
 	//And now we'll give it back
 	return instruction;
@@ -7280,7 +7280,7 @@ static inline instruction_t* emit_setp_instruction(three_addr_var_t* destination
 	instruction->op1 = relies_on;
 
 	//Finally we set the destination
-	instruction->destination_register = destination;
+	instruction->operands.x86.destination_register = destination;
 
 	//And now we'll give it back
 	return instruction;
@@ -7316,8 +7316,8 @@ static inline instruction_t* emit_and_instruction(three_addr_var_t* destination,
 	}
 
 	//Finally we set the destination
-	instruction->destination_register = destination;
-	instruction->source_register = source;
+	instruction->operands.x86.destination_register = destination;
+	instruction->operands.x86.source_register1 = source;
 
 	//And now we'll give it back
 	return instruction;
@@ -7353,7 +7353,7 @@ static inline instruction_t* emit_and_with_constant_source_instruction(three_add
 	}
 
 	//Finally we set the destination
-	instruction->destination_register = destination;
+	instruction->operands.x86.destination_register = destination;
 	instruction->source_immediate = constant_source;
 
 	//And now we'll give it back
@@ -7390,8 +7390,8 @@ static instruction_t* emit_or_instruction(three_addr_var_t* destination, three_a
 	}
 
 	//Finally we set the destination
-	instruction->destination_register = destination;
-	instruction->source_register = source;
+	instruction->operands.x86.destination_register = destination;
+	instruction->operands.x86.source_register1 = source;
 
 	//And now we'll give it back
 	return instruction;
@@ -7451,16 +7451,16 @@ static instruction_t* emit_div_instruction(generic_type_t* destination_type, thr
 	}
 
 	//Finally we set the sources
-	instruction->source_register = divisor;
+	instruction->operands.x86.source_register1 = divisor;
 	//This implicit source is important for our uses in the register allocator
-	instruction->source_register2 = dividend;
+	instruction->operands.x86.source_register2 = dividend;
 	//We will use address calc reg 1 for this purpose
 	instruction->address_calc_reg1 = higher_order_dividend_bits;
 
 	//Quotient register
-	instruction->destination_register = emit_temp_var(destination_type);
+	instruction->operands.x86.destination_register = emit_temp_var(destination_type);
 	//Remainder register
-	instruction->destination_register2 = emit_temp_var(destination_type);
+	instruction->operands.x86.destination_register2 = emit_temp_var(destination_type);
 
 	//And now we'll give it back
 	return instruction;
@@ -7681,7 +7681,7 @@ static void handle_left_shift_instruction(instruction_window_t* window){
 			insert_instruction_before_given(copy_instruction, left_shift_instruction);
 
 			//Now our op2 is really this one's assignee
-			left_shift_instruction->op2 = copy_instruction->destination_register;
+			left_shift_instruction->op2 = copy_instruction->operands.x86.destination_register;
 		}
 	
 		//We will always emit the byte copy version of the source register here
@@ -7697,11 +7697,11 @@ static void handle_left_shift_instruction(instruction_window_t* window){
 	 */
 	if(variables_equal_no_ssa(left_shift_instruction->assignee, left_shift_instruction->op1, TRUE) == TRUE){
 		//Destination is the assignee
-		left_shift_instruction->destination_register = left_shift_instruction->assignee;
+		left_shift_instruction->operands.x86.destination_register = left_shift_instruction->assignee;
 
 		//Assign the source or the source immediate based on which we need
 		if(left_shift_instruction->op2 != NULL){
-			left_shift_instruction->source_register = left_shift_instruction->op2;
+			left_shift_instruction->operands.x86.source_register1 = left_shift_instruction->op2;
 		} else {
 			left_shift_instruction->source_immediate = left_shift_instruction->op1_const;
 		}
@@ -7734,21 +7734,21 @@ static void handle_left_shift_instruction(instruction_window_t* window){
 			insert_instruction_before_given(temp_assigment, left_shift_instruction);
 
 			//This now is op1
-			left_shift_instruction->op1 = temp_assigment->destination_register;
+			left_shift_instruction->op1 = temp_assigment->operands.x86.destination_register;
 		}
 
 		//The destination register is op1
-		left_shift_instruction->destination_register = left_shift_instruction->op1;
+		left_shift_instruction->operands.x86.destination_register = left_shift_instruction->op1;
 
 		//Assign the source or the source immediate based on which we need
 		if(left_shift_instruction->op2 != NULL){
-			left_shift_instruction->source_register = left_shift_instruction->op2;
+			left_shift_instruction->operands.x86.source_register1 = left_shift_instruction->op2;
 		} else {
 			left_shift_instruction->source_immediate = left_shift_instruction->op1_const;
 		}
 
 		//Move the destination register into the actual assignee now
-		instruction_t* assignment_instruction = emit_move_instruction(left_shift_instruction->assignee, left_shift_instruction->destination_register);
+		instruction_t* assignment_instruction = emit_move_instruction(left_shift_instruction->assignee, left_shift_instruction->operands.x86.destination_register);
 
 		//This goes in *after* the left shift 
 		insert_instruction_after_given(assignment_instruction, left_shift_instruction);
@@ -7873,7 +7873,7 @@ static void handle_right_shift_instruction(instruction_window_t* window){
 			insert_instruction_before_given(copy_instruction, right_shift_instruction);
 
 			//Now our op2 is really this one's assignee
-			right_shift_instruction->op2 = copy_instruction->destination_register;
+			right_shift_instruction->op2 = copy_instruction->operands.x86.destination_register;
 		}
 	
 		//We will always emit the byte copy version of the source register here
@@ -7889,11 +7889,11 @@ static void handle_right_shift_instruction(instruction_window_t* window){
 	 */
 	if(variables_equal_no_ssa(right_shift_instruction->assignee, right_shift_instruction->op1, TRUE) == TRUE){
 		//Destination is the assignee
-		right_shift_instruction->destination_register = right_shift_instruction->assignee;
+		right_shift_instruction->operands.x86.destination_register = right_shift_instruction->assignee;
 
 		//Assign the source or the source immediate based on which we need
 		if(right_shift_instruction->op2 != NULL){
-			right_shift_instruction->source_register = right_shift_instruction->op2;
+			right_shift_instruction->operands.x86.source_register1 = right_shift_instruction->op2;
 		} else {
 			right_shift_instruction->source_immediate = right_shift_instruction->op1_const;
 		}
@@ -7925,21 +7925,21 @@ static void handle_right_shift_instruction(instruction_window_t* window){
 			insert_instruction_before_given(temp_assigment, right_shift_instruction);
 
 			//This now is op1
-			right_shift_instruction->op1 = temp_assigment->destination_register;
+			right_shift_instruction->op1 = temp_assigment->operands.x86.destination_register;
 		}
 
 		//The destination register is op1
-		right_shift_instruction->destination_register = right_shift_instruction->op1;
+		right_shift_instruction->operands.x86.destination_register = right_shift_instruction->op1;
 
 		//Assign the source or the source immediate based on which we need
 		if(right_shift_instruction->op2 != NULL){
-			right_shift_instruction->source_register = right_shift_instruction->op2;
+			right_shift_instruction->operands.x86.source_register1 = right_shift_instruction->op2;
 		} else {
 			right_shift_instruction->source_immediate = right_shift_instruction->op1_const;
 		}
 
 		//Move the destination register into the actual assignee now
-		instruction_t* assignment_instruction = emit_move_instruction(right_shift_instruction->assignee, right_shift_instruction->destination_register);
+		instruction_t* assignment_instruction = emit_move_instruction(right_shift_instruction->assignee, right_shift_instruction->operands.x86.destination_register);
 
 		//This goes in *after* the right shift 
 		insert_instruction_after_given(assignment_instruction, right_shift_instruction);
@@ -8026,11 +8026,11 @@ static void handle_bitwise_inclusive_or_instruction(instruction_window_t* window
 	 */
 	if(variables_equal_no_ssa(bitwise_or->assignee, bitwise_or->op1, TRUE) == TRUE){
 		//Destination is just the assignee
-		bitwise_or->destination_register = bitwise_or->assignee;
+		bitwise_or->operands.x86.destination_register = bitwise_or->assignee;
 
 		//Assign the source or the source immediate based on which we need
 		if(bitwise_or->op2 != NULL){
-			bitwise_or->source_register = bitwise_or->op2;
+			bitwise_or->operands.x86.source_register1 = bitwise_or->op2;
 		} else {
 			bitwise_or->source_immediate = bitwise_or->op1_const;
 		}
@@ -8063,21 +8063,21 @@ static void handle_bitwise_inclusive_or_instruction(instruction_window_t* window
 			insert_instruction_before_given(temp_assigment, bitwise_or);
 
 			//This now is op1
-			bitwise_or->op1 = temp_assigment->destination_register;
+			bitwise_or->op1 = temp_assigment->operands.x86.destination_register;
 		}
 
 		//The destination register is op1
-		bitwise_or->destination_register = bitwise_or->op1;
+		bitwise_or->operands.x86.destination_register = bitwise_or->op1;
 
 		//Assign the source or the source immediate based on which we need
 		if(bitwise_or->op2 != NULL){
-			bitwise_or->source_register = bitwise_or->op2;
+			bitwise_or->operands.x86.source_register1 = bitwise_or->op2;
 		} else {
 			bitwise_or->source_immediate = bitwise_or->op1_const;
 		}
 
 		//Move the destination register into the actual assignee now
-		instruction_t* assignment_instruction = emit_move_instruction(bitwise_or->assignee, bitwise_or->destination_register);
+		instruction_t* assignment_instruction = emit_move_instruction(bitwise_or->assignee, bitwise_or->operands.x86.destination_register);
 
 		//This goes in *after* the bitwise or
 		insert_instruction_after_given(assignment_instruction, bitwise_or);
@@ -8164,11 +8164,11 @@ static void handle_bitwise_and_instruction(instruction_window_t* window){
 	 */
 	if(variables_equal_no_ssa(bitwise_and->assignee, bitwise_and->op1, TRUE) == TRUE){
 		//Destination is just the assignee
-		bitwise_and->destination_register = bitwise_and->assignee;
+		bitwise_and->operands.x86.destination_register = bitwise_and->assignee;
 
 		//Assign the source or the source immediate based on which we need
 		if(bitwise_and->op2 != NULL){
-			bitwise_and->source_register = bitwise_and->op2;
+			bitwise_and->operands.x86.source_register1 = bitwise_and->op2;
 		} else {
 			bitwise_and->source_immediate = bitwise_and->op1_const;
 		}
@@ -8202,21 +8202,21 @@ static void handle_bitwise_and_instruction(instruction_window_t* window){
 			insert_instruction_before_given(temp_assigment, bitwise_and);
 
 			//This now is op1
-			bitwise_and->op1 = temp_assigment->destination_register;
+			bitwise_and->op1 = temp_assigment->operands.x86.destination_register;
 		}
 
 		//The destination register is op1
-		bitwise_and->destination_register = bitwise_and->op1;
+		bitwise_and->operands.x86.destination_register = bitwise_and->op1;
 
 		//Assign the source or the source immediate based on which we need
 		if(bitwise_and->op2 != NULL){
-			bitwise_and->source_register = bitwise_and->op2;
+			bitwise_and->operands.x86.source_register1 = bitwise_and->op2;
 		} else {
 			bitwise_and->source_immediate = bitwise_and->op1_const;
 		}
 
 		//Move the destination register into the actual assignee now
-		instruction_t* assignment_instruction = emit_move_instruction(bitwise_and->assignee, bitwise_and->destination_register);
+		instruction_t* assignment_instruction = emit_move_instruction(bitwise_and->assignee, bitwise_and->operands.x86.destination_register);
 
 		//This goes in *after* the subtraction
 		insert_instruction_after_given(assignment_instruction, bitwise_and);
@@ -8303,11 +8303,11 @@ static void handle_bitwise_exclusive_or_instruction(instruction_window_t* window
 	 */
 	if(variables_equal_no_ssa(bitwise_xor->assignee, bitwise_xor->op1, TRUE) == TRUE){
 		//Destination is just the assignee
-		bitwise_xor->destination_register = bitwise_xor->assignee;
+		bitwise_xor->operands.x86.destination_register = bitwise_xor->assignee;
 
 		//Assign the source or the source immediate based on which we need
 		if(bitwise_xor->op2 != NULL){
-			bitwise_xor->source_register = bitwise_xor->op2;
+			bitwise_xor->operands.x86.source_register1 = bitwise_xor->op2;
 		} else {
 			bitwise_xor->source_immediate = bitwise_xor->op1_const;
 		}
@@ -8341,21 +8341,21 @@ static void handle_bitwise_exclusive_or_instruction(instruction_window_t* window
 			insert_instruction_before_given(temp_assigment, bitwise_xor);
 
 			//This now is op1
-			bitwise_xor->op1 = temp_assigment->destination_register;
+			bitwise_xor->op1 = temp_assigment->operands.x86.destination_register;
 		}
 
 		//The destination register is op1
-		bitwise_xor->destination_register = bitwise_xor->op1;
+		bitwise_xor->operands.x86.destination_register = bitwise_xor->op1;
 
 		//Assign the source or the source immediate based on which we need
 		if(bitwise_xor->op2 != NULL){
-			bitwise_xor->source_register = bitwise_xor->op2;
+			bitwise_xor->operands.x86.source_register1 = bitwise_xor->op2;
 		} else {
 			bitwise_xor->source_immediate = bitwise_xor->op1_const;
 		}
 
 		//Move the destination register into the actual assignee now
-		instruction_t* assignment_instruction = emit_move_instruction(bitwise_xor->assignee, bitwise_xor->destination_register);
+		instruction_t* assignment_instruction = emit_move_instruction(bitwise_xor->assignee, bitwise_xor->operands.x86.destination_register);
 
 		//This goes in *after* the subtraction
 		insert_instruction_after_given(assignment_instruction, bitwise_xor);
@@ -8420,7 +8420,7 @@ static inline void handle_signed_modulus(instruction_window_t* window){
 		insert_instruction_before_given(move_to_rax, modulus_instruction);
 
 		//This is just the destination register here
-		dividend = move_to_rax->destination_register;
+		dividend = move_to_rax->operands.x86.destination_register;
 	}
 
 	/**
@@ -8434,8 +8434,8 @@ static inline void handle_signed_modulus(instruction_window_t* window){
 	instruction_t* cl_instruction = emit_conversion_instruction(dividend);
 
 	//Store both here
-	dividend = cl_instruction->destination_register;
-	higher_order_dividend_bits = cl_instruction->destination_register2;
+	dividend = cl_instruction->operands.x86.destination_register;
+	higher_order_dividend_bits = cl_instruction->operands.x86.destination_register2;
 
 	//Insert this before the mod instruction
 	insert_instruction_before_given(cl_instruction, modulus_instruction);
@@ -8462,14 +8462,14 @@ static inline void handle_signed_modulus(instruction_window_t* window){
 		insert_instruction_before_given(constant_assignment, modulus_instruction);
 
 		//And this now is our divisor
-		divisor = constant_assignment->destination_register;
+		divisor = constant_assignment->operands.x86.destination_register;
 	}
 
 	//Now we should have what we need, so we can emit the division instruction
 	instruction_t* division = emit_div_instruction(result_type, divisor, dividend, higher_order_dividend_bits, TRUE);
 	
 	//Store the remainder register here
-	three_addr_var_t* remainder_register = division->destination_register2;
+	three_addr_var_t* remainder_register = division->operands.x86.destination_register2;
 
 	//Insert this before the original modulus
 	insert_instruction_before_given(division, modulus_instruction);
@@ -8539,7 +8539,7 @@ static inline void handle_unsigned_modulus(instruction_window_t* window){
 		insert_instruction_before_given(move_to_rax, modulus_instruction);
 
 		//This is just the destination register here
-		dividend = move_to_rax->destination_register;
+		dividend = move_to_rax->operands.x86.destination_register;
 	}
 
 	/**
@@ -8564,7 +8564,7 @@ static inline void handle_unsigned_modulus(instruction_window_t* window){
 		insert_instruction_before_given(constant_assignment, modulus_instruction);
 
 		//And this now is our divisor
-		divisor = constant_assignment->destination_register;
+		divisor = constant_assignment->operands.x86.destination_register;
 	}
 
 	/**
@@ -8584,7 +8584,7 @@ static inline void handle_unsigned_modulus(instruction_window_t* window){
 	instruction_t* division = emit_div_instruction(result_type, divisor, dividend, cleared_rdx, FALSE);
 	
 	//Store the remainder register here
-	three_addr_var_t* remainder_register = division->destination_register2;
+	three_addr_var_t* remainder_register = division->operands.x86.destination_register2;
 
 	//Insert this before the original modulus
 	insert_instruction_before_given(division, modulus_instruction);
@@ -8728,7 +8728,7 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 			insert_instruction_before_given(move_to_rax, multiplication_instruction);
 
 			//This is just the destination register here
-			source2 = move_to_rax->destination_register;
+			source2 = move_to_rax->operands.x86.destination_register;
 		}
 
 	//Otherwise, we have a BIN_OP_WITH_CONST statement. We're actually going to need a temp assignment for the second operand(the constant)
@@ -8741,7 +8741,7 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 		insert_instruction_before_given(move_to_rax, multiplication_instruction);
 
 		//Our source2 now is this
-		source2 = move_to_rax->destination_register;
+		source2 = move_to_rax->operands.x86.destination_register;
 	}
 
 	//Let's also check is any conversions are needed for the first source register
@@ -8757,21 +8757,21 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	multiplication_instruction->instruction_type = select_unsigned_mulitplication_instruction(size);
 
 	//This is the case where we have two source registers
-	multiplication_instruction->source_register = source;
+	multiplication_instruction->operands.x86.source_register1 = source;
 	//The other source register is in RAX
-	multiplication_instruction->source_register2 = source2;
+	multiplication_instruction->operands.x86.source_register2 = source2;
 
 	//This is the assignee, we just don't see it
-	multiplication_instruction->destination_register = emit_temp_var(destination_type);
+	multiplication_instruction->operands.x86.destination_register = emit_temp_var(destination_type);
 
 	/**
 	 * Populate the second destination register for clobbering. This will be updated
 	 * to be %rdx by the precolorer by the time we reach the register allocator
 	 */
-	multiplication_instruction->destination_register2 = emit_temp_var(destination_type);
+	multiplication_instruction->operands.x86.destination_register2 = emit_temp_var(destination_type);
 
 	//Once we've done all that, we need one final movement operation
-	instruction_t* result_movement = emit_move_instruction(multiplication_instruction->assignee, multiplication_instruction->destination_register);
+	instruction_t* result_movement = emit_move_instruction(multiplication_instruction->assignee, multiplication_instruction->operands.x86.destination_register);
 
 	//Insert the result movement instruction to be after the multiplication operation
 	insert_instruction_after_given(result_movement, multiplication_instruction);
@@ -8860,11 +8860,11 @@ static void handle_signed_multiplication_instruction(instruction_window_t* windo
 	 */
 	if(variables_equal_no_ssa(multiplication_instruction->assignee, multiplication_instruction->op1, TRUE) == TRUE){
 		//Destination is just the assignee
-		multiplication_instruction->destination_register = multiplication_instruction->assignee;
+		multiplication_instruction->operands.x86.destination_register = multiplication_instruction->assignee;
 
 		//Assign the source or the source immediate based on which we need
 		if(multiplication_instruction->op2 != NULL){
-			multiplication_instruction->source_register = multiplication_instruction->op2;
+			multiplication_instruction->operands.x86.source_register1 = multiplication_instruction->op2;
 		} else {
 			multiplication_instruction->source_immediate = multiplication_instruction->op1_const;
 		}
@@ -8897,21 +8897,21 @@ static void handle_signed_multiplication_instruction(instruction_window_t* windo
 			insert_instruction_before_given(temp_assigment, multiplication_instruction);
 
 			//This now is op1
-			multiplication_instruction->op1 = temp_assigment->destination_register;
+			multiplication_instruction->op1 = temp_assigment->operands.x86.destination_register;
 		}
 
 		//The destination register is op1
-		multiplication_instruction->destination_register = multiplication_instruction->op1;
+		multiplication_instruction->operands.x86.destination_register = multiplication_instruction->op1;
 
 		//Assign the source or the source immediate based on which we need
 		if(multiplication_instruction->op2 != NULL){
-			multiplication_instruction->source_register = multiplication_instruction->op2;
+			multiplication_instruction->operands.x86.source_register1 = multiplication_instruction->op2;
 		} else {
 			multiplication_instruction->source_immediate = multiplication_instruction->op1_const;
 		}
 
 		//Move the destination register into the actual assignee now
-		instruction_t* assignment_instruction = emit_move_instruction(multiplication_instruction->assignee, multiplication_instruction->destination_register);
+		instruction_t* assignment_instruction = emit_move_instruction(multiplication_instruction->assignee, multiplication_instruction->operands.x86.destination_register);
 
 		//This goes in *after* the multiplication
 		insert_instruction_after_given(assignment_instruction, multiplication_instruction);
@@ -8992,9 +8992,9 @@ static void handle_sse_multiplication_instruction(instruction_window_t* window){
 	 */
 	if(variables_equal_no_ssa(multiplication_instruction->assignee, multiplication_instruction->op1, TRUE) == TRUE){
 		//Destination is just the assignee
-		multiplication_instruction->destination_register = multiplication_instruction->assignee;
+		multiplication_instruction->operands.x86.destination_register = multiplication_instruction->assignee;
 		//This is always op2
-		multiplication_instruction->source_register = multiplication_instruction->op2;
+		multiplication_instruction->operands.x86.source_register1 = multiplication_instruction->op2;
 
 		//Rebuild around the instruction
 		reconstruct_window(window, multiplication_instruction);
@@ -9024,17 +9024,17 @@ static void handle_sse_multiplication_instruction(instruction_window_t* window){
 			insert_instruction_before_given(temp_assigment, multiplication_instruction);
 
 			//This now is op1
-			multiplication_instruction->op1 = temp_assigment->destination_register;
+			multiplication_instruction->op1 = temp_assigment->operands.x86.destination_register;
 		}
 
 		//The destination register is op1
-		multiplication_instruction->destination_register = multiplication_instruction->op1;
+		multiplication_instruction->operands.x86.destination_register = multiplication_instruction->op1;
 
 		//This is always the source register
-		multiplication_instruction->source_register = multiplication_instruction->op2;
+		multiplication_instruction->operands.x86.source_register1 = multiplication_instruction->op2;
 
 		//Move the destination register into the actual assignee now
-		instruction_t* assignment_instruction = emit_move_instruction(multiplication_instruction->assignee, multiplication_instruction->destination_register);
+		instruction_t* assignment_instruction = emit_move_instruction(multiplication_instruction->assignee, multiplication_instruction->operands.x86.destination_register);
 
 		//This goes in *after* the multiplication
 		insert_instruction_after_given(assignment_instruction, multiplication_instruction);
@@ -9136,7 +9136,7 @@ static void handle_signed_division(instruction_window_t* window){
 		insert_instruction_before_given(move_to_rax, division_instruction);
 
 		//This is just the destination register here
-		dividend = move_to_rax->destination_register;
+		dividend = move_to_rax->operands.x86.destination_register;
 	}
 
 	/**
@@ -9150,8 +9150,8 @@ static void handle_signed_division(instruction_window_t* window){
 	instruction_t* cl_instruction = emit_conversion_instruction(dividend);
 
 	//Capute both the lower and higher order bit fields
-	dividend = cl_instruction->destination_register;
-	higher_order_dividend_bits = cl_instruction->destination_register2;
+	dividend = cl_instruction->operands.x86.destination_register;
+	higher_order_dividend_bits = cl_instruction->operands.x86.destination_register2;
 
 	//Insert this before the given
 	insert_instruction_before_given(cl_instruction, division_instruction);
@@ -9179,14 +9179,14 @@ static void handle_signed_division(instruction_window_t* window){
 		insert_instruction_before_given(constant_move, division_instruction);
 
 		//This is the divisor now
-		divisor = constant_move->destination_register;
+		divisor = constant_move->operands.x86.destination_register;
 	}
 
 	//Now we should have what we need, so we can emit the division instruction
 	instruction_t* division = emit_div_instruction(destination_type, divisor, dividend, higher_order_dividend_bits, TRUE);
 
 	//The quotient is the destination register
-	three_addr_var_t* quotient = division->destination_register;
+	three_addr_var_t* quotient = division->operands.x86.destination_register;
 
 	//Insert this before the division instruction
 	insert_instruction_before_given(division, division_instruction);
@@ -9258,7 +9258,7 @@ static void handle_unsigned_division(instruction_window_t* window){
 		insert_instruction_before_given(move_to_rax, division_instruction);
 
 		//This is just the destination register here
-		dividend = move_to_rax->destination_register;
+		dividend = move_to_rax->operands.x86.destination_register;
 	}
 
 	/**
@@ -9284,7 +9284,7 @@ static void handle_unsigned_division(instruction_window_t* window){
 		insert_instruction_before_given(constant_move, division_instruction);
 
 		//This is the divisor now
-		divisor = constant_move->destination_register;
+		divisor = constant_move->operands.x86.destination_register;
 	}
 
 	/**
@@ -9304,7 +9304,7 @@ static void handle_unsigned_division(instruction_window_t* window){
 	instruction_t* division = emit_div_instruction(destination_type, divisor, dividend, cleared_rdx, FALSE);
 
 	//The quotient is the destination register
-	three_addr_var_t* quotient = division->destination_register;
+	three_addr_var_t* quotient = division->operands.x86.destination_register;
 
 	//Insert this before the division instruction
 	insert_instruction_before_given(division, division_instruction);
@@ -9395,9 +9395,9 @@ static void handle_sse_division_instruction(instruction_window_t* window){
 	 */
 	if(variables_equal_no_ssa(division_instruction->assignee, division_instruction->op1, TRUE) == TRUE){
 		//Destination is just the assignee
-		division_instruction->destination_register = division_instruction->assignee;
+		division_instruction->operands.x86.destination_register = division_instruction->assignee;
 		//This is always op2
-		division_instruction->source_register = division_instruction->op2;
+		division_instruction->operands.x86.source_register1 = division_instruction->op2;
 
 		//Rebuild around the instruction
 		reconstruct_window(window, division_instruction);
@@ -9428,17 +9428,17 @@ static void handle_sse_division_instruction(instruction_window_t* window){
 			insert_instruction_before_given(temp_assigment, division_instruction);
 
 			//This now is op1
-			division_instruction->op1 = temp_assigment->destination_register;
+			division_instruction->op1 = temp_assigment->operands.x86.destination_register;
 		}
 
 		//The destination register is op1
-		division_instruction->destination_register = division_instruction->op1;
+		division_instruction->operands.x86.destination_register = division_instruction->op1;
 
 		//This is always the source register
-		division_instruction->source_register = division_instruction->op2;
+		division_instruction->operands.x86.source_register1 = division_instruction->op2;
 
 		//Move the destination register into the actual assignee now
-		instruction_t* assignment_instruction = emit_move_instruction(division_instruction->assignee, division_instruction->destination_register);
+		instruction_t* assignment_instruction = emit_move_instruction(division_instruction->assignee, division_instruction->operands.x86.destination_register);
 
 		//This goes in *after* the multiplication
 		insert_instruction_after_given(assignment_instruction, division_instruction);
@@ -9540,7 +9540,7 @@ static inline instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//We'll need to give it the assignee
-	stmt->destination_register = destination_register;
+	stmt->operands.x86.destination_register = destination_register;
 
 	//What do we relie on
 	stmt->op1 = relies_on;
@@ -9567,10 +9567,10 @@ static inline instruction_t* emit_movd_instruction(three_addr_var_t* general_pur
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Give it the assignee
-	stmt->destination_register = general_purpose_destination;
+	stmt->operands.x86.destination_register = general_purpose_destination;
 
 	//And the operand
-	stmt->source_register = sse_source;
+	stmt->operands.x86.source_register1 = sse_source;
 
 	//Now set the instruction type
 	stmt->instruction_type = MOVD;
@@ -9647,11 +9647,11 @@ static void handle_cmp_instruction(instruction_window_t* window){
 		instruction->instruction_type = select_cmp_instruction(size);
 
 		//Move as needed
-		instruction->source_register = instruction->op1;
+		instruction->operands.x86.source_register1 = instruction->op1;
 
 		//If we have 
 		if(instruction->op2 != NULL){
-			instruction->source_register2 = instruction->op2;
+			instruction->operands.x86.source_register2 = instruction->op2;
 		} else {
 			instruction->source_immediate = instruction->op1_const;
 		}
@@ -9671,11 +9671,11 @@ static void handle_cmp_instruction(instruction_window_t* window){
 			instruction->instruction_type = select_cmp_instruction(size);
 
 			//Move as needed
-			instruction->source_register = instruction->op1;
+			instruction->operands.x86.source_register1 = instruction->op1;
 
 			//If we have 
 			if(instruction->op2 != NULL){
-				instruction->source_register2 = instruction->op2;
+				instruction->operands.x86.source_register2 = instruction->op2;
 			} else {
 				instruction->source_immediate = instruction->op1_const;
 			}
@@ -9688,7 +9688,7 @@ static void handle_cmp_instruction(instruction_window_t* window){
 			insert_instruction_after_given(set_instruction, instruction);
 
 			//Move from the set instruction's assignee to this instruction's assignee
-			instruction_t* final_move = emit_move_instruction(instruction->assignee, set_instruction->destination_register);
+			instruction_t* final_move = emit_move_instruction(instruction->assignee, set_instruction->operands.x86.destination_register);
 
 			//This final move goes right after the set instruction
 			insert_instruction_after_given(final_move, set_instruction);
@@ -9704,7 +9704,7 @@ static void handle_cmp_instruction(instruction_window_t* window){
 			instruction_t* copying_move = emit_move_instruction(emit_temp_var(instruction->op1->type), instruction->op1);
 
 			//Grab a reference to the duplicated version
-			three_addr_var_t* copied_op1 = copying_move->destination_register;
+			three_addr_var_t* copied_op1 = copying_move->operands.x86.destination_register;
 
 			//This copying move needs to go in before the cmp
 			insert_instruction_before_given(copying_move, instruction);
@@ -9727,9 +9727,9 @@ static void handle_cmp_instruction(instruction_window_t* window){
 
 			//Now let's assign the destination/source. Remember that it's essential to use the copied_op1 in the destination
 			//so that we don't run into any issues with registers being overwritten
-			instruction->destination_register = copied_op1;
+			instruction->operands.x86.destination_register = copied_op1;
 			//It is not possible for this to be a constant
-			instruction->source_register = instruction->op2;
+			instruction->operands.x86.source_register1 = instruction->op2;
 
 			//Now that we've done all that, we need to emit a move instruction that takes the copied op1 and puts it into
 			//a general purpose register(32 bit)
@@ -9829,11 +9829,11 @@ static void handle_subtraction_instruction(instruction_window_t* window){
 	 */
 	if(variables_equal_no_ssa(subtraction_instruction->assignee, subtraction_instruction->op1, TRUE) == TRUE){
 		//Destination is just the assignee
-		subtraction_instruction->destination_register = subtraction_instruction->assignee;
+		subtraction_instruction->operands.x86.destination_register = subtraction_instruction->assignee;
 
 		//Assign the source or the source immediate based on which we need
 		if(subtraction_instruction->op2 != NULL){
-			subtraction_instruction->source_register = subtraction_instruction->op2;
+			subtraction_instruction->operands.x86.source_register1 = subtraction_instruction->op2;
 		} else {
 			subtraction_instruction->source_immediate = subtraction_instruction->op1_const;
 		}
@@ -9866,21 +9866,21 @@ static void handle_subtraction_instruction(instruction_window_t* window){
 			insert_instruction_before_given(temp_assigment, subtraction_instruction);
 
 			//This now is op1
-			subtraction_instruction->op1 = temp_assigment->destination_register;
+			subtraction_instruction->op1 = temp_assigment->operands.x86.destination_register;
 		}
 
 		//The destination register is op1
-		subtraction_instruction->destination_register = subtraction_instruction->op1;
+		subtraction_instruction->operands.x86.destination_register = subtraction_instruction->op1;
 
 		//Assign the source or the source immediate based on which we need
 		if(subtraction_instruction->op2 != NULL){
-			subtraction_instruction->source_register = subtraction_instruction->op2;
+			subtraction_instruction->operands.x86.source_register1 = subtraction_instruction->op2;
 		} else {
 			subtraction_instruction->source_immediate = subtraction_instruction->op1_const;
 		}
 
 		//Move the destination register into the actual assignee now
-		instruction_t* assignment_instruction = emit_move_instruction(subtraction_instruction->assignee, subtraction_instruction->destination_register);
+		instruction_t* assignment_instruction = emit_move_instruction(subtraction_instruction->assignee, subtraction_instruction->operands.x86.destination_register);
 
 		//This goes in *after* the subtraction
 		insert_instruction_after_given(assignment_instruction, subtraction_instruction);
@@ -9983,11 +9983,11 @@ static void handle_addition_instruction(instruction_window_t* window){
 		//Get the appropriate add instuction
 		original_addition->instruction_type = select_add_instruction(size);
 
-		original_addition->destination_register = original_addition->assignee;
+		original_addition->operands.x86.destination_register = original_addition->assignee;
 
 		//Assign the source or the source immediate based on which we need
 		if(original_addition->op2 != NULL){
-			original_addition->source_register = original_addition->op2;
+			original_addition->operands.x86.source_register1 = original_addition->op2;
 		} else {
 			original_addition->source_immediate = original_addition->op1_const;
 		}
@@ -10033,7 +10033,7 @@ static void handle_addition_instruction(instruction_window_t* window){
 			three_addr_var_t* final_destination = original_addition->assignee;
 
 			//This is what the lea will point to
-			original_addition->destination_register = temp_destination;
+			original_addition->operands.x86.destination_register = temp_destination;
 
 			//Now we can emit the move
 			instruction_t* move_instruction = emit_move_instruction(final_destination, temp_destination);
@@ -10049,7 +10049,7 @@ static void handle_addition_instruction(instruction_window_t* window){
 
 		} else {
 			//We can just use the assignee directly
-			original_addition->destination_register = original_addition->assignee;
+			original_addition->operands.x86.destination_register = original_addition->assignee;
 
 			//Rebuilt the entire window around this
 			reconstruct_window(window, original_addition);
@@ -10082,21 +10082,21 @@ static void handle_addition_instruction(instruction_window_t* window){
 			insert_instruction_before_given(temp_assigment, original_addition);
 
 			//This now is op1
-			original_addition->op1 = temp_assigment->destination_register;
+			original_addition->op1 = temp_assigment->operands.x86.destination_register;
 		}
 
 		//The destination register is op1
-		original_addition->destination_register = original_addition->op1;
+		original_addition->operands.x86.destination_register = original_addition->op1;
 
 		//Assign the source or the source immediate based on which we need
 		if(original_addition->op2 != NULL){
-			original_addition->source_register = original_addition->op2;
+			original_addition->operands.x86.source_register1 = original_addition->op2;
 		} else {
 			original_addition->source_immediate = original_addition->op1_const;
 		}
 
 		//Move the destination register into the actual assignee now
-		instruction_t* assignment_instruction = emit_move_instruction(original_addition->assignee, original_addition->destination_register);
+		instruction_t* assignment_instruction = emit_move_instruction(original_addition->assignee, original_addition->operands.x86.destination_register);
 
 		//This goes in *after* the subtraction
 		insert_instruction_after_given(assignment_instruction, original_addition);
@@ -10150,8 +10150,8 @@ static inline instruction_t* emit_cmovX_instruction(three_addr_var_t* destinatio
 	}
 
 	//Assign these two over
-	instruction->source_register = source;
-	instruction->destination_register = destination_variable;
+	instruction->operands.x86.source_register1 = source;
+	instruction->operands.x86.destination_register = destination_variable;
 
 	//And give it back
 	return instruction;
@@ -10202,8 +10202,8 @@ static inline instruction_t* emit_float_comparison_instruction(three_addr_var_t*
 	}
 
 	//Add in both registers
-	comparison_instruction->source_register = source_register;
-	comparison_instruction->source_register2 = source_register2;
+	comparison_instruction->operands.x86.source_register1 = source_register;
+	comparison_instruction->operands.x86.source_register2 = source_register2;
 
 	//Emit a dummy temp var in the assignee for tracking reasons. This will not
 	//be used anywhere else
@@ -10247,8 +10247,8 @@ static inline instruction_t* emit_direct_test_instruction(three_addr_var_t* op1,
 	}
 
 	//Then we'll set op1 and op2 to be the source registers
-	instruction->source_register = op1;
-	instruction->source_register2 = op2;
+	instruction->operands.x86.source_register1 = op1;
+	instruction->operands.x86.source_register2 = op2;
 
 	//And now we'll give it back
 	return instruction;
@@ -10338,7 +10338,7 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 			insert_instruction_before_given(move_to_temp, logical_or);
 
 			//The op1 now is this one's destination 
-			logical_or->op1 = move_to_temp->destination_register;
+			logical_or->op1 = move_to_temp->operands.x86.destination_register;
 		}
 
 		//Save the after instruction
@@ -10363,7 +10363,7 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 		insert_instruction_before_given(setne_instruction, after_logical_or);
 
 		//Emit and insert our final move. Note that this function will handle
-		instruction_t* move_instruction = emit_and_insert_move_instruction(logical_or->assignee, setne_instruction->destination_register, after_logical_or, INSERTION_ORDER_BEFORE);
+		instruction_t* move_instruction = emit_and_insert_move_instruction(logical_or->assignee, setne_instruction->operands.x86.destination_register, after_logical_or, INSERTION_ORDER_BEFORE);
 
 		//Reconstruct the window starting at the movzbl
 		reconstruct_window(window, move_instruction);
@@ -10450,13 +10450,13 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 		insert_instruction_after_given(op2_conditional_move, op2_setp);
 
 		//Emit the loigcal or, the final result is in the op1_setp
-		instruction_t* final_or = emit_or_instruction(op1_setp->destination_register, op2_setp->destination_register);
+		instruction_t* final_or = emit_or_instruction(op1_setp->operands.x86.destination_register, op2_setp->operands.x86.destination_register);
 
 		//This goes after the conditional move
 		insert_instruction_after_given(final_or, op2_conditional_move);
 
 		//And we need one final assignment into the destination
-		instruction_t* final_assignment = emit_and_insert_move_instruction(logical_or->assignee, final_or->destination_register, final_or, INSERTION_ORDER_AFTER);
+		instruction_t* final_assignment = emit_and_insert_move_instruction(logical_or->assignee, final_or->operands.x86.destination_register, final_or, INSERTION_ORDER_AFTER);
 
 		//And after all of that, the logical or is now useless to us so we will scrap it
 		delete_statement(logical_or);
@@ -10595,7 +10595,7 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 			instruction_t* set_instruction = emit_setne_instruction(op1_result, logical_and->op1);
 
 			//IMPORTANT - flag that this depends on the source register
-			set_instruction->op1 = test_instruction->source_register;
+			set_instruction->op1 = test_instruction->operands.x86.source_register1;
 
 			//Insert these in order. The test comes first, then the set(relies on the flags from test)
 			insert_instruction_before_given(test_instruction, after_logical_and);
@@ -10623,7 +10623,7 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 			instruction_t* set_instruction = emit_setne_instruction(op2_result, logical_and->op1);
 
 			//IMPORTANT - flag that this depends on the source register
-			set_instruction->op1 = test_instruction->source_register;
+			set_instruction->op1 = test_instruction->operands.x86.source_register1;
 
 			//Insert these in order. The test comes first, then the set(relies on the flags from test)
 			insert_instruction_before_given(test_instruction, after_logical_and);
@@ -10644,7 +10644,7 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		insert_instruction_before_given(and_inst, after_logical_and);
 
 		//Now emit our final move. Let the helper do this in case we have converitng moves
-		instruction_t* move_instruction = emit_and_insert_move_instruction(logical_and->assignee, and_inst->destination_register, after_logical_and, INSERTION_ORDER_BEFORE);
+		instruction_t* move_instruction = emit_and_insert_move_instruction(logical_and->assignee, and_inst->operands.x86.destination_register, after_logical_and, INSERTION_ORDER_BEFORE);
 
 		//We no longer need the logical and statement
 		delete_statement(logical_and);
@@ -10734,13 +10734,13 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		insert_instruction_after_given(op2_conditional_move, op2_setp);
 
 		//Emit the loigcal and, the final result is in the op1_setp
-		instruction_t* final_and = emit_and_instruction(op1_setp->destination_register, op2_setp->destination_register);
+		instruction_t* final_and = emit_and_instruction(op1_setp->operands.x86.destination_register, op2_setp->operands.x86.destination_register);
 
 		//This goes after the conditional move
 		insert_instruction_after_given(final_and, op2_conditional_move);
 
 		//And we need one final assignment into the destination
-		instruction_t* final_assignment = emit_and_insert_move_instruction(logical_and->assignee, final_and->destination_register, final_and, INSERTION_ORDER_AFTER);
+		instruction_t* final_assignment = emit_and_insert_move_instruction(logical_and->assignee, final_and->operands.x86.destination_register, final_and, INSERTION_ORDER_AFTER);
 
 		//And after all of that, the logical and is now useless to us so we will scrap it
 		delete_statement(logical_and);
@@ -10870,10 +10870,10 @@ static void handle_inc_instruction(instruction_t* instruction){
 			break;
 	}
 
-	instruction->source_register = instruction->op1;
+	instruction->operands.x86.source_register1 = instruction->op1;
 
 	//Set the destination as the assignee
-	instruction->destination_register = instruction->assignee;
+	instruction->operands.x86.destination_register = instruction->assignee;
 }
 
 
@@ -10905,10 +10905,10 @@ static void handle_dec_instruction(instruction_t* instruction){
 			break;
 	}
 
-	instruction->source_register = instruction->op1;
+	instruction->operands.x86.source_register1 = instruction->op1;
 
 	//Set the destination as the assignee
-	instruction->destination_register = instruction->assignee;
+	instruction->operands.x86.destination_register = instruction->assignee;
 }
 
 
@@ -10940,7 +10940,7 @@ static void handle_constant_to_register_move_instruction(instruction_t* instruct
 	}
 	
 	//We've already set the sources, now we set the destination as the assignee
-	instruction->destination_register = instruction->assignee;
+	instruction->operands.x86.destination_register = instruction->assignee;
 	//Set the source immediate here
 	instruction->source_immediate = instruction->op1_const;
 }
@@ -10973,7 +10973,7 @@ static void handle_lea_statement(instruction_t* instruction){
 	}
 
 	//This is always the same
-	instruction->destination_register = instruction->assignee;
+	instruction->operands.x86.destination_register = instruction->assignee;
 
 	//Go based on whatever the type is
 	switch(instruction->lea_statement_type){
@@ -11140,7 +11140,7 @@ static inline void handle_ret_instruction(instruction_t* ret_instruction, symtab
 
 	//Assign the type and the source register
 	ret_instruction->instruction_type = RET;
-	ret_instruction->source_register = ret_instruction->op1;
+	ret_instruction->operands.x86.source_register1 = ret_instruction->op1;
 
 	/**
 	 * If this function could raise errors, we need to clear out the
@@ -11158,7 +11158,7 @@ static inline void handle_ret_instruction(instruction_t* ret_instruction, symtab
 		insert_instruction_before_given(clear_instruction, ret_instruction);
 
 		//We're going to flag this as the second source register so we can allocate it properly
-		ret_instruction->source_register2 = error_register;
+		ret_instruction->operands.x86.source_register2 = error_register;
 	}
 }
 
@@ -11174,7 +11174,7 @@ static inline void handle_raise_instruction(instruction_t* instruction){
 	instruction->instruction_type = RAISE_INSTRUCTION;
 	
 	//We are returning the value in %rdx(the error register)
-	instruction->source_register = instruction->op1;
+	instruction->operands.x86.source_register1 = instruction->op1;
 }
 
 
@@ -11409,10 +11409,10 @@ static inline void handle_function_call(instruction_t* instruction){
 	instruction->instruction_type = CALL;
 
 	//The destination register is itself the assignee
-	instruction->destination_register = instruction->assignee;
+	instruction->operands.x86.destination_register = instruction->assignee;
 
 	//Grab the error assignee if we have one(or it could be null)
-	instruction->destination_register2 = instruction->optional_storage.error_assignee;
+	instruction->operands.x86.destination_register2 = instruction->optional_storage.error_assignee;
 }
 
 
@@ -11424,13 +11424,13 @@ static inline void handle_indirect_function_call(instruction_t* instruction){
 	instruction->instruction_type = INDIRECT_CALL;
 
 	//In this case, the source register is the function name
-	instruction->source_register = instruction->op1;
+	instruction->operands.x86.source_register1 = instruction->op1;
 
 	//The destination register is itself the assignee
-	instruction->destination_register = instruction->assignee;
+	instruction->operands.x86.destination_register = instruction->assignee;
 
 	//Grab the error assignee if we have one(or it could be null)
-	instruction->destination_register2 = instruction->optional_storage.error_assignee;
+	instruction->operands.x86.destination_register2 = instruction->optional_storage.error_assignee;
 }
 
 
@@ -11612,7 +11612,7 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 
 
 			//Now we need the final conditional move
-			instruction_t* conditional_move_to_dest = emit_cmovX_instruction(cmovne_destination, zero_assignment->destination_register, NOT_EQUALS);
+			instruction_t* conditional_move_to_dest = emit_cmovX_instruction(cmovne_destination, zero_assignment->operands.x86.destination_register, NOT_EQUALS);
 
 			//And finally add this in after the zero assignment
 			insert_instruction_after_given(conditional_move_to_dest, first_move_to_dest);
@@ -11638,7 +11638,7 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 static inline void handle_setne_instruction(instruction_t* instruction){
 	//Just set the type and register
 	instruction->instruction_type = SETNE;
-	instruction->destination_register = instruction->assignee;
+	instruction->operands.x86.destination_register = instruction->assignee;
 }
 
 
@@ -11698,7 +11698,7 @@ static inline instruction_t* emit_local_constant_from_memory_load(generic_type_t
 	}
 
 	//Destination var is straightforward
-	instruction->destination_register = destination_variable;
+	instruction->operands.x86.destination_register = destination_variable;
 
 	//This will be a rip-relative address calculation
 	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
@@ -11811,8 +11811,8 @@ static void handle_negation_instruction(instruction_window_t* window){
 		}
 
 		//Now we'll just translate the assignee to be the destination(and source in this case) register
-		negation_instruction->source_register = negation_instruction->op1;
-		negation_instruction->destination_register = negation_instruction->assignee;
+		negation_instruction->operands.x86.source_register1 = negation_instruction->op1;
+		negation_instruction->operands.x86.destination_register = negation_instruction->assignee;
 
 	//Otherwise it is a floating point variable so we will need to do
 	//some extra work here
@@ -11855,7 +11855,7 @@ static void handle_negation_instruction(instruction_window_t* window){
 				local_constant_load_instruction = emit_local_constant_from_memory_load(f64, local_constant, TRUE);
 
 				//Emit the xorpd instruction that will do the actual bitflip
-				xorpX_instruction = emit_direct_xmm_xorpX_instruction(negation_instruction->assignee, local_constant_load_instruction->destination_register);
+				xorpX_instruction = emit_direct_xmm_xorpX_instruction(negation_instruction->assignee, local_constant_load_instruction->operands.x86.destination_register);
 
 				break;
 
@@ -11876,7 +11876,7 @@ static void handle_negation_instruction(instruction_window_t* window){
 				local_constant_load_instruction = emit_local_constant_from_memory_load(f32, local_constant, TRUE);
 
 				//Emit the xorpd instruction that will do the actual bitflip
-				xorpX_instruction = emit_direct_xmm_xorpX_instruction(negation_instruction->assignee, local_constant_load_instruction->destination_register);
+				xorpX_instruction = emit_direct_xmm_xorpX_instruction(negation_instruction->assignee, local_constant_load_instruction->operands.x86.destination_register);
 
 				break;
 
@@ -11926,7 +11926,7 @@ static inline void handle_not_instruction(instruction_t* instruction){
 	}
 
 	//Now we'll just translate the assignee to be the destination(and source in this case) register
-	instruction->destination_register = instruction->assignee;
+	instruction->operands.x86.destination_register = instruction->assignee;
 }
 
 
@@ -11939,7 +11939,7 @@ static inline void handle_pxor_clear_instruction(instruction_t* instruction){
 	instruction->instruction_type = PXOR_CLEAR;
 
 	//And the destination register is just the assignee
-	instruction->destination_register = instruction->assignee;
+	instruction->operands.x86.destination_register = instruction->assignee;
 }
 
 
@@ -11953,8 +11953,8 @@ static instruction_t* emit_register_movement_instruction_directly(three_addr_var
 	instruction_t* move_instruction = calloc(1, sizeof(instruction_t));
 
 	//We know what the source and destination are already
-	move_instruction->destination_register = destination_register;
-	move_instruction->source_register = source_register;
+	move_instruction->operands.x86.destination_register = destination_register;
+	move_instruction->operands.x86.source_register1 = source_register;
 
 	//Grab the types
 	generic_type_t* destination_type = destination_register->type;
@@ -12019,7 +12019,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 					duplicate_64_bit->variable_size = get_type_size(duplicate_64_bit->type);
 
 					//And this will be our source
-					store_instruction->source_register = duplicate_64_bit;
+					store_instruction->operands.x86.source_register1 = duplicate_64_bit;
 
 				/**
 				 * If we have a case where we are trying to move an 8/16 bit
@@ -12055,13 +12055,13 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 							insert_instruction_after_given(pxor_instruction, converting_move);
 
 							//Emit the second convervsion between to go from an i32 to a float
-							second_conversion = emit_move_instruction(type_adjusted_source, converting_move->destination_register);
+							second_conversion = emit_move_instruction(type_adjusted_source, converting_move->operands.x86.destination_register);
 
 							//Get this into the block
 							insert_instruction_before_given(second_conversion, store_instruction);
 
 							//Finally, the store's source will be this final source varialbe
-							store_instruction->source_register = second_conversion->destination_register;
+							store_instruction->operands.x86.source_register1 = second_conversion->operands.x86.destination_register;
 
 							//Once we're here the source type really is now the destination type
 							source_type = destination_type;
@@ -12089,13 +12089,13 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 							insert_instruction_after_given(pxor_instruction, converting_move);
 
 							//Emit the second convervsion between to go from an i32 to a float
-							second_conversion = emit_move_instruction(type_adjusted_source, converting_move->destination_register);
+							second_conversion = emit_move_instruction(type_adjusted_source, converting_move->operands.x86.destination_register);
 
 							//Get this into the block
 							insert_instruction_before_given(second_conversion, store_instruction);
 
 							//Finally, the store's source will be this final source varialbe
-							store_instruction->source_register = second_conversion->destination_register;
+							store_instruction->operands.x86.source_register1 = second_conversion->operands.x86.destination_register;
 
 							//Once we're here the source type really is now the destination type
 							source_type = destination_type;
@@ -12139,13 +12139,13 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 					source_type = destination_type;
 
 					//And the source register is the new source, not the old one
-					store_instruction->source_register = new_source;
+					store_instruction->operands.x86.source_register1 = new_source;
 
 				/**
 				 * In all other cases, we can just straight assign here
 				 */
 				} else {
-					store_instruction->source_register = store_instruction->op1;
+					store_instruction->operands.x86.source_register1 = store_instruction->op1;
 				}
 
 			//If we get here it's a plain copy
@@ -12181,7 +12181,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 					duplicate_64_bit->variable_size = get_type_size(duplicate_64_bit->type);
 
 					//And this will be our source
-					store_instruction->source_register = duplicate_64_bit;
+					store_instruction->operands.x86.source_register1 = duplicate_64_bit;
 
 				/**
 				 * If we have a case where we are trying to move an 8/16 bit
@@ -12217,13 +12217,13 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 							insert_instruction_after_given(pxor_instruction, converting_move);
 
 							//Emit the second convervsion between to go from an i32 to a float
-							second_conversion = emit_move_instruction(type_adjusted_source, converting_move->destination_register);
+							second_conversion = emit_move_instruction(type_adjusted_source, converting_move->operands.x86.destination_register);
 
 							//Get this into the block
 							insert_instruction_before_given(second_conversion, store_instruction);
 
 							//Finally, the store's source will be this final source varialbe
-							store_instruction->source_register = second_conversion->destination_register;
+							store_instruction->operands.x86.source_register1 = second_conversion->operands.x86.destination_register;
 
 							//Once we're here the source type really is now the destination type
 							source_type = destination_type;
@@ -12251,13 +12251,13 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 							insert_instruction_after_given(pxor_instruction, converting_move);
 
 							//Emit the second convervsion between to go from an i32 to a float
-							second_conversion = emit_move_instruction(type_adjusted_source, converting_move->destination_register);
+							second_conversion = emit_move_instruction(type_adjusted_source, converting_move->operands.x86.destination_register);
 
 							//Get this into the block
 							insert_instruction_before_given(second_conversion, store_instruction);
 
 							//Finally, the store's source will be this final source varialbe
-							store_instruction->source_register = second_conversion->destination_register;
+							store_instruction->operands.x86.source_register1 = second_conversion->operands.x86.destination_register;
 
 							//Once we're here the source type really is now the destination type
 							source_type = destination_type;
@@ -12302,13 +12302,13 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 					source_type = destination_type;
 
 					//And the source register is the new source, not the old one
-					store_instruction->source_register = new_source;
+					store_instruction->operands.x86.source_register1 = new_source;
 
 				/**
 				 * In all other cases, we can just straight assign here
 				 */
 				} else {
-					store_instruction->source_register = store_instruction->op2;
+					store_instruction->operands.x86.source_register1 = store_instruction->op2;
 				}
 
 			} else {
@@ -12339,7 +12339,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 	switch(store_instruction->calculation_mode){
 		case ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST:
 			//If this is the stack pointer then we can guarantee alignmetn
-			if(store_instruction->destination_register == stack_pointer_variable){
+			if(store_instruction->operands.x86.destination_register == stack_pointer_variable){
 				destination_alignment = ALIGNMENT_TYPE_GUARANTEED;
 			} else {
 				destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
@@ -12424,7 +12424,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 	switch(load_instruction->calculation_mode){
 		case ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE:
 			//If this is the stack pointer then we can guarantee alignment
-			if(load_instruction->source_register == stack_pointer_variable){
+			if(load_instruction->operands.x86.source_register1 == stack_pointer_variable){
 				source_region_alignment = ALIGNMENT_TYPE_GUARANTEED;
 			} else {
 				source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
@@ -12481,7 +12481,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 		type_adjusted_destination->variable_size = get_type_size(type_adjusted_destination->type);
 
 		//This is the true destination now
-		load_instruction->destination_register = type_adjusted_destination;
+		load_instruction->operands.x86.destination_register = type_adjusted_destination;
 
 		//And we need to adjust this to be a MOVL type
 		load_instruction->instruction_type = MOVL;
@@ -12509,7 +12509,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 			case I16:
 				//The load instruction's destination will be the intermediary
 				intermediary_destination = emit_temp_var(i32);
-				load_instruction->destination_register = intermediary_destination;
+				load_instruction->operands.x86.destination_register = intermediary_destination;
 
 				//Populate all of these values now
 				destination_size = get_type_size(intermediary_destination->type);
@@ -12541,7 +12541,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 			case U16:
 				//The load instruction's destination will be the intermediary
 				intermediary_destination = emit_temp_var(u32);
-				load_instruction->destination_register = intermediary_destination;
+				load_instruction->operands.x86.destination_register = intermediary_destination;
 
 				//Populate all of these values now
 				destination_size = get_type_size(intermediary_destination->type);
@@ -12575,7 +12575,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 
 	//Otherwise, we just assign the destination to be the destination register
 	} else {
-		load_instruction->destination_register = destination_register;
+		load_instruction->operands.x86.destination_register = destination_register;
 
 		//Populate all of these variables
 		destination_size = get_type_size(destination_register->type);
@@ -12646,7 +12646,7 @@ static inline void handle_load_instruction_base_address(instruction_t* load_stat
 					 * The destination of the global variable address will be our new address calc reg 1. 
 					 * We already have the offset loaded in, so that remains unchanged
 					 */
-					load_statement->address_calc_reg1 = address_calculation->destination_register;
+					load_statement->address_calc_reg1 = address_calculation->operands.x86.destination_register;
 
 					break;
 
@@ -12769,7 +12769,7 @@ static void handle_load_instruction(instruction_window_t* window){
 						load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
 						
 						//Source is now just the stack pointer
-						load_instruction->source_register = stack_pointer_variable;
+						load_instruction->operands.x86.source_register1 = stack_pointer_variable;
 					}
 
 					break;
@@ -12801,7 +12801,7 @@ static void handle_load_instruction(instruction_window_t* window){
 			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
 
 			//And the op1 is our source
-			load_instruction->source_register = load_instruction->op1;
+			load_instruction->operands.x86.source_register1 = load_instruction->op1;
 
 			break;
 	}
@@ -12981,7 +12981,7 @@ static void handle_load_with_variable_offset_instruction(instruction_window_t* w
 					 * The destination of the global variable address will be our new address calc reg 1. 
 					 * We already have the offset loaded in, so that remains unchanged
 					 */
-					load_instruction->address_calc_reg1 = global_variable_address->destination_register;
+					load_instruction->address_calc_reg1 = global_variable_address->operands.x86.destination_register;
 
 					//The second address calc register is whatever is in op2
 					load_instruction->address_calc_reg2 = load_instruction->op2;
@@ -13394,7 +13394,7 @@ static void handle_store_instruction(instruction_t* instruction){
 						//If it is 0, we only need to deref the stack pointer
 						} else {
 							//This is the stack pointer, no offset is needed
-							instruction->destination_register = stack_pointer_variable;
+							instruction->operands.x86.destination_register = stack_pointer_variable;
 
 							//Just dereference the destination here, nothing more
 							instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
@@ -13428,7 +13428,7 @@ static void handle_store_instruction(instruction_t* instruction){
 				//If it is 0, we only need to deref the stack pointer
 				} else {
 					//This is the stack pointer, no offset is needed
-					instruction->destination_register = stack_pointer_variable;
+					instruction->operands.x86.destination_register = stack_pointer_variable;
 
 					//Just dereference the destination here, nothing more
 					instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
@@ -13459,7 +13459,7 @@ static void handle_store_instruction(instruction_t* instruction){
 		 */
 		default:
 			//Otherwise this is just the destination register
-			instruction->destination_register = instruction->assignee;
+			instruction->operands.x86.destination_register = instruction->assignee;
 
 			//This counts for our destination only
 			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
@@ -13682,7 +13682,7 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 
 						//The destination of the global variable address will be our new address calc reg 1. 
 						//We already have the offset loaded in, so that remains unchanged
-						instruction->address_calc_reg1 = global_variable_address->destination_register;
+						instruction->address_calc_reg1 = global_variable_address->operands.x86.destination_register;
 
 						//Address calc reg 2 is op1 always
 						instruction->address_calc_reg2 = instruction->op1;
@@ -13884,7 +13884,7 @@ static void handle_store_statement_base_address(instruction_t* store_instruction
 				 * The destination of the global variable address will be our new address calc reg 1. 
 				 * We already have the offset loaded in, so that remains unchanged
 				 */
-				store_instruction->address_calc_reg1 = global_variable_address->destination_register;
+				store_instruction->address_calc_reg1 = global_variable_address->operands.x86.destination_register;
 
 				break;
 
@@ -13962,8 +13962,8 @@ static void handle_test_if_not_zero_instruction(instruction_window_t* window){
 		instruction->instruction_type = select_appropriate_test_statement(instruction->op1->variable_size);
 
 		//Op1 is both sourced because we are testing against ourselves
-		instruction->source_register = instruction->op1;
-		instruction->source_register2 = instruction->op1;
+		instruction->operands.x86.source_register1 = instruction->op1;
+		instruction->operands.x86.source_register2 = instruction->op1;
 		
 		//Rebuild the window around this instruction
 		reconstruct_window(window, instruction);
@@ -14005,10 +14005,10 @@ static void handle_test_if_not_zero_instruction(instruction_window_t* window){
 		}
 
 		//Transfer over the old op1
-		instruction->source_register = instruction->op1;
+		instruction->operands.x86.source_register1 = instruction->op1;
 
 		//And the second source is the register we just zeroed out
-		instruction->source_register2 = zeroed_out;
+		instruction->operands.x86.source_register2 = zeroed_out;
 	}
 }
 
@@ -14202,7 +14202,7 @@ static inline void handle_stack_allocation_statement(instruction_t* instruction)
 	instruction->source_immediate = instruction->op1_const;
 
 	//The destination register is RSP since we are dealing with a stack allocation
-	instruction->destination_register = stack_pointer_variable;
+	instruction->operands.x86.destination_register = stack_pointer_variable;
 
 	//And change the type to subtraction
 	instruction->instruction_type = SUBQ;
@@ -14218,7 +14218,7 @@ static inline void handle_stack_deallocation_statement(instruction_t* instructio
 	instruction->source_immediate = instruction->op1_const;
 
 	//The destination register is RSP since we are dealing with a stack allocation
-	instruction->destination_register = stack_pointer_variable;
+	instruction->operands.x86.destination_register = stack_pointer_variable;
 
 	//And change the type to subtraction
 	instruction->instruction_type = ADDQ;
@@ -14270,7 +14270,7 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		}
 
 		//The source register is op1
-		window->instruction2->source_register = true_source;
+		window->instruction2->operands.x86.source_register1 = true_source;
 
 		//Store the jumping to block where the jump table is
 		window->instruction2->if_block = window->instruction1->if_block;
