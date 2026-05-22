@@ -66,8 +66,8 @@ static void update_dependence_for_variable(data_dependency_graph_t* graph, instr
 			//All others we just leave
 			default:
 				//Grab these out
-				destination = current->destination_register;
-				destination2 = current->destination_register2;
+				destination = current->operands.x86.destination_register;
+				destination2 = current->operands.x86.destination_register2;
 
 				//If they're equal then we're good
 				if(variables_equal(destination, variable, TRUE) == TRUE){
@@ -157,7 +157,7 @@ static void build_dependency_graph_for_block(data_dependency_graph_t* graph, bas
 			 */
 			case INDIRECT_CALL:
 				//Update the dependence for the source var
-				update_dependence_for_variable(graph, current, instructions, current->source_register, i - 1);
+				update_dependence_for_variable(graph, current, instructions, current->operands.x86.source_register1, i - 1);
 
 				//Really just acts as a cleaner cast
 				function_parameters = current->parameters;
@@ -198,31 +198,31 @@ static void build_dependency_graph_for_block(data_dependency_graph_t* graph, bas
 					//If the move instruction's destination is not assigned, then it is being used
 					|| is_move_instruction_destination_assigned(current) == FALSE){
 					//Start searching here, beginngin at the last instruction
-					update_dependence_for_variable(graph, current, instructions, current->destination_register, i - 1);
+					update_dependence_for_variable(graph, current, instructions, current->operands.x86.destination_register, i - 1);
 				}
 
 				//Same for the source
-				if(current->source_register != NULL){
+				if(current->operands.x86.source_register1 != NULL){
 					//Start searching here, beginngin at the last instruction
-					update_dependence_for_variable(graph, current, instructions, current->source_register, i - 1);
+					update_dependence_for_variable(graph, current, instructions, current->operands.x86.source_register1, i - 1);
 				}
 
 				//Same for the second source
-				if(current->source_register2 != NULL){
+				if(current->operands.x86.source_register2 != NULL){
 					//Start searching here, beginngin at the last instruction
-					update_dependence_for_variable(graph, current, instructions, current->source_register2, i - 1);
+					update_dependence_for_variable(graph, current, instructions, current->operands.x86.source_register2, i - 1);
 				}
 
 				//And the address calc registers
-				if(current->address_calc_reg1 != NULL){
+				if(current->operands.x86.addressing_mode_register1 != NULL){
 					//Start searching here, beginngin at the last instruction
-					update_dependence_for_variable(graph, current, instructions, current->address_calc_reg1, i - 1);
+					update_dependence_for_variable(graph, current, instructions, current->operands.x86.addressing_mode_register1, i - 1);
 				}
 
 				//And the address calc registers
-				if(current->address_calc_reg2 != NULL){
+				if(current->operands.x86.addressing_mode_register2 != NULL){
 					//Start searching here, beginngin at the last instruction
-					update_dependence_for_variable(graph, current, instructions, current->address_calc_reg2, i - 1);
+					update_dependence_for_variable(graph, current, instructions, current->operands.x86.addressing_mode_register2, i - 1);
 				}
 
 				break;
