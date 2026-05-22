@@ -2828,10 +2828,10 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, " <- .JT%d + ", ((jump_table_t*)(stmt->if_block))->jump_table_id);
 			
 			//Now print out the variable
-			print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
 
 			//Finally the multiplicator
-			fprintf(fl, " * %ld\n", stmt->lea_multiplier);
+			fprintf(fl, " * %ld\n", stmt->operands.oir.address_multiplier);
 			break;
 
 		case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
@@ -3094,7 +3094,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 			fprintf(fl, ", ");
 			print_variable(fl, instruction->operands.x86.address_register2, mode);
 			fprintf(fl, ", ");
-			fprintf(fl, "%ld", instruction->lea_multiplier);
+			fprintf(fl, "%ld", instruction->operands.x86.address_multiplier);
 			fprintf(fl, ")");
 			break;
 
@@ -3131,22 +3131,22 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 			print_variable(fl, instruction->operands.x86.address_register1, mode);
 			fprintf(fl, ", ");
 			print_variable(fl, instruction->operands.x86.address_register2, mode);
-			fprintf(fl, ", %ld)", instruction->lea_multiplier);
+			fprintf(fl, ", %ld)", instruction->operands.x86.address_multiplier);
 			break;
 
-		//Index is in address calc reg 1 for this
+		//Index is in address calc reg 2 for this
 		case ADDRESS_CALCULATION_MODE_INDEX_AND_SCALE:
 			fprintf(fl, "( , ");
-			print_variable(fl, instruction->operands.x86.address_register1, mode);
-			fprintf(fl, ", %ld)", instruction->lea_multiplier);
+			print_variable(fl, instruction->operands.x86.address_register2, mode);
+			fprintf(fl, ", %ld)", instruction->operands.x86.address_multiplier);
 			break;
 			
-		//Index is in address calc reg 1 for this
+		//Index is in address calc reg 2 for this
 		case ADDRESS_CALCULATION_MODE_INDEX_OFFSET_AND_SCALE:
 			print_immediate_value_no_prefix(fl, instruction->operands.x86.address_offset);
 			fprintf(fl, "( , ");
-			print_variable(fl, instruction->operands.x86.address_register1, mode);
-			fprintf(fl, ", %ld)", instruction->lea_multiplier);
+			print_variable(fl, instruction->operands.x86.address_register2, mode);
+			fprintf(fl, ", %ld)", instruction->operands.x86.address_multiplier);
 			break;
 
 		//Do nothing
@@ -4850,8 +4850,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			print_xor_instruction(fl, instruction, mode);
 			break;
 
-		//Handle the very rare case of an indirect jump. This will only appear
-		//in case statements
+		//Handle the very rare case of an indirect jump. This will only appear in switch/raise statements
 		case INDIRECT_JMP:
 			//The star makes this indirect
 			fprintf(fl, "jmp *");
@@ -4862,11 +4861,11 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			//We first print out the jumping to block
 			fprintf(fl, ".JT%d(,", jumping_to_block->jump_table_id);
 
-			//Now we print out the source register
-			print_variable(fl, instruction->operands.x86.source_register1, mode);
+			//Now we print out the address register(in 2);
+			print_variable(fl, instruction->operands.x86.address_register2, mode);
 
 			//And then a comma and the multplicator
-			fprintf(fl, ",%ld)\n", instruction->lea_multiplier);
+			fprintf(fl, ",%ld)\n", instruction->operands.x86.address_multiplier);
 
 			break;
 
