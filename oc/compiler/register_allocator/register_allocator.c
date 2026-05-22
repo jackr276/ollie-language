@@ -512,10 +512,10 @@ static inline instruction_t* emit_stack_allocation_statement(three_addr_var_t* s
 	stmt->instruction_type = SUBQ;
 
 	//Store the destination as the stack pointer
-	stmt->destination_register = stack_pointer;
+	stmt->operands.x86.destination_register = stack_pointer;
 
 	//Emit this directly
-	stmt->source_immediate = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type);
+	stmt->operands.x86.source_immediate = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type);
 
 	//Just give this back
 	return stmt;
@@ -533,10 +533,10 @@ static inline instruction_t* emit_stack_deallocation_statement(three_addr_var_t*
 	stmt->instruction_type = ADDQ;
 
 	//Destination is always the stack pointer
-	stmt->destination_register = stack_pointer;
+	stmt->operands.x86.destination_register = stack_pointer;
 
 	//Emit this directly
-	stmt->source_immediate = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type);
+	stmt->operands.x86.source_immediate = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type);
 
 	//Just give this back
 	return stmt;
@@ -929,20 +929,20 @@ static inline void handle_live_ranges_for_instruction(dynamic_array_t* SSE_live_
 		case NEGL:
 		case NEGQ:
 			//For non-temp vars, this should take care of itself
-			if(instruction->destination_register->variable_type == VARIABLE_TYPE_NON_TEMP){
-				assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->destination_register);
-				assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->source_register);
+			if(instruction->operands.x86.destination_register->variable_type == VARIABLE_TYPE_NON_TEMP){
+				assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->operands.x86.destination_register);
+				assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->operands.x86.source_register1);
 
 			//For temp vars, we have to cook the books a bit
 			} else {
 				//Do the destination first
-				assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->destination_register);
+				assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->operands.x86.destination_register);
 
 				//Get his LR out
-				live_range_t* lr = instruction->destination_register->associated_live_range;
+				live_range_t* lr = instruction->operands.x86.destination_register->associated_live_range;
 
 				//Doing this ensures that we always share LRs between souce and dest
-				add_variable_to_live_range(lr, instruction->source_register);
+				add_variable_to_live_range(lr, instruction->operands.x86.source_register1);
 			}
 
 			//Completely done after this
@@ -956,12 +956,12 @@ static inline void handle_live_ranges_for_instruction(dynamic_array_t* SSE_live_
 	/**
 	 * For each of the variables, we will try to assign a live range to it
 	 */
-	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->source_register);
-	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->source_register2);
-	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->address_calc_reg1);
-	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->address_calc_reg2);
-	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->destination_register);
-	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->destination_register2);
+	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->operands.x86.source_register1);
+	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->operands.x86.source_register2);
+	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->operands.x86.addressing_mode_register1);
+	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->operands.x86.addressing_mode_register2);
+	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->operands.x86.destination_register);
+	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->operands.x86.destination_register2);
 
 	/**
 	 * There may be function params. If there are just spin through and handle them
@@ -1028,10 +1028,10 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 			case NEGL:
 			case NEGQ:
 				//The use comes first
-				add_live_range_to_use_set(current->source_register->associated_live_range, basic_block);
+				add_live_range_to_use_set(current->operands.x86.source_register1->associated_live_range, basic_block);
 
 				//And then the assignment
-				add_live_range_to_def_set(current->destination_register->associated_live_range, basic_block);
+				add_live_range_to_def_set(current->operands.x86.destination_register->associated_live_range, basic_block);
 
 				break;
 
@@ -1043,10 +1043,10 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 			case XORW_CLEAR:
 			case XORB_CLEAR:
 				//First the def
-				add_live_range_to_def_set(current->destination_register->associated_live_range, basic_block);
+				add_live_range_to_def_set(current->operands.x86.destination_register->associated_live_range, basic_block);
 
 				//Then the use
-				add_live_range_to_use_set(current->destination_register->associated_live_range, basic_block);
+				add_live_range_to_use_set(current->operands.x86.destination_register->associated_live_range, basic_block);
 
 				break;
 
@@ -1064,13 +1064,13 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 				}
 
 				//Now the destination if one exists
-				if(current->destination_register != NULL){
-					add_live_range_to_def_set(current->destination_register->associated_live_range, basic_block);
+				if(current->operands.x86.destination_register != NULL){
+					add_live_range_to_def_set(current->operands.x86.destination_register->associated_live_range, basic_block);
 				}
 
 				//Now the error destination as well if one exists
-				if(current->destination_register2 != NULL){
-					add_live_range_to_def_set(current->destination_register2->associated_live_range, basic_block);
+				if(current->operands.x86.destination_register2 != NULL){
+					add_live_range_to_def_set(current->operands.x86.destination_register2->associated_live_range, basic_block);
 				}
 
 				break;
@@ -1082,7 +1082,7 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 			 */
 			case INDIRECT_CALL:
 				//Handle the function pointer
-				add_live_range_to_use_set(current->source_register->associated_live_range, basic_block);
+				add_live_range_to_use_set(current->operands.x86.source_register1->associated_live_range, basic_block);
 
 				//Do all of the parameters first
 				for(u_int32_t i = 0; i < current->parameters.current_index; i++){
@@ -1093,33 +1093,33 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 				}
 
 				//Now the destination if one exists
-				if(current->destination_register != NULL){
-					add_live_range_to_def_set(current->destination_register->associated_live_range, basic_block);
+				if(current->operands.x86.destination_register != NULL){
+					add_live_range_to_def_set(current->operands.x86.destination_register->associated_live_range, basic_block);
 				}
 
 				//Now the error destination as well if one exists
-				if(current->destination_register2 != NULL){
-					add_live_range_to_def_set(current->destination_register2->associated_live_range, basic_block);
+				if(current->operands.x86.destination_register2 != NULL){
+					add_live_range_to_def_set(current->operands.x86.destination_register2->associated_live_range, basic_block);
 				}
 
 				break;
 
 			default:
 				//Add all of the source *first*
-				if(current->source_register != NULL){
-					add_live_range_to_use_set(current->source_register->associated_live_range, basic_block);
+				if(current->operands.x86.source_register1 != NULL){
+					add_live_range_to_use_set(current->operands.x86.source_register1->associated_live_range, basic_block);
 				}
 
-				if(current->source_register2 != NULL){
-					add_live_range_to_use_set(current->source_register2->associated_live_range, basic_block);
+				if(current->operands.x86.source_register2 != NULL){
+					add_live_range_to_use_set(current->operands.x86.source_register2->associated_live_range, basic_block);
 				}
 
-				if(current->address_calc_reg1 != NULL){
-					add_live_range_to_use_set(current->address_calc_reg1->associated_live_range, basic_block);
+				if(current->operands.x86.addressing_mode_register1 != NULL){
+					add_live_range_to_use_set(current->operands.x86.addressing_mode_register1->associated_live_range, basic_block);
 				}
 
-				if(current->address_calc_reg2 != NULL){
-					add_live_range_to_use_set(current->address_calc_reg2->associated_live_range, basic_block);
+				if(current->operands.x86.addressing_mode_register2 != NULL){
+					add_live_range_to_use_set(current->operands.x86.addressing_mode_register2->associated_live_range, basic_block);
 				}
 
 				/**
@@ -1127,8 +1127,8 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 				 * it can only ever be assigned. For the first destination, there is some nuance
 				 * because it can be treated as an operand also
 				 */
-				if(current->destination_register != NULL){
-					live_range_t* destination_lr = current->destination_register->associated_live_range;
+				if(current->operands.x86.destination_register != NULL){
+					live_range_t* destination_lr = current->operands.x86.destination_register->associated_live_range;
 
 					/**
 					 * Handle the case where it's also an operand(think add, sub, etc). If this is
@@ -1149,8 +1149,8 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 				}
 
 				//This one is easier, if it's not null then it was assigned
-				if(current->destination_register2 != NULL){
-					add_live_range_to_def_set(current->destination_register2->associated_live_range, basic_block);
+				if(current->operands.x86.destination_register2 != NULL){
+					add_live_range_to_def_set(current->operands.x86.destination_register2->associated_live_range, basic_block);
 				}
 					
 				break;
@@ -1418,7 +1418,7 @@ static dynamic_array_t calculate_live_after_for_block(basic_block_t* block, inst
 		 * 	register may be present but this step in the algorithm will not 
 		 * 	apply or may apply in a different way
 		 */
-		if(operation->destination_register != NULL){
+		if(operation->operands.x86.destination_register != NULL){
 			/**
 			 * This is if we have something like add LRa, LRb. LRb
 			 * is a destination but it's also a value. As such, we will
@@ -1427,7 +1427,7 @@ static dynamic_array_t calculate_live_after_for_block(basic_block_t* block, inst
 			if(is_destination_also_operand(operation) == TRUE){
 				//Since this is *also* an operand, it needs to be added to the LIVE_NOW array. It would not be picked up any
 				//other way
-				add_live_now_live_range(operation->destination_register->associated_live_range, &live_after);
+				add_live_now_live_range(operation->operands.x86.destination_register->associated_live_range, &live_after);
 
 			/**
 			 * If the indirection level is more than 0, this means that we're moving into a memory
@@ -1436,7 +1436,7 @@ static dynamic_array_t calculate_live_after_for_block(basic_block_t* block, inst
 			 */
 			} else if(is_move_instruction_destination_assigned(operation) == FALSE){
 				//Add it to live now and we're done
-				add_live_now_live_range(operation->destination_register->associated_live_range, &live_after);
+				add_live_now_live_range(operation->operands.x86.destination_register->associated_live_range, &live_after);
 
 			/**
 			 * The final case here is the ideal case in the algorithm, where we have a simple
@@ -1445,7 +1445,7 @@ static dynamic_array_t calculate_live_after_for_block(basic_block_t* block, inst
 			 */
 			} else {
 				//And then scrap it from live_now
-				dynamic_array_delete(&live_after, operation->destination_register->associated_live_range);
+				dynamic_array_delete(&live_after, operation->operands.x86.destination_register->associated_live_range);
 			}
 		}
 
@@ -1453,9 +1453,9 @@ static dynamic_array_t calculate_live_after_for_block(basic_block_t* block, inst
 		 * Some instructions like CXXX and division instructions have 2 destinations. The second destination,
 		 * unlike the first, will never have any dual purpose, so we can just add the interference and delete
 		 */
-		if(operation->destination_register2 != NULL){
+		if(operation->operands.x86.destination_register2 != NULL){
 			//And then scrap it from live_now
-			dynamic_array_delete(&live_after, operation->destination_register2->associated_live_range);
+			dynamic_array_delete(&live_after, operation->operands.x86.destination_register2->associated_live_range);
 		}
 
 		/**
@@ -1467,20 +1467,20 @@ static dynamic_array_t calculate_live_after_for_block(basic_block_t* block, inst
 		 *
 		 * These first few are the obvious cases
 		 */
-		if(operation->source_register != NULL){
-			add_live_now_live_range(operation->source_register->associated_live_range, &live_after);
+		if(operation->operands.x86.source_register1 != NULL){
+			add_live_now_live_range(operation->operands.x86.source_register1->associated_live_range, &live_after);
 		}
 
-		if(operation->source_register2 != NULL){
-			add_live_now_live_range(operation->source_register2->associated_live_range, &live_after);
+		if(operation->operands.x86.source_register2 != NULL){
+			add_live_now_live_range(operation->operands.x86.source_register2->associated_live_range, &live_after);
 		}
 
-		if(operation->address_calc_reg1 != NULL){
-			add_live_now_live_range(operation->address_calc_reg1->associated_live_range, &live_after);
+		if(operation->operands.x86.addressing_mode_register1 != NULL){
+			add_live_now_live_range(operation->operands.x86.addressing_mode_register1->associated_live_range, &live_after);
 		}
 
-		if(operation->address_calc_reg2 != NULL){
-			add_live_now_live_range(operation->address_calc_reg2->associated_live_range, &live_after);
+		if(operation->operands.x86.addressing_mode_register2 != NULL){
+			add_live_now_live_range(operation->operands.x86.addressing_mode_register2->associated_live_range, &live_after);
 		}
 
 		/**
@@ -1632,7 +1632,7 @@ static void calculate_all_interference_in_block(basic_block_t* block){
 		 * 	register may be present but this step in the algorithm will not 
 		 * 	apply or may apply in a different way
 		 */
-		if(operation->destination_register != NULL){
+		if(operation->operands.x86.destination_register != NULL){
 			/**
 			 * This is if we have something like add LRa, LRb. LRb
 			 * is a destination but it's also a value. As such, we will
@@ -1640,14 +1640,14 @@ static void calculate_all_interference_in_block(basic_block_t* block){
 			 */
 			if(is_destination_also_operand(operation) == TRUE){
 				//Add the interference in the appropriate graph 
-				if(operation->destination_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
-					add_interefence_between_target_and_live_now(&live_now_general_purpose, operation->destination_register->associated_live_range);
-					add_live_now_live_range(operation->destination_register->associated_live_range, &live_now_general_purpose);
+				if(operation->operands.x86.destination_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+					add_interefence_between_target_and_live_now(&live_now_general_purpose, operation->operands.x86.destination_register->associated_live_range);
+					add_live_now_live_range(operation->operands.x86.destination_register->associated_live_range, &live_now_general_purpose);
 
 				//If we hit this we're using a float LR 
 				} else {
-					add_interefence_between_target_and_live_now(&live_now_sse, operation->destination_register->associated_live_range);
-					add_live_now_live_range(operation->destination_register->associated_live_range, &live_now_sse);
+					add_interefence_between_target_and_live_now(&live_now_sse, operation->operands.x86.destination_register->associated_live_range);
+					add_live_now_live_range(operation->operands.x86.destination_register->associated_live_range, &live_now_sse);
 				}
 
 			/**
@@ -1655,10 +1655,10 @@ static void calculate_all_interference_in_block(basic_block_t* block){
 			 * case, we'll just need to add the destination LR to live now
 			 */
 			} else if(is_move_instruction_destination_assigned(operation) == FALSE){
-				if(operation->destination_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
-					add_live_now_live_range(operation->destination_register->associated_live_range, &live_now_general_purpose);
+				if(operation->operands.x86.destination_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+					add_live_now_live_range(operation->operands.x86.destination_register->associated_live_range, &live_now_general_purpose);
 				} else {
-					add_live_now_live_range(operation->destination_register->associated_live_range, &live_now_sse);
+					add_live_now_live_range(operation->operands.x86.destination_register->associated_live_range, &live_now_sse);
 				}
 
 			/**
@@ -1667,19 +1667,19 @@ static void calculate_all_interference_in_block(basic_block_t* block){
 			 * between the destination and LIVE_NOW and then delete the destination from live_now
 			 */
 			} else {
-				if(operation->destination_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+				if(operation->operands.x86.destination_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
 					//Add the interference
-					add_interefence_between_target_and_live_now(&live_now_general_purpose, operation->destination_register->associated_live_range);
+					add_interefence_between_target_and_live_now(&live_now_general_purpose, operation->operands.x86.destination_register->associated_live_range);
 
 					//And then scrap it from live_now
-					dynamic_array_delete(&live_now_general_purpose, operation->destination_register->associated_live_range);
+					dynamic_array_delete(&live_now_general_purpose, operation->operands.x86.destination_register->associated_live_range);
 
 				} else {
 					//Add the interference
-					add_interefence_between_target_and_live_now(&live_now_sse, operation->destination_register->associated_live_range);
+					add_interefence_between_target_and_live_now(&live_now_sse, operation->operands.x86.destination_register->associated_live_range);
 
 					//And then scrap it from live_now
-					dynamic_array_delete(&live_now_sse, operation->destination_register->associated_live_range);
+					dynamic_array_delete(&live_now_sse, operation->operands.x86.destination_register->associated_live_range);
 				}
 			}
 		}
@@ -1688,20 +1688,20 @@ static void calculate_all_interference_in_block(basic_block_t* block){
 		 * Some instructions like CXXX and division instructions have 2 destinations. The second destination,
 		 * unlike the first, will never have any dual purpose, so we can just add the interference and delete
 		 */
-		if(operation->destination_register2 != NULL){
-			if(operation->destination_register2->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+		if(operation->operands.x86.destination_register2 != NULL){
+			if(operation->operands.x86.destination_register2->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
 				//Add the interference
-				add_interefence_between_target_and_live_now(&live_now_general_purpose, operation->destination_register2->associated_live_range);
+				add_interefence_between_target_and_live_now(&live_now_general_purpose, operation->operands.x86.destination_register2->associated_live_range);
 
 				//And then scrap it from live_now
-				dynamic_array_delete(&live_now_general_purpose, operation->destination_register2->associated_live_range);
+				dynamic_array_delete(&live_now_general_purpose, operation->operands.x86.destination_register2->associated_live_range);
 
 			} else {
 				//Add the interference
-				add_interefence_between_target_and_live_now(&live_now_sse, operation->destination_register2->associated_live_range);
+				add_interefence_between_target_and_live_now(&live_now_sse, operation->operands.x86.destination_register2->associated_live_range);
 
 				//And then scrap it from live_now
-				dynamic_array_delete(&live_now_sse, operation->destination_register2->associated_live_range);
+				dynamic_array_delete(&live_now_sse, operation->operands.x86.destination_register2->associated_live_range);
 			}
 		}
 
@@ -1712,36 +1712,36 @@ static void calculate_all_interference_in_block(basic_block_t* block){
 		 *  Remember - in this version of the algorithm we are segregating the general purpose and
 		 *  SSE because either is fair game
 		 */
-		if(operation->source_register != NULL){
-			if(operation->source_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
-				add_live_now_live_range(operation->source_register->associated_live_range, &live_now_general_purpose);
+		if(operation->operands.x86.source_register1 != NULL){
+			if(operation->operands.x86.source_register1->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+				add_live_now_live_range(operation->operands.x86.source_register1->associated_live_range, &live_now_general_purpose);
 			} else {
-				add_live_now_live_range(operation->source_register->associated_live_range, &live_now_sse);
+				add_live_now_live_range(operation->operands.x86.source_register1->associated_live_range, &live_now_sse);
 			}
 		}
 
-		if(operation->source_register2 != NULL){
-			if(operation->source_register2->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
-				add_live_now_live_range(operation->source_register2->associated_live_range, &live_now_general_purpose);
+		if(operation->operands.x86.source_register2 != NULL){
+			if(operation->operands.x86.source_register2->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+				add_live_now_live_range(operation->operands.x86.source_register2->associated_live_range, &live_now_general_purpose);
 			} else {
-				add_live_now_live_range(operation->source_register2->associated_live_range, &live_now_sse);
+				add_live_now_live_range(operation->operands.x86.source_register2->associated_live_range, &live_now_sse);
 			}
 		}
 
-		if(operation->address_calc_reg1 != NULL){
-			if(operation->address_calc_reg1->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
-				add_live_now_live_range(operation->address_calc_reg1->associated_live_range, &live_now_general_purpose);
+		if(operation->operands.x86.addressing_mode_register1 != NULL){
+			if(operation->operands.x86.addressing_mode_register1->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+				add_live_now_live_range(operation->operands.x86.addressing_mode_register1->associated_live_range, &live_now_general_purpose);
 			} else {
-				add_live_now_live_range(operation->address_calc_reg1->associated_live_range, &live_now_sse);
+				add_live_now_live_range(operation->operands.x86.addressing_mode_register1->associated_live_range, &live_now_sse);
 			}
 
 		}
 
-		if(operation->address_calc_reg2 != NULL){
-			if(operation->address_calc_reg2->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
-				add_live_now_live_range(operation->address_calc_reg2->associated_live_range, &live_now_general_purpose);
+		if(operation->operands.x86.addressing_mode_register2 != NULL){
+			if(operation->operands.x86.addressing_mode_register2->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+				add_live_now_live_range(operation->operands.x86.addressing_mode_register2->associated_live_range, &live_now_general_purpose);
 			} else {
-				add_live_now_live_range(operation->address_calc_reg2->associated_live_range, &live_now_sse);
+				add_live_now_live_range(operation->operands.x86.addressing_mode_register2->associated_live_range, &live_now_sse);
 			}
 		}
 
@@ -1860,7 +1860,7 @@ static void calculate_target_interference_in_block(basic_block_t* block, live_ra
 		 * 	register may be present but this step in the algorithm will not 
 		 * 	apply or may apply in a different way
 		 */
-		if(operation->destination_register != NULL){
+		if(operation->operands.x86.destination_register != NULL){
 			/**
 			 * This is if we have something like add LRa, LRb. LRb
 			 * is a destination but it's also a value. As such, we will
@@ -1868,9 +1868,9 @@ static void calculate_target_interference_in_block(basic_block_t* block, live_ra
 			 */
 			if(is_destination_also_operand(operation) == TRUE){
 				//Add the interference in the appropriate graph 
-				if(operation->destination_register->associated_live_range->live_range_class == target_class){
-					add_interefence_between_target_and_live_now(&target_live_now, operation->destination_register->associated_live_range);
-					add_live_now_live_range(operation->destination_register->associated_live_range, &target_live_now);
+				if(operation->operands.x86.destination_register->associated_live_range->live_range_class == target_class){
+					add_interefence_between_target_and_live_now(&target_live_now, operation->operands.x86.destination_register->associated_live_range);
+					add_live_now_live_range(operation->operands.x86.destination_register->associated_live_range, &target_live_now);
 				}
 
 			/**
@@ -1878,8 +1878,8 @@ static void calculate_target_interference_in_block(basic_block_t* block, live_ra
 			 * case, we'll just need to add the destination LR to live now
 			 */
 			} else if(is_move_instruction_destination_assigned(operation) == FALSE){
-				if(operation->destination_register->associated_live_range->live_range_class == target_class){
-					add_live_now_live_range(operation->destination_register->associated_live_range, &target_live_now);
+				if(operation->operands.x86.destination_register->associated_live_range->live_range_class == target_class){
+					add_live_now_live_range(operation->operands.x86.destination_register->associated_live_range, &target_live_now);
 				}
 
 			/**
@@ -1888,12 +1888,12 @@ static void calculate_target_interference_in_block(basic_block_t* block, live_ra
 			 * between the destination and LIVE_NOW and then delete the destination from live_now
 			 */
 			} else {
-				if(operation->destination_register->associated_live_range->live_range_class == target_class){
+				if(operation->operands.x86.destination_register->associated_live_range->live_range_class == target_class){
 					//Add the interference
-					add_interefence_between_target_and_live_now(&target_live_now, operation->destination_register->associated_live_range);
+					add_interefence_between_target_and_live_now(&target_live_now, operation->operands.x86.destination_register->associated_live_range);
 
 					//And then scrap it from live_now
-					dynamic_array_delete(&target_live_now, operation->destination_register->associated_live_range);
+					dynamic_array_delete(&target_live_now, operation->operands.x86.destination_register->associated_live_range);
 				}
 			}
 		}
@@ -1902,13 +1902,13 @@ static void calculate_target_interference_in_block(basic_block_t* block, live_ra
 		 * Some instructions like CXXX and division instructions have 2 destinations. The second destination,
 		 * unlike the first, will never have any dual purpose, so we can just add the interference and delete
 		 */
-		if(operation->destination_register2 != NULL){
-			if(operation->destination_register2->associated_live_range->live_range_class == target_class){
+		if(operation->operands.x86.destination_register2 != NULL){
+			if(operation->operands.x86.destination_register2->associated_live_range->live_range_class == target_class){
 				//Add the interference
-				add_interefence_between_target_and_live_now(&target_live_now, operation->destination_register2->associated_live_range);
+				add_interefence_between_target_and_live_now(&target_live_now, operation->operands.x86.destination_register2->associated_live_range);
 
 				//And then scrap it from live_now
-				dynamic_array_delete(&target_live_now, operation->destination_register2->associated_live_range);
+				dynamic_array_delete(&target_live_now, operation->operands.x86.destination_register2->associated_live_range);
 			}
 		}
 
@@ -1919,28 +1919,28 @@ static void calculate_target_interference_in_block(basic_block_t* block, live_ra
 		 *  Remember - in this version of the algorithm we are segregating the general purpose and
 		 *  SSE because either is fair game
 		 */
-		if(operation->source_register != NULL
-			&& operation->source_register->associated_live_range->live_range_class == target_class){
+		if(operation->operands.x86.source_register1 != NULL
+			&& operation->operands.x86.source_register1->associated_live_range->live_range_class == target_class){
 
-			add_live_now_live_range(operation->source_register->associated_live_range, &target_live_now);
+			add_live_now_live_range(operation->operands.x86.source_register1->associated_live_range, &target_live_now);
 		}
 
-		if(operation->source_register2 != NULL
-			&& operation->source_register2->associated_live_range->live_range_class == target_class){
+		if(operation->operands.x86.source_register2 != NULL
+			&& operation->operands.x86.source_register2->associated_live_range->live_range_class == target_class){
 
-			add_live_now_live_range(operation->source_register2->associated_live_range, &target_live_now);
+			add_live_now_live_range(operation->operands.x86.source_register2->associated_live_range, &target_live_now);
 		}
 
-		if(operation->address_calc_reg1 != NULL
-			&& operation->address_calc_reg1->associated_live_range->live_range_class == target_class){
+		if(operation->operands.x86.addressing_mode_register1 != NULL
+			&& operation->operands.x86.addressing_mode_register1->associated_live_range->live_range_class == target_class){
 
-			add_live_now_live_range(operation->address_calc_reg1->associated_live_range, &target_live_now);
+			add_live_now_live_range(operation->operands.x86.addressing_mode_register1->associated_live_range, &target_live_now);
 		}
 
-		if(operation->address_calc_reg2 != NULL
-			&& operation->address_calc_reg2->associated_live_range->live_range_class == target_class){
+		if(operation->operands.x86.addressing_mode_register2 != NULL
+			&& operation->operands.x86.addressing_mode_register2->associated_live_range->live_range_class == target_class){
 
-			add_live_now_live_range(operation->address_calc_reg2->associated_live_range, &target_live_now);
+			add_live_now_live_range(operation->operands.x86.addressing_mode_register2->associated_live_range, &target_live_now);
 		}
 
 		/**
@@ -2058,11 +2058,11 @@ static void precolor_instruction(instruction_t* instruction){
 		 */
 		case RET:
 			//If it has one, assign it
-			if(instruction->source_register != NULL){
-				if(instruction->source_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
-					instruction->source_register->associated_live_range->reg.gen_purpose = RAX;
+			if(instruction->operands.x86.source_register1 != NULL){
+				if(instruction->operands.x86.source_register1->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+					instruction->operands.x86.source_register1->associated_live_range->reg.gen_purpose = RAX;
 				} else {
-					instruction->source_register->associated_live_range->reg.sse_reg = XMM0;
+					instruction->operands.x86.source_register1->associated_live_range->reg.sse_reg = XMM0;
 				}
 			}
 
@@ -2071,8 +2071,8 @@ static void precolor_instruction(instruction_t* instruction){
 			 * upon a regular return. That error register will be inside of source_register2 if it exists
 			 * at all for this function
 			 */
-			if(instruction->source_register2 != NULL){
-				instruction->source_register2->associated_live_range->reg.gen_purpose = RDX;
+			if(instruction->operands.x86.source_register2 != NULL){
+				instruction->operands.x86.source_register2->associated_live_range->reg.gen_purpose = RDX;
 			}
 
 			break;
@@ -2084,7 +2084,7 @@ static void precolor_instruction(instruction_t* instruction){
 		 */
 		case RAISE_INSTRUCTION:
 			//This is always %rdx
-			instruction->source_register->associated_live_range->reg.gen_purpose = RDX;
+			instruction->operands.x86.source_register1->associated_live_range->reg.gen_purpose = RDX;
 
 			break;
 
@@ -2097,13 +2097,13 @@ static void precolor_instruction(instruction_t* instruction){
 		case MULL:
 		case MULQ:
 			//When we do an unsigned multiplication, the implicit source register must be in RAX
-			instruction->source_register2->associated_live_range->reg.gen_purpose = RAX;
+			instruction->operands.x86.source_register2->associated_live_range->reg.gen_purpose = RAX;
 
 			//The destination must also be in RAX here
-			instruction->destination_register->associated_live_range->reg.gen_purpose = RAX;
+			instruction->operands.x86.destination_register->associated_live_range->reg.gen_purpose = RAX;
 
 			//The implicit higher order bit destination is always RDX
-			instruction->destination_register2->associated_live_range->reg.gen_purpose = RDX;
+			instruction->operands.x86.destination_register2->associated_live_range->reg.gen_purpose = RDX;
 
 			break;
 
@@ -2131,9 +2131,9 @@ static void precolor_instruction(instruction_t* instruction){
 		case SHRL:
 		case SHRQ:
 			//Do we have a register source?
-			if(instruction->source_register != NULL){
+			if(instruction->operands.x86.source_register1 != NULL){
 				//Due to a quirk in old x86, shift instructions must have their source in RCX
-				instruction->source_register->associated_live_range->reg.gen_purpose = RCX;
+				instruction->operands.x86.source_register1->associated_live_range->reg.gen_purpose = RCX;
 			}
 		
 			break;
@@ -2147,14 +2147,14 @@ static void precolor_instruction(instruction_t* instruction){
 		case CWTL:
 		case CBTW:
 			//Source is always %RAX
-			instruction->source_register->associated_live_range->reg.gen_purpose = RAX;
+			instruction->operands.x86.source_register1->associated_live_range->reg.gen_purpose = RAX;
 
 			//The results are always RDX and RAX 
 			//Lower order bits
-			instruction->destination_register->associated_live_range->reg.gen_purpose = RAX;
+			instruction->operands.x86.destination_register->associated_live_range->reg.gen_purpose = RAX;
 
 			//Higher order bits
-			instruction->destination_register2->associated_live_range->reg.gen_purpose = RDX;
+			instruction->operands.x86.destination_register2->associated_live_range->reg.gen_purpose = RDX;
 
 			break;
 
@@ -2167,20 +2167,20 @@ static void precolor_instruction(instruction_t* instruction){
 		case IDIVL:
 		case IDIVQ:
 			//The source register for a division must be in RAX
-			instruction->source_register2->associated_live_range->reg.gen_purpose = RAX;
+			instruction->operands.x86.source_register2->associated_live_range->reg.gen_purpose = RAX;
 
 			/**
 			 * We've hijacked the address_calc_reg1 register for the higher order bits in
 			 * our division instruction. These higher order bits will always be stored in
 			 * RDX
 			 */
-			instruction->address_calc_reg1->associated_live_range->reg.gen_purpose = RDX;
+			instruction->operands.x86.addressing_mode_register1->associated_live_range->reg.gen_purpose = RDX;
 
 			//The first destination register is the quotient, and is in RAX
-			instruction->destination_register->associated_live_range->reg.gen_purpose = RAX;
+			instruction->operands.x86.destination_register->associated_live_range->reg.gen_purpose = RAX;
 
 			//The second destination register is the remainder, and is in RDX
-			instruction->destination_register2->associated_live_range->reg.gen_purpose = RDX;
+			instruction->operands.x86.destination_register2->associated_live_range->reg.gen_purpose = RDX;
 
 			break;
 
@@ -2188,18 +2188,18 @@ static void precolor_instruction(instruction_t* instruction){
 		case CALL:
 		case INDIRECT_CALL:
 			//We could have a void return, but usually we'll give something
-			if(instruction->destination_register != NULL){
+			if(instruction->operands.x86.destination_register != NULL){
 				//Go based on the type
-				if(instruction->destination_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
-					instruction->destination_register->associated_live_range->reg.gen_purpose = RAX;
+				if(instruction->operands.x86.destination_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+					instruction->operands.x86.destination_register->associated_live_range->reg.gen_purpose = RAX;
 				} else {
-					instruction->destination_register->associated_live_range->reg.sse_reg = XMM0;
+					instruction->operands.x86.destination_register->associated_live_range->reg.sse_reg = XMM0;
 				}
 			}
 
 			//If we have a second destination register(Error register), it's always GP and it's always %RDX
-			if(instruction->destination_register2 != NULL){
-				instruction->destination_register2->associated_live_range->reg.gen_purpose = RDX;
+			if(instruction->operands.x86.destination_register2 != NULL){
+				instruction->operands.x86.destination_register2->associated_live_range->reg.gen_purpose = RDX;
 			}
 
 			/**
@@ -2328,10 +2328,10 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 			case NEGL:
 			case NEGQ:
 				//The use comes first
-				add_live_range_to_use_set(cursor->source_register->associated_live_range, block);
+				add_live_range_to_use_set(cursor->operands.x86.source_register1->associated_live_range, block);
 
 				//And then the assignment
-				add_live_range_to_def_set(cursor->destination_register->associated_live_range, block);
+				add_live_range_to_def_set(cursor->operands.x86.destination_register->associated_live_range, block);
 
 				break;
 
@@ -2345,10 +2345,10 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 			case XORW_CLEAR:
 			case XORB_CLEAR:
 				//Do the def first(very unique)
-				add_live_range_to_def_set(cursor->destination_register->associated_live_range, block);
+				add_live_range_to_def_set(cursor->operands.x86.destination_register->associated_live_range, block);
 
 				//And then the use
-				add_live_range_to_use_set(cursor->destination_register->associated_live_range, block);
+				add_live_range_to_use_set(cursor->operands.x86.destination_register->associated_live_range, block);
 
 				break;
 
@@ -2366,13 +2366,13 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 				}
 
 				//Now the destination if one exists
-				if(cursor->destination_register != NULL){
-					add_live_range_to_def_set(cursor->destination_register->associated_live_range, block);
+				if(cursor->operands.x86.destination_register != NULL){
+					add_live_range_to_def_set(cursor->operands.x86.destination_register->associated_live_range, block);
 				}
 
 				//Add the error destination too if one exists
-				if(cursor->destination_register2 != NULL){
-					add_live_range_to_def_set(cursor->destination_register2->associated_live_range, block);
+				if(cursor->operands.x86.destination_register2 != NULL){
+					add_live_range_to_def_set(cursor->operands.x86.destination_register2->associated_live_range, block);
 				}
 
 				break;
@@ -2384,7 +2384,7 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 			 */
 			case INDIRECT_CALL:
 				//Handle the function pointer
-				add_live_range_to_use_set(cursor->source_register->associated_live_range, block);
+				add_live_range_to_use_set(cursor->operands.x86.source_register1->associated_live_range, block);
 
 				//Do all of the parameters first
 				for(u_int32_t i = 0; i < cursor->parameters.current_index; i++){
@@ -2395,33 +2395,33 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 				}
 
 				//Now the destination if one exists
-				if(cursor->destination_register != NULL){
-					add_live_range_to_def_set(cursor->destination_register->associated_live_range, block);
+				if(cursor->operands.x86.destination_register != NULL){
+					add_live_range_to_def_set(cursor->operands.x86.destination_register->associated_live_range, block);
 				}
 
 				//Add the error destination too if one exists
-				if(cursor->destination_register2 != NULL){
-					add_live_range_to_def_set(cursor->destination_register2->associated_live_range, block);
+				if(cursor->operands.x86.destination_register2 != NULL){
+					add_live_range_to_def_set(cursor->operands.x86.destination_register2->associated_live_range, block);
 				}
 
 				break;
 
 			default:
 				//Add all of the source *first*
-				if(cursor->source_register != NULL){
-					add_live_range_to_use_set(cursor->source_register->associated_live_range, block);
+				if(cursor->operands.x86.source_register1 != NULL){
+					add_live_range_to_use_set(cursor->operands.x86.source_register1->associated_live_range, block);
 				}
 
-				if(cursor->source_register2 != NULL){
-					add_live_range_to_use_set(cursor->source_register2->associated_live_range, block);
+				if(cursor->operands.x86.source_register2 != NULL){
+					add_live_range_to_use_set(cursor->operands.x86.source_register2->associated_live_range, block);
 				}
 
-				if(cursor->address_calc_reg1 != NULL){
-					add_live_range_to_use_set(cursor->address_calc_reg1->associated_live_range, block);
+				if(cursor->operands.x86.addressing_mode_register1 != NULL){
+					add_live_range_to_use_set(cursor->operands.x86.addressing_mode_register1->associated_live_range, block);
 				}
 
-				if(cursor->address_calc_reg2 != NULL){
-					add_live_range_to_use_set(cursor->address_calc_reg2->associated_live_range, block);
+				if(cursor->operands.x86.addressing_mode_register2 != NULL){
+					add_live_range_to_use_set(cursor->operands.x86.addressing_mode_register2->associated_live_range, block);
 				}
 
 				/**
@@ -2429,8 +2429,8 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 				 * it can only ever be assigned. For the first destination, there is some nuance
 				 * because it can be treated as an operand also
 				 */
-				if(cursor->destination_register != NULL){
-					live_range_t* destination_lr = cursor->destination_register->associated_live_range;
+				if(cursor->operands.x86.destination_register != NULL){
+					live_range_t* destination_lr = cursor->operands.x86.destination_register->associated_live_range;
 
 					/**
 					 * Handle the case where it's also an operand(think add, sub, etc). If this is
@@ -2451,8 +2451,8 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 				}
 
 				//This one is easier, if it's not null then it was assigned
-				if(cursor->destination_register2 != NULL){
-					add_live_range_to_def_set(cursor->destination_register2->associated_live_range, block);
+				if(cursor->operands.x86.destination_register2 != NULL){
+					add_live_range_to_def_set(cursor->operands.x86.destination_register2->associated_live_range, block);
 				}
 					
 				break;
@@ -2688,8 +2688,8 @@ static void perform_block_level_coalescence(basic_block_t* block, interference_g
 		}
 
 		//Otherwise if we get here, then we know that we have a pure copy instruction
-		live_range_t* source_live_range = instruction->source_register->associated_live_range;
-		live_range_t* destination_live_range = instruction->destination_register->associated_live_range;
+		live_range_t* source_live_range = instruction->operands.x86.source_register1->associated_live_range;
+		live_range_t* destination_live_range = instruction->operands.x86.destination_register->associated_live_range;
 
 		//These cannot possible coalesce since we have a mismatch, we will continue if that is
 		//the case
@@ -2851,8 +2851,8 @@ static void perform_block_level_coalescence_for_target(basic_block_t* block, int
 		}
 
 		//Otherwise if we get here, then we know that we have a pure copy instruction
-		live_range_t* source_live_range = instruction->source_register->associated_live_range;
-		live_range_t* destination_live_range = instruction->destination_register->associated_live_range;
+		live_range_t* source_live_range = instruction->operands.x86.source_register1->associated_live_range;
+		live_range_t* destination_live_range = instruction->operands.x86.destination_register->associated_live_range;
 
 		//On top of the classes matching, we need to ensure that the live range class
 		//itself matches what we're looking for. If it doesn't we can skip this and move
@@ -3064,20 +3064,20 @@ static void handle_pure_copy_source_spill(instruction_t* instruction, u_int32_t 
 
 	//Offset is 0, we just need to do a dereference
 	if(offset == 0){
-		instruction->source_register = stack_pointer;
+		instruction->operands.x86.source_register1 = stack_pointer;
 		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
 
 	//Otherwise, we need to do an offset calculation
 	} else {
 		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 		//Turn this into a load instruction
-		instruction->address_calc_reg1 = stack_pointer;
+		instruction->operands.x86.addressing_mode_register1 = stack_pointer;
 
 		//IMPORTANT - NULL this out so that future steps don't get confused
-		instruction->source_register = NULL;
+		instruction->operands.x86.source_register1 = NULL;
 
 		//Create the offset using a u64
-		instruction->offset = emit_direct_integer_or_char_constant(offset, u64_type);
+		instruction->operands.x86.addressing_mode_offset = emit_direct_integer_or_char_constant(offset, u64_type);
 	}
 }
 
@@ -3098,7 +3098,7 @@ static void handle_constant_assignment_destination_spill(instruction_t* instruct
 
 	//Offset is 0, we just need to do a dereference
 	if(offset == 0){
-		instruction->destination_register = stack_pointer;
+		instruction->operands.x86.destination_register = stack_pointer;
 		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
 
 	//Otherwise, we need to do an offset calculation
@@ -3106,13 +3106,13 @@ static void handle_constant_assignment_destination_spill(instruction_t* instruct
 		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
 		//Turn this into a load instruction
-		instruction->address_calc_reg1 = stack_pointer;
+		instruction->operands.x86.addressing_mode_register1 = stack_pointer;
 
 		//IMPORTANT - NULL this out so that future steps don't get confused
-		instruction->destination_register = NULL;
+		instruction->operands.x86.destination_register = NULL;
 
 		//Create the offset using a u64
-		instruction->offset = emit_direct_integer_or_char_constant(offset, u64_type);
+		instruction->operands.x86.addressing_mode_offset = emit_direct_integer_or_char_constant(offset, u64_type);
 	}
 }
 
@@ -3129,7 +3129,7 @@ static instruction_t* handle_instruction_level_spilling(symtab_function_record_t
 	 */
 	if(is_instruction_pure_copy(instruction) == TRUE){
 		//Case we want here
-		if(instruction->source_register->associated_live_range == spill_range){
+		if(instruction->operands.x86.source_register1->associated_live_range == spill_range){
 			//Let the helper deal with it
 			handle_pure_copy_source_spill(instruction, spill_region->function_local_base_address);
 
@@ -3145,7 +3145,7 @@ static instruction_t* handle_instruction_level_spilling(symtab_function_record_t
 	 */
 	if(is_instruction_constant_assignment(instruction) == TRUE){
 		//What we're after here
-		if(instruction->destination_register->associated_live_range == spill_range){
+		if(instruction->operands.x86.destination_register->associated_live_range == spill_range){
 			//Let the helper deal with it
 			handle_constant_assignment_destination_spill(instruction, spill_region->function_local_base_address);
 
@@ -3159,10 +3159,10 @@ static instruction_t* handle_instruction_level_spilling(symtab_function_record_t
 	instruction_t* latest = instruction;
 
 	//Handle all source spills first
-	handle_source_spill(function, live_ranges, instruction->source_register, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
-	handle_source_spill(function, live_ranges, instruction->source_register2, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
-	handle_source_spill(function, live_ranges, instruction->address_calc_reg1, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
-	handle_source_spill(function, live_ranges, instruction->address_calc_reg2, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
+	handle_source_spill(function, live_ranges, instruction->operands.x86.source_register1, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
+	handle_source_spill(function, live_ranges, instruction->operands.x86.source_register2, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
+	handle_source_spill(function, live_ranges, instruction->operands.x86.addressing_mode_register1, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
+	handle_source_spill(function, live_ranges, instruction->operands.x86.addressing_mode_register2, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
 
 	//Run through all function parameters
 	if(instruction->instruction_type != PHI_FUNCTION){
@@ -3185,18 +3185,18 @@ static instruction_t* handle_instruction_level_spilling(symtab_function_record_t
 	 * register may itself be the spill range, *or* it may also be the "currently spilled" value
 	 * that we've been working with. We will handle both cases
 	 */
-	if(instruction->destination_register != NULL){
+	if(instruction->operands.x86.destination_register != NULL){
 		//First case - the destination register is the spill range
-		if(instruction->destination_register->associated_live_range == spill_range
-			|| instruction->destination_register->associated_live_range == *currently_spilled){
+		if(instruction->operands.x86.destination_register->associated_live_range == spill_range
+			|| instruction->operands.x86.destination_register->associated_live_range == *currently_spilled){
 
 			//In this case, we need to handle a source spill and a destination store
 			if(is_destination_also_operand(instruction) == TRUE){
 				//Handle the source first
-				handle_source_spill(function, live_ranges, instruction->destination_register, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
+				handle_source_spill(function, live_ranges, instruction->operands.x86.destination_register, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
 
 				//Emit the store instruction for this now
-				handle_destination_spill(instruction->destination_register, instruction, spill_region->function_local_base_address);
+				handle_destination_spill(instruction->operands.x86.destination_register, instruction, spill_region->function_local_base_address);
 
 				//Update latest
 				latest = instruction->next_statement;
@@ -3204,12 +3204,12 @@ static instruction_t* handle_instruction_level_spilling(symtab_function_record_t
 			//In the case like this, we just need to emit the load
 			} else if(is_move_instruction_destination_assigned(instruction) == FALSE){
 				//Handle the source spill only
-				handle_source_spill(function, live_ranges, instruction->destination_register, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
+				handle_source_spill(function, live_ranges, instruction->operands.x86.destination_register, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
 
 			//In all other cases, we just have the store
 			} else {
 				//Emit the store instruction for this now
-				handle_destination_spill(instruction->destination_register, instruction, spill_region->function_local_base_address);
+				handle_destination_spill(instruction->operands.x86.destination_register, instruction, spill_region->function_local_base_address);
 
 				//Update latest
 				latest = instruction->next_statement;
@@ -3218,13 +3218,13 @@ static instruction_t* handle_instruction_level_spilling(symtab_function_record_t
 	}
 
 	//Same - but rarer - for destination register 2
-	if(instruction->destination_register2 != NULL){
+	if(instruction->operands.x86.destination_register2 != NULL){
 		//First case - the destination register is the spill range
-		if(instruction->destination_register2->associated_live_range == spill_range
-			|| instruction->destination_register2->associated_live_range == *currently_spilled){
+		if(instruction->operands.x86.destination_register2->associated_live_range == spill_range
+			|| instruction->operands.x86.destination_register2->associated_live_range == *currently_spilled){
 
 			//Emit the store instruction for this now
-			handle_destination_spill(instruction->destination_register2, instruction, spill_region->function_local_base_address);
+			handle_destination_spill(instruction->operands.x86.destination_register2, instruction, spill_region->function_local_base_address);
 
 			//Update latest
 			latest = instruction->next_statement;
@@ -3708,18 +3708,18 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	live_range_class_t destination_lr_class;
 	
 	//Assign if it's not null
-	if(function_call->destination_register != NULL){
+	if(function_call->operands.x86.destination_register != NULL){
 		//Extract the destination LR for our uses later
-		destination_lr = function_call->destination_register->associated_live_range;
+		destination_lr = function_call->operands.x86.destination_register->associated_live_range;
 
 		//Cache the class as well
 		destination_lr_class = destination_lr->live_range_class;
 	}
 
 	//Assign the error LR if it's also non-null
-	if(function_call->destination_register2 != NULL){
+	if(function_call->operands.x86.destination_register2 != NULL){
 		//Extract this for later. We don't need to worry about the class - it's always gen purpose
-		error_lr = function_call->destination_register2->associated_live_range;
+		error_lr = function_call->operands.x86.destination_register2->associated_live_range;
 	}
 
 
@@ -4007,20 +4007,20 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 	u_int32_t gp_caller_saved_space = 0;
 
 	//Extract the actual function type
-	generic_type_t* function_type = function_call->source_register->type;
+	generic_type_t* function_type = function_call->operands.x86.source_register1->type;
 
 	//Extract if not null
-	if(function_call->destination_register != NULL){
-		destination_lr = function_call->destination_register->associated_live_range;
+	if(function_call->operands.x86.destination_register != NULL){
+		destination_lr = function_call->operands.x86.destination_register->associated_live_range;
 
 		//What is the class
 		destination_lr_class = destination_lr->live_range_class;
 	}
 
 	//Extract the error LR if we have it as well
-	if(function_call->destination_register2 != NULL){
+	if(function_call->operands.x86.destination_register2 != NULL){
 		//Extract here. This is always general purpose(%rdx)
-		error_lr = function_call->destination_register2->associated_live_range;
+		error_lr = function_call->operands.x86.destination_register2->associated_live_range;
 	}
 
 	/**
@@ -4489,18 +4489,18 @@ static inline void update_stack_passed_parameter_offsets(symtab_function_record_
 		//For every instruction
 		while(cursor != NULL){
 			//Handle the vase where the immediate source needs updating
-			if(cursor->source_immediate != NULL	
-				&& cursor->source_immediate->const_type == STACK_PASSED_PARAM_OFFSET){
+			if(cursor->operands.x86.source_immediate != NULL	
+				&& cursor->operands.x86.source_immediate->const_type == STACK_PASSED_PARAM_OFFSET){
 
 				//Let the helper do it
-				handle_stack_passed_param_constant(cursor->source_immediate);
+				handle_stack_passed_param_constant(cursor->operands.x86.source_immediate);
 
 			//Otherwise we could also have this case
-			} else if(cursor->offset != NULL
-						&& cursor->offset->const_type == STACK_PASSED_PARAM_OFFSET){
+			} else if(cursor->operands.x86.addressing_mode_offset != NULL
+						&& cursor->operands.x86.addressing_mode_offset->const_type == STACK_PASSED_PARAM_OFFSET){
 
 				//Let the helper do it
-				handle_stack_passed_param_constant(cursor->offset);
+				handle_stack_passed_param_constant(cursor->operands.x86.addressing_mode_offset);
 			} 
 
 			//Push along to the next value
@@ -4595,10 +4595,10 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 		 * ...
 		 */
 		if(after_stack_allocation->instruction_type == SUBQ 
-			&& after_stack_allocation->destination_register == stack_pointer){
+			&& after_stack_allocation->operands.x86.destination_register == stack_pointer){
 
 			//Instead of allocating just bump up the size
-			sum_constant_with_raw_int64_value(after_stack_allocation->source_immediate, u64_type, local_stack_size);
+			sum_constant_with_raw_int64_value(after_stack_allocation->operands.x86.source_immediate, u64_type, local_stack_size);
 
 		} else {
 			//For each function entry block, we need to emit a stack subtraction that is the size of that given variable
@@ -4661,10 +4661,10 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 			 */
 			if(before_last_callee_saved != NULL
 				&& before_last_callee_saved->instruction_type == ADDQ
-				&& before_last_callee_saved->destination_register == stack_pointer){
+				&& before_last_callee_saved->operands.x86.destination_register == stack_pointer){
 
 				//Instead of allocating, we are just going to add the local stack size to this given stack size
-				sum_constant_with_raw_int64_value(before_last_callee_saved->source_immediate, u64_type, local_stack_size);
+				sum_constant_with_raw_int64_value(before_last_callee_saved->operands.x86.source_immediate, u64_type, local_stack_size);
 
 			//Otherwise we have no chance to optimize
 			} else {
