@@ -2390,7 +2390,7 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 				//Same for indirect function calls - also have params
 				case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 					//Indirect function calls also have their op1's used
-					add_variable_to_use_set(cursor->op1, block);
+					add_variable_to_use_set(cursor->operands.oir.operand1, block);
 
 					//Run through the params and add them
 					for(u_int32_t _ = 0; _ < cursor->parameters.current_index; _++){
@@ -2408,6 +2408,7 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 
 				//For STOREs, the assignee is a memory address, so it's actually
 				//used but not defined
+				//TODO NOT ANYMORE WERE GONNA FIX THIS
 				case THREE_ADDR_CODE_STORE_STATEMENT:
 				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
@@ -2420,12 +2421,15 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 
 					break;
 
-				//In the default case, we just add the USE/DEF for each 
-				//variable that we can see
+				/**
+				 * In the default case, we just add the USE/DEF for each 
+				 * variable that we can see
+				 */
 				default:
-					//Op1/Op2 go into use if they exist
-					add_variable_to_use_set(cursor->op1, block);
-					add_variable_to_use_set(cursor->op2, block);
+					add_variable_to_use_set(cursor->operands.oir.operand1, block);
+					add_variable_to_use_set(cursor->operands.oir.operand2, block);
+					add_variable_to_use_set(cursor->operands.oir.address_operand1, block);
+					add_variable_to_use_set(cursor->operands.oir.address_operand2, block);
 					
 					//The assignee is in the def set
 					add_variable_to_def_set(cursor->operands.oir.assignee, block);
@@ -2898,18 +2902,16 @@ static void rename_block(basic_block_t* entry){
 	//So long as this isn't null
 	while(cursor != NULL){
 		switch(cursor->statement_type){
-			//First option - if we encounter a phi function
 			case THREE_ADDR_CODE_PHI_FUNC:
-				//We will rewrite the assigneed of the phi function(LHS)
-				//with the new name
+				//We will rewrite the assigneed of the phi function(LHS) with the new name
 				lhs_new_name(cursor->operands.oir.assignee);
 				break;
 				
 			case THREE_ADDR_CODE_FUNC_CALL:
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 				//If we have a non-temp variable, rename it
-				if(is_variable_ssa_eligible(cursor->op1) == TRUE){
-					rhs_new_name(cursor->op1);
+				if(is_variable_ssa_eligible(cursor->operands.oir.operand1) == TRUE){
+					rhs_new_name(cursor->operands.oir.operand1);
 				}
 
 				//Same goes for the assignee, except this one is the LHS
@@ -2939,6 +2941,9 @@ static void rename_block(basic_block_t* entry){
 			 * These statements are interesting because the "assignee" is not really
 			 * being assigned to. It holds a memory address that is being dereferenced
 			 * and then assigned to. As such, these values should never count as an lhs new name
+			 *
+			 *
+			 * TODO - ALL WRONG NOW
 			 */
 			case THREE_ADDR_CODE_STORE_STATEMENT:
 			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
@@ -2960,23 +2965,26 @@ static void rename_block(basic_block_t* entry){
 
 				break;
 
-			//And now if it's anything else that has an assignee, operands, etc,
-			//we'll need to rewrite all of those as well
-			//We'll exclude direct jump statements, these we don't care about
+			/**
+			 * And now if it's anything else that has an assignee, operands, etc,
+			 * we'll need to rewrite all of those as well
+			 * We'll exclude direct jump statements, these we don't care about
+			 */
 			default:
-				//If we have a non-temp variable, rename it
-				if(is_variable_ssa_eligible(cursor->op1) == TRUE){
-					rhs_new_name(cursor->op1);
+				if(is_variable_ssa_eligible(cursor->operands.oir.operand1) == TRUE){
+					rhs_new_name(cursor->operands.oir.operand1);
 				}
 
-				//If we have a non-temp variable, rename it
-				if(is_variable_ssa_eligible(cursor->op2) == TRUE){
-					rhs_new_name(cursor->op2);
+				if(is_variable_ssa_eligible(cursor->operands.oir.operand2) == TRUE){
+					rhs_new_name(cursor->operands.oir.operand2);
 				}
 
-				//Same goes for the assignee, except this one is the LHS
-				if(is_variable_ssa_eligible(cursor->operands.oir.assignee) == TRUE){
-					lhs_new_name(cursor->operands.oir.assignee);
+				if(is_variable_ssa_eligible(cursor->operands.oir.address_operand1) == TRUE){
+					rhs_new_name(cursor->operands.oir.address_operand1);
+				}
+
+				if(is_variable_ssa_eligible(cursor->operands.oir.address_operand2) == TRUE){
+					rhs_new_name(cursor->operands.oir.address_operand2);
 				}
 
 				break;
@@ -4759,7 +4767,7 @@ static inline three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_
 	instruction_t* not_stmt = emit_not_instruction(assignee);
 
 	//We will still save op1 here, for tracking reasons
-	not_stmt->op1 = var;
+	not_stmt->operands.oir.operand1 = var;
 
 	//Add this into the block
 	add_statement(basic_block, not_stmt);
@@ -5768,6 +5776,8 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 
 			/**
 			 * Different store statement types have different areas where the operands go
+			 *
+			 * TODO BAD ASSUMPTION NOW
 			 */
 			switch(store_statement->statement_type){
 				//Store statements have the storee in op1

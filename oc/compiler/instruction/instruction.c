@@ -2450,6 +2450,8 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		 * These print out like
 		 *
 		 * store x[offset] <- storee
+		 *
+		 * TODO I DON'T EVEN LIKE THIS
 		 */
 		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
 			//First the base address(assignee)

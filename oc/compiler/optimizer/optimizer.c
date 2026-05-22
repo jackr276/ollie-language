@@ -677,6 +677,8 @@ static void mark(dynamic_array_t* function_blocks){
 			/**
 			 * There will be special rules for store statements because we have assignees
 			 * that are not really assignees, they are more like operands
+			 *
+			 * TODO ALL WRONG NOW
 			 */
 			case THREE_ADDR_CODE_STORE_STATEMENT:
 			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
@@ -1332,6 +1334,8 @@ static inline void mark_all_branch_related_statements(basic_block_t* block){
 			/**
 			 * There will be special rules for store statements because we have assignees
 			 * that are not really assignees, they are more like operands
+			 *
+			 * TODO ALL WRONG NOW
 			 */
 			case THREE_ADDR_CODE_STORE_STATEMENT:
 			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
