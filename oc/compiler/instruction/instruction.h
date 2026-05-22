@@ -306,7 +306,7 @@ struct instruction_t{
 			//Second operand inside of an expression
 			three_addr_var_t* operand2;
 			//Constant operand if need be
-			three_addr_var_t* constant_operand;
+			three_addr_const_t* constant_operand;
 			//Assignee
 			three_addr_var_t* assignee;
 			/**
@@ -314,10 +314,11 @@ struct instruction_t{
 			 * calculation statements. Reminder that these statements
 			 * go like(at their maximum): offset(operand1, operand2, multiplier)
 			 */
-			three_addr_const_t* addressing_mode_offset;
-			three_addr_var_t* addressing_mode_operand1;
-			three_addr_var_t* addressing_mode_operand2;
-			three_addr_const_t* addressing_mode_mulitplier;
+			three_addr_const_t* address_offset;
+			three_addr_var_t* address_operand1;
+			three_addr_var_t* address_operand2;
+			//This can never be anything besides a 64 bit integer
+			u_int64_t address_multiplier;
 		} oir; 
 
 		/**
@@ -340,20 +341,13 @@ struct instruction_t{
 			 * calculation statements. Reminder that these statements
 			 * go like(at their maximum): offset(register1, register2, multiplier)
 			 */
-			three_addr_const_t* addressing_mode_offset;
-			three_addr_var_t* addressing_mode_register1;
-			three_addr_var_t* addressing_mode_register2;
-			three_addr_const_t* addressing_mode_mulitplier;
+			three_addr_const_t* address_offset;
+			three_addr_var_t* address_register1;
+			three_addr_var_t* address_register2;
+			//This can never be anything besides a 64 bit integer
+			u_int64_t address_multiplier;
 		} x86;
 	} operands;
-
-
-	//A three address code always has 2 operands and an assignee
-	three_addr_var_t* op1;
-	three_addr_var_t* op2;
-	//For convenience: op1 can also be a const sometimes
-	three_addr_const_t* op1_const;
-	three_addr_var_t* assignee;
 	//The RIP offset variable
 	three_addr_var_t* rip_offset_variable;
 	//Optional storage for values that aren't often used
@@ -669,17 +663,17 @@ instruction_t* emit_pxor_instruction(three_addr_var_t* destination, three_addr_v
 /**
  * Emit a lea statement that has one operand and an offset
  */
-instruction_t* emit_lea_offset_only(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_const_t* op1_const);
+instruction_t* emit_lea_offset_only(three_addr_var_t* assignee, three_addr_var_t* address_operand1, three_addr_const_t* address_offset);
 
 /**
  * Emit a lea statement that has no multiplier, only operands
  */
-instruction_t* emit_lea_operands_only(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2);
+instruction_t* emit_lea_operands_only(three_addr_var_t* assignee, three_addr_var_t* address_operand1, three_addr_var_t* address_operand2);
 
 /**
  * Emit a lea statement that has a multiplier and operands
  */
-instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size);
+instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, three_addr_var_t* address_operand1, three_addr_var_t* address_operand2, u_int64_t type_size);
 
 /**
  * Emit a lea statement that is used for rip relative calculations
@@ -689,7 +683,7 @@ instruction_t* emit_lea_rip_relative_constant(three_addr_var_t* assignee, three_
 /**
  * Emit a lea with the index and scale only
  */
-instruction_t* emit_lea_index_and_scale_only(three_addr_var_t* assignee, three_addr_var_t* offset, u_int64_t scale);
+instruction_t* emit_lea_index_and_scale_only(three_addr_var_t* assignee, three_addr_var_t* address_offset, u_int64_t address_scale);
 
 /**
  * Emit an indirect jump calculation that includes a block label in three address code form

@@ -1192,7 +1192,7 @@ instruction_t* emit_floating_point_clear_instruction(three_addr_var_t* assignee)
 	instruction->statement_type = THREE_ADDR_CODE_CLEAR_STMT;
 
 	//We've only got an assignee
-	instruction->assignee = assignee;
+	instruction->operands.oir.assignee = assignee;
 
 	//And give it back
 	return instruction;
@@ -1223,15 +1223,15 @@ instruction_t* emit_pop_instruction(three_addr_var_t* popee){
  *
  * This would look something like lea 3(t5), t7
  */
-instruction_t* emit_lea_offset_only(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_const_t* op1_const){
+instruction_t* emit_lea_offset_only(three_addr_var_t* assignee, three_addr_var_t* addressing_mode_operand1, three_addr_const_t* ){
 	//First we allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Now we'll make our populations
 	stmt->statement_type = THREE_ADDR_CODE_LEA_STMT;
-	stmt->assignee = assignee;
-	stmt->op1 = op1;
-	stmt->op1_const = op1_const;
+	stmt->operands.oir.assignee = assignee;
+	stmt->operands.oir.addressing_mode_operand1 = addressing_mode_operand1;
+	stmt->operands.oir.address_offset = op1_const;
 
 	//This only has registers
 	stmt->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
@@ -2430,7 +2430,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			//Then the constant offset
 			fprintf(fl, "["); 
 			//TODO JUST FOR NOW
-			print_three_addr_constant(fl, stmt->operands.oir.addressing_mode_offset);
+			print_three_addr_constant(fl, stmt->operands.oir.address_offset);
 			fprintf(fl, "] <- "); 
 
 			//Finally the storee(op2 or op1_const)
@@ -2501,7 +2501,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			//Then the constant offset
 			fprintf(fl, "["); 
 			//TODO JUST FOR NOW
-			print_three_addr_constant(fl, stmt->operands.oir.addressing_mode_offset);
+			print_three_addr_constant(fl, stmt->operands.oir.address_offset);
 			fprintf(fl, "]"); 
 
 			fprintf(fl, "\n");
@@ -3052,7 +3052,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 			//Print the actual string name of the variable - no SSA and no registers
 			fprintf(fl, "(");
 			//This will be the instruction pointer
-			print_variable(fl, instruction->operands.x86.addressing_mode_register1, mode);
+			print_variable(fl, instruction->operands.x86.address_register1, mode);
 			fprintf(fl, ")");
 
 		   	break;
@@ -3061,7 +3061,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 		 * Global var address calculation with offset
 		 */
 		case ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET:
-			print_immediate_value_no_prefix(fl, instruction->operands.x86.addressing_mode_offset);
+			print_immediate_value_no_prefix(fl, instruction->operands.x86.address_offset);
 			//There are different ways that this can go
 			switch(instruction->rip_offset_variable->variable_type){
 				case VARIABLE_TYPE_LOCAL_CONSTANT:
@@ -3076,7 +3076,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 			}
 			fprintf(fl, "(");
 			//This will be the instruction pointer
-			print_variable(fl, instruction->operands.x86.addressing_mode_register1, mode);
+			print_variable(fl, instruction->operands.x86.address_register1, mode);
 			fprintf(fl, ")");
 
 		   	break;
@@ -3090,9 +3090,9 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 		 */
 		case ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE:
 			fprintf(fl, "(");
-			print_variable(fl, instruction->operands.x86.addressing_mode_register1, mode);
+			print_variable(fl, instruction->operands.x86.address_register1, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->operands.x86.addressing_mode_register2, mode);
+			print_variable(fl, instruction->operands.x86.address_register2, mode);
 			fprintf(fl, ", ");
 			fprintf(fl, "%ld", instruction->lea_multiplier);
 			fprintf(fl, ")");
@@ -3100,52 +3100,52 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 
 		case ADDRESS_CALCULATION_MODE_OFFSET_ONLY:
 			//Only print this if it's not 0
-			print_immediate_value_no_prefix(fl, instruction->operands.x86.addressing_mode_offset);
+			print_immediate_value_no_prefix(fl, instruction->operands.x86.address_offset);
 			fprintf(fl, "(");
-			print_variable(fl, instruction->operands.x86.addressing_mode_register1, mode);
+			print_variable(fl, instruction->operands.x86.address_register1, mode);
 			fprintf(fl, ")");
 			break;
 
 		case ADDRESS_CALCULATION_MODE_REGISTERS_ONLY:
 			fprintf(fl, "(");
-			print_variable(fl, instruction->operands.x86.addressing_mode_register1, mode);
+			print_variable(fl, instruction->operands.x86.address_register1, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->operands.x86.addressing_mode_register2, mode);
+			print_variable(fl, instruction->operands.x86.address_register2, mode);
 			fprintf(fl, ")");
 			break;
 
 		case ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET:
 			//Only print this if it's not 0
-			print_immediate_value_no_prefix(fl, instruction->operands.x86.addressing_mode_offset);
+			print_immediate_value_no_prefix(fl, instruction->operands.x86.address_offset);
 			fprintf(fl, "(");
-			print_variable(fl, instruction->operands.x86.addressing_mode_register1, mode);
+			print_variable(fl, instruction->operands.x86.address_register1, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->operands.x86.addressing_mode_register2, mode);
+			print_variable(fl, instruction->operands.x86.address_register2, mode);
 			fprintf(fl, ")");
 			break;
 
 		case ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE:
 			//Only print this if it's not 0
-			print_immediate_value_no_prefix(fl, instruction->operands.x86.addressing_mode_offset);
+			print_immediate_value_no_prefix(fl, instruction->operands.x86.address_offset);
 			fprintf(fl, "(");
-			print_variable(fl, instruction->operands.x86.addressing_mode_register1, mode);
+			print_variable(fl, instruction->operands.x86.address_register1, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->operands.x86.addressing_mode_register2, mode);
+			print_variable(fl, instruction->operands.x86.address_register2, mode);
 			fprintf(fl, ", %ld)", instruction->lea_multiplier);
 			break;
 
 		//Index is in address calc reg 1 for this
 		case ADDRESS_CALCULATION_MODE_INDEX_AND_SCALE:
 			fprintf(fl, "( , ");
-			print_variable(fl, instruction->operands.x86.addressing_mode_register1, mode);
+			print_variable(fl, instruction->operands.x86.address_register1, mode);
 			fprintf(fl, ", %ld)", instruction->lea_multiplier);
 			break;
 			
 		//Index is in address calc reg 1 for this
 		case ADDRESS_CALCULATION_MODE_INDEX_OFFSET_AND_SCALE:
-			print_immediate_value_no_prefix(fl, instruction->operands.x86.addressing_mode_offset);
+			print_immediate_value_no_prefix(fl, instruction->operands.x86.address_offset);
 			fprintf(fl, "( , ");
-			print_variable(fl, instruction->operands.x86.addressing_mode_register1, mode);
+			print_variable(fl, instruction->operands.x86.address_register1, mode);
 			fprintf(fl, ", %ld)", instruction->lea_multiplier);
 			break;
 
@@ -3770,8 +3770,8 @@ static void print_division_instruction(FILE* fl, instruction_t* instruction, var
 	fprintf(fl, " /* Dividend: ");
 	
 	//Print out the higher order bit source if need be
-	if(instruction->operands.x86.addressing_mode_register1 != NULL){
-		print_variable(fl, instruction->operands.x86.addressing_mode_register1, mode);
+	if(instruction->operands.x86.address_register1 != NULL){
+		print_variable(fl, instruction->operands.x86.address_register1, mode);
 		fprintf(fl, ":");
 	}
 
@@ -5413,13 +5413,13 @@ instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_
 
 	stmt->operands.x86.destination_register = assignee;
 	//Stack pointer is source 1
-	stmt->operands.x86.addressing_mode_register1 = stack_pointer;
+	stmt->operands.x86.address_register1 = stack_pointer;
 	stmt->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 	//Loading is reading from memory
 	stmt->memory_access_type = READ_FROM_MEMORY;
 
 	//Emit an integer constant for this offset
-	stmt->operands.x86.addressing_mode_offset = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64", NOT_MUTABLE)->type);
+	stmt->operands.x86.address_offset = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64", NOT_MUTABLE)->type);
 
 	//And we're done, we can return it
 	return stmt;
@@ -5464,13 +5464,13 @@ instruction_t* emit_store_instruction(three_addr_var_t* source, three_addr_var_t
 	stmt->operands.x86.source_register1 = source;
 	
 	//Stack pointer our base address
-	stmt->operands.x86.addressing_mode_register1 = stack_pointer;
+	stmt->operands.x86.address_register1 = stack_pointer;
 	stmt->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 	//Storing is writing to memory
 	stmt->memory_access_type = WRITE_TO_MEMORY;
 
 	//Emit an integer constant for this offset
-	stmt->operands.x86.addressing_mode_offset = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64", NOT_MUTABLE)->type);
+	stmt->operands.x86.address_offset = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64", NOT_MUTABLE)->type);
 
 	//And we're done, we can return it
 	return stmt;
@@ -5567,7 +5567,7 @@ instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_ad
 
 	//The offset placeholder is used for our offset, not op1_const 
 	//TODO WILL BE FIXED
-	stmt->operands.oir.addressing_mode_offset = offset;
+	stmt->operands.oir.address_offset = offset;
 
 	//What we're storing
 	stmt->op2 = storee;
@@ -5598,7 +5598,7 @@ instruction_t* emit_store_const_with_constant_offset_ir_code(three_addr_var_t* b
 
 	//The offset placeholder is used for our offset, not op1_const 
 	//TODO WILL BE FIXED
-	stmt->operands.oir.addressing_mode_offset = offset;
+	stmt->operands.oir.address_offset = offset;
 
 	//What we're storing
 	stmt->op1_const = storee;
@@ -5674,7 +5674,7 @@ instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee
 	stmt->op1 = base_address;
 
 	//Our offset is stored in "offset", not op1_const
-	stmt->operands.oir.addressing_mode_offset = offset;
+	stmt->operands.oir.address_offset = offset;
 
 	//Important - store the type that we expect to be getting out of memory
 	stmt->type_storage.memory_read_write_type = memory_read_type;
@@ -6133,7 +6133,7 @@ instruction_t* emit_global_variable_address_calculation_x86(three_addr_var_t* gl
 	lea->operands.x86.destination_register = destination;
 
 	//Address calc reg 1 is the instruction pointer(relative addressing)
-	lea->operands.x86.addressing_mode_register1 = instruction_pointer;
+	lea->operands.x86.address_register1 = instruction_pointer;
 
 	//The offset is the global variable(unique case)
 	lea->rip_offset_variable = global_variable;
@@ -6212,7 +6212,8 @@ instruction_t* copy_instruction(instruction_t* copied){
 	copy->assignee = duplicate_variable(copied->assignee);
 	copy->op1 = duplicate_variable(copied->op1);
 	copy->op2 = duplicate_variable(copied->op2);
-	copy->operands.oir.addressing_mode_offset = duplicate_constant(copied->operands.oir.addressing_mode_offset);
+	//TODO LOOKS WRONG
+	copy->operands.oir.address_offset = duplicate_constant(copied->operands.oir.address_offset);
 	copy->op1_const = duplicate_constant(copied->op1_const);
 
 	//If we have function call parameters, emit a copy of them
