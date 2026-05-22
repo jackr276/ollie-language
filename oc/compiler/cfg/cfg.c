@@ -200,7 +200,7 @@ static inline three_addr_var_t* unpack_result_package(cfg_result_package_t* resu
 			add_statement(block, const_assignment);
 
 			//This is the variable that we end up returning
-			returned_variable = const_assignment->assignee;
+			returned_variable = const_assignment->operands.oir.assignee;
 			break;
 	}
 
@@ -807,11 +807,11 @@ static inline three_addr_var_t* emit_direct_floating_point_constant(basic_block_
 			add_statement(block, f32_lea_load);
 
 			//Now that we have an address, we can get the actual constant out by doing a load
-			instruction_t* load_f32 = emit_load_ir_code(emit_temp_var(f32), f32_lea_load->assignee, f32);
+			instruction_t* load_f32 = emit_load_ir_code(emit_temp_var(f32), f32_lea_load->operands.oir.assignee, f32);
 			add_statement(block, load_f32);
 
 			//Give back whatever assignee we've got
-			return load_f32->assignee;
+			return load_f32->operands.oir.assignee;
 		
 		case F64:
 			//Like above let's first try to extract it
@@ -832,11 +832,11 @@ static inline three_addr_var_t* emit_direct_floating_point_constant(basic_block_
 			add_statement(block, f64_lea_load);
 
 			//Now that we have an address, we can get the actual constant out by doing a load
-			instruction_t* load_f64 = emit_load_ir_code(emit_temp_var(f64), f64_lea_load->assignee, f64);
+			instruction_t* load_f64 = emit_load_ir_code(emit_temp_var(f64), f64_lea_load->operands.oir.assignee, f64);
 			add_statement(block, f64_lea_load);
 
 			//Give back whatever assignee we've got
-			return load_f64->assignee;
+			return load_f64->operands.oir.assignee;
 
 		default:
 			printf("Fatal internal compiler error: attempt to allocate a non-float constant in the floating point allocator\n");
@@ -2369,7 +2369,7 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 					}
 
 					//Add the DEF var in
-					add_variable_to_def_set(cursor->assignee, block);
+					add_variable_to_def_set(cursor->operands.oir.assignee, block);
 
 					break;
 
@@ -2388,7 +2388,7 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 					}
 
 					//Add the DEF var in
-					add_variable_to_def_set(cursor->assignee, block);
+					add_variable_to_def_set(cursor->operands.oir.assignee, block);
 
 					break;
 
@@ -2402,7 +2402,7 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 					add_variable_to_use_set(cursor->op2, block);
 					
 					//Assignee is defined in this unique case
-					add_variable_to_use_set(cursor->assignee, block);
+					add_variable_to_use_set(cursor->operands.oir.assignee, block);
 
 					break;
 
@@ -2414,7 +2414,7 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 					add_variable_to_use_set(cursor->op2, block);
 					
 					//The assignee is in the def set
-					add_variable_to_def_set(cursor->assignee, block);
+					add_variable_to_def_set(cursor->operands.oir.assignee, block);
 					break;
 			}
 
@@ -2888,7 +2888,7 @@ static void rename_block(basic_block_t* entry){
 			case THREE_ADDR_CODE_PHI_FUNC:
 				//We will rewrite the assigneed of the phi function(LHS)
 				//with the new name
-				lhs_new_name(cursor->assignee);
+				lhs_new_name(cursor->operands.oir.assignee);
 				break;
 				
 			case THREE_ADDR_CODE_FUNC_CALL:
@@ -2899,8 +2899,8 @@ static void rename_block(basic_block_t* entry){
 				}
 
 				//Same goes for the assignee, except this one is the LHS
-				if(is_variable_ssa_eligible(cursor->assignee) == TRUE){
-					lhs_new_name(cursor->assignee);
+				if(is_variable_ssa_eligible(cursor->operands.oir.assignee) == TRUE){
+					lhs_new_name(cursor->operands.oir.assignee);
 				}
 				
 				//Special case - do we have a function call?
@@ -2940,8 +2940,8 @@ static void rename_block(basic_block_t* entry){
 				}
 
 				//UNIQUE CASE - rhs also gets a new name here
-				if(is_variable_ssa_eligible(cursor->assignee) == TRUE){
-					rhs_new_name(cursor->assignee);
+				if(is_variable_ssa_eligible(cursor->operands.oir.assignee) == TRUE){
+					rhs_new_name(cursor->operands.oir.assignee);
 				}
 
 				break;
@@ -2961,8 +2961,8 @@ static void rename_block(basic_block_t* entry){
 				}
 
 				//Same goes for the assignee, except this one is the LHS
-				if(is_variable_ssa_eligible(cursor->assignee) == TRUE){
-					lhs_new_name(cursor->assignee);
+				if(is_variable_ssa_eligible(cursor->operands.oir.assignee) == TRUE){
+					lhs_new_name(cursor->operands.oir.assignee);
 				}
 
 				break;
@@ -2986,7 +2986,7 @@ static void rename_block(basic_block_t* entry){
 		//So long as it isn't null AND it's a phi function
 		while(succ_cursor != NULL && succ_cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
 			//We have a phi function, so what are we assigning to it?
-			symtab_variable_record_t* phi_func_var = succ_cursor->assignee->linked_var;
+			symtab_variable_record_t* phi_func_var = succ_cursor->operands.oir.assignee->linked_var;
 
 			//Emit a new variable for this one
 			three_addr_var_t* phi_func_param = emit_var(phi_func_var);
@@ -3045,9 +3045,9 @@ static void rename_block(basic_block_t* entry){
 			//Otherwise this does count
 			default:
 				//If we see a statement that has an assignee that is not temporary, we'll unwind(pop) his stack
-				if(is_variable_ssa_eligible(cursor->assignee) == TRUE){
+				if(is_variable_ssa_eligible(cursor->operands.oir.assignee) == TRUE){
 					//Pop it off
-					lightstack_pop(&(cursor->assignee->linked_var->counter_stack));
+					lightstack_pop(&(cursor->operands.oir.assignee->linked_var->counter_stack));
 				}
 
 				break;
@@ -3275,7 +3275,7 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 						add_statement(current, assignment);
 
 						//This is what we're actually returning
-						return_variable = assignment->assignee;
+						return_variable = assignment->operands.oir.assignee;
 					}
 
 				/**
@@ -3438,11 +3438,11 @@ static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, t
 			*operator = NOT_EQUALS;
 
 			//Flag that this comes out of an FP comparsion
-			test_if_not_zero->assignee->comes_from_fp_comparison = TRUE;
+			test_if_not_zero->operands.oir.assignee->comes_from_fp_comparison = TRUE;
 		}
 
 		//Give back the final assignee
-		return test_if_not_zero->assignee;
+		return test_if_not_zero->operands.oir.assignee;
 
 	/**
 	 * Otherwise if we have a temp variable, we should look to see if this is really
@@ -3453,7 +3453,7 @@ static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, t
 	} else {
 		if(basic_block->exit_statement != NULL
 	 		&& basic_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-			&& variables_equal(basic_block->exit_statement->assignee, tested_variable, FALSE) == TRUE){
+			&& variables_equal(basic_block->exit_statement->operands.oir.assignee, tested_variable, FALSE) == TRUE){
 			//Use the constant enhancment to make this happen
 			instruction_t* test_if_not_zero = emit_test_if_not_zero_for_const_statement(emit_temp_var(u8), basic_block->exit_statement->op1_const);
 
@@ -3461,7 +3461,7 @@ static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, t
 			add_statement(basic_block, test_if_not_zero);
 
 			//Give back the result
-			return test_if_not_zero->assignee;
+			return test_if_not_zero->operands.oir.assignee;
 
 		} else {
 			//Emit the instruction
@@ -3471,7 +3471,7 @@ static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, t
 			add_statement(basic_block, test_if_not_zero);
 
 			//Give back the final assignee
-			return test_if_not_zero->assignee;
+			return test_if_not_zero->operands.oir.assignee;
 		}
 	}
 }
@@ -3621,7 +3621,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 				add_statement(current_block, constant_assignment);
 
 				//This now is our decider
-				conditional_decider = constant_assignment->assignee;
+				conditional_decider = constant_assignment->operands.oir.assignee;
 
 				break;
 
@@ -3649,7 +3649,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		u_int8_t type_signed;
 		if(current_block->exit_statement != NULL
 			&& is_binary_operation(current_block->exit_statement)
-			&& variables_equal(current_block->exit_statement->assignee, conditional_decider, FALSE) == TRUE){
+			&& variables_equal(current_block->exit_statement->operands.oir.assignee, conditional_decider, FALSE) == TRUE){
 
 			//If we have a result type use that, otherwise take from op1
 			if(current_block->exit_statement->type_storage.result_type != NULL){
@@ -3909,7 +3909,7 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 				add_statement(current_block, constant_assignment);
 
 				//This now is our decider
-				conditional_decider = constant_assignment->assignee;
+				conditional_decider = constant_assignment->operands.oir.assignee;
 
 				break;
 
@@ -3936,7 +3936,7 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 		u_int8_t type_signed;
 		if(current_block->exit_statement != NULL
 			&& is_binary_operation(current_block->exit_statement)
-			&& variables_equal(current_block->exit_statement->assignee, conditional_decider, FALSE) == TRUE){
+			&& variables_equal(current_block->exit_statement->operands.oir.assignee, conditional_decider, FALSE) == TRUE){
 
 			//If we have a result type use that, otherwise take from op1
 			if(current_block->exit_statement->type_storage.result_type != NULL){
@@ -4156,7 +4156,7 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 			 * This is always a variable constant - we will package it up and return now
 			 */
 			constant_result_package.type = CFG_RESULT_TYPE_VAR;
-			constant_result_package.result_value.result_var = const_assignment->assignee;
+			constant_result_package.result_value.result_var = const_assignment->operands.oir.assignee;
 			return constant_result_package;
 
 		//For float constants, we need to emit the local constant equivalent via the helper
@@ -4208,7 +4208,7 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 			add_statement(basic_block, address_load);
 
 			//Emit a load instruction to grab the constant from said address
-			const_assignment = emit_load_ir_code(emit_temp_var(f32), address_load->assignee, f32);
+			const_assignment = emit_load_ir_code(emit_temp_var(f32), address_load->operands.oir.assignee, f32);
 
 			//Now add the actual assignment into the block
 			add_statement(basic_block, const_assignment);
@@ -4217,7 +4217,7 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 			 * Package up and get out of here with our final result
 			 */
 			constant_result_package.type = CFG_RESULT_TYPE_VAR;
-			constant_result_package.result_value.result_var = const_assignment->assignee;
+			constant_result_package.result_value.result_var = const_assignment->operands.oir.assignee;
 			return constant_result_package;
 
 		//For double constants, we need to emit the local constant equivalent via the helper
@@ -4270,7 +4270,7 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 			add_statement(basic_block, address_load);
 
 			//Emit a load instruction to grab the constant from the above address
-			const_assignment = emit_load_ir_code(emit_temp_var(f64), address_load->assignee, f64);
+			const_assignment = emit_load_ir_code(emit_temp_var(f64), address_load->operands.oir.assignee, f64);
 
 			//Get this into the block
 			add_statement(basic_block, const_assignment);
@@ -4279,7 +4279,7 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 			 * Now we can package up and return the entire result struct
 			 */
 			constant_result_package.type = CFG_RESULT_TYPE_VAR;
-			constant_result_package.result_value.result_var = const_assignment->assignee;
+			constant_result_package.result_value.result_var = const_assignment->operands.oir.assignee;
 			return constant_result_package;
 
 		//Special case here - we need to emit a variable for the function pointer itself
@@ -4297,7 +4297,7 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 			 * Package up and return the resulting constant that we got
 			 */
 			constant_result_package.type = CFG_RESULT_TYPE_VAR;
-			constant_result_package.result_value.result_var = const_assignment->assignee;
+			constant_result_package.result_value.result_var = const_assignment->operands.oir.assignee;
 			return constant_result_package;
 
 		/**
@@ -4423,7 +4423,7 @@ static three_addr_var_t* emit_direct_constant_assignment(basic_block_t* basic_bl
 	add_statement(basic_block, const_var);
 
 	//Now give back the assignee variable
-	return const_var->assignee;
+	return const_var->operands.oir.assignee;
 }
 
 
@@ -4447,7 +4447,7 @@ static inline three_addr_var_t* emit_automatic_load_from_memory(basic_block_t* b
 	add_statement(block, load_instruction);
 
 	//Just give back the temp var here
-	return load_instruction->assignee;
+	return load_instruction->operands.oir.assignee;
 }
 
 
@@ -4641,7 +4641,7 @@ static inline three_addr_var_t* emit_general_purpose_inc_code(basic_block_t* bas
 	add_statement(basic_block, inc_code);
 
 	//Return the incrementee
-	return inc_code->assignee;
+	return inc_code->operands.oir.assignee;
 }
 
 
@@ -4693,7 +4693,7 @@ static inline three_addr_var_t* emit_general_purpose_dec_code(basic_block_t* bas
 	add_statement(basic_block, dec_code);
 
 	//Return the incrementee
-	return dec_code->assignee;
+	return dec_code->operands.oir.assignee;
 }
 
 
@@ -4751,7 +4751,7 @@ static inline three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_
 	add_statement(basic_block, not_stmt);
 
 	//Give back the assignee
-	return not_stmt->assignee;
+	return not_stmt->operands.oir.assignee;
 }
 
 
@@ -4859,7 +4859,7 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 			add_statement(current_block, load_instruction);
 
 			//The new base address now is the load instruction's assignee
-			*base_address = load_instruction->assignee;
+			*base_address = load_instruction->operands.oir.assignee;
 
 			//And the offset is now nothing
 			*current_offset = NULL;
@@ -4873,7 +4873,7 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 			add_statement(current_block, load_instruction);
 
 			//Again this now is the base address
-			*base_address = load_instruction->assignee;
+			*base_address = load_instruction->operands.oir.assignee;
 		}
 	}
 
@@ -4980,7 +4980,7 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 					add_statement(current_block, address_calculation);
 
 					//And finally - our current offset is no longer the actual offset
-					*current_offset = address_calculation->assignee;
+					*current_offset = address_calculation->operands.oir.assignee;
 				}
 
 			/**
@@ -5057,7 +5057,7 @@ static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block
 			add_statement(block, load_instruction);
 
 			//The new base address now is the load instruction's assignee
-			*base_address = load_instruction->assignee;
+			*base_address = load_instruction->operands.oir.assignee;
 
 			//And the offset is now nothing
 			*current_offset = NULL;
@@ -5071,7 +5071,7 @@ static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block
 			add_statement(block, load_instruction);
 
 			//Again this now is the base address
-			*base_address = load_instruction->assignee;
+			*base_address = load_instruction->operands.oir.assignee;
 		}
 	}
 
@@ -5156,7 +5156,7 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 			add_statement(block, load_instruction);
 
 			//The new base address now is the load instruction's assignee
-			*base_address = load_instruction->assignee;
+			*base_address = load_instruction->operands.oir.assignee;
 
 			//And the offset is now nothing
 			*current_offset = NULL;
@@ -5170,7 +5170,7 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 			add_statement(block, load_instruction);
 
 			//Again this now is the base address
-			*base_address = load_instruction->assignee;
+			*base_address = load_instruction->operands.oir.assignee;
 		}
 	}
 
@@ -5190,7 +5190,7 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 	add_statement(block, final_assignment);
 
 	//The current offset now is this
-	*current_offset = final_assignment->assignee;
+	*current_offset = final_assignment->operands.oir.assignee;
 
 	/**
 	 * IMPORTANT: if what we just calculated came specifically from a non-contiguous memory
@@ -5235,7 +5235,7 @@ static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block,
 			add_statement(block, load_instruction);
 
 			//The new base address now is the load instruction's assignee
-			*base_address = load_instruction->assignee;
+			*base_address = load_instruction->operands.oir.assignee;
 
 			//And the offset is now nothing
 			*current_offset = NULL;
@@ -5249,7 +5249,7 @@ static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block,
 			add_statement(block, load_instruction);
 
 			//Again this now is the base address
-			*base_address = load_instruction->assignee;
+			*base_address = load_instruction->operands.oir.assignee;
 		}
 	}
 
@@ -5301,7 +5301,7 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
 			add_statement(block, load_instruction);
 
 			//The new base address now is the load instruction's assignee
-			*base_address = load_instruction->assignee;
+			*base_address = load_instruction->operands.oir.assignee;
 
 			//And the offset is now nothing
 			*current_offset = NULL;
@@ -5315,7 +5315,7 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
 			add_statement(block, load_instruction);
 
 			//Again this now is the base address
-			*base_address = load_instruction->assignee;
+			*base_address = load_instruction->operands.oir.assignee;
 		}
 	}
 
@@ -5589,7 +5589,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 					add_statement(current_block, load_instruction);
 
 					//Now the final assignee here is important - it's what we give it here
-					postfix_results.result_value.result_var = load_instruction->assignee;
+					postfix_results.result_value.result_var = load_instruction->operands.oir.assignee;
 
 				//Otherwise we have a null current offset, so we're just relying on the base address
 				} else {
@@ -5600,7 +5600,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 					add_statement(current_block, load_instruction);
 
 					//This is our final assignee
-					postfix_results.result_value.result_var = load_instruction->assignee;
+					postfix_results.result_value.result_var = load_instruction->operands.oir.assignee;
 				}
 
 				break;
@@ -5617,7 +5617,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 			add_statement(current_block, address_calculation);
 
 			//This is what we're returning
-			postfix_results.result_value.result_var = address_calculation->assignee;
+			postfix_results.result_value.result_var = address_calculation->operands.oir.assignee;
 
 		//Otherwise it is null, so we can just use the base address
 		} else {
@@ -5670,7 +5670,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	add_statement(current_block, temp_assignment);
 
 	//Initialize this off the bat
-	cfg_result_package_t postoperation_package = {basic_block, current_block, {temp_assignment->assignee}, CFG_RESULT_TYPE_VAR, BLANK};
+	cfg_result_package_t postoperation_package = {basic_block, current_block, {temp_assignment->operands.oir.assignee}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	//If the assignee is not a pointer, we'll handle the normal case
 	switch(assignee->type->type_class){
@@ -6039,7 +6039,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 				//Package this up and get out
 				unary_package.type = CFG_RESULT_TYPE_VAR;
-				unary_package.result_value.result_var = assignment_instruction->assignee;
+				unary_package.result_value.result_var = assignment_instruction->operands.oir.assignee;
 				return unary_package;
 			}
 
@@ -6077,7 +6077,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 				//This one's assignee is our overall assignee
 				unary_package.type = CFG_RESULT_TYPE_VAR;
-				unary_package.result_value.result_var = load_instruction->assignee;
+				unary_package.result_value.result_var = load_instruction->operands.oir.assignee;
 			}
 
 			//Give back the final unary package
@@ -6119,7 +6119,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 * If we came from a floating point operation, then we will just flag as such here
 			 */
 			if(IS_FLOATING_POINT(assignee->type) == TRUE){
-				logical_not_statement->assignee->comes_from_fp_comparison = TRUE;
+				logical_not_statement->operands.oir.assignee->comes_from_fp_comparison = TRUE;
 			}
 
 			//Get it into the block right after the unary expression
@@ -6127,7 +6127,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 			//The package's assignee is now the result of this logical not instruction
 			unary_package.type = CFG_RESULT_TYPE_VAR;
-			unary_package.result_value.result_var = logical_not_statement->assignee;
+			unary_package.result_value.result_var = logical_not_statement->operands.oir.assignee;
 
 			//The operator here is logical not
 			unary_package.operator = EXCLAMATION;
@@ -6161,14 +6161,14 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			add_statement(current_block, assignment);
 
 			//Now emit the instruction itself
-			instruction_t* negation_instruction = emit_neg_instruction(assignment->assignee);
+			instruction_t* negation_instruction = emit_neg_instruction(assignment->operands.oir.assignee);
 
 			//Now get the whole statement into the block
 			add_statement(current_block, negation_instruction);
 
 			//Rewrite the assignee to be this now
 			unary_package.type = CFG_RESULT_TYPE_VAR;
-			unary_package.result_value.result_var = negation_instruction->assignee;
+			unary_package.result_value.result_var = negation_instruction->operands.oir.assignee;
 			
 			//And give back the final value
 			return unary_package;
@@ -6617,7 +6617,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	//Package up and return
 	package.final_block = current_block;
 	package.type = CFG_RESULT_TYPE_VAR;
-	package.result_value.result_var = binary_operation->assignee;
+	package.result_value.result_var = binary_operation->operands.oir.assignee;
 	package.operator = logical_or_expr->binary_operator;	
 
 	return package;
@@ -6702,7 +6702,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			 */
 			} else if(current_block->exit_statement != NULL
 						&& is_store_operation(current_block->exit_statement) == TRUE
-						&& current_block->exit_statement->assignee == left_hand_var){
+						&& current_block->exit_statement->operands.oir.assignee == left_hand_var){
 				//This is our store statement
 				instruction_t* store_statement = current_block->exit_statement;
 
@@ -6761,9 +6761,9 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				 * the copy assignment for this assignment expression and go to emitting directly
 				 */
 				if(last_instruction != NULL
-					&& last_instruction->assignee != NULL
-					&& last_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& variables_equal_no_ssa(last_instruction->assignee, result_var, FALSE) == TRUE){
+					&& last_instruction->operands.oir.assignee != NULL
+					&& last_instruction->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& variables_equal_no_ssa(last_instruction->operands.oir.assignee, result_var, FALSE) == TRUE){
 
 					switch(last_instruction->statement_type){
 						case THREE_ADDR_CODE_BIN_OP_STMT:
@@ -6771,7 +6771,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 							binary_expression = last_instruction;
 
 							//Make this one's assignee the left hand var
-							binary_expression->assignee = left_hand_var;
+							binary_expression->operands.oir.assignee = left_hand_var;
 							
 							break;
 
@@ -6820,7 +6820,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			 */
 			if(current_block->exit_statement != NULL
 				&& is_store_operation(current_block->exit_statement)
-				&& current_block->exit_statement->assignee == left_hand_var){
+				&& current_block->exit_statement->operands.oir.assignee == left_hand_var){
 
 				//Simply give this one the constant that we had
 				current_block->exit_statement->op1_const = right_hand_package.result_value.result_const;
@@ -7346,7 +7346,7 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 	//Add the comparsion
 	add_statement(starting_block, comparison);
 	//Get the branch out - this handles everything for us
-	emit_branch_for_switch_statement(starting_block, default_block, jump_calculation_block, BRANCH_A, comparison->assignee);
+	emit_branch_for_switch_statement(starting_block, default_block, jump_calculation_block, BRANCH_A, comparison->operands.oir.assignee);
 
 	/**
 	 * Now we can do the indirect jump calculation and emit the indirect jump. Remember that we're already starting at 0, so we don't
@@ -7366,7 +7366,7 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 
 		//This is the final assignee for the result package
 		result_package.type = CFG_RESULT_TYPE_VAR;
-		result_package.result_value.result_var = final_result_assingnment->assignee;
+		result_package.result_value.result_var = final_result_assingnment->operands.oir.assignee;
 	}
 
 	//We can already fill in the result package
@@ -7679,7 +7679,7 @@ static inline void handle_parameter_storage(basic_block_t* basic_block, function
 						add_statement(basic_block, assignment);
 
 						//Add the parameter in
-						dynamic_array_add(function_call_statement_parameters, assignment->assignee);
+						dynamic_array_add(function_call_statement_parameters, assignment->operands.oir.assignee);
 
 					//If we get here then we need to do a stack allocation
 					} else {
@@ -7749,7 +7749,7 @@ static inline void handle_parameter_storage(basic_block_t* basic_block, function
 						}
 
 						//Add the parameter in
-						dynamic_array_add(function_call_statement_parameters, assignment->assignee);
+						dynamic_array_add(function_call_statement_parameters, assignment->operands.oir.assignee);
 
 					//If we get here then we need to do a stack allocation
 					} else {
@@ -8268,7 +8268,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		add_statement(current_block, assignment);
 
 		//This now is our error assignee that will be used in the CFG
-		error_assignee = assignment->assignee;
+		error_assignee = assignment->operands.oir.assignee;
 
 		//Let the helper do the rest. It will spit back the results of the final assignment for us
 		cfg_result_package_t handle_results = emit_handle_statement(current_block, param_cursor, function_assignee, error_assignee);
@@ -8287,7 +8287,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(function_assignee->type), function_assignee);
 
 			//Reassign this value
-			function_assignee = assignment->assignee;
+			function_assignee = assignment->operands.oir.assignee;
 
 			//Add it in
 			add_statement(current_block, assignment);
@@ -9813,7 +9813,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 
 	//Now that all this is done, we can use our jump table for the rest
 	//We'll now need to cut the value down by whatever our offset was	
-	three_addr_var_t* input = emit_binary_operation_with_constant(jump_calculation_block, temporary_variable_assignent->assignee, temporary_variable_assignent->assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32));
+	three_addr_var_t* input = emit_binary_operation_with_constant(jump_calculation_block, temporary_variable_assignent->operands.oir.assignee, temporary_variable_assignent->operands.oir.assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32));
 
 	/**
 	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
@@ -10033,7 +10033,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 	//Now that all this is done, we can use our jump table for the rest
 	//We'll now need to cut the value down by whatever our offset was	
-	three_addr_var_t* input = emit_binary_operation_with_constant(jump_calculation_block, temporary_variable_assignent->assignee, temporary_variable_assignent->assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32));
+	three_addr_var_t* input = emit_binary_operation_with_constant(jump_calculation_block, temporary_variable_assignent->operands.oir.assignee, temporary_variable_assignent->operands.oir.assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32));
 
 	/**
 	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
@@ -10071,7 +10071,7 @@ static inline void handle_raise_statement(basic_block_t* basic_block, generic_as
 	add_statement(basic_block, temp_assignment);
 
 	//Now we can emit the raises statement itself
-	instruction_t* raise_statement = emit_raise_instruction(temp_assignment->assignee);
+	instruction_t* raise_statement = emit_raise_instruction(temp_assignment->operands.oir.assignee);
 
 	//Add this into the block
 	add_statement(basic_block, raise_statement);
@@ -11108,7 +11108,7 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 				add_statement(block, assignment); 
 
 				//We'll now manually insert a ret 0 based on whatever the return type of the function is
-				instruction_t* return_instruction = emit_ret_instruction(assignment->assignee);
+				instruction_t* return_instruction = emit_ret_instruction(assignment->operands.oir.assignee);
 				
 				//We'll now add this at the very end of the block
 				add_statement(block, return_instruction);
@@ -11821,7 +11821,7 @@ static cfg_result_package_t emit_final_initialization(basic_block_t* current_blo
 				add_statement(current_block, temp_assignment);
 
 				//This now is the final assignee
-				final_assignee = temp_assignment->assignee;
+				final_assignee = temp_assignment->operands.oir.assignee;
 			}
 
 			//This is now our op2
@@ -12085,9 +12085,9 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 				 * be able to shrink our footprint here
 				 */
 				if(current_block->exit_statement != NULL
-					&& current_block->exit_statement->assignee != NULL
-					&& current_block->exit_statement->assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& current_block->exit_statement->assignee == let_result_var){
+					&& current_block->exit_statement->operands.oir.assignee != NULL
+					&& current_block->exit_statement->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& current_block->exit_statement->operands.oir.assignee == let_result_var){
 
 					switch(current_block->exit_statement->statement_type){
 						/**
@@ -12098,7 +12098,7 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 							binary_operation = current_block->exit_statement;
 
 							//Just replace it with our variable
-							binary_operation->assignee = let_variable;
+							binary_operation->operands.oir.assignee = let_variable;
 
 							break;
 

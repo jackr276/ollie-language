@@ -2432,13 +2432,12 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 			//Then the constant offset
 			fprintf(fl, "["); 
-			//TODO JUST FOR NOW
 			print_three_addr_constant(fl, stmt->operands.oir.address_offset);
 			fprintf(fl, "] <- "); 
 
-			//Finally the storee(op2 or constant operand)
-			if(stmt->operands.oir.operand2 != NULL){
-				print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
+			//Finally the storee(op1 or constant operand)
+			if(stmt->operands.oir.operand1 != NULL){
+				print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			} else {
 				print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
 			}
@@ -2457,14 +2456,14 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "store ");
 			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 
-			//Then the variable offset(op1)
+			//Then the variable offset
 			fprintf(fl, "["); 
-			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, "] <- "); 
 
-			//Finally the storee(op2 or constant operand)
-			if(stmt->operands.oir.operand2 != NULL){
-				print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
+			//Finally the storee(op1 or constant operand)
+			if(stmt->operands.oir.operand1 != NULL){
+				print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			} else {
 				print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
 			}
@@ -2499,11 +2498,10 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, " <- ");
 
 			//Now the base address
-			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
 
 			//Then the constant offset
 			fprintf(fl, "["); 
-			//TODO JUST FOR NOW
 			print_three_addr_constant(fl, stmt->operands.oir.address_offset);
 			fprintf(fl, "]"); 
 
@@ -2523,11 +2521,11 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, " <- ");
 
 			//Now the base address
-			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
 
-			//Then the constant offset
+			//Then the variable offset
 			fprintf(fl, "["); 
-			print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
 			fprintf(fl, "]"); 
 
 			fprintf(fl, "\n");
@@ -5534,11 +5532,11 @@ instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_ad
 	//This is being dereferenced
 	stmt->operands.oir.assignee->is_dereferenced = TRUE;
 
-	//The op1 is our offset
-	stmt->operands.oir.operand1 = offset;
+	//Leverage the address calculation region
+	stmt->operands.oir.address_operand1 = offset;
 
 	//What we're storing
-	stmt->operands.oir.operand2 = storee;
+	stmt->operands.oir.operand1 = storee;
 
 	//Important - add the type that we expect to be writing to in memory
 	stmt->type_storage.memory_read_write_type = memory_write_type;
@@ -5565,11 +5563,10 @@ instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_ad
 	stmt->operands.oir.assignee->is_dereferenced = TRUE;
 
 	//The offset placeholder is used for our offset, not constant operand 
-	//TODO WILL BE FIXED
 	stmt->operands.oir.address_offset = offset;
 
 	//What we're storing
-	stmt->operands.oir.operand2 = storee;
+	stmt->operands.oir.operand1 = storee;
 
 	//Important - add the type that we expect to be writing to in memory
 	stmt->type_storage.memory_read_write_type = memory_write_type;
@@ -5596,7 +5593,6 @@ instruction_t* emit_store_const_with_constant_offset_ir_code(three_addr_var_t* b
 	stmt->operands.oir.assignee->is_dereferenced = TRUE;
 
 	//The offset placeholder is used for our offset, not constant operand 
-	//TODO WILL BE FIXED
 	stmt->operands.oir.address_offset = offset;
 
 	//What we're storing
@@ -5644,10 +5640,10 @@ instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee
 	//The base address that we're assigning to
 	stmt->operands.oir.assignee = assignee;
 	//The op1 is our base address
-	stmt->operands.oir.operand1 = base_address;
+	stmt->operands.oir.address_operand1 = base_address;
 
 	//And op2 is our offset
-	stmt->operands.oir.operand2 = offset;
+	stmt->operands.oir.address_operand2 = offset;
 
 	//Important - store the type that we expect to be getting out of memory
 	stmt->type_storage.memory_read_write_type = memory_read_type;
@@ -5670,7 +5666,7 @@ instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee
 	//The assignee that we're loading into
 	stmt->operands.oir.assignee = assignee;
 	//The op1 is our base address
-	stmt->operands.oir.operand1 = base_address;
+	stmt->operands.oir.address_operand1 = base_address;
 
 	//Our offset is stored in "offset", not constant operand
 	stmt->operands.oir.address_offset = offset;
