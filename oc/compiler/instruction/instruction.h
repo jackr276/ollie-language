@@ -387,8 +387,7 @@ struct instruction_t{
 		 */
 		generic_type_t* result_type;
 	} type_storage;
-	//For lea multiplication
-	u_int64_t lea_multiplier;
+
 	//The function called
 	symtab_function_record_t* called_function;
 	//What is the three address code type
