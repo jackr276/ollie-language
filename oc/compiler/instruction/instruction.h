@@ -353,25 +353,11 @@ struct instruction_t{
 	three_addr_var_t* op2;
 	//For convenience: op1 can also be a const sometimes
 	three_addr_const_t* op1_const;
+	//TODO FOR NOW - we will scrap later
+	three_addr_const_t* OIR_offset;
 	three_addr_var_t* assignee;
-	//Now for the assembly operations, we have a source and destination
-	three_addr_var_t* source_register;
-	//We can have more than one source, usually for CMP instructions
-	three_addr_var_t* source_register2;
-	//If we're trying to move a constant in
-	three_addr_const_t* source_immediate;
-	//Our destination register/variable
-	three_addr_var_t* destination_register;
-	//Certain instructions like conversions, and divisions, have more
-	//than one destination register
-	three_addr_var_t* destination_register2;
-	//The offset constant if we have one
-	three_addr_const_t* offset;
 	//The RIP offset variable
 	three_addr_var_t* rip_offset_variable;
-	//The address calculation registers
-	three_addr_var_t* address_calc_reg1;
-	three_addr_var_t* address_calc_reg2;
 	//Optional storage for values that aren't often used
 	union {
 		//Store inlined assembly in a string

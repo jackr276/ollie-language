@@ -696,7 +696,7 @@ u_int8_t is_instruction_pure_copy(instruction_t* instruction){
 		case MOVSD:
 		case MOVSS:
 			//If there's a source register we're good
-			if(instruction->source_register != NULL
+			if(instruction->operands.x86.source_register1 != NULL
 				&& instruction->memory_access_type == NO_MEMORY_ACCESS){
 				return TRUE;
 			}
@@ -727,7 +727,7 @@ u_int8_t is_instruction_constant_assignment(instruction_t* instruction){
 			}
 
 			//If this is NULL, it also doesn't count
-			if(instruction->source_immediate == NULL){
+			if(instruction->operands.x86.source_immediate == NULL){
 				return FALSE;
 			}
 
@@ -1108,7 +1108,7 @@ instruction_t* emit_push_instruction(three_addr_var_t* pushee){
 	instruction->instruction_type = PUSH;
 
 	//We only ever have a source
-	instruction->source_register = pushee;
+	instruction->operands.x86.source_register1 = pushee;
 
 	//Finally give it back
 	return instruction;
@@ -1172,8 +1172,8 @@ instruction_t* emit_pxor_instruction(three_addr_var_t* destination, three_addr_v
 	instruction->instruction_type = PXOR;
 
 	//The source and destination are the exact same
-	instruction->destination_register = destination;
-	instruction->source_register = source;
+	instruction->operands.x86.destination_register = destination;
+	instruction->operands.x86.source_register1 = source;
 
 	//Now give it back
 	return instruction;
@@ -1211,7 +1211,7 @@ instruction_t* emit_pop_instruction(three_addr_var_t* popee){
 	instruction->instruction_type = POP;
 
 	//We only ever have a source
-	instruction->source_register = popee;
+	instruction->operands.x86.source_register1 = popee;
 
 	//Finally give it back
 	return instruction;
@@ -2429,7 +2429,8 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 			//Then the constant offset
 			fprintf(fl, "["); 
-			print_three_addr_constant(fl, stmt->offset);
+			//TODO JUST FOR NOW
+			print_three_addr_constant(fl, stmt->OIR_offset);
 			fprintf(fl, "] <- "); 
 
 			//Finally the storee(op2 or op1_const)
@@ -2499,7 +2500,8 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 			//Then the constant offset
 			fprintf(fl, "["); 
-			print_three_addr_constant(fl, stmt->offset);
+			//TODO JUST FOR NOW
+			print_three_addr_constant(fl, stmt->OIR_offset);
 			fprintf(fl, "]"); 
 
 			fprintf(fl, "\n");
@@ -3022,9 +3024,9 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 			fprintf(fl, "(");
 
 			if(instruction->calculation_mode == ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE){
-				print_variable(fl, instruction->source_register, mode);
+				print_variable(fl, instruction->operands.x86.source_register1, mode);
 			} else {
-				print_variable(fl, instruction->destination_register, mode);
+				print_variable(fl, instruction->operands.x86.destination_register, mode);
 			}
 			fprintf(fl, ")");
 
@@ -3050,7 +3052,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 			//Print the actual string name of the variable - no SSA and no registers
 			fprintf(fl, "(");
 			//This will be the instruction pointer
-			print_variable(fl, instruction->address_calc_reg1, mode);
+			print_variable(fl, instruction->operands.x86.addressing_mode_register1, mode);
 			fprintf(fl, ")");
 
 		   	break;
@@ -3059,7 +3061,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 		 * Global var address calculation with offset
 		 */
 		case ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET:
-			print_immediate_value_no_prefix(fl, instruction->offset);
+			print_immediate_value_no_prefix(fl, instruction->operands.x86.addressing_mode_offset);
 			//There are different ways that this can go
 			switch(instruction->rip_offset_variable->variable_type){
 				case VARIABLE_TYPE_LOCAL_CONSTANT:
@@ -3074,7 +3076,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 			}
 			fprintf(fl, "(");
 			//This will be the instruction pointer
-			print_variable(fl, instruction->address_calc_reg1, mode);
+			print_variable(fl, instruction->operands.x86.addressing_mode_register1, mode);
 			fprintf(fl, ")");
 
 		   	break;
@@ -3088,9 +3090,9 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 		 */
 		case ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE:
 			fprintf(fl, "(");
-			print_variable(fl, instruction->address_calc_reg1, mode);
+			print_variable(fl, instruction->operands.x86.addressing_mode_register1, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->address_calc_reg2, mode);
+			print_variable(fl, instruction->operands.x86.addressing_mode_register2, mode);
 			fprintf(fl, ", ");
 			fprintf(fl, "%ld", instruction->lea_multiplier);
 			fprintf(fl, ")");
@@ -3098,52 +3100,52 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 
 		case ADDRESS_CALCULATION_MODE_OFFSET_ONLY:
 			//Only print this if it's not 0
-			print_immediate_value_no_prefix(fl, instruction->offset);
+			print_immediate_value_no_prefix(fl, instruction->operands.x86.addressing_mode_offset);
 			fprintf(fl, "(");
-			print_variable(fl, instruction->address_calc_reg1, mode);
+			print_variable(fl, instruction->operands.x86.addressing_mode_register1, mode);
 			fprintf(fl, ")");
 			break;
 
 		case ADDRESS_CALCULATION_MODE_REGISTERS_ONLY:
 			fprintf(fl, "(");
-			print_variable(fl, instruction->address_calc_reg1, mode);
+			print_variable(fl, instruction->operands.x86.addressing_mode_register1, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->address_calc_reg2, mode);
+			print_variable(fl, instruction->operands.x86.addressing_mode_register2, mode);
 			fprintf(fl, ")");
 			break;
 
 		case ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET:
 			//Only print this if it's not 0
-			print_immediate_value_no_prefix(fl, instruction->offset);
+			print_immediate_value_no_prefix(fl, instruction->operands.x86.addressing_mode_offset);
 			fprintf(fl, "(");
-			print_variable(fl, instruction->address_calc_reg1, mode);
+			print_variable(fl, instruction->operands.x86.addressing_mode_register1, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->address_calc_reg2, mode);
+			print_variable(fl, instruction->operands.x86.addressing_mode_register2, mode);
 			fprintf(fl, ")");
 			break;
 
 		case ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE:
 			//Only print this if it's not 0
-			print_immediate_value_no_prefix(fl, instruction->offset);
+			print_immediate_value_no_prefix(fl, instruction->operands.x86.addressing_mode_offset);
 			fprintf(fl, "(");
-			print_variable(fl, instruction->address_calc_reg1, mode);
+			print_variable(fl, instruction->operands.x86.addressing_mode_register1, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->address_calc_reg2, mode);
+			print_variable(fl, instruction->operands.x86.addressing_mode_register2, mode);
 			fprintf(fl, ", %ld)", instruction->lea_multiplier);
 			break;
 
 		//Index is in address calc reg 1 for this
 		case ADDRESS_CALCULATION_MODE_INDEX_AND_SCALE:
 			fprintf(fl, "( , ");
-			print_variable(fl, instruction->address_calc_reg1, mode);
+			print_variable(fl, instruction->operands.x86.addressing_mode_register1, mode);
 			fprintf(fl, ", %ld)", instruction->lea_multiplier);
 			break;
 			
 		//Index is in address calc reg 1 for this
 		case ADDRESS_CALCULATION_MODE_INDEX_OFFSET_AND_SCALE:
-			print_immediate_value_no_prefix(fl, instruction->offset);
+			print_immediate_value_no_prefix(fl, instruction->operands.x86.addressing_mode_offset);
 			fprintf(fl, "( , ");
-			print_variable(fl, instruction->address_calc_reg1, mode);
+			print_variable(fl, instruction->operands.x86.addressing_mode_register1, mode);
 			fprintf(fl, ", %ld)", instruction->lea_multiplier);
 			break;
 
@@ -3282,7 +3284,7 @@ static void print_general_purpose_register_to_register_move(FILE* fl, instructio
 	fprintf(fl, ", ");
 
 	//Finally we print the destination
-	print_variable(fl, instruction->destination_register, mode);
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
 
 	//A final newline is needed for all instructions
 	fprintf(fl, "\n");
@@ -3322,7 +3324,7 @@ static void print_general_purpose_memory_to_register_move(FILE* fl, instruction_
 	//The address mode expression comes firsj
 	print_addressing_mode_expression(fl, instruction, mode);
 	fprintf(fl, ", ");
-	print_variable(fl, instruction->destination_register, mode);
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
 	fprintf(fl, "\n");
 }
 
@@ -3396,7 +3398,7 @@ static void print_sse_register_to_register_move(FILE* fl, instruction_t* instruc
 	fprintf(fl, ", ");
 
 	//Finally we print the destination
-	print_variable(fl, instruction->destination_register, mode);
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
 
 	//A final newline is needed for all instructions
 	fprintf(fl, "\n");
@@ -3537,7 +3539,7 @@ static void print_sse_memory_to_register_move(FILE* fl, instruction_t* instructi
 	//The address mode expression comes firsj
 	print_addressing_mode_expression(fl, instruction, mode);
 	fprintf(fl, ", ");
-	print_variable(fl, instruction->destination_register, mode);
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
 	fprintf(fl, "\n");
 }
 
@@ -3563,7 +3565,7 @@ static void print_inc_instruction(FILE* fl, instruction_t* instruction, variable
 			break;
 	}
 
-	print_variable(fl, instruction->destination_register, mode);
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
 
 	//Show this if we're in the intermediate mode
 	if(mode == PRINTING_LIVE_RANGES){
@@ -3602,9 +3604,9 @@ static void print_conversion_instruction(FILE* fl, instruction_t* instruction, v
 	print_variable(fl, instruction->source_register, mode);
 	fprintf(fl, "--> ");
 	//Print the appropriate bitfield mapping for the destination
-	print_variable(fl, instruction->destination_register2, mode);
+	print_variable(fl, instruction->operands.x86.destination_register2, mode);
 	fprintf(fl, ":");
-	print_variable(fl, instruction->destination_register, mode);
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
 	fprintf(fl, "*/\n");
 }
 
@@ -3631,7 +3633,7 @@ static void print_dec_instruction(FILE* fl, instruction_t* instruction, variable
 			break;
 	}
 
-	print_variable(fl, instruction->destination_register, mode);
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
 
 	//Show this if we're in the intermediate mode
 	if(mode == PRINTING_LIVE_RANGES){
@@ -3679,9 +3681,9 @@ static void print_unsigned_multiplication_instruction(FILE* fl, instruction_t* i
 	//Print where this went
 	fprintf(fl, " -->  ");
 	//Print this mode
-	print_variable(fl, instruction->destination_register2, mode);
+	print_variable(fl, instruction->operands.x86.destination_register2, mode);
 	fprintf(fl, ":");
-	print_variable(fl, instruction->destination_register, mode);
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
 
 	fprintf(fl, " */\n");
 }
@@ -3721,7 +3723,7 @@ static void print_signed_multiplication_instruction(FILE* fl, instruction_t* ins
 	fprintf(fl, ", ");
 
 	//Now print our destination
-	print_variable(fl, instruction->destination_register, mode);
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
 	fprintf(fl, "\n");
 }
 
@@ -3768,17 +3770,17 @@ static void print_division_instruction(FILE* fl, instruction_t* instruction, var
 	fprintf(fl, " /* Dividend: ");
 	
 	//Print out the higher order bit source if need be
-	if(instruction->address_calc_reg1 != NULL){
-		print_variable(fl, instruction->address_calc_reg1, mode);
+	if(instruction->operands.x86.addressing_mode_register1 != NULL){
+		print_variable(fl, instruction->operands.x86.addressing_mode_register1, mode);
 		fprintf(fl, ":");
 	}
 
 	print_variable(fl, instruction->source_register2, mode);
 	//Print out both the quotient and the remainder
 	fprintf(fl, " --> Quotient: ");
-	print_variable(fl, instruction->destination_register, mode);
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
 	fprintf(fl, ", Remainder: ");
-	print_variable(fl, instruction->destination_register2, mode);
+	print_variable(fl, instruction->operands.x86.destination_register2, mode);
 	fprintf(fl, " */\n");
 }
 
@@ -3817,7 +3819,7 @@ static void print_addition_instruction(FILE* fl, instruction_t* instruction, var
 	fprintf(fl, ", ");
 
 	//Now print our destination
-	print_variable(fl, instruction->destination_register, mode);
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
 	fprintf(fl, "\n");
 }
 
@@ -3856,7 +3858,7 @@ static void print_subtraction_instruction(FILE* fl, instruction_t* instruction, 
 	fprintf(fl, ", ");
 
 	//Now print our destination
-	print_variable(fl, instruction->destination_register, mode);
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
 	fprintf(fl, "\n");
 }
 
@@ -3887,7 +3889,7 @@ static void print_lea_instruction(FILE* fl, instruction_t* instruction, variable
 	fprintf(fl, ", ");
 
 	//Now we print out the destination
-	print_variable(fl, instruction->destination_register, mode);
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
 
 	fprintf(fl, "\n");
 }
@@ -3915,7 +3917,7 @@ static void print_neg_instruction(FILE* fl, instruction_t* instruction, variable
 	}
 
 	//Now we'll print out the destination register
-	print_variable(fl, instruction->destination_register, mode);
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
 
 	//Show this if we're in the intermediate mode
 	if(mode == PRINTING_LIVE_RANGES){
@@ -3951,7 +3953,7 @@ static void print_not_instruction(FILE* fl, instruction_t* instruction, variable
 	}
 
 	//Now we'll print out the destination register
-	print_variable(fl, instruction->destination_register, mode);
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
 
 	//And give it a newlinw and we're done
 	fprintf(fl, "\n");
@@ -4087,7 +4089,7 @@ static inline void print_sse_scalar_cmp_instruction(FILE* fl, instruction_t* ins
 	fprintf(fl, ", ");
 
 	//Finally the second source which also doubles as the destination
-	print_variable(fl, instruction->destination_register, mode);
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
 	fprintf(fl, "\n");
 }
 
@@ -4139,7 +4141,7 @@ static void print_set_instruction(FILE* fl, instruction_t* instruction, variable
 	}
 
 	//Now we'll print the destination register
-	print_variable(fl, instruction->destination_register, mode);
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
 	fprintf(fl, "\n");
 }
 
@@ -4206,7 +4208,7 @@ static void print_sal_instruction(FILE* fl, instruction_t* instruction, variable
 
 	//Now our comma and the destination
 	fprintf(fl, ",");
-	print_variable(fl, instruction->destination_register, mode);
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
 	fprintf(fl, "\n");
 }
 
@@ -4241,7 +4243,7 @@ static void print_shl_instruction(FILE* fl, instruction_t* instruction, variable
 
 	//Now our comma and the destination
 	fprintf(fl, ",");
-	print_variable(fl, instruction->destination_register, mode);
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
 	fprintf(fl, "\n");
 }
 
@@ -4276,7 +4278,7 @@ static void print_sar_instruction(FILE* fl, instruction_t* instruction, variable
 
 	//Now our comma and the destination
 	fprintf(fl, ",");
-	print_variable(fl, instruction->destination_register, mode);
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
 	fprintf(fl, "\n");
 }
 
@@ -4311,7 +4313,7 @@ static void print_shr_instruction(FILE* fl, instruction_t* instruction, variable
 
 	//Now our comma and the destination
 	fprintf(fl, ",");
-	print_variable(fl, instruction->destination_register, mode);
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
 	fprintf(fl, "\n");
 }
 
@@ -4346,7 +4348,7 @@ static void print_and_instruction(FILE* fl, instruction_t* instruction, variable
 
 	//Now our comma and the destination
 	fprintf(fl, ",");
-	print_variable(fl, instruction->destination_register, mode);
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
 	fprintf(fl, "\n");
 }
 
@@ -4381,7 +4383,7 @@ static void print_or_instruction(FILE* fl, instruction_t* instruction, variable_
 
 	//Now our comma and the destination
 	fprintf(fl, ",");
-	print_variable(fl, instruction->destination_register, mode);
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
 	fprintf(fl, "\n");
 }
 
@@ -4422,7 +4424,7 @@ static inline void print_xor_instruction(FILE* fl, instruction_t* instruction, v
 
 	//Now our comma and the destination
 	fprintf(fl, ",");
-	print_variable(fl, instruction->destination_register, mode);
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
 	fprintf(fl, "\n");
 }
 
@@ -4513,14 +4515,14 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "call %s", instruction->called_function->func_name.string);
 
 			//This could be NULL
-			if(instruction->destination_register != NULL){
+			if(instruction->operands.x86.destination_register != NULL){
 				fprintf(fl, " /* --> ");
-				print_variable(fl, instruction->destination_register, mode);
+				print_variable(fl, instruction->operands.x86.destination_register, mode);
 				
 				//Print out the error destination
-				if(instruction->destination_register2 != NULL){
+				if(instruction->operands.x86.destination_register2 != NULL){
 					fprintf(fl, ", ");
-					print_variable(fl, instruction->destination_register2, mode);
+					print_variable(fl, instruction->operands.x86.destination_register2, mode);
 				}
 
 				fprintf(fl, " */");
@@ -4529,9 +4531,9 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 				fprintf(fl, " /* --> void");
 
 				//Print out the error destination
-				if(instruction->destination_register2 != NULL){
+				if(instruction->operands.x86.destination_register2 != NULL){
 					fprintf(fl, ", ");
-					print_variable(fl, instruction->destination_register2, mode);
+					print_variable(fl, instruction->operands.x86.destination_register2, mode);
 				}
 
 				fprintf(fl, " */");
@@ -4546,14 +4548,14 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			print_variable(fl, instruction->source_register, mode);
 
 			//This could be NULL
-			if(instruction->destination_register != NULL){
+			if(instruction->operands.x86.destination_register != NULL){
 				fprintf(fl, " /* --> ");
-				print_variable(fl, instruction->destination_register, mode);
+				print_variable(fl, instruction->operands.x86.destination_register, mode);
 				
 				//Print out the error destination
-				if(instruction->destination_register2 != NULL){
+				if(instruction->operands.x86.destination_register2 != NULL){
 					fprintf(fl, ", ");
-					print_variable(fl, instruction->destination_register2, mode);
+					print_variable(fl, instruction->operands.x86.destination_register2, mode);
 				}
 
 				fprintf(fl, " */");
@@ -4562,9 +4564,9 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 				fprintf(fl, " /* --> void");
 
 				//Print out the error destination
-				if(instruction->destination_register2 != NULL){
+				if(instruction->operands.x86.destination_register2 != NULL){
 					fprintf(fl, ", ");
-					print_variable(fl, instruction->destination_register2, mode);
+					print_variable(fl, instruction->operands.x86.destination_register2, mode);
 				}
 
 				fprintf(fl, " */");
@@ -4939,7 +4941,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "addss ");
 			print_variable(fl, instruction->source_register, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->destination_register, mode);
+			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
 
 			break;
@@ -4948,7 +4950,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "addsd ");
 			print_variable(fl, instruction->source_register, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->destination_register, mode);
+			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
 
 			break;
@@ -4957,7 +4959,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "subss ");
 			print_variable(fl, instruction->source_register, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->destination_register, mode);
+			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
 
 			break;
@@ -4966,7 +4968,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "subsd ");
 			print_variable(fl, instruction->source_register, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->destination_register, mode);
+			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
 
 			break;
@@ -4975,7 +4977,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "mulss ");
 			print_variable(fl, instruction->source_register, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->destination_register, mode);
+			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
 
 			break;
@@ -4984,7 +4986,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "mulsd ");
 			print_variable(fl, instruction->source_register, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->destination_register, mode);
+			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
 
 			break;
@@ -4993,7 +4995,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "divss ");
 			print_variable(fl, instruction->source_register, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->destination_register, mode);
+			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
 
 			break;
@@ -5002,7 +5004,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "DIVSD ");
 			print_variable(fl, instruction->source_register, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->destination_register, mode);
+			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
 
 			break;
@@ -5011,7 +5013,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "pand ");
 			print_variable(fl, instruction->source_register, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->destination_register, mode);
+			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
 
 			break;
@@ -5020,7 +5022,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "pandn ");
 			print_variable(fl, instruction->source_register, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->destination_register, mode);
+			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
 
 			break;
@@ -5029,7 +5031,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "por ");
 			print_variable(fl, instruction->source_register, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->destination_register, mode);
+			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
 
 			break;
@@ -5039,7 +5041,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "pxor ");
 			print_variable(fl, instruction->source_register, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->destination_register, mode);
+			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
 
 			break;
@@ -5048,9 +5050,9 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		//and nothing more
 		case PXOR_CLEAR:
 			fprintf(fl, "pxor ");
-			print_variable(fl, instruction->destination_register, mode);
+			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->destination_register, mode);
+			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
 
 			break;
@@ -5059,36 +5061,36 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		//wipe out register values
 		case XORQ_CLEAR:
 			fprintf(fl, "xorq ");
-			print_variable(fl, instruction->destination_register, mode);
+			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->destination_register, mode);
+			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
 
 			break;
 
 		case XORL_CLEAR:
 			fprintf(fl, "xorl ");
-			print_variable(fl, instruction->destination_register, mode);
+			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->destination_register, mode);
+			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
 
 			break;
 
 		case XORW_CLEAR:
 			fprintf(fl, "xorw ");
-			print_variable(fl, instruction->destination_register, mode);
+			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->destination_register, mode);
+			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
 
 			break;
 
 		case XORB_CLEAR:
 			fprintf(fl, "xorb ");
-			print_variable(fl, instruction->destination_register, mode);
+			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->destination_register, mode);
+			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
 
 			break;
@@ -5409,9 +5411,9 @@ instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_
 			break;
 	}
 
-	stmt->destination_register = assignee;
+	stmt->operands.x86.destination_register = assignee;
 	//Stack pointer is source 1
-	stmt->address_calc_reg1 = stack_pointer;
+	stmt->operands.x86.addressing_mode_register1 = stack_pointer;
 	stmt->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 	//Loading is reading from memory
 	stmt->memory_access_type = READ_FROM_MEMORY;
@@ -5462,7 +5464,7 @@ instruction_t* emit_store_instruction(three_addr_var_t* source, three_addr_var_t
 	stmt->source_register = source;
 	
 	//Stack pointer our base address
-	stmt->address_calc_reg1 = stack_pointer;
+	stmt->operands.x86.addressing_mode_register1 = stack_pointer;
 	stmt->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 	//Storing is writing to memory
 	stmt->memory_access_type = WRITE_TO_MEMORY;
@@ -6126,10 +6128,10 @@ instruction_t* emit_global_variable_address_calculation_x86(three_addr_var_t* gl
 	lea->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
 
 	//We already know what the destination will be
-	lea->destination_register = destination;
+	lea->operands.x86.destination_register = destination;
 
 	//Address calc reg 1 is the instruction pointer(relative addressing)
-	lea->address_calc_reg1 = instruction_pointer;
+	lea->operands.x86.addressing_mode_register1 = instruction_pointer;
 
 	//The offset is the global variable(unique case)
 	lea->rip_offset_variable = global_variable;
