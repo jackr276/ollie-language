@@ -1319,7 +1319,8 @@ instruction_t* emit_lea_index_and_scale_only(three_addr_var_t* assignee, three_a
 	//Now we'll make our populations
 	stmt->statement_type = THREE_ADDR_CODE_LEA_STMT;
 	stmt->operands.oir.assignee = assignee;
-	stmt->operands.oir.address_operand1 = index;
+	//Scale is in op2
+	stmt->operands.oir.address_operand2 = index;
 	stmt->operands.oir.address_multiplier = scale;
 
 	//This has registers and a multiplier
@@ -2692,17 +2693,15 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			//Print the assignment operator
 			fprintf(fl, " <- ");
 
-			//Go based on what lea statement type 
-			//we have
 			switch(stmt->lea_statement_type){
 				//We have something like t2 <- 3(t3)
 				case OIR_LEA_TYPE_OFFSET_ONLY:
 					//Print the constant out first
-					print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
+					print_three_addr_constant(fl, stmt->operands.oir.address_offset);
 
 					//Then the variable encased in parenthesis
 					fprintf(fl, "(");
-					print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
 					fprintf(fl, ")");
 
 					break;
@@ -2710,22 +2709,22 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 				case OIR_LEA_TYPE_REGISTERS_ONLY:
 					//Print both variables encase in parenthesis
 					fprintf(fl, "(");
-					print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
 					fprintf(fl, ", ");
-					print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
 					fprintf(fl, ")");
 
 					break;
 
 				case OIR_LEA_TYPE_REGISTERS_AND_OFFSET:
 					//Print the constant out first
-					print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
+					print_three_addr_constant(fl, stmt->operands.oir.address_offset);
 					
 					//Print both variables encase in parenthesis
 					fprintf(fl, "(");
-					print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
 					fprintf(fl, ", ");
-					print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
 					fprintf(fl, ")");
 
 					break;
@@ -2733,24 +2732,24 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 				case OIR_LEA_TYPE_REGISTERS_AND_SCALE:
 					//Print both variables encase in parenthesis
 					fprintf(fl, "(");
-					print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
 					fprintf(fl, ", ");
-					print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
 
 					//Now print the multiplier
-					fprintf(fl, ", %ld)", stmt->lea_multiplier);
+					fprintf(fl, ", %ld)", stmt->operands.oir.address_multiplier);
 
 					break;
 
 				case OIR_LEA_TYPE_RIP_RELATIVE:
-					print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
 					fprintf(fl, "(");
-					print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
 					fprintf(fl, ")");
 					break;
 
 				case OIR_LEA_TYPE_RIP_RELATIVE_WITH_OFFSET:
-					print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
+					print_three_addr_constant(fl, stmt->operands.oir.address_offset);
 					fprintf(fl, "+");
 					print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
 					fprintf(fl, "(");
@@ -2758,35 +2757,34 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 					fprintf(fl, ")");
 					break;
 
-
 				case OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE:
 					//Print the constant out first
-					print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
+					print_three_addr_constant(fl, stmt->operands.oir.address_offset);
 
 					//Print both variables encase in parenthesis
 					fprintf(fl, "(");
-					print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
 					fprintf(fl, ", ");
-					print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
 
 					//Now print the multiplier
-					fprintf(fl, ", %ld)", stmt->lea_multiplier);
+					fprintf(fl, ", %ld)", stmt->operands.oir.address_multiplier);
 
 				case OIR_LEA_TYPE_INDEX_AND_SCALE:
 					//Print out the scale and multiplier
 					fprintf(fl, "( , ");
-					print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
-					fprintf(fl, ", %ld)", stmt->lea_multiplier);
+					print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
+					fprintf(fl, ", %ld)", stmt->operands.oir.address_multiplier);
 
 					break;
 
 				case OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE:
 					//Print the offset first
-					print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
+					print_three_addr_constant(fl, stmt->operands.oir.address_offset);
 					//Print out the scale and multiplier
 					fprintf(fl, "( , ");
-					print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
-					fprintf(fl, ", %ld)", stmt->lea_multiplier);
+					print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
+					fprintf(fl, ", %ld)", stmt->operands.oir.address_multiplier);
 
 					break;
 
@@ -6067,10 +6065,10 @@ instruction_t* emit_global_variable_address_calculation_oir(three_addr_var_t* as
 	remediated_version->variable_type = VARIABLE_TYPE_NON_TEMP;
 
 	//Op1 is the instruction pointer(relative addressing)
-	lea->operands.oir.operand1 = instruction_pointer;
+	lea->operands.oir.address_operand1 = instruction_pointer;
 
 	//The op2 is always the global var itself
-	lea->operands.oir.operand2 = remediated_version;
+	lea->operands.oir.address_operand2 = remediated_version;
 
 	//And give it back
 	return lea;
@@ -6100,13 +6098,13 @@ instruction_t* emit_global_variable_address_calculation_with_offset_oir(three_ad
 	remediated_version->variable_type = VARIABLE_TYPE_NON_TEMP;
 
 	//Op1 is the instruction pointer(relative addressing)
-	lea->operands.oir.operand1 = instruction_pointer;
+	lea->operands.oir.address_operand1 = instruction_pointer;
 
 	//The op2 is always the global var itself
-	lea->operands.oir.operand2 = remediated_version;
+	lea->operands.oir.address_operand2 = remediated_version;
 
 	//Store the constant offset here as well
-	lea->operands.oir.constant_operand = constant;
+	lea->operands.oir.address_offset = constant;
 
 	//And give it back
 	return lea;
