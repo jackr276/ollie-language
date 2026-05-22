@@ -3274,10 +3274,10 @@ static void print_general_purpose_register_to_register_move(FILE* fl, instructio
 	print_move_instruction(fl, instruction->instruction_type);
 
 	//Print the appropriate variable here
-	if(instruction->source_register != NULL){
-		print_variable(fl, instruction->source_register, mode);
+	if(instruction->operands.x86.source_register1 != NULL){
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
 	} else {
-		print_immediate_value(fl, instruction->source_immediate);
+		print_immediate_value(fl, instruction->operands.x86.source_immediate);
 	}
 
 	//Needed comma
@@ -3300,11 +3300,11 @@ static void print_general_purpose_register_to_memory_move(FILE* fl, instruction_
 	print_move_instruction(fl, instruction->instruction_type);
 
 	//First we'll print out the source
-	if(instruction->source_register != NULL){
-		print_variable(fl, instruction->source_register, mode);
+	if(instruction->operands.x86.source_register1 != NULL){
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
 	} else {
 		//Otherwise we have an immediate value source
-		print_immediate_value(fl, instruction->source_immediate);
+		print_immediate_value(fl, instruction->operands.x86.source_immediate);
 	}
 	
 	fprintf(fl, ", ");
@@ -3388,10 +3388,10 @@ static void print_sse_register_to_register_move(FILE* fl, instruction_t* instruc
 
 	//Print the appropriate variable here. There are no immediate values
 	//that may be produced by SSE, but we'll keep the optionality here
-	if(instruction->source_register != NULL){
-		print_variable(fl, instruction->source_register, mode);
+	if(instruction->operands.x86.source_register1 != NULL){
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
 	} else {
-		print_immediate_value(fl, instruction->source_immediate);
+		print_immediate_value(fl, instruction->operands.x86.source_immediate);
 	}
 
 	//Needed comma
@@ -3464,11 +3464,11 @@ static void print_sse_register_to_memory_move(FILE* fl, instruction_t* instructi
 	}
 
 	//First we'll print out the source
-	if(instruction->source_register != NULL){
-		print_variable(fl, instruction->source_register, mode);
+	if(instruction->operands.x86.source_register1 != NULL){
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
 	} else {
 		//Otherwise we have an immediate value source
-		print_immediate_value(fl, instruction->source_immediate);
+		print_immediate_value(fl, instruction->operands.x86.source_immediate);
 	}
 	
 	fprintf(fl, ", ");
@@ -3570,7 +3570,7 @@ static void print_inc_instruction(FILE* fl, instruction_t* instruction, variable
 	//Show this if we're in the intermediate mode
 	if(mode == PRINTING_LIVE_RANGES){
 		printf(" /* SOURCE ");
-		print_variable(fl, instruction->source_register, mode);
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
 		printf(" */ ");
 	}
 
@@ -3601,7 +3601,7 @@ static void print_conversion_instruction(FILE* fl, instruction_t* instruction, v
 			break;
 	}
 
-	print_variable(fl, instruction->source_register, mode);
+	print_variable(fl, instruction->operands.x86.source_register1, mode);
 	fprintf(fl, "--> ");
 	//Print the appropriate bitfield mapping for the destination
 	print_variable(fl, instruction->operands.x86.destination_register2, mode);
@@ -3638,7 +3638,7 @@ static void print_dec_instruction(FILE* fl, instruction_t* instruction, variable
 	//Show this if we're in the intermediate mode
 	if(mode == PRINTING_LIVE_RANGES){
 		printf(" /* SOURCE ");
-		print_variable(fl, instruction->source_register, mode);
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
 		printf(" */ ");
 	}
 
@@ -3671,12 +3671,12 @@ static void print_unsigned_multiplication_instruction(FILE* fl, instruction_t* i
 
 	//We'll only print the source register, there is no explicit destination
 	//register
-	print_variable(fl, instruction->source_register, mode);
+	print_variable(fl, instruction->operands.x86.source_register1, mode);
 
 	//Print where this went
 	fprintf(fl, " /* Implicit Source: ");
 	//Print out the implied source
-	print_variable(fl, instruction->source_register2, mode);
+	print_variable(fl, instruction->operands.x86.source_register2, mode);
 
 	//Print where this went
 	fprintf(fl, " -->  ");
@@ -3713,10 +3713,10 @@ static void print_signed_multiplication_instruction(FILE* fl, instruction_t* ins
 	}
 
 	//Print the appropriate variable here
-	if(instruction->source_register != NULL){
-		print_variable(fl, instruction->source_register, mode);
+	if(instruction->operands.x86.source_register1 != NULL){
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
 	} else {
-		print_immediate_value(fl, instruction->source_immediate);
+		print_immediate_value(fl, instruction->operands.x86.source_immediate);
 	}
 
 	//Needed comma
@@ -3764,7 +3764,7 @@ static void print_division_instruction(FILE* fl, instruction_t* instruction, var
 	}
 
 	//We'll only have a source register here
-	print_variable(fl, instruction->source_register, mode);
+	print_variable(fl, instruction->operands.x86.source_register1, mode);
 
 	//Print the implied source
 	fprintf(fl, " /* Dividend: ");
@@ -3775,7 +3775,7 @@ static void print_division_instruction(FILE* fl, instruction_t* instruction, var
 		fprintf(fl, ":");
 	}
 
-	print_variable(fl, instruction->source_register2, mode);
+	print_variable(fl, instruction->operands.x86.source_register2, mode);
 	//Print out both the quotient and the remainder
 	fprintf(fl, " --> Quotient: ");
 	print_variable(fl, instruction->operands.x86.destination_register, mode);
@@ -3809,10 +3809,10 @@ static void print_addition_instruction(FILE* fl, instruction_t* instruction, var
 	}
 
 	//Print the appropriate variable here
-	if(instruction->source_register != NULL){
-		print_variable(fl, instruction->source_register, mode);
+	if(instruction->operands.x86.source_register1 != NULL){
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
 	} else {
-		print_immediate_value(fl, instruction->source_immediate);
+		print_immediate_value(fl, instruction->operands.x86.source_immediate);
 	}
 
 	//Needed comma
@@ -3848,10 +3848,10 @@ static void print_subtraction_instruction(FILE* fl, instruction_t* instruction, 
 	}
 
 	//Print the appropriate variable here
-	if(instruction->source_register != NULL){
-		print_variable(fl, instruction->source_register, mode);
+	if(instruction->operands.x86.source_register1 != NULL){
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
 	} else {
-		print_immediate_value(fl, instruction->source_immediate);
+		print_immediate_value(fl, instruction->operands.x86.source_immediate);
 	}
 
 	//Needed comma
@@ -3922,7 +3922,7 @@ static void print_neg_instruction(FILE* fl, instruction_t* instruction, variable
 	//Show this if we're in the intermediate mode
 	if(mode == PRINTING_LIVE_RANGES){
 		printf(" /* SOURCE ");
-		print_variable(fl, instruction->source_register, mode);
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
 		printf(" */ ");
 	}
 
@@ -3983,16 +3983,16 @@ static inline void print_general_purpose_cmp_instruction(FILE* fl, instruction_t
 	}
 
 	//If we have an immediate value, print it
-	if(instruction->source_immediate != NULL){
-		print_immediate_value(fl, instruction->source_immediate);
+	if(instruction->operands.x86.source_immediate != NULL){
+		print_immediate_value(fl, instruction->operands.x86.source_immediate);
 	} else {
-		print_variable(fl, instruction->source_register2, mode);
+		print_variable(fl, instruction->operands.x86.source_register2, mode);
 	}
 
 	fprintf(fl, ",");
 
 	//Now we'll need the source register. This may never be null
-	print_variable(fl, instruction->source_register, mode);
+	print_variable(fl, instruction->operands.x86.source_register1, mode);
 
 	//And give it a newline and we're done
 	fprintf(fl, "\n");
@@ -4022,12 +4022,12 @@ static inline void print_sse_cmp_instruction(FILE* fl, instruction_t* instructio
 	}
 
 	//No immediate values here, only ever a register
-	print_variable(fl, instruction->source_register2, mode);
+	print_variable(fl, instruction->operands.x86.source_register2, mode);
 
 	fprintf(fl, ",");
 
 	//Now we'll need the source register. This may never be null
-	print_variable(fl, instruction->source_register, mode);
+	print_variable(fl, instruction->operands.x86.source_register1, mode);
 
 	//And give it a newline and we're done
 	fprintf(fl, "\n");
@@ -4085,7 +4085,7 @@ static inline void print_sse_scalar_cmp_instruction(FILE* fl, instruction_t* ins
 	}
 
 	//Now print out the source register
-	print_variable(fl, instruction->source_register, mode);
+	print_variable(fl, instruction->operands.x86.source_register1, mode);
 	fprintf(fl, ", ");
 
 	//Finally the second source which also doubles as the destination
@@ -4169,9 +4169,9 @@ static void print_test_instruction(FILE* fl, instruction_t* instruction, variabl
 
 	//Now we'll print out the source and source2 registers. Test instruction
 	//has no destination
-	print_variable(fl, instruction->source_register, mode);
+	print_variable(fl, instruction->operands.x86.source_register1, mode);
 	fprintf(fl, ",");
-	print_variable(fl, instruction->source_register2, mode);
+	print_variable(fl, instruction->operands.x86.source_register2, mode);
 
 	//And give it a newline
 	fprintf(fl, "\n");
@@ -4200,10 +4200,10 @@ static void print_sal_instruction(FILE* fl, instruction_t* instruction, variable
 	}
 
 	//Now we'll need the source immediate/source
-	if(instruction->source_register != NULL){
-		print_variable(fl, instruction->source_register, mode);
+	if(instruction->operands.x86.source_register1 != NULL){
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
 	} else {
-		print_immediate_value(fl, instruction->source_immediate);
+		print_immediate_value(fl, instruction->operands.x86.source_immediate);
 	}
 
 	//Now our comma and the destination
@@ -4235,10 +4235,10 @@ static void print_shl_instruction(FILE* fl, instruction_t* instruction, variable
 	}
 
 	//Now we'll need the source immediate/source
-	if(instruction->source_register != NULL){
-		print_variable(fl, instruction->source_register, mode);
+	if(instruction->operands.x86.source_register1 != NULL){
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
 	} else {
-		print_immediate_value(fl, instruction->source_immediate);
+		print_immediate_value(fl, instruction->operands.x86.source_immediate);
 	}
 
 	//Now our comma and the destination
@@ -4270,10 +4270,10 @@ static void print_sar_instruction(FILE* fl, instruction_t* instruction, variable
 	}
 
 	//Now we'll need the source immediate/source
-	if(instruction->source_register != NULL){
-		print_variable(fl, instruction->source_register, mode);
+	if(instruction->operands.x86.source_register1 != NULL){
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
 	} else {
-		print_immediate_value(fl, instruction->source_immediate);
+		print_immediate_value(fl, instruction->operands.x86.source_immediate);
 	}
 
 	//Now our comma and the destination
@@ -4305,10 +4305,10 @@ static void print_shr_instruction(FILE* fl, instruction_t* instruction, variable
 	}
 
 	//Now we'll need the source immediate/source
-	if(instruction->source_register != NULL){
-		print_variable(fl, instruction->source_register, mode);
+	if(instruction->operands.x86.source_register1 != NULL){
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
 	} else {
-		print_immediate_value(fl, instruction->source_immediate);
+		print_immediate_value(fl, instruction->operands.x86.source_immediate);
 	}
 
 	//Now our comma and the destination
@@ -4340,10 +4340,10 @@ static void print_and_instruction(FILE* fl, instruction_t* instruction, variable
 	}
 
 	//Now we'll need the source immediate/source
-	if(instruction->source_register != NULL){
-		print_variable(fl, instruction->source_register, mode);
+	if(instruction->operands.x86.source_register1 != NULL){
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
 	} else {
-		print_immediate_value(fl, instruction->source_immediate);
+		print_immediate_value(fl, instruction->operands.x86.source_immediate);
 	}
 
 	//Now our comma and the destination
@@ -4375,10 +4375,10 @@ static void print_or_instruction(FILE* fl, instruction_t* instruction, variable_
 	}
 
 	//Now we'll need the source immediate/source
-	if(instruction->source_register != NULL){
-		print_variable(fl, instruction->source_register, mode);
+	if(instruction->operands.x86.source_register1 != NULL){
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
 	} else {
-		print_immediate_value(fl, instruction->source_immediate);
+		print_immediate_value(fl, instruction->operands.x86.source_immediate);
 	}
 
 	//Now our comma and the destination
@@ -4416,10 +4416,10 @@ static inline void print_xor_instruction(FILE* fl, instruction_t* instruction, v
 	}
 
 	//Now we'll need the source immediate/source
-	if(instruction->source_register != NULL){
-		print_variable(fl, instruction->source_register, mode);
+	if(instruction->operands.x86.source_register1 != NULL){
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
 	} else {
-		print_immediate_value(fl, instruction->source_immediate);
+		print_immediate_value(fl, instruction->operands.x86.source_immediate);
 	}
 
 	//Now our comma and the destination
@@ -4442,9 +4442,9 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		//These first ones are very simple - no real variations here
 		case RET:
 			fprintf(fl, "ret");
-			if(instruction->source_register != NULL){
+			if(instruction->operands.x86.source_register1 != NULL){
 				fprintf(fl, " /* --> ");
-				print_variable(fl, instruction->source_register, mode);
+				print_variable(fl, instruction->operands.x86.source_register1, mode);
 				fprintf(fl, " */");
 			}
 			fprintf(fl, "\n");
@@ -4453,7 +4453,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		//Raise instructions are ret instructions. They are guaranteed to have a return value
 		case RAISE_INSTRUCTION:
 			fprintf(fl, "ret /* --> raises error ");
-			print_variable(fl, instruction->source_register, mode);
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
 			fprintf(fl, " */\n");
 			break;
 
@@ -4545,7 +4545,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case INDIRECT_CALL:
 			//Indirect function calls store the location of the call in op1
 			fprintf(fl, "call *");
-			print_variable(fl, instruction->source_register, mode);
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
 
 			//This could be NULL
 			if(instruction->operands.x86.destination_register != NULL){
@@ -4578,7 +4578,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 		case PUSH:
 			fprintf(fl, "push ");
-			print_variable(fl, instruction->source_register, mode);
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
 			fprintf(fl, "\n");
 			break;
 
@@ -4598,7 +4598,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 		case POP:
 			fprintf(fl, "pop ");
-			print_variable(fl, instruction->source_register, mode);
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
 			fprintf(fl, "\n");
 			break;
 
@@ -4863,7 +4863,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, ".JT%d(,", jumping_to_block->jump_table_id);
 
 			//Now we print out the source register
-			print_variable(fl, instruction->source_register, mode);
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
 
 			//And then a comma and the multplicator
 			fprintf(fl, ",%ld)\n", instruction->lea_multiplier);
@@ -4939,7 +4939,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 		case ADDSS:
 			fprintf(fl, "addss ");
-			print_variable(fl, instruction->source_register, mode);
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
 			fprintf(fl, ", ");
 			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
@@ -4948,7 +4948,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 		case ADDSD:
 			fprintf(fl, "addsd ");
-			print_variable(fl, instruction->source_register, mode);
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
 			fprintf(fl, ", ");
 			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
@@ -4957,7 +4957,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 		case SUBSS:
 			fprintf(fl, "subss ");
-			print_variable(fl, instruction->source_register, mode);
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
 			fprintf(fl, ", ");
 			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
@@ -4966,7 +4966,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 		case SUBSD:
 			fprintf(fl, "subsd ");
-			print_variable(fl, instruction->source_register, mode);
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
 			fprintf(fl, ", ");
 			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
@@ -4975,7 +4975,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 		case MULSS:
 			fprintf(fl, "mulss ");
-			print_variable(fl, instruction->source_register, mode);
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
 			fprintf(fl, ", ");
 			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
@@ -4984,7 +4984,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 		case MULSD:
 			fprintf(fl, "mulsd ");
-			print_variable(fl, instruction->source_register, mode);
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
 			fprintf(fl, ", ");
 			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
@@ -4993,7 +4993,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 		case DIVSS:
 			fprintf(fl, "divss ");
-			print_variable(fl, instruction->source_register, mode);
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
 			fprintf(fl, ", ");
 			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
@@ -5002,7 +5002,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 		case DIVSD:
 			fprintf(fl, "DIVSD ");
-			print_variable(fl, instruction->source_register, mode);
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
 			fprintf(fl, ", ");
 			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
@@ -5011,7 +5011,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 		case PAND:
 			fprintf(fl, "pand ");
-			print_variable(fl, instruction->source_register, mode);
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
 			fprintf(fl, ", ");
 			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
@@ -5020,7 +5020,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 		case PANDN:
 			fprintf(fl, "pandn ");
-			print_variable(fl, instruction->source_register, mode);
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
 			fprintf(fl, ", ");
 			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
@@ -5029,7 +5029,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 		case POR:
 			fprintf(fl, "por ");
-			print_variable(fl, instruction->source_register, mode);
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
 			fprintf(fl, ", ");
 			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
@@ -5039,7 +5039,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		//Generic PXOR
 		case PXOR:
 			fprintf(fl, "pxor ");
-			print_variable(fl, instruction->source_register, mode);
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
 			fprintf(fl, ", ");
 			print_variable(fl, instruction->operands.x86.destination_register, mode);
 			fprintf(fl, "\n");
@@ -5419,7 +5419,7 @@ instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_
 	stmt->memory_access_type = READ_FROM_MEMORY;
 
 	//Emit an integer constant for this offset
-	stmt->offset= emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64", NOT_MUTABLE)->type);
+	stmt->operands.x86.addressing_mode_offset = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64", NOT_MUTABLE)->type);
 
 	//And we're done, we can return it
 	return stmt;
@@ -5461,7 +5461,7 @@ instruction_t* emit_store_instruction(three_addr_var_t* source, three_addr_var_t
 	}
 
 	//We'll have the stored variable as our source
-	stmt->source_register = source;
+	stmt->operands.x86.source_register1 = source;
 	
 	//Stack pointer our base address
 	stmt->operands.x86.addressing_mode_register1 = stack_pointer;
@@ -5470,7 +5470,7 @@ instruction_t* emit_store_instruction(three_addr_var_t* source, three_addr_var_t
 	stmt->memory_access_type = WRITE_TO_MEMORY;
 
 	//Emit an integer constant for this offset
-	stmt->offset= emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64", NOT_MUTABLE)->type);
+	stmt->operands.x86.addressing_mode_offset = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64", NOT_MUTABLE)->type);
 
 	//And we're done, we can return it
 	return stmt;
@@ -5566,7 +5566,8 @@ instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_ad
 	stmt->assignee->is_dereferenced = TRUE;
 
 	//The offset placeholder is used for our offset, not op1_const 
-	stmt->offset = offset;
+	//TODO WILL BE FIXED
+	stmt->OIR_offset = offset;
 
 	//What we're storing
 	stmt->op2 = storee;
@@ -5596,7 +5597,8 @@ instruction_t* emit_store_const_with_constant_offset_ir_code(three_addr_var_t* b
 	stmt->assignee->is_dereferenced = TRUE;
 
 	//The offset placeholder is used for our offset, not op1_const 
-	stmt->offset = offset;
+	//TODO WILL BE FIXED
+	stmt->OIR_offset = offset;
 
 	//What we're storing
 	stmt->op1_const = storee;
@@ -5672,7 +5674,7 @@ instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee
 	stmt->op1 = base_address;
 
 	//Our offset is stored in "offset", not op1_const
-	stmt->offset = offset;
+	stmt->OIR_offset = offset;
 
 	//Important - store the type that we expect to be getting out of memory
 	stmt->type_storage.memory_read_write_type = memory_read_type;
@@ -6210,7 +6212,7 @@ instruction_t* copy_instruction(instruction_t* copied){
 	copy->assignee = duplicate_variable(copied->assignee);
 	copy->op1 = duplicate_variable(copied->op1);
 	copy->op2 = duplicate_variable(copied->op2);
-	copy->offset = duplicate_constant(copied->offset);
+	copy->OIR_offset = duplicate_constant(copied->OIR_offset);
 	copy->op1_const = duplicate_constant(copied->op1_const);
 
 	//If we have function call parameters, emit a copy of them

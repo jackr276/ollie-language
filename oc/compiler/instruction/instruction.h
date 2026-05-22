@@ -333,8 +333,8 @@ struct instruction_t{
 			three_addr_const_t* source_immediate;
 			//First destination register
 			three_addr_var_t* destination_register;
-			//Second destination register - some instructions have these
-			three_addr_var_t* second_destination_register;
+			//Second destination register - some instructions have these but it is rare
+			three_addr_var_t* destination_register2;
 			/**
 			 * We maintain separate variable storage for lea/address
 			 * calculation statements. Reminder that these statements
