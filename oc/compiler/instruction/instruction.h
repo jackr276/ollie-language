@@ -284,6 +284,8 @@ struct three_addr_const_t{
 
 /**
  * A generic struct that encapsulates most of our instructions
+ *
+ * TODO TRY TO REFACTOR THIS FOR CACHE LOCALITY
  */
 struct instruction_t{
 	//For linked list properties -- the next statement
@@ -355,8 +357,6 @@ struct instruction_t{
 	u_int64_t lea_multiplier;
 	//The function called
 	symtab_function_record_t* called_function;
-	//The variable record
-	symtab_variable_record_t* var_record;
 	//What is the three address code type
 	instruction_stmt_type_t statement_type;
 	//What is the x86-64 instruction
