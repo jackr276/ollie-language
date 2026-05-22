@@ -2321,11 +2321,11 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, " <- ");
 
 			//Now we'll do op1, token, op2
-			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, " %s ", op_to_string(stmt->op));
 
 			//Print the constant out
-			print_three_addr_constant(fl, stmt->constant_operand);
+			print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
 
 			//We need a newline here
 			fprintf(fl, "\n");
@@ -2335,7 +2335,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			//We'll print out the left and right ones here
 			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- ");
-			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 			break;
 
@@ -2347,7 +2347,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "memory copy %ld bytes ", stmt->optional_storage.byte_amount_to_copy);
 			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- ");
-			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 			break;
 
@@ -2357,10 +2357,10 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, " <- Test if not zero ");
 			
 			//Print out either the constant or what is being tested
-			if(stmt->op1 != NULL){
-				print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			if(stmt->operands.oir.operand1 != NULL){
+				print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			} else {
-				print_three_addr_constant(stdout, stmt->constant_operand);
+				print_three_addr_constant(stdout, stmt->operands.oir.constant_operand);
 			}
 
 			fprintf(fl, "\n");
@@ -2373,7 +2373,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, " <- ");
 
 			//Print the constant out
-			print_three_addr_constant(fl, stmt->constant_operand);
+			print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
 			//Newline needed
 			fprintf(fl, "\n");
 			break;
@@ -2382,8 +2382,8 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "ret ");
 
 			//If it has a returned variable
-			if(stmt->op1 != NULL){
-				print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			if(stmt->operands.oir.operand1 != NULL){
+				print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			}
 			
 			//No matter what, print a newline
@@ -2395,7 +2395,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 			//This will always have a raised variable that comes
 			//from a constant assignment
-			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			
 			//No matter what, print a newline
 			fprintf(fl, "\n");
@@ -2411,10 +2411,10 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- ");
 			//Finally the storee(op1 or constant operand)
-			if(stmt->op1 != NULL){
-				print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			if(stmt->operands.oir.operand1 != NULL){
+				print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			} else {
-				print_three_addr_constant(fl, stmt->constant_operand);
+				print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
 			}
 			fprintf(fl, "\n");
 			break;
@@ -2436,10 +2436,10 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "] <- "); 
 
 			//Finally the storee(op2 or constant operand)
-			if(stmt->op2 != NULL){
-				print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+			if(stmt->operands.oir.operand2 != NULL){
+				print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
 			} else {
-				print_three_addr_constant(fl, stmt->constant_operand);
+				print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
 			}
 
 			fprintf(fl, "\n");
@@ -2458,14 +2458,14 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 			//Then the variable offset(op1)
 			fprintf(fl, "["); 
-			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, "] <- "); 
 
 			//Finally the storee(op2 or constant operand)
-			if(stmt->op2 != NULL){
-				print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+			if(stmt->operands.oir.operand2 != NULL){
+				print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
 			} else {
-				print_three_addr_constant(fl, stmt->constant_operand);
+				print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
 			}
 
 			fprintf(fl, "\n");
@@ -2482,7 +2482,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "load ");
 			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- "); 
-			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 			break;
 
@@ -2498,7 +2498,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, " <- ");
 
 			//Now the base address
-			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 
 			//Then the constant offset
 			fprintf(fl, "["); 
@@ -2522,11 +2522,11 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, " <- ");
 
 			//Now the base address
-			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 
 			//Then the constant offset
 			fprintf(fl, "["); 
-			print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
 			fprintf(fl, "]"); 
 
 			fprintf(fl, "\n");
@@ -2612,7 +2612,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "call *");
 
 			//Now we'll use the helper to print the variable name
-			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 
 			//Now we can print the opening parenthesis
 			fprintf(fl, "(");
@@ -2656,14 +2656,14 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		case THREE_ADDR_CODE_BITWISE_NOT_STMT:
 			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- not ");
-			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 			break;
 
 		case THREE_ADDR_CODE_NEG_STATEMENT:
 			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- neg ");
-			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 			break;
 
@@ -2671,7 +2671,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 			//We will use a sequence of commands to do this
 			fprintf(fl, " <- logical_not ");
-			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 			break;
 
@@ -2698,11 +2698,11 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 				//We have something like t2 <- 3(t3)
 				case OIR_LEA_TYPE_OFFSET_ONLY:
 					//Print the constant out first
-					print_three_addr_constant(fl, stmt->constant_operand);
+					print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
 
 					//Then the variable encased in parenthesis
 					fprintf(fl, "(");
-					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 					fprintf(fl, ")");
 
 					break;
@@ -2710,22 +2710,22 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 				case OIR_LEA_TYPE_REGISTERS_ONLY:
 					//Print both variables encase in parenthesis
 					fprintf(fl, "(");
-					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 					fprintf(fl, ", ");
-					print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
 					fprintf(fl, ")");
 
 					break;
 
 				case OIR_LEA_TYPE_REGISTERS_AND_OFFSET:
 					//Print the constant out first
-					print_three_addr_constant(fl, stmt->constant_operand);
+					print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
 					
 					//Print both variables encase in parenthesis
 					fprintf(fl, "(");
-					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 					fprintf(fl, ", ");
-					print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
 					fprintf(fl, ")");
 
 					break;
@@ -2733,9 +2733,9 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 				case OIR_LEA_TYPE_REGISTERS_AND_SCALE:
 					//Print both variables encase in parenthesis
 					fprintf(fl, "(");
-					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 					fprintf(fl, ", ");
-					print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
 
 					//Now print the multiplier
 					fprintf(fl, ", %ld)", stmt->lea_multiplier);
@@ -2743,31 +2743,31 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 					break;
 
 				case OIR_LEA_TYPE_RIP_RELATIVE:
-					print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
 					fprintf(fl, "(");
-					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 					fprintf(fl, ")");
 					break;
 
 				case OIR_LEA_TYPE_RIP_RELATIVE_WITH_OFFSET:
-					print_three_addr_constant(fl, stmt->constant_operand);
+					print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
 					fprintf(fl, "+");
-					print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
 					fprintf(fl, "(");
-					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 					fprintf(fl, ")");
 					break;
 
 
 				case OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE:
 					//Print the constant out first
-					print_three_addr_constant(fl, stmt->constant_operand);
+					print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
 
 					//Print both variables encase in parenthesis
 					fprintf(fl, "(");
-					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 					fprintf(fl, ", ");
-					print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
 
 					//Now print the multiplier
 					fprintf(fl, ", %ld)", stmt->lea_multiplier);
@@ -2775,17 +2775,17 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 				case OIR_LEA_TYPE_INDEX_AND_SCALE:
 					//Print out the scale and multiplier
 					fprintf(fl, "( , ");
-					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 					fprintf(fl, ", %ld)", stmt->lea_multiplier);
 
 					break;
 
 				case OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE:
 					//Print the offset first
-					print_three_addr_constant(fl, stmt->constant_operand);
+					print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
 					//Print out the scale and multiplier
 					fprintf(fl, "( , ");
-					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 					fprintf(fl, ", %ld)", stmt->lea_multiplier);
 
 					break;
@@ -2830,7 +2830,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, " <- .JT%d + ", ((jump_table_t*)(stmt->if_block))->jump_table_id);
 			
 			//Now print out the variable
-			print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
 
 			//Finally the multiplicator
 			fprintf(fl, " * %ld\n", stmt->lea_multiplier);
@@ -2841,7 +2841,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "jmp *");
 
 			//Now the variable
-			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 			break;
 
@@ -2854,14 +2854,14 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 		case THREE_ADDR_CODE_STACK_ALLOCATION_STMT:
 			fprintf(fl, "Stack Allocate <- ");
-			print_three_addr_constant(fl, stmt->constant_operand);
+			print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
 			fprintf(fl, " bytes\n");
 
 			break;
 
 		case THREE_ADDR_CODE_STACK_DEALLOCATION_STMT:
 			fprintf(fl, "Stack Deallocate <- ");
-			print_three_addr_constant(fl, stmt->constant_operand);
+			print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
 			fprintf(fl, " bytes\n");
 
 			break;
@@ -2869,7 +2869,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		case THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET:
 			print_variable(stdout, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- Starting Offset of Elaborative Param <");
-			print_variable(stdout, stmt->op1, PRINTING_VAR_INLINE);
+			print_variable(stdout, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, ">\n");
 			break;
 
@@ -5126,7 +5126,7 @@ instruction_t* emit_dec_instruction(three_addr_var_t* decrementee){
 	}
 
 	//This is always our input variable
-	dec_stmt->op1 = decrementee;
+	dec_stmt->operands.oir.operand1 = decrementee;
 
 	//And give it back
 	return dec_stmt;
@@ -5154,7 +5154,7 @@ instruction_t* emit_inc_instruction(three_addr_var_t* incrementee){
 	}
 
 	//No matter what this is the op1
-	inc_stmt->op1 = incrementee;
+	inc_stmt->operands.oir.operand1 = incrementee;
 
 	//And give it back
 	return inc_stmt;
@@ -5258,7 +5258,7 @@ instruction_t* emit_ret_instruction(three_addr_var_t* returnee){
 	//Let's now populate it appropriately
 	stmt->statement_type = THREE_ADDR_CODE_RET_STMT;
 	//Set op1 to be the returnee
-	stmt->op1 = returnee;
+	stmt->operands.oir.operand1 = returnee;
 
 	//And that's all, so we'll hop out
 	return stmt;
@@ -5275,7 +5275,7 @@ instruction_t* emit_raise_instruction(three_addr_var_t* raised_error){
 
 	//Now we populate
 	stmt->statement_type = THREE_ADDR_CODE_RAISE_STMT;
-	stmt->op1 = raised_error;
+	stmt->operands.oir.operand1 = raised_error;
 
 	return stmt;
 }
@@ -5292,9 +5292,9 @@ instruction_t* emit_binary_operation_instruction(three_addr_var_t* assignee, thr
 	//Let's now populate it with the appropriate values
 	stmt->statement_type = THREE_ADDR_CODE_BIN_OP_STMT;
 	stmt->operands.oir.assignee = assignee;
-	stmt->op1 = op1;
+	stmt->operands.oir.operand1 = op1;
 	stmt->op = op;
-	stmt->op2 = op2;
+	stmt->operands.oir.operand2 = op2;
 
 	//Give back the newly allocated statement
 	return stmt;
@@ -5311,9 +5311,9 @@ instruction_t* emit_binary_operation_with_const_instruction(three_addr_var_t* as
 	//Let's now populate it with the appropriate values
 	stmt->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
 	stmt->operands.oir.assignee = assignee;
-	stmt->op1 = op1;
+	stmt->operands.oir.operand1 = op1;
 	stmt->op = op;
-	stmt->constant_operand = op2;
+	stmt->operands.oir.constant_operand = op2;
 
 	//Give back the newly allocated statement
 	return stmt;
@@ -5332,7 +5332,7 @@ instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_add
 	stmt->statement_type = THREE_ADDR_CODE_ASSN_STMT;
 	//Let's now populate it with values
 	stmt->operands.oir.assignee = assignee;
-	stmt->op1 = op1;
+	stmt->operands.oir.operand1 = op1;
 
 	//And that's it, we'll just leave our now
 	return stmt;
@@ -5354,7 +5354,7 @@ instruction_t* emit_memory_copy_instruction(three_addr_var_t* assignee_memory_re
 
 	//Now throw in the values. These are both going to be memory address vars
 	stmt->operands.oir.assignee = assignee_memory_region;
-	stmt->op1 = source_memory_region;
+	stmt->operands.oir.operand1 = source_memory_region;
 
 	//Store how much we need to copy - eliminate all guessing
 	stmt->optional_storage.byte_amount_to_copy = byte_amount_to_copy;
@@ -5373,7 +5373,7 @@ instruction_t* emit_memory_access_instruction(three_addr_var_t* assignee, three_
 	//Let's now populate it with values
 	stmt->statement_type = THREE_ADDR_CODE_MEM_ACCESS_STMT;
 	stmt->operands.oir.assignee = assignee;
-	stmt->op1 = op1;
+	stmt->operands.oir.operand1 = op1;
 
 	return stmt;
 }
@@ -5489,7 +5489,7 @@ instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee
 	//Let's now populate it with values
 	stmt->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 	stmt->operands.oir.assignee = assignee;
-	stmt->constant_operand = constant;
+	stmt->operands.oir.constant_operand = constant;
 
 	//And that's it, we'll now just give it back
 	return stmt;
@@ -5511,7 +5511,7 @@ instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* 
 	//This is being dereferenced
 	stmt->operands.oir.assignee->is_dereferenced = TRUE;
 
-	stmt->op1 = op1;
+	stmt->operands.oir.operand1 = op1;
 
 	//Important - add the type that we expect to be writing to in memory
 	stmt->type_storage.memory_read_write_type = memory_write_type;
@@ -5538,10 +5538,10 @@ instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_ad
 	stmt->operands.oir.assignee->is_dereferenced = TRUE;
 
 	//The op1 is our offset
-	stmt->op1 = offset;
+	stmt->operands.oir.operand1 = offset;
 
 	//What we're storing
-	stmt->op2 = storee;
+	stmt->operands.oir.operand2 = storee;
 
 	//Important - add the type that we expect to be writing to in memory
 	stmt->type_storage.memory_read_write_type = memory_write_type;
@@ -5572,7 +5572,7 @@ instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_ad
 	stmt->operands.oir.address_offset = offset;
 
 	//What we're storing
-	stmt->op2 = storee;
+	stmt->operands.oir.operand2 = storee;
 
 	//Important - add the type that we expect to be writing to in memory
 	stmt->type_storage.memory_read_write_type = memory_write_type;
@@ -5603,7 +5603,7 @@ instruction_t* emit_store_const_with_constant_offset_ir_code(three_addr_var_t* b
 	stmt->operands.oir.address_offset = offset;
 
 	//What we're storing
-	stmt->constant_operand = storee;
+	stmt->operands.oir.constant_operand = storee;
 
 	//Important - add the type that we expect to be writing to in memory
 	stmt->type_storage.memory_read_write_type = memory_write_type;
@@ -5624,7 +5624,7 @@ instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* o
 	//Let's now populate it with values
 	stmt->statement_type = THREE_ADDR_CODE_LOAD_STATEMENT;
 	stmt->operands.oir.assignee = assignee;
-	stmt->op1 = op1;
+	stmt->operands.oir.operand1 = op1;
 
 	//Important - store the type that we expect to be getting out of memory
 	stmt->type_storage.memory_read_write_type = memory_read_type;
@@ -5647,10 +5647,10 @@ instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee
 	//The base address that we're assigning to
 	stmt->operands.oir.assignee = assignee;
 	//The op1 is our base address
-	stmt->op1 = base_address;
+	stmt->operands.oir.operand1 = base_address;
 
 	//And op2 is our offset
-	stmt->op2 = offset;
+	stmt->operands.oir.operand2 = offset;
 
 	//Important - store the type that we expect to be getting out of memory
 	stmt->type_storage.memory_read_write_type = memory_read_type;
@@ -5673,7 +5673,7 @@ instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee
 	//The assignee that we're loading into
 	stmt->operands.oir.assignee = assignee;
 	//The op1 is our base address
-	stmt->op1 = base_address;
+	stmt->operands.oir.operand1 = base_address;
 
 	//Our offset is stored in "offset", not constant operand
 	stmt->operands.oir.address_offset = offset;
@@ -5729,7 +5729,7 @@ instruction_t* emit_stack_allocation_ir_statement(three_addr_const_t* bytes_to_a
 	instruction->statement_type = THREE_ADDR_CODE_STACK_ALLOCATION_STMT;
 	
 	//Store the constant
-	instruction->constant_operand = bytes_to_allocate;
+	instruction->operands.oir.constant_operand = bytes_to_allocate;
 
 	//And give it back
 	return instruction;
@@ -5747,7 +5747,7 @@ instruction_t* emit_stack_deallocation_ir_statement(three_addr_const_t* bytes_to
 	instruction->statement_type = THREE_ADDR_CODE_STACK_DEALLOCATION_STMT;
 	
 	//Store the constant
-	instruction->constant_operand = bytes_to_deallocate;
+	instruction->operands.oir.constant_operand = bytes_to_deallocate;
 
 	//And give it back
 	return instruction;
@@ -5772,7 +5772,7 @@ instruction_t* emit_branch_statement(void* if_block, void* else_block, three_add
 	stmt->branch_type = branch_type;
 
 	//And we'll store the variable that we're making a decision based on here
-	stmt->op1 = relies_on;
+	stmt->operands.oir.operand1 = relies_on;
 
 	//Give the statement back
 	return stmt;
@@ -5789,7 +5789,7 @@ instruction_t* emit_indirect_jmp_instruction(three_addr_var_t* address){
 	//Let's now populate it with values
 	stmt->statement_type = THREE_ADDR_CODE_INDIRECT_JUMP_STMT;
 	//The address we're jumping to is in op1
-	stmt->op1 = address;
+	stmt->operands.oir.operand1 = address;
 	//And give it back
 	return stmt;
 }
@@ -5823,7 +5823,7 @@ instruction_t* emit_indirect_function_call_instruction(three_addr_var_t* functio
 	//Populate it with the appropriate values
 	stmt->statement_type = THREE_ADDR_CODE_INDIRECT_FUNC_CALL;
 	//We will store the variable for the function that we're calling indirectly in op1
-	stmt->op1 = function_pointer;
+	stmt->operands.oir.operand1 = function_pointer;
 	//Mark the assignee
 	stmt->operands.oir.assignee = assigned_to;
 
@@ -5921,7 +5921,7 @@ instruction_t* emit_neg_instruction(three_addr_var_t* negatee){
 	}
 
 	//No matter what this is the op1
-	stmt->op1 = negatee;
+	stmt->operands.oir.operand1 = negatee;
 
 	//Give it back
 	return stmt;
@@ -5940,7 +5940,7 @@ instruction_t* emit_not_instruction(three_addr_var_t* var){
 	//The only var here is the assignee
 	stmt->operands.oir.assignee = var;
 	//For the potential of temp variables
-	stmt->op1 = var;
+	stmt->operands.oir.operand1 = var;
 
 	//Give the statement back
 	return stmt;
@@ -5958,7 +5958,7 @@ instruction_t* emit_logical_not_instruction(three_addr_var_t* assignee, three_ad
 	stmt->statement_type = THREE_ADDR_CODE_LOGICAL_NOT_STMT;
 	stmt->operands.oir.assignee = assignee;
 	//Leave it in here
-	stmt->op1 = op1;
+	stmt->operands.oir.operand1 = op1;
 
 	//Flag that this does have an operator, even though we aren't strictly using it
 	stmt->op = EXCLAMATION;
@@ -6015,7 +6015,7 @@ instruction_t* emit_test_if_not_zero_statement(three_addr_var_t* destination_var
 
 	//The assignee/op1 is passed through
 	stmt->operands.oir.assignee = destination_variable;
-	stmt->op1 = being_tested;
+	stmt->operands.oir.operand1 = being_tested;
 
 	//Note what kind of node this is
 	stmt->statement_type = THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT;
@@ -6034,7 +6034,7 @@ instruction_t* emit_test_if_not_zero_for_const_statement(three_addr_var_t* desti
 
 	//The assignee/op1 is passed through
 	stmt->operands.oir.assignee = destination_variable;
-	stmt->constant_operand = being_tested;
+	stmt->operands.oir.constant_operand = being_tested;
 
 	//Note what kind of node this is
 	stmt->statement_type = THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT;
@@ -6067,10 +6067,10 @@ instruction_t* emit_global_variable_address_calculation_oir(three_addr_var_t* as
 	remediated_version->variable_type = VARIABLE_TYPE_NON_TEMP;
 
 	//Op1 is the instruction pointer(relative addressing)
-	lea->op1 = instruction_pointer;
+	lea->operands.oir.operand1 = instruction_pointer;
 
 	//The op2 is always the global var itself
-	lea->op2 = remediated_version;
+	lea->operands.oir.operand2 = remediated_version;
 
 	//And give it back
 	return lea;
@@ -6100,13 +6100,13 @@ instruction_t* emit_global_variable_address_calculation_with_offset_oir(three_ad
 	remediated_version->variable_type = VARIABLE_TYPE_NON_TEMP;
 
 	//Op1 is the instruction pointer(relative addressing)
-	lea->op1 = instruction_pointer;
+	lea->operands.oir.operand1 = instruction_pointer;
 
 	//The op2 is always the global var itself
-	lea->op2 = remediated_version;
+	lea->operands.oir.operand2 = remediated_version;
 
 	//Store the constant offset here as well
-	lea->constant_operand = constant;
+	lea->operands.oir.constant_operand = constant;
 
 	//And give it back
 	return lea;
@@ -6157,7 +6157,7 @@ instruction_t* emit_elaborative_param_starting_offset_calculation(three_addr_var
 
 	//Store the result/op1
 	stmt->operands.oir.assignee = result;
-	stmt->op1 = elaborative_param;
+	stmt->operands.oir.operand1 = elaborative_param;
 
 	//Give it back
 	return stmt;
@@ -6212,11 +6212,13 @@ instruction_t* copy_instruction(instruction_t* copied){
 	
 	//Duplicate the variables
 	copy->operands.oir.assignee = duplicate_variable(copied->operands.oir.assignee);
-	copy->op1 = duplicate_variable(copied->op1);
-	copy->op2 = duplicate_variable(copied->op2);
-	//TODO LOOKS WRONG
+	copy->operands.oir.operand1 = duplicate_variable(copied->operands.oir.operand1);
+	copy->operands.oir.operand2 = duplicate_variable(copied->operands.oir.operand2);
 	copy->operands.oir.address_offset = duplicate_constant(copied->operands.oir.address_offset);
-	copy->constant_operand = duplicate_constant(copied->constant_operand);
+	copy->operands.oir.constant_operand = duplicate_constant(copied->operands.oir.constant_operand);
+	copy->operands.oir.address_operand1 = duplicate_variable(copied->operands.oir.address_operand1);
+	copy->operands.oir.address_operand2 = duplicate_variable(copied->operands.oir.address_operand2);
+	copy->operands.oir.address_multiplier = copied->operands.oir.address_multiplier;
 
 	//If we have function call parameters, emit a copy of them
 	if(copied->parameters.internal_array != NULL){
