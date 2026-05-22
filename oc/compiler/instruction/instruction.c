@@ -3031,19 +3031,20 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 			break;
 
 		/**
-		 * Global var address calculation
+		 * Global var address calculation. Remember that the rip-relative address
+		 * is in address calc reg2
 		 */
 		case ADDRESS_CALCULATION_MODE_RIP_RELATIVE:
-			//There are different ways that this can go
-			switch(instruction->rip_offset_variable->variable_type){
+			//There are different ways that this can go(t)
+			switch(instruction->operands.x86.address_register2->variable_type){
 				case VARIABLE_TYPE_LOCAL_CONSTANT:
-					fprintf(fl, ".LC%d", instruction->rip_offset_variable->associated_memory_region.local_constant->local_constant_id);
+					fprintf(fl, ".LC%d", instruction->operands.x86.address_register2->associated_memory_region.local_constant->local_constant_id);
 					break;
 				case VARIABLE_TYPE_FUNCTION_ADDRESS:
-					fprintf(fl, "%s", instruction->rip_offset_variable->associated_memory_region.rip_relative_function->func_name.string);
+					fprintf(fl, "%s", instruction->operands.x86.address_register2->associated_memory_region.rip_relative_function->func_name.string);
 					break;
 				default:
-					fprintf(fl, "%s", instruction->rip_offset_variable->linked_var->var_name.string);
+					fprintf(fl, "%s", instruction->operands.x86.address_register2->linked_var->var_name.string);
 					break;
 			}
 
@@ -3056,20 +3057,21 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 		   	break;
 
 		/**
-		 * Global var address calculation with offset
+		 * Global var address calculation with offset. Again recall that the rip-relative
+		 * address is stored in the second address register
 		 */
 		case ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET:
 			print_immediate_value_no_prefix(fl, instruction->operands.x86.address_offset);
 			//There are different ways that this can go
-			switch(instruction->rip_offset_variable->variable_type){
+			switch(instruction->operands.x86.address_register2->variable_type){
 				case VARIABLE_TYPE_LOCAL_CONSTANT:
-					fprintf(fl, "+.LC%d", instruction->rip_offset_variable->associated_memory_region.local_constant->local_constant_id);
+					fprintf(fl, "+.LC%d", instruction->operands.x86.address_register2->associated_memory_region.local_constant->local_constant_id);
 					break;
 				case VARIABLE_TYPE_FUNCTION_ADDRESS:
-					fprintf(fl, "%s", instruction->rip_offset_variable->associated_memory_region.rip_relative_function->func_name.string);
+					fprintf(fl, "%s", instruction->operands.x86.address_register2->associated_memory_region.rip_relative_function->func_name.string);
 					break;
 				default:
-					fprintf(fl, "+%s", instruction->rip_offset_variable->linked_var->var_name.string);
+					fprintf(fl, "+%s", instruction->operands.x86.address_register2->linked_var->var_name.string);
 					break;
 			}
 			fprintf(fl, "(");
@@ -6130,8 +6132,8 @@ instruction_t* emit_global_variable_address_calculation_x86(three_addr_var_t* gl
 	//Address calc reg 1 is the instruction pointer(relative addressing)
 	lea->operands.x86.address_register1 = instruction_pointer;
 
-	//The offset is the global variable(unique case)
-	lea->rip_offset_variable = global_variable;
+	//The second address register is the rip offset variable that we're after
+	lea->operands.x86.address_register2 = global_variable;
 
 	//And give it back
 	return lea;

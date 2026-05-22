@@ -11040,6 +11040,7 @@ static void handle_lea_statement(instruction_t* instruction){
 			instruction->operands.x86.addressing_mode_register1 = instruction->op1;
 
 			//Op2 holds the global var, which then gets moved over
+						//TODO RIP OFFSET IS ADDR CALC REG2
 			instruction->rip_offset_variable = instruction->op2;
 
 			break;
@@ -11711,6 +11712,7 @@ static inline instruction_t* emit_local_constant_from_memory_load(generic_type_t
 	instruction->operands.x86.addressing_mode_register1 = instruction_pointer_variable;
 
 	//The local constant variable that we are using
+						//TODO RIP OFFSET IS ADDR CALC REG2
 	instruction->rip_offset_variable = emit_local_constant_temp_var(local_constant);
 
 	//Give the instruction back
@@ -12738,6 +12740,7 @@ static void handle_load_instruction(instruction_window_t* window){
 					load_instruction->operands.x86.addressing_mode_register1 = instruction_pointer_variable;
 
 					//The offset field holds the global var's name
+						//TODO RIP OFFSET IS ADDR CALC REG2
 					load_instruction->rip_offset_variable = load_instruction->op1;
 
 					break;
@@ -12851,6 +12854,7 @@ static void handle_load_with_constant_offset_instruction(instruction_window_t* w
 					load_instruction->operands.x86.addressing_mode_register1 = instruction_pointer_variable;
 
 					//The global var comes from op1
+						//TODO RIP OFFSET IS ADDR CALC REG2
 					load_instruction->rip_offset_variable = load_instruction->op1;
 
 					/**
@@ -13305,6 +13309,7 @@ static void combine_lea_with_regular_load_instruction(instruction_window_t* wind
 			load_statement->operands.x86.addressing_mode_register1 = instruction_pointer_variable;
 
 			//The rip offset variable is our .LCx value
+						//TODO RIP OFFSET IS ADDR CALC REG2
 			load_statement->rip_offset_variable = lea_statement->op2;
 
 			/**
@@ -13367,6 +13372,7 @@ static void handle_store_instruction(instruction_t* instruction){
 						instruction->operands.x86.addressing_mode_register1 = instruction_pointer_variable;
 
 						//The global variable is held by the offset
+						//TODO RIP OFFSET IS ADDR CALC REG2
 						instruction->rip_offset_variable = instruction->assignee;
 						
 						break;
@@ -13516,6 +13522,7 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 						instruction->operands.x86.addressing_mode_register1 = instruction_pointer_variable;
 
 						//The offset is already in place, we just need to set the rip offset variable based on the assignee
+						//TODO RIP OFFSET IS ADDR CALC REG2
 						instruction->rip_offset_variable = instruction->assignee;
 
 						//All that we need to do now is change the calculation mode to be rip with offset

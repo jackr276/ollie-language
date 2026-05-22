@@ -1454,11 +1454,16 @@ void delete_statement(instruction_t* stmt){
 	//Grab the block out
 	basic_block_t* block = stmt->block_contained_in;
 
-	//If we have a string constant and we're doing this, we'll need to decrement the reference
-	//count by 1 because we are losing a reference to it
-	if(stmt->op2 != NULL && stmt->op2->variable_type == VARIABLE_TYPE_LOCAL_CONSTANT){
-		//Knock one off of the reference count
-		stmt->op2->associated_memory_region.local_constant->reference_count--;
+	/**
+	 * If we have a string constant and we're doing this, we'll need to decrement the reference
+	 * count by 1 because we are losing a reference to it. Any/all local constant values are always
+	 * stored inside of the second address register
+	 */
+	three_addr_var_t* local_constant_var = stmt->operands.oir.address_operand2;
+
+	//Knock one off of the reference count if it's valid
+	if(local_constant_var != NULL && local_constant_var->variable_type == VARIABLE_TYPE_LOCAL_CONSTANT){
+		local_constant_var->use_count--;
 	}
 
 	//No matter what, we are reducing the number of statements in this block
@@ -1497,15 +1502,24 @@ void delete_statement(instruction_t* stmt){
 		next->previous_statement = previous;
 	}
 
-	//Now we need to do all maintenance when it comes to used variables for these statements. All variables
-	//in here that were used now have one less "use" instance, and we'll need to update accordingly
-	if(stmt->op1 != NULL){
-		stmt->op1->use_count--;
+	/**
+	 * Now we need to do all maintenance when it comes to used variables for these statements. All variables
+	 * in here that were used now have one less "use" instance, and we'll need to update accordingly
+	 */
+	if(stmt->operands.oir.operand1 != NULL){
+		stmt->operands.oir.operand1->use_count--;
 	}
 
-	//One less use count here as well
-	if(stmt->op2 != NULL){
-		stmt->op2->use_count--;
+	if(stmt->operands.oir.operand2 != NULL){
+		stmt->operands.oir.operand2->use_count--;
+	}
+
+	if(stmt->operands.oir.address_operand1 != NULL){
+		stmt->operands.oir.address_operand1->use_count--;
+	}
+
+	if(stmt->operands.oir.address_operand2 != NULL){
+		stmt->operands.oir.address_operand2->use_count--;
 	}
 }
 
@@ -3455,7 +3469,7 @@ static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, t
 	 		&& basic_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
 			&& variables_equal(basic_block->exit_statement->operands.oir.assignee, tested_variable, FALSE) == TRUE){
 			//Use the constant enhancment to make this happen
-			instruction_t* test_if_not_zero = emit_test_if_not_zero_for_const_statement(emit_temp_var(u8), basic_block->exit_statement->op1_const);
+			instruction_t* test_if_not_zero = emit_test_if_not_zero_for_const_statement(emit_temp_var(u8), basic_block->exit_statement->operands.oir.constant_operand);
 
 			//Add it in
 			add_statement(basic_block, test_if_not_zero);
@@ -3655,7 +3669,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 			if(current_block->exit_statement->type_storage.result_type != NULL){
 				type_signed = is_type_signed(current_block->exit_statement->type_storage.result_type);
 			} else {
-				type_signed = is_type_signed(current_block->exit_statement->op1->type);
+				type_signed = is_type_signed(current_block->exit_statement->operands.oir.address_operand1->type);
 			}
 
 		} else {
@@ -3942,7 +3956,7 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 			if(current_block->exit_statement->type_storage.result_type != NULL){
 				type_signed = is_type_signed(current_block->exit_statement->type_storage.result_type);
 			} else {
-				type_signed = is_type_signed(current_block->exit_statement->op1->type);
+				type_signed = is_type_signed(current_block->exit_statement->operands.oir.operand1->type);
 			}
 
 		} else {

@@ -290,6 +290,12 @@ struct instruction_t{
 	instruction_t* next_statement;
 	//For doubly linked list properties -- the previous statement
 	instruction_t* previous_statement;
+	//What is the three address code type
+	instruction_stmt_type_t statement_type;
+	//What is the x86-64 instruction
+	instruction_type_t instruction_type;
+	//What is the operator for the instruction?
+	ollie_token_t op;
 	/**
 	 * For the sake of efficiency - we only ever need to use
 	 * one of these structs at at time. It's for this reason
@@ -348,9 +354,10 @@ struct instruction_t{
 			u_int64_t address_multiplier;
 		} x86;
 	} operands;
-	//The RIP offset variable
-	three_addr_var_t* rip_offset_variable;
-	//Optional storage for values that aren't often used
+	/**
+	 * Optional storage values that are not used enough to justify
+	 * their own dedicated field
+	 */
 	union {
 		//Store inlined assembly in a string
 		dynamic_string_t inlined_assembly;
@@ -363,10 +370,9 @@ struct instruction_t{
 		//The label that we are jumping to
 		symtab_label_record_t* jumping_to_label;
 	} optional_storage;
+
 	//Generic parameter list - could be used for phi functions or function calls
 	dynamic_array_t parameters;
-	//What block holds this?
-	void* block_contained_in;
 	//We have 2 ways to jump. The if jump is our affirmative jump,
 	//else is our alternative
 	void* if_block;
@@ -390,13 +396,8 @@ struct instruction_t{
 
 	//The function called
 	symtab_function_record_t* called_function;
-	//What is the three address code type
-	instruction_stmt_type_t statement_type;
-	//What is the x86-64 instruction
-	instruction_type_t instruction_type;
-	//The actual operator, stored as a token for size requirements. We will
-	//also use this in determining floating point comparsions
-	ollie_token_t op;
+	//What block holds this?
+	void* block_contained_in;
 	//Is this operation critical?
 	u_int8_t mark;
 	//Is this a regular or inverse branch
