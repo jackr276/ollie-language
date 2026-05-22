@@ -284,54 +284,68 @@ struct three_addr_const_t{
 
 /**
  * A generic struct that encapsulates most of our instructions
- *
- * TODO TRY TO REFACTOR THIS FOR CACHE LOCALITY
  */
 struct instruction_t{
 	//For linked list properties -- the next statement
 	instruction_t* next_statement;
 	//For doubly linked list properties -- the previous statement
 	instruction_t* previous_statement;
-
 	/**
-	 * Storage for the variables that are used inside of OIR. 
+	 * For the sake of efficiency - we only ever need to use
+	 * one of these structs at at time. It's for this reason
+	 * that we have both structs wrapped inside of a union
+	 * to save on space
 	 */
-	struct {
-		//First operand inside of an expresion
-		three_addr_var_t* operand1;
-		//Second operand inside of an expression
-		three_addr_var_t* operand2;
-		//Constant operand if need be
-		three_addr_var_t* constant_operand;
-		//Assignee
-		three_addr_var_t* assignee;
+	union {
 		/**
-		 * We maintain separate variable storage for lea/address
-		 * calculation statements. Reminder that these statements
-		 * go like(at their maximum): offset(operand1, operand2, multiplier)
+		 * Storage for the variables that are used inside of OIR. 
 		 */
-		three_addr_const_t* addressing_mode_offset;
-		three_addr_var_t* addressing_mode_operand1;
-		three_addr_var_t* addressing_mode_operand2;
-		three_addr_const_t* addressing_mode_mulitplier;
+		struct {
+			//First operand inside of an expresion
+			three_addr_var_t* operand1;
+			//Second operand inside of an expression
+			three_addr_var_t* operand2;
+			//Constant operand if need be
+			three_addr_var_t* constant_operand;
+			//Assignee
+			three_addr_var_t* assignee;
+			/**
+			 * We maintain separate variable storage for lea/address
+			 * calculation statements. Reminder that these statements
+			 * go like(at their maximum): offset(operand1, operand2, multiplier)
+			 */
+			three_addr_const_t* addressing_mode_offset;
+			three_addr_var_t* addressing_mode_operand1;
+			three_addr_var_t* addressing_mode_operand2;
+			three_addr_const_t* addressing_mode_mulitplier;
+		} oir; 
 
-	} oir_variables;
-
-	struct {
-		//First source register for x86 assembly
-		three_addr_var_t* source_register1;
-		//Second source register for x86 assembly
-		three_addr_var_t* source_register2;
-		//Immediate value for x86 assembly
-		three_addr_const_t* source_immediate;
-
-		//First destination register
-		three_addr_var_t* destination_register;
-		//Second destination register - some instructions have these
-		three_addr_var_t* second_destination_register;
-
-	} registers;
-
+		/**
+		 * Storage for the variables that represent the registers inside of
+		 * our representation of x86 assembly
+		 */
+		struct {
+			//First source register for x86 assembly
+			three_addr_var_t* source_register1;
+			//Second source register for x86 assembly
+			three_addr_var_t* source_register2;
+			//Immediate value for x86 assembly
+			three_addr_const_t* source_immediate;
+			//First destination register
+			three_addr_var_t* destination_register;
+			//Second destination register - some instructions have these
+			three_addr_var_t* second_destination_register;
+			/**
+			 * We maintain separate variable storage for lea/address
+			 * calculation statements. Reminder that these statements
+			 * go like(at their maximum): offset(register1, register2, multiplier)
+			 */
+			three_addr_const_t* addressing_mode_offset;
+			three_addr_var_t* addressing_mode_register1;
+			three_addr_var_t* addressing_mode_register2;
+			three_addr_const_t* addressing_mode_mulitplier;
+		} x86;
+	} operands;
 
 
 	//A three address code always has 2 operands and an assignee
