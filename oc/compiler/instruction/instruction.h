@@ -292,6 +292,48 @@ struct instruction_t{
 	instruction_t* next_statement;
 	//For doubly linked list properties -- the previous statement
 	instruction_t* previous_statement;
+
+	/**
+	 * Storage for the variables that are used inside of OIR. 
+	 */
+	struct {
+		//First operand inside of an expresion
+		three_addr_var_t* operand1;
+		//Second operand inside of an expression
+		three_addr_var_t* operand2;
+		//Constant operand if need be
+		three_addr_var_t* constant_operand;
+		//Assignee
+		three_addr_var_t* assignee;
+		/**
+		 * We maintain separate variable storage for lea/address
+		 * calculation statements. Reminder that these statements
+		 * go like(at their maximum): offset(operand1, operand2, multiplier)
+		 */
+		three_addr_const_t* addressing_mode_offset;
+		three_addr_var_t* addressing_mode_operand1;
+		three_addr_var_t* addressing_mode_operand2;
+		three_addr_const_t* addressing_mode_mulitplier;
+
+	} oir_variables;
+
+	struct {
+		//First source register for x86 assembly
+		three_addr_var_t* source_register1;
+		//Second source register for x86 assembly
+		three_addr_var_t* source_register2;
+		//Immediate value for x86 assembly
+		three_addr_const_t* source_immediate;
+
+		//First destination register
+		three_addr_var_t* destination_register;
+		//Second destination register - some instructions have these
+		three_addr_var_t* second_destination_register;
+
+	} registers;
+
+
+
 	//A three address code always has 2 operands and an assignee
 	three_addr_var_t* op1;
 	three_addr_var_t* op2;
