@@ -724,7 +724,7 @@ instruction_t* emit_memory_copy_instruction(three_addr_var_t* assignee_memory_re
  * Emit a store statement. This is like an assignment instruction, but we're explicitly
  * using stack memory here
  */
-instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1, generic_type_t* memory_write_type);
+instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, generic_type_t* memory_write_type);
 
 /**
  * Emit a store with offset ir code. We take in a base address(assignee), 

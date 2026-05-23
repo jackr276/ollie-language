@@ -2409,8 +2409,9 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		 */
 		case THREE_ADDR_CODE_STORE_STATEMENT:
 			fprintf(fl, "store ");
-			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- ");
+
 			//Finally the storee(op1 or constant operand)
 			if(stmt->operands.oir.operand1 != NULL){
 				print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
@@ -2426,9 +2427,9 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		 * store x[offset] <- storee
 		 */
 		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-			//First the base address(assignee)
+			//First the base address
 			fprintf(fl, "store ");
-			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
 
 			//Then the constant offset
 			fprintf(fl, "["); 
@@ -2450,17 +2451,15 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		 * These print out like
 		 *
 		 * store x[offset] <- storee
-		 *
-		 * TODO I DON'T EVEN LIKE THIS
 		 */
 		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-			//First the base address(assignee)
+			//First the base address(address operand 1)
 			fprintf(fl, "store ");
-			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
 
 			//Then the variable offset
 			fprintf(fl, "["); 
-			print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
 			fprintf(fl, "] <- "); 
 
 			//Finally the storee(op1 or constant operand)
@@ -2484,7 +2483,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "load ");
 			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- "); 
-			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 			break;
 
@@ -5499,7 +5498,7 @@ instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee
  * Emit a store statement. This is like an assignment instruction, but we're explicitly
  * using stack memory here
  */
-instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1, generic_type_t* memory_write_type){
+instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, generic_type_t* memory_write_type){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -5510,7 +5509,8 @@ instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* 
 	//This is being dereferenced
 	stmt->operands.oir.assignee->is_dereferenced = TRUE;
 
-	stmt->operands.oir.operand1 = op1;
+	//Base address goes in operand1
+	stmt->operands.oir.address_operand1 = base_address;
 
 	//Important - add the type that we expect to be writing to in memory
 	stmt->type_storage.memory_read_write_type = memory_write_type;
@@ -5521,8 +5521,8 @@ instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* 
 
 
 /**
- * Emit a store with offset ir code. We take in a base address(assignee), 
- * a variable offset(op1), and the value we're storing(op2)
+ * Emit a store with offset ir code. We take in a base address(address_operand1), 
+ * a variable offset(address_operand2), and the value we're storing(op1)
  */
 instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_address, three_addr_var_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type){
 	//First allocate
@@ -5530,14 +5530,15 @@ instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_ad
 
 	//Now populate with values
 	stmt->statement_type = THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET;
-	//The base address that we're assigning to
-	stmt->operands.oir.assignee = base_address;
+
+	//Base address is op1
+	stmt->operands.oir.address_operand1 = base_address;
 
 	//This is being dereferenced
 	stmt->operands.oir.assignee->is_dereferenced = TRUE;
 
 	//Leverage the address calculation region
-	stmt->operands.oir.address_operand1 = offset;
+	stmt->operands.oir.address_operand2 = offset;
 
 	//What we're storing
 	stmt->operands.oir.operand1 = storee;
@@ -5621,7 +5622,7 @@ instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* o
 	//Let's now populate it with values
 	stmt->statement_type = THREE_ADDR_CODE_LOAD_STATEMENT;
 	stmt->operands.oir.assignee = assignee;
-	stmt->operands.oir.operand1 = op1;
+	stmt->operands.oir.address_operand1 = op1;
 
 	//Important - store the type that we expect to be getting out of memory
 	stmt->type_storage.memory_read_write_type = memory_read_type;
