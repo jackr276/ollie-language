@@ -5498,22 +5498,24 @@ instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee
  * Emit a store statement. This is like an assignment instruction, but we're explicitly
  * using stack memory here
  */
-instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, generic_type_t* memory_write_type){
+instruction_t* emit_store_ir_code(three_addr_var_t* address, three_addr_var_t* storee, generic_type_t* memory_write_type){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it with values
 	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
-	stmt->operands.oir.assignee = assignee;
+
+	//The first address op is the memory address
+	stmt->operands.oir.address_operand1 = address;
 
 	//This is being dereferenced
-	stmt->operands.oir.assignee->is_dereferenced = TRUE;
-
-	//Base address goes in operand1
-	stmt->operands.oir.address_operand1 = base_address;
+	stmt->operands.oir.address_operand1->is_dereferenced = TRUE;
 
 	//Important - add the type that we expect to be writing to in memory
 	stmt->type_storage.memory_read_write_type = memory_write_type;
+
+	//The storee goes inside of operand 1
+	stmt->operands.oir.operand1 = storee;
 
 	//And that's it, we'll now just give it back
 	return stmt;
@@ -5535,7 +5537,7 @@ instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_ad
 	stmt->operands.oir.address_operand1 = base_address;
 
 	//This is being dereferenced
-	stmt->operands.oir.assignee->is_dereferenced = TRUE;
+	stmt->operands.oir.address_operand1->is_dereferenced = TRUE;
 
 	//Leverage the address calculation region
 	stmt->operands.oir.address_operand2 = offset;
@@ -5561,16 +5563,17 @@ instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_ad
 
 	//Now populate with values
 	stmt->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
-	//The base address that we're assigning to
-	stmt->operands.oir.assignee = base_address;
+
+	//The base address is the first operand
+	stmt->operands.oir.address_operand1 = base_address;
 
 	//This is being dereferenced
-	stmt->operands.oir.assignee->is_dereferenced = TRUE;
+	stmt->operands.oir.address_operand1->is_dereferenced = TRUE;
 
 	//The offset placeholder is used for our offset, not constant operand 
 	stmt->operands.oir.address_offset = offset;
 
-	//What we're storing
+	//What we're storing goes in op1
 	stmt->operands.oir.operand1 = storee;
 
 	//Important - add the type that we expect to be writing to in memory
@@ -5591,11 +5594,12 @@ instruction_t* emit_store_const_with_constant_offset_ir_code(three_addr_var_t* b
 
 	//Now populate with values
 	stmt->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
+
 	//The base address that we're assigning to
-	stmt->operands.oir.assignee = base_address;
+	stmt->operands.oir.address_operand1 = base_address;
 
 	//This is being dereferenced
-	stmt->operands.oir.assignee->is_dereferenced = TRUE;
+	stmt->operands.oir.address_operand1->is_dereferenced = TRUE;
 
 	//The offset placeholder is used for our offset, not constant operand 
 	stmt->operands.oir.address_offset = offset;
