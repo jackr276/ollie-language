@@ -2938,34 +2938,6 @@ static void rename_block(basic_block_t* entry){
 				break;
 
 			/**
-			 * These statements are interesting because the "assignee" is not really
-			 * being assigned to. It holds a memory address that is being dereferenced
-			 * and then assigned to. As such, these values should never count as an lhs new name
-			 *
-			 *
-			 * TODO - ALL WRONG NOW
-			 */
-			case THREE_ADDR_CODE_STORE_STATEMENT:
-			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-				//If we have a non-temp variable, rename it
-				if(is_variable_ssa_eligible(cursor->op1) == TRUE){
-					rhs_new_name(cursor->op1);
-				}
-
-				//If we have a non-temp variable, rename it
-				if(is_variable_ssa_eligible(cursor->op2) == TRUE){
-					rhs_new_name(cursor->op2);
-				}
-
-				//UNIQUE CASE - rhs also gets a new name here
-				if(is_variable_ssa_eligible(cursor->operands.oir.assignee) == TRUE){
-					rhs_new_name(cursor->operands.oir.assignee);
-				}
-
-				break;
-
-			/**
 			 * And now if it's anything else that has an assignee, operands, etc,
 			 * we'll need to rewrite all of those as well
 			 * We'll exclude direct jump statements, these we don't care about
@@ -2985,6 +2957,14 @@ static void rename_block(basic_block_t* entry){
 
 				if(is_variable_ssa_eligible(cursor->operands.oir.address_operand2) == TRUE){
 					rhs_new_name(cursor->operands.oir.address_operand2);
+				}
+
+				/**
+				 * After we rename the RHS, we need to rename the left hand variable if
+				 * it itself is eligible
+				 */
+				if(is_variable_ssa_eligible(cursor->operands.oir.assignee) == TRUE){
+					lhs_new_name(cursor->operands.oir.assignee);
 				}
 
 				break;
@@ -3052,27 +3032,11 @@ static void rename_block(basic_block_t* entry){
 	 * need to pop it's stack so we don't have excessive variable numbers. We'll now iterate over again
 	 * and perform pops whereever we see a variable being assigned
 	 */
-
-	//Grab the cursor again
 	cursor = entry->leader_statement;
 	while(cursor != NULL){
-		//We have some special exceptions here...
-		switch(cursor->statement_type){
-			//These ones have assignees in name only - they do not count
-			case THREE_ADDR_CODE_STORE_STATEMENT:
-			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-				break;
-
-			//Otherwise this does count
-			default:
-				//If we see a statement that has an assignee that is not temporary, we'll unwind(pop) his stack
-				if(is_variable_ssa_eligible(cursor->operands.oir.assignee) == TRUE){
-					//Pop it off
-					lightstack_pop(&(cursor->operands.oir.assignee->linked_var->counter_stack));
-				}
-
-				break;
+		//If we see a statement that has an assignee that is not temporary, we'll unwind(pop) his stack
+		if(is_variable_ssa_eligible(cursor->operands.oir.assignee) == TRUE){
+			lightstack_pop(&(cursor->operands.oir.assignee->linked_var->counter_stack));
 		}
 
 		//Advance to the next one
@@ -5774,28 +5738,8 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 			//This is our store statement
 			instruction_t* store_statement = current_block->exit_statement;
 
-			/**
-			 * Different store statement types have different areas where the operands go
-			 *
-			 * TODO BAD ASSUMPTION NOW
-			 */
-			switch(store_statement->statement_type){
-				//Store statements have the storee in op1
-				case THREE_ADDR_CODE_STORE_STATEMENT:
-					//This is now our op1
-					current_block->exit_statement->op1 = assignee;
-					break;
-
-				//When we have offsets, the storee goes into op2
-				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-					current_block->exit_statement->op2 = assignee;
-					break;
-
-				//This is unreachable, just so the compiler is happy
-				default:
-					break;
-			}
+			//Throw this inside of the operand1 
+			store_statement->operands.oir.operand1 = assignee;
 
 		//Otherwise we just have a regular assignment
 		} else {
@@ -5961,26 +5905,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					//This is our store statement
 					instruction_t* store_statement = current_block->exit_statement;
 
-					/**
-					 * Different store statement types have different areas where the operands go
-					 */
-					switch(store_statement->statement_type){
-						//Store statements have the storee in op1
-						case THREE_ADDR_CODE_STORE_STATEMENT:
-							//This is now our op1
-							current_block->exit_statement->op1 = assignee;
-							break;
-
-						//When we have offsets, the storee goes into op2
-						case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-						case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-							current_block->exit_statement->op2 = assignee;
-							break;
-
-						//This is unreachable, just so the compiler is happy
-						default:
-							break;
-					}
+					//Throw this into the store statement's operand1
+					store_statement->operands.oir.operand1 = assignee;
 
 				//Otherwise we just have a regular assignment
 				} else {
