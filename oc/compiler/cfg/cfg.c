@@ -2406,21 +2406,6 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 
 					break;
 
-				//For STOREs, the assignee is a memory address, so it's actually
-				//used but not defined
-				//TODO NOT ANYMORE WERE GONNA FIX THIS
-				case THREE_ADDR_CODE_STORE_STATEMENT:
-				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-					//Op1/Op2 go into use if they exist
-					add_variable_to_use_set(cursor->op1, block);
-					add_variable_to_use_set(cursor->op2, block);
-					
-					//Assignee is defined in this unique case
-					add_variable_to_use_set(cursor->operands.oir.assignee, block);
-
-					break;
-
 				/**
 				 * In the default case, we just add the USE/DEF for each 
 				 * variable that we can see
@@ -6653,28 +6638,10 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			} else if(current_block->exit_statement != NULL
 						&& is_store_operation(current_block->exit_statement) == TRUE
 						&& current_block->exit_statement->operands.oir.assignee == left_hand_var){
-				//This is our store statement
 				instruction_t* store_statement = current_block->exit_statement;
 
-				/**
-				 * Different store statement types have different areas where the operands go
-				 */
-				switch(store_statement->statement_type){
-					//Store statements have the storee in op1
-					case THREE_ADDR_CODE_STORE_STATEMENT:
-						store_statement->op1 = result_var;
-						break;
-
-					//When we have offsets, the storee goes into op2
-					case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-					case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-						store_statement->op2 = result_var;
-						break;
-
-					//This is unreachable, just so the compiler is happy
-					default:
-						break;
-				}
+				//This goes inside of the store statement's operand1
+				store_statement->operands.oir.operand1 = result_var;
 
 			/**
 			 * If we have a variable that is on the stack or is a global variable, then a regular assignment won't
@@ -6773,7 +6740,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				&& current_block->exit_statement->operands.oir.assignee == left_hand_var){
 
 				//Simply give this one the constant that we had
-				current_block->exit_statement->op1_const = right_hand_package.result_value.result_const;
+				current_block->exit_statement->operands.oir.constant_operand = right_hand_package.result_value.result_const;
 
 			/**
 			 * Second case: If we have a variable that is on the stack or is a global variable, then a regular assignment won't
@@ -6789,7 +6756,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				instruction_t* final_assignment = emit_store_ir_code(memory_address, NULL, left_hand_var->type);
 
 				//This guy's operand is the result constant
-				final_assignment->op1_const = right_hand_package.result_value.result_const;
+				final_assignment->operands.oir.constant_operand = right_hand_package.result_value.result_const;
 
 				//Now add thi statement in here
 				add_statement(current_block, final_assignment);
@@ -7093,8 +7060,8 @@ static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, 
 	 */
 	conditional_result->sets_cc = TRUE;
 
-	//Mark this as the op1 so that we can track in the optimizer
-	branch_instruction->op1 = conditional_result;
+	//Mark this as the oprand1 so that we can track in the optimizer
+	branch_instruction->operands.oir.operand1 = conditional_result;
 
 	//Add the statement into the block
 	add_statement(basic_block, branch_instruction);
@@ -11747,7 +11714,7 @@ static cfg_result_package_t emit_final_initialization(basic_block_t* current_blo
 		 * Constant type is simple - just assign over the result value
 		 */
 		case CFG_RESULT_TYPE_CONST:
-			store_instruction->op1_const = expression_results.result_value.result_const;
+			store_instruction->operands.oir.constant_operand = expression_results.result_value.result_const;
 			break;
 
 		/**
@@ -11774,8 +11741,8 @@ static cfg_result_package_t emit_final_initialization(basic_block_t* current_blo
 				final_assignee = temp_assignment->operands.oir.assignee;
 			}
 
-			//This is now our op2
-			store_instruction->op2 = final_assignee;
+			//This is now our store instruction operand 
+			store_instruction->operands.oir.operand1 = final_assignee;
 			break;
 	}
 
@@ -11884,7 +11851,7 @@ static cfg_result_package_t emit_string_initializer(basic_block_t* current_block
 		instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(base_address, emit_direct_integer_or_char_constant(stack_offset, u64), NULL, char_type);
 
 		//We can skip the assignment here and just directly put the constant in
-		store_instruction->op1_const = constant;
+		store_instruction->operands.oir.constant_operand = constant;
 
 		//Add the instruction in
 		add_statement(current_block, store_instruction);
@@ -12105,7 +12072,7 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 				instruction_t* store_statement = emit_store_ir_code(base_address, NULL, true_stored_type);
 
 				//Set the store statement's op1_const to be this
-				store_statement->op1_const = expression_results.result_value.result_const;
+				store_statement->operands.oir.constant_operand = expression_results.result_value.result_const;
 
 				//Now add thi statement in here
 				add_statement(current_block, store_statement);
