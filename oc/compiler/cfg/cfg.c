@@ -5474,8 +5474,7 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
  * the deepest(first) part first and the highest(root) part last
  */
 static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, generic_ast_node_t* root){
-	//This is our "base case". If it's not a postfix expression,
-	//just move out
+	//This is our "base case". If it's not a postfix expression, just move out
 	if(root->ast_node_type != AST_NODE_TYPE_POSTFIX_EXPR){
 		return emit_primary_expr_code(basic_block, root);
 	}
@@ -5536,8 +5535,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 
 				//Otherwise, this means that the current offset is null
 				} else {
-					//Emit the store here - remember we leave the op1 NULL so that
-					//a later rule can fill it in
+					//Emit the store here - remember we leave the op1 NULL so that a later rule can fill it in
 					store_instruction = emit_store_ir_code(base_address, NULL, original_memory_access_type);
 
 					//Add it into our block
@@ -6637,7 +6635,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			 */
 			} else if(current_block->exit_statement != NULL
 						&& is_store_operation(current_block->exit_statement) == TRUE
-						&& current_block->exit_statement->operands.oir.assignee == left_hand_var){
+						&& current_block->exit_statement->operands.oir.address_operand1 == left_hand_var){
 				instruction_t* store_statement = current_block->exit_statement;
 
 				//This goes inside of the store statement's operand1
@@ -6737,7 +6735,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			 */
 			if(current_block->exit_statement != NULL
 				&& is_store_operation(current_block->exit_statement)
-				&& current_block->exit_statement->operands.oir.assignee == left_hand_var){
+				&& current_block->exit_statement->operands.oir.address_operand1 == left_hand_var){
 
 				//Simply give this one the constant that we had
 				current_block->exit_statement->operands.oir.constant_operand = right_hand_package.result_value.result_const;
