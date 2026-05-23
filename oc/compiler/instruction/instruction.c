@@ -2297,9 +2297,9 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, " <- ");
 
 			//Now we'll do op1, token, op2
-			print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, " %s ", op_to_string(stmt->op));
-			print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
 
 			//And end it out here
 			fprintf(fl, "\n");
