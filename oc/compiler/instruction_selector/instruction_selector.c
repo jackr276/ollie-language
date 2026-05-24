@@ -4406,9 +4406,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 *  load t4 <- t3
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET
-		&& is_constant_value_zero(window->instruction1->operands.oir.addressing_mode_offset) == TRUE){
+		&& is_constant_value_zero(window->instruction1->operands.oir.address_offset) == TRUE){
 		//First NULL out the constant
-		window->instruction1->operands.oir.addressing_mode_offset = NULL;
+		window->instruction1->operands.oir.address_offset = NULL;
 
 		//Then just make this a normal load
 		window->instruction1->statement_type = THREE_ADDR_CODE_LOAD_STATEMENT;
@@ -4416,7 +4416,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		//Counts as a change
 		changed = TRUE;
 	}
-
 
 	/**
 	 * Optimize constant offset stores with a 0 offset into regular stores
@@ -4428,16 +4427,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 *  store t4 <- t3
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET 
-		&& is_constant_value_zero(window->instruction1->operands.oir.addressing_mode_offset) == TRUE){
+		&& is_constant_value_zero(window->instruction1->operands.oir.address_offset) == TRUE){
 		//First NULL out the constant
-		window->instruction1->operands.oir.addressing_mode_offset = NULL;
-
-		//Slight adjustment as well, the op1's in complex stores are not the source but in regular
-		//stores they are, so we'll copy that over
-		window->instruction1->op1 = window->instruction1->op2;
-
-		//NULL out op2
-		window->instruction1->op2 = NULL;
+		window->instruction1->operands.oir.address_offset = NULL;
 
 		//Then just make this a normal load
 		window->instruction1->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
@@ -4640,7 +4632,7 @@ static inline u_int8_t convert_phi_function_if_redundant(value_numbering_table_t
 	 * this phi function with a regular copy assignment now
 	 */
 	phi_function->statement_type = THREE_ADDR_CODE_ASSN_STMT;
-	phi_function->op1 = first_parameter;
+	phi_function->operands.oir.operand1 = first_parameter;
 
 	/**
 	 * We will now also create a value number for the phi assignee
@@ -4701,13 +4693,13 @@ static inline void generate_value_name_key_for_instruction(instruction_t* instru
 			dynamic_string_concatenate(textual_key, "BIN");
 			
 			//First op
-			concatenate_value_name_string(instruction->op1, textual_key);
+			concatenate_value_name_string(instruction->operands.oir.operand1, textual_key);
 
 			//Actual opcode
 			dynamic_string_add_char_to_back(textual_key, instruction->op);
 
 			//Second op
-			concatenate_value_name_string(instruction->op2, textual_key);
+			concatenate_value_name_string(instruction->operands.oir.operand2, textual_key);
 
 			break;
 
@@ -4720,13 +4712,16 @@ static inline void generate_value_name_key_for_instruction(instruction_t* instru
 			dynamic_string_concatenate(textual_key, "BIN");
 			
 			//First op
-			concatenate_value_name_string(instruction->op1, textual_key);
+			concatenate_value_name_string(instruction->operands.oir.operand1, textual_key);
 
 			//Actual opcode
 			dynamic_string_add_char_to_back(textual_key, instruction->op);
 
+			//Extract this for convenience
+			three_addr_const_t* constant_value = instruction->operands.oir.constant_operand;
+
 			//Generate the constant string as well
-			sprintf(constant_string, "%d_%ld", instruction->op1_const->const_type, instruction->op1_const->constant_value.signed_long_constant);
+			sprintf(constant_string, "%d_%ld", constant_value->const_type, constant_value->constant_value.signed_long_constant);
 			
 			//Add this in
 			dynamic_string_concatenate(textual_key, constant_string);
@@ -4852,18 +4847,34 @@ static inline u_int8_t perform_value_name_substitutions(value_numbering_table_t*
 	three_addr_var_t* value_name;
 
 	//First comes op1
-	value_name = get_value_name(table, instruction->op1);
+	value_name = get_value_name(table, instruction->operands.oir.operand1);
 
 	//Replace the variable, and flag that this worked if it did
-	if(replace_rhs_variable(&(instruction->op1), value_name) == TRUE){
+	if(replace_rhs_variable(&(instruction->operands.oir.operand1), value_name) == TRUE){
 		substitution_occured = TRUE;
 	}
 
 	//Now do it for op2
-	value_name = get_value_name(table, instruction->op2);
+	value_name = get_value_name(table, instruction->operands.oir.operand2);
 
 	//Same deal here
-	if(replace_rhs_variable(&(instruction->op2), value_name) == TRUE){
+	if(replace_rhs_variable(&(instruction->operands.oir.operand2), value_name) == TRUE){
+		substitution_occured = TRUE;
+	}
+
+	//Now do it for the address operand
+	value_name = get_value_name(table, instruction->operands.oir.address_operand1);
+
+	//Same deal here
+	if(replace_rhs_variable(&(instruction->operands.oir.address_operand1), value_name) == TRUE){
+		substitution_occured = TRUE;
+	}
+
+	//Now do it for the second address operand
+	value_name = get_value_name(table, instruction->operands.oir.address_operand2);
+
+	//Same deal here
+	if(replace_rhs_variable(&(instruction->operands.oir.address_operand2), value_name) == TRUE){
 		substitution_occured = TRUE;
 	}
 
@@ -5002,18 +5013,16 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 				cursor->statement_type = THREE_ADDR_CODE_ASSN_STMT;
 
 				//Null out everything else just to be safe
-				cursor->op2 = NULL;
-				cursor->op1_const = NULL;
+				cursor->operands.oir.operand2 = NULL;
+				cursor->operands.oir.constant_operand = NULL;
 				cursor->op = BLANK;
 
 				//The op1 is just the result that we found
-				cursor->op1 = found_result;
+				cursor->operands.oir.operand1->use_count--;
+				cursor->operands.oir.operand1 = found_result;
 
 				//We've used this one more time
 				found_result->use_count++;
-
-				//Knock this down too
-				cursor->op1->use_count--;
 
 				/**
 				 * Now we can use the textual string again to create a new 
