@@ -10590,33 +10590,31 @@ static void handle_lea_statement(instruction_t* instruction){
 
 	//Go based on whatever the type is
 	switch(instruction->lea_statement_type){
-		//This converts to an addressing mode with
-		//an offset only
+		//This converts to an addressing mode with an offset only
 		case OIR_LEA_TYPE_OFFSET_ONLY:
-			//Set the mode
 			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 			
 			//The op1 is now our address calc register
-			instruction->operands.x86.address_register1 = instruction->operands.oir.operand1;
+			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
 
 			//Copy the offset constant over
-			instruction->operands.x86.address_offset = instruction->operands.oir.constant_operand;
+			instruction->operands.x86.address_offset = instruction->operands.oir.address_offset;
 
 			break;
 
-		//Converts to an addresing mode with address calc registers
-		//only
+		//Converts to an addresing mode with address calc registers only
 		case OIR_LEA_TYPE_REGISTERS_ONLY:
-			//Set the mode
 			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
 			
 			//Copy over the address calc registers
-			instruction->operands.x86.address_register1 = instruction->operands.oir.operand1;
-			instruction->operands.x86.address_register2 = instruction->operands.oir.operand2;
+			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
+			instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand2;
 
-			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-			//must adhere to this one's type
+			/**
+			 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+			 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+			 * must adhere to this one's type
+			 */
 			if(is_converting_move_required(instruction->operands.x86.address_register1->type, instruction->operands.x86.address_register2->type) == TRUE){
 				instruction->operands.x86.address_register2 = create_and_insert_converting_move_instruction(instruction, instruction->operands.x86.address_register2, instruction->operands.x86.address_register1->type);
 			}
@@ -10625,51 +10623,42 @@ static void handle_lea_statement(instruction_t* instruction){
 
 		//Converts to an addressing mode with the trifecta
 		case OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE:
-			//Set the mode
 			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
 
-			//Copy over the address calc registers
-			instruction->operands.x86.address_register1 = instruction->operands.oir.operand1;
-			instruction->operands.x86.address_register2 = instruction->operands.oir.operand2;
+			//Copy over the address calc registers & multiplier
+			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
+			instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand2;
+			instruction->operands.x86.address_multiplier = instruction->operands.oir.address_multiplier; 
+			instruction->operands.x86.address_offset = instruction->operands.oir.address_offset;
 
-			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-			//must adhere to this one's type
+			/**
+			 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+			 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+			 * must adhere to this one's type
+			 */
 			if(is_converting_move_required(instruction->operands.x86.address_register1->type, instruction->operands.x86.address_register2->type) == TRUE){
 				instruction->operands.x86.address_register2 = create_and_insert_converting_move_instruction(instruction, instruction->operands.x86.address_register2, instruction->operands.x86.address_register1->type);
 			}
-
-			//Set the appropriate value here
-			instruction->operands.x86.address_offset = instruction->operands.oir.constant_operand;
 
 			break;
 
 		//Special kind to support global vars
 		case OIR_LEA_TYPE_RIP_RELATIVE:
-			//Set the mode
 			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
 
 			//Copy over the address calc register
-			instruction->operands.x86.address_register1 = instruction->operands.oir.operand1;
-
-			//Op2 holds the global var, which then gets moved over
-						//TODO RIP OFFSET IS ADDR CALC REG2
-			instruction->rip_offset_variable = instruction->operands.oir.operand2;
+			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
+			instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand1;
 
 			break;
 
 		//Support RIP relative with offset addressing
 		case OIR_LEA_TYPE_RIP_RELATIVE_WITH_OFFSET:
-			//Set the mode
 			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET;
 
 			//And the address calc registers
-			instruction->operands.x86.address_register1 = instruction->operands.oir.operand1;
-
-			//Store the RIP relative offset
-			instruction->rip_offset_variable = instruction->operands.oir.operand2;
-
-			//And store the offset here from op1_const
+			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
+			instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand2;
 			instruction->operands.x86.address_offset = instruction->operands.oir.constant_operand;
 
 			break;
@@ -10677,65 +10666,63 @@ static void handle_lea_statement(instruction_t* instruction){
 
 		//Translates to the address calc mode of the same name
 		case OIR_LEA_TYPE_REGISTERS_AND_OFFSET:
-			//Set the mode
 			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
 
-			//Copy over the address calc registers
+			//Copy over the address calc registers and offset
 			instruction->operands.x86.address_register1 = instruction->operands.oir.operand1;
 			instruction->operands.x86.address_register2 = instruction->operands.oir.operand2;
+			instruction->operands.x86.address_offset = instruction->operands.oir.address_offset;
 
-			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-			//must adhere to this one's type
+			/**
+			 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+			 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+			 * must adhere to this one's type
+			 */
 			if(is_converting_move_required(instruction->operands.x86.address_register1->type, instruction->operands.x86.address_register2->type) == TRUE){
 				instruction->operands.x86.address_register2 = create_and_insert_converting_move_instruction(instruction, instruction->operands.x86.address_register2,
 																														instruction->operands.x86.address_register1->type);
 			}
 
-			//Set the appropriate value here
-			instruction->operands.x86.address_offset = instruction->operands.oir.constant_operand;
-
 			break;
 
 		//Translates to the address calc mode of the same name
 		case OIR_LEA_TYPE_REGISTERS_AND_SCALE:
-			//Set the mode
 			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
 
-			//Copy over the address calc registers
-			instruction->operands.x86.address_register1 = instruction->operands.oir.operand1;
-			instruction->operands.x86.address_register2 = instruction->operands.oir.operand2;
+			//Copy over the address calc registers and the multiplier
+			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
+			instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand2;
+			instruction->operands.x86.address_multiplier = instruction->operands.oir.address_multiplier;
 
-			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-			//must adhere to this one's type
+			/**
+			 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+			 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+			 * must adhere to this one's type
+			 */
 			if(is_converting_move_required(instruction->operands.x86.address_register1->type, instruction->operands.x86.address_register2->type) == TRUE){
 				instruction->operands.x86.address_register2 = create_and_insert_converting_move_instruction(instruction, instruction->operands.x86.address_register2, instruction->operands.x86.address_register1->type);
 			}
 
 			//The scale is already stored in the multiplier
-
 			break;
 
 		case OIR_LEA_TYPE_INDEX_AND_SCALE:
-			//Set the mode
 			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_INDEX_AND_SCALE;
 
-			//Address calc reg 1 is all we have here, the scale is already stored
-			instruction->operands.x86.address_register1 = instruction->operands.oir.operand1;
+			//Copy over the address register and multiplier
+			instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand2;
+			instruction->operands.x86.address_multiplier = instruction->operands.oir.address_multiplier;
 			
 			break;
 
 		case OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE:
-			//Set the mode
 			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_INDEX_OFFSET_AND_SCALE;
 
-			//Address calc reg 1 is all we have here, the scale is already stored
-			instruction->operands.x86.address_register1 = instruction->operands.oir.operand1;
+			//Copy over the address register and the multiplier
+			instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand2;
+			instruction->operands.x86.address_multiplier = instruction->operands.oir.address_multiplier;
+			instruction->operands.x86.address_offset = instruction->operands.oir.address_offset;
 
-			//Copy over the offset
-			instruction->operands.x86.address_offset = instruction->operands.oir.constant_operand;
-			
 			break;
 
 		//This is unreachable and should never happen. Hard error if it does
@@ -10861,8 +10848,8 @@ static void handle_branch_instruction(instruction_window_t* window){
 				exit(1);
 		}
 
-		//Copy the source register over here as it is a dependence
-		jump_to_if->operands.oir.operand1 = branch_stmt->operands.oir.operand1;
+		//Copy over the special relies_on field
+		jump_to_if->relies_on = branch_stmt->relies_on;
 
 		//The else jump is always a direct jump no matter what
 		jump_to_else = emit_jump_instruction_directly(else_block, JMP);
@@ -10965,8 +10952,10 @@ static void handle_branch_instruction(instruction_window_t* window){
 				//And the standard jump to else here
 				jump_to_else = emit_jump_instruction_directly(else_block, JMP);
 
-				//Add all of these statements in. NaN comes first, then the
-				//if, and finally the ending catch-all
+				/**
+				 * Add all of these statements in. NaN comes first, then the
+				 * if, and finally the ending catch-all
+				 */
 				add_statement(block, jump_when_nan);
 				add_statement(block, jump_to_if);
 				add_statement(block, jump_to_else);
@@ -10993,8 +10982,10 @@ static void handle_branch_instruction(instruction_window_t* window){
 				//And the standard jump to else here
 				jump_to_else = emit_jump_instruction_directly(else_block, JMP);
 
-				//Add all of these statements in. NaN comes first, then the
-				//if, and finally the ending catch-all
+				/**
+				 * Add all of these statements in. NaN comes first, then the
+				 * if, and finally the ending catch-all
+				 */
 				add_statement(block, jump_when_nan);
 				add_statement(block, jump_to_if);
 				add_statement(block, jump_to_else);
