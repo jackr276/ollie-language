@@ -2346,9 +2346,9 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		 */
 		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
 			fprintf(fl, "memory copy %ld bytes ", stmt->optional_storage.byte_amount_to_copy);
-			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- ");
-			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 			break;
 
@@ -5341,8 +5341,7 @@ instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_add
  * Emit a memory copy statement from one memory region to another. This exists
  * purely as an OIR statement and is converted to moves later on down the road
  *
- * Note that both the assignee and the op1 should be memory address variables when
- * we do this
+ * For the memory copy instruction, we copy *to* address operand 1 *from* address operand 2
  */
 instruction_t* emit_memory_copy_instruction(three_addr_var_t* assignee_memory_region, three_addr_var_t* source_memory_region, u_int64_t byte_amount_to_copy){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
@@ -5351,8 +5350,8 @@ instruction_t* emit_memory_copy_instruction(three_addr_var_t* assignee_memory_re
 	stmt->statement_type = THREE_ADDR_CODE_MEMORY_COPY_STATEMENT;
 
 	//Now throw in the values. These are both going to be memory address vars
-	stmt->operands.oir.assignee = assignee_memory_region;
-	stmt->operands.oir.operand1 = source_memory_region;
+	stmt->operands.oir.address_operand1 = assignee_memory_region;
+	stmt->operands.oir.address_operand2 = source_memory_region;
 
 	//Store how much we need to copy - eliminate all guessing
 	stmt->optional_storage.byte_amount_to_copy = byte_amount_to_copy;

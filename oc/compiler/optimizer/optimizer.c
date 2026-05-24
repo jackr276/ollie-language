@@ -682,17 +682,6 @@ static void mark(dynamic_array_t* function_blocks){
 				break;
 
 			/**
-			 * For a memory copy statement, we need the defitinition of the assignee
-			 * and op1 marked as they are both important to the overall copy
-			 *
-			 * TODO REWORK ME
-			 */
-			case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
-				mark_and_add_definition(function_blocks, stmt->operands.oir.assignee, &worklist);
-				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
-				break;
-
-			/**
 			 * By default we're just marking everything here. If it's NULL then mark_and_add defintion
 			 * will ignore
 			 */
@@ -1336,17 +1325,6 @@ static inline void mark_all_branch_related_statements(basic_block_t* block){
 					mark_and_add_definition_block_local(current, dynamic_array_get_at(&(current->parameters), i), worklist, &worklist_current_index);
 				}
 
-				break;
-
-			/**
-			 * For a memory copy statement, we need the defitinition of the assignee
-			 * and op1 marked as they are both important to the overall copy
-			 *
-			 * TODO REWORK ME
-			 */
-			case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
-				mark_and_add_definition_block_local(current, current->operands.oir.assignee, worklist, &worklist_current_index);
-				mark_and_add_definition_block_local(current, current->operands.oir.operand1, worklist, &worklist_current_index);
 				break;
 
 			/**
