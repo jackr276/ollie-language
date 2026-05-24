@@ -1580,88 +1580,15 @@ static inline instruction_t* emit_setne_code(three_addr_var_t* assignee, three_a
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Save the assignee
-	stmt->assignee = assignee;
+	stmt->operands.oir.assignee = assignee;
 
-	stmt->op1 = relies_on;
+	stmt->operands.oir.operand1 = relies_on;
 
 	//We'll determine the actual instruction type using the helper
 	stmt->statement_type = THREE_ADDR_CODE_SETNE_STMT;
 
 	//Once that's done, we'll return
 	return stmt;
-}
-
-
-/**
- * Replace all of the "target" variables with the replacement in the entire block
- */
-static inline void replace_all_variables_in_block(three_addr_var_t* target, three_addr_var_t* replacement, basic_block_t* block){
-	//Grab an instruction cursor
-	instruction_t* cursor = block->leader_statement;
-
-	//Run through everything
-	while(cursor != NULL){
-		if(cursor->assignee != NULL
-			&& variables_equal(cursor->assignee, target, FALSE) == TRUE){
-
-			//This is the replacement
-			cursor->assignee = emit_var_copy(replacement);
-		}
-
-		if(cursor->op1 != NULL
-			&& variables_equal(cursor->op1, target, FALSE) == TRUE){
-
-			//This is the replacement
-			cursor->op1 = emit_var_copy(replacement);
-		}
-
-		if(cursor->op2 != NULL
-			&& variables_equal(cursor->op2, target, FALSE) == TRUE){
-
-			//This is the replacement
-			cursor->op2 = emit_var_copy(replacement);
-		}
-
-		//Bump it up
-		cursor = cursor->next_statement;
-	}
-}
-
-
-/**
- * Replace all of the "target" variables with the replacement starting at and including the given starting instruction. This
- * is designed for use with the div -> right shift optimization but I could potentially see it having other uses down the line
- */
-static inline void replace_all_variables_after_instruction(three_addr_var_t* target, three_addr_var_t* replacement, instruction_t* starting_point){
-	//Grab an instruction cursor
-	instruction_t* cursor = starting_point;
-
-	//Run through everything
-	while(cursor != NULL){
-		if(cursor->assignee != NULL
-			&& variables_equal(cursor->assignee, target, FALSE) == TRUE){
-
-			//This is the replacement
-			cursor->assignee = emit_var_copy(replacement);
-		}
-
-		if(cursor->op1 != NULL
-			&& variables_equal(cursor->op1, target, FALSE) == TRUE){
-
-			//This is the replacement
-			cursor->op1 = emit_var_copy(replacement);
-		}
-
-		if(cursor->op2 != NULL
-			&& variables_equal(cursor->op2, target, FALSE) == TRUE){
-
-			//This is the replacement
-			cursor->op2 = emit_var_copy(replacement);
-		}
-
-		//Bump it up
-		cursor = cursor->next_statement;
-	}
 }
 
 
@@ -1716,10 +1643,11 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 	 *  that the idivX instruction that we would have been using will sometimes take 50+
 	 *  cycles to run. This is ultimately much faster
 	 */
-	if(is_type_signed(mod_instruction->assignee->type) == TRUE){
-		//Extract the actual type that we're using
-		generic_type_t* type = mod_instruction->assignee->type;
-		
+
+	//Extract the assignee type
+	generic_type_t* type = mod_instruction->operands.oir.assignee->type;
+
+	if(is_type_signed(type) == TRUE){
 		//We'll need the number of bits in the type
 		u_int32_t type_size_in_bits = type->type_size * 8;
 
@@ -1729,7 +1657,7 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		 * the divisor. So for example if we have 8, we need 3 bits, and so
 		 * on
 		 */
-		u_int32_t divisor_log2 = log2_of_constant(mod_instruction->op1_const);
+		u_int32_t divisor_log2 = log2_of_constant(mod_instruction->operands.oir.constant_operand);
 
 		//Now we'll compute 2^n - 1 
 		u_int32_t and_mask = (1 << divisor_log2) - 1;
@@ -1744,7 +1672,7 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		three_addr_var_t* first_shift_result = emit_temp_var(type);
 
 		//Now we need to perform the first shift. We will force this to be signed so that an arithmetic shift is used
-		instruction_t* arithmetic_shift = emit_binary_operation_with_const_instruction(first_shift_result, mod_instruction->op1, R_SHIFT, num_bits_first_shift);
+		instruction_t* arithmetic_shift = emit_binary_operation_with_const_instruction(first_shift_result, mod_instruction->operands.oir.operand1, R_SHIFT, num_bits_first_shift);
 
 		//IMPORTANT - flag that we need to force this to be signed
 		arithmetic_shift->optional_storage.forced_signedness = FORCED_SIGNED;
@@ -1778,7 +1706,7 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		three_addr_var_t* result = emit_temp_var(type);
 
 		//Emit a lea so that we end up with
-		instruction_t* addition = emit_lea_operands_only(result, mod_instruction->op1, bias_temp_var);
+		instruction_t* addition = emit_lea_operands_only(result, mod_instruction->operands.oir.operand1, bias_temp_var);
 
 		//Add this in right after the shift
 		insert_instruction_after_given(addition, logical_shift);
@@ -1809,7 +1737,7 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		 * Final cleanup: move the safe dividend result into the actual assignee temp var from
 		 * the original instruction to maintain consistency
 		 */
-		instruction_t* result_movement = emit_assignment_instruction(mod_instruction->assignee, result);
+		instruction_t* result_movement = emit_assignment_instruction(mod_instruction->operands.oir.assignee, result);
 
 		//Add this in after the undo instruction
 		insert_instruction_after_given(result_movement, undo_mask);
@@ -1838,7 +1766,7 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 	 */
 	} else {
 		//Get how many bits we need to extract
-		u_int32_t bits_needed = log2_of_constant(mod_instruction->op1_const);
+		u_int32_t bits_needed = log2_of_constant(mod_instruction->operands.oir.constant_operand);
 
 		//Now we'll compute 2^n - 1 
 		u_int32_t mask = (1 << bits_needed) - 1;
@@ -1851,9 +1779,9 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		 * Turns into 
 		 * x_1 <- x_0 & 1
 		 */
-		if(variables_equal_no_ssa(mod_instruction->assignee, mod_instruction->op1, TRUE) == TRUE){
+		if(variables_equal_no_ssa(mod_instruction->operands.oir.assignee, mod_instruction->operands.oir.operand1, TRUE) == TRUE){
 			//Make this constant the mask now
-			mod_instruction->op1_const->constant_value.unsigned_long_constant = mask;
+			mod_instruction->operands.oir.constant_operand->constant_value.unsigned_long_constant = mask;
 
 			//This is now an and instruction
 			mod_instruction->op = SINGLE_AND;
@@ -1867,35 +1795,38 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 			 * If this is not temp, then we're going to need to insert a move
 			 * instruction to avoid altering it
 			 */
-			if(mod_instruction->op1->variable_type != VARIABLE_TYPE_TEMP
-				|| mod_instruction->op1->was_value_named == TRUE){
+			if(mod_instruction->operands.oir.operand1->variable_type != VARIABLE_TYPE_TEMP
+				|| mod_instruction->operands.oir.operand1->was_value_named == TRUE){
+				//Extract it
+				three_addr_var_t* operand1 = mod_instruction->operands.oir.operand1;
+
 				//Emit the move
-				instruction_t* move_instruction = emit_assignment_instruction(emit_temp_var(mod_instruction->op1->type), mod_instruction->op1);
+				instruction_t* move_instruction = emit_assignment_instruction(emit_temp_var(operand1->type), operand1);
 
 				//Add it in right beforehand
 				insert_instruction_before_given(move_instruction, mod_instruction);
 
 				//This is now the op1
-				mod_instruction->op1 = move_instruction->assignee;
+				mod_instruction->operands.oir.operand1 = move_instruction->operands.oir.assignee;
 			}
 
 			//Grab out what the final assignee will be
-			three_addr_var_t* final_assignee = mod_instruction->assignee;
+			three_addr_var_t* final_assignee = mod_instruction->operands.oir.assignee;
 
 			/**
 			 * We can now turn our mod instruction into an and instruction, but we'll
 			 * need to swap out the assignee for the op1
 			 */
-			mod_instruction->assignee = emit_var_copy(mod_instruction->op1);
+			mod_instruction->operands.oir.assignee = emit_var_copy(mod_instruction->operands.oir.operand1);
 
 			//Store the mask
-			mod_instruction->op1_const->constant_value.unsigned_long_constant = mask;
+			mod_instruction->operands.oir.constant_operand->constant_value.unsigned_long_constant = mask;
 
 			//Force this to be a single_and
 			mod_instruction->op = SINGLE_AND;
 
 			//Now at the end, we'll just emit a final assignment over to the given assignee
-			instruction_t* final_assignment = emit_assignment_instruction(final_assignee, mod_instruction->assignee); 
+			instruction_t* final_assignment = emit_assignment_instruction(final_assignee, mod_instruction->operands.oir.assignee);
 
 			//Put this after the given
 			insert_instruction_after_given(final_assignment, mod_instruction);
