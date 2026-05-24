@@ -790,8 +790,6 @@ static inline u_int8_t binary_operator_valid_for_inplace_constant_match(ollie_to
 /**
  * Remediate a memory address that is *not* in a memory access(load or store) context. This will primarily
  * be hit when we're taking memory addresses or doing pointer arithmetic with arrays
- *
- * TODO NEEDS COMPLETE REFACTOR AFTER STORE/LOAD CHANGES
  */
 static void remediate_memory_address_variable_in_non_access_context(instruction_window_t* window, instruction_t* instruction){
 	//For later use
@@ -800,6 +798,123 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 	int64_t additional_offset;
 	three_addr_const_t* stack_offset_constant;
 	instruction_t* address_instruction;
+
+	/**
+	 * The associated varialbe will always come from operand1
+	 *
+	 * NOTE: this may be *NULL*
+	 */
+	symtab_variable_record_t* associated_variable = instruction->operands.oir.operand1->linked_var;
+
+	/**
+	 * Special handling if this is a global variable. Global variables will generate 2 instructions on most occassions
+	 * the lea instruction to grab the address and then the actual address manipulation in the binary operation. Note that for these steps,
+	 * window reconstruction is required
+	 *
+	 * NOTE: since this is a global variable, it is impossible for a function parameter that is passed via the stack to get caught up in this
+	 */
+	if(associated_variable != NULL){
+		switch(associated_variable->membership){
+			case GLOBAL_VARIABLE:
+			case STATIC_VARIABLE:
+				switch(instruction->statement_type){
+					/**
+					 * A global variable address assignment like this will turn into a leaq statement
+					 */
+					case THREE_ADDR_CODE_ASSN_STMT:
+						//Let the helper emit the statement
+						address_instruction = emit_global_variable_address_calculation_oir(instruction->operands.oir.assignee, instruction->operands.oir.operand1, instruction_pointer_variable);
+
+						//Insert this after the given instruction
+						insert_instruction_after_given(address_instruction, instruction);
+
+						//Once we've done that, the old instruction is useless to us
+						delete_statement(instruction);
+
+						//Rebuild the window based around the new instruction
+						reconstruct_window(window, address_instruction);
+
+						break;
+
+					/**
+					 * A global var address assignment like this will generate
+					 * 2 separate instructions. One instruction will hold the global variable address,
+					 * while the other holds the actual binary operation
+					 */
+					case THREE_ADDR_CODE_BIN_OP_STMT:
+						//Let the helper emit the statement. We will use a temp destination for this
+						address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->operands.oir.operand1, instruction_pointer_variable);
+
+						//This goes in before the given one
+						insert_instruction_before_given(address_instruction, instruction);
+
+						//We'll now replace op1 with what our assignee here is
+						instruction->operands.oir.operand1 = address_instruction->operands.oir.assignee;
+
+						//And now we'll reconstruct around our instruction just ot keep the window in order
+						reconstruct_window(window, instruction);
+
+						break;
+
+					/**
+					 * A global var address like this will generate one special instruction that is RIP relative
+					 * with a constant offset
+					 */
+					case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+						//Let the helper do all of the work
+						address_instruction = emit_global_variable_address_calculation_with_offset_oir(instruction->operands.oir.assignee,
+																					 					instruction->operands.oir.operand1,
+																					 					instruction_pointer_variable,
+																					 					instruction->operands.oir.constant_operand);
+
+						//This goes in before the given one
+						insert_instruction_before_given(address_instruction, instruction);
+
+						//Now we can delete the old one
+						delete_statement(instruction);
+						
+						//And reconstruct the window around the new one
+						reconstruct_window(window, address_instruction);
+
+						break;
+
+					/**
+					 * For our store operations, to rememdiate we just need to do everything that we would normally do 
+					 * before the store operation and replace the op1 with what we had
+					 */
+					case THREE_ADDR_CODE_STORE_STATEMENT:
+					case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+					case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+						//Let the helper emit the statement
+						address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->operands.oir.operand1, instruction_pointer_variable);
+
+						//Put this right before the store
+						insert_instruction_before_given(address_instruction, instruction);
+
+						//The assignee here now is our op1 variable
+						instruction->operands.oir.operand1 = address_instruction->operands.oir.assignee;
+
+						break;
+
+					//This should never happen
+					default:
+						printf("Fatal internal compiler error: unreachable path hit in global/static variable memory address remediation\n");
+						exit(1);
+				}
+
+				//We're completely done once we get here
+				return;
+
+			//Otherwise we get out
+			default:
+				break;
+		}
+	}
+
+
+
+
+
 
 	/**
 	 * If we do not have a store with offset, we grab from the op1 location. However if we
@@ -811,121 +926,6 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 		//Extract the variable
 		symtab_variable_record_t* associated_variable = instruction->op1->linked_var;
 
-		/**
-		 * Special handling if this is a global variable. Global variables will generate 2 instructions on most occassions
-		 * the lea instruction to grab the address and then the actual address manipulation in the binary operation. Note that for these steps,
-		 * window reconstruction is required
-		 *
-		 * NOTE: since this is a global variable, it is impossible for a function parameter that is passed via the stack to get caught up in this
-		 */
-		if(associated_variable != NULL){
-			switch(associated_variable->membership){
-				case GLOBAL_VARIABLE:
-				case STATIC_VARIABLE:
-					switch(instruction->statement_type){
-						/**
-						 * A global variable address assignment like this will turn into a leaq statement
-						 */
-						case THREE_ADDR_CODE_ASSN_STMT:
-							//Let the helper emit the statement
-							address_instruction = emit_global_variable_address_calculation_oir(instruction->assignee, instruction->op1, instruction_pointer_variable);
-
-							//Insert this after the given instruction
-							insert_instruction_after_given(address_instruction, instruction);
-
-							//Once we've done that, the old instruction is useless to us
-							delete_statement(instruction);
-
-							//Rebuild the window based around the new instruction
-							reconstruct_window(window, address_instruction);
-
-							break;
-
-						/**
-						 * A global var address assignment like this will generate
-						 * 2 separate instructions. One instruction will hold the global variable address,
-						 * while the other holds the actual binary operation
-						 */
-						case THREE_ADDR_CODE_BIN_OP_STMT:
-							//Let the helper emit the statement. We will use a temp destination for this
-							address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op1, instruction_pointer_variable);
-
-							//This goes in before the given one
-							insert_instruction_before_given(address_instruction, instruction);
-
-							//We'll now replace op1 with what our assignee here is
-							instruction->op1 = address_instruction->assignee;
-
-							//And now we'll reconstruct around our instruction just ot keep the window in order
-							reconstruct_window(window, instruction);
-
-							break;
-
-						/**
-						 * A global var address like this will generate one special instruction that is RIP relative
-						 * with a constant offset
-						 */
-						case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-							//Let the helper do all of the work
-							address_instruction = emit_global_variable_address_calculation_with_offset_oir(instruction->assignee, instruction->op1, instruction_pointer_variable, instruction->op1_const);
-
-							//This goes in before the given one
-							insert_instruction_before_given(address_instruction, instruction);
-
-							//Now we can delete the old one
-							delete_statement(instruction);
-							
-							//And reconstruct the window around the new one
-							reconstruct_window(window, address_instruction);
-
-							break;
-
-						/**
-						 * For our store operations, to rememdiate we just need to do everything that we would normally do 
-						 * before the store operation and replace the op1 with what we had
-						 */
-						case THREE_ADDR_CODE_STORE_STATEMENT:
-							//Let the helper emit the statement
-							address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op1, instruction_pointer_variable);
-
-							//Put this right before the store
-							insert_instruction_before_given(address_instruction, instruction);
-
-							//The assignee here now is our op1 variable
-							instruction->op1 = address_instruction->assignee;
-
-							break;
-
-						/**
-						 * Note that values here draw from op2, not op1
-						 */
-						case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-						case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-							//Let the helper emit the statement
-							address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op2, instruction_pointer_variable);
-
-							//Put this right before the store
-							insert_instruction_before_given(address_instruction, instruction);
-
-							//The assignee here now is our op1 variable
-							instruction->op2 = address_instruction->assignee;
-
-							break;
-
-						//This should never happen
-						default:
-							printf("Fatal internal compiler error: unreachable path hit in global/static variable memory address remediation\n");
-							exit(1);
-					}
-
-					//We're completely done once we get here
-					return;
-
-				//Otherwise we get out
-				default:
-					break;
-			}
-		}
 
 		/**
 		 * There are two things that we need to account for here: regular memory address vars that
