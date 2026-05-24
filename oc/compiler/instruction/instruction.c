@@ -2782,7 +2782,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 					print_three_addr_constant(fl, stmt->operands.oir.address_offset);
 					//Print out the scale and multiplier
 					fprintf(fl, "( , ");
-					print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
 					fprintf(fl, ", %ld)", stmt->operands.oir.address_multiplier);
 
 					break;
