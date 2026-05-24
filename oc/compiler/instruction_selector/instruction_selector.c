@@ -1022,11 +1022,11 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						//Simplify based on what we have
 						switch(instruction->op){
 							case PLUS:
-								add_constants(stack_offset_constant, instruction->op1_const);
+								add_constants(stack_offset_constant, instruction->operands.oir.constant_operand);
 								break;
 
 							case MINUS:
-								subtract_constants(stack_offset_constant, instruction->op1_const);
+								subtract_constants(stack_offset_constant, instruction->operands.oir.constant_operand);
 								break;
 
 							//This should be impossible, if we get here it's a hard out
@@ -1038,11 +1038,11 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						//Wipe out the operator
 						instruction->op = BLANK;
 
-						//Op1 becomes that stack pointer
-						instruction->op1 = stack_pointer_variable;
+						//Address operand 1 becomes that stack pointer
+						instruction->operands.oir.address_operand1 = stack_pointer_variable;
 
-						//Op1 const is the lea constant
-						instruction->op1_const = stack_offset_constant;
+						//Add in the lea constant is the lea constant
+						instruction->operands.oir.address_offset = stack_offset_constant;
 
 						//Change the instruction type to a lea
 						instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
@@ -1055,7 +1055,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					 * they're one in the same
 					 */
 					} else {
-						instruction->op1 = stack_pointer_variable;
+						instruction->operands.oir.address_operand1 = stack_pointer_variable;
 					}
 
 					break;
@@ -1066,17 +1066,16 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 * need to use our special version of a lea for this in most cases
 				 */
 				case THREE_ADDR_CODE_BIN_OP_STMT:
-					//Make it a lea, we'll need to use op2
-					//for the second variable
+					//Convert this into a lea statement
 					if(stack_offset != 0){
 						//Create the offset constant
 						three_addr_const_t* stack_offset_constant = emit_direct_integer_or_char_constant(stack_offset, i64);
 
-						//This is now our op1_const
-						instruction->op1_const = stack_offset_constant;
+						//This is now our address ofset
+						instruction->operands.oir.address_offset = stack_offset_constant;
 
-						//Op1 becomes the stack pointer
-						instruction->op1 = stack_pointer_variable;
+						//First address operand becomes the stack pointer
+						instruction->operands.oir.address_operand1 = stack_pointer_variable;
 
 						//Finally declare that this is a lea statement
 						instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
@@ -1089,20 +1088,6 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 								instruction->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_OFFSET;
 								
 								//Nothing else to do here
-								break;
-							
-							/**
-							 * For a minus, we'll need to circumvent the system by using a -1 multiplier
-							 * to make this still work for our lea. Since we have op1 - op2, we can rewrite
-							 * this into op1 + op2 * -1
-							 */
-							case MINUS:
-								//Full stack here
-								instruction->lea_statement_type = OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE;
-
-								//-1 to mimic the subtraction
-								instruction->lea_multiplier = -1;
-
 								break;
 							
 							//Unreachable path - hard fail if we somehow get to this
@@ -1119,7 +1104,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					 * to be our stack pointer
 					 */
 					} else {
-						instruction->op1 = stack_pointer_variable;
+						instruction->operands.oir.operand1 = stack_pointer_variable;
 					}
 
 					break;
@@ -1133,7 +1118,182 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 			//Final break for the case
 			break;
 
+		/**
+		 * Stack parameter offsets use specialized variables to represent their difference from memory address variables. We
+		 * need handling entirely separate from the regular memory addresses to support this
+		 */
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+			//Grab the additional offset for processing
+			additional_offset = instruction->op1->memory_address_base_adjustment;
+
+			//Go based on what kind of statement that we've got here
+			switch(instruction->statement_type){
+				/**
+				 * Example:
+				 *   t4 <- PARAMATER_MEM<dd_0>
+				 *
+				 *   Turns into:
+				 * 	 t5 <- lea <Stack passed offset region 2>(%rsp)
+				 *
+				 */
+				case THREE_ADDR_CODE_ASSN_STMT:
+					//op1_const is our offset
+					instruction->op1_const = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
+
+					//Add the additional offset in as an adjustment(it's usually 0)
+					instruction->op1_const->constant_adjustment = additional_offset;
+
+					//Turn it into a LEA
+					instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
+
+					//Op1 becomes that stack pointer
+					instruction->op1 = stack_pointer_variable;
+
+					//This is a lea with an offset only
+					instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
+
+					break;
+
+				/**
+				 * Store statements act very similarly to the assignment
+				 * statement, except for our need to put the assignment before the
+				 * actual statement. We do not need to account for cases where
+				 * the offset from %rsp is 0 because that will never happen
+				 */
+				case THREE_ADDR_CODE_STORE_STATEMENT:
+				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+					//Emit the special stack constant
+					stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
+
+					//Now emit the address calculation
+					address_instruction = emit_lea_offset_only(emit_temp_var(u64), stack_pointer_variable, stack_offset_constant);
+
+					//This goes in right before the store does
+					insert_instruction_before_given(address_instruction, instruction);
+
+					//The op1 now comes from this instruction
+					instruction->op1 = address_instruction->assignee;
+
+					break;
+
+				/**
+				 * For any binary operation instruction, we're just going to have to emit the extra assignment
+				 * here since again we cannot know what the offset is going to be
+				 *
+				 * Example:
+				 *
+				 *   t4 <- PARAMATER_MEM<dd_0> + 32
+				 *
+				 *   Turns into
+				 *
+				 * 	 t5 <- rsp + <Stack passed offset region 2>
+				 *   t4 <- t5 + 32
+				 *
+				 */
+				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+					//Emit the constant
+					stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
+
+					//Add the additional offset in as an adjustment(it's usually 0)
+					stack_offset_constant->constant_adjustment = additional_offset;
+
+					//Simplify based on what we have
+					switch(instruction->op){
+						case PLUS:
+							add_constants(stack_offset_constant, instruction->op1_const);
+							break;
+
+						case MINUS:
+							subtract_constants(stack_offset_constant, instruction->op1_const);
+							break;
+
+						//This should be impossible, if we get here it's a hard out
+						default:
+							printf("Fatal internal compiler error. Attempt to do a binary operation that is not +/- with a memory address\n");
+							exit(1);
+					}
+
+					//Wipe out the operator
+					instruction->op = BLANK;
+
+					//Op1 becomes that stack pointer
+					instruction->op1 = stack_pointer_variable;
+
+					//Op1 const is the lea constant
+					instruction->op1_const = stack_offset_constant;
+
+					//Change the instruction type to a lea
+					instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
+
+					//This is an offset only
+					instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
+
+
+					break;
+
+				/**
+				 * Final and trickiest case. We need to have a memory calculation *and* a regular
+				 * calculation stuffed into here, but we only have 2 operands to work with. We will
+				 * need to use our special version of a lea for this in most cases
+				 */
+				case THREE_ADDR_CODE_BIN_OP_STMT:
+					//Create the offset constant
+					stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
+
+					//Add the additional offset in as an adjustment(it's usually 0)
+					stack_offset_constant->constant_adjustment = additional_offset;
+
+					//This is now our op1_const
+					instruction->op1_const = stack_offset_constant;
+
+					//Op1 becomes the stack pointer
+					instruction->op1 = stack_pointer_variable;
+
+					//Finally declare that this is a lea statement
+					instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
+
+					//Go based on the op here
+					switch(instruction->op){
+						//In this case, we'd have something like t5 <- <offset>(t4, t5)
+						case PLUS:
+							//This is a lea statement with registers and an offset
+							instruction->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_OFFSET;
+							
+							//Nothing else to do here
+							break;
+						
+						/**
+						 * For a minus, we'll need to circumvent the system by using a -1 multiplier
+						 * to make this still work for our lea. Since we have op1 - op2, we can rewrite
+						 * this into op1 + op2 * -1
+						 */
+						case MINUS:
+							//Full stack here
+							instruction->lea_statement_type = OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE;
+
+							//-1 to mimic the subtraction
+							instruction->lea_multiplier = -1;
+
+							break;
+						
+						//Unreachable path - hard fail if we somehow get to this
+						default:
+							printf("Fatal internal compiler error: Invalid binary operand found on address calculation\n");
+							exit(1);
+					}
+
+					//Wipe out the op once we're done
+					instruction->op = BLANK;
+
+					break;
+
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: unreachable path hit in memory address remediation\n");
+					exit(1);
+				}
+
 			break;
 			
 
@@ -1142,205 +1302,6 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 			printf("Fatal internal compiler error: invalid variable membership found in memory address remediator\n");
 			exit(1);
 	}
-
-
-
-
-
-
-	/**
-	 * If we do not have a store with offset, we grab from the op1 location. However if we
-	 * do then we need to grab from op2. Since this causes such a big divergence in the flow
-	 * we will handle these two special cases separately in the else
-	 */
-	if(instruction->statement_type != THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET
-		&& instruction->statement_type != THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET){
-
-		switch(instruction->op1->variable_type){
-			case VARIABLE_TYPE_MEMORY_ADDRESS:
-
-			/**
-			 * A stack passed parameter address is different in a few ways. First off, we do not
-			 * know and cannot know what the actual constant value is until after register allocation.
-			 * This is a major limitation. We do however know that it will never be 0 due to the way
-			 * that the function return address is saved on the stack. We can use this to simpilify our
-			 * processing, but fundamentally we are limited here
-			 */
-			case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-				//Grab the additional offset for processing
-				additional_offset = instruction->op1->memory_address_base_adjustment;
-
-				//Go based on what kind of statement that we've got here
-				switch(instruction->statement_type){
-					/**
-					 * Example:
-					 *   t4 <- PARAMATER_MEM<dd_0>
-					 *
-					 *   Turns into:
-					 * 	 t5 <- lea <Stack passed offset region 2>(%rsp)
-					 *
-					 */
-					case THREE_ADDR_CODE_ASSN_STMT:
-						//op1_const is our offset
-						instruction->op1_const = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
-
-						//Add the additional offset in as an adjustment(it's usually 0)
-						instruction->op1_const->constant_adjustment = additional_offset;
-
-						//Turn it into a LEA
-						instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-
-						//Op1 becomes that stack pointer
-						instruction->op1 = stack_pointer_variable;
-
-						//This is a lea with an offset only
-						instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
-
-						break;
-
-					/**
-					 * Store statements act very similarly to the assignment
-					 * statement, except for our need to put the assignment before the
-					 * actual statement. We do not need to account for cases where
-					 * the offset from %rsp is 0 because that will never happen
-					 */
-					case THREE_ADDR_CODE_STORE_STATEMENT:
-					case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-					case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-						//Emit the special stack constant
-						stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
-
-						//Now emit the address calculation
-						address_instruction = emit_lea_offset_only(emit_temp_var(u64), stack_pointer_variable, stack_offset_constant);
-
-						//This goes in right before the store does
-						insert_instruction_before_given(address_instruction, instruction);
-
-						//The op1 now comes from this instruction
-						instruction->op1 = address_instruction->assignee;
-
-						break;
-
-					/**
-					 * For any binary operation instruction, we're just going to have to emit the extra assignment
-					 * here since again we cannot know what the offset is going to be
-					 *
-					 * Example:
-					 *
-					 *   t4 <- PARAMATER_MEM<dd_0> + 32
-					 *
-					 *   Turns into
-					 *
-					 * 	 t5 <- rsp + <Stack passed offset region 2>
-					 *   t4 <- t5 + 32
-					 *
-					 */
-					case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-						//Emit the constant
-						stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
-
-						//Add the additional offset in as an adjustment(it's usually 0)
-						stack_offset_constant->constant_adjustment = additional_offset;
-
-						//Simplify based on what we have
-						switch(instruction->op){
-							case PLUS:
-								add_constants(stack_offset_constant, instruction->op1_const);
-								break;
-
-							case MINUS:
-								subtract_constants(stack_offset_constant, instruction->op1_const);
-								break;
-
-							//This should be impossible, if we get here it's a hard out
-							default:
-								printf("Fatal internal compiler error. Attempt to do a binary operation that is not +/- with a memory address\n");
-								exit(1);
-						}
-
-						//Wipe out the operator
-						instruction->op = BLANK;
-
-						//Op1 becomes that stack pointer
-						instruction->op1 = stack_pointer_variable;
-
-						//Op1 const is the lea constant
-						instruction->op1_const = stack_offset_constant;
-
-						//Change the instruction type to a lea
-						instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-
-						//This is an offset only
-						instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
-
-
-						break;
-
-					/**
-					 * Final and trickiest case. We need to have a memory calculation *and* a regular
-					 * calculation stuffed into here, but we only have 2 operands to work with. We will
-					 * need to use our special version of a lea for this in most cases
-					 */
-					case THREE_ADDR_CODE_BIN_OP_STMT:
-						//Create the offset constant
-						stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
-
-						//Add the additional offset in as an adjustment(it's usually 0)
-						stack_offset_constant->constant_adjustment = additional_offset;
-
-						//This is now our op1_const
-						instruction->op1_const = stack_offset_constant;
-
-						//Op1 becomes the stack pointer
-						instruction->op1 = stack_pointer_variable;
-
-						//Finally declare that this is a lea statement
-						instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-
-						//Go based on the op here
-						switch(instruction->op){
-							//In this case, we'd have something like t5 <- <offset>(t4, t5)
-							case PLUS:
-								//This is a lea statement with registers and an offset
-								instruction->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_OFFSET;
-								
-								//Nothing else to do here
-								break;
-							
-							/**
-							 * For a minus, we'll need to circumvent the system by using a -1 multiplier
-							 * to make this still work for our lea. Since we have op1 - op2, we can rewrite
-							 * this into op1 + op2 * -1
-							 */
-							case MINUS:
-								//Full stack here
-								instruction->lea_statement_type = OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE;
-
-								//-1 to mimic the subtraction
-								instruction->lea_multiplier = -1;
-
-								break;
-							
-							//Unreachable path - hard fail if we somehow get to this
-							default:
-								printf("Fatal internal compiler error: Invalid binary operand found on address calculation\n");
-								exit(1);
-						}
-
-						//Wipe out the op once we're done
-						instruction->op = BLANK;
-
-						break;
-
-					//This should never happen
-					default:
-						printf("Fatal internal compiler error: unreachable path hit in memory address remediation\n");
-						exit(1);
-					}
-
-				break;
-
-		}
 }
 
 
