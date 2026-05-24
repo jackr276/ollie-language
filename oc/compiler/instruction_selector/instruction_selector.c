@@ -180,7 +180,7 @@ static inline u_int8_t does_instruction_set_condition_codes(instruction_t* instr
 				case L_THAN_OR_EQ:
 				case DOUBLE_EQUALS:
 				case NOT_EQUALS:
-					return instruction->assignee->sets_cc;
+					return instruction->operands.oir.assignee->sets_cc;
 
 				default:
 					return FALSE;
@@ -756,9 +756,11 @@ static inline u_int8_t can_assignment_instruction_be_removed(instruction_t* assi
 		return TRUE;
 	}
 
-	//Otherwise, we know that we have a regular assignment statement
-	//This cannot be optimized away
-	if(is_converting_move_required(assignment_instruction->assignee->type, assignment_instruction->op1->type) == TRUE){
+	/**
+	 * If we require a converting move then the assignment instruction cannot be removed
+	 */
+	if(is_converting_move_required(assignment_instruction->operands.oir.assignee->type, 
+									assignment_instruction->operands.oir.operand1->type) == TRUE){
 		return FALSE;
 	}
 
@@ -788,6 +790,8 @@ static inline u_int8_t binary_operator_valid_for_inplace_constant_match(ollie_to
 /**
  * Remediate a memory address that is *not* in a memory access(load or store) context. This will primarily
  * be hit when we're taking memory addresses or doing pointer arithmetic with arrays
+ *
+ * TODO NEEDS COMPLETE REFACTOR AFTER STORE/LOAD CHANGES
  */
 static void remediate_memory_address_variable_in_non_access_context(instruction_window_t* window, instruction_t* instruction){
 	//For later use
@@ -1614,9 +1618,11 @@ static inline void emit_2_byte_copy_pair(instruction_t** last_instruction, three
  *	 that we maintain all of the existing logic around memory address variables
  */
 static void convert_memory_copy_statement_into_loads_and_stores(instruction_window_t* window, instruction_t* memory_copy_statement){
-	//We'll want these on hand for down the road
-	three_addr_var_t* source_memory_address_var = memory_copy_statement->op1;
-	three_addr_var_t* destination_memory_address_var = memory_copy_statement->assignee;
+	/**
+	 * For memory copy statements, we copy *from* address operand 2 *to* address operand 1
+	 */
+	three_addr_var_t* source_memory_address_var = memory_copy_statement->operands.oir.address_operand2;
+	three_addr_var_t* destination_memory_address_var = memory_copy_statement->operands.oir.address_operand1;
 
 	//Maintain the current offset. This is going to be the same for the source and destination
 	u_int64_t current_offset = 0;
@@ -1626,7 +1632,7 @@ static void convert_memory_copy_statement_into_loads_and_stores(instruction_wind
 	 * to adjust the memory address that the source has if we're copying after a new stack allocation
 	 * statement. We maintain a base adjustment amoutn just for this purpose
 	 */
-	u_int64_t source_adjustment = memory_copy_statement->op1->memory_address_base_adjustment;
+	u_int64_t source_adjustment = source_memory_address_var->memory_address_base_adjustment;
 
 	//We always use the dedicated field to determine how many bytes we should be copying
 	u_int64_t remaining_copy_amount = memory_copy_statement->optional_storage.byte_amount_to_copy;
