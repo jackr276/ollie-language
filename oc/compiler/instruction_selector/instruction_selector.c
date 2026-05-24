@@ -3882,32 +3882,36 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction2 != NULL
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& (window->instruction2->op == DOUBLE_AND || window->instruction2->op == DOUBLE_OR)
-		&& variables_equal(window->instruction2->op1, window->instruction1->operands.oir.assignee, FALSE) == TRUE){
+		&& variables_equal(window->instruction2->operands.oir.operand1, window->instruction1->operands.oir.assignee, FALSE) == TRUE){
+
+		//Grab these two out for convenience
+		instruction_t* constant_assignment = window->instruction1;
+		instruction_t* binary_operation = window->instruction2;
 
 		//We will handle the constants accordingly
-		if(window->instruction2->op == DOUBLE_OR) {
-			logical_or_constants(window->instruction2->op1_const, window->instruction1->op1_const);
+		if(binary_operation->op == DOUBLE_OR) {
+			logical_or_constants(binary_operation->operands.oir.constant_operand, constant_assignment->operands.oir.constant_operand);
 		} else {
-			logical_and_constants(window->instruction2->op1_const, window->instruction1->op1_const);
+			logical_and_constants(binary_operation->operands.oir.constant_operand, constant_assignment->operands.oir.constant_operand);
 		}
 
 		//Instruction 2 is now simply an assign const statement
-		window->instruction2->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+		binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
-		//Op1 is now used one less time
-		window->instruction2->op1->use_count--;
+		//Wipe out operand1
+		binary_operation->operands.oir.operand1->use_count--;
+		binary_operation->operands.oir.operand1 = NULL;
 
-		//Null out where the old value was
-		window->instruction2->op1 = NULL;
-
-		//Instruction 1 is now completely useless *if* that was the only time that
-		//his assignee was used. Otherwise, we need to keep it in
-		if(window->instruction1->operands.oir.assignee->use_count == 0){
-			delete_statement(window->instruction1);
+		/**
+		 * Instruction 1 is now completely useless *if* that was the only time that
+		 * his assignee was used. Otherwise, we need to keep it in
+		 */
+		if(constant_assignment->operands.oir.assignee->use_count == 0){
+			delete_statement(constant_assignment);
 		}
 
 		//Reconstruct the window with instruction 2 as the start
-		reconstruct_window(window, window->instruction2);
+		reconstruct_window(window, binary_operation);
 
 		//This counts as a change
 		changed = TRUE;
@@ -3915,65 +3919,77 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 
 	/**
-	 * ======================= Logical And operation simplifying ==========================
-	 * t2 <- t4 && 0 === set t2 to be 0
-	 * t2 <- t4 && (non-zero) === test t4,t4 and setne t2 if t4 isn't 0
-	 *
-	 * It is safe to assume that a logical and binary operation with constant is always
-	 * simplifiable
+	 * Simplifying binary operations with logical and/or
 	 */
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& window->instruction1->op == DOUBLE_AND){
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
 		//For convenience extract this
 		instruction_t* current_instruction = window->instruction1;
 
-		//First option - the value is 0
-		if(is_constant_value_zero(current_instruction->op1_const) == TRUE){
-			//It's now just an assign statement
-			current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+		switch(current_instruction->op){
+			/**
+			 * ======================= Logical And operation simplifying ==========================
+			 * t2 <- t4 && 0 === set t2 to be 0
+			 * t2 <- t4 && (non-zero) === test t4,t4 and setne t2 if t4 isn't 0
+			 *
+			 * It is safe to assume that a logical and binary operation with constant is always
+			 * simplifiable
+			 */
+			case DOUBLE_AND:
+				//First option - the value is 0
+				if(is_constant_value_zero(current_instruction->operands.oir.constant_operand) == TRUE){
+					//It's now just an assign statement
+					current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
-			//Wipe out op1
-			if(current_instruction->op1 != NULL){
-				current_instruction->op1->use_count--;
-				current_instruction->op1 = NULL;
-			}
+					//Wipe out op1
+					if(current_instruction->operands.oir.operand1 != NULL){
+						current_instruction->operands.oir.operand1->use_count--;
+						current_instruction->operands.oir.operand1 = NULL;
+					}
 
-		//Otherwise, the value is not 0
-		} else {
-			//First we add a test instruction
-			instruction_t* test_instruction = test_instruction = emit_test_if_not_zero_statement(emit_temp_var(u8), current_instruction->op1);
-						
-			//The result of this will be used for our set instruction
-			instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8), test_instruction->operands.oir.assignee);
+				//Otherwise, the value is not 0
+				} else {
+					//First we add a test instruction
+					instruction_t* test_instruction = test_instruction = emit_test_if_not_zero_statement(emit_temp_var(u8), current_instruction->operands.oir.operand1);
+								
+					//The result of this will be used for our set instruction
+					instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8), test_instruction->operands.oir.assignee);
 
-			//Assign the two over
-			instruction_t* assignment = emit_assignment_instruction(current_instruction->operands.oir.assignee, setne_instruction->operands.oir.assignee);
+					//Assign the two over
+					instruction_t* assignment = emit_assignment_instruction(current_instruction->operands.oir.assignee, setne_instruction->operands.oir.assignee);
 
-			//Insert these both in beforehand
-			insert_instruction_before_given(test_instruction, current_instruction);
-			insert_instruction_before_given(setne_instruction, current_instruction);
-			insert_instruction_before_given(assignment, current_instruction);
+					//Insert these both in beforehand
+					insert_instruction_before_given(test_instruction, current_instruction);
+					insert_instruction_before_given(setne_instruction, current_instruction);
+					insert_instruction_before_given(assignment, current_instruction);
 
-			//And then remove this now useless current instruction
-			delete_statement(current_instruction);
+					//And then remove this now useless current instruction
+					delete_statement(current_instruction);
 
-			//Reconstruct the window based on the set instruction
-			reconstruct_window(window, assignment);
+					//Reconstruct the window based on the set instruction
+					reconstruct_window(window, assignment);
+				}
+
+				//We changed something
+				changed = TRUE;
+				break;
+
+			/**
+			 * ======================= Logical OR operation simplifying ==========================
+			 * t2 <- t4 || 0 === test t4, t4 and setne t2 if t4 isn't 0
+			 * t2 <- t4 || (non-zero) === t2 <- 1
+			 *
+			 * It is safe to assume that a logical and binary operation with constant is always
+			 * simplifiable
+			 */
+			case DOUBLE_OR:
+
+			//By default do nothing
+			default:
+				break;
 		}
-
-		//We changed something
-		changed = TRUE;
 	}
 
 
-	/**
-	 * ======================= Logical OR operation simplifying ==========================
-	 * t2 <- t4 || 0 === test t4, t4 and setne t2 if t4 isn't 0
-	 * t2 <- t4 || (non-zero) === t2 <- 1
-	 *
-	 * It is safe to assume that a logical and binary operation with constant is always
-	 * simplifiable
-	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction1->op == DOUBLE_OR){
 		//For convenience extract this
