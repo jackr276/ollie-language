@@ -2141,29 +2141,30 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 	//If we see a constant assingment first and then we see a an assignment
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP 
-		&& window->instruction1->assignee->use_count <= 1
+		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP 
+		&& window->instruction1->operands.oir.assignee->use_count <= 1
 		&& window->instruction2 != NULL
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT 
-		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
+		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.operand1, FALSE) == TRUE){
 
 		//Grab this out for convenience
+		instruction_t* constant_assignment = window->instruction1;
 		instruction_t* assign_operation = window->instruction2;
 
 		//Now we'll modify this to be an assignment const statement
-		assign_operation->op1_const = window->instruction1->op1_const;
+		assign_operation->operands.oir.constant_operand = constant_assignment->operands.oir.constant_operand;
 
 		//Modify the type of the assignment
 		assign_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
 		//The use count here now goes down by one
-		assign_operation->op1->use_count--;
+		assign_operation->operands.oir.operand1->use_count--;
 
 		//Make sure that we now null out op1
-		assign_operation->op1 = NULL;
+		assign_operation->operands.oir.operand1 = NULL;
 
 		//Once we've done this, the first statement is entirely useless
-		delete_statement(window->instruction1);
+		delete_statement(constant_assignment);
 
 		//Once we've deleted the statement, we'll need to completely rewire the block
 		reconstruct_window(window, assign_operation);
@@ -2180,36 +2181,34 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	if(window->instruction2 != NULL 
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
+		//Extract these two for convenience
+		instruction_t* constant_assignment = window->instruction1;
+		instruction_t* binary_operation = window->instruction2;
+
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instruction2? Let's check.
-		if(window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
-			//Validate that the use count is less than 1
-			&& window->instruction1->assignee->use_count <= 1
-			&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
-			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
-			//Grab this out for convenience
-			instruction_t* const_assignment = window->instruction1;
+		if(constant_assignment->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
+			&& constant_assignment->operands.oir.assignee->use_count <= 1
+			&& variables_equal(constant_assignment->operands.oir.assignee, binary_operation->operands.oir.operand2, FALSE) == TRUE){
 
 			//Let's mark that this is now a binary op with const statement
-			window->instruction2->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+			binary_operation->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
 
-			//op2 is now used one less time
-			window->instruction2->op2->use_count--;
+			//Scrap the old op2
+			binary_operation->operands.oir.operand2->use_count--;
+			binary_operation->operands.oir.operand2 = NULL;
 
-			//We'll want to NULL out the secondary variable in the operation
-			window->instruction2->op2 = NULL;
-			
-			//We'll replace it with the op1 const that we've gotten from the prior instruction
-			window->instruction2->op1_const = const_assignment->op1_const;
+			//Replace it with what we had prior
+			binary_operation->operands.oir.constant_operand = constant_assignment->operands.oir.constant_operand;
 
 			//We can now delete the very first statement
-			delete_statement(window->instruction1);
+			delete_statement(constant_assignment);
 
-			//Reconstruct using the previous instruction or instruction
-			//2, if we're blanked out
-			if(window->instruction2->previous_statement != NULL){
-				reconstruct_window(window, window->instruction2->previous_statement);
+			//Reconstruct appropriately based on what we're using
+			//TODO IS THIS NEEDED?
+			if(binary_operation->previous_statement != NULL){
+				reconstruct_window(window, binary_operation->previous_statement);
 			} else {
-				reconstruct_window(window, window->instruction2);
+				reconstruct_window(window, binary_operation);
 			}
 
 			//This does count as a change
@@ -2217,42 +2216,46 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
-	//Now check with 1 and 3. The prior compression may have made this more worthwhile
-	if(window->instruction3 != NULL && window->instruction3->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
-		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
-		//Is the variable in instruction 1 temporary *and* the same one that we're using in instrution2? Let's check.
-		if(window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
-			//Validate that this is not being used more than once
-			&& window->instruction1->assignee->use_count <= 1
-			&& variables_equal(window->instruction2->assignee, window->instruction3->op2, FALSE) == FALSE
-			&& variables_equal(window->instruction1->assignee, window->instruction3->op2, FALSE) == TRUE){
-			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
-			//Grab this out for convenience
-			instruction_t* const_assignment = window->instruction1;
+	/**
+	 * Do the exact same thing now with instructions 2 & 3
+	 */
+	if(window->instruction3 != NULL 
+		&& window->instruction3->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
+		//Extract these two for convenience
+		instruction_t* constant_assignment = window->instruction2;
+		instruction_t* binary_operation = window->instruction3;
+
+		//Is the variable in instruction 1 temporary *and* the same one that we're using in instruction2? Let's check.
+		if(constant_assignment->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
+			&& constant_assignment->operands.oir.assignee->use_count <= 1
+			&& variables_equal(constant_assignment->operands.oir.assignee, binary_operation->operands.oir.operand2, FALSE) == TRUE){
 
 			//Let's mark that this is now a binary op with const statement
-			window->instruction3->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+			binary_operation->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
 
-			//Op2 for instruction3 is now used one less time
-			window->instruction3->op2->use_count--;
+			//Scrap the old op2
+			binary_operation->operands.oir.operand2->use_count--;
+			binary_operation->operands.oir.operand2 = NULL;
 
-			//We'll want to NULL out the secondary variable in the operation
-			window->instruction3->op2 = NULL;
-			
-			//We'll replace it with the op1 const that we've gotten from the prior instruction
-			window->instruction3->op1_const = const_assignment->op1_const;
+			//Replace it with what we had prior
+			binary_operation->operands.oir.constant_operand = constant_assignment->operands.oir.constant_operand;
 
 			//We can now delete the very first statement
-			delete_statement(window->instruction1);
+			delete_statement(constant_assignment);
 
-			//Reconstruct the window with instruction2 as the seed
-			reconstruct_window(window, window->instruction2);
+			//Reconstruct appropriately based on what we're using
+			//TODO IS THIS NEEDED?
+			if(binary_operation->previous_statement != NULL){
+				reconstruct_window(window, binary_operation->previous_statement);
+			} else {
+				reconstruct_window(window, binary_operation);
+			}
 
 			//This does count as a change
 			changed = TRUE;
 		}
 	}
-
 
 	/**
 	 * ================= Handling pure constant operations ========================
@@ -2265,8 +2268,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction2 != NULL
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& binary_operator_valid_for_inplace_constant_match(window->instruction2->op) == TRUE
-		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& variables_equal(window->instruction2->op1, window->instruction1->assignee, FALSE) == TRUE){
+		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& variables_equal(window->instruction2->op1, window->instruction1->operands.oir.assignee, FALSE) == TRUE){
 
 		//Go based on the op. We already know that we can do this by the time 
 		//we get here
@@ -2347,8 +2350,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction3 != NULL
 		&& window->instruction3->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& binary_operator_valid_for_inplace_constant_match(window->instruction3->op) == TRUE
-		&& window->instruction2->assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& variables_equal(window->instruction3->op1, window->instruction2->assignee, FALSE) == TRUE){
+		&& window->instruction2->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& variables_equal(window->instruction3->op1, window->instruction2->operands.oir.assignee, FALSE) == TRUE){
 
 		//Go based on the op. We already know that we can do this by the time 
 		//we get here
@@ -2430,12 +2433,12 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		instruction_t* move = window->instruction2;
 		
 		//If the variables are temp and the first one's assignee is the same as the second's op1, we can fold
-		if(load->assignee->variable_type == VARIABLE_TYPE_TEMP && variables_equal(load->assignee, move->op1, TRUE) == TRUE
+		if(load->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP && variables_equal(load->operands.oir.assignee, move->op1, TRUE) == TRUE
 			//And the load's assignee is only ever used once
-			&& load->assignee->use_count <= 1){
+			&& load->operands.oir.assignee->use_count <= 1){
 
 			//The load's assignee now is the move's assignee
-			load->assignee = move->assignee;
+			load->operands.oir.assignee = move->operands.oir.assignee;
 
 			//The second move is now useless
 			delete_statement(move);
@@ -2615,9 +2618,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				 * as this should never have gotten here anyway if it does(optimizer
 				 * does it's own simplification), but we need to check
 				 */
-				if(binary_operation->assignee->sets_cc == FALSE){
+				if(binary_operation->operands.oir.assignee->sets_cc == FALSE){
 					//Hang onto the actual assignee
-					three_addr_var_t* final_assignee = binary_operation->assignee;
+					three_addr_var_t* final_assignee = binary_operation->operands.oir.assignee;
 
 					//Get rid of the second operand and the op
 					binary_operation->op2->use_count--;
@@ -2628,19 +2631,19 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					binary_operation->statement_type = THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT;
 
 					//Emit a temporary assignee for the test not zero
-					binary_operation->assignee = emit_temp_var(u8);
+					binary_operation->operands.oir.assignee = emit_temp_var(u8);
 
 					/**
 					 * Since we aren't setting condition codes, we need to emit a setne statement
 					 * as well as an assignment over to the actual assignee for this to work
 					 */
-					instruction_t* setne = emit_setne_code(emit_temp_var(u8), binary_operation->assignee);
+					instruction_t* setne = emit_setne_code(emit_temp_var(u8), binary_operation->operands.oir.assignee);
 
 					//This goes in right after our assignee
 					insert_instruction_after_given(setne, binary_operation);
 
 					//Now we'll need a final assignment
-					instruction_t* final_assignment = emit_assignment_instruction(final_assignee, setne->assignee);
+					instruction_t* final_assignment = emit_assignment_instruction(final_assignee, setne->operands.oir.assignee);
 
 					//This goes in after our other statement
 					insert_instruction_after_given(final_assignment, setne);
@@ -2663,7 +2666,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			case DOUBLE_EQUALS:
 			case G_THAN_OR_EQ:
 			case L_THAN_OR_EQ:
-				if(binary_operation->assignee->sets_cc == FALSE){
+				if(binary_operation->operands.oir.assignee->sets_cc == FALSE){
 					//Spit the constant out
 					simplification_constant = emit_direct_integer_or_char_constant(1, result_type);
 
@@ -2695,7 +2698,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			case NOT_EQUALS:
 			case G_THAN:
 			case L_THAN:
-				if(binary_operation->assignee->sets_cc == FALSE){
+				if(binary_operation->operands.oir.assignee->sets_cc == FALSE){
 					//Spit the constant out
 					simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
 
@@ -2742,10 +2745,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	if(window->instruction2 != NULL
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& (window->instruction1->op == STAR || window->instruction1->op == PLUS)
-		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
 		&& window->instruction2->op == PLUS
-		&& variables_equal(window->instruction2->op2, window->instruction1->assignee, TRUE) == TRUE) {
+		&& variables_equal(window->instruction2->op2, window->instruction1->operands.oir.assignee, TRUE) == TRUE) {
 
 		//Extract for convenience
 		instruction_t* constant_operation = window->instruction1;
@@ -2853,10 +2856,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	if(window->instruction3 != NULL
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& (window->instruction1->op == STAR || window->instruction1->op == PLUS)
-		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction3->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
 		&& window->instruction3->op == PLUS
-		&& variables_equal(window->instruction3->op2, window->instruction1->assignee, TRUE) == TRUE) {
+		&& variables_equal(window->instruction3->op2, window->instruction1->operands.oir.assignee, TRUE) == TRUE) {
 
 		//Extract for convenience
 		instruction_t* constant_operation = window->instruction1;
@@ -2965,10 +2968,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	if(window->instruction2 != NULL
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_STMT 
 		&& window->instruction1->op == PLUS
-		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction2->op == PLUS
-		&& variables_equal(window->instruction2->op1, window->instruction1->assignee, TRUE) == TRUE) {
+		&& variables_equal(window->instruction2->op1, window->instruction1->operands.oir.assignee, TRUE) == TRUE) {
 
 		//Extract for convenience
 		instruction_t* binary_operation = window->instruction1;
@@ -3086,8 +3089,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	if(window->instruction2 != NULL 
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& window->instruction1->assignee->use_count <= 1){
+		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& window->instruction1->operands.oir.assignee->use_count <= 1){
 
 		//Grab this for clarity
 		instruction_t* move_instruction = window->instruction1;
@@ -3098,7 +3101,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		int64_t lea_multiplier;
 
 		//First 4 cases - if op2 and the assignee are equal
-		if(variables_equal(move_instruction->assignee, lea_instruction->op2, FALSE) == TRUE){
+		if(variables_equal(move_instruction->operands.oir.assignee, lea_instruction->op2, FALSE) == TRUE){
 			//Go based on what kind of lea we've got here
 			switch(lea_instruction->lea_statement_type){
 				/**
@@ -3239,7 +3242,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			}
 
 		//The final case - we just have the op1 as equal
-		} else if(variables_equal(move_instruction->assignee, lea_instruction->op1, FALSE) == TRUE){
+		} else if(variables_equal(move_instruction->operands.oir.assignee, lea_instruction->op1, FALSE) == TRUE){
 			switch(lea_instruction->lea_statement_type){
 				/**
 				 * t4 <- 4
@@ -3441,7 +3444,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 */
 	if(window->instruction2 != NULL
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT 
-		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP //Make sure it's a temp var
+		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP //Make sure it's a temp var
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT){
 
 		//Grab these references for our convenience
@@ -3449,7 +3452,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		instruction_t* second_lea = window->instruction2;
 
 		//If the first one's assignee is the second one's op1
-		if(variables_equal(first_lea->assignee, second_lea->op1, FALSE) == TRUE){
+		if(variables_equal(first_lea->operands.oir.assignee, second_lea->op1, FALSE) == TRUE){
 			//Go based on the first one's addressing mode
 			switch(first_lea->lea_statement_type){
 				case OIR_LEA_TYPE_INDEX_AND_SCALE:
@@ -3569,7 +3572,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			}
 			
 		//Rarer but still possible case - is the assignee equal to the op2
-		} else if(variables_equal(first_lea->assignee, second_lea->op2, FALSE) == TRUE){
+		} else if(variables_equal(first_lea->operands.oir.assignee, second_lea->op2, FALSE) == TRUE){
 			//Go based on the first one's type
 			switch(first_lea->lea_statement_type){
 				//Just do nothing by default
@@ -3600,9 +3603,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 */
 	if(window->instruction2 != NULL
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
-		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP //Make sure it's a temp var
+		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP //Make sure it's a temp var
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT 
-		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
+		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->op1, FALSE) == TRUE){
 
 		//Grab these for convenience
 		instruction_t* first_lea = window->instruction1;
@@ -3619,7 +3622,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 */
 			case OIR_LEA_TYPE_RIP_RELATIVE:
 				//Back-copy the assignee and op1_const
-				first_lea->assignee = second_bin_op->assignee;
+				first_lea->operands.oir.assignee = second_bin_op->operands.oir.assignee;
 				first_lea->op1_const = second_bin_op->op1_const;
 
 				//Change the lea type to be rip relative but with an offset
@@ -3645,7 +3648,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 */
 			case OIR_LEA_TYPE_RIP_RELATIVE_WITH_OFFSET:
 				//Back-copy the assignee
-				first_lea->assignee = second_bin_op->assignee;
+				first_lea->operands.oir.assignee = second_bin_op->operands.oir.assignee;
 
 				//Add the 2 constants together, the result will be in the first one's constant
 				add_constants(first_lea->op1_const, second_bin_op->op1_const);
@@ -3779,27 +3782,30 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 */
 	if(window->instruction2 != NULL
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_STATEMENT){
+		//Extract for convenience
+		instruction_t* binary_operation = window->instruction1;
+		instruction_t* store_statement = window->instruction2;
+
 		//Go based on the first statement
-		switch (window->instruction1->statement_type) {
+		switch (binary_operation->statement_type) {
 			case THREE_ADDR_CODE_BIN_OP_STMT:
 				//If the first one is used less than once and they match
-				if(window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP 
-					&& window->instruction1->op == PLUS //We can only handle addition
-					&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, FALSE) == TRUE){
+				if(binary_operation->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP 
+					&& binary_operation->op == PLUS //We can only handle addition
+					&& variables_equal(binary_operation->operands.oir.assignee, store_statement->operands.oir.address_operand1, FALSE) == TRUE){
 
 					//This is now a load with variable offset
-					window->instruction2->statement_type = THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET;
+					store_statement->statement_type = THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET;
 
-					//The assignee is now the old op1
-					window->instruction2->assignee = window->instruction1->op1;
-					//And op1 is now the old op2
-					window->instruction2->op1 = window->instruction1->op2;
+					//Translate these into the store statement
+					store_statement->operands.oir.address_operand1 = store_statement->operands.oir.operand1;
+					store_statement->operands.oir.address_operand2 = store_statement->operands.oir.operand2;
 
-					//Now scrap instruction 1
-					delete_statement(window->instruction1);
+					//We no longer need the binary operation
+					delete_statement(binary_operation);
 
 					//Rebuild around instruction 2
-					reconstruct_window(window, window->instruction2);
+					reconstruct_window(window, store_statement);
 
 					//Is a change
 					changed = TRUE;
@@ -3810,15 +3816,15 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			//Same treatment for if we have a binary operation with const here
 			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 				//If the first one is used less than once and they match
-				if(window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
+				if(window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 					&& (window->instruction1->op == PLUS || window->instruction1->op == MINUS) //We can only handle addition/subtraction
-					&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, FALSE) == TRUE){
+					&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.assignee, FALSE) == TRUE){
 
 					//This is now a load with contant offset
 					window->instruction2->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
 
 					//The assignee is now the old op1
-					window->instruction2->assignee = window->instruction1->op1;
+					window->instruction2->operands.oir.assignee = window->instruction1->op1;
 					//And the offset is the old constant
 					window->instruction2->operands.oir.addressing_mode_offset = window->instruction1->op1_const;
 
@@ -3862,9 +3868,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		switch (window->instruction1->statement_type) {
 			case THREE_ADDR_CODE_BIN_OP_STMT:
 				//If the first one is used less than once and they match
-				if(window->instruction1->assignee->use_count <= 1
+				if(window->instruction1->operands.oir.assignee->use_count <= 1
 					&& window->instruction1->op == PLUS //We can only handle addition
-					&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
+					&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->op1, FALSE) == TRUE){
 
 					//This is now a load with variable offset
 					window->instruction2->statement_type = THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET;
@@ -3888,9 +3894,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			//Same treatment for if we have a binary operation with const here
 			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 				//If the first one is used less than once and they match
-				if((window->instruction1->assignee->use_count <= 1 || window->instruction1->assignee == window->instruction1->op1)
+				if((window->instruction1->operands.oir.assignee->use_count <= 1 || window->instruction1->operands.oir.assignee == window->instruction1->op1)
 					&& (window->instruction1->op == PLUS || window->instruction1->op == MINUS) //We can only handle addition/subtraction
-					&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
+					&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->op1, FALSE) == TRUE){
 
 					//This is now a load with contant offset
 					window->instruction2->statement_type = THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET;
@@ -3939,7 +3945,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction2 != NULL
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& (window->instruction2->op == DOUBLE_AND || window->instruction2->op == DOUBLE_OR)
-		&& variables_equal(window->instruction2->op1, window->instruction1->assignee, FALSE) == TRUE){
+		&& variables_equal(window->instruction2->op1, window->instruction1->operands.oir.assignee, FALSE) == TRUE){
 
 		//We will handle the constants accordingly
 		if(window->instruction2->op == DOUBLE_OR) {
@@ -3959,7 +3965,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 		//Instruction 1 is now completely useless *if* that was the only time that
 		//his assignee was used. Otherwise, we need to keep it in
-		if(window->instruction1->assignee->use_count == 0){
+		if(window->instruction1->operands.oir.assignee->use_count == 0){
 			delete_statement(window->instruction1);
 		}
 
@@ -4001,10 +4007,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			instruction_t* test_instruction = test_instruction = emit_test_if_not_zero_statement(emit_temp_var(u8), current_instruction->op1);
 						
 			//The result of this will be used for our set instruction
-			instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8), test_instruction->assignee);
+			instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8), test_instruction->operands.oir.assignee);
 
 			//Assign the two over
-			instruction_t* assignment = emit_assignment_instruction(current_instruction->assignee, setne_instruction->assignee);
+			instruction_t* assignment = emit_assignment_instruction(current_instruction->operands.oir.assignee, setne_instruction->operands.oir.assignee);
 
 			//Insert these both in beforehand
 			insert_instruction_before_given(test_instruction, current_instruction);
@@ -4042,10 +4048,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			instruction_t* test_instruction = test_instruction = emit_test_if_not_zero_statement(emit_temp_var(u8), current_instruction->op1);
 						
 			//The result of this will be used for our set instruction
-			instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8), test_instruction->assignee);
+			instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8), test_instruction->operands.oir.assignee);
 
 			//Assign the two over
-			instruction_t* assignment = emit_assignment_instruction(current_instruction->assignee, setne_instruction->assignee);
+			instruction_t* assignment = emit_assignment_instruction(current_instruction->operands.oir.assignee, setne_instruction->operands.oir.assignee);
 
 			//Insert these both in beforehand
 			insert_instruction_before_given(test_instruction, current_instruction);
@@ -4178,7 +4184,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					/**
 					 * If we don't have something like x_1 = x_0 + 1, we can't be doing this so we'll leave
 					 */
-					if(variables_equal_no_ssa(first_instruction->assignee, first_instruction->op1, TRUE) == FALSE){
+					if(variables_equal_no_ssa(first_instruction->operands.oir.assignee, first_instruction->op1, TRUE) == FALSE){
 						break;
 					}
 
@@ -4196,7 +4202,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					/**
 					 * If we don't have something like x_1 = x_0 - 1, we can't be doing this so we'll leave
 					 */
-					if(variables_equal_no_ssa(first_instruction->assignee, first_instruction->op1, TRUE) == FALSE){
+					if(variables_equal_no_ssa(first_instruction->operands.oir.assignee, first_instruction->op1, TRUE) == FALSE){
 						break;
 					}
 
@@ -4334,7 +4340,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		generic_type_t* final_type = types_assignable(second->op1_const->type, first->op1_const->type);
 
 		//If these are the same variable and the types are compatible, then we're good to go
-		if(variables_equal(first->assignee, second->op1, FALSE) == TRUE && final_type != NULL){
+		if(variables_equal(first->operands.oir.assignee, second->op1, FALSE) == TRUE && final_type != NULL){
 			//What we'll do first is add the two constants. The resultant constant will be stored
 			//in the second instruction's constant
 			add_constants(second->op1_const, first->op1_const);
@@ -4380,9 +4386,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			//If we have the assign const look at it here
 			case THREE_ADDR_CODE_ASSN_CONST_STMT:
 				//These conditions must be met for it to be ok for us to do this
-				if(preceeding_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& preceeding_instruction->assignee->use_count == 1
-					&& variables_equal(preceeding_instruction->assignee, load_instruction->op2, FALSE) == TRUE){
+				if(preceeding_instruction->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& preceeding_instruction->operands.oir.assignee->use_count == 1
+					&& variables_equal(preceeding_instruction->operands.oir.assignee, load_instruction->op2, FALSE) == TRUE){
 
 					//This is now a load with constant offset
 					load_instruction->statement_type = THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET;
@@ -4409,9 +4415,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			//changing the instruction, just replacing a variable
 			case THREE_ADDR_CODE_ASSN_STMT:
 				//Same conditions must be met for this to work
-				if(preceeding_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& preceeding_instruction->assignee->use_count == 1
-					&& variables_equal(preceeding_instruction->assignee, load_instruction->op2, FALSE) == TRUE){
+				if(preceeding_instruction->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& preceeding_instruction->operands.oir.assignee->use_count == 1
+					&& variables_equal(preceeding_instruction->operands.oir.assignee, load_instruction->op2, FALSE) == TRUE){
 
 					//Copy over the result pre-assignment. The load instruction's 
 					//op2 will be whatever we were assigning over here
@@ -4457,9 +4463,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		switch(preceeding_instruction->statement_type){
 			case THREE_ADDR_CODE_ASSN_CONST_STMT:
 				//These specific conditions must be met for this to be true
-				if(preceeding_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& preceeding_instruction->assignee->use_count == 1
-					&& variables_equal(preceeding_instruction->assignee, store_instruction->op1, FALSE) == TRUE){
+				if(preceeding_instruction->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& preceeding_instruction->operands.oir.assignee->use_count == 1
+					&& variables_equal(preceeding_instruction->operands.oir.assignee, store_instruction->op1, FALSE) == TRUE){
 				}
 
 				//This now has a constant offset
@@ -4485,9 +4491,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			//Opportunity to copy fold here
 			case THREE_ADDR_CODE_ASSN_STMT:
 				//These specific conditions must be met for this to be true
-				if(preceeding_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& preceeding_instruction->assignee->use_count == 1
-					&& variables_equal(preceeding_instruction->assignee, store_instruction->op1, FALSE) == TRUE){
+				if(preceeding_instruction->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& preceeding_instruction->operands.oir.assignee->use_count == 1
+					&& variables_equal(preceeding_instruction->operands.oir.assignee, store_instruction->op1, FALSE) == TRUE){
 				}
 
 				//Unlike above, we do not need to change the statement type. We just need to shuffle around the values
@@ -4766,7 +4772,7 @@ static inline u_int8_t convert_phi_function_if_redundant(value_numbering_table_t
 	dynamic_string_t value_name = dynamic_string_alloc();
 
 	//Get the value name string of the assignee
-	concatenate_value_name_string(phi_function->assignee, &value_name);
+	concatenate_value_name_string(phi_function->operands.oir.assignee, &value_name);
 
 	/**
 	 * Store this in here so that every reference to the old assignee
@@ -5064,7 +5070,7 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 		generate_value_name_key_for_instruction(cursor, &textual_key);
 		
 		//Now add this in with the key as our name, and the value as the assignee
-		add_value_number_expression(table, cursor->assignee, &textual_key);
+		add_value_number_expression(table, cursor->operands.oir.assignee, &textual_key);
 		
 		//Bump it up
 		cursor = cursor->next_statement;
@@ -5138,7 +5144,7 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 				 * the assignee here can instead use the result that we got
 				 */
 				clear_dynamic_string(&textual_string);
-				concatenate_value_name_string(cursor->assignee, &textual_string);
+				concatenate_value_name_string(cursor->operands.oir.assignee, &textual_string);
 
 				//Now we can add this to the table for future reference
 				add_value_number_expression(table, found_result, &textual_string);
@@ -5152,7 +5158,7 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 			 * for future passes
 			 */
 			} else {
-				add_value_number_expression(table, cursor->assignee, &textual_string);
+				add_value_number_expression(table, cursor->operands.oir.assignee, &textual_string);
 			}
 
 		/**
@@ -5384,14 +5390,14 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 				//So long as this isn't NULL
 				while(stmt != NULL){
 					//If it's marked we're out of here
-					if(stmt->mark == TRUE || stmt->assignee == NULL){
+					if(stmt->mark == TRUE || stmt->operands.oir.assignee == NULL){
 						stmt = stmt->previous_statement;
 						continue;
 					}
 
 					//Is the assignee our variable AND it's unmarked?
-					if(stmt->assignee->linked_var == variable->linked_var
-						&& stmt->assignee->ssa_generation == variable->ssa_generation){
+					if(stmt->operands.oir.assignee->linked_var == variable->linked_var
+						&& stmt->operands.oir.assignee->ssa_generation == variable->ssa_generation){
 
 						dynamic_array_add(worklist, stmt);
 						stmt->mark = TRUE;
@@ -5409,13 +5415,13 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 				//So long as this isn't NULL
 				while(stmt != NULL){
 					//If this is the case, we'll just go onto the next one
-					if(stmt->mark == TRUE || stmt->assignee == NULL){
+					if(stmt->mark == TRUE || stmt->operands.oir.assignee == NULL){
 						stmt = stmt->previous_statement;
 						continue;
 					}
 
 					//Is the assignee our variable AND it's unmarked?
-					if(stmt->assignee->temp_var_number == variable->temp_var_number){
+					if(stmt->operands.oir.assignee->temp_var_number == variable->temp_var_number){
 						dynamic_array_add(worklist, stmt);
 						stmt->mark = TRUE;
 						block->contains_mark = TRUE;
@@ -6584,7 +6590,7 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 	instruction_t* converting_move;
 
 	//Extract the assignee and the op1
-	three_addr_var_t* assignee = instruction->assignee;
+	three_addr_var_t* assignee = instruction->operands.oir.assignee;
 	three_addr_var_t* op1 = instruction->op1;
 	
 	/**
@@ -6666,14 +6672,14 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 	if(is_integer_to_sse_conversion_instruction(instruction->instruction_type) == TRUE){
 		//We need to completely zero out the destination register here, so we will emit a pxor to do
 		//just that
-		instruction_t* pxor_instruction = emit_sse_register_clear_instruction(instruction->assignee);
+		instruction_t* pxor_instruction = emit_sse_register_clear_instruction(instruction->operands.oir.assignee);
 
 		//Get this in right before the given
 		insert_instruction_before_given(pxor_instruction, instruction);
 	}
 
 	//Set the sources and destinations
-	instruction->operands.x86.destination_register = instruction->assignee;
+	instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
 	//We need to ensure that we're using the real op1 here
 	instruction->operands.x86.source_register1 = op1;
 }
@@ -7329,7 +7335,7 @@ static void handle_left_shift_instruction(instruction_window_t* window){
 	if(left_shift_instruction->type_storage.result_type != NULL){
 		destination_type = left_shift_instruction->type_storage.result_type;
 	} else {
-		destination_type = left_shift_instruction->assignee->type;
+		destination_type = left_shift_instruction->operands.oir.assignee->type;
 	}
 
 	//Determine what our size is off the bat
@@ -7400,9 +7406,9 @@ static void handle_left_shift_instruction(instruction_window_t* window){
 	 * Now if op1 and the assignee line up, we are good. Otherwise we will
 	 * need to make them align and insert some actual instructions
 	 */
-	if(variables_equal_no_ssa(left_shift_instruction->assignee, left_shift_instruction->op1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(left_shift_instruction->operands.oir.assignee, left_shift_instruction->op1, TRUE) == TRUE){
 		//Destination is the assignee
-		left_shift_instruction->operands.x86.destination_register = left_shift_instruction->assignee;
+		left_shift_instruction->operands.x86.destination_register = left_shift_instruction->operands.oir.assignee;
 
 		//Assign the source or the source immediate based on which we need
 		if(left_shift_instruction->op2 != NULL){
@@ -7453,7 +7459,7 @@ static void handle_left_shift_instruction(instruction_window_t* window){
 		}
 
 		//Move the destination register into the actual assignee now
-		instruction_t* assignment_instruction = emit_move_instruction(left_shift_instruction->assignee, left_shift_instruction->operands.x86.destination_register);
+		instruction_t* assignment_instruction = emit_move_instruction(left_shift_instruction->operands.oir.assignee, left_shift_instruction->operands.x86.destination_register);
 
 		//This goes in *after* the left shift 
 		insert_instruction_after_given(assignment_instruction, left_shift_instruction);
@@ -7521,7 +7527,7 @@ static void handle_right_shift_instruction(instruction_window_t* window){
 	if(right_shift_instruction->type_storage.result_type != NULL){
 		destination_type = right_shift_instruction->type_storage.result_type;
 	} else {
-		destination_type = right_shift_instruction->assignee->type;
+		destination_type = right_shift_instruction->operands.oir.assignee->type;
 	}
 
 	//Determine what our size is off the bat
@@ -7592,9 +7598,9 @@ static void handle_right_shift_instruction(instruction_window_t* window){
 	 * Now if op1 and the assignee line up, we are good. Otherwise we will
 	 * need to make them align and insert some actual instructions
 	 */
-	if(variables_equal_no_ssa(right_shift_instruction->assignee, right_shift_instruction->op1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(right_shift_instruction->operands.oir.assignee, right_shift_instruction->op1, TRUE) == TRUE){
 		//Destination is the assignee
-		right_shift_instruction->operands.x86.destination_register = right_shift_instruction->assignee;
+		right_shift_instruction->operands.x86.destination_register = right_shift_instruction->operands.oir.assignee;
 
 		//Assign the source or the source immediate based on which we need
 		if(right_shift_instruction->op2 != NULL){
@@ -7644,7 +7650,7 @@ static void handle_right_shift_instruction(instruction_window_t* window){
 		}
 
 		//Move the destination register into the actual assignee now
-		instruction_t* assignment_instruction = emit_move_instruction(right_shift_instruction->assignee, right_shift_instruction->operands.x86.destination_register);
+		instruction_t* assignment_instruction = emit_move_instruction(right_shift_instruction->operands.oir.assignee, right_shift_instruction->operands.x86.destination_register);
 
 		//This goes in *after* the right shift 
 		insert_instruction_after_given(assignment_instruction, right_shift_instruction);
@@ -7699,7 +7705,7 @@ static void handle_bitwise_inclusive_or_instruction(instruction_window_t* window
 	if(bitwise_or->type_storage.result_type != NULL){
 		destination_type = bitwise_or->type_storage.result_type;
 	} else {
-		destination_type = bitwise_or->assignee->type;
+		destination_type = bitwise_or->operands.oir.assignee->type;
 	}
 
 	//Determine what our size is off the bat
@@ -7729,9 +7735,9 @@ static void handle_bitwise_inclusive_or_instruction(instruction_window_t* window
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(bitwise_or->assignee, bitwise_or->op1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(bitwise_or->operands.oir.assignee, bitwise_or->op1, TRUE) == TRUE){
 		//Destination is just the assignee
-		bitwise_or->operands.x86.destination_register = bitwise_or->assignee;
+		bitwise_or->operands.x86.destination_register = bitwise_or->operands.oir.assignee;
 
 		//Assign the source or the source immediate based on which we need
 		if(bitwise_or->op2 != NULL){
@@ -7782,7 +7788,7 @@ static void handle_bitwise_inclusive_or_instruction(instruction_window_t* window
 		}
 
 		//Move the destination register into the actual assignee now
-		instruction_t* assignment_instruction = emit_move_instruction(bitwise_or->assignee, bitwise_or->operands.x86.destination_register);
+		instruction_t* assignment_instruction = emit_move_instruction(bitwise_or->operands.oir.assignee, bitwise_or->operands.x86.destination_register);
 
 		//This goes in *after* the bitwise or
 		insert_instruction_after_given(assignment_instruction, bitwise_or);
@@ -7837,7 +7843,7 @@ static void handle_bitwise_and_instruction(instruction_window_t* window){
 	if(bitwise_and->type_storage.result_type != NULL){
 		destination_type = bitwise_and->type_storage.result_type;
 	} else {
-		destination_type = bitwise_and->assignee->type;
+		destination_type = bitwise_and->operands.oir.assignee->type;
 	}
 
 	//Determine what our size is off the bat
@@ -7867,9 +7873,9 @@ static void handle_bitwise_and_instruction(instruction_window_t* window){
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(bitwise_and->assignee, bitwise_and->op1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(bitwise_and->operands.oir.assignee, bitwise_and->op1, TRUE) == TRUE){
 		//Destination is just the assignee
-		bitwise_and->operands.x86.destination_register = bitwise_and->assignee;
+		bitwise_and->operands.x86.destination_register = bitwise_and->operands.oir.assignee;
 
 		//Assign the source or the source immediate based on which we need
 		if(bitwise_and->op2 != NULL){
@@ -7921,7 +7927,7 @@ static void handle_bitwise_and_instruction(instruction_window_t* window){
 		}
 
 		//Move the destination register into the actual assignee now
-		instruction_t* assignment_instruction = emit_move_instruction(bitwise_and->assignee, bitwise_and->operands.x86.destination_register);
+		instruction_t* assignment_instruction = emit_move_instruction(bitwise_and->operands.oir.assignee, bitwise_and->operands.x86.destination_register);
 
 		//This goes in *after* the subtraction
 		insert_instruction_after_given(assignment_instruction, bitwise_and);
@@ -7976,7 +7982,7 @@ static void handle_bitwise_exclusive_or_instruction(instruction_window_t* window
 	if(bitwise_xor->type_storage.result_type != NULL){
 		destination_type = bitwise_xor->type_storage.result_type;
 	} else {
-		destination_type = bitwise_xor->assignee->type;
+		destination_type = bitwise_xor->operands.oir.assignee->type;
 	}
 
 	//Determine what our size is off the bat
@@ -8006,9 +8012,9 @@ static void handle_bitwise_exclusive_or_instruction(instruction_window_t* window
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(bitwise_xor->assignee, bitwise_xor->op1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(bitwise_xor->operands.oir.assignee, bitwise_xor->op1, TRUE) == TRUE){
 		//Destination is just the assignee
-		bitwise_xor->operands.x86.destination_register = bitwise_xor->assignee;
+		bitwise_xor->operands.x86.destination_register = bitwise_xor->operands.oir.assignee;
 
 		//Assign the source or the source immediate based on which we need
 		if(bitwise_xor->op2 != NULL){
@@ -8060,7 +8066,7 @@ static void handle_bitwise_exclusive_or_instruction(instruction_window_t* window
 		}
 
 		//Move the destination register into the actual assignee now
-		instruction_t* assignment_instruction = emit_move_instruction(bitwise_xor->assignee, bitwise_xor->operands.x86.destination_register);
+		instruction_t* assignment_instruction = emit_move_instruction(bitwise_xor->operands.oir.assignee, bitwise_xor->operands.x86.destination_register);
 
 		//This goes in *after* the subtraction
 		insert_instruction_after_given(assignment_instruction, bitwise_xor);
@@ -8108,7 +8114,7 @@ static inline void handle_signed_modulus(instruction_window_t* window){
 	if(modulus_instruction->type_storage.result_type != NULL){
 		result_type = modulus_instruction->type_storage.result_type;
 	} else {
-		result_type = modulus_instruction->assignee->type;
+		result_type = modulus_instruction->operands.oir.assignee->type;
 	}
 
 	//If we need to convert, we'll do that here
@@ -8161,7 +8167,7 @@ static inline void handle_signed_modulus(instruction_window_t* window){
 	//Otherwise we'll need a const assignment
 	} else {
 		//Emit the move
-		instruction_t* constant_assignment = emit_constant_move_instruction(emit_temp_var(modulus_instruction->assignee->type), modulus_instruction->op1_const);
+		instruction_t* constant_assignment = emit_constant_move_instruction(emit_temp_var(modulus_instruction->operands.oir.assignee->type), modulus_instruction->op1_const);
 
 		//This goes right in before the mod
 		insert_instruction_before_given(constant_assignment, modulus_instruction);
@@ -8180,7 +8186,7 @@ static inline void handle_signed_modulus(instruction_window_t* window){
 	insert_instruction_before_given(division, modulus_instruction);
 
 	//Once we've done all that, we need one final movement operation
-	instruction_t* result_movement = emit_move_instruction(modulus_instruction->assignee, remainder_register);
+	instruction_t* result_movement = emit_move_instruction(modulus_instruction->operands.oir.assignee, remainder_register);
 
 	//Insert this after the original modulus
 	insert_instruction_after_given(result_movement, modulus_instruction);
@@ -8224,7 +8230,7 @@ static inline void handle_unsigned_modulus(instruction_window_t* window){
 	if(modulus_instruction->type_storage.result_type != NULL){
 		result_type = modulus_instruction->type_storage.result_type;
 	} else {
-		result_type = modulus_instruction->assignee->type;
+		result_type = modulus_instruction->operands.oir.assignee->type;
 	}
 
 	three_addr_var_t* dividend;
@@ -8277,7 +8283,7 @@ static inline void handle_unsigned_modulus(instruction_window_t* window){
 	 * This is in contrast to signed division where we intentionally extend to said register. Here we will
 	 * just clean it out
 	 */
-	three_addr_var_t* cleared_rdx = emit_temp_var(modulus_instruction->assignee->type);
+	three_addr_var_t* cleared_rdx = emit_temp_var(modulus_instruction->operands.oir.assignee->type);
 
 	//Get the instruction out
 	instruction_t* clear_instruction = emit_gp_register_clear_instruction(cleared_rdx);
@@ -8295,7 +8301,7 @@ static inline void handle_unsigned_modulus(instruction_window_t* window){
 	insert_instruction_before_given(division, modulus_instruction);
 
 	//Once we've done all that, we need one final movement operation
-	instruction_t* result_movement = emit_move_instruction(modulus_instruction->assignee, remainder_register);
+	instruction_t* result_movement = emit_move_instruction(modulus_instruction->operands.oir.assignee, remainder_register);
 
 	//Insert this after the original modulus
 	insert_instruction_after_given(result_movement, modulus_instruction);
@@ -8340,7 +8346,7 @@ static inline void handle_modulus_instruction(instruction_window_t* window){
 	if(modulus_instruction->type_storage.result_type != NULL){
 		 is_signed = is_type_signed(modulus_instruction->type_storage.result_type);
 	} else {
-		is_signed = is_type_signed(modulus_instruction->assignee->type);
+		is_signed = is_type_signed(modulus_instruction->operands.oir.assignee->type);
 	}
 
 	//Dynamic dispatch based on what we need
@@ -8407,7 +8413,7 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	if(multiplication_instruction->type_storage.result_type != NULL){
 		destination_type = multiplication_instruction->type_storage.result_type;
 	} else {
-		destination_type = multiplication_instruction->assignee->type;
+		destination_type = multiplication_instruction->operands.oir.assignee->type;
 	}
 
 	//We'll need to know the variables size
@@ -8451,7 +8457,7 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 
 	//Let's also check is any conversions are needed for the first source register
 	if(is_converting_move_required(destination_type, multiplication_instruction->op1->type) == TRUE){
-		source = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->op1, multiplication_instruction->assignee->type);
+		source = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->op1, multiplication_instruction->operands.oir.assignee->type);
 
 	//Otherwise we'll just assign this to be op1
 	} else {
@@ -8476,7 +8482,7 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	multiplication_instruction->operands.x86.destination_register2 = emit_temp_var(destination_type);
 
 	//Once we've done all that, we need one final movement operation
-	instruction_t* result_movement = emit_move_instruction(multiplication_instruction->assignee, multiplication_instruction->operands.x86.destination_register);
+	instruction_t* result_movement = emit_move_instruction(multiplication_instruction->operands.oir.assignee, multiplication_instruction->operands.x86.destination_register);
 
 	//Insert the result movement instruction to be after the multiplication operation
 	insert_instruction_after_given(result_movement, multiplication_instruction);
@@ -8533,7 +8539,7 @@ static void handle_signed_multiplication_instruction(instruction_window_t* windo
 	if(multiplication_instruction->type_storage.result_type != NULL){
 		destination_type = multiplication_instruction->type_storage.result_type;
 	} else {
-		destination_type = multiplication_instruction->assignee->type;
+		destination_type = multiplication_instruction->operands.oir.assignee->type;
 	}
 
 	//Determine what our size is off the bat
@@ -8563,9 +8569,9 @@ static void handle_signed_multiplication_instruction(instruction_window_t* windo
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(multiplication_instruction->assignee, multiplication_instruction->op1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(multiplication_instruction->operands.oir.assignee, multiplication_instruction->op1, TRUE) == TRUE){
 		//Destination is just the assignee
-		multiplication_instruction->operands.x86.destination_register = multiplication_instruction->assignee;
+		multiplication_instruction->operands.x86.destination_register = multiplication_instruction->operands.oir.assignee;
 
 		//Assign the source or the source immediate based on which we need
 		if(multiplication_instruction->op2 != NULL){
@@ -8616,7 +8622,7 @@ static void handle_signed_multiplication_instruction(instruction_window_t* windo
 		}
 
 		//Move the destination register into the actual assignee now
-		instruction_t* assignment_instruction = emit_move_instruction(multiplication_instruction->assignee, multiplication_instruction->operands.x86.destination_register);
+		instruction_t* assignment_instruction = emit_move_instruction(multiplication_instruction->operands.oir.assignee, multiplication_instruction->operands.x86.destination_register);
 
 		//This goes in *after* the multiplication
 		insert_instruction_after_given(assignment_instruction, multiplication_instruction);
@@ -8666,7 +8672,7 @@ static void handle_sse_multiplication_instruction(instruction_window_t* window){
 	if(multiplication_instruction->type_storage.result_type != NULL){
 		destination_type = multiplication_instruction->type_storage.result_type;
 	} else {
-		destination_type = multiplication_instruction->assignee->type;
+		destination_type = multiplication_instruction->operands.oir.assignee->type;
 	}
 
 	//Determine what our size is off the bat
@@ -8695,9 +8701,9 @@ static void handle_sse_multiplication_instruction(instruction_window_t* window){
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(multiplication_instruction->assignee, multiplication_instruction->op1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(multiplication_instruction->operands.oir.assignee, multiplication_instruction->op1, TRUE) == TRUE){
 		//Destination is just the assignee
-		multiplication_instruction->operands.x86.destination_register = multiplication_instruction->assignee;
+		multiplication_instruction->operands.x86.destination_register = multiplication_instruction->operands.oir.assignee;
 		//This is always op2
 		multiplication_instruction->operands.x86.source_register1 = multiplication_instruction->op2;
 
@@ -8739,7 +8745,7 @@ static void handle_sse_multiplication_instruction(instruction_window_t* window){
 		multiplication_instruction->operands.x86.source_register1 = multiplication_instruction->op2;
 
 		//Move the destination register into the actual assignee now
-		instruction_t* assignment_instruction = emit_move_instruction(multiplication_instruction->assignee, multiplication_instruction->operands.x86.destination_register);
+		instruction_t* assignment_instruction = emit_move_instruction(multiplication_instruction->operands.oir.assignee, multiplication_instruction->operands.x86.destination_register);
 
 		//This goes in *after* the multiplication
 		insert_instruction_after_given(assignment_instruction, multiplication_instruction);
@@ -8767,7 +8773,7 @@ static inline void handle_multiplication_instruction(instruction_window_t* windo
 	if(multiplication_instruction->type_storage.result_type != NULL){
 		result_type = multiplication_instruction->type_storage.result_type;
 	} else {
-		result_type = multiplication_instruction->assignee->type;
+		result_type = multiplication_instruction->operands.oir.assignee->type;
 	}
 
 	switch(result_type->basic_type_token){
@@ -8824,7 +8830,7 @@ static void handle_signed_division(instruction_window_t* window){
 	if(division_instruction->type_storage.result_type != NULL){
 		destination_type = division_instruction->type_storage.result_type;
 	} else {
-		destination_type = division_instruction->assignee->type;
+		destination_type = division_instruction->operands.oir.assignee->type;
 	}
 
 	//If we need to convert, we'll do that here
@@ -8897,7 +8903,7 @@ static void handle_signed_division(instruction_window_t* window){
 	insert_instruction_before_given(division, division_instruction);
 
 	//Once we've done all that, we need one final movement operation
-	instruction_t* result_movement = emit_move_instruction(division_instruction->assignee, quotient);
+	instruction_t* result_movement = emit_move_instruction(division_instruction->operands.oir.assignee, quotient);
 
 	//Insert this before the original division instruction
 	insert_instruction_before_given(result_movement, division_instruction);
@@ -8946,7 +8952,7 @@ static void handle_unsigned_division(instruction_window_t* window){
 	if(division_instruction->type_storage.result_type != NULL){
 		destination_type = division_instruction->type_storage.result_type;
 	} else {
-		destination_type = division_instruction->assignee->type;
+		destination_type = division_instruction->operands.oir.assignee->type;
 	}
 
 	//If we need to convert, we'll do that here
@@ -9015,7 +9021,7 @@ static void handle_unsigned_division(instruction_window_t* window){
 	insert_instruction_before_given(division, division_instruction);
 
 	//Once we've done all that, we need one final movement operation
-	instruction_t* result_movement = emit_move_instruction(division_instruction->assignee, quotient);
+	instruction_t* result_movement = emit_move_instruction(division_instruction->operands.oir.assignee, quotient);
 
 	//Insert this before the original division instruction
 	insert_instruction_before_given(result_movement, division_instruction);
@@ -9069,7 +9075,7 @@ static void handle_sse_division_instruction(instruction_window_t* window){
 	if(division_instruction->type_storage.result_type != NULL){
 		destination_type = division_instruction->type_storage.result_type;
 	} else {
-		destination_type = division_instruction->assignee->type;
+		destination_type = division_instruction->operands.oir.assignee->type;
 	}
 
 	//Determine what our size is off the bat
@@ -9098,9 +9104,9 @@ static void handle_sse_division_instruction(instruction_window_t* window){
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(division_instruction->assignee, division_instruction->op1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(division_instruction->operands.oir.assignee, division_instruction->op1, TRUE) == TRUE){
 		//Destination is just the assignee
-		division_instruction->operands.x86.destination_register = division_instruction->assignee;
+		division_instruction->operands.x86.destination_register = division_instruction->operands.oir.assignee;
 		//This is always op2
 		division_instruction->operands.x86.source_register1 = division_instruction->op2;
 
@@ -9143,7 +9149,7 @@ static void handle_sse_division_instruction(instruction_window_t* window){
 		division_instruction->operands.x86.source_register1 = division_instruction->op2;
 
 		//Move the destination register into the actual assignee now
-		instruction_t* assignment_instruction = emit_move_instruction(division_instruction->assignee, division_instruction->operands.x86.destination_register);
+		instruction_t* assignment_instruction = emit_move_instruction(division_instruction->operands.oir.assignee, division_instruction->operands.x86.destination_register);
 
 		//This goes in *after* the multiplication
 		insert_instruction_after_given(assignment_instruction, division_instruction);
@@ -9171,7 +9177,7 @@ static inline void handle_division_instruction(instruction_window_t* window){
 	if(division_instruction->type_storage.result_type != NULL){
 		destination_type = division_instruction->type_storage.result_type;
 	} else {
-		destination_type = division_instruction->assignee->type;
+		destination_type = division_instruction->operands.oir.assignee->type;
 	}
 
 	/**
@@ -9305,7 +9311,7 @@ static void handle_cmp_instruction(instruction_window_t* window){
 	 * by a branch statement or if we are going to need to expand it out
 	 * more. By default, we assume it is just being used by a branch
 	 */
-	u_int8_t used_by_branch_only = instruction->assignee->sets_cc;
+	u_int8_t used_by_branch_only = instruction->operands.oir.assignee->sets_cc;
 
 	//Store the result type
 	generic_type_t* operator_type;
@@ -9393,7 +9399,7 @@ static void handle_cmp_instruction(instruction_window_t* window){
 			insert_instruction_after_given(set_instruction, instruction);
 
 			//Move from the set instruction's assignee to this instruction's assignee
-			instruction_t* final_move = emit_move_instruction(instruction->assignee, set_instruction->operands.x86.destination_register);
+			instruction_t* final_move = emit_move_instruction(instruction->operands.oir.assignee, set_instruction->operands.x86.destination_register);
 
 			//This final move goes right after the set instruction
 			insert_instruction_after_given(final_move, set_instruction);
@@ -9403,7 +9409,7 @@ static void handle_cmp_instruction(instruction_window_t* window){
 
 		} else {
 			//Cache the original destination var
-			three_addr_var_t* original_destination = instruction->assignee;
+			three_addr_var_t* original_destination = instruction->operands.oir.assignee;
 
 			//Since the CMPSS/CMPSD operations *do* overwrite the destintatoin, we need to emit a copy of op1 first
 			instruction_t* copying_move = emit_move_instruction(emit_temp_var(instruction->op1->type), instruction->op1);
@@ -9502,7 +9508,7 @@ static void handle_subtraction_instruction(instruction_window_t* window){
 	if(subtraction_instruction->type_storage.result_type != NULL){
 		destination_type = subtraction_instruction->type_storage.result_type;
 	} else {
-		destination_type = subtraction_instruction->assignee->type;
+		destination_type = subtraction_instruction->operands.oir.assignee->type;
 	}
 
 	//Determine what our size is off the bat
@@ -9532,9 +9538,9 @@ static void handle_subtraction_instruction(instruction_window_t* window){
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(subtraction_instruction->assignee, subtraction_instruction->op1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(subtraction_instruction->operands.oir.assignee, subtraction_instruction->op1, TRUE) == TRUE){
 		//Destination is just the assignee
-		subtraction_instruction->operands.x86.destination_register = subtraction_instruction->assignee;
+		subtraction_instruction->operands.x86.destination_register = subtraction_instruction->operands.oir.assignee;
 
 		//Assign the source or the source immediate based on which we need
 		if(subtraction_instruction->op2 != NULL){
@@ -9585,7 +9591,7 @@ static void handle_subtraction_instruction(instruction_window_t* window){
 		}
 
 		//Move the destination register into the actual assignee now
-		instruction_t* assignment_instruction = emit_move_instruction(subtraction_instruction->assignee, subtraction_instruction->operands.x86.destination_register);
+		instruction_t* assignment_instruction = emit_move_instruction(subtraction_instruction->operands.oir.assignee, subtraction_instruction->operands.x86.destination_register);
 
 		//This goes in *after* the subtraction
 		insert_instruction_after_given(assignment_instruction, subtraction_instruction);
@@ -9658,7 +9664,7 @@ static void handle_addition_instruction(instruction_window_t* window){
 	if(original_addition->type_storage.result_type != NULL){
 		destination_type = original_addition->type_storage.result_type;
 	} else {
-		destination_type = original_addition->assignee->type;
+		destination_type = original_addition->operands.oir.assignee->type;
 	}
 
 	//Determine what our size is off the bat
@@ -9684,11 +9690,11 @@ static void handle_addition_instruction(instruction_window_t* window){
 	 * If these two are equal, then we have something like x1 <- x0 + 2. This can simply be
 	 * turned into addl $2, x_1
 	 */
-	if(variables_equal_no_ssa(original_addition->assignee, original_addition->op1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(original_addition->operands.oir.assignee, original_addition->op1, TRUE) == TRUE){
 		//Get the appropriate add instuction
 		original_addition->instruction_type = select_add_instruction(size);
 
-		original_addition->operands.x86.destination_register = original_addition->assignee;
+		original_addition->operands.x86.destination_register = original_addition->operands.oir.assignee;
 
 		//Assign the source or the source immediate based on which we need
 		if(original_addition->op2 != NULL){
@@ -9708,7 +9714,7 @@ static void handle_addition_instruction(instruction_window_t* window){
 	 * no benefit from an instruction count perspective to doing this
 	 */
 	} else if(is_type_valid_for_addition_to_lea_conversion(size) == TRUE
-				&& (original_addition->assignee->variable_type != VARIABLE_TYPE_TEMP
+				&& (original_addition->operands.oir.assignee->variable_type != VARIABLE_TYPE_TEMP
 					|| original_addition->op1 == stack_pointer_variable)){
 		//Get the lea that we need
 		original_addition->instruction_type = select_lea_instruction(size);
@@ -9730,12 +9736,12 @@ static void handle_addition_instruction(instruction_window_t* window){
 		 * If we require a converting move between the original assignee and this one, we will need
 		 * to use a temp var as the actual assignee and insert that here
 		 */
-		if(is_converting_move_required(original_addition->assignee->type, destination_type) == TRUE){
+		if(is_converting_move_required(original_addition->operands.oir.assignee->type, destination_type) == TRUE){
 			//We'll need a temp var for this
 			three_addr_var_t* temp_destination = emit_temp_var(destination_type);
 
 			//The fianl destination actually comes from the instruction
-			three_addr_var_t* final_destination = original_addition->assignee;
+			three_addr_var_t* final_destination = original_addition->operands.oir.assignee;
 
 			//This is what the lea will point to
 			original_addition->operands.x86.destination_register = temp_destination;
@@ -9754,7 +9760,7 @@ static void handle_addition_instruction(instruction_window_t* window){
 
 		} else {
 			//We can just use the assignee directly
-			original_addition->operands.x86.destination_register = original_addition->assignee;
+			original_addition->operands.x86.destination_register = original_addition->operands.oir.assignee;
 
 			//Rebuilt the entire window around this
 			reconstruct_window(window, original_addition);
@@ -9801,7 +9807,7 @@ static void handle_addition_instruction(instruction_window_t* window){
 		}
 
 		//Move the destination register into the actual assignee now
-		instruction_t* assignment_instruction = emit_move_instruction(original_addition->assignee, original_addition->operands.x86.destination_register);
+		instruction_t* assignment_instruction = emit_move_instruction(original_addition->operands.oir.assignee, original_addition->operands.x86.destination_register);
 
 		//This goes in *after* the subtraction
 		insert_instruction_after_given(assignment_instruction, original_addition);
@@ -9912,7 +9918,7 @@ static inline instruction_t* emit_float_comparison_instruction(three_addr_var_t*
 
 	//Emit a dummy temp var in the assignee for tracking reasons. This will not
 	//be used anywhere else
-	comparison_instruction->assignee = emit_temp_var(u8);
+	comparison_instruction->operands.oir.assignee = emit_temp_var(u8);
 
 	//Give the instruction back
 	return comparison_instruction;
@@ -10006,7 +10012,7 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 	if(logical_or->type_storage.result_type != NULL){
 		destination_type = logical_or->type_storage.result_type;
 	} else {
-		destination_type = logical_or->assignee->type;
+		destination_type = logical_or->operands.oir.assignee->type;
 	}
 
 	//Is this a floating point operation or not? This will determine how we handle things
@@ -10068,7 +10074,7 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 		insert_instruction_before_given(setne_instruction, after_logical_or);
 
 		//Emit and insert our final move. Note that this function will handle
-		instruction_t* move_instruction = emit_and_insert_move_instruction(logical_or->assignee, setne_instruction->operands.x86.destination_register, after_logical_or, INSERTION_ORDER_BEFORE);
+		instruction_t* move_instruction = emit_and_insert_move_instruction(logical_or->operands.oir.assignee, setne_instruction->operands.x86.destination_register, after_logical_or, INSERTION_ORDER_BEFORE);
 
 		//Reconstruct the window starting at the movzbl
 		reconstruct_window(window, move_instruction);
@@ -10125,7 +10131,7 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 		insert_instruction_after_given(op1_comparison, clear_instruction);
 
 		//Following that, we'll need our setp instruction
-		instruction_t* op1_setp = emit_setp_instruction(op1_result, op1_comparison->assignee);
+		instruction_t* op1_setp = emit_setp_instruction(op1_result, op1_comparison->operands.oir.assignee);
 
 		//Throw this in after the comparison
 		insert_instruction_after_given(op1_setp, op1_comparison);
@@ -10143,7 +10149,7 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 		insert_instruction_after_given(op2_comparison, op1_conditional_move);
 
 		//Following that, we'll need our setp instruction
-		instruction_t* op2_setp = emit_setp_instruction(op2_result, op2_comparison->assignee);
+		instruction_t* op2_setp = emit_setp_instruction(op2_result, op2_comparison->operands.oir.assignee);
 
 		//Throw this in after the comparison for op2
 		insert_instruction_after_given(op2_setp, op2_comparison);
@@ -10161,7 +10167,7 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 		insert_instruction_after_given(final_or, op2_conditional_move);
 
 		//And we need one final assignment into the destination
-		instruction_t* final_assignment = emit_and_insert_move_instruction(logical_or->assignee, final_or->operands.x86.destination_register, final_or, INSERTION_ORDER_AFTER);
+		instruction_t* final_assignment = emit_and_insert_move_instruction(logical_or->operands.oir.assignee, final_or->operands.x86.destination_register, final_or, INSERTION_ORDER_AFTER);
 
 		//And after all of that, the logical or is now useless to us so we will scrap it
 		delete_statement(logical_or);
@@ -10224,7 +10230,7 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 	if(logical_and->type_storage.result_type != NULL){
 		destination_type = logical_and->type_storage.result_type;
 	} else {
-		destination_type = logical_and->assignee->type;
+		destination_type = logical_and->operands.oir.assignee->type;
 	}
 
 	/**
@@ -10271,13 +10277,13 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 			//Did we find where op1 got assigned?. If so, check to see
 			//if the operation that made it generated a truthful byte value(0 or 1)
 			//or not
-			if(variables_equal(logical_and->op1, cursor->assignee, FALSE)){
+			if(variables_equal(logical_and->op1, cursor->operands.oir.assignee, FALSE)){
 				if(does_operator_generate_truthful_byte_value(cursor->op) == TRUE){
 					op1_came_from_setX = TRUE;
 				}
 
 			//Give op2 the exact same treatment
-			} else if(variables_equal(logical_and->op2, cursor->assignee, FALSE)){
+			} else if(variables_equal(logical_and->op2, cursor->operands.oir.assignee, FALSE)){
 				if(does_operator_generate_truthful_byte_value(cursor->op) == TRUE){
 					op2_came_from_setX = TRUE;
 				}
@@ -10349,7 +10355,7 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		insert_instruction_before_given(and_inst, after_logical_and);
 
 		//Now emit our final move. Let the helper do this in case we have converitng moves
-		instruction_t* move_instruction = emit_and_insert_move_instruction(logical_and->assignee, and_inst->operands.x86.destination_register, after_logical_and, INSERTION_ORDER_BEFORE);
+		instruction_t* move_instruction = emit_and_insert_move_instruction(logical_and->operands.oir.assignee, and_inst->operands.x86.destination_register, after_logical_and, INSERTION_ORDER_BEFORE);
 
 		//We no longer need the logical and statement
 		delete_statement(logical_and);
@@ -10409,7 +10415,7 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		insert_instruction_after_given(op1_comparison, clear_instruction);
 
 		//Following that, we'll need our setp instruction
-		instruction_t* op1_setp = emit_setp_instruction(op1_result, op1_comparison->assignee);
+		instruction_t* op1_setp = emit_setp_instruction(op1_result, op1_comparison->operands.oir.assignee);
 
 		//Throw this in after the comparison
 		insert_instruction_after_given(op1_setp, op1_comparison);
@@ -10427,7 +10433,7 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		insert_instruction_after_given(op2_comparison, op1_conditional_move);
 
 		//Following that, we'll need our setp instruction
-		instruction_t* op2_setp = emit_setp_instruction(op2_result, op2_comparison->assignee);
+		instruction_t* op2_setp = emit_setp_instruction(op2_result, op2_comparison->operands.oir.assignee);
 
 		//Throw this in after the comparison for op2
 		insert_instruction_after_given(op2_setp, op2_comparison);
@@ -10445,7 +10451,7 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		insert_instruction_after_given(final_and, op2_conditional_move);
 
 		//And we need one final assignment into the destination
-		instruction_t* final_assignment = emit_and_insert_move_instruction(logical_and->assignee, final_and->operands.x86.destination_register, final_and, INSERTION_ORDER_AFTER);
+		instruction_t* final_assignment = emit_and_insert_move_instruction(logical_and->operands.oir.assignee, final_and->operands.x86.destination_register, final_and, INSERTION_ORDER_AFTER);
 
 		//And after all of that, the logical and is now useless to us so we will scrap it
 		delete_statement(logical_and);
@@ -10552,7 +10558,7 @@ static inline void handle_binary_operation_instruction(instruction_window_t* win
  */
 static void handle_inc_instruction(instruction_t* instruction){
 	//Determine the size of the variable we need
-	variable_size_t size = get_type_size(instruction->assignee->type);
+	variable_size_t size = get_type_size(instruction->operands.oir.assignee->type);
 
 	//If it's a quad word, there's a different instruction to use. Otherwise
 	//it's just a regular inc
@@ -10578,7 +10584,7 @@ static void handle_inc_instruction(instruction_t* instruction){
 	instruction->operands.x86.source_register1 = instruction->op1;
 
 	//Set the destination as the assignee
-	instruction->operands.x86.destination_register = instruction->assignee;
+	instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
 }
 
 
@@ -10587,7 +10593,7 @@ static void handle_inc_instruction(instruction_t* instruction){
  */
 static void handle_dec_instruction(instruction_t* instruction){
 	//Determine the size of the variable we need
-	variable_size_t size = get_type_size(instruction->assignee->type);
+	variable_size_t size = get_type_size(instruction->operands.oir.assignee->type);
 
 	//If it's a quad word, there's a different instruction to use. Otherwise
 	//it's just a regular inc
@@ -10613,7 +10619,7 @@ static void handle_dec_instruction(instruction_t* instruction){
 	instruction->operands.x86.source_register1 = instruction->op1;
 
 	//Set the destination as the assignee
-	instruction->operands.x86.destination_register = instruction->assignee;
+	instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
 }
 
 
@@ -10623,7 +10629,7 @@ static void handle_dec_instruction(instruction_t* instruction){
  */
 static void handle_constant_to_register_move_instruction(instruction_t* instruction){
 	//Get the size we need first
-	variable_size_t size = get_type_size(instruction->assignee->type);
+	variable_size_t size = get_type_size(instruction->operands.oir.assignee->type);
 
 	//Select based on size
 	switch(size){
@@ -10645,7 +10651,7 @@ static void handle_constant_to_register_move_instruction(instruction_t* instruct
 	}
 	
 	//We've already set the sources, now we set the destination as the assignee
-	instruction->operands.x86.destination_register = instruction->assignee;
+	instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
 	//Set the source immediate here
 	instruction->operands.x86.source_immediate = instruction->op1_const;
 }
@@ -10659,7 +10665,7 @@ static void handle_constant_to_register_move_instruction(instruction_t* instruct
  */
 static void handle_lea_statement(instruction_t* instruction){
 	//Select the size of our variable
-	variable_size_t size = get_type_size(instruction->assignee->type);
+	variable_size_t size = get_type_size(instruction->operands.oir.assignee->type);
 
 	//Select the appropriate instruction first
 	switch(size){
@@ -10678,7 +10684,7 @@ static void handle_lea_statement(instruction_t* instruction){
 	}
 
 	//This is always the same
-	instruction->operands.x86.destination_register = instruction->assignee;
+	instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
 
 	//Go based on whatever the type is
 	switch(instruction->lea_statement_type){
@@ -11116,7 +11122,7 @@ static inline void handle_function_call(instruction_t* instruction){
 	instruction->instruction_type = CALL;
 
 	//The destination register is itself the assignee
-	instruction->operands.x86.destination_register = instruction->assignee;
+	instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
 
 	//Grab the error assignee if we have one(or it could be null)
 	instruction->operands.x86.destination_register2 = instruction->optional_storage.error_assignee;
@@ -11134,7 +11140,7 @@ static inline void handle_indirect_function_call(instruction_t* instruction){
 	instruction->operands.x86.source_register1 = instruction->op1;
 
 	//The destination register is itself the assignee
-	instruction->operands.x86.destination_register = instruction->assignee;
+	instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
 
 	//Grab the error assignee if we have one(or it could be null)
 	instruction->operands.x86.destination_register2 = instruction->optional_storage.error_assignee;
@@ -11167,7 +11173,7 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 	instruction_t* logical_not = window->instruction1;
 
 	//Is this value *exclusively* used by a branch?
-	u_int8_t used_by_branch_only = logical_not->assignee->sets_cc;
+	u_int8_t used_by_branch_only = logical_not->operands.oir.assignee->sets_cc;
 
 	//Let's also determine if this is a floating point logical not or not
 	u_int8_t is_floating_point = IS_FLOATING_POINT(logical_not->op1->type);
@@ -11186,7 +11192,7 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 		//we will need more than just the test instruction
 		if(used_by_branch_only == FALSE){
 			//Set to 1 if we're zero
-			instruction_t* set_if_equal = emit_sete_instruction(logical_not->assignee);
+			instruction_t* set_if_equal = emit_sete_instruction(logical_not->operands.oir.assignee);
 
 			//Insert this after the test
 			insert_instruction_after_given(set_if_equal, test_instruction);
@@ -11199,7 +11205,7 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 
 		} else {
 			//This is just around for bookkeeping, will not be displayed
-			test_instruction->assignee = logical_not->assignee;
+			test_instruction->operands.oir.assignee = logical_not->operands.oir.assignee;
 
 			//This is now useless so get rid of it
 			delete_statement(logical_not);
@@ -11263,23 +11269,23 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 		//Different dependencies based on whether or not we are being used in a branch
 		if(used_by_branch_only == FALSE){
 			//We need to know this type size for later
-			generic_type_t* destination_type = logical_not->assignee->type;
+			generic_type_t* destination_type = logical_not->operands.oir.assignee->type;
 
 			//This is purely for bookkeeping
-			unordered_comparison->assignee = emit_temp_var(u8);
+			unordered_comparison->operands.oir.assignee = emit_temp_var(u8);
 
 			//Emit a temp var that is a u8. We need this to "set" in here
 			three_addr_var_t* set_variable = emit_temp_var(u8);
 
 			//Now let's add in the setnp instruction
-			instruction_t* setnp_instruction = emit_setnp_instruction(set_variable, unordered_comparison->assignee);
+			instruction_t* setnp_instruction = emit_setnp_instruction(set_variable, unordered_comparison->operands.oir.assignee);
 
 			//Insert this right after the unordered comparison
 			insert_instruction_after_given(setnp_instruction, unordered_comparison);
 
 			//The original CMOVNE destination/zero assignment destinations. These type sizes may
 			//need to be changed for compliance reasons
-			three_addr_var_t* cmovne_destination = logical_not->assignee;
+			three_addr_var_t* cmovne_destination = logical_not->operands.oir.assignee;
 			three_addr_var_t* zero_assignment_dest = emit_temp_var(destination_type);
 
 			//Do we need to emit a special kind of assignee here that is 16 bits?
@@ -11299,13 +11305,13 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 
 			//Now let's have a 0 on hand. We need a 0 because unfortunately the conditional move operations
 			//do not support immediate values on x86
-			instruction_t* zero_assignment = emit_constant_move_instruction(zero_assignment_dest, emit_direct_integer_or_char_constant(0, logical_not->assignee->type));
+			instruction_t* zero_assignment = emit_constant_move_instruction(zero_assignment_dest, emit_direct_integer_or_char_constant(0, logical_not->operands.oir.assignee->type));
 
 			//Throw this in right after the set
 			insert_instruction_after_given(zero_assignment, setnp_instruction);
 
 			//Now that we've got 0 primed, we can do our set variable move to the destination
-			instruction_t* first_move_to_dest = emit_move_instruction(logical_not->assignee, set_variable);
+			instruction_t* first_move_to_dest = emit_move_instruction(logical_not->operands.oir.assignee, set_variable);
 
 			/**
 			 * VERY IMPORTANT - odds are the coalescer would want to remove this first move to dest because
@@ -11330,7 +11336,7 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 		//No new instructions if it actually is a branch, but we still need some bookkeeping
 		} else {
 			//Set this just for bookkeeping
-			unordered_comparison->assignee = logical_not->assignee;
+			unordered_comparison->operands.oir.assignee = logical_not->operands.oir.assignee;
 
 			//Rebuild around the unordered comparison in this case
 			reconstruct_window(window, unordered_comparison);
@@ -11345,7 +11351,7 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 static inline void handle_setne_instruction(instruction_t* instruction){
 	//Just set the type and register
 	instruction->instruction_type = SETNE;
-	instruction->operands.x86.destination_register = instruction->assignee;
+	instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
 }
 
 
@@ -11495,9 +11501,9 @@ static void handle_negation_instruction(instruction_window_t* window){
 	instruction_t* negation_instruction = window->instruction1;
 
 	//If this is not a floating point variable we take the if path
-	if(IS_FLOATING_POINT(negation_instruction->assignee->type) == FALSE){
+	if(IS_FLOATING_POINT(negation_instruction->operands.oir.assignee->type) == FALSE){
 		//Find out what size we have
-		variable_size_t size = get_type_size(negation_instruction->assignee->type);
+		variable_size_t size = get_type_size(negation_instruction->operands.oir.assignee->type);
 
 		switch(size){
 			case QUAD_WORD:
@@ -11520,17 +11526,17 @@ static void handle_negation_instruction(instruction_window_t* window){
 
 		//Now we'll just translate the assignee to be the destination(and source in this case) register
 		negation_instruction->operands.x86.source_register1 = negation_instruction->op1;
-		negation_instruction->operands.x86.destination_register = negation_instruction->assignee;
+		negation_instruction->operands.x86.destination_register = negation_instruction->operands.oir.assignee;
 
 	//Otherwise it is a floating point variable so we will need to do
 	//some extra work here
 	} else {
 		//Find out what size we have
-		variable_size_t size = get_type_size(negation_instruction->assignee->type);
+		variable_size_t size = get_type_size(negation_instruction->operands.oir.assignee->type);
 
 		//This is purely for bookkeeping. The IR works by having different variables for the source/destination. Since we will
 		//only be working with the destination, we have this symbolic move here that will later be coalesced away to fully track ownership
-		instruction_t* direct_move_instruction = emit_move_instruction(negation_instruction->assignee, negation_instruction->op1);
+		instruction_t* direct_move_instruction = emit_move_instruction(negation_instruction->operands.oir.assignee, negation_instruction->op1);
 
 		//This goes in before the move
 		insert_instruction_before_given(direct_move_instruction, negation_instruction);
@@ -11563,7 +11569,7 @@ static void handle_negation_instruction(instruction_window_t* window){
 				local_constant_load_instruction = emit_local_constant_from_memory_load(f64, local_constant, TRUE);
 
 				//Emit the xorpd instruction that will do the actual bitflip
-				xorpX_instruction = emit_direct_xmm_xorpX_instruction(negation_instruction->assignee, local_constant_load_instruction->operands.x86.destination_register);
+				xorpX_instruction = emit_direct_xmm_xorpX_instruction(negation_instruction->operands.oir.assignee, local_constant_load_instruction->operands.x86.destination_register);
 
 				break;
 
@@ -11584,7 +11590,7 @@ static void handle_negation_instruction(instruction_window_t* window){
 				local_constant_load_instruction = emit_local_constant_from_memory_load(f32, local_constant, TRUE);
 
 				//Emit the xorpd instruction that will do the actual bitflip
-				xorpX_instruction = emit_direct_xmm_xorpX_instruction(negation_instruction->assignee, local_constant_load_instruction->operands.x86.destination_register);
+				xorpX_instruction = emit_direct_xmm_xorpX_instruction(negation_instruction->operands.oir.assignee, local_constant_load_instruction->operands.x86.destination_register);
 
 				break;
 
@@ -11614,7 +11620,7 @@ static void handle_negation_instruction(instruction_window_t* window){
  */
 static inline void handle_not_instruction(instruction_t* instruction){
 	//Find out what size we have
-	variable_size_t size = get_type_size(instruction->assignee->type);
+	variable_size_t size = get_type_size(instruction->operands.oir.assignee->type);
 
 	switch(size){
 		case QUAD_WORD:
@@ -11634,7 +11640,7 @@ static inline void handle_not_instruction(instruction_t* instruction){
 	}
 
 	//Now we'll just translate the assignee to be the destination(and source in this case) register
-	instruction->operands.x86.destination_register = instruction->assignee;
+	instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
 }
 
 
@@ -11647,7 +11653,7 @@ static inline void handle_pxor_clear_instruction(instruction_t* instruction){
 	instruction->instruction_type = PXOR_CLEAR;
 
 	//And the destination register is just the assignee
-	instruction->operands.x86.destination_register = instruction->assignee;
+	instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
 }
 
 
@@ -11723,7 +11729,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 					three_addr_var_t* duplicate_64_bit = emit_var_copy(store_instruction->op1);
 
 					//Then we give it the type that we want
-					duplicate_64_bit->type = store_instruction->assignee->type;
+					duplicate_64_bit->type = store_instruction->operands.oir.assignee->type;
 					duplicate_64_bit->variable_size = get_type_size(duplicate_64_bit->type);
 
 					//And this will be our source
@@ -11885,7 +11891,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 					three_addr_var_t* duplicate_64_bit = emit_var_copy(store_instruction->op2);
 
 					//Then we give it the type that we want
-					duplicate_64_bit->type = store_instruction->assignee->type;
+					duplicate_64_bit->type = store_instruction->operands.oir.assignee->type;
 					duplicate_64_bit->variable_size = get_type_size(duplicate_64_bit->type);
 
 					//And this will be our source
@@ -12168,7 +12174,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 	}
 
 	//By default, assume it's the assignee
-	three_addr_var_t* destination_register = load_instruction->assignee;
+	three_addr_var_t* destination_register = load_instruction->operands.oir.assignee;
 
 	//This is always the memory region type
 	generic_type_t* memory_region_type = load_instruction->type_storage.memory_read_write_type;
@@ -12234,7 +12240,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 				insert_instruction_after_given(pxor_instruction, load_instruction);
 
 				//Now we need to add a separate copy instruction into the true destination
-				converting_copy_instruction = emit_register_movement_instruction_directly(load_instruction->assignee, intermediary_destination);
+				converting_copy_instruction = emit_register_movement_instruction_directly(load_instruction->operands.oir.assignee, intermediary_destination);
 
 				//This goes right after the pxor 
 				insert_instruction_after_given(converting_copy_instruction, pxor_instruction);
@@ -12266,7 +12272,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 				insert_instruction_after_given(pxor_instruction, load_instruction);
 
 				//Now we need to add a separate copy instruction into the true destination
-				converting_copy_instruction = emit_register_movement_instruction_directly(load_instruction->assignee, intermediary_destination);
+				converting_copy_instruction = emit_register_movement_instruction_directly(load_instruction->operands.oir.assignee, intermediary_destination);
 
 				//This goes right after the pxor
 				insert_instruction_after_given(converting_copy_instruction, pxor_instruction);
@@ -12300,7 +12306,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 		if(is_integer_to_sse_conversion_instruction(load_instruction->instruction_type) == TRUE){
 			//We need to completely zero out the destination register here, so we will emit a pxor to do
 			//just that
-			pxor_instruction = emit_sse_register_clear_instruction(load_instruction->assignee);
+			pxor_instruction = emit_sse_register_clear_instruction(load_instruction->operands.oir.assignee);
 
 			//Get this in right before the given
 			insert_instruction_before_given(pxor_instruction, load_instruction);
@@ -12865,7 +12871,7 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			/**
 			 * We can delete this *if* it's not being used by someone else
 			 */
-			if(lea_statement->assignee->use_count <= 1){
+			if(lea_statement->operands.oir.assignee->use_count <= 1){
 				delete_statement(lea_statement);
 			} else {
 				handle_lea_statement(lea_statement);
@@ -12913,7 +12919,7 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			/**
 			 * We can delete this *if* it's not being used by someone else
 			 */
-			if(lea_statement->assignee->use_count <= 1){
+			if(lea_statement->operands.oir.assignee->use_count <= 1){
 				delete_statement(lea_statement);
 			} else {
 				handle_lea_statement(lea_statement);
@@ -12966,7 +12972,7 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			/**
 			 * We can delete this *if* it's not being used by someone else
 			 */
-			if(lea_statement->assignee->use_count <= 1){
+			if(lea_statement->operands.oir.assignee->use_count <= 1){
 				delete_statement(lea_statement);
 			} else {
 				handle_lea_statement(lea_statement);
@@ -13020,7 +13026,7 @@ static void combine_lea_with_regular_load_instruction(instruction_window_t* wind
 			/**
 			 * We can delete this *if* it's not being used by someone else
 			 */
-			if(lea_statement->assignee->use_count <= 1){
+			if(lea_statement->operands.oir.assignee->use_count <= 1){
 				delete_statement(lea_statement);
 			} else {
 				handle_lea_statement(lea_statement);
@@ -13053,7 +13059,7 @@ static void handle_store_instruction(instruction_t* instruction){
 	instruction->memory_access_type = WRITE_TO_MEMORY;
 
 	//Handle based on the assignee type
-	switch(instruction->assignee->variable_type){
+	switch(instruction->operands.oir.assignee->variable_type){
 		/**
 		 * This is the most common case. When we have a memory address, we are going to need
 		 * to handle it differently based on whether or not it's a global variable, and based
@@ -13063,8 +13069,8 @@ static void handle_store_instruction(instruction_t* instruction){
 			/**
 			 * If we actually have a linked var(most common), we'll use that
 			 */
-			if(instruction->assignee->linked_var != NULL){
-				switch(instruction->assignee->linked_var->membership){
+			if(instruction->operands.oir.assignee->linked_var != NULL){
+				switch(instruction->operands.oir.assignee->linked_var->membership){
 					/**
 					 * Global or static variable, we will need to load these as rip-relative
 					 */
@@ -13078,7 +13084,7 @@ static void handle_store_instruction(instruction_t* instruction){
 
 						//The global variable is held by the offset
 						//TODO RIP OFFSET IS ADDR CALC REG2
-						instruction->rip_offset_variable = instruction->assignee;
+						instruction->rip_offset_variable = instruction->operands.oir.assignee;
 						
 						break;
 
@@ -13087,7 +13093,7 @@ static void handle_store_instruction(instruction_t* instruction){
 					 */
 					default:
 						//Get the stack offset
-						stack_offset = instruction->assignee->linked_var->stack_region->function_local_base_address;
+						stack_offset = instruction->operands.oir.assignee->linked_var->stack_region->function_local_base_address;
 
 						//If it's not 0, we need to do some arithmetic
 						if(stack_offset != 0){
@@ -13121,7 +13127,7 @@ static void handle_store_instruction(instruction_t* instruction){
 			 */
 			} else {
 				//Get the stack offset
-				stack_offset = instruction->assignee->associated_memory_region.stack_region->function_local_base_address;
+				stack_offset = instruction->operands.oir.assignee->associated_memory_region.stack_region->function_local_base_address;
 
 				//If it's not 0, we need to do some arithmetic
 				if(stack_offset != 0){
@@ -13159,7 +13165,7 @@ static void handle_store_instruction(instruction_t* instruction){
 			instruction->operands.x86.addressing_mode_register1 = stack_pointer_variable;
 
 			//And we need to store the offset
-			instruction->operands.oir.addressing_mode_offset = emit_stack_passed_parameter_offset_constant(instruction->assignee->associated_memory_region.stack_region, u64);
+			instruction->operands.oir.addressing_mode_offset = emit_stack_passed_parameter_offset_constant(instruction->operands.oir.assignee->associated_memory_region.stack_region, u64);
 
 			//This counts for our destination only
 			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
@@ -13171,7 +13177,7 @@ static void handle_store_instruction(instruction_t* instruction){
 		 */
 		default:
 			//Otherwise this is just the destination register
-			instruction->operands.x86.destination_register = instruction->assignee;
+			instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
 
 			//This counts for our destination only
 			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
@@ -13203,14 +13209,14 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 	instruction->memory_access_type = WRITE_TO_MEMORY;
 
 	//Go based on what kind of variable we have
-	switch(instruction->assignee->variable_type){
+	switch(instruction->operands.oir.assignee->variable_type){
 		/**
 		 * This is by far the most common type. In this case, we will need to account
 		 * for when we have global variables or when we have stack offsets of 0
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
 			//Grab the linked var out
-			linked_var = instruction->assignee->linked_var;
+			linked_var = instruction->operands.oir.assignee->linked_var;
 
 			/**
 			 * Most of the time the linked var will not be NULL, but we need to account
@@ -13228,7 +13234,7 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 
 						//The offset is already in place, we just need to set the rip offset variable based on the assignee
 						//TODO RIP OFFSET IS ADDR CALC REG2
-						instruction->rip_offset_variable = instruction->assignee;
+						instruction->rip_offset_variable = instruction->operands.oir.assignee;
 
 						//All that we need to do now is change the calculation mode to be rip with offset
 						instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET;
@@ -13240,7 +13246,7 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 					 */
 					default:
 						//Get the stack offset
-						stack_offset = instruction->assignee->linked_var->stack_region->function_local_base_address;
+						stack_offset = instruction->operands.oir.assignee->linked_var->stack_region->function_local_base_address;
 
 						//If it's not 0, we need to do some arithmetic with the constants
 						if(stack_offset != 0){
@@ -13275,7 +13281,7 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 			 */
 			} else {
 				//Get the stack offset
-				stack_offset = instruction->assignee->associated_memory_region.stack_region->function_local_base_address;
+				stack_offset = instruction->operands.oir.assignee->associated_memory_region.stack_region->function_local_base_address;
 
 				//If it's not 0, we need to do some arithmetic with the constants
 				if(stack_offset != 0){
@@ -13313,7 +13319,7 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 			instruction->operands.x86.addressing_mode_register1 = stack_pointer_variable;
 
 			//Emit the value
-			three_addr_const_t* stack_param_offset = emit_stack_passed_parameter_offset_constant(instruction->assignee->associated_memory_region.stack_region, u64);
+			three_addr_const_t* stack_param_offset = emit_stack_passed_parameter_offset_constant(instruction->operands.oir.assignee->associated_memory_region.stack_region, u64);
 
 			//Add these two together, the result will be in the new offset we just made
 			add_constants(stack_param_offset, instruction->operands.oir.addressing_mode_offset);
@@ -13329,7 +13335,7 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 		//Non-special variable type means it's likely a pointer dereference
 		default:
 			//The base address is the assignee
-			instruction->operands.x86.addressing_mode_register1 = instruction->assignee;
+			instruction->operands.x86.addressing_mode_register1 = instruction->operands.oir.assignee;
 
 			//The offset is already stored where we need it to be
 			//Set the type
@@ -13362,7 +13368,7 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 	instruction->memory_access_type = WRITE_TO_MEMORY;
 
 	//Go based on the variable type
-	switch(instruction->assignee->variable_type){
+	switch(instruction->operands.oir.assignee->variable_type){
 		/**
 		 * A regular function local stack address is the most commmon type that we can have here. We need
 		 * to account for this being a global variable or a regular address, and for the stack offset being
@@ -13370,7 +13376,7 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
 			//Grab the linked var out
-			linked_var = instruction->assignee->linked_var;
+			linked_var = instruction->operands.oir.assignee->linked_var;
 
 			/**
 			 * Most of the time the linked var will not be NULL, but it could be
@@ -13385,7 +13391,7 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 					case GLOBAL_VARIABLE:
 					case STATIC_VARIABLE:
 						//Let the helper do the work
-						global_variable_address = emit_global_variable_address_calculation_x86(instruction->assignee, instruction_pointer_variable, u64);
+						global_variable_address = emit_global_variable_address_calculation_x86(instruction->operands.oir.assignee, instruction_pointer_variable, u64);
 
 						//Now insert this before the given instruction
 						insert_instruction_before_given(global_variable_address, instruction);
@@ -13416,7 +13422,7 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 					 */
 					default:
 						//Get the stack offset
-						stack_offset = instruction->assignee->linked_var->stack_region->function_local_base_address;
+						stack_offset = instruction->operands.oir.assignee->linked_var->stack_region->function_local_base_address;
 
 						//If it's not 0, we need to do some arithmetic with the constants
 						if(stack_offset != 0){
@@ -13465,7 +13471,7 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 
 			} else {
 				//Get the stack offset
-				stack_offset = instruction->assignee->associated_memory_region.stack_region->function_local_base_address;
+				stack_offset = instruction->operands.oir.assignee->associated_memory_region.stack_region->function_local_base_address;
 
 				//If it's not 0, we need to do some arithmetic with the constants
 				if(stack_offset != 0){
@@ -13527,7 +13533,7 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 			instruction->operands.x86.addressing_mode_register2 = instruction->op1;
 
 			//We will need to have a stack offset here since the memory base address has one
-			instruction->operands.oir.addressing_mode_offset = emit_stack_passed_parameter_offset_constant(instruction->assignee->associated_memory_region.stack_region, u64); 
+			instruction->operands.oir.addressing_mode_offset = emit_stack_passed_parameter_offset_constant(instruction->operands.oir.assignee->associated_memory_region.stack_region, u64); 
 
 			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
@@ -13545,7 +13551,7 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY; 
 
 			//The base address is the assignee
-			instruction->operands.x86.addressing_mode_register1 = instruction->assignee;
+			instruction->operands.x86.addressing_mode_register1 = instruction->operands.oir.assignee;
 
 			//And the offset is op1
 			instruction->operands.x86.addressing_mode_register2 = instruction->op1;
@@ -13577,9 +13583,9 @@ static void handle_store_statement_base_address(instruction_t* store_instruction
 	instruction_t* global_variable_address;
 
 	//Do we have a memory address variable(very common) or not?
-	if(store_instruction->assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+	if(store_instruction->operands.oir.assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
 		//Grab the linked var out
-		symtab_variable_record_t* linked_var = store_instruction->assignee->linked_var;
+		symtab_variable_record_t* linked_var = store_instruction->operands.oir.assignee->linked_var;
 
 		switch(linked_var->membership){
 			/**
@@ -13588,7 +13594,7 @@ static void handle_store_statement_base_address(instruction_t* store_instruction
 			case GLOBAL_VARIABLE:
 			case STATIC_VARIABLE:
 				//Let the helper do the work
-				global_variable_address = emit_global_variable_address_calculation_x86(store_instruction->assignee, instruction_pointer_variable, u64);
+				global_variable_address = emit_global_variable_address_calculation_x86(store_instruction->operands.oir.assignee, instruction_pointer_variable, u64);
 
 				//Now insert this before the given instruction
 				insert_instruction_before_given(global_variable_address, store_instruction);
@@ -13630,7 +13636,7 @@ static void handle_store_statement_base_address(instruction_t* store_instruction
 	//Otherwise there is no memory address, so we just handle normally
 	} else {
 		//The base address is the assignee
-		store_instruction->operands.x86.addressing_mode_register1 = store_instruction->assignee;
+		store_instruction->operands.x86.addressing_mode_register1 = store_instruction->operands.oir.assignee;
 	}
 }
 
@@ -13776,7 +13782,7 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 			/**
 			 * We can delete this *if* it's not being used by someone else
 			 */
-			if(lea_statement->assignee->use_count <= 1){
+			if(lea_statement->operands.oir.assignee->use_count <= 1){
 				delete_statement(lea_statement);
 			} else {
 				handle_lea_statement(lea_statement);
@@ -13821,7 +13827,7 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 			/**
 			 * We can delete this *if* it's not being used by someone else
 			 */
-			if(lea_statement->assignee->use_count <= 1){
+			if(lea_statement->operands.oir.assignee->use_count <= 1){
 				delete_statement(lea_statement);
 			} else {
 				handle_lea_statement(lea_statement);
@@ -13872,7 +13878,7 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 			/**
 			 * We can delete this *if* it's not being used by someone else
 			 */
-			if(lea_statement->assignee->use_count <= 1){
+			if(lea_statement->operands.oir.assignee->use_count <= 1){
 				delete_statement(lea_statement);
 			} else {
 				handle_lea_statement(lea_statement);
@@ -14013,8 +14019,8 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 	if(window->instruction2 != NULL
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_STATEMENT
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
-		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE){
+		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->op1, TRUE) == TRUE){
 
 		/**
 		 * Invoke a special helper here that will deal with the selection for us and also
@@ -14034,7 +14040,7 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
 		&& window->instruction1->lea_statement_type != OIR_LEA_TYPE_RIP_RELATIVE //Nothing to do if we have this
 		//Is the lea's assignee equal to the offset of the load
-		&& variables_equal(window->instruction1->assignee, window->instruction2->op2, TRUE) == TRUE){
+		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->op2, TRUE) == TRUE){
 
 		/**
 		 * Let the helper deal with it. This helper handles all possible cases, so once it's done this whole
@@ -14053,7 +14059,7 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
 		&& window->instruction1->lea_statement_type != OIR_LEA_TYPE_RIP_RELATIVE //Nothing to do if we have this
 		//Is the lea's assignee equal to the offset(op1) of the store
-		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE){
+		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->op1, TRUE) == TRUE){
 
 		/**
 		 * Let the helper deal with it. This helper handles all possible cases, so once it's done this whole
