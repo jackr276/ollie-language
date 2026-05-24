@@ -1463,7 +1463,7 @@ void delete_statement(instruction_t* stmt){
 
 	//Knock one off of the reference count if it's valid
 	if(local_constant_var != NULL && local_constant_var->variable_type == VARIABLE_TYPE_LOCAL_CONSTANT){
-		local_constant_var->use_count--;
+		local_constant_var->associated_memory_region.local_constant->reference_count--;
 	}
 
 	//No matter what, we are reducing the number of statements in this block

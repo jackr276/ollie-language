@@ -2750,9 +2750,9 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 				case OIR_LEA_TYPE_RIP_RELATIVE_WITH_OFFSET:
 					print_three_addr_constant(fl, stmt->operands.oir.address_offset);
 					fprintf(fl, "+");
-					print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
 					fprintf(fl, "(");
-					print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
 					fprintf(fl, ")");
 					break;
 

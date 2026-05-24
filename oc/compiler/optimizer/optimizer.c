@@ -1066,10 +1066,12 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 			 * require special attention
 			 */
 			switch(stmt->statement_type){
-				//We *never* delete jump statements because
-				//they are critical to the control flow. They
-				//may be cleaned up by other optimizations, but for
-				//here we leave them
+				/**
+				 * We *never* delete jump statements because
+				 * they are critical to the control flow. They
+				 * may be cleaned up by other optimizations, but for
+				 * here we leave them
+				 */
 				case THREE_ADDR_CODE_JUMP_STMT:
 					stmt = stmt->next_statement;
 
@@ -1128,8 +1130,10 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 	 * we'll just get rid of it
 	 */
 
-	//Invoke the stack sweeper. This function will go through an remove any stack regions
-	//that have been flagged as unimportant
+	/**
+	 * Invoke the stack sweeper. This function will go through an remove any stack regions
+	 * that have been flagged as unimportant
+	 */
 	sweep_stack_data_area(&(function_entry_block->function_defined_in->local_stack));
 }
 
