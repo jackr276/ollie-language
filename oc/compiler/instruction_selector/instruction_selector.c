@@ -13079,23 +13079,21 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 	int64_t stack_offset;
 	instruction_t* global_variable_address;
 
-	//For later use
-	symtab_variable_record_t* linked_var;
+	//Extract the base address and the linked var(if any)
+	three_addr_var_t* base_address = instruction->operands.oir.address_operand1;
+	symtab_variable_record_t* linked_var = base_address->linked_var;
 
 	//This is a write regardless
 	instruction->memory_access_type = WRITE_TO_MEMORY;
 
 	//Go based on the variable type
-	switch(instruction->operands.oir.assignee->variable_type){
+	switch(base_address->variable_type){
 		/**
 		 * A regular function local stack address is the most commmon type that we can have here. We need
 		 * to account for this being a global variable or a regular address, and for the stack offset being
 		 * 0 or not
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
-			//Grab the linked var out
-			linked_var = instruction->operands.oir.assignee->linked_var;
-
 			/**
 			 * Most of the time the linked var will not be NULL, but it could be
 			 * since we have the concept of a temporary memory address var for holding stack regions
@@ -13109,7 +13107,7 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 					case GLOBAL_VARIABLE:
 					case STATIC_VARIABLE:
 						//Let the helper do the work
-						global_variable_address = emit_global_variable_address_calculation_x86(instruction->operands.oir.assignee, instruction_pointer_variable, u64);
+						global_variable_address = emit_global_variable_address_calculation_x86(base_address, instruction_pointer_variable, u64);
 
 						//Now insert this before the given instruction
 						insert_instruction_before_given(global_variable_address, instruction);
@@ -13118,11 +13116,11 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 						instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
 
 						//The destination of the global variable address will be our new address calc reg 1. 
-						//We already have the offset loaded in, so that remains unchanged
 						instruction->operands.x86.address_register1 = global_variable_address->operands.x86.destination_register;
+						instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand2;
 
-						//Address calc reg 2 is op1 always
-						instruction->operands.x86.address_register2 = instruction->operands.oir.operand1;
+						//Copy this over
+						instruction->operands.x86.address_offset = instruction->operands.oir.address_offset;
 
 						/**
 						 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
@@ -13140,7 +13138,7 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 					 */
 					default:
 						//Get the stack offset
-						stack_offset = instruction->operands.oir.assignee->linked_var->stack_region->function_local_base_address;
+						stack_offset = linked_var->stack_region->function_local_base_address;
 
 						//If it's not 0, we need to do some arithmetic with the constants
 						if(stack_offset != 0){
@@ -13151,14 +13149,16 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 							instruction->operands.x86.address_register1 = stack_pointer_variable;
 
 							//This is the variable offset
-							instruction->operands.x86.address_register2 = instruction->operands.oir.operand1;
+							instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand2;
 
 							//We will need to have a stack offset here since the memory base address has one
-							instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(stack_offset, i64);
+							instruction->operands.x86.address_offset = emit_direct_integer_or_char_constant(stack_offset, i64);
 
-							//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-							//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-							//must adhere to this one's type
+							/**
+							 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+							 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+							 * must adhere to this one's type
+							 */
 							if(is_converting_move_required(instruction->operands.x86.address_register1->type, instruction->operands.x86.address_register2->type) == TRUE){
 								instruction->operands.x86.address_register2 = create_and_insert_converting_move_instruction(instruction, instruction->operands.x86.address_register2, instruction->operands.x86.address_register1->type);
 							}
@@ -13171,8 +13171,8 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 							//The base address is the assignee
 							instruction->operands.x86.address_register1 = stack_pointer_variable;
 
-							//And the offset is op1
-							instruction->operands.x86.address_register2 = instruction->operands.oir.operand1;
+							//Copy over the index value
+							instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand2;
 
 							/**
 							 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
@@ -13189,7 +13189,7 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 
 			} else {
 				//Get the stack offset
-				stack_offset = instruction->operands.oir.assignee->associated_memory_region.stack_region->function_local_base_address;
+				stack_offset = base_address->associated_memory_region.stack_region->function_local_base_address;
 
 				//If it's not 0, we need to do some arithmetic with the constants
 				if(stack_offset != 0){
@@ -13200,14 +13200,16 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 					instruction->operands.x86.address_register1 = stack_pointer_variable;
 
 					//This is the variable offset
-					instruction->operands.x86.address_register2 = instruction->operands.oir.operand1;
+					instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand1;
 
 					//We will need to have a stack offset here since the memory base address has one
-					instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(stack_offset, i64);
+					instruction->operands.x86.address_offset = emit_direct_integer_or_char_constant(stack_offset, i64);
 
-					//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-					//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-					//must adhere to this one's type
+					/**
+					 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+					 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+					 * must adhere to this one's type
+					 */
 					if(is_converting_move_required(instruction->operands.x86.address_register1->type, instruction->operands.x86.address_register2->type) == TRUE){
 						instruction->operands.x86.address_register2 = create_and_insert_converting_move_instruction(instruction, instruction->operands.x86.address_register2, instruction->operands.x86.address_register1->type);
 					}
@@ -13220,8 +13222,8 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 					//The base address is the assignee
 					instruction->operands.x86.address_register1 = stack_pointer_variable;
 
-					//And the offset is op1
-					instruction->operands.x86.address_register2 = instruction->operands.oir.operand1;
+					//Copy over the address offset
+					instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand2;
 
 					/**
 					 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
@@ -13248,14 +13250,16 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 			instruction->operands.x86.address_register1 = stack_pointer_variable;
 
 			//This is the variable offset
-			instruction->operands.x86.address_register2 = instruction->operands.oir.operand1;
+			instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand1;
 
 			//We will need to have a stack offset here since the memory base address has one
-			instruction->operands.oir.address_offset = emit_stack_passed_parameter_offset_constant(instruction->operands.oir.assignee->associated_memory_region.stack_region, u64); 
+			instruction->operands.x86.address_offset = emit_stack_passed_parameter_offset_constant(instruction->operands.oir.assignee->associated_memory_region.stack_region, u64); 
 
-			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-			//must adhere to this one's type
+			/**
+			 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+			 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+			 * must adhere to this one's type
+			 */
 			if(is_converting_move_required(instruction->operands.x86.address_register1->type, instruction->operands.x86.address_register2->type) == TRUE){
 				instruction->operands.x86.address_register2 = create_and_insert_converting_move_instruction(instruction, instruction->operands.x86.address_register2, instruction->operands.x86.address_register1->type);
 			}
@@ -13264,19 +13268,18 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 
 		//This means that we just have some kind of pointer dereference
 		default:
-			//The offset is already stored where we need it to be
 			//Set the type
 			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY; 
 
 			//The base address is the assignee
-			instruction->operands.x86.address_register1 = instruction->operands.oir.assignee;
+			instruction->operands.x86.address_register1 = base_address;
+			instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand2;
 
-			//And the offset is op1
-			instruction->operands.x86.address_register2 = instruction->operands.oir.operand1;
-
-			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-			//must adhere to this one's type
+			/**
+			 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+			 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+			 * must adhere to this one's type
+			 */
 			if(is_converting_move_required(instruction->operands.x86.address_register1->type, instruction->operands.x86.address_register2->type) == TRUE){
 				instruction->operands.x86.address_register2 = create_and_insert_converting_move_instruction(instruction, instruction->operands.x86.address_register2, instruction->operands.x86.address_register1->type);
 			}
@@ -13295,6 +13298,9 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
  * be used by the lea combiner rule. It will *not* modify addressing modes and it should
  * not be expected to give a full and complete result back. It will only modify
  * address calc reg1 and the offset if appropriate
+ *
+ *
+ * TODO ALL BAD
  */
 static void handle_store_statement_base_address(instruction_t* store_instruction){
 	int64_t stack_offset;
@@ -13674,7 +13680,8 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 	//We want to ensure that we get the best possible outcome for memory movement address calculations.
 	//This is where *a lot* of instructions get generated, so it's worth it to spend compilation time
 	//compressing these
-
+	//
+	//TODO REFACTOR
 	//Do we have a case where we have an indirect jump statement? If so we can handle that by condensing it into one
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_INDIRECT_JUMP_STMT){
