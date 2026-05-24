@@ -351,6 +351,9 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 		//This is always where we start
 		instruction_t* stmt = block->exit_statement;
 
+		//Extract the assignee as we'll be needing it
+		three_addr_var_t* assignee = stmt->operands.oir.assignee;
+
 		//Our logic is based on the variable type
 		switch(variable->variable_type){
 			case VARIABLE_TYPE_NON_TEMP:
@@ -360,14 +363,14 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 				//So long as this isn't NULL
 				while(stmt != NULL){
 					//If it's marked we're out of here
-					if(stmt->mark == TRUE || stmt->assignee == NULL){
+					if(stmt->mark == TRUE || assignee == NULL){
 						stmt = stmt->previous_statement;
 						continue;
 					}
 
 					//Is the assignee our variable AND it's unmarked?
-					if(stmt->assignee->linked_var == variable->linked_var
-						&& stmt->assignee->ssa_generation == variable->ssa_generation){
+					if(assignee->linked_var == variable->linked_var
+						&& assignee->ssa_generation == variable->ssa_generation){
 						//Add this in
 						dynamic_array_add(worklist, stmt);
 						//Mark it
@@ -387,13 +390,13 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 				//So long as this isn't NULL
 				while(stmt != NULL){
 					//If this is the case, we'll just go onto the next one
-					if(stmt->mark == TRUE || stmt->assignee == NULL){
+					if(stmt->mark == TRUE || assignee == NULL){
 						stmt = stmt->previous_statement;
 						continue;
 					}
 
 					//Is the assignee our variable AND it's unmarked?
-					if(stmt->assignee->temp_var_number == variable->temp_var_number){
+					if(assignee->temp_var_number == variable->temp_var_number){
 						//Add this in
 						dynamic_array_add(worklist, stmt);
 						//Mark it
@@ -662,7 +665,7 @@ static void mark(dynamic_array_t* function_blocks){
 			 */
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 				//Mark the op1 of this function as being important
-				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
 
 				//Grab the parameters out
 				params = stmt->parameters;
@@ -675,36 +678,24 @@ static void mark(dynamic_array_t* function_blocks){
 				break;
 
 			/**
-			 * There will be special rules for store statements because we have assignees
-			 * that are not really assignees, they are more like operands
-			 *
-			 * TODO ALL WRONG NOW
-			 */
-			case THREE_ADDR_CODE_STORE_STATEMENT:
-			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-				//Add the assignee as if it was a variable itself
-				mark_and_add_definition(function_blocks, stmt->assignee, &worklist);
-
-				//We need to mark the place where each definition is set
-				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
-				mark_and_add_definition(function_blocks, stmt->op2, &worklist);
-				break;
-
-			/**
 			 * For a memory copy statement, we need the defitinition of the assignee
 			 * and op1 marked as they are both important to the overall copy
 			 */
 			case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
-				mark_and_add_definition(function_blocks, stmt->assignee, &worklist);
-				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.assignee, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
 				break;
 
-			//In all other cases, we'll just mark and add the two operands 
+			/**
+			 * By default we're just marking everything here. If it's NULL then mark_and_add defintion
+			 * will ignore
+			 */
 			default:
 				//We need to mark the place where each definition is set
-				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
-				mark_and_add_definition(function_blocks, stmt->op2, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand2, &worklist);
 
 				break;
 		}
