@@ -2168,43 +2168,21 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		case THREE_ADDR_CODE_ASSN_STMT:
 		case THREE_ADDR_CODE_BIN_OP_STMT:
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-			//If we have any memory addresses now is the time
-			switch(first->op1->variable_type){
-				case VARIABLE_TYPE_MEMORY_ADDRESS:
-				case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-					remediate_memory_address_variable_in_non_access_context(window, first);
-					break;
-
-				default:
-					break;
-			}
-
-		/**
-		 * If we are trying to store a memory address, then we'll also
-		 * need to do remediations here as the regular store area cannot handle that
-		 */
 		case THREE_ADDR_CODE_STORE_STATEMENT:
-			if(first->op1 != NULL){
-				switch(first->op1->variable_type){
-					case VARIABLE_TYPE_MEMORY_ADDRESS:
-					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-						remediate_memory_address_variable_in_non_access_context(window, first);
-						break;
-					default:
-						break;
-				}
-			}
-
-			break;
-
-		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-			if(first->op2 != NULL){
-				switch(first->op2->variable_type){
+		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
+			/**
+			 * If have a value in operand1 *and* it's a memory address,
+			 * we will need to remediate it
+			 */
+			if(first->operands.oir.operand1 != NULL){
+				//If we have any memory addresses now is the time
+				switch(first->operands.oir.operand1->variable_type){
 					case VARIABLE_TYPE_MEMORY_ADDRESS:
 					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
 						remediate_memory_address_variable_in_non_access_context(window, first);
 						break;
+
 					default:
 						break;
 				}
@@ -2244,41 +2222,16 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		case THREE_ADDR_CODE_ASSN_STMT:
 		case THREE_ADDR_CODE_BIN_OP_STMT:
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-			//If we have any memory addresses now is the time
-			switch(second->op1->variable_type){
-				case VARIABLE_TYPE_MEMORY_ADDRESS:
-				case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-					remediate_memory_address_variable_in_non_access_context(window, second);
-					break;
-				default:
-					break;
-			}
-			
-			break;
-
-		/**
-		 * If we are trying to store a memory address, then we'll also
-		 * need to do remediations here as the regular store area cannot handle that
-		 */
 		case THREE_ADDR_CODE_STORE_STATEMENT:
-			if(second->op1 != NULL){
-				switch(second->op1->variable_type){
-					case VARIABLE_TYPE_MEMORY_ADDRESS:
-					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-						remediate_memory_address_variable_in_non_access_context(window, second);
-						break;
-
-					default:
-						break;
-				}
-			}
-			
-			break;
-
-		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-			if(second->op2 != NULL){
-				switch(second->op2->variable_type){
+		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
+			/**
+			 * If have a value in operand1 *and* it's a memory address,
+			 * we will need to remediate it
+			 */
+			if(second->operands.oir.operand1 != NULL){
+				//If we have any memory addresses now is the time
+				switch(second->operands.oir.operand1->variable_type){
 					case VARIABLE_TYPE_MEMORY_ADDRESS:
 					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
 						remediate_memory_address_variable_in_non_access_context(window, second);
@@ -2324,52 +2277,27 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			case THREE_ADDR_CODE_ASSN_STMT:
 			case THREE_ADDR_CODE_BIN_OP_STMT:
 			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-				//If we have any memory addresses now is the time
-				switch(third->op1->variable_type){
-					case VARIABLE_TYPE_MEMORY_ADDRESS:
-					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-						remediate_memory_address_variable_in_non_access_context(window, third);
-						break;
-					default:
-						break;
+			case THREE_ADDR_CODE_STORE_STATEMENT:
+			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
+				/**
+				 * If have a value in operand1 *and* it's a memory address,
+				 * we will need to remediate it
+				 */
+				if(third->operands.oir.operand1 != NULL){
+					//If we have any memory addresses now is the time
+					switch(third->operands.oir.operand1->variable_type){
+						case VARIABLE_TYPE_MEMORY_ADDRESS:
+						case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+							remediate_memory_address_variable_in_non_access_context(window, third);
+							break;
+
+						default:
+							break;
+					}
 				}
 				
 				break;
-				
-		/**
-		 * If we are trying to store a memory address, then we'll also
-		 * need to do remediations here as the regular store area cannot handle that
-		 */
-		case THREE_ADDR_CODE_STORE_STATEMENT:
-			if(third->op1 != NULL){
-				switch(third->op1->variable_type){
-					case VARIABLE_TYPE_MEMORY_ADDRESS:
-					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-						remediate_memory_address_variable_in_non_access_context(window, third);
-						break;
-
-					default:
-						break;
-				}
-			}
-			
-			break;
-
-		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-			if(third->op2 != NULL){
-				switch(third->op2->variable_type){
-					case VARIABLE_TYPE_MEMORY_ADDRESS:
-					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-						remediate_memory_address_variable_in_non_access_context(window, third);
-						break;
-
-					default:
-						break;
-				}
-			}
-			
-			break;
 
 		/**
 		 * If we have an elaborative param offset calculation, now is the time
