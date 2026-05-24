@@ -369,8 +369,6 @@ struct instruction_t{
 		forced_signedness_type_t forced_signedness;
 		//The label that we are jumping to
 		symtab_label_record_t* jumping_to_label;
-		//Optional variable storage to determine what a value relies on
-		three_addr_var_t* relies_on;
 	} optional_storage;
 
 	//Generic parameter list - could be used for phi functions or function calls
@@ -379,6 +377,8 @@ struct instruction_t{
 	//else is our alternative
 	void* if_block;
 	void* else_block;
+	//Optional variable storage to determine what a value relies on
+	three_addr_var_t* relies_on;
 	/**
 	 * Optional storage for a type. The union is for readability and intentionality, 
 	 * we know that it's not really needed

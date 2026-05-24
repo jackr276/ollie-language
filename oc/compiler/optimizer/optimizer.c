@@ -682,6 +682,15 @@ static void mark(dynamic_array_t* function_blocks){
 				break;
 
 			/**
+			 * Branch and set statements maintain a special "relies on" field to hold what they rely on,
+			 * so we'll need to mark that as well
+			 */
+			case THREE_ADDR_CODE_BRANCH_STMT:
+			case THREE_ADDR_CODE_SETNE_STMT:
+				mark_and_add_definition(function_blocks, stmt->relies_on, &worklist);
+				break;
+
+			/**
 			 * By default we're just marking everything here. If it's NULL then mark_and_add defintion
 			 * will ignore
 			 */
@@ -1326,6 +1335,15 @@ static inline void mark_all_branch_related_statements(basic_block_t* block){
 
 				break;
 
+			/**
+			 * Branch and set statements maintain a special "relies on" field to hold what they rely on,
+			 * so we'll need to mark that as well
+			 */
+			case THREE_ADDR_CODE_BRANCH_STMT:
+			case THREE_ADDR_CODE_SETNE_STMT:
+				mark_and_add_definition_block_local(current, current->relies_on, worklist, &worklist_current_index);
+				break;
+				
 			/**
 			 * Our default is marking all of the operands. It doesn't matter if they are NULL, the helper will account for that
 			 */
@@ -2050,11 +2068,11 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 		instruction_t* statement_cursor = current_block->exit_statement;
 
 		//Store these blocks for later processing
-		if_block = statement_cursor->if_block;
-		else_block = statement_cursor->else_block;
+		if_block = branch_instruction->if_block;
+		else_block = branch_instruction->else_block;
 
 		//Get what the branch relies on.
-		branch_relies_on = statement_cursor->optional_storage.relies_on;
+		branch_relies_on = branch_instruction->relies_on;
 
 		/**
 		 * If we have that it relies on nothing(shouldn't happen but there could be special cases)
@@ -2085,8 +2103,7 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 			 * else case. We will rewrite the branch to be an unconditional jump to the else block
 			 */
 			case CONDITIONAL_ALWAYS_FALSE:
-				//Is it an inverse branch or not? This will impact how we handle
-				//things
+				//Is it an inverse branch or not? This will impact how we handle things
 				if(branch_instruction->inverse_branch == FALSE){
 					//We will emit an unconditional jump to the else block
 					unconditional_jump = emit_jmp_instruction(else_block);
@@ -2127,8 +2144,7 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 			 * block
 			 */
 			case CONDITIONAL_ALWAYS_TRUE:
-				//Is it an inverse branch or not? This will impact how we handle
-				//things
+				//Is it an inverse branch or not? This will impact how we handle things
 				if(branch_instruction->inverse_branch == FALSE){
 					//We will emit an unconditional jump to the if block
 					unconditional_jump = emit_jmp_instruction(if_block);

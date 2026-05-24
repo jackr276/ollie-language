@@ -116,7 +116,7 @@ static void build_dependency_graph_for_block(data_dependency_graph_t* graph, bas
 		//more efficiently
 		switch(current->instruction_type){
 			/**
-			 * Jump and set instructions store the op1's that they depend on, though
+			 * Jump and set instructions store the variables that they depend on, though
 			 * this is intentionally looked over by the selector, we need to account for it
 			 * here
 			 */
@@ -142,7 +142,7 @@ static void build_dependency_graph_for_block(data_dependency_graph_t* graph, bas
 			case JLE:
 			case JG:
 			case JGE:
-				update_dependence_for_variable(graph, current, instructions, current->operands.oir.operand1, i - 1);
+				update_dependence_for_variable(graph, current, instructions, current->relies_on, i - 1);
 				break;
 
 			//We can actually skip phi functions, reason being that they

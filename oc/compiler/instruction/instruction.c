@@ -5773,7 +5773,7 @@ instruction_t* emit_branch_statement(void* if_block, void* else_block, three_add
 	stmt->branch_type = branch_type;
 
 	//And we'll store the variable that we're making a decision based on here
-	stmt->optional_storage.relies_on = relies_on;
+	stmt->relies_on = relies_on;
 
 	//Give the statement back
 	return stmt;

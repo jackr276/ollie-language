@@ -1583,7 +1583,7 @@ static inline instruction_t* emit_setne_code(three_addr_var_t* assignee, three_a
 	stmt->operands.oir.assignee = assignee;
 
 	//Save what this relies on
-	stmt->optional_storage.relies_on = relies_on;
+	stmt->relies_on = relies_on;
 
 	//We'll determine the actual instruction type using the helper
 	stmt->statement_type = THREE_ADDR_CODE_SETNE_STMT;
@@ -5786,6 +5786,15 @@ static void mark(dynamic_array_t* function_blocks){
 
 				break;
 
+			/**
+			 * Branch and set statements maintain a special "relies on" field to hold what they rely on,
+			 * so we'll need to mark that as well
+			 */
+			case THREE_ADDR_CODE_BRANCH_STMT:
+			case THREE_ADDR_CODE_SETNE_STMT:
+				mark_and_add_definition(function_blocks, stmt->relies_on, &worklist);
+				break;
+
 			//In all other cases, we'll just mark and add every operand
 			default:
 				//We need to mark the place where each definition is set
@@ -6825,7 +6834,7 @@ static inline instruction_t* emit_setne_instruction(three_addr_var_t* destinatio
 	 * We store what this instruction relies on in it's op1 value. This is necessary for scheduling reasons,
 	 * but it is completely ignored at the selector level
 	 */
-	instruction->optional_storage.relies_on = relies_on;
+	instruction->relies_on = relies_on;
 
 	//Finally we set the destination
 	instruction->operands.x86.destination_register = destination;
@@ -6853,7 +6862,7 @@ static inline instruction_t* emit_setnp_instruction(three_addr_var_t* destinatio
 	 * We store what this instruction relies on in it's op1 value. This is necessary for scheduling reasons,
 	 * but it is completely ignored at the selector level
 	 */
-	instruction->optional_storage.relies_on = relies_on;
+	instruction->relies_on = relies_on;
 
 	//Finally we set the destination
 	instruction->operands.x86.destination_register = destination;
@@ -6881,7 +6890,7 @@ static inline instruction_t* emit_setp_instruction(three_addr_var_t* destination
 	 * We store what this instruction relies on in it's op1 value. This is necessary for scheduling reasons,
 	 * but it is completely ignored at the selector level
 	 */
-	instruction->optional_storage.relies_on = relies_on;
+	instruction->relies_on = relies_on;
 
 	//Finally we set the destination
 	instruction->operands.x86.destination_register = destination;
