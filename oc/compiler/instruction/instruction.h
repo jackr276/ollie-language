@@ -302,7 +302,7 @@ struct instruction_t{
 	 * that we have both structs wrapped inside of a union
 	 * to save on space
 	 */
-	union {
+	struct {
 		/**
 		 * Storage for the variables that are used inside of OIR. 
 		 */
@@ -354,6 +354,7 @@ struct instruction_t{
 			u_int64_t address_multiplier;
 		} x86;
 	} operands;
+
 	/**
 	 * Optional storage values that are not used enough to justify
 	 * their own dedicated field
