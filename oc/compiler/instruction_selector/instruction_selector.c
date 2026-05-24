@@ -1124,7 +1124,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 		 */
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
 			//Grab the additional offset for processing
-			additional_offset = instruction->op1->memory_address_base_adjustment;
+			additional_offset = memory_address_operand->memory_address_base_adjustment;
 
 			//Go based on what kind of statement that we've got here
 			switch(instruction->statement_type){
@@ -1137,17 +1137,17 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 *
 				 */
 				case THREE_ADDR_CODE_ASSN_STMT:
-					//op1_const is our offset
-					instruction->op1_const = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
+					//Convert this into our lea offest
+					instruction->operands.oir.address_offset = emit_stack_passed_parameter_offset_constant(memory_address_operand->associated_memory_region.stack_region, u64);
 
 					//Add the additional offset in as an adjustment(it's usually 0)
-					instruction->op1_const->constant_adjustment = additional_offset;
+					instruction->operands.oir.address_offset->constant_adjustment = additional_offset;
 
 					//Turn it into a LEA
 					instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
 
-					//Op1 becomes that stack pointer
-					instruction->op1 = stack_pointer_variable;
+					//First register is the stack pointer
+					instruction->operands.oir.address_operand1 = stack_pointer_variable;
 
 					//This is a lea with an offset only
 					instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
@@ -1164,7 +1164,10 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
 					//Emit the special stack constant
-					stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
+					stack_offset_constant = emit_stack_passed_parameter_offset_constant(memory_address_operand->associated_memory_region.stack_region, u64);
+
+					//Store the additional offset here as well
+					stack_offset_constant->constant_adjustment = additional_offset;
 
 					//Now emit the address calculation
 					address_instruction = emit_lea_offset_only(emit_temp_var(u64), stack_pointer_variable, stack_offset_constant);
@@ -1172,8 +1175,8 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					//This goes in right before the store does
 					insert_instruction_before_given(address_instruction, instruction);
 
-					//The op1 now comes from this instruction
-					instruction->op1 = address_instruction->assignee;
+					//The first operand now comes from this instruction
+					instruction->operands.oir.operand1 = address_instruction->operands.oir.assignee;
 
 					break;
 
@@ -1193,7 +1196,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 */
 				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 					//Emit the constant
-					stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
+					stack_offset_constant = emit_stack_passed_parameter_offset_constant(memory_address_operand->associated_memory_region.stack_region, u64);
 
 					//Add the additional offset in as an adjustment(it's usually 0)
 					stack_offset_constant->constant_adjustment = additional_offset;
@@ -1201,11 +1204,11 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					//Simplify based on what we have
 					switch(instruction->op){
 						case PLUS:
-							add_constants(stack_offset_constant, instruction->op1_const);
+							add_constants(stack_offset_constant, instruction->operands.oir.constant_operand);
 							break;
 
 						case MINUS:
-							subtract_constants(stack_offset_constant, instruction->op1_const);
+							subtract_constants(stack_offset_constant, instruction->operands.oir.constant_operand);
 							break;
 
 						//This should be impossible, if we get here it's a hard out
@@ -1217,11 +1220,11 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					//Wipe out the operator
 					instruction->op = BLANK;
 
-					//Op1 becomes that stack pointer
-					instruction->op1 = stack_pointer_variable;
+					//The address operand becomes that stack pointer
+					instruction->operands.oir.address_operand1 = stack_pointer_variable;
 
-					//Op1 const is the lea constant
-					instruction->op1_const = stack_offset_constant;
+					//And this becomes the address constant
+					instruction->operands.oir.address_offset = stack_offset_constant;
 
 					//Change the instruction type to a lea
 					instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
@@ -1239,16 +1242,16 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 */
 				case THREE_ADDR_CODE_BIN_OP_STMT:
 					//Create the offset constant
-					stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
+					stack_offset_constant = emit_stack_passed_parameter_offset_constant(memory_address_operand->associated_memory_region.stack_region, u64);
 
 					//Add the additional offset in as an adjustment(it's usually 0)
 					stack_offset_constant->constant_adjustment = additional_offset;
 
-					//This is now our op1_const
-					instruction->op1_const = stack_offset_constant;
+					//This is now our address offset
+					instruction->operands.oir.address_offset = stack_offset_constant;
 
-					//Op1 becomes the stack pointer
-					instruction->op1 = stack_pointer_variable;
+					//First address operand becomes the stack pointer
+					instruction->operands.oir.address_operand1 = stack_pointer_variable;
 
 					//Finally declare that this is a lea statement
 					instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
@@ -1259,22 +1262,6 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						case PLUS:
 							//This is a lea statement with registers and an offset
 							instruction->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_OFFSET;
-							
-							//Nothing else to do here
-							break;
-						
-						/**
-						 * For a minus, we'll need to circumvent the system by using a -1 multiplier
-						 * to make this still work for our lea. Since we have op1 - op2, we can rewrite
-						 * this into op1 + op2 * -1
-						 */
-						case MINUS:
-							//Full stack here
-							instruction->lea_statement_type = OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE;
-
-							//-1 to mimic the subtraction
-							instruction->lea_multiplier = -1;
-
 							break;
 						
 						//Unreachable path - hard fail if we somehow get to this
