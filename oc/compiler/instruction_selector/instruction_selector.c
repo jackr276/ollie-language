@@ -2264,51 +2264,51 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 *
 	 * Can become: t27 <- 340
 	 */
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT 
-		&& window->instruction2 != NULL
+	if(window->instruction2 != NULL
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT 
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& binary_operator_valid_for_inplace_constant_match(window->instruction2->op) == TRUE
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& variables_equal(window->instruction2->op1, window->instruction1->operands.oir.assignee, FALSE) == TRUE){
+		&& variables_equal(window->instruction2->operands.oir.operand1, window->instruction1->operands.oir.assignee, FALSE) == TRUE){
 
-		//Go based on the op. We already know that we can do this by the time 
-		//we get here
-		switch(window->instruction2->op){
+		//Extract these two for convenience
+		instruction_t* constant_assignment = window->instruction1;
+		instruction_t* binary_operation = window->instruction2;
+
+		switch(binary_operation->op){
 			case STAR:
-				//We can multiply the constants now. The result will be stored in op1 const
-				multiply_constants(window->instruction2->op1_const, window->instruction1->op1_const);
+				multiply_constants(binary_operation->operands.oir.constant_operand, constant_assignment->operands.oir.constant_operand);
 				break;
 
 			case PLUS:
-				//We can add the constants now. The result will be stored in op1 const
-				add_constants(window->instruction2->op1_const, window->instruction1->op1_const);
+				add_constants(binary_operation->operands.oir.constant_operand, constant_assignment->operands.oir.constant_operand);
 				break;
 			
+			/**
+			 * Not commutative, so we need to overwrite the first constand then replace it in the
+			 * binary operation instead of doing it inplace
+			 */
 			case MINUS:
-				//Important caveat here. The constant above is the first one that 
-				subtract_constants(window->instruction1->op1_const, window->instruction2->op1_const);
-
-				//Overwrite with op1
-				window->instruction2->op1_const = window->instruction1->op1_const;
-
+				subtract_constants(constant_assignment->operands.oir.constant_operand, binary_operation->operands.oir.constant_operand);
+				binary_operation->operands.oir.constant_operand = constant_assignment->operands.oir.constant_operand;
 				break;
 
+			/**
+			 * Not commutative, so we need to overwrite the first constand then replace it in the
+			 * binary operation instead of doing it inplace
+			 */
 			case L_SHIFT:
-				//Important caveat here. The constant above is the first one that 
-				left_shift_constants(window->instruction1->op1_const, window->instruction2->op1_const);
-
-				//Overwrite with op1
-				window->instruction2->op1_const = window->instruction1->op1_const;
-
+				left_shift_constants(constant_assignment->operands.oir.constant_operand, binary_operation->operands.oir.constant_operand);
+				binary_operation->operands.oir.constant_operand = constant_assignment->operands.oir.constant_operand;
 				break;
 
+			/**
+			 * Not commutative, so we need to overwrite the first constand then replace it in the
+			 * binary operation instead of doing it inplace
+			 */
 			case R_SHIFT:
-				//Important caveat here. The constant above is the first one that 
-				right_shift_constants(window->instruction1->op1_const, window->instruction2->op1_const);
-
-				//Overwrite with op1
-				window->instruction2->op1_const = window->instruction1->op1_const;
-
+				right_shift_constants(constant_assignment->operands.oir.constant_operand, binary_operation->operands.oir.constant_operand);
+				binary_operation->operands.oir.constant_operand = constant_assignment->operands.oir.constant_operand;
 				break;
 
 			//Unreachable - just so the compiler won't complain
@@ -2316,78 +2316,71 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				break;
 		}
 
-		//Op1 is now used one less time
-		window->instruction2->op1->use_count--;
+		//NULL the old operand out
+		binary_operation->operands.oir.operand1->use_count--;
+		binary_operation->operands.oir.operand1 = NULL;
 
-		//Null out where the old value was
-		window->instruction2->op1 = NULL;
+		//The old binary operation is now simply an assign const statement
+		binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
-		//Instruction 2 is now simply an assign const statement
-		window->instruction2->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+		//Now useless so delete it
+		delete_statement(constant_assignment);
 
-		//Instruction 1 is now completely useless *if* that was the only time that
-		//his assignee was used. Otherwise, we need to keep it in
-		delete_statement(window->instruction1);
-
-		//Reconstruct the window with instruction 2 as the start
-		reconstruct_window(window, window->instruction2);
+		//Reconstruct the window with the binary operation as the start
+		reconstruct_window(window, binary_operation);
 
 		//This counts as a change
 		changed = TRUE;
 	}
 
-
 	/**
-	 * ================= Handling pure constant operations ========================
-	 * t27 <- 5
-	 * t27 <- t27 (+/-/star(*)) 68
-	 *
-	 * Can become: t27 <- 340
-	 *
-	 * This is the same as above, but for 2 & 3
+	 * Now do the exact same thing here but do it with instructions 2 & 3 if able to
 	 */
-	if(window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT 
-		&& window->instruction3 != NULL
+	if(window->instruction3 != NULL
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT 
 		&& window->instruction3->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& binary_operator_valid_for_inplace_constant_match(window->instruction3->op) == TRUE
 		&& window->instruction2->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& variables_equal(window->instruction3->op1, window->instruction2->operands.oir.assignee, FALSE) == TRUE){
+		&& variables_equal(window->instruction3->operands.oir.operand1, window->instruction2->operands.oir.assignee, FALSE) == TRUE){
 
-		//Go based on the op. We already know that we can do this by the time 
-		//we get here
-		switch(window->instruction3->op){
+		//Extract these two for convenience
+		instruction_t* constant_assignment = window->instruction2;
+		instruction_t* binary_operation = window->instruction3;
+
+		switch(binary_operation->op){
 			case STAR:
-				//We can multiply the constants now. The result will be stored in op1 const
-				multiply_constants(window->instruction3->op1_const, window->instruction2->op1_const);
+				multiply_constants(binary_operation->operands.oir.constant_operand, constant_assignment->operands.oir.constant_operand);
 				break;
 
 			case PLUS:
-				//We can add the constants now. The result will be stored in op1 const
-				add_constants(window->instruction3->op1_const, window->instruction2->op1_const);
+				add_constants(binary_operation->operands.oir.constant_operand, constant_assignment->operands.oir.constant_operand);
 				break;
 			
+			/**
+			 * Not commutative, so we need to overwrite the first constand then replace it in the
+			 * binary operation instead of doing it inplace
+			 */
 			case MINUS:
-				//Important caveat here. The constant above is the first one that 
-				subtract_constants(window->instruction2->op1_const, window->instruction3->op1_const);
-
-				//Overwrite with op1
-				window->instruction3->op1_const = window->instruction2->op1_const;
+				subtract_constants(constant_assignment->operands.oir.constant_operand, binary_operation->operands.oir.constant_operand);
+				binary_operation->operands.oir.constant_operand = constant_assignment->operands.oir.constant_operand;
 				break;
 
+			/**
+			 * Not commutative, so we need to overwrite the first constand then replace it in the
+			 * binary operation instead of doing it inplace
+			 */
 			case L_SHIFT:
-				//Important caveat here. The constant above is the first one that 
-				left_shift_constants(window->instruction2->op1_const, window->instruction3->op1_const);
-
-				//Overwrite with op1
-				window->instruction3->op1_const = window->instruction2->op1_const;
+				left_shift_constants(constant_assignment->operands.oir.constant_operand, binary_operation->operands.oir.constant_operand);
+				binary_operation->operands.oir.constant_operand = constant_assignment->operands.oir.constant_operand;
 				break;
 
+			/**
+			 * Not commutative, so we need to overwrite the first constand then replace it in the
+			 * binary operation instead of doing it inplace
+			 */
 			case R_SHIFT:
-				//Important caveat here. The constant above is the first one that 
-				right_shift_constants(window->instruction2->op1_const, window->instruction3->op1_const);
-
-				//Overwrite with op1
-				window->instruction3->op1_const = window->instruction2->op1_const;
+				right_shift_constants(constant_assignment->operands.oir.constant_operand, binary_operation->operands.oir.constant_operand);
+				binary_operation->operands.oir.constant_operand = constant_assignment->operands.oir.constant_operand;
 				break;
 
 			//Unreachable - just so the compiler won't complain
@@ -2395,20 +2388,18 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				break;
 		}
 
-		//Decrement the use counts
-		window->instruction3->op1->use_count--;
+		//NULL the old operand out
+		binary_operation->operands.oir.operand1->use_count--;
+		binary_operation->operands.oir.operand1 = NULL;
 
-		//Null out where the old value was
-		window->instruction3->op1 = NULL;
+		//The old binary operation is now simply an assign const statement
+		binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
-		//Instruction 2 is now simply an assign const statement
-		window->instruction3->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+		//Now useless so delete it
+		delete_statement(constant_assignment);
 
-		//Instruction2 is now useless
-		delete_statement(window->instruction2);
-
-		//Reconstruct the window with instruction 2 as the start
-		reconstruct_window(window, window->instruction3);
+		//Reconstruct the window with the binary operation as the start
+		reconstruct_window(window, binary_operation);
 
 		//This counts as a change
 		changed = TRUE;
