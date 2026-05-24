@@ -351,8 +351,6 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 		//This is always where we start
 		instruction_t* stmt = block->exit_statement;
 
-		//Extract the assignee as we'll be needing it
-		three_addr_var_t* assignee = stmt->operands.oir.assignee;
 
 		//Our logic is based on the variable type
 		switch(variable->variable_type){
@@ -362,6 +360,9 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 
 				//So long as this isn't NULL
 				while(stmt != NULL){
+					//Extract the assignee as we'll be needing it
+					three_addr_var_t* assignee = stmt->operands.oir.assignee;
+
 					//If it's marked we're out of here
 					if(stmt->mark == TRUE || assignee == NULL){
 						stmt = stmt->previous_statement;
@@ -389,6 +390,9 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 			case VARIABLE_TYPE_TEMP:
 				//So long as this isn't NULL
 				while(stmt != NULL){
+					//Extract the assignee as we'll be needing it
+					three_addr_var_t* assignee = stmt->operands.oir.assignee;
+
 					//If this is the case, we'll just go onto the next one
 					if(stmt->mark == TRUE || assignee == NULL){
 						stmt = stmt->previous_statement;
@@ -680,6 +684,8 @@ static void mark(dynamic_array_t* function_blocks){
 			/**
 			 * For a memory copy statement, we need the defitinition of the assignee
 			 * and op1 marked as they are both important to the overall copy
+			 *
+			 * TODO REWORK ME
 			 */
 			case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
 				mark_and_add_definition(function_blocks, stmt->operands.oir.assignee, &worklist);
@@ -1184,15 +1190,18 @@ static void mark_and_add_definition_block_local(instruction_t* starting_point, t
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
 			//So long as this isn't NULL
 			while(cursor != NULL){
+				//Extract the assignee here for convenience
+				three_addr_var_t* assignee = cursor->operands.oir.assignee;
+
 				//If it's marked we're out of here
-				if(cursor->mark == TRUE || cursor->assignee == NULL){
+				if(cursor->mark == TRUE || assignee == NULL){
 					cursor = cursor->previous_statement;
 					continue;
 				}
 
 				//Is the assignee our variable AND it's unmarked?
-				if(cursor->assignee->linked_var == variable->linked_var
-					&& cursor->assignee->ssa_generation == variable->ssa_generation){
+				if(assignee->linked_var == variable->linked_var
+					&& assignee->ssa_generation == variable->ssa_generation){
 					//Mark the cursor
 					cursor->mark = TRUE;
 
@@ -1212,14 +1221,17 @@ static void mark_and_add_definition_block_local(instruction_t* starting_point, t
 		case VARIABLE_TYPE_TEMP:
 			//So long as this isn't NULL
 			while(cursor != NULL){
+				//Extract the assignee here for convenience
+				three_addr_var_t* assignee = cursor->operands.oir.assignee;
+
 				//If this is the case, we'll just go onto the next one
-				if(cursor->mark == TRUE || cursor->assignee == NULL){
+				if(cursor->mark == TRUE || assignee == NULL){
 					cursor = cursor->previous_statement;
 					continue;
 				}
 
 				//Is the assignee our variable AND it's unmarked?
-				if(cursor->assignee->temp_var_number == variable->temp_var_number){
+				if(assignee->temp_var_number == variable->temp_var_number){
 					//Mark it
 					cursor->mark = TRUE;
 
@@ -1276,7 +1288,7 @@ static inline void mark_all_branch_related_statements(basic_block_t* block){
 	u_int32_t worklist_current_index = 0;
 
 	//We will mark where the op1 for this branch came from
-	mark_and_add_definition_block_local(branch_statement, branch_statement->op1, worklist, &worklist_current_index);
+	mark_and_add_definition_block_local(branch_statement, branch_statement->operands.oir.operand1, worklist, &worklist_current_index);
 
 	//Let's start by marking the branch statement
 	branch_statement->mark = TRUE;
@@ -1313,7 +1325,7 @@ static inline void mark_all_branch_related_statements(basic_block_t* block){
 			 */
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 				//Mark the op1 of this function as being important
-				mark_and_add_definition_block_local(current, current->op1, worklist, &worklist_current_index);
+				mark_and_add_definition_block_local(current, current->operands.oir.operand1, worklist, &worklist_current_index);
 
 				//Run through them all and mark them
 				for(u_int16_t i = 0; i < current->parameters.current_index; i++){
@@ -1323,29 +1335,24 @@ static inline void mark_all_branch_related_statements(basic_block_t* block){
 				break;
 
 			/**
-			 * There will be special rules for store statements because we have assignees
-			 * that are not really assignees, they are more like operands
+			 * For a memory copy statement, we need the defitinition of the assignee
+			 * and op1 marked as they are both important to the overall copy
 			 *
-			 * TODO ALL WRONG NOW
+			 * TODO REWORK ME
 			 */
-			case THREE_ADDR_CODE_STORE_STATEMENT:
-			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-				//Add the assignee as if it was a variable itself
-				mark_and_add_definition_block_local(current, current->assignee, worklist, &worklist_current_index);
-
-				//We need to mark the place where each definition is set
-				mark_and_add_definition_block_local(current, current->op1, worklist, &worklist_current_index);
-				mark_and_add_definition_block_local(current, current->op2, worklist, &worklist_current_index);
-
+			case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
+				mark_and_add_definition_block_local(current, current->operands.oir.assignee, worklist, &worklist_current_index);
+				mark_and_add_definition_block_local(current, current->operands.oir.operand1, worklist, &worklist_current_index);
 				break;
 
-			//In all other cases, we'll just mark and add the two operands 
+			/**
+			 * Our default is marking all of the operands. It doesn't matter if they are NULL, the helper will account for that
+			 */
 			default:
-				//We need to mark the place where each definition is set
-				mark_and_add_definition_block_local(current, current->op1, worklist, &worklist_current_index);
-				mark_and_add_definition_block_local(current, current->op2, worklist, &worklist_current_index);
-
+				mark_and_add_definition_block_local(current, current->operands.oir.operand1, worklist, &worklist_current_index);
+				mark_and_add_definition_block_local(current, current->operands.oir.operand2, worklist, &worklist_current_index);
+				mark_and_add_definition_block_local(current, current->operands.oir.address_operand1, worklist, &worklist_current_index);
+				mark_and_add_definition_block_local(current, current->operands.oir.address_operand2, worklist, &worklist_current_index);
 				break;
 		}
 	}
@@ -2062,7 +2069,7 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 		else_block = statement_cursor->else_block;
 
 		//Get what the branch relies on. Remember that this is store in op1
-		branch_relies_on = statement_cursor->op1;
+		branch_relies_on = statement_cursor->operands.oir.operand1;
 
 		//If we have that it relies on nothing(shouldn't happen but there could be special cases)
 		//then we'll leave here because we can't be sure of this optimization
@@ -2073,7 +2080,7 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 		//Let's now trace back until we can find what it relies on
 		while(statement_cursor != NULL){
 			//If they're equal we can leave
-			if(variables_equal(branch_relies_on, statement_cursor->assignee, FALSE) == TRUE){
+			if(variables_equal(branch_relies_on, statement_cursor->operands.oir.assignee, FALSE) == TRUE){
 				break;
 			}
 
