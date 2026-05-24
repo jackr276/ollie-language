@@ -958,8 +958,8 @@ static inline void handle_live_ranges_for_instruction(dynamic_array_t* SSE_live_
 	 */
 	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->operands.x86.source_register1);
 	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->operands.x86.source_register2);
-	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->operands.x86.addressing_mode_register1);
-	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->operands.x86.addressing_mode_register2);
+	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->operands.x86.address_register1);
+	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->operands.x86.address_register2);
 	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->operands.x86.destination_register);
 	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->operands.x86.destination_register2);
 
@@ -1114,12 +1114,12 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 					add_live_range_to_use_set(current->operands.x86.source_register2->associated_live_range, basic_block);
 				}
 
-				if(current->operands.x86.addressing_mode_register1 != NULL){
-					add_live_range_to_use_set(current->operands.x86.addressing_mode_register1->associated_live_range, basic_block);
+				if(current->operands.x86.address_register1 != NULL){
+					add_live_range_to_use_set(current->operands.x86.address_register1->associated_live_range, basic_block);
 				}
 
-				if(current->operands.x86.addressing_mode_register2 != NULL){
-					add_live_range_to_use_set(current->operands.x86.addressing_mode_register2->associated_live_range, basic_block);
+				if(current->operands.x86.address_register2 != NULL){
+					add_live_range_to_use_set(current->operands.x86.address_register2->associated_live_range, basic_block);
 				}
 
 				/**
@@ -1475,12 +1475,12 @@ static dynamic_array_t calculate_live_after_for_block(basic_block_t* block, inst
 			add_live_now_live_range(operation->operands.x86.source_register2->associated_live_range, &live_after);
 		}
 
-		if(operation->operands.x86.addressing_mode_register1 != NULL){
-			add_live_now_live_range(operation->operands.x86.addressing_mode_register1->associated_live_range, &live_after);
+		if(operation->operands.x86.address_register1 != NULL){
+			add_live_now_live_range(operation->operands.x86.address_register1->associated_live_range, &live_after);
 		}
 
-		if(operation->operands.x86.addressing_mode_register2 != NULL){
-			add_live_now_live_range(operation->operands.x86.addressing_mode_register2->associated_live_range, &live_after);
+		if(operation->operands.x86.address_register2 != NULL){
+			add_live_now_live_range(operation->operands.x86.address_register2->associated_live_range, &live_after);
 		}
 
 		/**
@@ -1728,20 +1728,20 @@ static void calculate_all_interference_in_block(basic_block_t* block){
 			}
 		}
 
-		if(operation->operands.x86.addressing_mode_register1 != NULL){
-			if(operation->operands.x86.addressing_mode_register1->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
-				add_live_now_live_range(operation->operands.x86.addressing_mode_register1->associated_live_range, &live_now_general_purpose);
+		if(operation->operands.x86.address_register1 != NULL){
+			if(operation->operands.x86.address_register1->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+				add_live_now_live_range(operation->operands.x86.address_register1->associated_live_range, &live_now_general_purpose);
 			} else {
-				add_live_now_live_range(operation->operands.x86.addressing_mode_register1->associated_live_range, &live_now_sse);
+				add_live_now_live_range(operation->operands.x86.address_register1->associated_live_range, &live_now_sse);
 			}
 
 		}
 
-		if(operation->operands.x86.addressing_mode_register2 != NULL){
-			if(operation->operands.x86.addressing_mode_register2->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
-				add_live_now_live_range(operation->operands.x86.addressing_mode_register2->associated_live_range, &live_now_general_purpose);
+		if(operation->operands.x86.address_register2 != NULL){
+			if(operation->operands.x86.address_register2->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+				add_live_now_live_range(operation->operands.x86.address_register2->associated_live_range, &live_now_general_purpose);
 			} else {
-				add_live_now_live_range(operation->operands.x86.addressing_mode_register2->associated_live_range, &live_now_sse);
+				add_live_now_live_range(operation->operands.x86.address_register2->associated_live_range, &live_now_sse);
 			}
 		}
 
@@ -1931,16 +1931,16 @@ static void calculate_target_interference_in_block(basic_block_t* block, live_ra
 			add_live_now_live_range(operation->operands.x86.source_register2->associated_live_range, &target_live_now);
 		}
 
-		if(operation->operands.x86.addressing_mode_register1 != NULL
-			&& operation->operands.x86.addressing_mode_register1->associated_live_range->live_range_class == target_class){
+		if(operation->operands.x86.address_register1 != NULL
+			&& operation->operands.x86.address_register1->associated_live_range->live_range_class == target_class){
 
-			add_live_now_live_range(operation->operands.x86.addressing_mode_register1->associated_live_range, &target_live_now);
+			add_live_now_live_range(operation->operands.x86.address_register1->associated_live_range, &target_live_now);
 		}
 
-		if(operation->operands.x86.addressing_mode_register2 != NULL
-			&& operation->operands.x86.addressing_mode_register2->associated_live_range->live_range_class == target_class){
+		if(operation->operands.x86.address_register2 != NULL
+			&& operation->operands.x86.address_register2->associated_live_range->live_range_class == target_class){
 
-			add_live_now_live_range(operation->operands.x86.addressing_mode_register2->associated_live_range, &target_live_now);
+			add_live_now_live_range(operation->operands.x86.address_register2->associated_live_range, &target_live_now);
 		}
 
 		/**
@@ -2174,7 +2174,7 @@ static void precolor_instruction(instruction_t* instruction){
 			 * our division instruction. These higher order bits will always be stored in
 			 * RDX
 			 */
-			instruction->operands.x86.addressing_mode_register1->associated_live_range->reg.gen_purpose = RDX;
+			instruction->operands.x86.address_register1->associated_live_range->reg.gen_purpose = RDX;
 
 			//The first destination register is the quotient, and is in RAX
 			instruction->operands.x86.destination_register->associated_live_range->reg.gen_purpose = RAX;
@@ -2416,12 +2416,12 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 					add_live_range_to_use_set(cursor->operands.x86.source_register2->associated_live_range, block);
 				}
 
-				if(cursor->operands.x86.addressing_mode_register1 != NULL){
-					add_live_range_to_use_set(cursor->operands.x86.addressing_mode_register1->associated_live_range, block);
+				if(cursor->operands.x86.address_register1 != NULL){
+					add_live_range_to_use_set(cursor->operands.x86.address_register1->associated_live_range, block);
 				}
 
-				if(cursor->operands.x86.addressing_mode_register2 != NULL){
-					add_live_range_to_use_set(cursor->operands.x86.addressing_mode_register2->associated_live_range, block);
+				if(cursor->operands.x86.address_register2 != NULL){
+					add_live_range_to_use_set(cursor->operands.x86.address_register2->associated_live_range, block);
 				}
 
 				/**
@@ -3071,13 +3071,13 @@ static void handle_pure_copy_source_spill(instruction_t* instruction, u_int32_t 
 	} else {
 		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 		//Turn this into a load instruction
-		instruction->operands.x86.addressing_mode_register1 = stack_pointer;
+		instruction->operands.x86.address_register1 = stack_pointer;
 
 		//IMPORTANT - NULL this out so that future steps don't get confused
 		instruction->operands.x86.source_register1 = NULL;
 
 		//Create the offset using a u64
-		instruction->operands.x86.addressing_mode_offset = emit_direct_integer_or_char_constant(offset, u64_type);
+		instruction->operands.x86.address_offset = emit_direct_integer_or_char_constant(offset, u64_type);
 	}
 }
 
@@ -3106,13 +3106,13 @@ static void handle_constant_assignment_destination_spill(instruction_t* instruct
 		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
 		//Turn this into a load instruction
-		instruction->operands.x86.addressing_mode_register1 = stack_pointer;
+		instruction->operands.x86.address_register1 = stack_pointer;
 
 		//IMPORTANT - NULL this out so that future steps don't get confused
 		instruction->operands.x86.destination_register = NULL;
 
 		//Create the offset using a u64
-		instruction->operands.x86.addressing_mode_offset = emit_direct_integer_or_char_constant(offset, u64_type);
+		instruction->operands.x86.address_offset = emit_direct_integer_or_char_constant(offset, u64_type);
 	}
 }
 
@@ -3161,8 +3161,8 @@ static instruction_t* handle_instruction_level_spilling(symtab_function_record_t
 	//Handle all source spills first
 	handle_source_spill(function, live_ranges, instruction->operands.x86.source_register1, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
 	handle_source_spill(function, live_ranges, instruction->operands.x86.source_register2, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
-	handle_source_spill(function, live_ranges, instruction->operands.x86.addressing_mode_register1, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
-	handle_source_spill(function, live_ranges, instruction->operands.x86.addressing_mode_register2, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
+	handle_source_spill(function, live_ranges, instruction->operands.x86.address_register1, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
+	handle_source_spill(function, live_ranges, instruction->operands.x86.address_register2, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
 
 	//Run through all function parameters
 	if(instruction->instruction_type != PHI_FUNCTION){
@@ -4496,11 +4496,11 @@ static inline void update_stack_passed_parameter_offsets(symtab_function_record_
 				handle_stack_passed_param_constant(cursor->operands.x86.source_immediate);
 
 			//Otherwise we could also have this case
-			} else if(cursor->operands.x86.addressing_mode_offset != NULL
-						&& cursor->operands.x86.addressing_mode_offset->const_type == STACK_PASSED_PARAM_OFFSET){
+			} else if(cursor->operands.x86.address_offset != NULL
+						&& cursor->operands.x86.address_offset->const_type == STACK_PASSED_PARAM_OFFSET){
 
 				//Let the helper do it
-				handle_stack_passed_param_constant(cursor->operands.x86.addressing_mode_offset);
+				handle_stack_passed_param_constant(cursor->operands.x86.address_offset);
 			} 
 
 			//Push along to the next value

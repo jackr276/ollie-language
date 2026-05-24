@@ -564,9 +564,9 @@ static instruction_t* clone_instruction(instruction_t* source){
 	copy->operands.x86.destination_register2 = clone_variable(source->operands.x86.destination_register2);
 	copy->operands.x86.source_register1 = clone_variable(source->operands.x86.source_register1);
 	copy->operands.x86.source_register2 = clone_variable(source->operands.x86.source_register2);
-	copy->operands.x86.addressing_mode_register1 = clone_variable(source->operands.x86.addressing_mode_register1);
-	copy->operands.x86.addressing_mode_register2 = clone_variable(source->operands.x86.addressing_mode_register2);
-	copy->operands.x86.addressing_mode_offset = clone_constant(source->operands.x86.addressing_mode_offset);
+	copy->operands.x86.address_register1 = clone_variable(source->operands.x86.address_register1);
+	copy->operands.x86.address_register2 = clone_variable(source->operands.x86.address_register2);
+	copy->operands.x86.address_offset = clone_constant(source->operands.x86.address_offset);
 	copy->operands.x86.source_immediate = clone_constant(source->operands.x86.source_immediate);
 
 	//If we have function call parameters, emit a copy of them
