@@ -12040,6 +12040,8 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
  * be used by the lea combiner rule. It will *not* modify addressing modes and it should
  * not be expected to give a full and complete result back. It will only modify
  * address calc reg1 and the offset if appropriate
+ *
+ * TODO NOT CORRECT
  */
 static inline void handle_load_instruction_base_address(instruction_t* load_statement){
 	int64_t stack_offset;
@@ -12625,13 +12627,13 @@ static void handle_load_with_variable_offset_instruction(instruction_window_t* w
 			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
 
 			//Emit hte specialized offset constant for this
-			load_instruction->operands.x86.address_offset = emit_stack_passed_parameter_offset_constant(load_instruction->operands.oir.operand1->associated_memory_region.stack_region, u64);
+			load_instruction->operands.x86.address_offset = emit_stack_passed_parameter_offset_constant(base_address->associated_memory_region.stack_region, u64);
 
 			//This will be the stack pointer
 			load_instruction->operands.x86.address_register1 = stack_pointer_variable;
 
 			//And this is whatever was there before
-			load_instruction->operands.x86.address_register2 = load_instruction->operands.oir.operand2;
+			load_instruction->operands.x86.address_register2 = load_instruction->operands.oir.address_operand2;
 
 			/**
 			 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
@@ -12644,14 +12646,16 @@ static void handle_load_with_variable_offset_instruction(instruction_window_t* w
 
 			break;
 
-		//Base case we just have the variable
+		/**
+		 * At the most basic case we just have a regular dereference with the base address
+		 */
 		default:
 			//Just have registers here
 			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
 
 			//Assign over like such
-			load_instruction->operands.x86.address_register1 = load_instruction->operands.oir.operand1;
-			load_instruction->operands.x86.address_register2 = load_instruction->operands.oir.operand2;
+			load_instruction->operands.x86.address_register1 = base_address;
+			load_instruction->operands.x86.address_register2 = load_instruction->operands.oir.address_operand2;
 
 			/**
 			 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
@@ -12847,6 +12851,62 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 
 			break;
 	}
+}
+
+
+/**
+ * Combine an indirect jump address calculation with the indirect jump itself to 
+ * minimize the instruction footprint. This is most often used with switch/raise
+ * statements
+ */
+static inline void handle_indirect_jump_address_calculation(instruction_window_t* window){
+	//Extract these for convenience
+	instruction_t* address_calculation = window->instruction1;
+	instruction_t* indirect_jump = window->instruction2;
+
+
+	window->instruction2->instruction_type = INDIRECT_JMP;
+
+	//By default the true source is this, but we may need to emit a converting move
+	three_addr_var_t* true_source = window->instruction1->operands.oir.operand2;
+
+	//What is the size of this source variable? It needs
+	//to be 32 bits or more to avoid needing a conversion
+	switch(true_source->variable_size){
+		//These two mean that we're fine
+		case QUAD_WORD:
+		case DOUBLE_WORD:
+			break;
+
+		//Otherwise, a conversion is required
+		default:
+			//If it is signed, we'll want to preserve the signedness
+			if(is_type_signed(true_source->type) == TRUE){
+				true_source = create_and_insert_converting_move_instruction(window->instruction1, window->instruction1->operands.oir.operand2, i32);
+
+			//Otherwise, we'll use the unsigned version
+			} else {
+				true_source = create_and_insert_converting_move_instruction(window->instruction1, window->instruction1->operands.oir.operand2, u32);
+			}
+
+			break;
+	}
+
+	//The source register is op1
+	window->instruction2->operands.x86.source_register1 = true_source;
+
+	//Store the jumping to block where the jump table is
+	window->instruction2->if_block = window->instruction1->if_block;
+
+	//We also have an "S" multiplicator factor that will always be a power of 2 stored in the lea_multiplier
+	window->instruction2->lea_multiplier = window->instruction1->lea_multiplier;
+
+	//We're now able to delete instruction 1
+	delete_statement(window->instruction1);
+
+	//Reconstruct the window with instruction2 as the start
+	reconstruct_window(window, window->instruction2);
+	return;
 }
 
 
@@ -13808,60 +13868,22 @@ static inline void handle_stack_deallocation_statement(instruction_t* instructio
  * the pattern selector ran and perform one-to-one mappings on whatever is left.
  */
 static void select_instruction_patterns(instruction_window_t* window, symtab_function_record_t* function){
-	//============================= Address Calculation Optimization  ==============================
-	//These are patterns that span multiple instructions. Often we're able to
-	//condense these multiple instructions into one singular x86 instruction
-	//
-	//We want to ensure that we get the best possible outcome for memory movement address calculations.
-	//This is where *a lot* of instructions get generated, so it's worth it to spend compilation time
-	//compressing these
-	//
-	//TODO REFACTOR
-	//Do we have a case where we have an indirect jump statement? If so we can handle that by condensing it into one
+	/**
+	 * ============================= Address Calculation Optimization  ==============================
+	 * These are patterns that span multiple instructions. Often we're able to
+	 * condense these multiple instructions into one singular x86 instruction
+	 * We want to ensure that we get the best possible outcome for memory movement address calculations.
+	 * This is where *a lot* of instructions get generated, so it's worth it to spend compilation time
+	 * compressing these
+	 *
+	 *
+	 * Do we have a case where we have an indirect jump statement? If so we can handle that by condensing it into one
+	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_INDIRECT_JUMP_STMT){
-		//This will be flagged as an indirect jump
-		window->instruction2->instruction_type = INDIRECT_JMP;
 
-		//By default the true source is this, but we may need to emit a converting move
-		three_addr_var_t* true_source = window->instruction1->operands.oir.operand2;
-
-		//What is the size of this source variable? It needs
-		//to be 32 bits or more to avoid needing a conversion
-		switch(true_source->variable_size){
-			//These two mean that we're fine
-			case QUAD_WORD:
-			case DOUBLE_WORD:
-				break;
-
-			//Otherwise, a conversion is required
-			default:
-				//If it is signed, we'll want to preserve the signedness
-				if(is_type_signed(true_source->type) == TRUE){
-					true_source = create_and_insert_converting_move_instruction(window->instruction1, window->instruction1->operands.oir.operand2, i32);
-
-				//Otherwise, we'll use the unsigned version
-				} else {
-					true_source = create_and_insert_converting_move_instruction(window->instruction1, window->instruction1->operands.oir.operand2, u32);
-				}
-
-				break;
-		}
-
-		//The source register is op1
-		window->instruction2->operands.x86.source_register1 = true_source;
-
-		//Store the jumping to block where the jump table is
-		window->instruction2->if_block = window->instruction1->if_block;
-
-		//We also have an "S" multiplicator factor that will always be a power of 2 stored in the lea_multiplier
-		window->instruction2->lea_multiplier = window->instruction1->lea_multiplier;
-
-		//We're now able to delete instruction 1
-		delete_statement(window->instruction1);
-
-		//Reconstruct the window with instruction2 as the start
-		reconstruct_window(window, window->instruction2);
+		//Let the helper deal with it
+		handle_indirect_jump_address_calculation(window);
 		return;
 	}
 
