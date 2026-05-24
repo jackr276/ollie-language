@@ -691,7 +691,7 @@ instruction_t* emit_lea_index_and_scale_only(three_addr_var_t* assignee, three_a
 /**
  * Emit an indirect jump calculation that includes a block label in three address code form
  */
-instruction_t* emit_indir_jump_address_calc_instruction(three_addr_var_t* assignee, void* jump_table, three_addr_var_t* op2, u_int64_t type_size);
+instruction_t* emit_indir_jump_address_calc_instruction(three_addr_var_t* assignee, void* jumping_to_block, three_addr_var_t* index, u_int64_t type_size);
 
 /**
  * Emit a statement using three vars and a binary operator

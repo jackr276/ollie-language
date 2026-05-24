@@ -12858,17 +12858,19 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
  * Combine an indirect jump address calculation with the indirect jump itself to 
  * minimize the instruction footprint. This is most often used with switch/raise
  * statements
+ *
+ * TODO why can't we just have this be one instruction
  */
 static inline void handle_indirect_jump_address_calculation(instruction_window_t* window){
 	//Extract these for convenience
 	instruction_t* address_calculation = window->instruction1;
 	instruction_t* indirect_jump = window->instruction2;
 
-
-	window->instruction2->instruction_type = INDIRECT_JMP;
+	//Set this to be the proper instruction type
+	indirect_jump->instruction_type = INDIRECT_JMP;
 
 	//By default the true source is this, but we may need to emit a converting move
-	three_addr_var_t* true_source = window->instruction1->operands.oir.operand2;
+	three_addr_var_t* true_source = address_calculation->operands.oir.operand2;
 
 	//What is the size of this source variable? It needs
 	//to be 32 bits or more to avoid needing a conversion
@@ -12901,11 +12903,12 @@ static inline void handle_indirect_jump_address_calculation(instruction_window_t
 	//We also have an "S" multiplicator factor that will always be a power of 2 stored in the lea_multiplier
 	window->instruction2->lea_multiplier = window->instruction1->lea_multiplier;
 
-	//We're now able to delete instruction 1
-	delete_statement(window->instruction1);
+	//We're now able to delete address calculation
+	delete_statement(address_calculation);
 
-	//Reconstruct the window with instruction2 as the start
-	reconstruct_window(window, window->instruction2);
+	//Reconstruct the window with the indirect jump as the start
+	reconstruct_window(window, indirect_jump);
+
 	return;
 }
 
