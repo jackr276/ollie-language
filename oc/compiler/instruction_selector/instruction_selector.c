@@ -902,13 +902,45 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						exit(1);
 				}
 
-				//We're completely done once we get here
+				/**
+				 * We are completely done once we get here so we leave
+				 */
 				return;
 
-			//Otherwise we get out
+			/**
+			 * If the variable is not the type that we're after, we come down to the next section to handle
+			 * it in a non-global variable context
+			 */
 			default:
 				break;
 		}
+	}
+
+	/**
+	 * If we've survived to down here, we know that we don't have to deal with a global or static
+	 * variable. Because of that we can make a few more assumptions that allow us to
+	 * handle things in a different way with more potential to optimize several instructions together
+	 */
+	three_addr_var_t* memory_address_operand = instruction->operands.oir.operand1;
+
+	/**
+	 * There are two things that we need to account for here: regular memory address vars that
+	 * are stack local and variables that are stack passed parameters. The two take different
+	 * approaches which is why they are separated over here
+	 */
+	switch(memory_address_operand->variable_type){
+		case VARIABLE_TYPE_MEMORY_ADDRESS:
+			break;
+
+
+		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+			break;
+			
+
+		//This should be impossible
+		default:
+			printf("Fatal internal compiler error: invalid variable membership found in memory address remediator\n");
+			exit(1);
 	}
 
 
@@ -923,15 +955,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 	 */
 	if(instruction->statement_type != THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET
 		&& instruction->statement_type != THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET){
-		//Extract the variable
-		symtab_variable_record_t* associated_variable = instruction->op1->linked_var;
 
-
-		/**
-		 * There are two things that we need to account for here: regular memory address vars that
-		 * are stack local and variables that are stack passed parameters. The two take different
-		 * approaches which is why they are separated over here
-		 */
 		switch(instruction->op1->variable_type){
 			case VARIABLE_TYPE_MEMORY_ADDRESS:
 				//The additional offset may come from stack passed parameters, and we need to account for it
@@ -1312,120 +1336,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 
 				break;
 
-			//This should be impossible
-			default:
-				printf("Fatal internal compiler error: invalid variable membership found in memory address remediator\n");
-				exit(1);
 		}
-
-	/**
-	 * If we get here we have a store with an offset(constant or variable). They should both be handled in the same way
-	 * because the memory address var that we are after is going to be in op2 regardless
-	 */
-	} else {
-		symtab_variable_record_t* associated_variable = instruction->op2->linked_var;
-
-		/**
-		 * Special handling if this is a global variable. Global variables will generate 2 instructions on most occassions
-		 * the lea instruction to grab the address and then the actual address manipulation in the binary operation. Note that for these steps,
-		 * window reconstruction is required
-		 *
-		 * NOTE: since this is a global variable, it is impossible for a function parameter that is passed via the stack to get caught up in this
-		 */
-		if(associated_variable != NULL){
-			switch(associated_variable->membership){
-				case GLOBAL_VARIABLE:
-				case STATIC_VARIABLE:
-					//Let the helper emit the statement
-					address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op2, instruction_pointer_variable);
-
-					//Put this right before the store
-					insert_instruction_before_given(address_instruction, instruction);
-
-					//The assignee here now is our op1 variable
-					instruction->op2 = address_instruction->assignee;
-
-					//We cna just bail out once done
-					return;
-
-				//Otherwise we get out
-				default:
-					break;
-			}
-		}
-
-		/**
-		 * There are two things that we need to account for here: regular memory address vars that
-		 * are stack local and variables that are stack passed parameters. The two take different
-		 * approaches which is why they are separated over here
-		 */
-		switch(instruction->op2->variable_type){
-			case VARIABLE_TYPE_MEMORY_ADDRESS:
-				//The additional offset may come from stack passed parameters, and we need to account for it
-				additional_offset = instruction->op2->memory_address_base_adjustment;
-
-				/**
-				 * Extract the stack offset for our use. This will determine how 
-				 * we process things down below
-				 */
-				stack_offset = instruction->op2->associated_memory_region.stack_region->function_local_base_address + additional_offset;
-
-				//Make it a lea
-				if(stack_offset != 0){
-					//Emit the stack offset constant
-					three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
-
-					//Now the lea for our calculation
-					instruction_t* lea_statement = emit_lea_offset_only(emit_temp_var(u64), stack_pointer_variable, offset_constant);
-
-					//This lea goes in right before the store
-					insert_instruction_before_given(lea_statement, instruction);
-
-					//The op2 here is now what the lea calculated
-					instruction->op2 = lea_statement->assignee;
-
-				/**
-				 * Otherwise, we'll just swap the var out with the stack pointer since
-				 * they're one in the same. We don't need any extra instructions
-				 * before the store for this
-				 */
-				} else {
-					instruction->op2 = stack_pointer_variable;
-				}
-
-				break;
-
-			/**
-			 * A stack passed parameter address is different in a few ways. First off, we do not
-			 * know and cannot know what the actual constant value is until after register allocation.
-			 * This is a major limitation. We do however know that it will never be 0 due to the way
-			 * that the function return address is saved on the stack. We can use this to simpilify our
-			 * processing, but fundamentally we are limited here
-			 */
-			case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-				//Grab the additional offset for processing
-				additional_offset = instruction->op2->memory_address_base_adjustment;
-
-				//Emit the special stack constant
-				stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op2->associated_memory_region.stack_region, u64);
-
-				//Now emit the address calculation
-				address_instruction = emit_lea_offset_only(emit_temp_var(u64), stack_pointer_variable, stack_offset_constant);
-
-				//This goes in right before the store does
-				insert_instruction_before_given(address_instruction, instruction);
-
-				//The op1 now comes from this instruction
-				instruction->op2 = address_instruction->assignee;
-
-				break;
-
-			//This should be impossible
-			default:
-				printf("Fatal internal compiler error: invalid variable membership found in memory address remediator\n");
-				exit(1);
-		}
-	}
 }
 
 
