@@ -3982,60 +3982,52 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * simplifiable
 			 */
 			case DOUBLE_OR:
+				//First option - the value is 0. If it is, then anything else is irrelevant
+				if(is_constant_value_zero(current_instruction->operands.oir.constant_operand) == TRUE){
+					//First we add a test instruction
+					instruction_t* test_instruction = test_instruction = emit_test_if_not_zero_statement(emit_temp_var(u8), current_instruction->operands.oir.operand1);
+								
+					//The result of this will be used for our set instruction
+					instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8), test_instruction->operands.oir.assignee);
+
+					//Assign the two over
+					instruction_t* assignment = emit_assignment_instruction(current_instruction->operands.oir.assignee, setne_instruction->operands.oir.assignee);
+
+					//Insert these both in beforehand
+					insert_instruction_before_given(test_instruction, current_instruction);
+					insert_instruction_before_given(setne_instruction, current_instruction);
+					insert_instruction_before_given(assignment, current_instruction);
+
+					//And then remove this now useless current instruction
+					delete_statement(current_instruction);
+
+					//Reconstruct the window based on the set instruction
+					reconstruct_window(window, assignment);
+
+				//Otherwise, the value is not 0
+				} else {
+					//It's now just an assign statement
+					current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+					//Wipe out op1
+					if(current_instruction->operands.oir.operand1 != NULL){
+						current_instruction->operands.oir.operand1->use_count--;
+						current_instruction->operands.oir.operand1;
+					}
+
+					//Set the constant's value to 1
+					current_instruction->operands.oir.constant_operand->constant_value.signed_long_constant = 1;
+				}
+
+				//We changed something
+				changed = TRUE;
+				break;
 
 			//By default do nothing
 			default:
 				break;
 		}
 	}
-
-
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& window->instruction1->op == DOUBLE_OR){
-		//For convenience extract this
-		instruction_t* current_instruction = window->instruction1;
-
-		//First option - the value is 0. If it is, then anything else is irrelevant
-		if(is_constant_value_zero(current_instruction->op1_const) == TRUE){
-			//First we add a test instruction
-			instruction_t* test_instruction = test_instruction = emit_test_if_not_zero_statement(emit_temp_var(u8), current_instruction->op1);
-						
-			//The result of this will be used for our set instruction
-			instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8), test_instruction->operands.oir.assignee);
-
-			//Assign the two over
-			instruction_t* assignment = emit_assignment_instruction(current_instruction->operands.oir.assignee, setne_instruction->operands.oir.assignee);
-
-			//Insert these both in beforehand
-			insert_instruction_before_given(test_instruction, current_instruction);
-			insert_instruction_before_given(setne_instruction, current_instruction);
-			insert_instruction_before_given(assignment, current_instruction);
-
-			//And then remove this now useless current instruction
-			delete_statement(current_instruction);
-
-			//Reconstruct the window based on the set instruction
-			reconstruct_window(window, assignment);
-
-		//Otherwise, the value is not 0
-		} else {
-			//It's now just an assign statement
-			current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-
-			//Wipe out op1
-			if(current_instruction->op1 != NULL){
-				current_instruction->op1->use_count--;
-				current_instruction->op1 = NULL;
-			}
-
-			//Set the constant's value to 1
-			current_instruction->op1_const->constant_value.signed_long_constant = 1;
-		}
-
-		//We changed something
-		changed = TRUE;
-	}
-
 
 	/**
 	 * ================== Arithmetic Operation Simplifying ==========================
@@ -4068,7 +4060,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 */
 	if(first_instruction->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
 		//Grab this out for convenience
-		three_addr_const_t* constant = first_instruction->op1_const;
+		three_addr_const_t* constant = first_instruction->operands.oir.constant_operand;
 
 		//If this is 0, then we can optimize
 		if(is_constant_value_zero(constant) == TRUE){
@@ -4083,7 +4075,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					//We're just assigning here
 					first_instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
 					//Wipe the values out
-					first_instruction->op1_const = NULL;
+					first_instruction->operands.oir.constant_operand = NULL;
 
 					//Also scrap the op
 					first_instruction->op = BLANK;
@@ -4098,9 +4090,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					first_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
 					//The constant is still the same thing(0), let's just wipe out the ops
-					if(first_instruction->op1 != NULL){
-						first_instruction->op1->use_count--;
-						first_instruction->op1 = NULL;
+					if(first_instruction->operands.oir.operand1 != NULL){
+						first_instruction->operands.oir.operand1->use_count--;
+						first_instruction->operands.oir.operand1 = NULL;
 					}
 
 					//We changed something
@@ -4137,36 +4129,36 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					/**
 					 * If we don't have something like x_1 = x_0 + 1, we can't be doing this so we'll leave
 					 */
-					if(variables_equal_no_ssa(first_instruction->operands.oir.assignee, first_instruction->op1, TRUE) == FALSE){
+					if(variables_equal_no_ssa(first_instruction->operands.oir.assignee, first_instruction->operands.oir.operand1, TRUE) == FALSE){
 						break;
 					}
 
 					//Now turn it into an inc statement
 					first_instruction->statement_type = THREE_ADDR_CODE_INC_STMT;
 					//Wipe the values out
-					first_instruction->op1_const = NULL;
+					first_instruction->operands.oir.constant_operand = NULL;
 					first_instruction->op = BLANK;
+
 					//We changed something
 					changed = TRUE;
-
 					break;
 
 				case MINUS:
 					/**
 					 * If we don't have something like x_1 = x_0 - 1, we can't be doing this so we'll leave
 					 */
-					if(variables_equal_no_ssa(first_instruction->operands.oir.assignee, first_instruction->op1, TRUE) == FALSE){
+					if(variables_equal_no_ssa(first_instruction->operands.oir.assignee, first_instruction->operands.oir.operand1, TRUE) == FALSE){
 						break;
 					}
 
 					//Change what the class is
 					first_instruction->statement_type = THREE_ADDR_CODE_DEC_STMT;
 					//Wipe the values out
-					first_instruction->op1_const = NULL;
+					first_instruction->operands.oir.constant_operand = NULL;
 					first_instruction->op = BLANK;
+
 					//We changed something
 					changed = TRUE;
-
 					break;
 
 				//These are both the same - handle a 1 multiply, 1 divide
@@ -4175,11 +4167,11 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					//Change it to a regular assignment statement
 					first_instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
 					//Wipe the operator out
-					first_instruction->op1_const = NULL;
+					first_instruction->operands.oir.constant_operand = NULL;
 					first_instruction->op = BLANK;
+
 					//We changed something
 					changed = TRUE;
-
 					break;
 
 				//Modulo by 1 will always result in 0
@@ -4191,17 +4183,18 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					first_instruction->op = BLANK;
 
 					//We no longer even need our op1
-					if(first_instruction->op1 != NULL){
-						first_instruction->op1->use_count--;
-						first_instruction->op1 = NULL;
+					if(first_instruction->operands.oir.operand1 != NULL){
+						first_instruction->operands.oir.operand1->use_count--;
+						first_instruction->operands.oir.operand1 = NULL;
 					}
 
 					//We can modify op1 const to just be 0 now. This is lazy but it
 					//works, we'll just 0 out all 64 bits
-					first_instruction->op1_const->constant_value.signed_long_constant = 0;
+					first_instruction->operands.oir.constant_operand->constant_value.signed_long_constant = 0;
 
 					//We changed something
 					changed = TRUE;
+					break;
 
 				//Just bail out
 				default:
@@ -4226,11 +4219,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				 */
 				case STAR:
 					first_instruction->op = L_SHIFT;
-					update_constant_with_log2_value(first_instruction->op1_const);
+					update_constant_with_log2_value(first_instruction->operands.oir.constant_operand);
 
-					//This is a change
 					changed = TRUE;
-
 					break;
 
 				/**
@@ -4241,11 +4232,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				 */
 				case F_SLASH:
 					first_instruction->op = R_SHIFT;
-					update_constant_with_log2_value(first_instruction->op1_const);
+					update_constant_with_log2_value(first_instruction->operands.oir.constant_operand);
 
-					//This is a change
 					changed = TRUE;
-
 					break;
 
 				/**
@@ -4255,9 +4244,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				case MOD:
 					optimize_mod_by_power_of_2(window);
 
-					//This is a change
 					changed = TRUE;
-
 					break;
 
 				//Do nothing
@@ -4280,7 +4267,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * This is incredibly common with array address calculations, which is why we do it. We focus on the special case
 	 * of two consecutive additions here for this reason. Any other two consecutive operations are usually quite uncommon
 	 */
-	//If instructions 1 and 2 are both BIN_OP_WITH_CONST
 	if(window->instruction2 != NULL && window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction2->op == PLUS && window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT 
 		&& window->instruction1->op == PLUS){
@@ -4290,25 +4276,26 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		instruction_t* second = window->instruction2;
 
 		//Calculate this for now in case we need it
-		generic_type_t* final_type = types_assignable(second->op1_const->type, first->op1_const->type);
+		generic_type_t* final_type = types_assignable(second->operands.oir.constant_operand->type, first->operands.oir.constant_operand->type);
 
 		//If these are the same variable and the types are compatible, then we're good to go
-		if(variables_equal(first->operands.oir.assignee, second->op1, FALSE) == TRUE && final_type != NULL){
-			//What we'll do first is add the two constants. The resultant constant will be stored
-			//in the second instruction's constant
-			add_constants(second->op1_const, first->op1_const);
+		if(variables_equal(first->operands.oir.assignee, second->operands.oir.operand1, FALSE) == TRUE && final_type != NULL){
+			/**
+			 * What we'll do first is add the two constants. The resultant constant will be stored
+			 * in the second instruction's constant
+			 */
+			add_constants(second->operands.oir.constant_operand, first->operands.oir.constant_operand);
 
 			//Manage our use state here
-			replace_variable(second->op1, first->op1);
+			replace_variable(second->operands.oir.operand1, first->operands.oir.operand1);
 
 			//Now that we've done that, we'll modify the second equation's op1 to be the first equation's op1
-			second->op1 = first->op1;
+			second->operands.oir.operand1 = first->operands.oir.operand1;
 
 			//Now that this is done, we can remove the first equation
 			delete_statement(first);
 
-			//We'll reconstruct the window with the second instruction being the
-			//first instruction now
+			//We'll reconstruct the window with the second instruction being the first instruction now
 			reconstruct_window(window, second);
 
 			//This counts as a change because we deleted
