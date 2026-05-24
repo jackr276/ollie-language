@@ -11578,360 +11578,179 @@ static instruction_t* emit_register_movement_instruction_directly(three_addr_var
 /**
  * Handle the assignment of the source for a store instruction.
  *
- * This function will account for all edge cases(op1 vs op2 vs op1_const), as well
+ * This function will account for all edge cases, as well
  * as the unique case where our source is a 32 bit integer *but* we are saving to an
  * unsigned 64 bit memory region, as well as the unique case where we need to handle floating
  * point areas coming from bytes/shorts
  */
 static void handle_store_instruction_sources_and_instruction_type(instruction_t* store_instruction){
-	//For holding the type adjusted source if we need it
-	three_addr_var_t* type_adjusted_source;
-
-	//A converting move instruction placeholder for the float case
-	instruction_t* converting_move;
-
-	//A secondary conversion. This is only required for the case of byte/short to floating point
-	instruction_t* second_conversion;
-
-	//The pxor instruction in case we have a float destination
-	instruction_t* pxor_instruction;
-
-	//The destination type is always stored in the instruction itself
+	//We'll need the source and memory write types on hand
+	generic_type_t* source_type;
 	generic_type_t* destination_type = store_instruction->type_storage.memory_read_write_type;
 
-	//The source type will be assigned later
-	generic_type_t* source_type;
+	/**
+	 * All store instructions have what they are actually storing cached inside of the 
+	 * very first operand
+	 */
+	if(store_instruction->operands.oir.operand1 != NULL){
+		//Mark that the source type is op1
+		source_type = store_instruction->operands.oir.operand1->type;
 
-	//Go based on what we have
-	switch(store_instruction->statement_type){
-		//For stores like this, we either have an op1 or an immediate source
-		case THREE_ADDR_CODE_STORE_STATEMENT:
-			//The op1 is where we may have conversion issues
-			if(store_instruction->operands.oir.operand1 != NULL){
-				//Mark that the source type is op1
-				source_type = store_instruction->operands.oir.operand1->type;
+		/**
+		 * Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
+		 * movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
+		 * zero pad when 32 bit moves happen
+		 */
+		if(is_type_unsigned_64_bit(destination_type) == TRUE 
+			&& is_type_32_bit_int(source_type) == TRUE){
+			//First we duplicate it
+			three_addr_var_t* duplicate_64_bit = emit_var_copy(store_instruction->operands.oir.operand1);
 
-				/**
-				 * Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
-				 * movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
-				 * zero pad when 32 bit moves happen
-				 */
-				if(is_type_unsigned_64_bit(destination_type) == TRUE 
-					&& is_type_32_bit_int(source_type) == TRUE){
-					//First we duplicate it
-					three_addr_var_t* duplicate_64_bit = emit_var_copy(store_instruction->operands.oir.operand1);
+			//Then we give it the type that we want
+			duplicate_64_bit->type = store_instruction->operands.oir.assignee->type;
+			duplicate_64_bit->variable_size = get_type_size(duplicate_64_bit->type);
 
-					//Then we give it the type that we want
-					duplicate_64_bit->type = store_instruction->operands.oir.assignee->type;
-					duplicate_64_bit->variable_size = get_type_size(duplicate_64_bit->type);
+			//And this will be our source
+			store_instruction->operands.x86.source_register1 = duplicate_64_bit;
 
-					//And this will be our source
-					store_instruction->operands.x86.source_register1 = duplicate_64_bit;
+		/**
+		 * If we have a case where we are trying to move an 8/16 bit
+		 * value into an f32/f64 value, unfortunately no x86-64 instructions
+		 * exist to do that conversion. Instead, we'll need to first convert
+		 * this value into a 32 bit integer, and then convert that into
+		 * a floating point value
+		 */
+		} else if(is_type_floating_point(destination_type) == TRUE 
+			&& source_type->type_size <= 2){
+			//We'll need to type adjust the source & emit a converting move
+			three_addr_var_t* type_adjusted_source;
+			instruction_t* converting_move;
+			instruction_t* second_conversion;
+			instruction_t* pxor_instruction;
 
-				/**
-				 * If we have a case where we are trying to move an 8/16 bit
-				 * value into an f32/f64 value, unfortunately no x86-64 instructions
-				 * exist to do that conversion. Instead, we'll need to first convert
-				 * this value into a 32 bit integer, and then convert that into
-				 * a floating point value
-				 */
-				} else if(is_type_floating_point(destination_type) == TRUE 
-					&& source_type->type_size <= 2){
+			//Go based on the source type token
+			switch(source_type->basic_type_token){
+				//Signed values, we will use an i32
+				case CHAR:
+				case I8:
+				case I16:
+					//Move the old value into an i32 slot
+					type_adjusted_source = emit_temp_var(i32);
+					converting_move = emit_move_instruction(type_adjusted_source, store_instruction->operands.oir.operand1);
 
-					//Go based on the source type token
-					switch(source_type->basic_type_token){
-						//Signed values, we will use an i32
-						case CHAR:
-						case I8:
-						case I16:
-							//Move the old value into an i32 slot
-							type_adjusted_source = emit_temp_var(i32);
-							converting_move = emit_move_instruction(type_adjusted_source, store_instruction->operands.oir.operand1);
-
-							//This goes before our given instruction
-							insert_instruction_before_given(converting_move, store_instruction);
-
-							//Final type adjustment here, we don't have any store
-							//converting moves so we'll need to do this now
-							type_adjusted_source = emit_temp_var(destination_type);
-
-							//Since this is a floating point destination, we need to 0 it out first
-							pxor_instruction = emit_sse_register_clear_instruction(type_adjusted_source);
-
-							//Put it in after the converting move
-							insert_instruction_after_given(pxor_instruction, converting_move);
-
-							//Emit the second convervsion between to go from an i32 to a float
-							second_conversion = emit_move_instruction(type_adjusted_source, converting_move->operands.x86.destination_register);
-
-							//Get this into the block
-							insert_instruction_before_given(second_conversion, store_instruction);
-
-							//Finally, the store's source will be this final source varialbe
-							store_instruction->operands.x86.source_register1 = second_conversion->operands.x86.destination_register;
-
-							//Once we're here the source type really is now the destination type
-							source_type = destination_type;
-
-							break;
-
-						//Unsigned values, we'll use a u32
-						case U8:
-						case U16:
-							//Move the old value into a u32 slot
-							type_adjusted_source = emit_temp_var(u32);
-							converting_move = emit_move_instruction(type_adjusted_source, store_instruction->operands.oir.operand1);
-
-							//This goes before our given instruction
-							insert_instruction_before_given(converting_move, store_instruction);
-
-							//Final type adjustment here, we don't have any store
-							//converting moves so we'll need to do this now
-							type_adjusted_source = emit_temp_var(destination_type);
-
-							//Since this is a floating point destination, we need to 0 it out first
-							pxor_instruction = emit_sse_register_clear_instruction(type_adjusted_source);
-
-							//Put it in after the converting move
-							insert_instruction_after_given(pxor_instruction, converting_move);
-
-							//Emit the second convervsion between to go from an i32 to a float
-							second_conversion = emit_move_instruction(type_adjusted_source, converting_move->operands.x86.destination_register);
-
-							//Get this into the block
-							insert_instruction_before_given(second_conversion, store_instruction);
-
-							//Finally, the store's source will be this final source varialbe
-							store_instruction->operands.x86.source_register1 = second_conversion->operands.x86.destination_register;
-
-							//Once we're here the source type really is now the destination type
-							source_type = destination_type;
-
-							break;
-
-						//Everything else do nothing
-						default:
-							break;
-					}
-
-				/**
-				 * In the event that a converting move is required, we need to insert the converting
-				 * move in before the store instruction because x86 assembly does not allow us
-				 * to do *to memory* converting moves
-				 */
-				} else if(is_converting_move_required(destination_type, source_type) == TRUE) {
-					//Emit a temp var that is the destination's type
-					three_addr_var_t* new_source = emit_temp_var(destination_type);
-
-					//Emit a move instruction where we send the old source(op1) into here
-					instruction_t* converting_move = emit_register_movement_instruction_directly(new_source, store_instruction->operands.oir.operand1);
-					
-					//Insert this *right before* the store
+					//This goes before our given instruction
 					insert_instruction_before_given(converting_move, store_instruction);
 
-					/**
-					 * If we have a conversion instruction that has an SSE destination, we need to emit
-					 * a special "pxor" statement beforehand to completely wipe out said register
-					 */
-					if(is_integer_to_sse_conversion_instruction(converting_move->instruction_type) == TRUE){
-						//We need to completely zero out the destination register here, so we will emit a pxor to do
-						//just that
-						pxor_instruction = emit_sse_register_clear_instruction(new_source);
+					//Final type adjustment here, we don't have any store
+					//converting moves so we'll need to do this now
+					type_adjusted_source = emit_temp_var(destination_type);
 
-						//Get this in right before the given
-						insert_instruction_before_given(pxor_instruction, converting_move);
-					}
+					//Since this is a floating point destination, we need to 0 it out first
+					pxor_instruction = emit_sse_register_clear_instruction(type_adjusted_source);
 
-					//Now, our source type is the destination's type
+					//Put it in after the converting move
+					insert_instruction_after_given(pxor_instruction, converting_move);
+
+					//Emit the second convervsion between to go from an i32 to a float
+					second_conversion = emit_move_instruction(type_adjusted_source, converting_move->operands.x86.destination_register);
+
+					//Get this into the block
+					insert_instruction_before_given(second_conversion, store_instruction);
+
+					//Finally, the store's source will be this final source varialbe
+					store_instruction->operands.x86.source_register1 = second_conversion->operands.x86.destination_register;
+
+					//Once we're here the source type really is now the destination type
 					source_type = destination_type;
 
-					//And the source register is the new source, not the old one
-					store_instruction->operands.x86.source_register1 = new_source;
+					break;
 
-				/**
-				 * In all other cases, we can just straight assign here
-				 */
-				} else {
-					store_instruction->operands.x86.source_register1 = store_instruction->operands.oir.operand1;
-				}
+				//Unsigned values, we'll use a u32
+				case U8:
+				case U16:
+					//Move the old value into a u32 slot
+					type_adjusted_source = emit_temp_var(u32);
+					converting_move = emit_move_instruction(type_adjusted_source, store_instruction->operands.oir.operand1);
 
-			//If we get here it's a plain copy
-			} else {
-				//If we get here, we can just use the destination type
-				source_type = destination_type;
-
-				store_instruction->operands.x86.source_immediate = store_instruction->operands.oir.constant_operand;
-			}
-
-			break;
-
-		//For these kinds of stores, op2 would have our value
-		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-			//The op1 is where we may have conversion issues
-			if(store_instruction->operands.oir.operand2 != NULL){
-				//Mark that the source type is op2
-				source_type = store_instruction->operands.oir.operand2->type;
-
-				/**
-				 * Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
-				 * movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
-				 * zero pad when 32 bit moves happen
-				 */
-				if(is_type_unsigned_64_bit(destination_type) == TRUE 
-					&& is_type_32_bit_int(source_type) == TRUE){
-					//First we duplicate it
-					three_addr_var_t* duplicate_64_bit = emit_var_copy(store_instruction->operands.oir.operand2);
-
-					//Then we give it the type that we want
-					duplicate_64_bit->type = store_instruction->operands.oir.assignee->type;
-					duplicate_64_bit->variable_size = get_type_size(duplicate_64_bit->type);
-
-					//And this will be our source
-					store_instruction->operands.x86.source_register1 = duplicate_64_bit;
-
-				/**
-				 * If we have a case where we are trying to move an 8/16 bit
-				 * value into an f32/f64 value, unfortunately no x86-64 instructions
-				 * exist to do that conversion. Instead, we'll need to first convert
-				 * this value into a 32 bit integer, and then convert that into
-				 * a floating point value
-				 */
-				} else if(is_type_floating_point(destination_type) == TRUE 
-					&& source_type->type_size <= 2){
-
-					//Go based on the source type token
-					switch(source_type->basic_type_token){
-						//Signed values, we will use an i32
-						case CHAR:
-						case I8:
-						case I16:
-							//Move the old value into an i32 slot
-							type_adjusted_source = emit_temp_var(i32);
-							converting_move = emit_move_instruction(type_adjusted_source, store_instruction->operands.oir.operand2);
-
-							//This goes before our given instruction
-							insert_instruction_before_given(converting_move, store_instruction);
-
-							//Final type adjustment here, we don't have any store
-							//converting moves so we'll need to do this now
-							type_adjusted_source = emit_temp_var(destination_type);
-
-							//Since this is a floating point destination, we need to 0 it out first
-							pxor_instruction = emit_sse_register_clear_instruction(type_adjusted_source);
-
-							//Put it in after the converting move
-							insert_instruction_after_given(pxor_instruction, converting_move);
-
-							//Emit the second convervsion between to go from an i32 to a float
-							second_conversion = emit_move_instruction(type_adjusted_source, converting_move->operands.x86.destination_register);
-
-							//Get this into the block
-							insert_instruction_before_given(second_conversion, store_instruction);
-
-							//Finally, the store's source will be this final source varialbe
-							store_instruction->operands.x86.source_register1 = second_conversion->operands.x86.destination_register;
-
-							//Once we're here the source type really is now the destination type
-							source_type = destination_type;
-
-							break;
-
-						//Unsigned values, we'll use a u32
-						case U8:
-						case U16:
-							//Move the old value into a u32 slot
-							type_adjusted_source = emit_temp_var(u32);
-							converting_move = emit_move_instruction(type_adjusted_source, store_instruction->operands.oir.operand2);
-
-							//This goes before our given instruction
-							insert_instruction_before_given(converting_move, store_instruction);
-
-							//Final type adjustment here, we don't have any store
-							//converting moves so we'll need to do this now
-							type_adjusted_source = emit_temp_var(destination_type);
-
-							//Since this is a floating point destination, we need to 0 it out first
-							pxor_instruction = emit_sse_register_clear_instruction(type_adjusted_source);
-
-							//Put it in after the converting move
-							insert_instruction_after_given(pxor_instruction, converting_move);
-
-							//Emit the second convervsion between to go from an i32 to a float
-							second_conversion = emit_move_instruction(type_adjusted_source, converting_move->operands.x86.destination_register);
-
-							//Get this into the block
-							insert_instruction_before_given(second_conversion, store_instruction);
-
-							//Finally, the store's source will be this final source varialbe
-							store_instruction->operands.x86.source_register1 = second_conversion->operands.x86.destination_register;
-
-							//Once we're here the source type really is now the destination type
-							source_type = destination_type;
-
-							break;
-
-						//Everything else do nothing
-						default:
-							break;
-					}
-
-				/**
-				 * In the event that a converting move is required, we need to insert the converting
-				 * move in before the store instruction because x86 assembly does not allow us
-				 * to do *to memory* converting moves
-				 */
-				} else if(is_converting_move_required(destination_type, source_type) == TRUE) {
-					//Emit a temp var that is the destination's type
-					three_addr_var_t* new_source = emit_temp_var(destination_type);
-
-					//Emit a move instruction where we send the old source(op1) into here
-					instruction_t* converting_move = emit_register_movement_instruction_directly(new_source, store_instruction->operands.oir.operand2);
-					
-					//Insert this *right before* the store
+					//This goes before our given instruction
 					insert_instruction_before_given(converting_move, store_instruction);
 
-					/**
-					 * If we have a conversion instruction that has an SSE destination, we need to emit
-					 * a special "pxor" statement beforehand to completely wipe out said register
-					 */
-					if(is_integer_to_sse_conversion_instruction(converting_move->instruction_type) == TRUE){
-						//We need to completely zero out the destination register here, so we will emit a pxor to do
-						//just that
-						pxor_instruction = emit_sse_register_clear_instruction(new_source);
+					//Final type adjustment here, we don't have any store
+					//converting moves so we'll need to do this now
+					type_adjusted_source = emit_temp_var(destination_type);
 
-						//Get this in right before the given
-						insert_instruction_before_given(pxor_instruction, converting_move);
-					}
+					//Since this is a floating point destination, we need to 0 it out first
+					pxor_instruction = emit_sse_register_clear_instruction(type_adjusted_source);
 
+					//Put it in after the converting move
+					insert_instruction_after_given(pxor_instruction, converting_move);
 
-					//Now, our source type is the new destination's type
+					//Emit the second convervsion between to go from an i32 to a float
+					second_conversion = emit_move_instruction(type_adjusted_source, converting_move->operands.x86.destination_register);
+
+					//Get this into the block
+					insert_instruction_before_given(second_conversion, store_instruction);
+
+					//Finally, the store's source will be this final source varialbe
+					store_instruction->operands.x86.source_register1 = second_conversion->operands.x86.destination_register;
+
+					//Once we're here the source type really is now the destination type
 					source_type = destination_type;
 
-					//And the source register is the new source, not the old one
-					store_instruction->operands.x86.source_register1 = new_source;
+					break;
 
-				/**
-				 * In all other cases, we can just straight assign here
-				 */
-				} else {
-					store_instruction->operands.x86.source_register1 = store_instruction->operands.oir.operand2;
-				}
-
-			} else {
-				//If we get here, we can just use the destination type
-				source_type = destination_type;
-
-				//Simple copy over
-				store_instruction->operands.x86.source_immediate = store_instruction->operands.oir.constant_operand;
+				//Everything else do nothing
+				default:
+					break;
 			}
 
-			break;
+		/**
+		 * In the event that a converting move is required, we need to insert the converting
+		 * move in before the store instruction because x86 assembly does not allow us
+		 * to do *to memory* converting moves
+		 */
+		} else if(is_converting_move_required(destination_type, source_type) == TRUE) {
+			//Emit a temp var that is the destination's type
+			three_addr_var_t* new_source = emit_temp_var(destination_type);
 
-		//Should never get here
-		default:
-			printf("Fatal internal compiler error: invalid store instruction");
-			exit(1);
+			//Emit a move instruction where we send the old source(op1) into here
+			instruction_t* converting_move = emit_register_movement_instruction_directly(new_source, store_instruction->operands.oir.operand1);
+			
+			//Insert this *right before* the store
+			insert_instruction_before_given(converting_move, store_instruction);
+
+			/**
+			 * If we have a conversion instruction that has an SSE destination, we need to emit
+			 * a special "pxor" statement beforehand to completely wipe out said register
+			 */
+			if(is_integer_to_sse_conversion_instruction(converting_move->instruction_type) == TRUE){
+				//We need to completely zero out the destination register here, so we will emit a pxor to do just that
+				instruction_t* pxor_instruction = emit_sse_register_clear_instruction(new_source);
+
+				//Get this in right before the given
+				insert_instruction_before_given(pxor_instruction, converting_move);
+			}
+
+			//Now, our source type is the destination's type
+			source_type = destination_type;
+
+			//And the source register is the new source, not the old one
+			store_instruction->operands.x86.source_register1 = new_source;
+
+		/**
+		 * In all other cases, we can just straight assign here
+		 */
+		} else {
+			store_instruction->operands.x86.source_register1 = store_instruction->operands.oir.operand1;
+		}
+
+	//If we get here it's a plain copy
+	} else {
+		//If we get here, we can just use the destination type
+		source_type = destination_type;
+
+		//Put this into the immediate source
+		store_instruction->operands.x86.source_immediate = store_instruction->operands.oir.constant_operand;
 	}
 
 	//Now we need to determine the store instruction's alignment
@@ -11944,9 +11763,9 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 	 * isn't there then we have to assume it's not
 	 */
 	switch(store_instruction->calculation_mode){
-		case ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST:
+		case ADDRESS_CALCULATION_MODE_BASE_ADDRESS_ONLY:
 			//If this is the stack pointer then we can guarantee alignmetn
-			if(store_instruction->operands.x86.destination_register == stack_pointer_variable){
+			if(store_instruction->operands.x86.address_register1 == stack_pointer_variable){
 				destination_alignment = ALIGNMENT_TYPE_GUARANTEED;
 			} else {
 				destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
@@ -12951,7 +12770,6 @@ static void handle_store_instruction(instruction_t* instruction){
 	//Store is to memory
 	instruction->memory_access_type = WRITE_TO_MEMORY;
 
-	//Handle based on the assignee type
 	switch(instruction->operands.oir.assignee->variable_type){
 		/**
 		 * This is the most common case. When we have a memory address, we are going to need

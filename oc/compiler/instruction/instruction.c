@@ -3012,21 +3012,17 @@ static void print_immediate_value_no_prefix(FILE* fl, three_addr_const_t* consta
 
 /**
  * Print out a complex addressing mode expression
+ *
+ * TODO THIS IS ALL WRONG
  */
 static void print_addressing_mode_expression(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	switch (instruction->calculation_mode) {
 		/**
 		 * This is the case where we only have a deref
 		 */
-		case ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE:
-		case ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST:
+		case ADDRESS_CALCULATION_MODE_BASE_ADDRESS_ONLY:
 			fprintf(fl, "(");
-
-			if(instruction->calculation_mode == ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE){
-				print_variable(fl, instruction->operands.x86.source_register1, mode);
-			} else {
-				print_variable(fl, instruction->operands.x86.destination_register, mode);
-			}
+			print_variable(fl, instruction->operands.x86.address_register1, mode);
 			fprintf(fl, ")");
 
 			break;
@@ -3051,7 +3047,6 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 
 			//Print the actual string name of the variable - no SSA and no registers
 			fprintf(fl, "(");
-			//This will be the instruction pointer
 			print_variable(fl, instruction->operands.x86.address_register1, mode);
 			fprintf(fl, ")");
 
