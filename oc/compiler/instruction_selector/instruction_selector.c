@@ -4305,7 +4305,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 
 	/**
-	 * Optimize loads with variable offsets into one's that have constant offsets. Also
+	 * Optimize loads and stores with variable offsets into one's that have constant offsets. Also
 	 * reduce redundant copy operations if need be
 	 *
 	 * We'll take something like:
@@ -4315,35 +4315,50 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * And make it:
 	 *
 	 * load t5 <- t4[4]
+	 *
+	 * Since loads and stores have the same underlying memory access architecture in OIR, we can
+	 * handle both instruction types in one go
 	 */
-	if(window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET){
+	if(window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET
+		|| window->instruction2->statement_type == THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET){
 		//Extract these for our convenience
-		instruction_t* load_instruction = window->instruction2;
+		instruction_t* memory_access = window->instruction2;
 		instruction_t* preceeding_instruction = window->instruction1;
 
-		//Go based on what the statement type here is
 		switch(preceeding_instruction->statement_type){
-			//If we have the assign const look at it here
 			case THREE_ADDR_CODE_ASSN_CONST_STMT:
 				//These conditions must be met for it to be ok for us to do this
 				if(preceeding_instruction->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 					&& preceeding_instruction->operands.oir.assignee->use_count == 1
-					&& variables_equal(preceeding_instruction->operands.oir.assignee, load_instruction->op2, FALSE) == TRUE){
+					&& variables_equal(preceeding_instruction->operands.oir.assignee, memory_access->operands.oir.address_operand2, FALSE) == TRUE){
 
-					//This is now a load with constant offset
-					load_instruction->statement_type = THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET;
+					//Update the type based on what we had previously
+					switch(memory_access->statement_type){
+						case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+							memory_access->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
+							break;
+
+						case THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET:
+							memory_access->statement_type = THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET;
+							break;
+
+						//Completely unreachable
+						default:
+							break;
+					}
 
 					//We don't want to have this in here anymore
-					load_instruction->op2 = NULL;
+					memory_access->operands.oir.address_operand2->use_count--;
+					memory_access->operands.oir.address_operand2 = NULL;
 
-					//Copy their constants over
-					load_instruction->operands.oir.addressing_mode_offset = preceeding_instruction->op1_const;
+					//Copy the constant over
+					memory_access->operands.oir.address_offset = preceeding_instruction->operands.oir.constant_operand;
 
 					//We can delete the entire assignment statement
 					delete_statement(preceeding_instruction);
 
-					//Reconstruct the window now based on instruction2
-					reconstruct_window(window, load_instruction);
+					//Rebuilt around the memory access
+					reconstruct_window(window, memory_access);
 
 					//This counts as change
 					changed = TRUE;
@@ -4351,23 +4366,23 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 				break;
 
-			//Handle an assign statement. Unlike before we aren't fundamentally
-			//changing the instruction, just replacing a variable
+			/**
+			 * Handle an assign statement. Unlike before we aren't fundamentally
+			 * changing the instruction, just replacing a variable
+			 */
 			case THREE_ADDR_CODE_ASSN_STMT:
-				//Same conditions must be met for this to work
 				if(preceeding_instruction->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 					&& preceeding_instruction->operands.oir.assignee->use_count == 1
-					&& variables_equal(preceeding_instruction->operands.oir.assignee, load_instruction->op2, FALSE) == TRUE){
+					&& variables_equal(preceeding_instruction->operands.oir.assignee, memory_access->operands.oir.address_operand2, FALSE) == TRUE){
 
-					//Copy over the result pre-assignment. The load instruction's 
-					//op2 will be whatever we were assigning over here
-					load_instruction->op2 = preceeding_instruction->op1;
+					//Copy the value over
+					memory_access->operands.oir.address_operand2 = preceeding_instruction->operands.oir.operand1;
 
 					//The assignment instruction itself is now useless
 					delete_statement(preceeding_instruction);
 
 					//Rebuild the window around the one that we have now
-					reconstruct_window(window, load_instruction);
+					reconstruct_window(window, memory_access);
 
 					//Counts as a change
 					changed = TRUE;
@@ -4376,84 +4391,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				break;
 
 			//By default just ignore and do nothing
-			default:
-				break;
-		}
-	}
-
-	/**
-	 * Optimize loads with variable offsets into one's that have constant offsets. Also
-	 * reduce redundant copy operations if need be
-	 *
-	 * We'll take something like:
-	 * t3 <- 4
-	 * store t4[t3] <- t5
-	 *
-	 * And make it:
-	 *
-	 * store t4[4] <- t5
-	 */
-	if(window->instruction2->statement_type == THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET){
-		//Extract these for our convenience
-		instruction_t* store_instruction = window->instruction2;
-		instruction_t* preceeding_instruction = window->instruction1;
-
-		//Only 2 types that we are going to consider - assigning constants and regular
-		//assignments that could potentially benefit from a copy fold
-		switch(preceeding_instruction->statement_type){
-			case THREE_ADDR_CODE_ASSN_CONST_STMT:
-				//These specific conditions must be met for this to be true
-				if(preceeding_instruction->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& preceeding_instruction->operands.oir.assignee->use_count == 1
-					&& variables_equal(preceeding_instruction->operands.oir.assignee, store_instruction->op1, FALSE) == TRUE){
-				}
-
-				//This now has a constant offset
-				store_instruction->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
-
-				//The op1 is now irrelevant
-				store_instruction->op1 = NULL;
-
-				//The offset just comes from the above constant
-				store_instruction->operands.oir.addressing_mode_offset = preceeding_instruction->op1_const;
-
-				//And now that we've extracted all that we can, we delete the preceeding instruction
-				delete_statement(preceeding_instruction);
-
-				//Rebuild around the new instruction
-				reconstruct_window(window, store_instruction);
-
-				//This is a change
-				changed = TRUE;
-
-				break;
-
-			//Opportunity to copy fold here
-			case THREE_ADDR_CODE_ASSN_STMT:
-				//These specific conditions must be met for this to be true
-				if(preceeding_instruction->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& preceeding_instruction->operands.oir.assignee->use_count == 1
-					&& variables_equal(preceeding_instruction->operands.oir.assignee, store_instruction->op1, FALSE) == TRUE){
-				}
-
-				//Unlike above, we do not need to change the statement type. We just need to shuffle around the values
-				//that we already have
-
-				//This becomes our op1
-				store_instruction->op1 = preceeding_instruction->op1;
-
-				//THe preceeding instruction is now irrelevant, so delete it
-				delete_statement(preceeding_instruction);
-
-				//Rebuild the entire window around the only instruction left
-				reconstruct_window(window, preceeding_instruction);
-
-				//This is a change
-				changed = TRUE;
-
-				break;
-
-			//By default don't do anything
 			default:
 				break;
 		}
