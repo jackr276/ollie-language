@@ -2424,8 +2424,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		instruction_t* move = window->instruction2;
 		
 		//If the variables are temp and the first one's assignee is the same as the second's op1, we can fold
-		if(load->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP && variables_equal(load->operands.oir.assignee, move->op1, TRUE) == TRUE
-			//And the load's assignee is only ever used once
+		if(load->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP 
+			&& variables_equal(load->operands.oir.assignee, move->operands.oir.operand1, TRUE) == TRUE
 			&& load->operands.oir.assignee->use_count <= 1){
 
 			//The load's assignee now is the move's assignee
@@ -2482,7 +2482,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		if(binary_operation->type_storage.result_type != NULL){
 			result_type = binary_operation->type_storage.result_type;
 		} else {
-			result_type = binary_operation->op1->type;
+			result_type = binary_operation->operands.oir.operand1->type;
 		}
 
 		// The binary operation determines the optimization
@@ -2499,14 +2499,14 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					simplification_constant = emit_direct_integer_or_char_constant(2, result_type);
 					
 					//Op2 is no longer needed
-					binary_operation->op2->use_count--;
-					binary_operation->op2 = NULL;
+					binary_operation->operands.oir.operand2->use_count--;
+					binary_operation->operands.oir.operand2 = NULL;
 
 					//This is now a BIN_OP_WITH_CONST
 					binary_operation->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
 
 					//Throw the constant in
-					binary_operation->op1_const = simplification_constant;
+					binary_operation->operands.oir.constant_operand = simplification_constant;
 
 					//The op is multiplication
 					binary_operation->op = STAR;
@@ -2529,10 +2529,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
 
 					//Remove these variables
-					binary_operation->op1->use_count--;
-					binary_operation->op2->use_count--;
-					binary_operation->op1 = NULL;
-					binary_operation->op2 = NULL;
+					binary_operation->operands.oir.operand1->use_count--;
+					binary_operation->operands.oir.operand1 = NULL;
+					binary_operation->operands.oir.operand2->use_count--;
+					binary_operation->operands.oir.operand2 = NULL;
 
 					//Remove the opcode to avoid confusion
 					binary_operation->op = BLANK;
@@ -2541,7 +2541,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
 					//And throw the simplification constant in
-					binary_operation->op1_const = simplification_constant;
+					binary_operation->operands.oir.constant_operand = simplification_constant;
 					
 					//This is a change
 					changed = TRUE;
@@ -2560,17 +2560,17 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
 
 				//Remove these variables
-				binary_operation->op1->use_count--;
-				binary_operation->op2->use_count--;
-				binary_operation->op1 = NULL;
-				binary_operation->op2 = NULL;
+				binary_operation->operands.oir.operand1->use_count--;
+				binary_operation->operands.oir.operand1 = NULL;
+				binary_operation->operands.oir.operand2->use_count--;
+				binary_operation->operands.oir.operand2 = NULL;
 
 				//Avoid any confusion with the op as well
 				binary_operation->op = BLANK;
 
 				//Now we will convert this into our assignment operation
 				binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-				binary_operation->op1_const = simplification_constant;
+				binary_operation->operands.oir.constant_operand = simplification_constant;
 
 				//This is a change
 				changed = TRUE;
@@ -2586,8 +2586,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			case SINGLE_AND:
 			case SINGLE_OR:
 				//Delete the second operand
-				binary_operation->op2->use_count--;
-				binary_operation->op2 = NULL;
+				binary_operation->operands.oir.operand2->use_count--;
+				binary_operation->operands.oir.operand2 = NULL;
 
 				//Avoid confusion by clearing out the operator
 				binary_operation->op = BLANK;
@@ -2614,8 +2614,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					three_addr_var_t* final_assignee = binary_operation->operands.oir.assignee;
 
 					//Get rid of the second operand and the op
-					binary_operation->op2->use_count--;
-					binary_operation->op2 = NULL;
+					binary_operation->operands.oir.operand2->use_count--;
+					binary_operation->operands.oir.operand2 = NULL;
+
+					//Clear out the operator too
 					binary_operation->op = BLANK;
 
 					//Turn this into a test to see if op1 is 0 or not, that's all we need
@@ -2662,17 +2664,17 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					simplification_constant = emit_direct_integer_or_char_constant(1, result_type);
 
 					//Remove these variables
-					binary_operation->op1->use_count--;
-					binary_operation->op2->use_count--;
-					binary_operation->op1 = NULL;
-					binary_operation->op2 = NULL;
+					binary_operation->operands.oir.operand1->use_count--;
+					binary_operation->operands.oir.operand1 = NULL;
+					binary_operation->operands.oir.operand2->use_count--;
+					binary_operation->operands.oir.operand2 = NULL;
 
 					//Avoid any confusion with the op as well
 					binary_operation->op = BLANK;
 
 					//Convert this into a regular assignment
 					binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-					binary_operation->op1_const = simplification_constant;
+					binary_operation->operands.oir.constant_operand = simplification_constant;
 
 					//This is a change
 					changed = TRUE;
@@ -2694,17 +2696,17 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
 
 					//Remove these variables
-					binary_operation->op1->use_count--;
-					binary_operation->op2->use_count--;
-					binary_operation->op1 = NULL;
-					binary_operation->op2 = NULL;
+					binary_operation->operands.oir.operand1->use_count--;
+					binary_operation->operands.oir.operand1 = NULL;
+					binary_operation->operands.oir.operand2->use_count--;
+					binary_operation->operands.oir.operand2 = NULL;
 
 					//Avoid any confusion with the op as well
 					binary_operation->op = BLANK;
 
 					//Convert this into a regular assignment
 					binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-					binary_operation->op1_const = simplification_constant;
+					binary_operation->operands.oir.constant_operand = simplification_constant;
 
 					//This is a change
 					changed = TRUE;
@@ -2739,10 +2741,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
 		&& window->instruction2->op == PLUS
-		&& variables_equal(window->instruction2->op2, window->instruction1->operands.oir.assignee, TRUE) == TRUE) {
+		&& variables_equal(window->instruction2->operands.oir.operand1, window->instruction1->operands.oir.assignee, TRUE) == TRUE) {
 
 		//Extract for convenience
-		instruction_t* constant_operation = window->instruction1;
+		instruction_t* bin_operation_with_const = window->instruction1;
 		instruction_t* binary_operation = window->instruction2;
 
 		//Grab the result type out
@@ -2752,14 +2754,14 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		if(binary_operation->type_storage.result_type != NULL){
 			result_type = binary_operation->type_storage.result_type;
 		} else {
-			result_type = binary_operation->op1->type;
+			result_type = binary_operation->operands.oir.operand1->type;
 		}
 
 		/**
 		 * If the type here is actually compatible, then we can do this
 		 */
 		if(is_type_lea_compatible(result_type) == TRUE){
-			switch(constant_operation->op){
+			switch(bin_operation_with_const->op){
 				/**
 				 * For the case of a plus:
 				 * 	t21 <- t20 + 8
@@ -2772,14 +2774,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					binary_operation->statement_type = THREE_ADDR_CODE_LEA_STMT;
 					binary_operation->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_OFFSET;
 
-					//The op2 now becomes the op1
-					binary_operation->op2 = constant_operation->op1;
-
-					//Store the constant over as well
-					binary_operation->op1_const = constant_operation->op1_const;
+					//Translate the operands & constants
+					binary_operation->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
+					binary_operation->operands.oir.address_operand2 = bin_operation_with_const->operands.oir.operand1;
+					binary_operation->operands.oir.address_offset = bin_operation_with_const->operands.oir.address_offset;
 					
 					//Once this is done we can scrap the first instruction
-					delete_statement(constant_operation);
+					delete_statement(bin_operation_with_const);
 
 					//Rebuild the window around the binary operation
 					reconstruct_window(window, binary_operation);
@@ -2797,7 +2798,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				 */
 				case STAR:
 					//We need to make sure that we have a compatible power of 2, otherwise this will all break down
-					if(is_constant_lea_compatible_power_of_2(constant_operation->op1_const) == FALSE){
+					if(is_constant_lea_compatible_power_of_2(bin_operation_with_const->operands.oir.constant_operand) == FALSE){
 						break;
 					}
 
@@ -2805,14 +2806,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					binary_operation->statement_type = THREE_ADDR_CODE_LEA_STMT;
 					binary_operation->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_SCALE;
 
-					//The op2 now becomes the op1
-					binary_operation->op2 = constant_operation->op1;
-
-					//Store the constant over as well
-					binary_operation->lea_multiplier = constant_operation->op1_const->constant_value.signed_long_constant;
+					//Convert to LEA form
+					binary_operation->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
+					binary_operation->operands.oir.address_operand2 = bin_operation_with_const->operands.oir.operand1;
+					binary_operation->operands.oir.address_multiplier = bin_operation_with_const->operands.oir.constant_operand->constant_value.signed_long_constant;
 					
 					//Once this is done we can scrap the first instruction
-					delete_statement(constant_operation);
+					delete_statement(bin_operation_with_const);
 
 					//Rebuild the window around the binary operation
 					reconstruct_window(window, binary_operation);
@@ -2850,10 +2850,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction3->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
 		&& window->instruction3->op == PLUS
-		&& variables_equal(window->instruction3->op2, window->instruction1->operands.oir.assignee, TRUE) == TRUE) {
+		&& variables_equal(window->instruction3->operands.oir.operand2, window->instruction1->operands.oir.assignee, TRUE) == TRUE) {
 
 		//Extract for convenience
-		instruction_t* constant_operation = window->instruction1;
+		instruction_t* bin_operation_with_const = window->instruction1;
 		instruction_t* binary_operation = window->instruction3;
 
 		//Grab the result type out
@@ -2863,18 +2863,17 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		if(binary_operation->type_storage.result_type != NULL){
 			result_type = binary_operation->type_storage.result_type;
 		} else {
-			result_type = binary_operation->op1->type;
+			result_type = binary_operation->operands.oir.operand1->type;
 		}
 
 		/**
 		 * If the type here is actually compatible, then we can do this
 		 */
 		if(is_type_lea_compatible(result_type) == TRUE){
-			switch(constant_operation->op){
+			switch(bin_operation_with_const->op){
 				/**
 				 * For the case of a plus:
 				 * 	t21 <- t20 + 8
-				 * 	....
 				 * 	t22 <- t19 + t21
 				 *
 				 * 	t22 <- 8(t19, t20)
@@ -2884,34 +2883,31 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					binary_operation->statement_type = THREE_ADDR_CODE_LEA_STMT;
 					binary_operation->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_OFFSET;
 
-					//The op2 now becomes the op1
-					binary_operation->op2 = constant_operation->op1;
-
-					//Store the constant over as well
-					binary_operation->op1_const = constant_operation->op1_const;
+					//Translate the operands & constants
+					binary_operation->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
+					binary_operation->operands.oir.address_operand2 = bin_operation_with_const->operands.oir.operand1;
+					binary_operation->operands.oir.address_offset = bin_operation_with_const->operands.oir.address_offset;
 					
 					//Once this is done we can scrap the first instruction
-					delete_statement(constant_operation);
+					delete_statement(bin_operation_with_const);
 
 					//Rebuild the window around the binary operation
 					reconstruct_window(window, binary_operation);
 
 					//This is a change
 					changed = TRUE;
-
 					break;
 
 				/**
 				 * For the case of a *:
 				 * 	t21 <- t20 * 8
-				 * 	....
 				 * 	t22 <- t19 + t21
 				 *
 				 * 	t22 <- (t19, t20, 8)
 				 */
 				case STAR:
 					//We need to make sure that we have a compatible power of 2, otherwise this will all break down
-					if(is_constant_lea_compatible_power_of_2(constant_operation->op1_const) == FALSE){
+					if(is_constant_lea_compatible_power_of_2(bin_operation_with_const->operands.oir.constant_operand) == FALSE){
 						break;
 					}
 
@@ -2919,14 +2915,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					binary_operation->statement_type = THREE_ADDR_CODE_LEA_STMT;
 					binary_operation->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_SCALE;
 
-					//The op2 now becomes the op1
-					binary_operation->op2 = constant_operation->op1;
-
-					//Store the constant over as well
-					binary_operation->lea_multiplier = constant_operation->op1_const->constant_value.signed_long_constant;
+					//Convert to LEA form
+					binary_operation->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
+					binary_operation->operands.oir.address_operand2 = bin_operation_with_const->operands.oir.operand1;
+					binary_operation->operands.oir.address_multiplier = bin_operation_with_const->operands.oir.constant_operand->constant_value.signed_long_constant;
 					
 					//Once this is done we can scrap the first instruction
-					delete_statement(constant_operation);
+					delete_statement(bin_operation_with_const);
 
 					//Rebuild the window around the binary operation
 					reconstruct_window(window, binary_operation);
@@ -2942,6 +2937,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			}
 		}
 	}
+
 
 	/**
 	 * ------------------ Converting adjacent binary operations into LEA statements ----------------------------------
