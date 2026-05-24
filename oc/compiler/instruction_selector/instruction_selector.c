@@ -1908,10 +1908,10 @@ static inline u_int64_t get_initial_padding_for_elaborative_type(generic_type_t*
  */
 static void convert_elaborative_param_offset_to_constant_assignment(instruction_t* elaborative_param_offset){
 	//The base address comes from op1
-	three_addr_var_t* base_address_variable = elaborative_param_offset->op1;
+	three_addr_var_t* base_address_variable = elaborative_param_offset->operands.oir.operand1;
 
 	//We won't need it for later so wipe it out
-	elaborative_param_offset->op1 = NULL;
+	elaborative_param_offset->operands.oir.operand1 = NULL;
 
 	//Get the starting alignment that we need to add
 	u_int64_t initial_padding = get_initial_padding_for_elaborative_type(base_address_variable->type);
@@ -1923,7 +1923,7 @@ static void convert_elaborative_param_offset_to_constant_assignment(instruction_
 	elaborative_param_offset->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
 	//And assign the constant in
-	elaborative_param_offset->op1_const = offset_constant;
+	elaborative_param_offset->operands.oir.constant_operand= offset_constant;
 }
 
 
@@ -1964,7 +1964,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 		case THREE_ADDR_CODE_STORE_STATEMENT:
 		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
+		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 			/**
 			 * If have a value in operand1 *and* it's a memory address,
 			 * we will need to remediate it
@@ -2018,7 +2018,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 		case THREE_ADDR_CODE_STORE_STATEMENT:
 		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
+		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 			/**
 			 * If have a value in operand1 *and* it's a memory address,
 			 * we will need to remediate it
@@ -2073,7 +2073,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 			case THREE_ADDR_CODE_STORE_STATEMENT:
 			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
+			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 				/**
 				 * If have a value in operand1 *and* it's a memory address,
 				 * we will need to remediate it
@@ -5862,8 +5862,7 @@ static void mark(dynamic_array_t* function_blocks){
 
 				break;
 
-			//If we have a function call, everything in the function call
-			//is important
+			//If we have a function call, everything in the function call is important
 			case THREE_ADDR_CODE_FUNC_CALL:
 				//Grab the parameters out
 				params = stmt->parameters;
@@ -5882,7 +5881,7 @@ static void mark(dynamic_array_t* function_blocks){
 			 */
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 				//Mark the op1 of this function as being important
-				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
 
 				//Grab the parameters out
 				params = stmt->parameters;
@@ -5894,35 +5893,13 @@ static void mark(dynamic_array_t* function_blocks){
 
 				break;
 
-			/**
-			 * There will be special rules for store statements because we have assignees
-			 * that are not really assignees, they are more like operands
-			 */
-			case THREE_ADDR_CODE_STORE_STATEMENT:
-			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-				//Add the assignee as if it was a variable itself
-				mark_and_add_definition(function_blocks, stmt->assignee, &worklist);
-
-				//We need to mark the place where each definition is set
-				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
-				mark_and_add_definition(function_blocks, stmt->op2, &worklist);
-				break;
-
-			/**
-			 * For a memory copy statement, we need the defitinition of the assignee
-			 * and op1 marked as they are both important to the overall copy
-			 */
-			case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
-				mark_and_add_definition(function_blocks, stmt->assignee, &worklist);
-				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
-				break;
-
-			//In all other cases, we'll just mark and add the two operands 
+			//In all other cases, we'll just mark and add every operand
 			default:
 				//We need to mark the place where each definition is set
-				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
-				mark_and_add_definition(function_blocks, stmt->op2, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand2, &worklist);
 
 				break;
 		}

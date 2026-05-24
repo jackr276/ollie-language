@@ -1012,7 +1012,6 @@ void sweep_local_constants(cfg_t* cfg){
 }
 
 
-
 /**
  * The sweep algorithm will go through and remove every operation that has not been marked
  *
