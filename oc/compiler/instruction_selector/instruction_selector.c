@@ -12282,74 +12282,118 @@ static void handle_load_instruction(instruction_window_t* window){
  */
 static void handle_load_with_constant_offset_instruction(instruction_window_t* window){
 	int64_t stack_offset;
-
-	//Holder for down the line
 	three_addr_const_t* stack_offset_constant;
 
 	//This is the load that we're after
 	instruction_t* load_instruction = window->instruction1;
 
+	//Extract the base address value and the linked variable(if one exists)
+	three_addr_var_t* base_address = load_instruction->operands.oir.address_operand1;
+	symtab_variable_record_t* linked_var = base_address->linked_var;
+
 	/**
 	 * Go based on what kind of base address we are given
 	 */
-	switch(load_instruction->operands.oir.operand1->variable_type){
+	switch(base_address->variable_type){
 		/**
 		 * Memory address variables are the most common type that we will see here. We need
 		 * to translate these into either stack offsets or rip-relative offsets if we have a
 		 * global variable
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
-			switch(load_instruction->operands.oir.operand1->linked_var->membership){
-				/**
-				 * Global and static variables require a special rip-relative addressing
-				 * to work
-				 */
-				case GLOBAL_VARIABLE:
-				case STATIC_VARIABLE:
-					//The first address calc register is the instruction pointer
-					load_instruction->operands.x86.address_register1 = instruction_pointer_variable;
+			if(linked_var != NULL){
+				switch(linked_var->membership){
+					/**
+					 * Global and static variables require a special rip-relative addressing
+					 * to work
+					 */
+					case GLOBAL_VARIABLE:
+					case STATIC_VARIABLE:
+						//The first address calc register is the instruction pointer
+						load_instruction->operands.x86.address_register1 = instruction_pointer_variable;
 
-					//The global var comes from op1
-						//TODO RIP OFFSET IS ADDR CALC REG2
-					load_instruction->rip_offset_variable = load_instruction->operands.oir.operand1;
+						//The rip offset goes into the second address register
+						load_instruction->operands.x86.address_register2 = base_address;
+
+						/**
+						 * The offset is already where it needs to be
+						 * Now we just need to change the mode to make this work
+						 */
+						load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET;
+
+						break;
 
 					/**
-					 * The offset is already where it needs to be
-					 * Now we just need to change the mode to make this work
+					 * Otherwise we have a standard non-global non-static variable that we will load the normal way
 					 */
-					load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET;
+					default:
+						//This is our stack offset, it will be needed going forward
+						stack_offset = linked_var->stack_region->function_local_base_address;
 
-					break;
+						//If we actually have a stack offset to deal with
+						if(stack_offset != 0){
+							//This will be the stack pointer
+							load_instruction->operands.x86.address_register1 = stack_pointer_variable;
+
+							//Copy over the constant
+							load_instruction->operands.x86.address_offset = load_instruction->operands.oir.address_offset;
+
+							//We need to sum the existing offset with the stack offset to get an accurate picture
+							sum_constant_with_raw_int64_value(load_instruction->operands.x86.address_offset, i64, stack_offset);
+
+							//We now will have something like <offset>(%rsp)
+							load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+						/**
+						 * Otherwise there's no stack offset, so we're just dereferencing the
+						 * stack pointer with the pre-existing offset
+						 */
+						} else {
+							//Address calc just needs the stack pointer
+							load_instruction->operands.x86.address_register1 = stack_pointer_variable;
+
+							//Copy over the constant
+							load_instruction->operands.x86.address_offset = load_instruction->operands.oir.address_offset;
+
+							//Change the mode
+							load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+						}
+
+						break;
+				}
+
+			} else {
+				//This is our stack offset, it will be needed going forward
+				stack_offset = base_address->associated_memory_region.stack_region->function_local_base_address;
+
+				//If we actually have a stack offset to deal with
+				if(stack_offset != 0){
+					//This will be the stack pointer
+					load_instruction->operands.x86.address_register1 = stack_pointer_variable;
+
+					//Copy over the constant
+					load_instruction->operands.x86.address_offset = load_instruction->operands.oir.address_offset;
+
+					//We need to sum the existing offset with the stack offset to get an accurate picture
+					sum_constant_with_raw_int64_value(load_instruction->operands.x86.address_offset, i64, stack_offset);
+
+					//We now will have something like <offset>(%rsp)
+					load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
 				/**
-				 * Otherwise we have a standard non-global non-static variable that we will load the normal way
+				 * Otherwise there's no stack offset, so we're just dereferencing the
+				 * stack pointer with the pre-existing offset
 				 */
-				default:
-					//This is our stack offset, it will be needed going forward
-					stack_offset = load_instruction->operands.oir.operand1->linked_var->stack_region->function_local_base_address;
+				} else {
+					//Address calc just needs the stack pointer
+					load_instruction->operands.x86.address_register1 = stack_pointer_variable;
 
-					//If we actually have a stack offset to deal with
-					if(stack_offset != 0){
-						//We need to sum the existing offset with the stack offset to get an accurate picture
-						sum_constant_with_raw_int64_value(load_instruction->operands.oir.address_offset, i64, stack_offset);
+					//Copy over the constant
+					load_instruction->operands.x86.address_offset = load_instruction->operands.oir.address_offset;
 
-						//We now will have something like <offset>(%rsp)
-						load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
-
-						//This will be the stack pointer
-						load_instruction->operands.x86.address_register1 = stack_pointer_variable;
-
-					//Otherwise there's no stack offset, so we're just dereferencing the
-					//stack pointer with the pre-existing offset
-					} else {
-						//Change the mode
-						load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
-						
-						//Address calc just needs the stack pointer
-						load_instruction->operands.x86.address_register1 = stack_pointer_variable;
-					}
-
-					break;
+					//Change the mode
+					load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+				}
 			}
 
 			break;
@@ -12361,20 +12405,22 @@ static void handle_load_with_constant_offset_instruction(instruction_window_t* w
 		 */
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:	
 			//Emit the stack passed parameter offset
-			stack_offset_constant = emit_stack_passed_parameter_offset_constant(load_instruction->operands.oir.operand1->associated_memory_region.stack_region, u64);
+			stack_offset_constant = emit_stack_passed_parameter_offset_constant(base_address->associated_memory_region.stack_region, u64);
 
-			//Add these two values together. Make sure that we're storing the result inside of the stack offset - the other way around
-			//will not work
+			/**
+			 * Add these two values together. Make sure that we're storing the result inside of the stack offset - the other way around
+			 * will not work
+			 */
 			add_constants(stack_offset_constant, load_instruction->operands.oir.address_offset);
+
+			//This will be the stack pointer
+			load_instruction->operands.x86.address_register1 = stack_pointer_variable;
 
 			//Now reassing the offset to be this stack offset
 			load_instruction->operands.x86.address_offset = stack_offset_constant;
 
 			//We now will have something like <offset>(%rsp)
 			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
-
-			//This will be the stack pointer
-			load_instruction->operands.x86.address_register1 = stack_pointer_variable;
 
 			break;
 
@@ -12383,8 +12429,11 @@ static void handle_load_with_constant_offset_instruction(instruction_window_t* w
 			//This will always be a SOURCE_ONLY
 			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
+			//Copy over the constant
+			load_instruction->operands.x86.address_offset = load_instruction->operands.oir.address_offset;
+
 			//Op1 is the only address calc needed
-			load_instruction->operands.x86.address_register1 = load_instruction->operands.oir.operand1;
+			load_instruction->operands.x86.address_register1 = base_address;
 
 			break;
 	}
