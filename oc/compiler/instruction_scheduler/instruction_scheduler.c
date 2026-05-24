@@ -54,6 +54,7 @@ static void update_dependence_for_variable(data_dependency_graph_t* graph, instr
 			case TESTL:
 			case TESTW:
 			case TESTQ:
+				//TODO UPDATE
 				//The cmp instructions store their symbolic assignees in the assignee slot
 				if(variables_equal(current->assignee, variable, TRUE) == TRUE){
 					//Add it in
@@ -141,7 +142,7 @@ static void build_dependency_graph_for_block(data_dependency_graph_t* graph, bas
 			case JLE:
 			case JG:
 			case JGE:
-				update_dependence_for_variable(graph, current, instructions, current->op1, i - 1);
+				update_dependence_for_variable(graph, current, instructions, current->operands.oir.operand1, i - 1);
 				break;
 
 			//We can actually skip phi functions, reason being that they
@@ -214,15 +215,15 @@ static void build_dependency_graph_for_block(data_dependency_graph_t* graph, bas
 				}
 
 				//And the address calc registers
-				if(current->operands.x86.addressing_mode_register1 != NULL){
+				if(current->operands.x86.address_register1 != NULL){
 					//Start searching here, beginngin at the last instruction
-					update_dependence_for_variable(graph, current, instructions, current->operands.x86.addressing_mode_register1, i - 1);
+					update_dependence_for_variable(graph, current, instructions, current->operands.x86.address_register1, i - 1);
 				}
 
 				//And the address calc registers
-				if(current->operands.x86.addressing_mode_register2 != NULL){
+				if(current->operands.x86.address_register2 != NULL){
 					//Start searching here, beginngin at the last instruction
-					update_dependence_for_variable(graph, current, instructions, current->operands.x86.addressing_mode_register2, i - 1);
+					update_dependence_for_variable(graph, current, instructions, current->operands.x86.address_register2, i - 1);
 				}
 
 				break;

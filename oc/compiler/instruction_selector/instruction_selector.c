@@ -3753,7 +3753,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	}
 
 	/**
-	 * ====================== Combining stores and operations =============
+	 * ====================== Combining loads/stores and operations =============
 	 *
 	 * If we have:
 	 *
@@ -3762,33 +3762,53 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 *
 	 * We can instead combine this to be
 	 * store t7[4] <- t5
+	 *
+	 * The same goes for loads. Since both loads and stores use the exact same addressing mode values, we can handle
+	 * them all in the same rule here
 	 */
 	if(window->instruction2 != NULL
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_STATEMENT){
+		&& (window->instruction2->statement_type == THREE_ADDR_CODE_STORE_STATEMENT || window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_STATEMENT)){
 		//Extract for convenience
 		instruction_t* binary_operation = window->instruction1;
-		instruction_t* store_statement = window->instruction2;
+		instruction_t* memory_movement = window->instruction2;
 
-		//Go based on the first statement
+		/**
+		 * We will do simplifications as need be for binary operations
+		 */
 		switch (binary_operation->statement_type) {
 			case THREE_ADDR_CODE_BIN_OP_STMT:
 				//If the first one is used less than once and they match
 				if(binary_operation->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP 
 					&& binary_operation->op == PLUS //We can only handle addition
-					&& variables_equal(binary_operation->operands.oir.assignee, store_statement->operands.oir.address_operand1, FALSE) == TRUE){
+					&& variables_equal(binary_operation->operands.oir.assignee, memory_movement->operands.oir.address_operand1, FALSE) == TRUE){
+
+					//Convert to the appropriate new statement type
+					switch(memory_movement->statement_type){
+						case THREE_ADDR_CODE_LOAD_STATEMENT:
+							memory_movement->statement_type = THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET;
+							break;
+
+						case THREE_ADDR_CODE_STORE_STATEMENT:
+							memory_movement->statement_type = THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET;
+							break;
+
+						//Unreachable
+						default:
+							break;
+					}
 
 					//This is now a load with variable offset
-					store_statement->statement_type = THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET;
+					memory_movement->statement_type = THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET;
 
-					//Translate these into the store statement
-					store_statement->operands.oir.address_operand1 = store_statement->operands.oir.operand1;
-					store_statement->operands.oir.address_operand2 = store_statement->operands.oir.operand2;
+					//Translate these into the memory statement
+					memory_movement->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
+					memory_movement->operands.oir.address_operand2 = binary_operation->operands.oir.operand2;
 
 					//We no longer need the binary operation
 					delete_statement(binary_operation);
 
 					//Rebuild around instruction 2
-					reconstruct_window(window, store_statement);
+					reconstruct_window(window, memory_movement);
 
 					//Is a change
 					changed = TRUE;
@@ -3799,105 +3819,39 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			//Same treatment for if we have a binary operation with const here
 			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 				//If the first one is used less than once and they match
-				if(window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& (window->instruction1->op == PLUS || window->instruction1->op == MINUS) //We can only handle addition/subtraction
-					&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.assignee, FALSE) == TRUE){
+				if(binary_operation->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& (binary_operation->op == PLUS || binary_operation->op == MINUS) //We can only handle addition/subtraction
+					&& variables_equal(binary_operation->operands.oir.assignee, memory_movement->operands.oir.address_operand1, FALSE) == TRUE){
 
-					//This is now a load with contant offset
-					window->instruction2->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
+					//Convert to the appropriate new statement type
+					switch(memory_movement->statement_type){
+						case THREE_ADDR_CODE_LOAD_STATEMENT:
+							memory_movement->statement_type = THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET;
+							break;
 
-					//The assignee is now the old op1
-					window->instruction2->operands.oir.assignee = window->instruction1->op1;
-					//And the offset is the old constant
-					window->instruction2->operands.oir.addressing_mode_offset = window->instruction1->op1_const;
+						case THREE_ADDR_CODE_STORE_STATEMENT:
+							memory_movement->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
+							break;
 
-					//If we have a minus, we'll just convert to a negative
-					if(window->instruction1->op == MINUS){
-						window->instruction2->operands.oir.addressing_mode_offset->constant_value.signed_long_constant *= -1;
+						//Unreachable
+						default:
+							break;
 					}
 
-					//Now scrap instruction 1
-					delete_statement(window->instruction1);
-
-					//Rebuild around instruction 2
-					reconstruct_window(window, window->instruction2);
-
-					//Is a change
-					changed = TRUE;
-				}
-
-				break;
-				
-			//By default do nothing
-			default:
-				break;
-		}
-	}
-
-	/**
-	 * ====================== Combining loads and preceeding binary operations =============
-	 *
-	 * If we have:
-	 *
-	 * t8 <- t7 + 4
-	 * load t5 <- t8
-	 *
-	 * We can instead combine this to be
-	 * load t5 <- t7[4]
-	 */
-	if(window->instruction2 != NULL
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_STATEMENT){
-		//Go based on the first statement
-		switch (window->instruction1->statement_type) {
-			case THREE_ADDR_CODE_BIN_OP_STMT:
-				//If the first one is used less than once and they match
-				if(window->instruction1->operands.oir.assignee->use_count <= 1
-					&& window->instruction1->op == PLUS //We can only handle addition
-					&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->op1, FALSE) == TRUE){
-
-					//This is now a load with variable offset
-					window->instruction2->statement_type = THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET;
-
-					//Copy these both over
-					window->instruction2->op1 = window->instruction1->op1;
-					window->instruction2->op2 = window->instruction1->op2;
-
-					//Now scrap instruction 1
-					delete_statement(window->instruction1);
-
-					//Rebuild around instruction 2
-					reconstruct_window(window, window->instruction2);
-
-					//Is a change
-					changed = TRUE;
-				}
-
-				break;
-
-			//Same treatment for if we have a binary operation with const here
-			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-				//If the first one is used less than once and they match
-				if((window->instruction1->operands.oir.assignee->use_count <= 1 || window->instruction1->operands.oir.assignee == window->instruction1->op1)
-					&& (window->instruction1->op == PLUS || window->instruction1->op == MINUS) //We can only handle addition/subtraction
-					&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->op1, FALSE) == TRUE){
-
-					//This is now a load with contant offset
-					window->instruction2->statement_type = THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET;
-
-					//Copy these both over
-					window->instruction2->op1 = window->instruction1->op1;
-					window->instruction2->operands.oir.addressing_mode_offset = window->instruction1->op1_const;
+					//Update the address operand and offset
+					memory_movement->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
+					memory_movement->operands.oir.address_offset = binary_operation->operands.oir.constant_operand;
 
 					//If we have a minus, we'll just convert to a negative
-					if(window->instruction1->op == MINUS){
-						window->instruction2->operands.oir.addressing_mode_offset->constant_value.signed_long_constant *= -1;
+					if(binary_operation->op == MINUS){
+						memory_movement->operands.oir.address_offset->constant_value.signed_long_constant *= -1;
 					}
 
-					//Now scrap instruction 1
-					delete_statement(window->instruction1);
+					//Delete the bin op now
+					delete_statement(binary_operation);
 
-					//Rebuild around instruction 2
-					reconstruct_window(window, window->instruction2);
+					//Rebuild around the memory movement
+					reconstruct_window(window, memory_movement);
 
 					//Is a change
 					changed = TRUE;
