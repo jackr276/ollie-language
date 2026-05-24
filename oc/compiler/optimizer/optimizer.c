@@ -2019,7 +2019,7 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 	u_int8_t found_branches_to_optimize = FALSE;
 
 	//What does the branch rely on?
-	three_addr_var_t* branch_relies_on;
+	three_addr_var_t* branch_relies_on = NULL;
 
 	//The if and else blocks from the branch
 	basic_block_t* if_block;
@@ -2033,15 +2033,19 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 		//Extract the given block
 		basic_block_t* current_block = dynamic_array_get_at(function_blocks, i);
 
-		//If this exit statement isn't there, or it's not a 
-		//branch, we are not interested so move along
+		/**
+		 * If this exit statement isn't there, or it's not a 
+		 * branch, we are not interested so move along
+		 */
 		if(current_block->exit_statement == NULL
 			|| current_block->exit_statement->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
 			continue;
 		}
 
-		//Otherwise we do have a branch statement here. Let's do some more investigation
-		//and see what we can uncover
+	 	/**
+		 * Otherwise we do have a branch statement here. Let's do some more investigation
+		 * and see what we can uncover
+		 */
 		instruction_t* branch_instruction = current_block->exit_statement;
 		instruction_t* statement_cursor = current_block->exit_statement;
 
@@ -2049,11 +2053,13 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 		if_block = statement_cursor->if_block;
 		else_block = statement_cursor->else_block;
 
-		//Get what the branch relies on. Remember that this is store in op1
-		branch_relies_on = statement_cursor->operands.oir.operand1;
+		//Get what the branch relies on.
+		branch_relies_on = statement_cursor->optional_storage.relies_on;
 
-		//If we have that it relies on nothing(shouldn't happen but there could be special cases)
-		//then we'll leave here because we can't be sure of this optimization
+		/**
+		 * If we have that it relies on nothing(shouldn't happen but there could be special cases)
+		 * then we'll leave here because we can't be sure of this optimization
+		 */
 		if(branch_relies_on == NULL){
 			continue;
 		}

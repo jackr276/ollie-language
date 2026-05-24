@@ -1582,7 +1582,8 @@ static inline instruction_t* emit_setne_code(three_addr_var_t* assignee, three_a
 	//Save the assignee
 	stmt->operands.oir.assignee = assignee;
 
-	stmt->operands.oir.operand1 = relies_on;
+	//Save what this relies on
+	stmt->optional_storage.relies_on = relies_on;
 
 	//We'll determine the actual instruction type using the helper
 	stmt->statement_type = THREE_ADDR_CODE_SETNE_STMT;
@@ -6477,7 +6478,7 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 
 	//Extract the assignee and the op1
 	three_addr_var_t* assignee = instruction->operands.oir.assignee;
-	three_addr_var_t* op1 = instruction->op1;
+	three_addr_var_t* op1 = instruction->operands.oir.operand1;
 	
 	/**
 	 * Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
@@ -6820,9 +6821,11 @@ static inline instruction_t* emit_setne_instruction(three_addr_var_t* destinatio
 	//And we'll set the class
 	instruction->instruction_type = SETNE;
 
-	//We store what this instruction relies on in it's op1 value. This is necessary for scheduling reasons,
-	//but it is completely ignored at the selector level
-	instruction->op1 = relies_on;
+	/**
+	 * We store what this instruction relies on in it's op1 value. This is necessary for scheduling reasons,
+	 * but it is completely ignored at the selector level
+	 */
+	instruction->optional_storage.relies_on = relies_on;
 
 	//Finally we set the destination
 	instruction->operands.x86.destination_register = destination;
@@ -6846,9 +6849,11 @@ static inline instruction_t* emit_setnp_instruction(three_addr_var_t* destinatio
 	//And we'll set the class
 	instruction->instruction_type = SETNP;
 
-	//We store what this instruction relies on in it's op1 value. This is necessary for scheduling reasons,
-	//but it is completely ignored at the selector level
-	instruction->op1 = relies_on;
+	/**
+	 * We store what this instruction relies on in it's op1 value. This is necessary for scheduling reasons,
+	 * but it is completely ignored at the selector level
+	 */
+	instruction->optional_storage.relies_on = relies_on;
 
 	//Finally we set the destination
 	instruction->operands.x86.destination_register = destination;
@@ -6872,9 +6877,11 @@ static inline instruction_t* emit_setp_instruction(three_addr_var_t* destination
 	//And we'll set the class
 	instruction->instruction_type = SETP;
 
-	//We store what this instruction relies on in it's op1 value. This is necessary for scheduling reasons,
-	//but it is completely ignored at the selector level
-	instruction->op1 = relies_on;
+	/**
+	 * We store what this instruction relies on in it's op1 value. This is necessary for scheduling reasons,
+	 * but it is completely ignored at the selector level
+	 */
+	instruction->optional_storage.relies_on = relies_on;
 
 	//Finally we set the destination
 	instruction->operands.x86.destination_register = destination;
