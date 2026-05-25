@@ -10660,7 +10660,7 @@ static void handle_lea_statement(instruction_t* instruction){
 			//And the address calc registers
 			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
 			instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand2;
-			instruction->operands.x86.address_offset = instruction->operands.oir.constant_operand;
+			instruction->operands.x86.address_offset = instruction->operands.oir.address_offset;
 
 			break;
 			
@@ -12333,6 +12333,9 @@ static void handle_load_with_constant_offset_instruction(instruction_window_t* w
 						//The rip offset goes into the second address register
 						load_instruction->operands.x86.address_register2 = base_address;
 
+						//Copy over the address offset
+						load_instruction->operands.x86.address_offset = load_instruction->operands.oir.address_offset;
+
 						/**
 						 * The offset is already where it needs to be
 						 * Now we just need to change the mode to make this work
@@ -13165,6 +13168,9 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 						//The offset is already in place, we just need to set the rip offset variable
 						instruction->operands.x86.address_register2 = base_address;
 
+						//Copy over the address offset
+						instruction->operands.x86.address_offset = instruction->operands.oir.address_offset;
+
 						//All that we need to do now is change the calculation mode to be rip with offset
 						instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET;
 						break;
@@ -13268,7 +13274,7 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 		//Non-special variable type means it's likely a pointer dereference
 		default:
 			//The base address is the assignee
-			instruction->operands.x86.address_register1 = instruction->operands.oir.assignee;
+			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
 
 			//Copy over the offset
 			instruction->operands.x86.address_offset = instruction->operands.oir.address_offset;

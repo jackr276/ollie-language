@@ -2986,8 +2986,6 @@ static void print_immediate_value_no_prefix(FILE* fl, three_addr_const_t* consta
 
 /**
  * Print out a complex addressing mode expression
- *
- * TODO THIS IS ALL WRONG
  */
 static void print_addressing_mode_expression(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	switch (instruction->calculation_mode) {
@@ -3276,7 +3274,7 @@ static void print_general_purpose_register_to_memory_move(FILE* fl, instruction_
 		//Otherwise we have an immediate value source
 		print_immediate_value(fl, instruction->operands.x86.source_immediate);
 	}
-	
+
 	fprintf(fl, ", ");
 	//Let this handle it now
 	print_addressing_mode_expression(fl, instruction, mode);
@@ -3291,7 +3289,7 @@ static void print_general_purpose_memory_to_register_move(FILE* fl, instruction_
 	//First thing - print the move instruciton
 	print_move_instruction(fl, instruction->instruction_type);
 	
-	//The address mode expression comes firsj
+	//The address mode expression comes first
 	print_addressing_mode_expression(fl, instruction, mode);
 	fprintf(fl, ", ");
 	print_variable(fl, instruction->operands.x86.destination_register, mode);
