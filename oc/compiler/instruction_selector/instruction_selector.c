@@ -5490,7 +5490,7 @@ static simplification_type_t sweep(dynamic_array_t* function_blocks, basic_block
 					 * If we are deleting an indirect jump address calculation statement,
 					 * then this statements jump table is useless
 					 */
-					if(temp->statement_type == THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT){
+					if(temp->statement_type == THREE_ADDR_CODE_INDIRECT_JUMP_STMT){
 						//We'll need to deallocate this jump table
 						jump_table_dealloc(block->jump_table);
 
@@ -12858,22 +12858,18 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
  * Combine an indirect jump address calculation with the indirect jump itself to 
  * minimize the instruction footprint. This is most often used with switch/raise
  * statements
- *
- * TODO why can't we just have this be one instruction
  */
-static inline void handle_indirect_jump_address_calculation(instruction_window_t* window){
-	//Extract these for convenience
-	instruction_t* address_calculation = window->instruction1;
-	instruction_t* indirect_jump = window->instruction2;
-
+static inline void handle_indirect_jump(instruction_t* indirect_jump_statement){
 	//Set this to be the proper instruction type
-	indirect_jump->instruction_type = INDIRECT_JMP;
+	indirect_jump_statement->instruction_type = INDIRECT_JMP;
 
 	//By default the true source is this, but we may need to emit a converting move
-	three_addr_var_t* true_source = address_calculation->operands.oir.operand2;
+	three_addr_var_t* true_source = indirect_jump_statement->operands.oir.address_operand2;
 
-	//What is the size of this source variable? It needs
-	//to be 32 bits or more to avoid needing a conversion
+	/**
+	 * What is the size of this source variable? It needs
+	 * to be 32 bits or more to avoid needing a conversion
+	 */
 	switch(true_source->variable_size){
 		//These two mean that we're fine
 		case QUAD_WORD:
@@ -13878,17 +13874,7 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 	 * We want to ensure that we get the best possible outcome for memory movement address calculations.
 	 * This is where *a lot* of instructions get generated, so it's worth it to spend compilation time
 	 * compressing these
-	 *
-	 *
-	 * Do we have a case where we have an indirect jump statement? If so we can handle that by condensing it into one
 	 */
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_INDIRECT_JUMP_STMT){
-
-		//Let the helper deal with it
-		handle_indirect_jump_address_calculation(window);
-		return;
-	}
 
 	/**
 	 * Compressing lea constant loads with the rip-relative addressing that
@@ -13974,38 +13960,27 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		case THREE_ADDR_CODE_LEA_STMT:
 			handle_lea_statement(instruction);
 			break;
-		//One-to-one mapping to nop
 		case THREE_ADDR_CODE_IDLE_STMT:
 			instruction->instruction_type = NOP;
 			break;
-		//One to one mapping here as well
 		case THREE_ADDR_CODE_RET_STMT:
-			//Let the helper do this
 			handle_ret_instruction(instruction, function);
 			break;
 		case THREE_ADDR_CODE_RAISE_STMT:
 			handle_raise_instruction(instruction);
 			break;
-		//These will always just be a JMP - the branch will have
-		//more complex rules
 		case THREE_ADDR_CODE_JUMP_STMT:
 			instruction->instruction_type = JMP;
 			break;
-		//A branch statement will have more complex
-		//selection rules, so we'll use a helper function
 		case THREE_ADDR_CODE_BRANCH_STMT:
 			handle_branch_instruction(window);
 			break;
-		//Special case here - we don't change anything
 		case THREE_ADDR_CODE_ASM_INLINE_STMT:
 			instruction->instruction_type = ASM_INLINE;
 			break;
-		//The translation here takes the form of a call instruction
 		case THREE_ADDR_CODE_FUNC_CALL:
 			handle_function_call(instruction);
 			break;
-		//Similarly, an indirect function call also has it's own kind of
-		//instruction
 		case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 			handle_indirect_function_call(instruction);
 			break;
@@ -14019,15 +13994,12 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		case THREE_ADDR_CODE_BIN_OP_STMT:
 			handle_binary_operation_instruction(window);
 			break;
-		//For a phi function, we perform an exact 1:1 mapping
 		case THREE_ADDR_CODE_PHI_FUNC:
 			instruction->instruction_type = PHI_FUNCTION;
 			break;
-		//Handle a neg statement
 		case THREE_ADDR_CODE_NEG_STATEMENT:
 			handle_negation_instruction(window);
 			break;
-		//Handle a neg statement
 		case THREE_ADDR_CODE_BITWISE_NOT_STMT:
 			handle_not_instruction(instruction);
 			break;
@@ -14061,6 +14033,10 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		case THREE_ADDR_CODE_STACK_DEALLOCATION_STMT:
 			handle_stack_deallocation_statement(instruction);
 			break;
+		case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
+			handle_indirect_jump(instruction);
+			break;
+
 		/**
 		 * If we get here then we're encountering something that we've never seen
 		 * before or was never meant to reach this part of selection. Either way
