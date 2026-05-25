@@ -868,6 +868,9 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 																					 					instruction_pointer_variable,
 																					 					instruction->operands.oir.constant_operand);
 
+						//Put this in for op1
+						instruction->operands.oir.operand1 = address_instruction->operands.oir.assignee;
+
 						//This goes in before the given one
 						insert_instruction_before_given(address_instruction, instruction);
 
@@ -1056,7 +1059,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					 * they're one in the same
 					 */
 					} else {
-						instruction->operands.oir.address_operand1 = stack_pointer_variable;
+						instruction->operands.oir.operand1 = stack_pointer_variable;
 					}
 
 					break;
@@ -2208,7 +2211,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			delete_statement(constant_assignment);
 
 			//Reconstruct appropriately based on what we're using
-			//TODO IS THIS NEEDED?
 			if(binary_operation->previous_statement != NULL){
 				reconstruct_window(window, binary_operation->previous_statement);
 			} else {
@@ -2221,13 +2223,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	}
 
 	/**
-	 * Do the exact same thing now with instructions 2 & 3
+	 * Do the exact same thing now with instructions 1 & 3
 	 */
 	if(window->instruction3 != NULL 
 		&& window->instruction3->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
 		//Extract these two for convenience
-		instruction_t* constant_assignment = window->instruction2;
+		instruction_t* constant_assignment = window->instruction1;
 		instruction_t* binary_operation = window->instruction3;
 
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instruction2? Let's check.
@@ -2249,7 +2251,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			delete_statement(constant_assignment);
 
 			//Reconstruct appropriately based on what we're using
-			//TODO IS THIS NEEDED?
 			if(binary_operation->previous_statement != NULL){
 				reconstruct_window(window, binary_operation->previous_statement);
 			} else {
