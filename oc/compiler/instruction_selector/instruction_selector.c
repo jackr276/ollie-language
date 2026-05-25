@@ -12716,20 +12716,22 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			handle_load_instruction_base_address(variable_offset_load);
 
 			//If there are any constants to add, we'll do that now
-			if(variable_offset_load->operands.oir.address_offset != NULL){
-				add_constants(variable_offset_load->operands.oir.address_offset, lea_statement->operands.oir.constant_operand);
+			if(variable_offset_load->operands.x86.address_offset != NULL){
+				add_constants(variable_offset_load->operands.x86.address_offset, lea_statement->operands.oir.address_offset);
 
 			//Otherwise copy it over
 			} else {
-				variable_offset_load->operands.oir.address_offset = lea_statement->operands.oir.constant_operand;
+				variable_offset_load->operands.x86.address_offset = lea_statement->operands.oir.address_offset;
 			}
 
 			//Our op2 is now the first operand from the old lea
-			variable_offset_load->operands.x86.address_register2 = lea_statement->operands.oir.operand1;
+			variable_offset_load->operands.x86.address_register2 = lea_statement->operands.oir.address_operand1;
 
-			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-			//must adhere to this one's type
+			/**
+			 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+			 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+			 * must adhere to this one's type
+			 */
 			if(is_converting_move_required(variable_offset_load->operands.x86.address_register1->type, variable_offset_load->operands.x86.address_register2->type) == TRUE){
 				variable_offset_load->operands.x86.address_register2 = create_and_insert_converting_move_instruction(variable_offset_load, variable_offset_load->operands.x86.address_register2, variable_offset_load->operands.x86.address_register1->type);
 			}
@@ -12766,20 +12768,25 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			handle_load_instruction_base_address(variable_offset_load);
 
 			//Copy the scale over
-			variable_offset_load->lea_multiplier = lea_statement->lea_multiplier;
+			variable_offset_load->operands.x86.address_multiplier = lea_statement->operands.oir.address_multiplier;
 
 			//Our op2 is now the first operand from the old lea
-			variable_offset_load->operands.x86.address_register2 = lea_statement->operands.oir.operand1;
+			variable_offset_load->operands.x86.address_register2 = lea_statement->operands.oir.address_operand2;
 
-			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-			//must adhere to this one's type
+			/**
+			 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+			 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+			 * must adhere to this one's type
+			 */
 			if(is_converting_move_required(variable_offset_load->operands.x86.address_register1->type, variable_offset_load->operands.x86.address_register2->type) == TRUE){
 				variable_offset_load->operands.x86.address_register2 = create_and_insert_converting_move_instruction(variable_offset_load, variable_offset_load->operands.x86.address_register2, variable_offset_load->operands.x86.address_register1->type);
 			}
 
+			//Copy the value over(it may be NULL)
+			variable_offset_load->operands.x86.address_offset = variable_offset_load->operands.oir.address_offset;
+
 			//The calculation mode type depends on the constant
-			if(variable_offset_load->operands.oir.address_offset != NULL){
+			if(variable_offset_load->operands.x86.address_offset != NULL){
 				variable_offset_load->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
 			} else {
 				variable_offset_load->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
@@ -12814,23 +12821,25 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			handle_load_instruction_base_address(variable_offset_load);
 
 			//If there are any constants to add, we'll do that now
-			if(variable_offset_load->operands.oir.address_offset != NULL){
-				add_constants(variable_offset_load->operands.oir.address_offset, lea_statement->operands.oir.constant_operand);
+			if(variable_offset_load->operands.x86.address_offset != NULL){
+				add_constants(variable_offset_load->operands.x86.address_offset, lea_statement->operands.oir.address_offset);
 
 			//Otherwise copy it over
 			} else {
-				variable_offset_load->operands.oir.address_offset = lea_statement->operands.oir.constant_operand;
+				variable_offset_load->operands.x86.address_offset = lea_statement->operands.oir.address_offset;
 			}
 
 			//Copy the scale over
-			variable_offset_load->lea_multiplier = lea_statement->lea_multiplier;
+			variable_offset_load->operands.x86.address_multiplier = lea_statement->operands.oir.address_multiplier;
 
 			//Our op2 is now the first operand from the old lea
-			variable_offset_load->operands.x86.address_register2 = lea_statement->operands.oir.operand1;
+			variable_offset_load->operands.x86.address_register2 = lea_statement->operands.oir.address_operand2;
 
-			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-			//must adhere to this one's type
+			/**
+			 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+			 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+			 * must adhere to this one's type
+			 */
 			if(is_converting_move_required(variable_offset_load->operands.x86.address_register1->type, variable_offset_load->operands.x86.address_register2->type) == TRUE){
 				variable_offset_load->operands.x86.address_register2 = create_and_insert_converting_move_instruction(variable_offset_load, variable_offset_load->operands.x86.address_register2, variable_offset_load->operands.x86.address_register1->type);
 			}
@@ -12855,8 +12864,10 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 
 			break;
 
-		//By default - if we can't handle it, we just invoke the other helpers and call
-		//it quits. This ensures uniform behavior and correctness
+		/**
+		 * By default - if we can't handle it, we just invoke the other helpers and call
+		 * it quits. This ensures uniform behavior and correctness
+		 */
 		default:
 			handle_lea_statement(lea_statement);
 
@@ -13942,8 +13953,8 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET 
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
 		&& window->instruction1->lea_statement_type != OIR_LEA_TYPE_RIP_RELATIVE //Nothing to do if we have this
-		//Is the lea's assignee equal to the offset(op1) of the store
-		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.operand1, TRUE) == TRUE){
+		//Is the lea's assignee equal to the offset of the store
+		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.address_operand2, TRUE) == TRUE){
 
 		/**
 		 * Let the helper deal with it. This helper handles all possible cases, so once it's done this whole
