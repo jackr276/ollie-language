@@ -2800,26 +2800,20 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, ")\n");
 			break;
 
-		case THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT:
-			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
+		/**
+		 * Indirect jump statements carry all of the operands that they need with them for the
+		 * address calculation and the jump itself
+		 */
+		case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
+			//Print out the jump offset
+			fprintf(fl, "jmp *.JT%d(, ", ((jump_table_t*)(stmt->if_block))->jump_table_id);
 
-			//Print out the jump block ID
-			fprintf(fl, " <- .JT%d + ", ((jump_table_t*)(stmt->if_block))->jump_table_id);
-			
 			//Now print out the variable
 			print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
 
 			//Finally the multiplicator
-			fprintf(fl, " * %ld\n", stmt->operands.oir.address_multiplier);
-			break;
+			fprintf(fl, " ,%ld)\n", stmt->operands.oir.address_multiplier);
 
-		case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
-			//Indirection
-			fprintf(fl, "jmp *");
-
-			//Now the variable
-			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
-			fprintf(fl, "\n");
 			break;
 
 		case THREE_ADDR_CODE_CLEAR_STMT:

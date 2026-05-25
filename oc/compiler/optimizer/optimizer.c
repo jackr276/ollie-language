@@ -1100,9 +1100,11 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 					//Perform the deletion and advancement
 					temp = stmt;
 
-					//If we are deleting an indirect jump address calculation statement,
-					//then this statements jump table is useless
-					if(temp->statement_type == THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT){
+					/**
+					 * If we are deleting an indirect jump address calculation statement,
+					 * then this statements jump table is useless
+					 */
+					if(temp->statement_type == THREE_ADDR_CODE_INDIRECT_JUMP_STMT){
 						//We'll need to deallocate this jump table
 						jump_table_dealloc(block->jump_table);
 
