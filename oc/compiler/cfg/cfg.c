@@ -3146,24 +3146,6 @@ static inline three_addr_var_t* emit_struct_address_calculation(basic_block_t* b
 
 
 /**
- * Emit an indirect jump statement
- */
-static three_addr_var_t* emit_indirect_jump_address_calculation(basic_block_t* basic_block, jump_table_t* initial_address, three_addr_var_t* mutliplicand){
-	//We'll need a new temp var for the assignee
-	three_addr_var_t* assignee = emit_temp_var(u64);
-
-	//Use the helper to emit it - type size is 8 because it's an address
-	instruction_t* stmt = emit_indir_jump_address_calc_instruction(assignee, initial_address, mutliplicand, 8);
-
-	//Add it in
-	add_statement(basic_block, stmt);
-
-	//Give back the assignee
-	return assignee;
-}
-
-
-/**
  * Directly emit the assembly nop instruction
  */
 static inline void emit_idle(basic_block_t* basic_block){
@@ -4060,21 +4042,6 @@ static inline void emit_user_defined_jump(basic_block_t* basic_block, symtab_lab
 
 	//Add this into the first block
 	add_statement(basic_block, jump_statement);
-}
-
-
-/**
- * Emit an indirect jump statement
- *
- * Indirect jumps are written in the form:
- * 	jump *__var__, where var holds the address that we need
- */
-void emit_indirect_jump(basic_block_t* basic_block, three_addr_var_t* dest_addr){
-	//Use the helper function to create it
-	instruction_t* indirect_jump = emit_indirect_jmp_instruction(dest_addr);
-
-	//Now we'll add it into the block
-	add_statement(basic_block, indirect_jump);
 }
 
 
@@ -7267,8 +7234,8 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 	 * Now we can do the indirect jump calculation and emit the indirect jump. Remember that we're already starting at 0, so we don't
 	 * need to do any subtraction here
 	 */
-	three_addr_var_t* address = emit_indirect_jump_address_calculation(jump_calculation_block, jump_calculation_block->jump_table, error_assignee);
-	emit_indirect_jump(jump_calculation_block, address);
+	instruction_t* indirect_jump = emit_indirect_jump_statement(jump_calculation_block->jump_table, error_assignee, 8);
+	add_statement(jump_calculation_block, indirect_jump);
 
 	/**
 	 * The final thing that we need to do is emit one final assignment for the error result var

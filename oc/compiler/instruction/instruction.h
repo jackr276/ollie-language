@@ -856,7 +856,7 @@ instruction_t* emit_branch_statement(void* if_block, void* else_block, three_add
 /**
  * Emit an indirect jump statement. The jump statement can take on several different types of jump
  */
-instruction_t* emit_indirect_jmp_instruction(void* jumping_to_block, three_addr_var_t* index, u_int64_t multiplier);
+instruction_t* emit_indirect_jump_statement(void* jumping_to_block, three_addr_var_t* index, u_int64_t multiplier);
 
 /**
  * Emit a function call statement. Once emitted, no paramters will have been added in
