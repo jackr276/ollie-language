@@ -1077,6 +1077,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 
 						//First address operand becomes the stack pointer
 						instruction->operands.oir.address_operand1 = stack_pointer_variable;
+						instruction->operands.oir.address_operand2 = instruction->operands.oir.operand2;
 
 						//Finally declare that this is a lea statement
 						instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
@@ -1253,6 +1254,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 
 					//First address operand becomes the stack pointer
 					instruction->operands.oir.address_operand1 = stack_pointer_variable;
+					instruction->operands.oir.address_operand2 = instruction->operands.oir.operand2;
 
 					//Finally declare that this is a lea statement
 					instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
