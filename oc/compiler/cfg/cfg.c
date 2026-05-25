@@ -9694,7 +9694,6 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	add_statement(jump_calculation_block, temporary_variable_assignent);
 
 	//Now that all this is done, we can use our jump table for the rest
-	//We'll now need to cut the value down by whatever our offset was	
 	three_addr_var_t* input = emit_binary_operation_with_constant(jump_calculation_block, temporary_variable_assignent->operands.oir.assignee, temporary_variable_assignent->operands.oir.assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32));
 
 	/**
@@ -9704,11 +9703,8 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	 * We have a special kind of statement for doing this
 	 * 	
 	 */
-	//Emit the address first
-	three_addr_var_t* address = emit_indirect_jump_address_calculation(jump_calculation_block, jump_calculation_block->jump_table, input);
-
-	//Now we'll emit the indirect jump to the address
-	emit_indirect_jump(jump_calculation_block, address);
+	instruction_t* indirect_jump = emit_indirect_jump_statement(jump_calculation_block->jump_table, input, 8);
+	add_statement(jump_calculation_block, indirect_jump);
 
 	//Give back the starting block
 	return result_package;
@@ -9914,7 +9910,6 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	add_statement(jump_calculation_block, temporary_variable_assignent);
 
 	//Now that all this is done, we can use our jump table for the rest
-	//We'll now need to cut the value down by whatever our offset was	
 	three_addr_var_t* input = emit_binary_operation_with_constant(jump_calculation_block, temporary_variable_assignent->operands.oir.assignee, temporary_variable_assignent->operands.oir.assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32));
 
 	/**
@@ -9924,11 +9919,8 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	 * We have a special kind of statement for doing this
 	 * 	
 	 */
-	//Emit the address first
-	three_addr_var_t* address = emit_indirect_jump_address_calculation(jump_calculation_block, jump_calculation_block->jump_table, input);
-
-	//Now we'll emit the indirect jump to the address
-	emit_indirect_jump(jump_calculation_block, address);
+	instruction_t* indirect_jump = emit_indirect_jump_statement(jump_calculation_block->jump_table, input, 8);
+	add_statement(jump_calculation_block, indirect_jump);
 
 	//Give back the starting block
 	return result_package;
