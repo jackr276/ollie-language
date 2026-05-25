@@ -12858,13 +12858,21 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
  * Combine an indirect jump address calculation with the indirect jump itself to 
  * minimize the instruction footprint. This is most often used with switch/raise
  * statements
+ *
+ * NOTE: we assume that the indirect jump is always the first statement
  */
-static inline void handle_indirect_jump(instruction_t* indirect_jump_statement){
+static inline void handle_indirect_jump(instruction_window_t* window){
+	//Extract it
+	instruction_t* indirect_jump_statement = window->instruction1;
+
 	//Set this to be the proper instruction type
 	indirect_jump_statement->instruction_type = INDIRECT_JMP;
 
 	//By default the true source is this, but we may need to emit a converting move
 	three_addr_var_t* true_source = indirect_jump_statement->operands.oir.address_operand2;
+
+	//Extract the type
+	generic_type_t* source_type = true_source->type;
 
 	/**
 	 * What is the size of this source variable? It needs
@@ -12878,33 +12886,20 @@ static inline void handle_indirect_jump(instruction_t* indirect_jump_statement){
 
 		//Otherwise, a conversion is required
 		default:
-			//If it is signed, we'll want to preserve the signedness
-			if(is_type_signed(true_source->type) == TRUE){
-				true_source = create_and_insert_converting_move_instruction(window->instruction1, window->instruction1->operands.oir.operand2, i32);
+			//We use either a u32 or i32 here based on signedness
+			source_type = is_type_signed(source_type) ? i32 : u32;
 
-			//Otherwise, we'll use the unsigned version
-			} else {
-				true_source = create_and_insert_converting_move_instruction(window->instruction1, window->instruction1->operands.oir.operand2, u32);
-			}
-
+			//Now emit the converting move
+			true_source = create_and_insert_converting_move_instruction(indirect_jump_statement, true_source, source_type);
 			break;
 	}
 
-	//The source register is op1
-	window->instruction2->operands.x86.source_register1 = true_source;
-
-	//Store the jumping to block where the jump table is
-	window->instruction2->if_block = window->instruction1->if_block;
-
-	//We also have an "S" multiplicator factor that will always be a power of 2 stored in the lea_multiplier
-	window->instruction2->lea_multiplier = window->instruction1->lea_multiplier;
-
-	//We're now able to delete address calculation
-	delete_statement(address_calculation);
+	//The index register goes in the second address register
+	indirect_jump_statement->operands.x86.address_register2 = true_source;
+	indirect_jump_statement->operands.x86.address_multiplier = indirect_jump_statement->operands.oir.address_multiplier;
 
 	//Reconstruct the window with the indirect jump as the start
-	reconstruct_window(window, indirect_jump);
-
+	reconstruct_window(window, indirect_jump_statement);
 	return;
 }
 
