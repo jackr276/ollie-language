@@ -10672,8 +10672,8 @@ static void handle_lea_statement(instruction_t* instruction){
 			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
 
 			//Copy over the address calc registers and offset
-			instruction->operands.x86.address_register1 = instruction->operands.oir.operand1;
-			instruction->operands.x86.address_register2 = instruction->operands.oir.operand2;
+			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
+			instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand2;
 			instruction->operands.x86.address_offset = instruction->operands.oir.address_offset;
 
 			/**
@@ -11609,7 +11609,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 			three_addr_var_t* duplicate_64_bit = emit_var_copy(store_instruction->operands.oir.operand1);
 
 			//Then we give it the type that we want
-			duplicate_64_bit->type = store_instruction->operands.oir.assignee->type;
+			duplicate_64_bit->type = destination_type;
 			duplicate_64_bit->variable_size = get_type_size(duplicate_64_bit->type);
 
 			//And this will be our source
