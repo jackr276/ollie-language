@@ -12040,69 +12040,86 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
  * be used by the lea combiner rule. It will *not* modify addressing modes and it should
  * not be expected to give a full and complete result back. It will only modify
  * address calc reg1 and the offset if appropriate
- *
- * TODO NOT CORRECT
  */
 static inline void handle_load_instruction_base_address(instruction_t* load_statement){
 	int64_t stack_offset;
 	instruction_t* address_calculation;
 
+	//Extract the base address and the linked variable
+	three_addr_var_t* base_address = load_statement->operands.oir.address_operand1;
+	symtab_variable_record_t* linked_var = base_address->linked_var;
+
 	/**
 	 * Go based on the kind of variable that we have here
 	 */
-	switch(load_statement->operands.oir.operand1->variable_type){
+	switch(base_address->variable_type){
 		/**
 		 * We have a regular memory address variable(super common). We'll handle this
 		 * here
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
-			//Based on the variable's membership, we load accordingly
-			switch(load_statement->operands.oir.operand1->linked_var->membership){
-				/**
-				 * We are loading a global/static variable(same thing) with a subsequent offset. We will need to first
-				 * load the address of said global variable, and then use that with an address calculation. We 
-				 * are not able to combine the 2 in such a way
-				 */
-				case GLOBAL_VARIABLE:
-				case STATIC_VARIABLE:
-					//Let the helper do the work
-					address_calculation = emit_global_variable_address_calculation_x86(load_statement->operands.oir.operand1, instruction_pointer_variable, u64);
+			if(linked_var != NULL){
+				switch(linked_var->membership){
+					/**
+					 * We are loading a global/static variable(same thing) with a subsequent offset. We will need to first
+					 * load the address of said global variable, and then use that with an address calculation. We 
+					 * are not able to combine the 2 in such a way
+					 */
+					case GLOBAL_VARIABLE:
+					case STATIC_VARIABLE:
+						//Let the helper do the work
+						address_calculation = emit_global_variable_address_calculation_x86(base_address, instruction_pointer_variable, u64);
 
-					//Now insert this before the given instruction
-					insert_instruction_before_given(address_calculation, load_statement);
+						//Now insert this before the given instruction
+						insert_instruction_before_given(address_calculation, load_statement);
+
+						/**
+						 * The destination of the global variable address will be our new address calc reg 1. 
+						 * We already have the offset loaded in, so that remains unchanged
+						 */
+						load_statement->operands.x86.address_register1 = address_calculation->operands.x86.destination_register;
+
+						break;
 
 					/**
-					 * The destination of the global variable address will be our new address calc reg 1. 
-					 * We already have the offset loaded in, so that remains unchanged
+					 * Otherwise we're here with a non global/static variable so we do the normal procedure
 					 */
-					load_statement->operands.x86.address_register1 = address_calculation->operands.x86.destination_register;
+					default:
+						//This is our stack offset, it will be needed going forward
+						stack_offset = linked_var->stack_region->function_local_base_address;
 
-					break;
+						//If we actually have a stack offset to deal with. We'll store the offset constant and first operand
+						if(stack_offset != 0){
+							//Emit the offset
+							load_statement->operands.x86.address_offset = emit_direct_integer_or_char_constant(stack_offset, i64);
 
-				/**
-				 * Otherwise we're here with a non global/static variable so we do the normal procedure
-				 */
-				default:
-					//This is our stack offset, it will be needed going forward
-					stack_offset = load_statement->operands.oir.operand1->linked_var->stack_region->function_local_base_address;
+							//This will be the stack pointer
+							load_statement->operands.x86.address_register1 = stack_pointer_variable;
 
-					//If we actually have a stack offset to deal with. We'll store the offset constant
-					//and op1
-					if(stack_offset != 0){
-						//Emit the offset
-						load_statement->operands.x86.address_offset = emit_direct_integer_or_char_constant(stack_offset, i64);
+						//Otherwise there's no stack offset, so we'll just have the stack pointer
+						} else {
+							load_statement->operands.x86.address_register1 = stack_pointer_variable;
+						}
 
-						//This will be the stack pointer
-						load_statement->operands.x86.address_register1 = stack_pointer_variable;
+						break;
+				}
 
-					//Otherwise there's no stack offset, so we'll just have the stack
-					//pointer
-					} else {
-						//Copy both over
-						load_statement->operands.x86.address_register1 = stack_pointer_variable;
-					}
+			} else {
+				//This is our stack offset, it will be needed going forward
+				stack_offset = base_address->associated_memory_region.stack_region->function_local_base_address;
 
-					break;
+				//If we actually have a stack offset to deal with. We'll store the offset constant and first operand
+				if(stack_offset != 0){
+					//Emit the offset
+					load_statement->operands.x86.address_offset = emit_direct_integer_or_char_constant(stack_offset, i64);
+
+					//This will be the stack pointer
+					load_statement->operands.x86.address_register1 = stack_pointer_variable;
+
+				//Otherwise there's no stack offset, so we'll just have the stack pointer
+				} else {
+					load_statement->operands.x86.address_register1 = stack_pointer_variable;
+				}
 			}
 
 			break;
@@ -12114,7 +12131,7 @@ static inline void handle_load_instruction_base_address(instruction_t* load_stat
 		 */
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
 			//Emit the offset
-			load_statement->operands.x86.address_offset = emit_stack_passed_parameter_offset_constant(load_statement->operands.oir.operand1->associated_memory_region.stack_region, u64);
+			load_statement->operands.x86.address_offset = emit_stack_passed_parameter_offset_constant(base_address->associated_memory_region.stack_region, u64);
 
 			//This will be the stack pointer
 			load_statement->operands.x86.address_register1 = stack_pointer_variable;
@@ -12123,7 +12140,7 @@ static inline void handle_load_instruction_base_address(instruction_t* load_stat
 
 		default:
 			//Assign over like such
-			load_statement->operands.x86.address_register1 = load_statement->operands.oir.operand1;
+			load_statement->operands.x86.address_register1 = base_address;
 			break;
 	}
 }
@@ -12921,9 +12938,8 @@ static void combine_lea_with_regular_load_instruction(instruction_window_t* wind
 			//The first thing we need is the %rip register
 			load_statement->operands.x86.address_register1 = instruction_pointer_variable;
 
-			//The rip offset variable is our .LCx value
-						//TODO RIP OFFSET IS ADDR CALC REG2
-			load_statement->rip_offset_variable = lea_statement->operands.oir.operand2;
+			//Store the rip rleative offset in the second address register
+			load_statement->operands.x86.address_register2 = lea_statement->operands.oir.address_operand2;
 
 			/**
 			 * We can delete this *if* it's not being used by someone else
@@ -12942,9 +12958,11 @@ static void combine_lea_with_regular_load_instruction(instruction_window_t* wind
 
 			break;
 
-		//By default, just do nothing and leave the instruction window
-		//as is. It will be picked up by the rest of the selector as
-		//normal
+		/**
+		 * By default, just do nothing and leave the instruction window
+		 * as is. It will be picked up by the rest of the selector as
+		 * normal
+		 */
 		default:
 			break;
 	}
@@ -13886,7 +13904,7 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_STATEMENT
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.operand1, TRUE) == TRUE){
+		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.address_operand1, TRUE) == TRUE){
 
 		/**
 		 * Invoke a special helper here that will deal with the selection for us and also
@@ -13906,7 +13924,7 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
 		&& window->instruction1->lea_statement_type != OIR_LEA_TYPE_RIP_RELATIVE //Nothing to do if we have this
 		//Is the lea's assignee equal to the offset of the load
-		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.operand2, TRUE) == TRUE){
+		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.address_operand2, TRUE) == TRUE){
 
 		/**
 		 * Let the helper deal with it. This helper handles all possible cases, so once it's done this whole
@@ -14029,7 +14047,7 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 			handle_stack_deallocation_statement(instruction);
 			break;
 		case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
-			handle_indirect_jump(instruction);
+			handle_indirect_jump(window);
 			break;
 
 		/**
