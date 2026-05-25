@@ -4014,7 +4014,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					//Wipe out op1
 					if(current_instruction->operands.oir.operand1 != NULL){
 						current_instruction->operands.oir.operand1->use_count--;
-						current_instruction->operands.oir.operand1;
+						current_instruction->operands.oir.operand1 = NULL;
 					}
 
 					//Set the constant's value to 1
@@ -11317,8 +11317,7 @@ static inline instruction_t* emit_local_constant_from_memory_load(generic_type_t
 	instruction->operands.x86.address_register1 = instruction_pointer_variable;
 
 	//The local constant variable that we are using
-						//TODO RIP OFFSET IS ADDR CALC REG2
-	instruction->rip_offset_variable = emit_local_constant_temp_var(local_constant);
+	instruction->operands.x86.address_register2 = emit_local_constant_temp_var(local_constant);
 
 	//Give the instruction back
 	return instruction;
@@ -13740,21 +13739,22 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 			handle_store_statement_base_address(variable_offset_store);
 
 			//If we're able to combine constants here, we will
-			if(variable_offset_store->operands.oir.address_offset != NULL){
-				//Add the 2, result is in the store's constant
-				add_constants(variable_offset_store->operands.oir.address_offset, lea_statement->operands.oir.constant_operand);
+			if(variable_offset_store->operands.x86.address_offset != NULL){
+				add_constants(variable_offset_store->operands.x86.address_offset, lea_statement->operands.oir.address_offset);
 
 			//Otherwise do a straight copy
 			} else {
-				variable_offset_store->operands.oir.address_offset = lea_statement->operands.oir.constant_operand;
+				variable_offset_store->operands.x86.address_offset = lea_statement->operands.oir.address_offset;
 			}
 
-			//Now get the address calc reg 2
-			variable_offset_store->operands.x86.address_register2 = lea_statement->operands.oir.operand1;
+			//The offset goes into the second area
+			variable_offset_store->operands.x86.address_register2 = lea_statement->operands.oir.address_operand2;
 
-			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-			//must adhere to this one's type
+			/**
+			 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+			 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+			 * must adhere to this one's type
+			 */
 			if(is_converting_move_required(variable_offset_store->operands.x86.address_register1->type, variable_offset_store->operands.x86.address_register2->type) == TRUE){
 				variable_offset_store->operands.x86.address_register2 = create_and_insert_converting_move_instruction(variable_offset_store, variable_offset_store->operands.x86.address_register2, variable_offset_store->operands.x86.address_register1->type);
 			}
@@ -13788,20 +13788,22 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 			handle_store_statement_base_address(variable_offset_store);
 
 			//Now get the address calc reg 2
-			variable_offset_store->operands.x86.address_register2 = lea_statement->operands.oir.operand1;
+			variable_offset_store->operands.x86.address_register2 = lea_statement->operands.oir.address_operand2;
 
 			//Copy over the lea multiplier
-			variable_offset_store->lea_multiplier = lea_statement->lea_multiplier;
+			variable_offset_store->operands.x86.address_multiplier = lea_statement->operands.oir.address_multiplier;
 
-			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-			//must adhere to this one's type
+			/**
+			 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+			 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+			 * must adhere to this one's type
+			 */
 			if(is_converting_move_required(variable_offset_store->operands.x86.address_register1->type, variable_offset_store->operands.x86.address_register2->type) == TRUE){
 				variable_offset_store->operands.x86.address_register2 = create_and_insert_converting_move_instruction(variable_offset_store, variable_offset_store->operands.x86.address_register2, variable_offset_store->operands.x86.address_register1->type);
 			}
 
 			//Determine the calculation mode based on the present of offset
-			if(variable_offset_store->operands.oir.address_offset != NULL){
+			if(variable_offset_store->operands.x86.address_offset != NULL){
 				variable_offset_store->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
 			} else {
 				variable_offset_store->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
@@ -13833,24 +13835,26 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 			handle_store_statement_base_address(variable_offset_store);
 
 			//If we're able to combine constants here, we will
-			if(variable_offset_store->operands.oir.address_offset != NULL){
+			if(variable_offset_store->operands.x86.address_offset != NULL){
 				//Add the 2, result is in the store's constant
-				add_constants(variable_offset_store->operands.oir.address_offset, lea_statement->operands.oir.constant_operand);
+				add_constants(variable_offset_store->operands.x86.address_offset, lea_statement->operands.oir.address_offset);
 
 			//Otherwise do a straight copy
 			} else {
-				variable_offset_store->operands.oir.address_offset = lea_statement->operands.oir.constant_operand;
+				variable_offset_store->operands.x86.address_offset = lea_statement->operands.oir.address_offset;
 			}
 
-			//Now get the address calc reg 2
-			variable_offset_store->operands.x86.address_register2 = lea_statement->operands.oir.operand1;
+			//The second address calculation register is the other operand
+			variable_offset_store->operands.x86.address_register2 = lea_statement->operands.oir.address_operand2;
 
 			//Copy over the lea multiplier
-			variable_offset_store->lea_multiplier = lea_statement->lea_multiplier;
+			variable_offset_store->operands.x86.address_multiplier = lea_statement->operands.oir.address_multiplier;
 
-			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-			//must adhere to this one's type
+			/**
+			 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+			 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+			 * must adhere to this one's type
+			 */
 			if(is_converting_move_required(variable_offset_store->operands.x86.address_register1->type, variable_offset_store->operands.x86.address_register2->type) == TRUE){
 				variable_offset_store->operands.x86.address_register2 = create_and_insert_converting_move_instruction(variable_offset_store, variable_offset_store->operands.x86.address_register2, variable_offset_store->operands.x86.address_register1->type);
 			}
@@ -13872,8 +13876,10 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 
 			break;
 
-		//By default - if we can't handle it, we just invoke the other helpers and call
-		//it quits. This ensures uniform behavior and correctness
+		/**
+		 * By default - if we can't handle it, we just invoke the other helpers and call
+		 * it quits. This ensures uniform behavior and correctness
+		 */
 		default:
 			handle_lea_statement(lea_statement);
 			handle_store_with_variable_offset_instruction(variable_offset_store);
@@ -13885,8 +13891,10 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 			return;
 	}
 	
-	//NOTE: These are down here so that the default clause in the above switch can take effect and avoid doing duplicate work
-	//Invoke the helper for our source assignment
+	/**
+	 * NOTE: These are down here so that the default clause in the above switch can take effect and avoid doing duplicate work
+	 * Invoke the helper for our source assignment
+	 */
 	handle_store_instruction_sources_and_instruction_type(variable_offset_store);
 	//This is a write regardless
 	variable_offset_store->memory_access_type = WRITE_TO_MEMORY;
