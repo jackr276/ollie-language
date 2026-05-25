@@ -10649,7 +10649,7 @@ static void handle_lea_statement(instruction_t* instruction){
 
 			//Copy over the address calc register
 			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
-			instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand1;
+			instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand2;
 
 			break;
 
@@ -12488,7 +12488,7 @@ static void handle_load_with_variable_offset_instruction(instruction_window_t* w
 	 * Based on what variable type we have here, we will need to handle
 	 * things differently
 	 */
-	switch(load_instruction->operands.oir.operand1->variable_type){
+	switch(base_address->variable_type){
 		/**
 		 * The most common case is a memory address variable. These variables are function-local
 		 * so we can emit an offset here safely without having to worry about future adjustments. It
@@ -13540,7 +13540,7 @@ static void handle_store_statement_base_address(instruction_t* store_instruction
 					case GLOBAL_VARIABLE:
 					case STATIC_VARIABLE:
 						//Let the helper do the work
-						global_variable_address = emit_global_variable_address_calculation_x86(store_instruction->operands.oir.assignee, instruction_pointer_variable, u64);
+						global_variable_address = emit_global_variable_address_calculation_x86(base_address, instruction_pointer_variable, u64);
 
 						//Now insert this before the given instruction
 						insert_instruction_before_given(global_variable_address, store_instruction);
