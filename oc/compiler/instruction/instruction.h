@@ -689,11 +689,6 @@ instruction_t* emit_lea_rip_relative_constant(three_addr_var_t* assignee, three_
 instruction_t* emit_lea_index_and_scale_only(three_addr_var_t* assignee, three_addr_var_t* address_offset, u_int64_t address_scale);
 
 /**
- * Emit an indirect jump calculation that includes a block label in three address code form
- */
-instruction_t* emit_indir_jump_address_calc_instruction(three_addr_var_t* assignee, void* jumping_to_block, three_addr_var_t* index, u_int64_t type_size);
-
-/**
  * Emit a statement using three vars and a binary operator
  * ALL statements are of the form: assignee <- op1 operator op2
 */
@@ -861,7 +856,7 @@ instruction_t* emit_branch_statement(void* if_block, void* else_block, three_add
 /**
  * Emit an indirect jump statement. The jump statement can take on several different types of jump
  */
-instruction_t* emit_indirect_jmp_instruction(three_addr_var_t* address);
+instruction_t* emit_indirect_jmp_instruction(void* jumping_to_block, three_addr_var_t* index, u_int64_t multiplier);
 
 /**
  * Emit a function call statement. Once emitted, no paramters will have been added in

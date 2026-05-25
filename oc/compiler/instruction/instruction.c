@@ -1332,28 +1332,6 @@ instruction_t* emit_lea_index_and_scale_only(three_addr_var_t* assignee, three_a
 
 
 /**
- * Emit an indirect jump calculation that includes a block label in three address code form
- *
- * TODO why can't we have this just be one instruction
- */
-instruction_t* emit_indir_jump_address_calc_instruction(three_addr_var_t* assignee, void* jumping_to_block, three_addr_var_t* index, u_int64_t type_size){
-	//First we allocate it
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	//Now we'll make our populations
-	stmt->statement_type = THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT;
-	stmt->operands.oir.assignee = assignee;
-	//We store the jumping to block as our operand. It's really a jump table
-	stmt->if_block = jumping_to_block;
-	stmt->operands.oir.address_operand2 = index;
-	stmt->operands.oir.address_multiplier = type_size;
-
-	//And now we'll give it back
-	return stmt;
-}
-
-
-/**
  * Directly emit an idle statement
  */
 instruction_t* emit_idle_instruction(){
@@ -5780,14 +5758,23 @@ instruction_t* emit_branch_statement(void* if_block, void* else_block, three_add
 /**
  * Emit an indirect jump statement. The jump statement can take on several different types of jump
  */
-instruction_t* emit_indirect_jmp_instruction(three_addr_var_t* address){
+instruction_t* emit_indirect_jmp_instruction(void* jumping_to_block, three_addr_var_t* index, u_int64_t multiplier){
 	//First we allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it with values
 	stmt->statement_type = THREE_ADDR_CODE_INDIRECT_JUMP_STMT;
-	//The address we're jumping to is in op1
-	stmt->operands.oir.operand1 = address;
+
+	//This is going to leverage the OIR lea type for printing
+	stmt->lea_statement_type = OIR_LEA_TYPE_INDEX_AND_SCALE;
+
+	//Store the index and multiplier
+	stmt->operands.oir.address_operand2 = index;
+	stmt->operands.oir.address_multiplier = multiplier;
+
+	//Store the block that we are jumping to here
+	stmt->if_block = jumping_to_block;
+
 	//And give it back
 	return stmt;
 }
