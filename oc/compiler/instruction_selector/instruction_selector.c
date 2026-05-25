@@ -10805,7 +10805,7 @@ static void handle_branch_instruction(instruction_window_t* window){
 
 	//Most common case, we do not expect that most things will
 	//be relying on FP comparison
-	if(branch_stmt->operands.oir.operand1->comes_from_fp_comparison == FALSE){
+	if(branch_stmt->relies_on->comes_from_fp_comparison == FALSE){
 		switch(branch_stmt->branch_type){
 			case BRANCH_A:
 				jump_to_if = emit_jump_instruction_directly(if_block, JA);
@@ -10883,7 +10883,7 @@ static void handle_branch_instruction(instruction_window_t* window){
 			case BRANCH_A:
 			case BRANCH_G:
 				jump_to_if = emit_jump_instruction_directly(if_block, JA);
-				jump_to_if->operands.oir.operand1 = branch_stmt->operands.oir.operand1;
+				jump_to_if->relies_on = branch_stmt->relies_on;
 
 				jump_to_else = emit_jump_instruction_directly(else_block, JMP);
 
@@ -10897,7 +10897,7 @@ static void handle_branch_instruction(instruction_window_t* window){
 			case BRANCH_L:
 			case BRANCH_B:
 				jump_to_if = emit_jump_instruction_directly(if_block, JL);
-				jump_to_if->operands.oir.operand1 = branch_stmt->operands.oir.operand1;
+				jump_to_if->relies_on = branch_stmt->relies_on;
 
 				jump_to_else = emit_jump_instruction_directly(else_block, JMP);
 
@@ -10910,7 +10910,7 @@ static void handle_branch_instruction(instruction_window_t* window){
 			case BRANCH_AE:
 			case BRANCH_GE:
 				jump_to_if = emit_jump_instruction_directly(if_block, JAE);
-				jump_to_if->operands.oir.operand1 = branch_stmt->operands.oir.operand1;
+				jump_to_if->relies_on = branch_stmt->relies_on;
 
 				jump_to_else = emit_jump_instruction_directly(else_block, JMP);
 
@@ -10924,7 +10924,7 @@ static void handle_branch_instruction(instruction_window_t* window){
 			case BRANCH_LE:
 			case BRANCH_BE:
 				jump_to_if = emit_jump_instruction_directly(if_block, JBE);
-				jump_to_if->operands.oir.operand1 = branch_stmt->operands.oir.operand1;
+				jump_to_if->relies_on = branch_stmt->relies_on;
 
 				jump_to_else = emit_jump_instruction_directly(else_block, JMP);
 
@@ -10945,7 +10945,7 @@ static void handle_branch_instruction(instruction_window_t* window){
 			case BRANCH_NZ:
 				//We need two conditional jumps here
 				jump_when_nan = emit_jump_instruction_directly(if_block, JP);
-				jump_when_nan->operands.oir.operand1 = branch_stmt->operands.oir.operand1;
+				jump_when_nan->relies_on = branch_stmt->relies_on;
 
 				jump_to_if = emit_jump_instruction_directly(if_block, JNE);
 				jump_to_if->operands.oir.operand1 = branch_stmt->operands.oir.operand1;
@@ -10975,10 +10975,10 @@ static void handle_branch_instruction(instruction_window_t* window){
 			case BRANCH_Z:
 				//We need two conditional jumps here
 				jump_when_nan = emit_jump_instruction_directly(else_block, JP);
-				jump_when_nan->operands.oir.operand1 = branch_stmt->operands.oir.operand1;
+				jump_when_nan->relies_on = branch_stmt->relies_on;
 
 				jump_to_if = emit_jump_instruction_directly(if_block, JE);
-				jump_to_if->operands.oir.operand1 = branch_stmt->operands.oir.operand1;
+				jump_to_if->relies_on = branch_stmt->relies_on;
 
 				//And the standard jump to else here
 				jump_to_else = emit_jump_instruction_directly(else_block, JMP);
@@ -12216,7 +12216,7 @@ static void handle_load_instruction(instruction_window_t* window){
 							load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_BASE_ADDRESS_ONLY;
 							
 							//Source is now just the stack pointer
-							load_instruction->operands.x86.source_register1 = stack_pointer_variable;
+							load_instruction->operands.x86.address_register1 = stack_pointer_variable;
 						}
 
 						break;
@@ -12249,7 +12249,7 @@ static void handle_load_instruction(instruction_window_t* window){
 					load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_BASE_ADDRESS_ONLY;
 					
 					//Source is now just the stack pointer
-					load_instruction->operands.x86.source_register1 = stack_pointer_variable;
+					load_instruction->operands.x86.address_register1 = stack_pointer_variable;
 				}
 			}
 
@@ -13602,6 +13602,8 @@ static void handle_store_statement_base_address(instruction_t* store_instruction
 				}
 			}
 
+			break;
+
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
 			//The first address calc register will be the stack pointer
 			store_instruction->operands.x86.address_register1 = stack_pointer_variable;
@@ -13754,7 +13756,7 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 			}
 
 			//The offset goes into the second area
-			variable_offset_store->operands.x86.address_register2 = lea_statement->operands.oir.address_operand2;
+			variable_offset_store->operands.x86.address_register2 = lea_statement->operands.oir.address_operand1;
 
 			/**
 			 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
