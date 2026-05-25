@@ -2745,7 +2745,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
 		&& window->instruction2->op == PLUS
-		&& variables_equal(window->instruction2->operands.oir.operand1, window->instruction1->operands.oir.assignee, TRUE) == TRUE) {
+		&& variables_equal(window->instruction2->operands.oir.operand2, window->instruction1->operands.oir.assignee, TRUE) == TRUE) {
 
 		//Extract for convenience
 		instruction_t* bin_operation_with_const = window->instruction1;
@@ -2781,7 +2781,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					//Translate the operands & constants
 					binary_operation->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
 					binary_operation->operands.oir.address_operand2 = bin_operation_with_const->operands.oir.operand1;
-					binary_operation->operands.oir.address_offset = bin_operation_with_const->operands.oir.address_offset;
+					binary_operation->operands.oir.address_offset = bin_operation_with_const->operands.oir.constant_operand;
 					
 					//Once this is done we can scrap the first instruction
 					delete_statement(bin_operation_with_const);
@@ -2890,7 +2890,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					//Translate the operands & constants
 					binary_operation->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
 					binary_operation->operands.oir.address_operand2 = bin_operation_with_const->operands.oir.operand1;
-					binary_operation->operands.oir.address_offset = bin_operation_with_const->operands.oir.address_offset;
+					binary_operation->operands.oir.address_offset = bin_operation_with_const->operands.oir.constant_operand;
 					
 					//Once this is done we can scrap the first instruction
 					delete_statement(bin_operation_with_const);
