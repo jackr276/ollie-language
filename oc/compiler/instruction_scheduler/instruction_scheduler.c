@@ -143,9 +143,11 @@ static void build_dependency_graph_for_block(data_dependency_graph_t* graph, bas
 				update_dependence_for_variable(graph, current, instructions, current->relies_on, i - 1);
 				break;
 
-			//We can actually skip phi functions, reason being that they
-			//will always come at the front of a block and are always going
-			//to have their dependencies coming from outside of the block
+			/**
+			 * We can actually skip phi functions, reason being that they
+			 * will always come at the front of a block and are always going
+			 * to have their dependencies coming from outside of the block
+			 */
 			case PHI_FUNCTION:
 				break;
 
@@ -186,11 +188,11 @@ static void build_dependency_graph_for_block(data_dependency_graph_t* graph, bas
 				break;
 				
 			default:
-				//For this instruction, we need to backtrace through the list and figure out:
-				//	1.) Do the dependencies get assigned in this block? It is fully possible
-				//	that they do not
-				//	2.) If they do get assigned in this block, what are those instructions that
-				//	are doing the assignment
+				/**
+				 * For this instruction, we need to backtrace through the list and figure out:
+				 * 	1.) Do the dependencies get assigned in this block? It is fully possible that they do not
+				 *  2.) If they do get assigned in this block, what are those instructions that are doing the assignment
+				 */
 				
 				//For each variable in the instruction, we need to perform the search
 				if(is_destination_also_operand(current) == TRUE){
@@ -325,7 +327,6 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	 * adjacency matrix
 	 */
 	finalize_data_dependency_graph(&dependency_graph);
-
 
 	/**
 	 * Step 4: If we have at least one load instruction, we will run
