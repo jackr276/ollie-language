@@ -3735,22 +3735,11 @@ static void print_addition_instruction(FILE* fl, instruction_t* instruction, var
 			break;
 	}
 
-	/**
-	 * Since addition instructions are eligible to be combined with
-	 * addressing modes, we will print out the addressing mode
-	 * here *if* we have a calculation mode other than none. Otherwise,
-	 * we will print everything out normally
-	 */
-	if(instruction->calculation_mode == ADDRESS_CALCULATION_MODE_NONE){
-		//Print the appropriate variable here
-		if(instruction->operands.x86.source_register1 != NULL){
-			print_variable(fl, instruction->operands.x86.source_register1, mode);
-		} else {
-			print_immediate_value(fl, instruction->operands.x86.source_immediate);
-		}
-
+	//Print the appropriate variable here
+	if(instruction->operands.x86.source_register1 != NULL){
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
 	} else {
-		print_addressing_mode_expression(fl, instruction,  mode);
+		print_immediate_value(fl, instruction->operands.x86.source_immediate);
 	}
 
 	//Needed comma
@@ -3785,22 +3774,11 @@ static void print_subtraction_instruction(FILE* fl, instruction_t* instruction, 
 			break;
 	}
 
-	/**
-	 * Since subtraction instructions are eligible to be combined with
-	 * addressing modes, we will print out the addressing mode
-	 * here *if* we have a calculation mode other than none. Otherwise,
-	 * we will print everything out normally
-	 */
-	if(instruction->calculation_mode == ADDRESS_CALCULATION_MODE_NONE){
-		//Print the appropriate variable here
-		if(instruction->operands.x86.source_register1 != NULL){
-			print_variable(fl, instruction->operands.x86.source_register1, mode);
-		} else {
-			print_immediate_value(fl, instruction->operands.x86.source_immediate);
-		}
-
+	//Print the appropriate variable here
+	if(instruction->operands.x86.source_register1 != NULL){
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
 	} else {
-		print_addressing_mode_expression(fl, instruction,  mode);
+		print_immediate_value(fl, instruction->operands.x86.source_immediate);
 	}
 
 	//Needed comma
