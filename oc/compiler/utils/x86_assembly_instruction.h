@@ -25,8 +25,7 @@ typedef enum {
  */
 typedef enum{
 	ADDRESS_CALCULATION_MODE_NONE = 0, //default is always none
-	ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE, //(%rax) - only the deref depending on how much indirection
-	ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST, //(%rax) - only the deref depending on how much indirection
+	ADDRESS_CALCULATION_MODE_BASE_ADDRESS_ONLY,
 	ADDRESS_CALCULATION_MODE_OFFSET_ONLY, // 4(%rax)
 	ADDRESS_CALCULATION_MODE_REGISTERS_ONLY, // (%rax, %rcx)
 	ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET, // 4(%rax, %rcx)
