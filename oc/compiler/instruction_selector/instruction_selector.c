@@ -9257,8 +9257,7 @@ static void handle_cmp_instruction(instruction_window_t* window){
 		instruction->operands.oir.operand2 = create_and_insert_converting_move_instruction(instruction, instruction->operands.oir.operand2, operator_type);
 	}
 
-	//If this is only used by a branch(which is the most common type to have), we will
-	//handle here
+	//If this is only used by a branch(which is the most common type to have), we will handle here
 	if(used_by_branch_only == TRUE){
 		//Select this instruction
 		instruction->instruction_type = select_cmp_instruction(size);

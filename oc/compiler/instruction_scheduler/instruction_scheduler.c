@@ -42,9 +42,11 @@ static void update_dependence_for_variable(data_dependency_graph_t* graph, instr
 			continue;
 		}
 
-		//Some instructions(namely compares), have
-		//special rules where we hang onto the assignee
-		//for just this reason
+		/**
+		 * Some instructions(namely compares), have
+		 * special rules where we hang onto the assignee
+		 * for just this reason
+		 */
 		switch(current->instruction_type){
 			case CMPQ:
 			case CMPW:
@@ -54,9 +56,8 @@ static void update_dependence_for_variable(data_dependency_graph_t* graph, instr
 			case TESTL:
 			case TESTW:
 			case TESTQ:
-				//TODO UPDATE
 				//The cmp instructions store their symbolic assignees in the assignee slot
-				if(variables_equal(current->assignee, variable, TRUE) == TRUE){
+				if(variables_equal(current->operands.oir.assignee, variable, TRUE) == TRUE){
 					//Add it in
 					add_dependence(graph, given, current);
 					return;
@@ -104,10 +105,12 @@ static void build_dependency_graph_for_block(data_dependency_graph_t* graph, bas
 	//the nature of the switch
 	dynamic_array_t function_parameters;
 
-	//Run through the instruction list backwards. Logically speaking, we're going to
-	//find the instruction with the maximum number of dependencies later on down in the block
-	//We only go down to one here because for the first instruction, there is nothing of
-	//value to check as it's the very first one
+	/**
+	 * Run through the instruction list backwards. Logically speaking, we're going to
+	 * find the instruction with the maximum number of dependencies later on down in the block
+	 * We only go down to one here because for the first instruction, there is nothing of
+	 * value to check as it's the very first one
+	 */
 	for(int32_t i = block->number_of_instructions - 1; i >= 1; i--){
 		//Extract it
 		instruction_t* current = instructions[i];
