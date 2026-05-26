@@ -2998,7 +2998,6 @@ static void handle_source_spill(symtab_function_record_t* function, dynamic_arra
 		insert_instruction_before_given(load_instruction, target);
 	}
 
-
 	//We can put the dummy in now
 	dynamic_array_add(&((*currently_spilled)->variables), target_source);
 	target_source->associated_live_range = *currently_spilled;
@@ -3034,6 +3033,11 @@ static void handle_pure_copy_source_spill(instruction_t* instruction, u_int32_t 
 	if(offset == 0){
 		//Operand goes in the first address calc register
 		instruction->operands.x86.address_register1 = stack_pointer;
+
+		//IMPORTANT - NULL this out so that future steps don't get confused
+		instruction->operands.x86.source_register1 = NULL;
+
+		//This is just going to be a base address dereference
 		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_BASE_ADDRESS_ONLY;
 
 	//Otherwise, we need to do an offset calculation
@@ -3070,6 +3074,11 @@ static void handle_constant_assignment_destination_spill(instruction_t* instruct
 	if(offset == 0){
 		//Operand goes in the address register
 		instruction->operands.x86.address_register1 = stack_pointer;
+
+		//IMPORTANT - NULL this out so that future steps don't get confused
+		instruction->operands.x86.destination_register = NULL;
+
+		//This is just a base address
 		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_BASE_ADDRESS_ONLY;
 
 	//Otherwise, we need to do an offset calculation
