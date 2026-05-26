@@ -3743,7 +3743,7 @@ static void print_addition_instruction(FILE* fl, instruction_t* instruction, var
 	 */
 	if(instruction->calculation_mode == ADDRESS_CALCULATION_MODE_NONE){
 		//Print the appropriate variable here
-		if(instruction->operands.x86.address_register1 != NULL){
+		if(instruction->operands.x86.source_register1 != NULL){
 			print_variable(fl, instruction->operands.x86.source_register1, mode);
 		} else {
 			print_immediate_value(fl, instruction->operands.x86.source_immediate);
