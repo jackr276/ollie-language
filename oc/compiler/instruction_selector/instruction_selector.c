@@ -4556,32 +4556,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		changed = TRUE;
 	}
 
-
-	/**
-	 * ================================ Combining binary operations with loads =====================================
-	 * There are several binary operation instruction types in x86 that are eligible to have their source be a memory
-	 * read. Some examples are addition and subtraction. If we detect that we have such a binary operation here, we 
-	 * should combine the two equations into one.
-	 */
-	if(is_instruction_binary_operation(window->instruction2) == TRUE
-		&& is_load_operation(window->instruction1) == TRUE
-		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.assignee, FALSE) == TRUE 
-		//These are more costly checks which is why they are last
-		&& does_load_operation_require_converting_move(window->instruction1) == FALSE
-		&& is_binary_operation_capable_of_memory_source_argument(window->instruction2) == TRUE){
-
-		//Grab these two out for convenience
-		instruction_t* load_operation = window->instruction1;
-		instruction_t* binary_operation = window->instruction2;
-
-
-		printf("HERE\n\n\n");
-		print_instruction_window_three_address_code(window);
-	}
-
-
-
 	//Return whether or not we changed the block return changed;
 	return changed;
 }
@@ -10101,9 +10075,11 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		 * the time
 		 */
 		while(cursor != NULL){
-			//Did we find where op1 got assigned?. If so, check to see
-			//if the operation that made it generated a truthful byte value(0 or 1)
-			//or not
+			/**
+			 * Did we find where op1 got assigned?. If so, check to see
+			 * if the operation that made it generated a truthful byte value(0 or 1)
+			 * or not
+			 */
 			if(variables_equal(logical_and->operands.oir.operand1, cursor->operands.oir.assignee, FALSE)){
 				if(does_operator_generate_truthful_byte_value(cursor->op) == TRUE){
 					op1_came_from_setX = TRUE;
@@ -10120,8 +10096,7 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 			cursor = cursor->previous_statement;
 		}
 
-		//We expect that it *not* being from
-		//setX is the most likely case
+		//We expect that it *not* being from setX is the most likely case
 		if(op1_came_from_setX == FALSE){
 			//Let's first emit our test instruction
 			instruction_t* test_instruction = emit_direct_test_instruction(logical_and->operands.oir.operand1, logical_and->operands.oir.operand1);
