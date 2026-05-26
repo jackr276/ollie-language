@@ -500,11 +500,6 @@ u_int8_t is_instruction_assignment_operation(instruction_t* instruction);
 u_int8_t is_destination_also_operand(instruction_t* instruction);
 
 /**
- * Is the destination actually assigned?
- */
-u_int8_t is_move_instruction_destination_assigned(instruction_t* instruction);
-
-/**
  * Is this operation a pure copy? In other words, is it a move instruction
  * that moves one register to another?
  */
@@ -519,10 +514,6 @@ u_int8_t is_instruction_constant_assignment(instruction_t* instruction);
  * Is this an unsigned multiplication instruction?
  */
 u_int8_t is_unsigned_multplication_instruction(instruction_t* instruction);
-
-/**
- * Is this a division instruction?
- */
 
 /**
  * Is this constant value 0?

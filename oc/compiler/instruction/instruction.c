@@ -421,45 +421,6 @@ u_int8_t is_destination_also_operand(instruction_t* instruction){
 
 
 /**
- * Is the destination actually assigned?
- */
-u_int8_t is_move_instruction_destination_assigned(instruction_t* instruction){
-	switch(instruction->instruction_type){
-		case MOVQ:
-		case MOVL:
-		case MOVW:
-		case MOVB:
-		case MOVD:
-		case MOVSBW:
-		case MOVSBL:
-		case MOVSBQ:
-		case MOVSWL:
-		case MOVSWQ:
-		case MOVSLQ:
-		case MOVZBW:
-		case MOVZBL:
-		case MOVZBQ:
-		case MOVZWL:
-		case MOVZWQ:
-		case MOVDQU:
-		case MOVDQA:
-			//If we have a move where we are writing to memory, the destination
-			//does not count as assigned
-			if(instruction->memory_access_type == WRITE_TO_MEMORY){
-				return FALSE;
-			}
-
-			//Otherwise it is
-			return TRUE;
-
-		//By default yes
-		default:
-			return TRUE;
-	}
-}
-
-
-/**
  * Is this an unsigned multiplication instruction?
  */
 u_int8_t is_unsigned_multplication_instruction(instruction_t* instruction){

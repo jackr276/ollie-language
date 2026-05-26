@@ -1035,8 +1035,10 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 
 				break;
 
-			//This is a unique case. PXOR/XORQ clear is often used to define a register. As such, we'll put the
-			//destination before the use in this one case
+			/**
+			 * This is a unique case. PXOR/XORQ clear is often used to define a register. As such, we'll put the
+			 * destination before the use in this one case
+			 */
 			case PXOR_CLEAR:
 			case XORQ_CLEAR:
 			case XORL_CLEAR:
@@ -1294,8 +1296,10 @@ static void calculate_live_range_liveness_sets(basic_block_t* function_entry_blo
 				}
 			}
 
-			//Since we need all of the used variables, we'll just clone this
-			//dynamic array so that we start off with them all
+			/**
+			 * Since we need all of the used variables, we'll just clone this
+			 * dynamic array so that we start off with them all
+			 */
 			current->live_in = clone_dynamic_array(&(current->used_before_definition));
 
 			//Now we need to add every variable that is in LIVE_OUT but NOT in assigned
@@ -1303,8 +1307,10 @@ static void calculate_live_range_liveness_sets(basic_block_t* function_entry_blo
 				//Grab a reference for our use
 				live_range_t* live_out_var = dynamic_array_get_at(&(current->live_out), j);
 
-				//Now we need this block to be not in "assigned" also. If it is in assigned we can't
-				//add it. Additionally, we'll want to make sure we aren't adding duplicate live ranges
+				/**
+				 * Now we need this block to be not in "assigned" also. If it is in assigned we can't
+				 * add it. Additionally, we'll want to make sure we aren't adding duplicate live ranges
+				 */
 				if(dynamic_array_contains(&(current->assigned_variables), live_out_var) == NOT_FOUND 
 					&& dynamic_array_contains(&(current->live_in), live_out_var) == NOT_FOUND){
 					//If this is true we can add
