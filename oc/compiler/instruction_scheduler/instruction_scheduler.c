@@ -10,6 +10,12 @@
 #include <stdio.h>
 #include <sys/types.h>
 
+/**
+ * Hang onto these two for later use
+ */
+static three_addr_var_t* stack_pointer_var;
+static three_addr_var_t* instruction_pointer_var;
+
 
 /**
  * Does the given instruction have a *Data Dependence* on the candidate. We will know
@@ -28,6 +34,16 @@
  * definition, we're done for that given variable
  */
 static void update_dependence_for_variable(data_dependency_graph_t* graph, instruction_t* given, instruction_t** instructions, three_addr_var_t* variable, u_int32_t start){
+	/**
+	 * There is no point in ever searching for these variables because they do not
+	 * and will never behave like normal vars. We save time and just skip
+	 */
+	if(variable == NULL
+		|| variable == stack_pointer_var 
+		|| variable == instruction_pointer_var){
+		return;
+	}
+
 	//Predeclare due to the switch
 	three_addr_var_t* destination;
 	three_addr_var_t* destination2;
@@ -196,33 +212,13 @@ static void build_dependency_graph_for_block(data_dependency_graph_t* graph, bas
 				
 				//For each variable in the instruction, we need to perform the search
 				if(is_destination_also_operand(current) == TRUE){
-					//Start searching here, beginngin at the last instruction
 					update_dependence_for_variable(graph, current, instructions, current->operands.x86.destination_register, i - 1);
 				}
 
-				//Same for the source
-				if(current->operands.x86.source_register1 != NULL){
-					//Start searching here, beginngin at the last instruction
-					update_dependence_for_variable(graph, current, instructions, current->operands.x86.source_register1, i - 1);
-				}
-
-				//Same for the second source
-				if(current->operands.x86.source_register2 != NULL){
-					//Start searching here, beginngin at the last instruction
-					update_dependence_for_variable(graph, current, instructions, current->operands.x86.source_register2, i - 1);
-				}
-
-				//And the address calc registers
-				if(current->operands.x86.address_register1 != NULL){
-					//Start searching here, beginngin at the last instruction
-					update_dependence_for_variable(graph, current, instructions, current->operands.x86.address_register1, i - 1);
-				}
-
-				//And the address calc registers
-				if(current->operands.x86.address_register2 != NULL){
-					//Start searching here, beginngin at the last instruction
-					update_dependence_for_variable(graph, current, instructions, current->operands.x86.address_register2, i - 1);
-				}
+				update_dependence_for_variable(graph, current, instructions, current->operands.x86.source_register1, i - 1);
+				update_dependence_for_variable(graph, current, instructions, current->operands.x86.source_register2, i - 1);
+				update_dependence_for_variable(graph, current, instructions, current->operands.x86.address_register1, i - 1);
+				update_dependence_for_variable(graph, current, instructions, current->operands.x86.address_register2, i - 1);
 
 				break;
 		}
@@ -300,8 +296,10 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 		//Increment
 		list_index++;
 
-		//Flag if we have at least one load instruction for our
-		//priority computations down the line
+		/**
+		 * Flag if we have at least one load instruction for our
+		 * priority computations down the line
+		 */
 		if(is_load_instruction(instruction_cursor) == TRUE){
 			contains_load = TRUE;
 		}
@@ -378,6 +376,10 @@ cfg_t* schedule_all_instructions(cfg_t* cfg, compiler_options_t* options){
 	//Grab these flags for later
 	u_int8_t debug_printing = options->enable_debug_printing;
 	u_int8_t print_irs = options->print_irs;
+
+	//Extract the stack and instruction pointer so that we know what to skip
+	stack_pointer_var = cfg->stack_pointer;
+	instruction_pointer_var = cfg->instruction_pointer;
 
 	/**
 	 * Really all that we'll do here is invoke the block
