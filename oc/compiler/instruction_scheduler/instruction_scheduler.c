@@ -36,11 +36,6 @@ static void update_dependence_for_variable(data_dependency_graph_t* graph, instr
 	for(int32_t i = start; i >= 0; i--){
 		//Extract it
 		instruction_t* current = instructions[i];
-		
-		//If we don't even deal with the destination why bother
-		if(is_move_instruction_destination_assigned(current) == FALSE){
-			continue;
-		}
 
 		/**
 		 * Some instructions(namely compares), have
@@ -198,9 +193,7 @@ static void build_dependency_graph_for_block(data_dependency_graph_t* graph, bas
 				//	are doing the assignment
 				
 				//For each variable in the instruction, we need to perform the search
-				if(is_destination_also_operand(current) == TRUE
-					//If the move instruction's destination is not assigned, then it is being used
-					|| is_move_instruction_destination_assigned(current) == FALSE){
+				if(is_destination_also_operand(current) == TRUE){
 					//Start searching here, beginngin at the last instruction
 					update_dependence_for_variable(graph, current, instructions, current->operands.x86.destination_register, i - 1);
 				}

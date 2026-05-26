@@ -3172,11 +3172,6 @@ static instruction_t* handle_instruction_level_spilling(symtab_function_record_t
 				//Update latest
 				latest = instruction->next_statement;
 
-			//In the case like this, we just need to emit the load
-			} else if(is_move_instruction_destination_assigned(instruction) == FALSE){
-				//Handle the source spill only
-				handle_source_spill(function, live_ranges, instruction->operands.x86.destination_register, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
-
 			//In all other cases, we just have the store
 			} else {
 				//Emit the store instruction for this now
