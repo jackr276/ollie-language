@@ -186,7 +186,7 @@ static inline generic_type_t* get_destination_type_for_binary_operation_instruct
 			case MOD:
 			case STAR:
 			case F_SLASH:
-				destination_type = instruction->assignee->type;
+				destination_type = instruction->operands.oir.assignee->type;
 				break;
 
 			/**
@@ -203,10 +203,12 @@ static inline generic_type_t* get_destination_type_for_binary_operation_instruct
 			case G_THAN_OR_EQ:
 			case DOUBLE_EQUALS:
 			case NOT_EQUALS:
-				if(instruction->op2 != NULL){
-					destination_type = get_operand_type_for_logical_operation(cfg_reference->type_symtab, instruction->op1->type, instruction->op2->type);
+				if(instruction->operands.oir.operand2 != NULL){
+					destination_type = get_operand_type_for_logical_operation(cfg_reference->type_symtab, 
+															   					instruction->operands.oir.operand1->type,
+															   					instruction->operands.oir.operand2->type);
 				} else {
-					destination_type = instruction->op1->type;
+					destination_type = instruction->operands.oir.operand1->type;
 				}
 
 				break;
@@ -217,7 +219,7 @@ static inline generic_type_t* get_destination_type_for_binary_operation_instruct
 			 */
 			case DOUBLE_AND:
 			case DOUBLE_OR:
-				destination_type = instruction->assignee->type;
+				destination_type = instruction->operands.oir.assignee->type;
 				break;
 
 			default:
@@ -311,7 +313,7 @@ static inline u_int8_t is_binary_operation_capable_of_memory_source_argument(ins
 	 * this(it's pretty rare anyways)
 	 */
 	generic_type_t* destination_type = get_destination_type_for_binary_operation_instruction(instruction);
-	if(is_converting_move_required(destination_type, instruction->op2->type) == TRUE){
+	if(is_converting_move_required(destination_type, instruction->operands.oir.operand2->type) == TRUE){
 		return FALSE;
 	}
 
@@ -328,7 +330,7 @@ static inline u_int8_t is_binary_operation_capable_of_memory_source_argument(ins
 static inline u_int8_t does_load_operation_require_converting_move(instruction_t* instruction){
 	//Extract the region/destination type
 	generic_type_t* memory_region_type = instruction->type_storage.memory_read_write_type;
-	generic_type_t* destination_type = instruction->assignee->type;
+	generic_type_t* destination_type = instruction->operands.oir.address_operand2->type;
 
 	//Give back whether or not the converting move is needed
 	return is_converting_move_required(destination_type, memory_region_type);
@@ -4563,8 +4565,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 */
 	if(is_instruction_binary_operation(window->instruction2) == TRUE
 		&& is_load_operation(window->instruction1) == TRUE
-		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE 
+		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.assignee, FALSE) == TRUE 
 		//These are more costly checks which is why they are last
 		&& does_load_operation_require_converting_move(window->instruction1) == FALSE
 		&& is_binary_operation_capable_of_memory_source_argument(window->instruction2) == TRUE){
