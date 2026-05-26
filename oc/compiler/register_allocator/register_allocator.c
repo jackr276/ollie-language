@@ -1140,10 +1140,6 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 						add_live_range_to_use_set(destination_lr, basic_block);
 						add_live_range_to_def_set(destination_lr, basic_block);
 
-					///Handle the case where we have something that is not a true assignment, just a use
-					} else if(is_move_instruction_destination_assigned(current) == FALSE){
-						add_live_range_to_use_set(destination_lr, basic_block);
-
 					//If we get all the way to here, then it was truly assigned
 					} else {
 						add_live_range_to_def_set(destination_lr, basic_block);
@@ -1431,17 +1427,7 @@ static dynamic_array_t calculate_live_after_for_block(basic_block_t* block, inst
 			 * *not* delete this after we add our interference
 			 */
 			if(is_destination_also_operand(operation) == TRUE){
-				//Since this is *also* an operand, it needs to be added to the LIVE_NOW array. It would not be picked up any
-				//other way
-				add_live_now_live_range(operation->operands.x86.destination_register->associated_live_range, &live_after);
-
-			/**
-			 * If the indirection level is more than 0, this means that we're moving into a memory
-			 * region. Since this is the case, we're not really assigning to the register here. In
-			 * fact, we're using it, so we'll need to add this to LIVE_NOW
-			 */
-			} else if(is_move_instruction_destination_assigned(operation) == FALSE){
-				//Add it to live now and we're done
+				//Since this is *also* an operand, it needs to be added to the LIVE_NOW array. It would not be picked up any other way
 				add_live_now_live_range(operation->operands.x86.destination_register->associated_live_range, &live_after);
 
 			/**
@@ -1657,17 +1643,6 @@ static void calculate_all_interference_in_block(basic_block_t* block){
 				}
 
 			/**
-			 * If we hit this, this means that the destination register itself is never being assigned. In this
-			 * case, we'll just need to add the destination LR to live now
-			 */
-			} else if(is_move_instruction_destination_assigned(operation) == FALSE){
-				if(operation->operands.x86.destination_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
-					add_live_now_live_range(operation->operands.x86.destination_register->associated_live_range, &live_now_general_purpose);
-				} else {
-					add_live_now_live_range(operation->operands.x86.destination_register->associated_live_range, &live_now_sse);
-				}
-
-			/**
 			 * The final case here is the ideal case in the algorithm, where we have a simple
 			 * assignment at the end. To satisfy the algorithm, we'll add all of the interference
 			 * between the destination and LIVE_NOW and then delete the destination from live_now
@@ -1876,15 +1851,6 @@ static void calculate_target_interference_in_block(basic_block_t* block, live_ra
 				//Add the interference in the appropriate graph 
 				if(operation->operands.x86.destination_register->associated_live_range->live_range_class == target_class){
 					add_interefence_between_target_and_live_now(&target_live_now, operation->operands.x86.destination_register->associated_live_range);
-					add_live_now_live_range(operation->operands.x86.destination_register->associated_live_range, &target_live_now);
-				}
-
-			/**
-			 * If we hit this, this means that the destination register itself is never being assigned. In this
-			 * case, we'll just need to add the destination LR to live now
-			 */
-			} else if(is_move_instruction_destination_assigned(operation) == FALSE){
-				if(operation->operands.x86.destination_register->associated_live_range->live_range_class == target_class){
 					add_live_now_live_range(operation->operands.x86.destination_register->associated_live_range, &target_live_now);
 				}
 
@@ -2445,10 +2411,6 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 					if(is_destination_also_operand(cursor) == TRUE){
 						add_live_range_to_use_set(destination_lr, block);
 						add_live_range_to_def_set(destination_lr, block);
-
-					///Handle the case where we have something that is not a true assignment, just a use
-					} else if(is_move_instruction_destination_assigned(cursor) == FALSE){
-						add_live_range_to_use_set(destination_lr, block);
 
 					//If we get all the way to here, then it was truly assigned
 					} else {
