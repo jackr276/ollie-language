@@ -4820,13 +4820,14 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			}
 
 			fprintf(fl, ")\n");
-
 			break;
 
-		// ============================ Begin floating point area ==============================
-		// The instructions below operate either exclusively with xmm registers or with a mix
-		// of xmm and general purpose registers or memory operations. These handle basic movement
-		// and conversion
+		/**
+		 * ============================ Begin floating point area ==============================
+		 * The instructions below operate either exclusively with xmm registers or with a mix
+		 * of xmm and general purpose registers or memory operations. These handle basic movement
+		 * and conversion
+		 */
 		case MOVAPD:
 		case MOVAPS:
 		case MOVUPS:
@@ -4863,6 +4864,25 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 			break;
 
+		case ADDSS:
+		case ADDSD:
+			print_sse_addition_instruction(fl, instruction, mode);
+			break;
+
+		case SUBSS:
+		case SUBSD:
+			print_sse_subtraction_instruction(fl, instruction, mode);
+			break;
+
+		case MULSS:
+		case MULSD:
+			print_sse_multiplication_instruction(fl, instruction, mode);
+			break;
+
+		case DIVSS:
+		case DIVSD:
+			print_sse_division_instruction(fl, instruction, mode);
+			break;
 
 		//TODO MAKE IT'S OWN HELPER
 		case ADDSS:
@@ -5044,8 +5064,10 @@ instruction_t* emit_dec_instruction(three_addr_var_t* decrementee){
 	//Now we populate
 	dec_stmt->statement_type = THREE_ADDR_CODE_DEC_STMT;
 
-	//If this is not a temporary variable, then we'll
-	//emit an exact copy and let the SSA system handle it
+	/**
+	 * If this is not a temporary variable, then we'll
+	 * emit an exact copy and let the SSA system handle it
+	 */
 	if(decrementee->variable_type != VARIABLE_TYPE_TEMP){
 		dec_stmt->operands.oir.assignee = emit_var_copy(decrementee);
 
@@ -5072,8 +5094,10 @@ instruction_t* emit_inc_instruction(three_addr_var_t* incrementee){
 	//Now we populate
 	inc_stmt->statement_type = THREE_ADDR_CODE_INC_STMT;
 
-	//If this is not a temporary variable, then we'll
-	//emit an exact copy and let the SSA system handle it
+	/**
+	 * If this is not a temporary variable, then we'll
+	 * emit an exact copy and let the SSA system handle it
+	 */
 	if(incrementee->variable_type != VARIABLE_TYPE_TEMP){
 		inc_stmt->operands.oir.assignee = emit_var_copy(incrementee);
 
