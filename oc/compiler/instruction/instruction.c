@@ -353,8 +353,6 @@ u_int8_t is_instruction_assignment_operation(instruction_t* instruction){
 }
 
 
-
-
 /**
  * Does a given operation overwrite it's source? Think add, subtract, etc
  */
@@ -2237,7 +2235,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			//Then the arrow
 			fprintf(fl, " <- ");
 
-			//Now we'll do op1, token, op2
+			//Now we'll do the first and second operands
 			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, " %s ", op_to_string(stmt->op));
 			print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
@@ -2262,7 +2260,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			//Then the arrow
 			fprintf(fl, " <- ");
 
-			//Now we'll do op1, token, op2
+			//Now we'll do the first and second operands
 			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, " %s ", op_to_string(stmt->op));
 
