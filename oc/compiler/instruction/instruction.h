@@ -362,6 +362,15 @@ struct instruction_t{
 		} x86;
 	} operands;
 
+	//Generic parameter list - could be used for phi functions or function calls
+	dynamic_array_t parameters;
+	//We have 2 ways to jump. The if jump is our affirmative jump,
+	//else is our alternative
+	void* if_block;
+	void* else_block;
+	//Optional variable storage to determine what a value relies on
+	three_addr_var_t* relies_on;
+
 	/**
 	 * Optional storage values that are not used enough to justify
 	 * their own dedicated field
@@ -379,14 +388,6 @@ struct instruction_t{
 		symtab_label_record_t* jumping_to_label;
 	} optional_storage;
 
-	//Generic parameter list - could be used for phi functions or function calls
-	dynamic_array_t parameters;
-	//We have 2 ways to jump. The if jump is our affirmative jump,
-	//else is our alternative
-	void* if_block;
-	void* else_block;
-	//Optional variable storage to determine what a value relies on
-	three_addr_var_t* relies_on;
 	/**
 	 * Optional storage for a type. The union is for readability and intentionality, 
 	 * we know that it's not really needed
