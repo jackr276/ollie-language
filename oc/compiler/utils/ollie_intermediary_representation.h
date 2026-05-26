@@ -136,8 +136,6 @@ typedef enum {
 	THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT,
 	//A "Load effective address(lea)" instruction
 	THREE_ADDR_CODE_LEA_STMT,
-	//An indirect jump address calculation instruction, very similar to lea
-	THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT,
 	//A phi function - for SSA analysis only
 	THREE_ADDR_CODE_PHI_FUNC,
 	//A memory access statement

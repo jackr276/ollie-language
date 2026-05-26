@@ -154,8 +154,8 @@ static void remove_useless_moves(basic_block_t* function_entry_block){
 			//It's not a pure copy, so leave
 			if(is_instruction_pure_copy(current_instruction) == TRUE){
 				//Extract for convenience
-				live_range_t* destination_live_range = current_instruction->destination_register->associated_live_range;
-				live_range_t* source_live_range = current_instruction->source_register->associated_live_range;
+				live_range_t* destination_live_range = current_instruction->operands.x86.destination_register->associated_live_range;
+				live_range_t* source_live_range = current_instruction->operands.x86.source_register1->associated_live_range;
 
 				//Go based on what live range class we have here
 				switch(source_live_range->live_range_class){
@@ -482,7 +482,7 @@ static inline u_int8_t is_block_eligible_for_ret_hoisting(basic_block_t* block){
 
 			case ADDQ:
 				//Only counts if this isn't the stack pointer
-				if(cursor->destination_register != stack_pointer_variable){
+				if(cursor->operands.x86.destination_register != stack_pointer_variable){
 					number_of_non_call_management_instructions++;
 				}
 
@@ -560,13 +560,14 @@ static instruction_t* clone_instruction(instruction_t* source){
 	memcpy(copy, source, sizeof(instruction_t));
 	
 	//Duplicate the variables
-	copy->destination_register = clone_variable(source->destination_register);
-	copy->source_register = clone_variable(source->source_register);
-	copy->source_register2 = clone_variable(source->source_register2);
-	copy->address_calc_reg1 = clone_variable(source->address_calc_reg1);
-	copy->address_calc_reg2 = clone_variable(source->address_calc_reg2);
-	copy->offset = clone_constant(source->offset);
-	copy->source_immediate = clone_constant(source->source_immediate);
+	copy->operands.x86.destination_register = clone_variable(source->operands.x86.destination_register);
+	copy->operands.x86.destination_register2 = clone_variable(source->operands.x86.destination_register2);
+	copy->operands.x86.source_register1 = clone_variable(source->operands.x86.source_register1);
+	copy->operands.x86.source_register2 = clone_variable(source->operands.x86.source_register2);
+	copy->operands.x86.address_register1 = clone_variable(source->operands.x86.address_register1);
+	copy->operands.x86.address_register2 = clone_variable(source->operands.x86.address_register2);
+	copy->operands.x86.address_offset = clone_constant(source->operands.x86.address_offset);
+	copy->operands.x86.source_immediate = clone_constant(source->operands.x86.source_immediate);
 
 	//If we have function call parameters, emit a copy of them
 	if(source->parameters.internal_array != NULL){

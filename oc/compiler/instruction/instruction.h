@@ -290,36 +290,95 @@ struct instruction_t{
 	instruction_t* next_statement;
 	//For doubly linked list properties -- the previous statement
 	instruction_t* previous_statement;
-	//A three address code always has 2 operands and an assignee
-	three_addr_var_t* op1;
-	three_addr_var_t* op2;
-	//For convenience: op1 can also be a const sometimes
-	three_addr_const_t* op1_const;
-	three_addr_var_t* assignee;
-	//Now for the assembly operations, we have a source and destination
-	three_addr_var_t* source_register;
-	//We can have more than one source, usually for CMP instructions
-	three_addr_var_t* source_register2;
-	//If we're trying to move a constant in
-	three_addr_const_t* source_immediate;
-	//Our destination register/variable
-	three_addr_var_t* destination_register;
-	//Certain instructions like conversions, and divisions, have more
-	//than one destination register
-	three_addr_var_t* destination_register2;
-	//The offset constant if we have one
-	three_addr_const_t* offset;
-	//The RIP offset variable
-	three_addr_var_t* rip_offset_variable;
-	//The address calculation registers
-	three_addr_var_t* address_calc_reg1;
-	three_addr_var_t* address_calc_reg2;
-	//Optional storage for values that aren't often used
+	//What is the three address code type
+	instruction_stmt_type_t statement_type;
+	//What is the x86-64 instruction
+	instruction_type_t instruction_type;
+	//What is the operator for the instruction?
+	ollie_token_t op;
+	/**
+	 * For the sake of efficiency - we only ever need to use
+	 * one of these structs at at time. It's for this reason
+	 * that we have both structs wrapped inside of a union
+	 * to save on space
+	 */
+	struct {
+		/**
+		 * Storage for the variables that are used inside of OIR. 
+		 */
+		struct {
+			//First operand inside of an expresion
+			three_addr_var_t* operand1;
+			//Second operand inside of an expression
+			three_addr_var_t* operand2;
+			//Constant operand if need be
+			three_addr_const_t* constant_operand;
+			//Assignee
+			three_addr_var_t* assignee;
+			/**
+			 * We maintain separate variable storage for lea/address
+			 * calculation statements. Reminder that these statements
+			 * go like(at their maximum): offset(operand1, operand2, multiplier)
+			 */
+			three_addr_const_t* address_offset;
+			three_addr_var_t* address_operand1;
+			three_addr_var_t* address_operand2;
+			//This can never be anything besides a 64 bit integer
+			u_int64_t address_multiplier;
+		} oir; 
+
+		/**
+		 * Storage for the variables that represent the registers inside of
+		 * our representation of x86 assembly
+		 */
+		struct {
+			//First source register for x86 assembly
+			three_addr_var_t* source_register1;
+			//Second source register for x86 assembly
+			three_addr_var_t* source_register2;
+			//Immediate value for x86 assembly
+			three_addr_const_t* source_immediate;
+			//First destination register
+			three_addr_var_t* destination_register;
+			//Second destination register - some instructions have these but it is rare
+			three_addr_var_t* destination_register2;
+			/**
+			 * We maintain separate variable storage for lea/address
+			 * calculation statements. Reminder that these statements
+			 * go like(at their maximum): offset(register1, register2, multiplier)
+			 */
+			three_addr_const_t* address_offset;
+			three_addr_var_t* address_register1;
+			three_addr_var_t* address_register2;
+			//This can never be anything besides a 64 bit integer
+			u_int64_t address_multiplier;
+			/**
+			 * Some variables are represented as RIP offsets. We will use a special
+			 * space here so that they are excluded from the register allocator's
+			 * processing
+			 */
+			three_addr_var_t* rip_offset_var;
+
+		} x86;
+	} operands;
+
+	//Generic parameter list - could be used for phi functions or function calls
+	dynamic_array_t parameters;
+	//We have 2 ways to jump. The if jump is our affirmative jump,
+	//else is our alternative
+	void* if_block;
+	void* else_block;
+	//Optional variable storage to determine what a value relies on
+	three_addr_var_t* relies_on;
+
+	/**
+	 * Optional storage values that are not used enough to justify
+	 * their own dedicated field
+	 */
 	union {
 		//Store inlined assembly in a string
 		dynamic_string_t inlined_assembly;
-		//The second error assignee for an errorable
-		//function
+		//The second error assignee for an errorable function
 		three_addr_var_t* error_assignee;
 		//Store the byte amount that we want to copy by
 		u_int64_t byte_amount_to_copy;
@@ -328,14 +387,7 @@ struct instruction_t{
 		//The label that we are jumping to
 		symtab_label_record_t* jumping_to_label;
 	} optional_storage;
-	//Generic parameter list - could be used for phi functions or function calls
-	dynamic_array_t parameters;
-	//What block holds this?
-	void* block_contained_in;
-	//We have 2 ways to jump. The if jump is our affirmative jump,
-	//else is our alternative
-	void* if_block;
-	void* else_block;
+
 	/**
 	 * Optional storage for a type. The union is for readability and intentionality, 
 	 * we know that it's not really needed
@@ -352,21 +404,11 @@ struct instruction_t{
 		 */
 		generic_type_t* result_type;
 	} type_storage;
-	//For lea multiplication
-	u_int64_t lea_multiplier;
+
 	//The function called
 	symtab_function_record_t* called_function;
-	//The variable record
-	symtab_variable_record_t* var_record;
-	//What function are we currently in?
-	symtab_function_record_t* function;
-	//What is the three address code type
-	instruction_stmt_type_t statement_type;
-	//What is the x86-64 instruction
-	instruction_type_t instruction_type;
-	//The actual operator, stored as a token for size requirements. We will
-	//also use this in determining floating point comparsions
-	ollie_token_t op;
+	//What block holds this?
+	void* block_contained_in;
 	//Is this operation critical?
 	u_int8_t mark;
 	//Is this a regular or inverse branch
@@ -466,11 +508,6 @@ u_int8_t is_instruction_assignment_operation(instruction_t* instruction);
 u_int8_t is_destination_also_operand(instruction_t* instruction);
 
 /**
- * Is the destination actually assigned?
- */
-u_int8_t is_move_instruction_destination_assigned(instruction_t* instruction);
-
-/**
  * Is this operation a pure copy? In other words, is it a move instruction
  * that moves one register to another?
  */
@@ -485,10 +522,6 @@ u_int8_t is_instruction_constant_assignment(instruction_t* instruction);
  * Is this an unsigned multiplication instruction?
  */
 u_int8_t is_unsigned_multplication_instruction(instruction_t* instruction);
-
-/**
- * Is this a division instruction?
- */
 
 /**
  * Is this constant value 0?
@@ -632,17 +665,17 @@ instruction_t* emit_pxor_instruction(three_addr_var_t* destination, three_addr_v
 /**
  * Emit a lea statement that has one operand and an offset
  */
-instruction_t* emit_lea_offset_only(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_const_t* op1_const);
+instruction_t* emit_lea_offset_only(three_addr_var_t* assignee, three_addr_var_t* address_operand1, three_addr_const_t* address_offset);
 
 /**
  * Emit a lea statement that has no multiplier, only operands
  */
-instruction_t* emit_lea_operands_only(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2);
+instruction_t* emit_lea_operands_only(three_addr_var_t* assignee, three_addr_var_t* address_operand1, three_addr_var_t* address_operand2);
 
 /**
  * Emit a lea statement that has a multiplier and operands
  */
-instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size);
+instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, three_addr_var_t* address_operand1, three_addr_var_t* address_operand2, u_int64_t type_size);
 
 /**
  * Emit a lea statement that is used for rip relative calculations
@@ -652,12 +685,7 @@ instruction_t* emit_lea_rip_relative_constant(three_addr_var_t* assignee, three_
 /**
  * Emit a lea with the index and scale only
  */
-instruction_t* emit_lea_index_and_scale_only(three_addr_var_t* assignee, three_addr_var_t* offset, u_int64_t scale);
-
-/**
- * Emit an indirect jump calculation that includes a block label in three address code form
- */
-instruction_t* emit_indir_jump_address_calc_instruction(three_addr_var_t* assignee, void* jump_table, three_addr_var_t* op2, u_int64_t type_size);
+instruction_t* emit_lea_index_and_scale_only(three_addr_var_t* assignee, three_addr_var_t* address_offset, u_int64_t address_scale);
 
 /**
  * Emit a statement using three vars and a binary operator
@@ -693,7 +721,7 @@ instruction_t* emit_memory_copy_instruction(three_addr_var_t* assignee_memory_re
  * Emit a store statement. This is like an assignment instruction, but we're explicitly
  * using stack memory here
  */
-instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1, generic_type_t* memory_write_type);
+instruction_t* emit_store_ir_code(three_addr_var_t* address, three_addr_var_t* storee, generic_type_t* memory_write_type);
 
 /**
  * Emit a store with offset ir code. We take in a base address(assignee), 
@@ -827,7 +855,7 @@ instruction_t* emit_branch_statement(void* if_block, void* else_block, three_add
 /**
  * Emit an indirect jump statement. The jump statement can take on several different types of jump
  */
-instruction_t* emit_indirect_jmp_instruction(three_addr_var_t* address);
+instruction_t* emit_indirect_jump_statement(void* jump_table, three_addr_var_t* index, u_int64_t multiplier);
 
 /**
  * Emit a function call statement. Once emitted, no paramters will have been added in

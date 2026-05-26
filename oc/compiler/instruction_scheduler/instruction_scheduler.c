@@ -10,6 +10,12 @@
 #include <stdio.h>
 #include <sys/types.h>
 
+/**
+ * Hang onto these two for later use
+ */
+static three_addr_var_t* stack_pointer_var;
+static three_addr_var_t* instruction_pointer_var;
+
 
 /**
  * Does the given instruction have a *Data Dependence* on the candidate. We will know
@@ -28,6 +34,16 @@
  * definition, we're done for that given variable
  */
 static void update_dependence_for_variable(data_dependency_graph_t* graph, instruction_t* given, instruction_t** instructions, three_addr_var_t* variable, u_int32_t start){
+	/**
+	 * There is no point in ever searching for these variables because they do not
+	 * and will never behave like normal vars. We save time and just skip
+	 */
+	if(variable == NULL
+		|| variable == stack_pointer_var 
+		|| variable == instruction_pointer_var){
+		return;
+	}
+
 	//Predeclare due to the switch
 	three_addr_var_t* destination;
 	three_addr_var_t* destination2;
@@ -36,15 +52,12 @@ static void update_dependence_for_variable(data_dependency_graph_t* graph, instr
 	for(int32_t i = start; i >= 0; i--){
 		//Extract it
 		instruction_t* current = instructions[i];
-		
-		//If we don't even deal with the destination why bother
-		if(is_move_instruction_destination_assigned(current) == FALSE){
-			continue;
-		}
 
-		//Some instructions(namely compares), have
-		//special rules where we hang onto the assignee
-		//for just this reason
+		/**
+		 * Some instructions(namely compares), have
+		 * special rules where we hang onto the assignee
+		 * for just this reason
+		 */
 		switch(current->instruction_type){
 			case CMPQ:
 			case CMPW:
@@ -55,7 +68,7 @@ static void update_dependence_for_variable(data_dependency_graph_t* graph, instr
 			case TESTW:
 			case TESTQ:
 				//The cmp instructions store their symbolic assignees in the assignee slot
-				if(variables_equal(current->assignee, variable, TRUE) == TRUE){
+				if(variables_equal(current->operands.oir.assignee, variable, TRUE) == TRUE){
 					//Add it in
 					add_dependence(graph, given, current);
 					return;
@@ -66,8 +79,8 @@ static void update_dependence_for_variable(data_dependency_graph_t* graph, instr
 			//All others we just leave
 			default:
 				//Grab these out
-				destination = current->destination_register;
-				destination2 = current->destination_register2;
+				destination = current->operands.x86.destination_register;
+				destination2 = current->operands.x86.destination_register2;
 
 				//If they're equal then we're good
 				if(variables_equal(destination, variable, TRUE) == TRUE){
@@ -103,10 +116,12 @@ static void build_dependency_graph_for_block(data_dependency_graph_t* graph, bas
 	//the nature of the switch
 	dynamic_array_t function_parameters;
 
-	//Run through the instruction list backwards. Logically speaking, we're going to
-	//find the instruction with the maximum number of dependencies later on down in the block
-	//We only go down to one here because for the first instruction, there is nothing of
-	//value to check as it's the very first one
+	/**
+	 * Run through the instruction list backwards. Logically speaking, we're going to
+	 * find the instruction with the maximum number of dependencies later on down in the block
+	 * We only go down to one here because for the first instruction, there is nothing of
+	 * value to check as it's the very first one
+	 */
 	for(int32_t i = block->number_of_instructions - 1; i >= 1; i--){
 		//Extract it
 		instruction_t* current = instructions[i];
@@ -115,7 +130,7 @@ static void build_dependency_graph_for_block(data_dependency_graph_t* graph, bas
 		//more efficiently
 		switch(current->instruction_type){
 			/**
-			 * Jump and set instructions store the op1's that they depend on, though
+			 * Jump and set instructions store the variables that they depend on, though
 			 * this is intentionally looked over by the selector, we need to account for it
 			 * here
 			 */
@@ -141,12 +156,14 @@ static void build_dependency_graph_for_block(data_dependency_graph_t* graph, bas
 			case JLE:
 			case JG:
 			case JGE:
-				update_dependence_for_variable(graph, current, instructions, current->op1, i - 1);
+				update_dependence_for_variable(graph, current, instructions, current->relies_on, i - 1);
 				break;
 
-			//We can actually skip phi functions, reason being that they
-			//will always come at the front of a block and are always going
-			//to have their dependencies coming from outside of the block
+			/**
+			 * We can actually skip phi functions, reason being that they
+			 * will always come at the front of a block and are always going
+			 * to have their dependencies coming from outside of the block
+			 */
 			case PHI_FUNCTION:
 				break;
 
@@ -157,7 +174,7 @@ static void build_dependency_graph_for_block(data_dependency_graph_t* graph, bas
 			 */
 			case INDIRECT_CALL:
 				//Update the dependence for the source var
-				update_dependence_for_variable(graph, current, instructions, current->source_register, i - 1);
+				update_dependence_for_variable(graph, current, instructions, current->operands.x86.source_register1, i - 1);
 
 				//Really just acts as a cleaner cast
 				function_parameters = current->parameters;
@@ -187,43 +204,21 @@ static void build_dependency_graph_for_block(data_dependency_graph_t* graph, bas
 				break;
 				
 			default:
-				//For this instruction, we need to backtrace through the list and figure out:
-				//	1.) Do the dependencies get assigned in this block? It is fully possible
-				//	that they do not
-				//	2.) If they do get assigned in this block, what are those instructions that
-				//	are doing the assignment
+				/**
+				 * For this instruction, we need to backtrace through the list and figure out:
+				 * 	1.) Do the dependencies get assigned in this block? It is fully possible that they do not
+				 *  2.) If they do get assigned in this block, what are those instructions that are doing the assignment
+				 */
 				
 				//For each variable in the instruction, we need to perform the search
-				if(is_destination_also_operand(current) == TRUE
-					//If the move instruction's destination is not assigned, then it is being used
-					|| is_move_instruction_destination_assigned(current) == FALSE){
-					//Start searching here, beginngin at the last instruction
-					update_dependence_for_variable(graph, current, instructions, current->destination_register, i - 1);
+				if(is_destination_also_operand(current) == TRUE){
+					update_dependence_for_variable(graph, current, instructions, current->operands.x86.destination_register, i - 1);
 				}
 
-				//Same for the source
-				if(current->source_register != NULL){
-					//Start searching here, beginngin at the last instruction
-					update_dependence_for_variable(graph, current, instructions, current->source_register, i - 1);
-				}
-
-				//Same for the second source
-				if(current->source_register2 != NULL){
-					//Start searching here, beginngin at the last instruction
-					update_dependence_for_variable(graph, current, instructions, current->source_register2, i - 1);
-				}
-
-				//And the address calc registers
-				if(current->address_calc_reg1 != NULL){
-					//Start searching here, beginngin at the last instruction
-					update_dependence_for_variable(graph, current, instructions, current->address_calc_reg1, i - 1);
-				}
-
-				//And the address calc registers
-				if(current->address_calc_reg2 != NULL){
-					//Start searching here, beginngin at the last instruction
-					update_dependence_for_variable(graph, current, instructions, current->address_calc_reg2, i - 1);
-				}
+				update_dependence_for_variable(graph, current, instructions, current->operands.x86.source_register1, i - 1);
+				update_dependence_for_variable(graph, current, instructions, current->operands.x86.source_register2, i - 1);
+				update_dependence_for_variable(graph, current, instructions, current->operands.x86.address_register1, i - 1);
+				update_dependence_for_variable(graph, current, instructions, current->operands.x86.address_register2, i - 1);
 
 				break;
 		}
@@ -301,8 +296,10 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 		//Increment
 		list_index++;
 
-		//Flag if we have at least one load instruction for our
-		//priority computations down the line
+		/**
+		 * Flag if we have at least one load instruction for our
+		 * priority computations down the line
+		 */
 		if(is_load_instruction(instruction_cursor) == TRUE){
 			contains_load = TRUE;
 		}
@@ -328,7 +325,6 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	 * adjacency matrix
 	 */
 	finalize_data_dependency_graph(&dependency_graph);
-
 
 	/**
 	 * Step 4: If we have at least one load instruction, we will run
@@ -380,6 +376,10 @@ cfg_t* schedule_all_instructions(cfg_t* cfg, compiler_options_t* options){
 	//Grab these flags for later
 	u_int8_t debug_printing = options->enable_debug_printing;
 	u_int8_t print_irs = options->print_irs;
+
+	//Extract the stack and instruction pointer so that we know what to skip
+	stack_pointer_var = cfg->stack_pointer;
+	instruction_pointer_var = cfg->instruction_pointer;
 
 	/**
 	 * Really all that we'll do here is invoke the block
