@@ -10651,7 +10651,7 @@ static void handle_lea_statement(instruction_t* instruction){
 
 			//Copy over the address calc register
 			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
-			instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand2;
+			instruction->operands.x86.rip_offset_var = instruction->operands.oir.address_operand2;
 
 			break;
 
@@ -10661,7 +10661,7 @@ static void handle_lea_statement(instruction_t* instruction){
 
 			//And the address calc registers
 			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
-			instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand2;
+			instruction->operands.x86.rip_offset_var = instruction->operands.oir.address_operand2;
 			instruction->operands.x86.address_offset = instruction->operands.oir.address_offset;
 
 			break;
@@ -11319,7 +11319,7 @@ static inline instruction_t* emit_local_constant_from_memory_load(generic_type_t
 	instruction->operands.x86.address_register1 = instruction_pointer_variable;
 
 	//The local constant variable that we are using
-	instruction->operands.x86.address_register2 = emit_local_constant_temp_var(local_constant);
+	instruction->operands.x86.rip_offset_var = emit_local_constant_temp_var(local_constant);
 
 	//Give the instruction back
 	return instruction;
@@ -12187,7 +12187,7 @@ static void handle_load_instruction(instruction_window_t* window){
 
 						//The address calc reg1 is the instruction pointer
 						load_instruction->operands.x86.address_register1 = instruction_pointer_variable;
-						load_instruction->operands.x86.address_register2 = base_address;
+						load_instruction->operands.x86.rip_offset_var = base_address;
 
 						break;
 
@@ -12332,8 +12332,8 @@ static void handle_load_with_constant_offset_instruction(instruction_window_t* w
 						//The first address calc register is the instruction pointer
 						load_instruction->operands.x86.address_register1 = instruction_pointer_variable;
 
-						//The rip offset goes into the second address register
-						load_instruction->operands.x86.address_register2 = base_address;
+						//The rip offset goes into the rip offset var
+						load_instruction->operands.x86.rip_offset_var = base_address;
 
 						//Copy over the address offset
 						load_instruction->operands.x86.address_offset = load_instruction->operands.oir.address_offset;
@@ -12953,8 +12953,8 @@ static void combine_lea_with_regular_load_instruction(instruction_window_t* wind
 			//The first thing we need is the %rip register
 			load_statement->operands.x86.address_register1 = instruction_pointer_variable;
 
-			//Store the rip rleative offset in the second address register
-			load_statement->operands.x86.address_register2 = lea_statement->operands.oir.address_operand2;
+			//Store the rip rleative offset in the rip offset register
+			load_statement->operands.x86.rip_offset_var = lea_statement->operands.oir.address_operand2;
 
 			/**
 			 * We can delete this *if* it's not being used by someone else
@@ -13021,7 +13021,7 @@ static void handle_store_instruction(instruction_t* instruction){
 						instruction->operands.x86.address_register1 = instruction_pointer_variable;
 
 						//The global variable goes into the second register
-						instruction->operands.x86.address_register2 = base_address;
+						instruction->operands.x86.rip_offset_var = base_address;
 						
 						break;
 
@@ -13168,7 +13168,7 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 						instruction->operands.x86.address_register1 = instruction_pointer_variable;
 
 						//The offset is already in place, we just need to set the rip offset variable
-						instruction->operands.x86.address_register2 = base_address;
+						instruction->operands.x86.rip_offset_var = base_address;
 
 						//Copy over the address offset
 						instruction->operands.x86.address_offset = instruction->operands.oir.address_offset;
