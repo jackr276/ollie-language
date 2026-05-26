@@ -3032,12 +3032,14 @@ static void handle_pure_copy_source_spill(instruction_t* instruction, u_int32_t 
 
 	//Offset is 0, we just need to do a dereference
 	if(offset == 0){
-		instruction->operands.x86.source_register1 = stack_pointer;
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
+		//Operand goes in the first address calc register
+		instruction->operands.x86.address_register1 = stack_pointer;
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_BASE_ADDRESS_ONLY;
 
 	//Otherwise, we need to do an offset calculation
 	} else {
 		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
 		//Turn this into a load instruction
 		instruction->operands.x86.address_register1 = stack_pointer;
 
@@ -3066,8 +3068,9 @@ static void handle_constant_assignment_destination_spill(instruction_t* instruct
 
 	//Offset is 0, we just need to do a dereference
 	if(offset == 0){
-		instruction->operands.x86.destination_register = stack_pointer;
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
+		//Operand goes in the address register
+		instruction->operands.x86.address_register1 = stack_pointer;
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_BASE_ADDRESS_ONLY;
 
 	//Otherwise, we need to do an offset calculation
 	} else {
@@ -4215,8 +4218,7 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
  * for caller-saved registers
  */
 static inline void insert_caller_saved_register_logic(basic_block_t* function_entry_block){
-	//We'll grab out everything we need from this function
-	//Extract this for convenience
+	//Extract for convenience
 	symtab_function_record_t* function = function_entry_block->function_defined_in;
 
 	//Define a cursor for crawling
@@ -4235,9 +4237,11 @@ static inline void insert_caller_saved_register_logic(basic_block_t* function_en
 					instruction = insert_caller_saved_logic_for_direct_call(function, instruction);
 					break;
 					
-				//Use the helper for an indirect call. Indirect calls differ slightly
-				//from direct ones because we have less information, so we'll need a different
-				//helper here
+				/**
+				 * Use the helper for an indirect call. Indirect calls differ slightly
+				 * from direct ones because we have less information, so we'll need a different
+				 * helper here
+				 */
 				case INDIRECT_CALL:
 					instruction = insert_caller_saved_logic_for_indirect_call(function, instruction);
 					break;
@@ -4412,8 +4416,10 @@ static void insert_callee_saving_logic(basic_block_t* function_entry, basic_bloc
  * our calling convention
  */
 static inline void insert_saving_logic(basic_block_t* function_entry_block, basic_block_t* function_exit_block){
-	//We'll first insert the caller saved logic. This logic has the potential to
-	//generate stack allocations for XMM registers so it needs to come first
+	/**
+	 * We'll first insert the caller saved logic. This logic has the potential to
+	 * generate stack allocations for XMM registers so it needs to come first
+	 */
 	insert_caller_saved_register_logic(function_entry_block);
 
 	//Then we'll do all callee saving
