@@ -3754,7 +3754,7 @@ static void print_addition_instruction(FILE* fl, instruction_t* instruction, var
 /**
  * Print an addition instruction, in all the forms it can take
  */
-static void print_sse_addition_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+static inline void print_sse_addition_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	//First we'll print out the appropriate variety of addition
 	switch(instruction->instruction_type){
 		case ADDSS:
@@ -3809,6 +3809,35 @@ static void print_subtraction_instruction(FILE* fl, instruction_t* instruction, 
 	} else {
 		print_immediate_value(fl, instruction->operands.x86.source_immediate);
 	}
+
+	//Needed comma
+	fprintf(fl, ", ");
+
+	//Now print our destination
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
+	fprintf(fl, "\n");
+}
+
+
+/**
+ * Print a subtraction instruction, in all the forms it can take
+ */
+static inline void print_sse_subtraction_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+	//First we'll print out the appropriate variety of subtraction 
+	switch(instruction->instruction_type){
+		case SUBSS:
+			fprintf(fl, "subss ");
+			break;
+		case SUBSD:
+			fprintf(fl, "subsd ");
+			break;
+		//We'll never get here, just to stop the compiler from complaining
+		default:
+			break;
+	}
+
+	//We don't ever need to worry about an immediate value for SSE instructions
+	print_variable(fl, instruction->operands.x86.source_register1, mode);
 
 	//Needed comma
 	fprintf(fl, ", ");
@@ -4911,34 +4940,6 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case DIVSS:
 		case DIVSD:
 			print_sse_division_instruction(fl, instruction, mode);
-			break;
-
-		case ADDSD:
-			fprintf(fl, "addsd ");
-			print_variable(fl, instruction->operands.x86.source_register1, mode);
-			fprintf(fl, ", ");
-			print_variable(fl, instruction->operands.x86.destination_register, mode);
-			fprintf(fl, "\n");
-
-			break;
-
-		//TODO MAKE ITS OWN HELPER
-		case SUBSS:
-			fprintf(fl, "subss ");
-			print_variable(fl, instruction->operands.x86.source_register1, mode);
-			fprintf(fl, ", ");
-			print_variable(fl, instruction->operands.x86.destination_register, mode);
-			fprintf(fl, "\n");
-
-			break;
-
-		case SUBSD:
-			fprintf(fl, "subsd ");
-			print_variable(fl, instruction->operands.x86.source_register1, mode);
-			fprintf(fl, ", ");
-			print_variable(fl, instruction->operands.x86.destination_register, mode);
-			fprintf(fl, "\n");
-
 			break;
 
 		//TODO MAKE ITS OWN HELPER
