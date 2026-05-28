@@ -3849,6 +3849,35 @@ static inline void print_sse_subtraction_instruction(FILE* fl, instruction_t* in
 
 
 /**
+ * Print a multiplication instruction, in all the forms it can take
+ */
+static inline void print_sse_multiplication_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+	//First we'll print out the appropriate variety of subtraction 
+	switch(instruction->instruction_type){
+		case MULSS:
+			fprintf(fl, "mulss ");
+			break;
+		case MULSD:
+			fprintf(fl, "mulsd ");
+			break;
+		//We'll never get here, just to stop the compiler from complaining
+		default:
+			break;
+	}
+
+	//We don't ever need to worry about an immediate value for SSE instructions
+	print_variable(fl, instruction->operands.x86.source_register1, mode);
+
+	//Needed comma
+	fprintf(fl, ", ");
+
+	//Now print our destination
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
+	fprintf(fl, "\n");
+}
+
+
+/**
  * Print a lea instruction. This will also handle all the complexities around
  * complex addressing modes
  */
@@ -4940,25 +4969,6 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case DIVSS:
 		case DIVSD:
 			print_sse_division_instruction(fl, instruction, mode);
-			break;
-
-		//TODO MAKE ITS OWN HELPER
-		case MULSS:
-			fprintf(fl, "mulss ");
-			print_variable(fl, instruction->operands.x86.source_register1, mode);
-			fprintf(fl, ", ");
-			print_variable(fl, instruction->operands.x86.destination_register, mode);
-			fprintf(fl, "\n");
-
-			break;
-
-		case MULSD:
-			fprintf(fl, "mulsd ");
-			print_variable(fl, instruction->operands.x86.source_register1, mode);
-			fprintf(fl, ", ");
-			print_variable(fl, instruction->operands.x86.destination_register, mode);
-			fprintf(fl, "\n");
-
 			break;
 
 		case DIVSS:
