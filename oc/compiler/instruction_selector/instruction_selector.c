@@ -9545,11 +9545,11 @@ static void handle_addition_instruction(instruction_window_t* window){
 		
 		//Based on the constant status we do it one way or the other
 		if(original_addition->statement_type == THREE_ADDR_CODE_BIN_OP_STMT){
-			original_addition->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+			original_addition->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
 			original_addition->operands.x86.address_register2 = original_addition->operands.oir.operand2;
 
 		} else {
-			original_addition->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+			original_addition->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 			original_addition->operands.x86.address_offset = original_addition->operands.oir.constant_operand;
 		}
 
@@ -10492,7 +10492,7 @@ static void handle_lea_statement(instruction_t* instruction){
 	switch(instruction->lea_statement_type){
 		//This converts to an addressing mode with an offset only
 		case OIR_LEA_TYPE_OFFSET_ONLY:
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+			instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 			
 			//The op1 is now our address calc register
 			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
@@ -10504,7 +10504,7 @@ static void handle_lea_statement(instruction_t* instruction){
 
 		//Converts to an addresing mode with address calc registers only
 		case OIR_LEA_TYPE_REGISTERS_ONLY:
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+			instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
 			
 			//Copy over the address calc registers
 			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
@@ -10523,7 +10523,7 @@ static void handle_lea_statement(instruction_t* instruction){
 
 		//Converts to an addressing mode with the trifecta
 		case OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE:
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
+			instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
 			//Copy over the address calc registers & multiplier
 			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
@@ -10544,7 +10544,7 @@ static void handle_lea_statement(instruction_t* instruction){
 
 		//Special kind to support global vars
 		case OIR_LEA_TYPE_RIP_RELATIVE:
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
+			instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
 
 			//Copy over the address calc register
 			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
@@ -10554,7 +10554,7 @@ static void handle_lea_statement(instruction_t* instruction){
 
 		//Support RIP relative with offset addressing
 		case OIR_LEA_TYPE_RIP_RELATIVE_WITH_OFFSET:
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET;
+			instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
 
 			//And the address calc registers
 			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
@@ -10566,7 +10566,7 @@ static void handle_lea_statement(instruction_t* instruction){
 
 		//Translates to the address calc mode of the same name
 		case OIR_LEA_TYPE_REGISTERS_AND_OFFSET:
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+			instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 			//Copy over the address calc registers and offset
 			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
@@ -10587,7 +10587,7 @@ static void handle_lea_statement(instruction_t* instruction){
 
 		//Translates to the address calc mode of the same name
 		case OIR_LEA_TYPE_REGISTERS_AND_SCALE:
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
+			instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
 
 			//Copy over the address calc registers and the multiplier
 			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
@@ -10607,7 +10607,7 @@ static void handle_lea_statement(instruction_t* instruction){
 			break;
 
 		case OIR_LEA_TYPE_INDEX_AND_SCALE:
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_INDEX_AND_SCALE;
+			instruction->addressing_mode = ADDRESSING_MODE_INDEX_AND_SCALE;
 
 			//Copy over the address register and multiplier
 			instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand2;
@@ -10616,7 +10616,7 @@ static void handle_lea_statement(instruction_t* instruction){
 			break;
 
 		case OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE:
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_INDEX_OFFSET_AND_SCALE;
+			instruction->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
 
 			//Copy over the address register and the multiplier
 			instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand2;
@@ -11207,7 +11207,7 @@ static inline instruction_t* emit_local_constant_from_memory_load(generic_type_t
 	instruction->operands.x86.destination_register = destination_variable;
 
 	//This will be a rip-relative address calculation
-	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
+	instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
 
 	//This is a read from memory movement
 	instruction->memory_access_type = READ_FROM_MEMORY;
@@ -11661,8 +11661,8 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 	 * if we have one to determine if it is aligned. If the offset
 	 * isn't there then we have to assume it's not
 	 */
-	switch(store_instruction->calculation_mode){
-		case ADDRESS_CALCULATION_MODE_BASE_ADDRESS_ONLY:
+	switch(store_instruction->addressing_mode){
+		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
 			//If this is the stack pointer then we can guarantee alignmetn
 			if(store_instruction->operands.x86.address_register1 == stack_pointer_variable){
 				destination_alignment = ALIGNMENT_TYPE_GUARANTEED;
@@ -11673,7 +11673,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 			break;
 
 		//If we're just dealing with the offset we can also use that
-		case ADDRESS_CALCULATION_MODE_OFFSET_ONLY:
+		case ADDRESSING_MODE_OFFSET_ONLY:
 			//If this is the stack pointer we can make guarantees
 			if(store_instruction->operands.x86.address_register1 == stack_pointer_variable){
 				//Extract the value
@@ -11746,8 +11746,8 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 	 * if we have one to determine if it is aligned. If the offset
 	 * isn't there then we have to assume it's not
 	 */
-	switch(load_instruction->calculation_mode){
-		case ADDRESS_CALCULATION_MODE_BASE_ADDRESS_ONLY:
+	switch(load_instruction->addressing_mode){
+		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
 			//If this is the stack pointer then we can guarantee alignment
 			if(load_instruction->operands.x86.address_register1 == stack_pointer_variable){
 				source_region_alignment = ALIGNMENT_TYPE_GUARANTEED;
@@ -11758,7 +11758,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 			break;
 
 		//If we're just dealing with the offset we can also use that
-		case ADDRESS_CALCULATION_MODE_OFFSET_ONLY:
+		case ADDRESSING_MODE_OFFSET_ONLY:
 			//If this is the stack pointer we can make guarantees
 			if(load_instruction->operands.x86.address_register1 == stack_pointer_variable){
 				//Extract the value
@@ -12080,7 +12080,7 @@ static void handle_load_instruction(instruction_window_t* window){
 					case GLOBAL_VARIABLE:
 					case STATIC_VARIABLE:
 						//Global/static are rip-relative
-						load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
+						load_instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
 
 						//The address calc reg1 is the instruction pointer
 						load_instruction->operands.x86.address_register1 = instruction_pointer_variable;
@@ -12101,7 +12101,7 @@ static void handle_load_instruction(instruction_window_t* window){
 							three_addr_const_t* offset = emit_direct_integer_or_char_constant(linked_var->stack_region->function_local_base_address, u64);
 
 							//We now will have something like <offset>(%rsp)
-							load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+							load_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 							//This will be the stack pointer
 							load_instruction->operands.x86.address_register1 = stack_pointer_variable;
@@ -12112,7 +12112,7 @@ static void handle_load_instruction(instruction_window_t* window){
 						//Otherwise there's no stack offset, so we're just dereferencing the stack pointer
 						} else {
 							//Change the mode
-							load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_BASE_ADDRESS_ONLY;
+							load_instruction->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
 							
 							//Source is now just the stack pointer
 							load_instruction->operands.x86.address_register1 = stack_pointer_variable;
@@ -12134,7 +12134,7 @@ static void handle_load_instruction(instruction_window_t* window){
 					three_addr_const_t* offset = emit_direct_integer_or_char_constant(linked_var->stack_region->function_local_base_address, u64);
 
 					//We now will have something like <offset>(%rsp)
-					load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+					load_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 					//This will be the stack pointer
 					load_instruction->operands.x86.address_register1 = stack_pointer_variable;
@@ -12145,7 +12145,7 @@ static void handle_load_instruction(instruction_window_t* window){
 				//Otherwise there's no stack offset, so we're just dereferencing the stack pointer
 				} else {
 					//Change the mode
-					load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_BASE_ADDRESS_ONLY;
+					load_instruction->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
 					
 					//Source is now just the stack pointer
 					load_instruction->operands.x86.address_register1 = stack_pointer_variable;
@@ -12162,7 +12162,7 @@ static void handle_load_instruction(instruction_window_t* window){
 		 */
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
 			//We now will have something like <offset>(%rsp)
-			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+			load_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 			//This will be the stack pointer
 			load_instruction->operands.x86.address_register1 = stack_pointer_variable;
@@ -12175,7 +12175,7 @@ static void handle_load_instruction(instruction_window_t* window){
 		//Most basic case is we just have a pointer or something
 		default:
 			//Just a base dereference
-			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_BASE_ADDRESS_ONLY;
+			load_instruction->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
 
 			//Copy over the base address
 			load_instruction->operands.x86.address_register1 = base_address;
@@ -12239,7 +12239,7 @@ static void handle_load_with_constant_offset_instruction(instruction_window_t* w
 						 * The offset is already where it needs to be
 						 * Now we just need to change the mode to make this work
 						 */
-						load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET;
+						load_instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
 
 						break;
 
@@ -12262,7 +12262,7 @@ static void handle_load_with_constant_offset_instruction(instruction_window_t* w
 							sum_constant_with_raw_int64_value(load_instruction->operands.x86.address_offset, i64, stack_offset);
 
 							//We now will have something like <offset>(%rsp)
-							load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+							load_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 						/**
 						 * Otherwise there's no stack offset, so we're just dereferencing the
@@ -12276,7 +12276,7 @@ static void handle_load_with_constant_offset_instruction(instruction_window_t* w
 							load_instruction->operands.x86.address_offset = load_instruction->operands.oir.address_offset;
 
 							//Change the mode
-							load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+							load_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 						}
 
 						break;
@@ -12298,7 +12298,7 @@ static void handle_load_with_constant_offset_instruction(instruction_window_t* w
 					sum_constant_with_raw_int64_value(load_instruction->operands.x86.address_offset, i64, stack_offset);
 
 					//We now will have something like <offset>(%rsp)
-					load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+					load_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 				/**
 				 * Otherwise there's no stack offset, so we're just dereferencing the
@@ -12312,7 +12312,7 @@ static void handle_load_with_constant_offset_instruction(instruction_window_t* w
 					load_instruction->operands.x86.address_offset = load_instruction->operands.oir.address_offset;
 
 					//Change the mode
-					load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+					load_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 				}
 			}
 
@@ -12340,14 +12340,14 @@ static void handle_load_with_constant_offset_instruction(instruction_window_t* w
 			load_instruction->operands.x86.address_offset = stack_offset_constant;
 
 			//We now will have something like <offset>(%rsp)
-			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+			load_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 			break;
 
 		//Just some pointer with an offset - in this case we won't do anything with the stack pointer
 		default:
 			//This will always be a SOURCE_ONLY
-			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+			load_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 			//Copy over the constant
 			load_instruction->operands.x86.address_offset = load_instruction->operands.oir.address_offset;
@@ -12410,7 +12410,7 @@ static void handle_load_with_variable_offset_instruction(instruction_window_t* w
 						insert_instruction_before_given(global_variable_address, load_instruction);
 
 						//These are registers only
-						load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+						load_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
 
 						/**
 						 * The destination of the global variable address will be our new address calc reg 1. 
@@ -12442,7 +12442,7 @@ static void handle_load_with_variable_offset_instruction(instruction_window_t* w
 						//If we actually have a stack offset to deal with
 						if(stack_offset != 0){
 							//We'll have something like <offset>(%rsp, t4)
-							load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+							load_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 							//Emit the offset
 							load_instruction->operands.x86.address_offset = emit_direct_integer_or_char_constant(stack_offset, i64);
@@ -12464,7 +12464,7 @@ static void handle_load_with_variable_offset_instruction(instruction_window_t* w
 
 						//Otherwise there's no stack offset, so we'll keep the op2 and only have registers
 						} else {
-							load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+							load_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
 							
 							//Copy both over
 							load_instruction->operands.x86.address_register1 = stack_pointer_variable;
@@ -12494,7 +12494,7 @@ static void handle_load_with_variable_offset_instruction(instruction_window_t* w
 				//If we actually have a stack offset to deal with
 				if(stack_offset != 0){
 					//We'll have something like <offset>(%rsp, t4)
-					load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+					load_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 					//Emit the offset
 					load_instruction->operands.x86.address_offset = emit_direct_integer_or_char_constant(stack_offset, i64);
@@ -12516,7 +12516,7 @@ static void handle_load_with_variable_offset_instruction(instruction_window_t* w
 
 				//Otherwise there's no stack offset, so we'll keep the op2 and only have registers
 				} else {
-					load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+					load_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
 					
 					//Copy both over
 					load_instruction->operands.x86.address_register1 = stack_pointer_variable;
@@ -12542,7 +12542,7 @@ static void handle_load_with_variable_offset_instruction(instruction_window_t* w
 		 */
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
 			//We'll have something like <offset>(%rsp, t4)
-			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+			load_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 			//Emit hte specialized offset constant for this
 			load_instruction->operands.x86.address_offset = emit_stack_passed_parameter_offset_constant(base_address->associated_memory_region.stack_region, u64);
@@ -12569,7 +12569,7 @@ static void handle_load_with_variable_offset_instruction(instruction_window_t* w
 		 */
 		default:
 			//Just have registers here
-			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+			load_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
 
 			//Assign over like such
 			load_instruction->operands.x86.address_register1 = base_address;
@@ -12638,7 +12638,7 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			}
 
 			//This one will have an addressing type of registers and offset
-			variable_offset_load->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+			variable_offset_load->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 			/**
 			 * We can delete this *if* it's not being used by someone else
@@ -12688,9 +12688,9 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 
 			//The calculation mode type depends on the constant
 			if(variable_offset_load->operands.x86.address_offset != NULL){
-				variable_offset_load->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
+				variable_offset_load->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 			} else {
-				variable_offset_load->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
+				variable_offset_load->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
 			}
 
 			/**
@@ -12746,7 +12746,7 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			}
 
 			//This will always be a registers, offset and scale type
-			variable_offset_load->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
+			variable_offset_load->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
 			/**
 			 * We can delete this *if* it's not being used by someone else
@@ -12845,7 +12845,7 @@ static void combine_lea_with_regular_load_instruction(instruction_window_t* wind
 		 */
 		case OIR_LEA_TYPE_RIP_RELATIVE:
 			//This will be a rip-relative address
-			load_statement->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
+			load_statement->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
 
 			//The first thing we need is the %rip register
 			load_statement->operands.x86.address_register1 = instruction_pointer_variable;
@@ -12912,7 +12912,7 @@ static void handle_store_instruction(instruction_t* instruction){
 					case GLOBAL_VARIABLE:
 					case STATIC_VARIABLE:
 						//This is going to be a global variable movement
-						instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
+						instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
 
 						//The address calc reg1 is the instruction pointer
 						instruction->operands.x86.address_register1 = instruction_pointer_variable;
@@ -12941,7 +12941,7 @@ static void handle_store_instruction(instruction_t* instruction){
 							instruction->operands.x86.address_offset = offset;
 
 							//This counts for our destination only
-							instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+							instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 						//If it is 0, we only need to deref the stack pointer
 						} else {
@@ -12949,7 +12949,7 @@ static void handle_store_instruction(instruction_t* instruction){
 							instruction->operands.x86.address_register1 = stack_pointer_variable;
 
 							//Just dereference the destination here, nothing more
-							instruction->calculation_mode = ADDRESS_CALCULATION_MODE_BASE_ADDRESS_ONLY;
+							instruction->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
 						}
 
 						break;
@@ -12975,7 +12975,7 @@ static void handle_store_instruction(instruction_t* instruction){
 					instruction->operands.x86.address_offset = offset;
 
 					//This counts for our destination only
-					instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+					instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 				//If it is 0, we only need to deref the stack pointer
 				} else {
@@ -12983,7 +12983,7 @@ static void handle_store_instruction(instruction_t* instruction){
 					instruction->operands.x86.address_register1 = stack_pointer_variable;
 
 					//Just dereference the destination here, nothing more
-					instruction->calculation_mode = ADDRESS_CALCULATION_MODE_BASE_ADDRESS_ONLY;
+					instruction->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
 				}
 			}
 
@@ -13002,7 +13002,7 @@ static void handle_store_instruction(instruction_t* instruction){
 			instruction->operands.x86.address_offset = emit_stack_passed_parameter_offset_constant(base_address->associated_memory_region.stack_region, u64);
 
 			//This counts for our destination only
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+			instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 			break;
 			
@@ -13014,7 +13014,7 @@ static void handle_store_instruction(instruction_t* instruction){
 			instruction->operands.x86.address_register1 = base_address;
 
 			//This counts for our destination only
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_BASE_ADDRESS_ONLY;
+			instruction->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
 			
 			break;
 	}
@@ -13071,7 +13071,7 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 						instruction->operands.x86.address_offset = instruction->operands.oir.address_offset;
 
 						//All that we need to do now is change the calculation mode to be rip with offset
-						instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET;
+						instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
 						break;
 
 					/**
@@ -13094,7 +13094,7 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 
 
 							//Once that's done, we just need to change the address calc mode
-							instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+							instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 						//Even if this is 0, we still need to account for the offset in the original statement
 						} else {
@@ -13105,7 +13105,7 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 							instruction->operands.x86.address_offset = instruction->operands.oir.address_offset;
 							
 							//This has the address calc and the offset
-							instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+							instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 						}
 
 						break;
@@ -13131,7 +13131,7 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 					sum_constant_with_raw_int64_value(instruction->operands.x86.address_offset, i64, stack_offset);
 
 					//Once that's done, we just need to change the address calc mode
-					instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+					instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 				//Even if this is 0, we still need to account for the offset in the original statement
 				} else {
@@ -13142,7 +13142,7 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 					instruction->operands.x86.address_offset = instruction->operands.oir.address_offset;
 					
 					//This has the address calc and the offset
-					instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+					instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 				}
 			}
 
@@ -13166,7 +13166,7 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 			instruction->operands.x86.address_offset = stack_param_offset;
 
 			//Once that's done, we just need to change the address calc mode
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+			instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 			break;
 
@@ -13179,7 +13179,7 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 			instruction->operands.x86.address_offset = instruction->operands.oir.address_offset;
 
 			//Set the type
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY; 
+			instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY; 
 			break;
 	}
 
@@ -13235,7 +13235,7 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 						insert_instruction_before_given(global_variable_address, instruction);
 
 						//We have 2 registers so this is registers only
-						instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+						instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
 
 						//The destination of the global variable address will be our new address calc reg 1. 
 						instruction->operands.x86.address_register1 = global_variable_address->operands.x86.destination_register;
@@ -13265,7 +13265,7 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 						//If it's not 0, we need to do some arithmetic with the constants
 						if(stack_offset != 0){
 							//Once that's done, we just need to change the address calc mode
-							instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+							instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 							//This is still the stack pointer
 							instruction->operands.x86.address_register1 = stack_pointer_variable;
@@ -13288,7 +13288,7 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 						//Even if this is 0, we still need to account for the offset in the original statement
 						} else {
 							//This has registers only
-							instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+							instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
 
 							//The base address is the assignee
 							instruction->operands.x86.address_register1 = stack_pointer_variable;
@@ -13316,7 +13316,7 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 				//If it's not 0, we need to do some arithmetic with the constants
 				if(stack_offset != 0){
 					//Once that's done, we just need to change the address calc mode
-					instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+					instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 					//This is still the stack pointer
 					instruction->operands.x86.address_register1 = stack_pointer_variable;
@@ -13339,7 +13339,7 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 				//Even if this is 0, we still need to account for the offset in the original statement
 				} else {
 					//This has registers only
-					instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+					instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
 
 					//The base address is the assignee
 					instruction->operands.x86.address_register1 = stack_pointer_variable;
@@ -13366,7 +13366,7 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 		 */
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
 			//Once that's done, we just need to change the address calc mode
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+			instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 			//This is still the stack pointer
 			instruction->operands.x86.address_register1 = stack_pointer_variable;
@@ -13391,7 +13391,7 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 		//This means that we just have some kind of pointer dereference
 		default:
 			//Set the type
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY; 
+			instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY; 
 
 			//The base address is the assignee
 			instruction->operands.x86.address_register1 = base_address;
@@ -13462,7 +13462,7 @@ static void handle_store_statement_base_address(instruction_t* store_instruction
 						//If it's not 0, we need to do some arithmetic with the constants
 						if(stack_offset != 0){
 							//Once that's done, we just need to change the address calc mode
-							store_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+							store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 							//This is still the stack pointer
 							store_instruction->operands.x86.address_register1 = stack_pointer_variable;
@@ -13486,7 +13486,7 @@ static void handle_store_statement_base_address(instruction_t* store_instruction
 				//If it's not 0, we need to do some arithmetic with the constants
 				if(stack_offset != 0){
 					//Once that's done, we just need to change the address calc mode
-					store_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+					store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 					//This is still the stack pointer
 					store_instruction->operands.x86.address_register1 = stack_pointer_variable;
@@ -13511,7 +13511,7 @@ static void handle_store_statement_base_address(instruction_t* store_instruction
 			store_instruction->operands.x86.address_offset = emit_stack_passed_parameter_offset_constant(base_address->associated_memory_region.stack_region, u64);
 
 			//This counts for our destination only
-			store_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+			store_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 			break;
 			
@@ -13523,7 +13523,7 @@ static void handle_store_statement_base_address(instruction_t* store_instruction
 			store_instruction->operands.x86.address_register1 = base_address;
 
 			//This counts for our destination only
-			store_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_BASE_ADDRESS_ONLY;
+			store_instruction->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
 			
 			break;
 	}
@@ -13667,7 +13667,7 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 			}
 
 			//The calculation mode here will always be registers and offset
-			variable_offset_store->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+			variable_offset_store->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 			/**
 			 * We can delete this *if* it's not being used by someone else
@@ -13711,9 +13711,9 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 
 			//Determine the calculation mode based on the present of offset
 			if(variable_offset_store->operands.x86.address_offset != NULL){
-				variable_offset_store->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
+				variable_offset_store->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 			} else {
-				variable_offset_store->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
+				variable_offset_store->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
 			}
 
 			/**
@@ -13767,7 +13767,7 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 			}
 
 			//This will always have registers, an offset and a scale
-			variable_offset_store->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
+			variable_offset_store->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
 			/**
 			 * We can delete this *if* it's not being used by someone else
