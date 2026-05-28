@@ -3356,12 +3356,12 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				 * Turns into:
 				 *	t5 <- 504(no longer a lea)
 				 */
-				case OIR_LEA_TYPE_OFFSET_ONLY:
+				case ADDRESSING_MODE_OFFSET_ONLY:
 					//Add the 2 together, the result is in the lea's op1_const
 					add_constants(lea_instruction->operands.oir.address_offset, move_instruction->operands.oir.constant_operand);
 					
 					//Null out the addressing mode and ops
-					lea_instruction->lea_statement_type = OIR_LEA_TYPE_NONE;
+					lea_instruction->addressing_mode = ADDRESSING_MODE_NONE;
 					lea_instruction->operands.oir.address_operand1 = NULL;
 					lea_instruction->operands.oir.address_operand2 = NULL;
 					lea_instruction->operands.oir.constant_operand = lea_instruction->operands.oir.address_offset;
@@ -3387,7 +3387,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				 * Turns into:
 				 *	t5 <- 4(t7)
 				 */
-				case OIR_LEA_TYPE_REGISTERS_ONLY:
+				case ADDRESSING_MODE_REGISTERS_ONLY:
 					//Copy the constant right on over
 					lea_instruction->operands.oir.address_offset = move_instruction->operands.oir.constant_operand;
 
@@ -3396,7 +3396,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					lea_instruction->operands.oir.address_operand2 = NULL;
 
 					//This is now an offset only type statement
-					lea_instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
+					lea_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 					//Delete the move now
 					delete_statement(move_instruction);
@@ -3416,7 +3416,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				 * Turns into:
 				 *	t5 <- 504(t7)
 				 */
-				case OIR_LEA_TYPE_REGISTERS_AND_OFFSET:
+				case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
 					//Sum the 2 together, result is in the lea's offset
 					add_constants(lea_instruction->operands.oir.address_offset, move_instruction->operands.oir.constant_operand);
 
@@ -3425,7 +3425,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					lea_instruction->operands.oir.address_operand2 = NULL;
 
 					//This is now an offset only type statement
-					lea_instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
+					lea_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 					//Delete the move now
 					delete_statement(move_instruction);
@@ -3445,7 +3445,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				 * Turns into:
 				 *   t5 <- 4(, t7, 4)
 				 */
-				case OIR_LEA_TYPE_REGISTERS_AND_SCALE:
+				case ADDRESSING_MODE_REGISTERS_AND_SCALE:
 					//Copy the constant over
 					lea_instruction->operands.oir.address_offset = move_instruction->operands.oir.constant_operand;
 
@@ -3453,7 +3453,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					lea_instruction->operands.oir.address_operand1 = NULL;
 
 					//This has become a scale and offset type
-					lea_instruction->lea_statement_type = OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE;
+					lea_instruction->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
 
 					//Delete the move now
 					delete_statement(move_instruction);
@@ -3473,7 +3473,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				 * Turns into:
 				 *  t5 <- 48(, t7, 4)
 				 */
-				case OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE:
+				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
 					//Add the two together, result is in the lea
 					add_constants(lea_instruction->operands.oir.address_offset, move_instruction->operands.oir.constant_operand);
 
@@ -3481,7 +3481,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					lea_instruction->operands.oir.address_operand1 = NULL;
 
 					//This has become a scale and offset type
-					lea_instruction->lea_statement_type = OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE;
+					lea_instruction->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
 
 					//Delete the move now
 					delete_statement(move_instruction);
@@ -3550,10 +3550,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		 * Most common case - the first one's assignee is equal to the address operand of the second one
 		 */
 		if(variables_equal(first_lea->operands.oir.assignee, second_lea->operands.oir.address_operand1, FALSE) == TRUE){
-			switch(first_lea->lea_statement_type){
-				case OIR_LEA_TYPE_INDEX_AND_SCALE:
+			switch(first_lea->addressing_mode){
+				case ADDRESSING_MODE_INDEX_AND_SCALE:
 					//Now go based on the second one's type
-					switch(second->lea_statement_type){
+					switch(second->addressing_mode){
 						/**
 						 * 	t4 <- (, t7, 4)
 						 * 	t5 <- 4(t4)
@@ -3561,13 +3561,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						 * 	Can become:
 						 * 	 t5 <- 4(, t7, 4)
 						 */
-						case OIR_LEA_TYPE_OFFSET_ONLY:
+						case ADDRESSING_MODE_OFFSET_ONLY:
 							//Copy over the operand and the multiplier
 							second_lea->operands.oir.address_operand2 = first_lea->operands.oir.address_operand2;
 							second_lea->operands.oir.address_multiplier = first_lea->operands.oir.address_multiplier;
 
 							//Now change the type of it
-							second_lea->lea_statement_type = OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE;
+							second_lea->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
 
 							//Now delete the entire first lea - it's useless
 							delete_statement(first_lea);
@@ -3587,9 +3587,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 					break;
 
-				case OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE:
+				case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
 					//Now go based on the second one's type
-					switch(second->lea_statement_type){
+					switch(second->addressing_mode){
 						/**
 						 * 	t4 <- 4(, t7, 4)
 						 * 	t5 <- 4(t4)
@@ -3597,7 +3597,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						 * 	Can become:
 						 * 	 t5 <- 8(, t7, 4)
 						 */
-						case OIR_LEA_TYPE_OFFSET_ONLY:
+						case ADDRESSING_MODE_OFFSET_ONLY:
 							//Add the 2 constants together - the result is in the second lea's address offset
 							add_constants(second_lea->operands.oir.address_offset, first_lea->operands.oir.address_offset);
 
@@ -3606,7 +3606,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							second_lea->operands.oir.address_multiplier = first_lea->operands.oir.address_multiplier;
 
 							//Now change the type of it
-							second_lea->lea_statement_type = OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE;
+							second_lea->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
 
 							//Now delete the entire first lea - it's useless
 							delete_statement(first_lea);
@@ -3624,8 +3624,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							break;
 					}
 
-				case OIR_LEA_TYPE_RIP_RELATIVE:
-					switch(second->lea_statement_type){
+				case ADDRESSING_MODE_RIP_RELATIVE:
+					switch(second->addressing_mode){
 						/**
 						 * CASE 3: RIP relative addressing
 						 * 	t4 <- <global_var>(%rip)
@@ -3633,13 +3633,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						 *
 						 * 	t5 <- 4+<global_var>(%rip)
 						 */
-						case OIR_LEA_TYPE_OFFSET_ONLY:
+						case ADDRESSING_MODE_OFFSET_ONLY:
 							//Copy over the global var and offset var
 							second_lea->operands.oir.address_operand1 = first_lea->operands.oir.address_operand1;
-							second_lea->operands.oir.address_operand2 = first_lea->operands.oir.address_operand2;
+							second_lea->operands.oir.rip_offset_var = first_lea->operands.oir.rip_offset_var;
 
 							//Change the calculation mode
-							second_lea->lea_statement_type = OIR_LEA_TYPE_RIP_RELATIVE_WITH_OFFSET;
+							second_lea->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
 
 							//Now the first statement is useless
 							delete_statement(first_lea);
@@ -3666,11 +3666,11 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		/**
 		 * Rarer but still possible case, we have the assignee equalling the second operand
 		 *
-		 * THIS HAS NOT BEEN IMPLEMENTED TO DATE
+		 * THIS HAS NOT BEEN IMPLEMENTED TO DATE AND MAY BE DEPRECATED
 		 */
 		} else if(variables_equal(first_lea->operands.oir.assignee, second_lea->operands.oir.address_operand2, FALSE) == TRUE){
 			//Go based on the first one's type
-			switch(first_lea->lea_statement_type){
+			switch(first_lea->addressing_mode){
 				//Just do nothing by default
 				default:
 					break;
@@ -3708,7 +3708,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		instruction_t* second_bin_op = window->instruction2;
 
 		//Go based on what kind of lea we have
-		switch(window->instruction1->lea_statement_type){
+		switch(first_lea->addressing_mode){
 			/**
 			 * 	 t45 <- global_var(t3)
 			 * 	 t46 <- t45 + 12
@@ -3716,13 +3716,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * 	 Turns into:
 			 * 	 	t46 <- 12+global_var(t3)
 			 */
-			case OIR_LEA_TYPE_RIP_RELATIVE:
+			case ADDRESSING_MODE_RIP_RELATIVE:
 				//Back-copy the assignee and op1_const
 				first_lea->operands.oir.assignee = second_bin_op->operands.oir.assignee;
 				first_lea->operands.oir.address_offset = second_bin_op->operands.oir.constant_operand;
 
 				//Change the lea type to be rip relative but with an offset
-				first_lea->lea_statement_type = OIR_LEA_TYPE_RIP_RELATIVE_WITH_OFFSET;
+				first_lea->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
 
 				//The second instruction is now useless
 				delete_statement(second_bin_op);
@@ -3742,7 +3742,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * 	Turns into:
 			 * 		t46 <- 18+global_var(t3)
 			 */
-			case OIR_LEA_TYPE_RIP_RELATIVE_WITH_OFFSET:
+			case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
 				//Back-copy the assignee
 				first_lea->operands.oir.assignee = second_bin_op->operands.oir.assignee;
 
@@ -3775,7 +3775,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		//Grab it out
 		instruction_t* lea_statement = window->instruction1;
 
-		switch(lea_statement->lea_statement_type){
+		switch(lea_statement->addressing_mode){
 			/**
 			 * We have something like: 
 			 * 	t3 <- lea (, x, 1)
@@ -3784,7 +3784,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 *
 			 * We should already be set here with the assignee and all
 			 */
-			case OIR_LEA_TYPE_INDEX_AND_SCALE:
+			case ADDRESSING_MODE_INDEX_AND_SCALE:
 				if(lea_statement->operands.oir.address_multiplier == 1){
 					//0 this out
 					lea_statement->operands.oir.address_multiplier = 0;
@@ -3793,7 +3793,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					lea_statement->statement_type = THREE_ADDR_CODE_ASSN_STMT;
 
 					//Clear it out
-					lea_statement->lea_statement_type = OIR_LEA_TYPE_NONE;
+					lea_statement->addressing_mode = ADDRESSING_MODE_NONE;
 
 					//Move thte scale to where it needs to be
 					lea_statement->operands.oir.operand1 = lea_statement->operands.oir.address_operand2;
@@ -3807,13 +3807,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 *
 			 * 	We can convert it into t3 <- x + 4
 			 */
-			case OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE:
+			case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
 				if(lea_statement->operands.oir.address_multiplier == 1){
 					//0 this out
 					lea_statement->operands.oir.address_multiplier = 0;
 
 					//Clear this too
-					lea_statement->lea_statement_type = OIR_LEA_TYPE_NONE;
+					lea_statement->addressing_mode = ADDRESSING_MODE_NONE;
 
 					//Convert it here
 					lea_statement->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
@@ -3832,13 +3832,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * 	Just turn it into 
 			 * 	t3 <- lea (x, y)
 			 */
-			case OIR_LEA_TYPE_REGISTERS_AND_SCALE:
+			case ADDRESSING_MODE_REGISTERS_AND_SCALE:
 				if(lea_statement->operands.oir.address_multiplier == 1){
 					//0 this out
 					lea_statement->operands.oir.address_multiplier = 0;
 
 					//Convert the lea type
-					lea_statement->lea_statement_type = OIR_LEA_TYPE_REGISTERS_ONLY;
+					lea_statement->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
 				}
 				
 				break;
@@ -3850,13 +3850,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * 	Just turn it into 
 			 * 	t3 <- lea 4(x, y)
 			 */
-			case OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE:
+			case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
 				if(lea_statement->operands.oir.address_multiplier == 1){
 					//0 this out
 					lea_statement->operands.oir.address_multiplier = 0;
 
 					//Convert the type
-					lea_statement->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_OFFSET;
+					lea_statement->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 				}
 
 				break;
