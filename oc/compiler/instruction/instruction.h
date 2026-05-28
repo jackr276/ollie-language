@@ -294,6 +294,8 @@ struct instruction_t{
 	instruction_stmt_type_t statement_type;
 	//What is the x86-64 instruction
 	instruction_type_t instruction_type;
+	//What kind of memory addressing mode do we have?
+	memory_addressing_mode_t addressing_mode;
 	//What is the operator for the instruction?
 	ollie_token_t op;
 	/**
@@ -420,8 +422,6 @@ struct instruction_t{
 	u_int8_t is_callee_saving_instruction;
 	//If it's a branch statment, then we'll use this
 	branch_type_t branch_type;
-	//What kind of address calculation mode do we have?
-	address_calculation_mode_t calculation_mode;
 	//What is the lea type(only used during the IR phase)
 	oir_lea_type_t lea_statement_type;
 	//Do we have a read, write, or no attempt to access memory(default)

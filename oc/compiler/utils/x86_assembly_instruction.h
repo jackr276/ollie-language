@@ -21,21 +21,33 @@ typedef enum {
 
 
 /**
- * What kind of memory addressing mode do we have?
+ * What kind of memory addressing mode do we have? This is standardized
+ * across both OIR and x86 instructions for simplicity
  */
 typedef enum{
-	ADDRESS_CALCULATION_MODE_NONE = 0, //default is always none
-	ADDRESS_CALCULATION_MODE_BASE_ADDRESS_ONLY,
-	ADDRESS_CALCULATION_MODE_OFFSET_ONLY, // 4(%rax)
-	ADDRESS_CALCULATION_MODE_REGISTERS_ONLY, // (%rax, %rcx)
-	ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET, // 4(%rax, %rcx)
-	ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE, // (%rax, %rcx, 8)
-	ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE, // 4(%rax, %rcx, 8)
-	ADDRESS_CALCULATION_MODE_INDEX_AND_SCALE, // (, %rcx, 8)
-	ADDRESS_CALCULATION_MODE_INDEX_OFFSET_AND_SCALE, // 4(, %rcx, 8)
-	ADDRESS_CALCULATION_MODE_RIP_RELATIVE, //RIP relative addresing like: <val>(%rip)
-	ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET //RIP relative addresing like: <offset> + <val>(%rip)
-} address_calculation_mode_t;
+	//Default is always none
+	ADDRESSING_MODE_NONE = 0, 
+	//Just the base address like (%rsp)
+	ADDRESSING_MODE_BASE_ADDRESS_ONLY,
+	// 4(%rax)
+	ADRESSING_MODE_OFFSET_ONLY, 
+ 	// (%rax, %rcx)
+	ADRESSING_MODE_REGISTERS_ONLY,
+	// 4(%rax, %rcx)
+	ADRESSING_MODE_REGISTERS_AND_OFFSET,
+	// (%rax, %rcx, 8)
+	ADRESSING_MODE_REGISTERS_AND_SCALE,
+	// 4(%rax, %rcx, 8)
+	ADRESSING_MODE_REGISTERS_OFFSET_AND_SCALE,
+	// (, %rcx, 8)
+	ADRESSING_MODE_INDEX_AND_SCALE, 
+	// 4(, %rcx, 8)
+	ADRESSING_MODE_INDEX_OFFSET_AND_SCALE,
+	//RIP relative addresing like: <val>(%rip)
+	ADRESSING_MODE_RIP_RELATIVE,
+	//RIP relative addresing like: <offset> + <val>(%rip)
+	ADRESSING_MODE_RIP_RELATIVE_WITH_OFFSET 
+} memory_addressing_mode_t;
 
 
 /**
