@@ -55,26 +55,6 @@ typedef enum {
 
 
 /**
- * What is the type in our IR that the lea
- * statement is using. This is designed
- * to reduce comparisons/complexity throught
- * the IR parsing
- */
-typedef enum {
-	OIR_LEA_TYPE_NONE = 0, //default is always none
-	OIR_LEA_TYPE_OFFSET_ONLY, // 4(%rax)
-	OIR_LEA_TYPE_REGISTERS_ONLY, // (%rax, %rcx)
-	OIR_LEA_TYPE_REGISTERS_AND_OFFSET, // 4(%rax, %rcx)
-	OIR_LEA_TYPE_REGISTERS_AND_SCALE, // (%rax, %rcx, 8)
-	OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE, // 4(%rax, %rcx, 8)
-	OIR_LEA_TYPE_INDEX_AND_SCALE, // (, %rcx, 8)
-	OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE, // 44(, %rcx, 8)
-	OIR_LEA_TYPE_RIP_RELATIVE, // Case where we have <global_var>(%rip)
-	OIR_LEA_TYPE_RIP_RELATIVE_WITH_OFFSET // Case where we have <offset> + <global_var>(%rip)
-} oir_lea_type_t;
-
-
-/**
  * All OIR statement types
  */
 typedef enum {

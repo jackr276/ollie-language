@@ -422,8 +422,6 @@ struct instruction_t{
 	u_int8_t is_callee_saving_instruction;
 	//If it's a branch statment, then we'll use this
 	branch_type_t branch_type;
-	//What is the lea type(only used during the IR phase)
-	oir_lea_type_t lea_statement_type;
 	//Do we have a read, write, or no attempt to access memory(default)
 	memory_access_type_t memory_access_type;
 	//The register that we're popping or pushing
