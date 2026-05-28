@@ -1459,7 +1459,7 @@ void delete_statement(instruction_t* stmt){
 	 * count by 1 because we are losing a reference to it. Any/all local constant values are always
 	 * stored inside of the second address register
 	 */
-	three_addr_var_t* local_constant_var = stmt->operands.oir.address_operand2;
+	three_addr_var_t* local_constant_var = stmt->operands.oir.rip_offset_var;
 
 	//Knock one off of the reference count if it's valid
 	if(local_constant_var != NULL && local_constant_var->variable_type == VARIABLE_TYPE_LOCAL_CONSTANT){

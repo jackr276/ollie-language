@@ -1193,7 +1193,7 @@ instruction_t* emit_lea_offset_only(three_addr_var_t* assignee, three_addr_var_t
 	stmt->operands.oir.address_offset = address_offset;
 
 	//This only has registers
-	stmt->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
+	stmt->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 	//And now we give it back
 	return stmt;
@@ -1216,7 +1216,7 @@ instruction_t* emit_lea_operands_only(three_addr_var_t* assignee, three_addr_var
 	stmt->operands.oir.address_operand2 = address_operand2;
 
 	//This only has registers
-	stmt->lea_statement_type = OIR_LEA_TYPE_REGISTERS_ONLY;
+	stmt->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
 
 	//And now we give it back
 	return stmt;
@@ -1240,7 +1240,7 @@ instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, thre
 	stmt->operands.oir.address_multiplier = type_size;
 
 	//This has registers and a multiplier
-	stmt->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_SCALE;
+	stmt->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
 
 	//And now we give it back
 	return stmt;
@@ -1258,10 +1258,11 @@ instruction_t* emit_lea_rip_relative_constant(three_addr_var_t* assignee, three_
 	stmt->statement_type = THREE_ADDR_CODE_LEA_STMT;
 	stmt->operands.oir.assignee = assignee;
 	stmt->operands.oir.address_operand1 = instruction_pointer;
-	stmt->operands.oir.address_operand2 = local_constant;
+	//This goes in the rip offset var
+	stmt->operands.oir.rip_offset_var = local_constant;
 
 	//This is a rip-relative lea
-	stmt->lea_statement_type = OIR_LEA_TYPE_RIP_RELATIVE;
+	stmt->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
 
 	//And now we give it back
 	return stmt;
@@ -1283,7 +1284,7 @@ instruction_t* emit_lea_index_and_scale_only(three_addr_var_t* assignee, three_a
 	stmt->operands.oir.address_multiplier = scale;
 
 	//This has registers and a multiplier
-	stmt->lea_statement_type = OIR_LEA_TYPE_INDEX_AND_SCALE;
+	stmt->addressing_mode = ADDRESSING_MODE_INDEX_AND_SCALE;
 
 	//And now we give it back
 	return stmt;
@@ -2219,6 +2220,99 @@ static char* branch_type_to_string(branch_type_t branch_type){
 
 
 /**
+ * Print out an OIR addressing mode expression. This is specifically just for OIR instructions, there is a separate
+ * version for x86 instructions
+ */
+static void print_OIR_addressing_mode_expression(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+	switch (instruction->addressing_mode) {
+		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+			fprintf(fl, "(");
+			print_variable(fl, instruction->operands.oir.address_operand1, mode);
+			fprintf(fl, ")");
+			break;
+
+		case ADDRESSING_MODE_RIP_RELATIVE:
+			//We want the actual var name here
+			print_variable(fl, instruction->operands.oir.rip_offset_var, mode);
+			fprintf(fl, "(");
+			print_variable(fl, instruction->operands.oir.address_operand1, mode);
+			fprintf(fl, ")");
+		   	break;
+
+		case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
+			print_three_addr_constant(fl, instruction->operands.oir.address_offset);
+			fprintf(fl, "+");
+			print_variable(fl, instruction->operands.oir.rip_offset_var, mode);
+			fprintf(fl, "(");
+			print_variable(fl, instruction->operands.oir.address_operand1, mode);
+			fprintf(fl, ")");
+		   	break;
+
+		case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+			fprintf(fl, "(");
+			print_variable(fl, instruction->operands.oir.address_operand1, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->operands.oir.address_operand2, mode);
+			fprintf(fl, ", ");
+			fprintf(fl, "%ld", instruction->operands.oir.address_multiplier);
+			fprintf(fl, ")");
+			break;
+
+		case ADDRESSING_MODE_OFFSET_ONLY:
+			print_three_addr_constant(fl, instruction->operands.oir.address_offset);
+			fprintf(fl, "(");
+			print_variable(fl, instruction->operands.oir.address_operand1, mode);
+			fprintf(fl, ")");
+			break;
+
+		case ADDRESSING_MODE_REGISTERS_ONLY:
+			fprintf(fl, "(");
+			print_variable(fl, instruction->operands.oir.address_operand1, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->operands.oir.address_operand2, mode);
+			fprintf(fl, ")");
+			break;
+
+		case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+			print_three_addr_constant(fl, instruction->operands.oir.address_offset);
+			fprintf(fl, "(");
+			print_variable(fl, instruction->operands.oir.address_operand1, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->operands.oir.address_operand2, mode);
+			fprintf(fl, ")");
+			break;
+
+		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+			print_three_addr_constant(fl, instruction->operands.oir.address_offset);
+			fprintf(fl, "(");
+			print_variable(fl, instruction->operands.oir.address_operand1, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->operands.oir.address_operand2, mode);
+			fprintf(fl, ", %ld)", instruction->operands.oir.address_multiplier);
+			break;
+
+		case ADDRESSING_MODE_INDEX_AND_SCALE:
+			fprintf(fl, "( , ");
+			print_variable(fl, instruction->operands.oir.address_operand2, mode);
+			fprintf(fl, ", %ld)", instruction->operands.oir.address_multiplier);
+			break;
+			
+		case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+			print_three_addr_constant(fl, instruction->operands.oir.address_offset);
+			fprintf(fl, "( , ");
+			print_variable(fl, instruction->operands.oir.address_operand2, mode);
+			fprintf(fl, ", %ld)", instruction->operands.oir.address_multiplier);
+			break;
+
+		//Should be unreachable but we have it anwyas
+		default:
+			fprintf(stderr, "Fatal internal compiler error: unreachable path hit in OIR addressing mode printer\n");
+			exit(1);
+	}
+}
+
+
+/**
  * Pretty print a three address code statement
  *
 */
@@ -2628,110 +2722,9 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			//Var name comes first
 			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 
-			//Print the assignment operator
+			//Let the overall helper take over and do the printing for us here
 			fprintf(fl, " <- ");
-
-			switch(stmt->lea_statement_type){
-				//We have something like t2 <- 3(t3)
-				case OIR_LEA_TYPE_OFFSET_ONLY:
-					//Print the constant out first
-					print_three_addr_constant(fl, stmt->operands.oir.address_offset);
-
-					//Then the variable encased in parenthesis
-					fprintf(fl, "(");
-					print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
-					fprintf(fl, ")");
-
-					break;
-
-				case OIR_LEA_TYPE_REGISTERS_ONLY:
-					//Print both variables encase in parenthesis
-					fprintf(fl, "(");
-					print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
-					fprintf(fl, ", ");
-					print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
-					fprintf(fl, ")");
-
-					break;
-
-				case OIR_LEA_TYPE_REGISTERS_AND_OFFSET:
-					//Print the constant out first
-					print_three_addr_constant(fl, stmt->operands.oir.address_offset);
-					
-					//Print both variables encase in parenthesis
-					fprintf(fl, "(");
-					print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
-					fprintf(fl, ", ");
-					print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
-					fprintf(fl, ")");
-
-					break;
-
-				case OIR_LEA_TYPE_REGISTERS_AND_SCALE:
-					//Print both variables encase in parenthesis
-					fprintf(fl, "(");
-					print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
-					fprintf(fl, ", ");
-					print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
-
-					//Now print the multiplier
-					fprintf(fl, ", %ld)", stmt->operands.oir.address_multiplier);
-
-					break;
-
-				case OIR_LEA_TYPE_RIP_RELATIVE:
-					print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
-					fprintf(fl, "(");
-					print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
-					fprintf(fl, ")");
-					break;
-
-				case OIR_LEA_TYPE_RIP_RELATIVE_WITH_OFFSET:
-					print_three_addr_constant(fl, stmt->operands.oir.address_offset);
-					fprintf(fl, "+");
-					print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
-					fprintf(fl, "(");
-					print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
-					fprintf(fl, ")");
-					break;
-
-				case OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE:
-					//Print the constant out first
-					print_three_addr_constant(fl, stmt->operands.oir.address_offset);
-
-					//Print both variables encase in parenthesis
-					fprintf(fl, "(");
-					print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
-					fprintf(fl, ", ");
-					print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
-
-					//Now print the multiplier
-					fprintf(fl, ", %ld)", stmt->operands.oir.address_multiplier);
-
-				case OIR_LEA_TYPE_INDEX_AND_SCALE:
-					//Print out the scale and multiplier
-					fprintf(fl, "( , ");
-					print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
-					fprintf(fl, ", %ld)", stmt->operands.oir.address_multiplier);
-
-					break;
-
-				case OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE:
-					//Print the offset first
-					print_three_addr_constant(fl, stmt->operands.oir.address_offset);
-					//Print out the scale and multiplier
-					fprintf(fl, "( , ");
-					print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
-					fprintf(fl, ", %ld)", stmt->operands.oir.address_multiplier);
-
-					break;
-
-				//Should be unreachable
-				default:
-					printf("Fatal internal compiler error: unknown lea statement type hit\n");
-					exit(1);
-			}
-
+			print_OIR_addressing_mode_expression(fl, stmt, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 			break;
 
@@ -2944,14 +2937,15 @@ static void print_immediate_value_no_prefix(FILE* fl, three_addr_const_t* consta
 
 
 /**
- * Print out a complex addressing mode expression
+ * Print out an x86 addressing mode expression. This is specifically just for x86 instructions, there is a separate
+ * version for regular OIR instructions
  */
-static void print_addressing_mode_expression(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
-	switch (instruction->calculation_mode) {
+static void print_x86_addressing_mode_expression(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+	switch (instruction->addressing_mode) {
 		/**
 		 * This is the case where we only have a deref
 		 */
-		case ADDRESS_CALCULATION_MODE_BASE_ADDRESS_ONLY:
+		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
 			fprintf(fl, "(");
 			print_variable(fl, instruction->operands.x86.address_register1, mode);
 			fprintf(fl, ")");
@@ -2962,7 +2956,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 		 * Global var address calculation. Remember that the rip-relative address
 		 * is in address calc reg2
 		 */
-		case ADDRESS_CALCULATION_MODE_RIP_RELATIVE:
+		case ADDRESSING_MODE_RIP_RELATIVE:
 			//There are different ways that this can go(t)
 			switch(instruction->operands.x86.rip_offset_var->variable_type){
 				case VARIABLE_TYPE_LOCAL_CONSTANT:
@@ -2987,7 +2981,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 		 * Global var address calculation with offset. Again recall that the rip-relative
 		 * address is stored in the second address register
 		 */
-		case ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET:
+		case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
 			print_immediate_value_no_prefix(fl, instruction->operands.x86.address_offset);
 			//There are different ways that this can go
 			switch(instruction->operands.x86.rip_offset_var->variable_type){
@@ -3015,7 +3009,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 		 * (%rax, %rbx, 2)
 		 * (address_calc_reg1, address_calc_reg2, lea_mult)
 		 */
-		case ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE:
+		case ADDRESSING_MODE_REGISTERS_AND_SCALE:
 			fprintf(fl, "(");
 			print_variable(fl, instruction->operands.x86.address_register1, mode);
 			fprintf(fl, ", ");
@@ -3025,7 +3019,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 			fprintf(fl, ")");
 			break;
 
-		case ADDRESS_CALCULATION_MODE_OFFSET_ONLY:
+		case ADDRESSING_MODE_OFFSET_ONLY:
 			//Only print this if it's not 0
 			print_immediate_value_no_prefix(fl, instruction->operands.x86.address_offset);
 			fprintf(fl, "(");
@@ -3033,7 +3027,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 			fprintf(fl, ")");
 			break;
 
-		case ADDRESS_CALCULATION_MODE_REGISTERS_ONLY:
+		case ADDRESSING_MODE_REGISTERS_ONLY:
 			fprintf(fl, "(");
 			print_variable(fl, instruction->operands.x86.address_register1, mode);
 			fprintf(fl, ", ");
@@ -3041,7 +3035,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 			fprintf(fl, ")");
 			break;
 
-		case ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET:
+		case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
 			//Only print this if it's not 0
 			print_immediate_value_no_prefix(fl, instruction->operands.x86.address_offset);
 			fprintf(fl, "(");
@@ -3051,7 +3045,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 			fprintf(fl, ")");
 			break;
 
-		case ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE:
+		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
 			//Only print this if it's not 0
 			print_immediate_value_no_prefix(fl, instruction->operands.x86.address_offset);
 			fprintf(fl, "(");
@@ -3062,14 +3056,14 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 			break;
 
 		//Index is in address calc reg 2 for this
-		case ADDRESS_CALCULATION_MODE_INDEX_AND_SCALE:
+		case ADDRESSING_MODE_INDEX_AND_SCALE:
 			fprintf(fl, "( , ");
 			print_variable(fl, instruction->operands.x86.address_register2, mode);
 			fprintf(fl, ", %ld)", instruction->operands.x86.address_multiplier);
 			break;
 			
 		//Index is in address calc reg 2 for this
-		case ADDRESS_CALCULATION_MODE_INDEX_OFFSET_AND_SCALE:
+		case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
 			print_immediate_value_no_prefix(fl, instruction->operands.x86.address_offset);
 			fprintf(fl, "( , ");
 			print_variable(fl, instruction->operands.x86.address_register2, mode);
@@ -3236,7 +3230,7 @@ static void print_general_purpose_register_to_memory_move(FILE* fl, instruction_
 
 	fprintf(fl, ", ");
 	//Let this handle it now
-	print_addressing_mode_expression(fl, instruction, mode);
+	print_x86_addressing_mode_expression(fl, instruction, mode);
 	fprintf(fl, "\n");
 }
 
@@ -3249,7 +3243,7 @@ static void print_general_purpose_memory_to_register_move(FILE* fl, instruction_
 	print_move_instruction(fl, instruction->instruction_type);
 	
 	//The address mode expression comes first
-	print_addressing_mode_expression(fl, instruction, mode);
+	print_x86_addressing_mode_expression(fl, instruction, mode);
 	fprintf(fl, ", ");
 	print_variable(fl, instruction->operands.x86.destination_register, mode);
 	fprintf(fl, "\n");
@@ -3400,7 +3394,7 @@ static void print_sse_register_to_memory_move(FILE* fl, instruction_t* instructi
 	
 	fprintf(fl, ", ");
 	//Let this handle it now
-	print_addressing_mode_expression(fl, instruction, mode);
+	print_x86_addressing_mode_expression(fl, instruction, mode);
 	fprintf(fl, "\n");
 }
 
@@ -3464,7 +3458,7 @@ static void print_sse_memory_to_register_move(FILE* fl, instruction_t* instructi
 	}
 	
 	//The address mode expression comes firsj
-	print_addressing_mode_expression(fl, instruction, mode);
+	print_x86_addressing_mode_expression(fl, instruction, mode);
 	fprintf(fl, ", ");
 	print_variable(fl, instruction->operands.x86.destination_register, mode);
 	fprintf(fl, "\n");
@@ -3927,7 +3921,7 @@ static void print_lea_instruction(FILE* fl, instruction_t* instruction, variable
 	}
 
 	//Now we'll print out one of the various complex addressing modes
-	print_addressing_mode_expression(fl, instruction, mode);
+	print_x86_addressing_mode_expression(fl, instruction, mode);
 
 	fprintf(fl, ", ");
 
@@ -5408,7 +5402,7 @@ instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_
 	stmt->operands.x86.destination_register = assignee;
 	//Stack pointer is source 1
 	stmt->operands.x86.address_register1 = stack_pointer;
-	stmt->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+	stmt->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 	//Loading is reading from memory
 	stmt->memory_access_type = READ_FROM_MEMORY;
 
@@ -5459,7 +5453,7 @@ instruction_t* emit_store_instruction(three_addr_var_t* source, three_addr_var_t
 	
 	//Stack pointer our base address
 	stmt->operands.x86.address_register1 = stack_pointer;
-	stmt->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+	stmt->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 	//Storing is writing to memory
 	stmt->memory_access_type = WRITE_TO_MEMORY;
 
@@ -5785,8 +5779,8 @@ instruction_t* emit_indirect_jump_statement(void* jump_table, three_addr_var_t* 
 	//Let's now populate it with values
 	stmt->statement_type = THREE_ADDR_CODE_INDIRECT_JUMP_STMT;
 
-	//This is going to leverage the OIR lea type for printing
-	stmt->lea_statement_type = OIR_LEA_TYPE_INDEX_AND_SCALE;
+	//Leverage the addressing mode for printing
+	stmt->addressing_mode = ADDRESSING_MODE_INDEX_AND_SCALE;
 
 	//Store the index and multiplier
 	stmt->operands.oir.address_operand2 = index;
@@ -6062,7 +6056,7 @@ instruction_t* emit_global_variable_address_calculation_oir(three_addr_var_t* as
 	lea->statement_type = THREE_ADDR_CODE_LEA_STMT;
 
 	//Global var address calc mode
-	lea->lea_statement_type = OIR_LEA_TYPE_RIP_RELATIVE;
+	lea->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
 
 	//We already know what the destination will be
 	lea->operands.oir.assignee = assignee;
@@ -6074,8 +6068,8 @@ instruction_t* emit_global_variable_address_calculation_oir(three_addr_var_t* as
 	//Op1 is the instruction pointer(relative addressing)
 	lea->operands.oir.address_operand1 = instruction_pointer;
 
-	//The op2 is always the global var itself
-	lea->operands.oir.address_operand2 = remediated_version;
+	//Store this in the rip-relative area
+	lea->operands.oir.rip_offset_var = remediated_version;
 
 	//And give it back
 	return lea;
@@ -6095,7 +6089,7 @@ instruction_t* emit_global_variable_address_calculation_with_offset_oir(three_ad
 	lea->statement_type = THREE_ADDR_CODE_LEA_STMT;
 
 	//Global var address calc mode
-	lea->lea_statement_type = OIR_LEA_TYPE_RIP_RELATIVE_WITH_OFFSET;
+	lea->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
 
 	//We already know what the destination will be
 	lea->operands.oir.assignee = assignee;
@@ -6107,8 +6101,8 @@ instruction_t* emit_global_variable_address_calculation_with_offset_oir(three_ad
 	//Op1 is the instruction pointer(relative addressing)
 	lea->operands.oir.address_operand1 = instruction_pointer;
 
-	//The op2 is always the global var itself
-	lea->operands.oir.address_operand2 = remediated_version;
+	//Store this in the dedicated rip offset area
+	lea->operands.oir.rip_offset_var = remediated_version;
 
 	//Store the constant offset here as well
 	lea->operands.oir.address_offset = constant;
@@ -6134,7 +6128,7 @@ instruction_t* emit_global_variable_address_calculation_x86(three_addr_var_t* gl
 	lea->instruction_type = LEAQ;
 
 	//Global var address calc mode
-	lea->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
+	lea->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
 
 	//We already know what the destination will be
 	lea->operands.x86.destination_register = destination;

@@ -3038,11 +3038,11 @@ static void handle_pure_copy_source_spill(instruction_t* instruction, u_int32_t 
 		instruction->operands.x86.source_register1 = NULL;
 
 		//This is just going to be a base address dereference
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_BASE_ADDRESS_ONLY;
+		instruction->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
 
 	//Otherwise, we need to do an offset calculation
 	} else {
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+		instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 		//Turn this into a load instruction
 		instruction->operands.x86.address_register1 = stack_pointer;
@@ -3079,11 +3079,11 @@ static void handle_constant_assignment_destination_spill(instruction_t* instruct
 		instruction->operands.x86.destination_register = NULL;
 
 		//This is just a base address
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_BASE_ADDRESS_ONLY;
+		instruction->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
 
 	//Otherwise, we need to do an offset calculation
 	} else {
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+		instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 		//Turn this into a load instruction
 		instruction->operands.x86.address_register1 = stack_pointer;

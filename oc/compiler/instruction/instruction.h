@@ -294,6 +294,8 @@ struct instruction_t{
 	instruction_stmt_type_t statement_type;
 	//What is the x86-64 instruction
 	instruction_type_t instruction_type;
+	//What kind of memory addressing mode do we have?
+	memory_addressing_mode_t addressing_mode;
 	//What is the operator for the instruction?
 	ollie_token_t op;
 	/**
@@ -325,6 +327,12 @@ struct instruction_t{
 			three_addr_var_t* address_operand2;
 			//This can never be anything besides a 64 bit integer
 			u_int64_t address_multiplier;
+			/**
+			 * Some variables are represented as RIP offsets. We will use a special
+			 * space here so that they are excluded from the register allocator's
+			 * processing
+			 */
+			three_addr_var_t* rip_offset_var;
 		} oir; 
 
 		/**
@@ -420,10 +428,6 @@ struct instruction_t{
 	u_int8_t is_callee_saving_instruction;
 	//If it's a branch statment, then we'll use this
 	branch_type_t branch_type;
-	//What kind of address calculation mode do we have?
-	address_calculation_mode_t calculation_mode;
-	//What is the lea type(only used during the IR phase)
-	oir_lea_type_t lea_statement_type;
 	//Do we have a read, write, or no attempt to access memory(default)
 	memory_access_type_t memory_access_type;
 	//The register that we're popping or pushing
