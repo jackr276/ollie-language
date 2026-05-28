@@ -3752,6 +3752,35 @@ static void print_addition_instruction(FILE* fl, instruction_t* instruction, var
 
 
 /**
+ * Print an addition instruction, in all the forms it can take
+ */
+static void print_sse_addition_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+	//First we'll print out the appropriate variety of addition
+	switch(instruction->instruction_type){
+		case ADDSS:
+			fprintf(fl, "addss ");
+			break;
+		case ADDSD:
+			fprintf(fl, "addsd ");
+			break;
+		//We'll never get here, just to stop the compiler from complaining
+		default:
+			break;
+	}
+
+	//No chance for an immediate value here
+	print_variable(fl, instruction->operands.x86.source_register1, mode);
+
+	//Needed comma
+	fprintf(fl, ", ");
+
+	//Now print our destination
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
+	fprintf(fl, "\n");
+}
+
+
+/**
  * Print a subtraction instruction, in all the forms it can take
  */
 static void print_subtraction_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
@@ -4882,16 +4911,6 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case DIVSS:
 		case DIVSD:
 			print_sse_division_instruction(fl, instruction, mode);
-			break;
-
-		//TODO MAKE IT'S OWN HELPER
-		case ADDSS:
-			fprintf(fl, "addss ");
-			print_variable(fl, instruction->operands.x86.source_register1, mode);
-			fprintf(fl, ", ");
-			print_variable(fl, instruction->operands.x86.destination_register, mode);
-			fprintf(fl, "\n");
-
 			break;
 
 		case ADDSD:
