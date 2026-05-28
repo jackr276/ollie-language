@@ -3752,6 +3752,35 @@ static void print_addition_instruction(FILE* fl, instruction_t* instruction, var
 
 
 /**
+ * Print an addition instruction, in all the forms it can take
+ */
+static inline void print_sse_addition_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+	//First we'll print out the appropriate variety of addition
+	switch(instruction->instruction_type){
+		case ADDSS:
+			fprintf(fl, "addss ");
+			break;
+		case ADDSD:
+			fprintf(fl, "addsd ");
+			break;
+		//We'll never get here, just to stop the compiler from complaining
+		default:
+			break;
+	}
+
+	//No chance for an immediate value here
+	print_variable(fl, instruction->operands.x86.source_register1, mode);
+
+	//Needed comma
+	fprintf(fl, ", ");
+
+	//Now print our destination
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
+	fprintf(fl, "\n");
+}
+
+
+/**
  * Print a subtraction instruction, in all the forms it can take
  */
 static void print_subtraction_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
@@ -3780,6 +3809,93 @@ static void print_subtraction_instruction(FILE* fl, instruction_t* instruction, 
 	} else {
 		print_immediate_value(fl, instruction->operands.x86.source_immediate);
 	}
+
+	//Needed comma
+	fprintf(fl, ", ");
+
+	//Now print our destination
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
+	fprintf(fl, "\n");
+}
+
+
+/**
+ * Print a subtraction instruction, in all the forms it can take
+ */
+static inline void print_sse_subtraction_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+	//First we'll print out the appropriate variety of subtraction 
+	switch(instruction->instruction_type){
+		case SUBSS:
+			fprintf(fl, "subss ");
+			break;
+		case SUBSD:
+			fprintf(fl, "subsd ");
+			break;
+		//We'll never get here, just to stop the compiler from complaining
+		default:
+			break;
+	}
+
+	//We don't ever need to worry about an immediate value for SSE instructions
+	print_variable(fl, instruction->operands.x86.source_register1, mode);
+
+	//Needed comma
+	fprintf(fl, ", ");
+
+	//Now print our destination
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
+	fprintf(fl, "\n");
+}
+
+
+/**
+ * Print a multiplication instruction, in all the forms it can take
+ */
+static inline void print_sse_multiplication_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+	//First we'll print out the appropriate variety of subtraction 
+	switch(instruction->instruction_type){
+		case MULSS:
+			fprintf(fl, "mulss ");
+			break;
+		case MULSD:
+			fprintf(fl, "mulsd ");
+			break;
+		//We'll never get here, just to stop the compiler from complaining
+		default:
+			break;
+	}
+
+	//We don't ever need to worry about an immediate value for SSE instructions
+	print_variable(fl, instruction->operands.x86.source_register1, mode);
+
+	//Needed comma
+	fprintf(fl, ", ");
+
+	//Now print our destination
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
+	fprintf(fl, "\n");
+}
+
+
+/**
+ * Print a division instruction, in all the forms it can take
+ */
+static inline void print_sse_division_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+	//First we'll print out the appropriate variety of subtraction 
+	switch(instruction->instruction_type){
+		case DIVSS:
+			fprintf(fl, "divss ");
+			break;
+		case DIVSD:
+			fprintf(fl, "divsd ");
+			break;
+		//We'll never get here, just to stop the compiler from complaining
+		default:
+			break;
+	}
+
+	//We don't ever need to worry about an immediate value for SSE instructions
+	print_variable(fl, instruction->operands.x86.source_register1, mode);
 
 	//Needed comma
 	fprintf(fl, ", ");
@@ -4820,13 +4936,14 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			}
 
 			fprintf(fl, ")\n");
-
 			break;
 
-		// ============================ Begin floating point area ==============================
-		// The instructions below operate either exclusively with xmm registers or with a mix
-		// of xmm and general purpose registers or memory operations. These handle basic movement
-		// and conversion
+		/**
+		 * ============================ Begin floating point area ==============================
+		 * The instructions below operate either exclusively with xmm registers or with a mix
+		 * of xmm and general purpose registers or memory operations. These handle basic movement
+		 * and conversion
+		 */
 		case MOVAPD:
 		case MOVAPS:
 		case MOVUPS:
@@ -4864,75 +4981,23 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			break;
 
 		case ADDSS:
-			fprintf(fl, "addss ");
-			print_variable(fl, instruction->operands.x86.source_register1, mode);
-			fprintf(fl, ", ");
-			print_variable(fl, instruction->operands.x86.destination_register, mode);
-			fprintf(fl, "\n");
-
-			break;
-
 		case ADDSD:
-			fprintf(fl, "addsd ");
-			print_variable(fl, instruction->operands.x86.source_register1, mode);
-			fprintf(fl, ", ");
-			print_variable(fl, instruction->operands.x86.destination_register, mode);
-			fprintf(fl, "\n");
-
+			print_sse_addition_instruction(fl, instruction, mode);
 			break;
 
 		case SUBSS:
-			fprintf(fl, "subss ");
-			print_variable(fl, instruction->operands.x86.source_register1, mode);
-			fprintf(fl, ", ");
-			print_variable(fl, instruction->operands.x86.destination_register, mode);
-			fprintf(fl, "\n");
-
-			break;
-
 		case SUBSD:
-			fprintf(fl, "subsd ");
-			print_variable(fl, instruction->operands.x86.source_register1, mode);
-			fprintf(fl, ", ");
-			print_variable(fl, instruction->operands.x86.destination_register, mode);
-			fprintf(fl, "\n");
-
+			print_sse_subtraction_instruction(fl, instruction, mode);
 			break;
 
 		case MULSS:
-			fprintf(fl, "mulss ");
-			print_variable(fl, instruction->operands.x86.source_register1, mode);
-			fprintf(fl, ", ");
-			print_variable(fl, instruction->operands.x86.destination_register, mode);
-			fprintf(fl, "\n");
-
-			break;
-
 		case MULSD:
-			fprintf(fl, "mulsd ");
-			print_variable(fl, instruction->operands.x86.source_register1, mode);
-			fprintf(fl, ", ");
-			print_variable(fl, instruction->operands.x86.destination_register, mode);
-			fprintf(fl, "\n");
-
+			print_sse_multiplication_instruction(fl, instruction, mode);
 			break;
 
 		case DIVSS:
-			fprintf(fl, "divss ");
-			print_variable(fl, instruction->operands.x86.source_register1, mode);
-			fprintf(fl, ", ");
-			print_variable(fl, instruction->operands.x86.destination_register, mode);
-			fprintf(fl, "\n");
-
-			break;
-
 		case DIVSD:
-			fprintf(fl, "DIVSD ");
-			print_variable(fl, instruction->operands.x86.source_register1, mode);
-			fprintf(fl, ", ");
-			print_variable(fl, instruction->operands.x86.destination_register, mode);
-			fprintf(fl, "\n");
-
+			print_sse_division_instruction(fl, instruction, mode);
 			break;
 
 		case PAND:
@@ -5039,8 +5104,10 @@ instruction_t* emit_dec_instruction(three_addr_var_t* decrementee){
 	//Now we populate
 	dec_stmt->statement_type = THREE_ADDR_CODE_DEC_STMT;
 
-	//If this is not a temporary variable, then we'll
-	//emit an exact copy and let the SSA system handle it
+	/**
+	 * If this is not a temporary variable, then we'll
+	 * emit an exact copy and let the SSA system handle it
+	 */
 	if(decrementee->variable_type != VARIABLE_TYPE_TEMP){
 		dec_stmt->operands.oir.assignee = emit_var_copy(decrementee);
 
@@ -5067,8 +5134,10 @@ instruction_t* emit_inc_instruction(three_addr_var_t* incrementee){
 	//Now we populate
 	inc_stmt->statement_type = THREE_ADDR_CODE_INC_STMT;
 
-	//If this is not a temporary variable, then we'll
-	//emit an exact copy and let the SSA system handle it
+	/**
+	 * If this is not a temporary variable, then we'll
+	 * emit an exact copy and let the SSA system handle it
+	 */
 	if(incrementee->variable_type != VARIABLE_TYPE_TEMP){
 		inc_stmt->operands.oir.assignee = emit_var_copy(incrementee);
 

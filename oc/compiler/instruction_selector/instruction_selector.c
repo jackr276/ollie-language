@@ -162,6 +162,77 @@ static void print_instruction_window(instruction_window_t* window){
 
 
 /**
+ * For binary operation instructions, we store their overall "destination type" inside of the "result_type" field.
+ * However, due to legacy implementations, this field is not always going to be populated. This special unpacker
+ * function here will contain all the logic for every kind of binary operation to unpack and return that field
+ */
+static inline generic_type_t* get_destination_type_for_binary_operation_instruction(instruction_t* instruction){
+	//First thing we do is default to using the type storage field
+	generic_type_t* destination_type = instruction->type_storage.result_type;
+
+	/**
+	 * If that ended up being NULL, now we'll have to go into our specific
+	 * decision logic based on what kind of binary operation it is
+	 */
+	if(destination_type == NULL){
+		switch(instruction->op){
+			case PLUS:
+			case MINUS:
+			case L_SHIFT:
+			case R_SHIFT:
+			case SINGLE_OR:
+			case SINGLE_AND:
+			case CARROT:
+			case MOD:
+			case STAR:
+			case F_SLASH:
+				destination_type = instruction->operands.oir.assignee->type;
+				break;
+
+			/**
+			 * Relational operators follow a different pattern than above. We still
+			 * attempt to get the result type from the type storage, but if we cannot
+			 * find it, then we have to rely on a special helper to get the operand
+			 * type for a logical operation. Still this relies on acutal three address
+			 * variables, and if we don't have those, then we have to resort to exclusively
+			 * using the op1 type
+			 */
+			case L_THAN:
+			case G_THAN:
+			case L_THAN_OR_EQ:
+			case G_THAN_OR_EQ:
+			case DOUBLE_EQUALS:
+			case NOT_EQUALS:
+				if(instruction->operands.oir.operand2 != NULL){
+					destination_type = get_operand_type_for_logical_operation(cfg_reference->type_symtab, 
+															   					instruction->operands.oir.operand1->type,
+															   					instruction->operands.oir.operand2->type);
+				} else {
+					destination_type = instruction->operands.oir.operand1->type;
+				}
+
+				break;
+
+			/**
+			 * For logical and/or, we will be grabbing the *assignee* type if we are unable to determine the
+			 * destination type from the type storage field on the instruction
+			 */
+			case DOUBLE_AND:
+			case DOUBLE_OR:
+				destination_type = instruction->operands.oir.assignee->type;
+				break;
+
+			default:
+				fprintf(stderr, "Fatal interal compiler error: unrecognzied binary operatore in destination type determinator\n");
+				exit(1);
+		}
+	}
+
+	return destination_type;
+}
+
+
+/**
  * Is this instruction going to be used to set condition codes? If so, we
  * don't want to accidentally value number the thing and remove it
  */
@@ -193,6 +264,76 @@ static inline u_int8_t does_instruction_set_condition_codes(instruction_t* instr
 		default:
 			return FALSE;
 	}
+}
+
+
+/**
+ * Is an instruction valid for a memory read source argument? Some examples
+ * include add and sub instructions.
+ *
+ * TODO NOT COMPLETE
+ */
+static inline u_int8_t is_binary_operation_capable_of_memory_source_argument(instruction_t* instruction){
+	if(instruction == NULL){
+		return FALSE;
+	}
+
+	/**
+	 * Validation part 1: only certain binary operations are going to be valid for/worth bothering
+	 * with for this optimization. We will first weed out anything not worth dealing with here
+	 */
+	switch(instruction->instruction_type){
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+			switch(instruction->op){
+				//If something is eligible we break out into part 2 of validations
+				case PLUS:
+				case MINUS:
+					break;
+				//TODO ELABORATE MORE
+				default:
+					return FALSE;
+			}
+
+			break;
+
+		//Anything else is (for now) not eligible
+		default:
+			return FALSE;
+	}
+
+	/**
+	 * There is a possibility that we could have survived the load instruction optimization check, but still
+	 * have a converting move being set as required by the binary operation. Here's an example:
+	 *
+	 * t6(i16) <- load from i16 region
+	 * result(i32) <- t7(i32) + t6(i16)
+	 *
+	 * This will not be caught by our original check, and as such we need to check again here to make extra
+	 * sure. There is nothing that we could do to "fix" this for our optimization, we just have to skip
+	 * this(it's pretty rare anyways)
+	 */
+	generic_type_t* destination_type = get_destination_type_for_binary_operation_instruction(instruction);
+	if(is_converting_move_required(destination_type, instruction->operands.oir.operand2->type) == TRUE){
+		return FALSE;
+	}
+
+	//If we survived to down here then we are all set
+	return TRUE;
+}
+
+
+/**
+ * Is the given load instruction going to require any kind of converting move between the 
+ * memory read/write type and the destination type? If so, we cannot use it for any
+ * kind of binary operation condensation optimization
+ */
+static inline u_int8_t does_load_operation_require_converting_move(instruction_t* instruction){
+	//Extract the region/destination type
+	generic_type_t* memory_region_type = instruction->type_storage.memory_read_write_type;
+	generic_type_t* destination_type = instruction->operands.oir.address_operand2->type;
+
+	//Give back whether or not the converting move is needed
+	return is_converting_move_required(destination_type, memory_region_type);
 }
 
 
@@ -2481,14 +2622,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		three_addr_const_t* simplification_constant;
 
 		//We will also need the result type, especially for float determination
-		generic_type_t* result_type;
-
-		//If we have it stored then use that, otherwise use op1
-		if(binary_operation->type_storage.result_type != NULL){
-			result_type = binary_operation->type_storage.result_type;
-		} else {
-			result_type = binary_operation->operands.oir.operand1->type;
-		}
+		generic_type_t* result_type = get_destination_type_for_binary_operation_instruction(binary_operation);
 
 		// The binary operation determines the optimization
 		switch(binary_operation->op){
@@ -2753,14 +2887,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		instruction_t* binary_operation = window->instruction2;
 
 		//Grab the result type out
-		generic_type_t* result_type;
-
-		//If we can find it great, otherwise just use op1
-		if(binary_operation->type_storage.result_type != NULL){
-			result_type = binary_operation->type_storage.result_type;
-		} else {
-			result_type = binary_operation->operands.oir.operand1->type;
-		}
+		generic_type_t* result_type = get_destination_type_for_binary_operation_instruction(binary_operation);
 
 		/**
 		 * If the type here is actually compatible, then we can do this
@@ -2862,14 +2989,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		instruction_t* binary_operation = window->instruction3;
 
 		//Grab the result type out
-		generic_type_t* result_type;
-
-		//If we can find it great, otherwise just use op1
-		if(binary_operation->type_storage.result_type != NULL){
-			result_type = binary_operation->type_storage.result_type;
-		} else {
-			result_type = binary_operation->operands.oir.operand1->type;
-		}
+		generic_type_t* result_type = get_destination_type_for_binary_operation_instruction(binary_operation);
 
 		/**
 		 * If the type here is actually compatible, then we can do this
@@ -2970,14 +3090,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		instruction_t* constant_operation = window->instruction2;
 
 		//Grab the result type out
-		generic_type_t* result_type;
-
-		//If we can find it great, otherwise just use op1
-		if(binary_operation->type_storage.result_type != NULL){
-			result_type = binary_operation->type_storage.result_type;
-		} else {
-			result_type = binary_operation->operands.oir.operand1->type;
-		}
+		generic_type_t* result_type = get_destination_type_for_binary_operation_instruction(binary_operation);
 
 		/**
 		 * If we are lea compatible, we will convert
@@ -7231,18 +7344,8 @@ static void handle_left_shift_instruction(instruction_window_t* window){
 	//Get the actual left shift
 	instruction_t* left_shift_instruction = window->instruction1;
 
-	//The destination type
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(left_shift_instruction->type_storage.result_type != NULL){
-		destination_type = left_shift_instruction->type_storage.result_type;
-	} else {
-		destination_type = left_shift_instruction->operands.oir.assignee->type;
-	}
+	//Let the helper determine the destination type
+	generic_type_t* destination_type = get_destination_type_for_binary_operation_instruction(left_shift_instruction);
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -7423,18 +7526,8 @@ static void handle_right_shift_instruction(instruction_window_t* window){
 	//Get the actual right shift
 	instruction_t* right_shift_instruction = window->instruction1;
 
-	//The destination type
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(right_shift_instruction->type_storage.result_type != NULL){
-		destination_type = right_shift_instruction->type_storage.result_type;
-	} else {
-		destination_type = right_shift_instruction->operands.oir.assignee->type;
-	}
+	//Let the helper determine the destination type
+	generic_type_t* destination_type = get_destination_type_for_binary_operation_instruction(right_shift_instruction);
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -7602,17 +7695,7 @@ static void handle_bitwise_inclusive_or_instruction(instruction_window_t* window
 	instruction_t* bitwise_or = window->instruction1;
 
 	//The destination type
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(bitwise_or->type_storage.result_type != NULL){
-		destination_type = bitwise_or->type_storage.result_type;
-	} else {
-		destination_type = bitwise_or->operands.oir.assignee->type;
-	}
+	generic_type_t* destination_type = get_destination_type_for_binary_operation_instruction(bitwise_or);
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -7739,18 +7822,8 @@ static void handle_bitwise_and_instruction(instruction_window_t* window){
 	//Grab out the first one
 	instruction_t* bitwise_and = window->instruction1;
 
-	//The destination type
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(bitwise_and->type_storage.result_type != NULL){
-		destination_type = bitwise_and->type_storage.result_type;
-	} else {
-		destination_type = bitwise_and->operands.oir.assignee->type;
-	}
+	//Let the helper determine what the destination type is
+	generic_type_t* destination_type = get_destination_type_for_binary_operation_instruction(bitwise_and);
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -7878,18 +7951,8 @@ static void handle_bitwise_exclusive_or_instruction(instruction_window_t* window
 	//Grab out the first one
 	instruction_t* bitwise_xor = window->instruction1;
 
-	//The destination type
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(bitwise_xor->type_storage.result_type != NULL){
-		destination_type = bitwise_xor->type_storage.result_type;
-	} else {
-		destination_type = bitwise_xor->operands.oir.assignee->type;
-	}
+	//Let the helper determine the destination type
+	generic_type_t* destination_type = get_destination_type_for_binary_operation_instruction(bitwise_xor);
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -8003,25 +8066,12 @@ static void handle_bitwise_exclusive_or_instruction(instruction_window_t* window
  * NOTE: We guarantee that the instruction we're after is always the first
  * instruction in the window
  */
-static inline void handle_signed_modulus(instruction_window_t* window){
+static inline void handle_signed_modulus(instruction_window_t* window, generic_type_t* result_type){
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* modulus_instruction = window->instruction1;
 
 	three_addr_var_t* dividend;
 	three_addr_var_t* divisor;
-
-	//The destination type
-	generic_type_t* result_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(modulus_instruction->type_storage.result_type != NULL){
-		result_type = modulus_instruction->type_storage.result_type;
-	} else {
-		result_type = modulus_instruction->operands.oir.assignee->type;
-	}
 
 	//If we need to convert, we'll do that here
 	if(is_converting_move_required(result_type, modulus_instruction->operands.oir.operand1->type) == TRUE){
@@ -8122,22 +8172,9 @@ static inline void handle_signed_modulus(instruction_window_t* window){
  * NOTE: We guarantee that the instruction we're after is always the first
  * instruction in the window
  */
-static inline void handle_unsigned_modulus(instruction_window_t* window){
+static inline void handle_unsigned_modulus(instruction_window_t* window, generic_type_t* result_type){
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* modulus_instruction = window->instruction1;
-
-	//The destination type
-	generic_type_t* result_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(modulus_instruction->type_storage.result_type != NULL){
-		result_type = modulus_instruction->type_storage.result_type;
-	} else {
-		result_type = modulus_instruction->operands.oir.assignee->type;
-	}
 
 	three_addr_var_t* dividend;
 	three_addr_var_t* divisor;
@@ -8242,24 +8279,17 @@ static inline void handle_modulus_instruction(instruction_window_t* window){
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* modulus_instruction = window->instruction1;
 
-	//Is the type signed
-	u_int8_t is_signed;
+	//Determine the result type here
+	generic_type_t* result_type = get_destination_type_for_binary_operation_instruction(modulus_instruction);
 
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(modulus_instruction->type_storage.result_type != NULL){
-		 is_signed = is_type_signed(modulus_instruction->type_storage.result_type);
-	} else {
-		is_signed = is_type_signed(modulus_instruction->operands.oir.assignee->type);
-	}
+	//Is the type signed
+	u_int8_t is_signed = is_type_signed(result_type);
 
 	//Dynamic dispatch based on what we need
 	if(is_signed == TRUE){
-		handle_signed_modulus(window);
+		handle_signed_modulus(window, result_type);
 	} else {
-		handle_unsigned_modulus(window);
+		handle_unsigned_modulus(window, result_type);
 	}
 }
 
@@ -8301,26 +8331,16 @@ static inline instruction_type_t select_unsigned_mulitplication_instruction(vari
  *
  * NOTE: this is always the first instruction in the instruction window
  *
+ * We've already determined the destination type when we did the dynamic dispatch into here,
+ * so we will pass that along as a parameter to avoid redoing work
+ *
  * An important note - since we use the one operand unsigned multiplication instruction, we
  * clobber the %rdx register whenever we do this. Even though we do not use it, this is 
  * something that we need to account for
 */
-static void handle_unsigned_multiplication_instruction(instruction_window_t* window){
+static void handle_unsigned_multiplication_instruction(instruction_window_t* window, generic_type_t* destination_type){
 	//Instruction 1 is the multiplication instruction
 	instruction_t* multiplication_instruction = window->instruction1;
-
-	//The destination type
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(multiplication_instruction->type_storage.result_type != NULL){
-		destination_type = multiplication_instruction->type_storage.result_type;
-	} else {
-		destination_type = multiplication_instruction->operands.oir.assignee->type;
-	}
 
 	//We'll need to know the variables size
 	variable_size_t size = get_type_size(destination_type);
@@ -8430,23 +8450,13 @@ static inline instruction_type_t select_signed_multiplication_instruction(variab
  * Handle a signed multiplication operation
  *
  * A multiplication operation can be different based on size and sign
+ *
+ * We've already determined the destination type by the time we get here, so we'll just pass that along
+ * as a second parameter
  */
-static void handle_signed_multiplication_instruction(instruction_window_t* window){
+static void handle_signed_multiplication_instruction(instruction_window_t* window, generic_type_t* destination_type){
 	//Grab out the first one
 	instruction_t* multiplication_instruction = window->instruction1;
-
-	//The actual destination type that we are after
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(multiplication_instruction->type_storage.result_type != NULL){
-		destination_type = multiplication_instruction->type_storage.result_type;
-	} else {
-		destination_type = multiplication_instruction->operands.oir.assignee->type;
-	}
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -8562,24 +8572,14 @@ static inline instruction_type_t select_sse_multiplication_instruction(variable_
  * know that we're dealing with an SSE operation. This instruction will generate
  * converting moves if such moves are required
  *
+ * We've already determine the result type by the time we get in here, so why not just use that? We pass
+ * that in as a second argument
+ *
  * NOTE: SSE multiplication instructions never contain constants
  */
-static void handle_sse_multiplication_instruction(instruction_window_t* window){
+static void handle_sse_multiplication_instruction(instruction_window_t* window, generic_type_t* destination_type){
 	//Grab out the first one
 	instruction_t* multiplication_instruction = window->instruction1;
-
-	//The destination type
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(multiplication_instruction->type_storage.result_type != NULL){
-		destination_type = multiplication_instruction->type_storage.result_type;
-	} else {
-		destination_type = multiplication_instruction->operands.oir.assignee->type;
-	}
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -8670,33 +8670,24 @@ static inline void handle_multiplication_instruction(instruction_window_t* windo
 	//We'll need to extract what our result actually is
 	instruction_t* multiplication_instruction = window->instruction1;
 
-	generic_type_t* result_type = NULL;
-
-	/**
-	 * If the result type is here, we'll use that. Otherwise we will default
-	 * to the assignee type
-	 */
-	if(multiplication_instruction->type_storage.result_type != NULL){
-		result_type = multiplication_instruction->type_storage.result_type;
-	} else {
-		result_type = multiplication_instruction->operands.oir.assignee->type;
-	}
+	//Let the helper extract the result type
+	generic_type_t* result_type = get_destination_type_for_binary_operation_instruction(multiplication_instruction);
 
 	switch(result_type->basic_type_token){
 		case F32:
 		case F64:
-			handle_sse_multiplication_instruction(window);
+			handle_sse_multiplication_instruction(window, result_type);
 			break;
 
 		case I8:
 		case I16:
 		case I32:
 		case I64:
-			handle_signed_multiplication_instruction(window);
+			handle_signed_multiplication_instruction(window, result_type);
 			break;
 
 		default:
-			handle_unsigned_multiplication_instruction(window);
+			handle_unsigned_multiplication_instruction(window, result_type);
 			break;
 	}
 }
@@ -8714,30 +8705,19 @@ static inline void handle_multiplication_instruction(instruction_window_t* windo
  * As such, this will generate additional instructions for us, making it not
  * a "single instruction" pattern
  *
+ * We already have the destination type by the time we get here so we pass it along
+ * as a parameter
+ *
  * NOTE: We guarantee that the instruction we're after is always the first
  * instruction in the window
- *
  */
-static void handle_signed_division(instruction_window_t* window){
+static void handle_signed_division(instruction_window_t* window, generic_type_t* destination_type){
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* division_instruction = window->instruction1;
 
 	//A temp holder for the final second source variable
 	three_addr_var_t* dividend;
 	three_addr_var_t* divisor;
-
-	//The destination type
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(division_instruction->type_storage.result_type != NULL){
-		destination_type = division_instruction->type_storage.result_type;
-	} else {
-		destination_type = division_instruction->operands.oir.assignee->type;
-	}
 
 	//If we need to convert, we'll do that here
 	if(is_converting_move_required(destination_type, division_instruction->operands.oir.operand1->type) == TRUE){
@@ -8837,29 +8817,19 @@ static void handle_signed_division(instruction_window_t* window){
  * As such, this will generate additional instructions for us, making it not
  * a "single instruction" pattern
  *
+ * We already have the destination type by the time we get here, so we pass
+ * it along as a parameter
+ *
  * NOTE: We guarantee that the instruction we're after is always the first
  * instruction in the window
  */
-static void handle_unsigned_division(instruction_window_t* window){
+static void handle_unsigned_division(instruction_window_t* window, generic_type_t* destination_type){
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* division_instruction = window->instruction1;
 
 	//A temp holder for the final second source variable
 	three_addr_var_t* dividend;
 	three_addr_var_t* divisor;
-
-	//The destination type
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(division_instruction->type_storage.result_type != NULL){
-		destination_type = division_instruction->type_storage.result_type;
-	} else {
-		destination_type = division_instruction->operands.oir.assignee->type;
-	}
 
 	//If we need to convert, we'll do that here
 	if(is_converting_move_required(destination_type, division_instruction->operands.oir.operand1->type) == TRUE){
@@ -8966,23 +8936,13 @@ static inline instruction_type_t select_sse_division_instruction(variable_size_t
  * Handle an SSE multiplication instruction. By the time we get here, we already
  * know that we're dealing with an SSE operation. This instruction will generate
  * converting moves if such moves are required
+ *
+ * We already have the destination type by the time we get here so we pass it along
+ * as a parameter
  */
-static void handle_sse_division_instruction(instruction_window_t* window){
+static void handle_sse_division_instruction(instruction_window_t* window, generic_type_t* destination_type){
 	//Grab out the first one
 	instruction_t* division_instruction = window->instruction1;
-
-	//This is the type that everything is targeting
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(division_instruction->type_storage.result_type != NULL){
-		destination_type = division_instruction->type_storage.result_type;
-	} else {
-		destination_type = division_instruction->operands.oir.assignee->type;
-	}
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -9073,18 +9033,11 @@ static void handle_sse_division_instruction(instruction_window_t* window){
  * we really want to be using
  */
 static inline void handle_division_instruction(instruction_window_t* window){
+	//Assume it is instruction 1 always
 	instruction_t* division_instruction = window->instruction1;
-	generic_type_t* destination_type = NULL;
 
-	/**
-	 * If we are given a result type we *always* use that. Otherwise
-	 * we default to the assignee
-	 */
-	if(division_instruction->type_storage.result_type != NULL){
-		destination_type = division_instruction->type_storage.result_type;
-	} else {
-		destination_type = division_instruction->operands.oir.assignee->type;
-	}
+	//Grab the destination type from the helper
+	generic_type_t* destination_type = get_destination_type_for_binary_operation_instruction(division_instruction);
 
 	/**
 	 * To dispatch properly here - if we don't have a floating point
@@ -9095,13 +9048,13 @@ static inline void handle_division_instruction(instruction_window_t* window){
 		u_int8_t is_signed = is_type_signed(destination_type);
 
 		if(is_signed == TRUE){
-			handle_signed_division(window);
+			handle_signed_division(window, destination_type);
 		} else {
-			handle_unsigned_division(window);
+			handle_unsigned_division(window, destination_type);
 		}
 
 	} else {
-		handle_sse_division_instruction(window);
+		handle_sse_division_instruction(window, destination_type);
 	}
 }
 
@@ -9220,24 +9173,7 @@ static void handle_cmp_instruction(instruction_window_t* window){
 	u_int8_t used_by_branch_only = instruction->operands.oir.assignee->sets_cc;
 
 	//Store the result type
-	generic_type_t* operator_type;
-
-	/**
-	 * If we have an operator type use that, otherwise we can find it out on the fly
-	 */
-	if(instruction->type_storage.result_type != NULL){
-		operator_type = instruction->type_storage.result_type;
-	} else {
-		/**
-		 * If we have 2 operands, we will find what they both go into. Otherwise
-		 * if we have a const we're just defaulting to the non-const
-		 */
-		if(instruction->operands.oir.operand2 != NULL){
-			operator_type = get_operand_type_for_logical_operation(cfg_reference->type_symtab, instruction->operands.oir.operand1->type, instruction->operands.oir.operand2->type);
-		} else {
-			operator_type = instruction->operands.oir.operand1->type;
-		}
-	}
+	generic_type_t* operator_type = get_destination_type_for_binary_operation_instruction(instruction);
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(operator_type);
@@ -9404,17 +9340,7 @@ static void handle_subtraction_instruction(instruction_window_t* window){
 	instruction_t* subtraction_instruction = window->instruction1;
 
 	//The destination type
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(subtraction_instruction->type_storage.result_type != NULL){
-		destination_type = subtraction_instruction->type_storage.result_type;
-	} else {
-		destination_type = subtraction_instruction->operands.oir.assignee->type;
-	}
+	generic_type_t* destination_type = get_destination_type_for_binary_operation_instruction(subtraction_instruction);
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -9559,18 +9485,8 @@ static void handle_addition_instruction(instruction_window_t* window){
 	//Grab out the first one
 	instruction_t* original_addition = window->instruction1;
 
-	//The destination type
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(original_addition->type_storage.result_type != NULL){
-		destination_type = original_addition->type_storage.result_type;
-	} else {
-		destination_type = original_addition->operands.oir.assignee->type;
-	}
+	//Let the helper unpack/decide what the destination type is
+	generic_type_t* destination_type = get_destination_type_for_binary_operation_instruction(original_addition);
 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
@@ -9907,18 +9823,8 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 	//Grab it out for convenience
 	instruction_t* logical_or = window->instruction1;
 
-	//The destination type
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(logical_or->type_storage.result_type != NULL){
-		destination_type = logical_or->type_storage.result_type;
-	} else {
-		destination_type = logical_or->operands.oir.assignee->type;
-	}
+	//Let the helper determine the destination type
+	generic_type_t* destination_type = get_destination_type_for_binary_operation_instruction(logical_or);
 
 	//Is this a floating point operation or not? This will determine how we handle things
 	u_int8_t is_floating_point = IS_FLOATING_POINT(destination_type);
@@ -10125,18 +10031,8 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 	//Grab it out for convenience
 	instruction_t* logical_and = window->instruction1;
 
-	//The destination type
-	generic_type_t* destination_type;
-
-	/**
-	 * If we are given a result type to use, then we will use it. Otherwise,
-	 * we'll default to the assignee type
-	 */
-	if(logical_and->type_storage.result_type != NULL){
-		destination_type = logical_and->type_storage.result_type;
-	} else {
-		destination_type = logical_and->operands.oir.assignee->type;
-	}
+	//The destination type is determined by the helper
+	generic_type_t* destination_type = get_destination_type_for_binary_operation_instruction(logical_and);
 
 	/**
 	 * Create and insert converting moves if it is required for op1
@@ -10179,9 +10075,11 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		 * the time
 		 */
 		while(cursor != NULL){
-			//Did we find where op1 got assigned?. If so, check to see
-			//if the operation that made it generated a truthful byte value(0 or 1)
-			//or not
+			/**
+			 * Did we find where op1 got assigned?. If so, check to see
+			 * if the operation that made it generated a truthful byte value(0 or 1)
+			 * or not
+			 */
 			if(variables_equal(logical_and->operands.oir.operand1, cursor->operands.oir.assignee, FALSE)){
 				if(does_operator_generate_truthful_byte_value(cursor->op) == TRUE){
 					op1_came_from_setX = TRUE;
@@ -10198,8 +10096,7 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 			cursor = cursor->previous_statement;
 		}
 
-		//We expect that it *not* being from
-		//setX is the most likely case
+		//We expect that it *not* being from setX is the most likely case
 		if(op1_came_from_setX == FALSE){
 			//Let's first emit our test instruction
 			instruction_t* test_instruction = emit_direct_test_instruction(logical_and->operands.oir.operand1, logical_and->operands.oir.operand1);
