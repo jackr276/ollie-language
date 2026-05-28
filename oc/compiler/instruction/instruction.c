@@ -3878,6 +3878,35 @@ static inline void print_sse_multiplication_instruction(FILE* fl, instruction_t*
 
 
 /**
+ * Print a division instruction, in all the forms it can take
+ */
+static inline void print_sse_division_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+	//First we'll print out the appropriate variety of subtraction 
+	switch(instruction->instruction_type){
+		case DIVSS:
+			fprintf(fl, "divss ");
+			break;
+		case DIVSD:
+			fprintf(fl, "divsd ");
+			break;
+		//We'll never get here, just to stop the compiler from complaining
+		default:
+			break;
+	}
+
+	//We don't ever need to worry about an immediate value for SSE instructions
+	print_variable(fl, instruction->operands.x86.source_register1, mode);
+
+	//Needed comma
+	fprintf(fl, ", ");
+
+	//Now print our destination
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
+	fprintf(fl, "\n");
+}
+
+
+/**
  * Print a lea instruction. This will also handle all the complexities around
  * complex addressing modes
  */
@@ -4969,25 +4998,6 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case DIVSS:
 		case DIVSD:
 			print_sse_division_instruction(fl, instruction, mode);
-			break;
-
-		case DIVSS:
-			fprintf(fl, "divss ");
-			print_variable(fl, instruction->operands.x86.source_register1, mode);
-			fprintf(fl, ", ");
-			print_variable(fl, instruction->operands.x86.destination_register, mode);
-			fprintf(fl, "\n");
-
-			break;
-
-		//TODO MAKE ITS OWN HELPER
-		case DIVSD:
-			fprintf(fl, "DIVSD ");
-			print_variable(fl, instruction->operands.x86.source_register1, mode);
-			fprintf(fl, ", ");
-			print_variable(fl, instruction->operands.x86.destination_register, mode);
-			fprintf(fl, "\n");
-
 			break;
 
 		case PAND:
