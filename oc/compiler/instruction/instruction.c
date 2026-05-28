@@ -5779,8 +5779,8 @@ instruction_t* emit_indirect_jump_statement(void* jump_table, three_addr_var_t* 
 	//Let's now populate it with values
 	stmt->statement_type = THREE_ADDR_CODE_INDIRECT_JUMP_STMT;
 
-	//This is going to leverage the OIR lea type for printing
-	stmt->lea_statement_type = OIR_LEA_TYPE_INDEX_AND_SCALE;
+	//Leverage the addressing mode for printing
+	stmt->addressing_mode = ADDRESSING_MODE_INDEX_AND_SCALE;
 
 	//Store the index and multiplier
 	stmt->operands.oir.address_operand2 = index;
@@ -6056,7 +6056,7 @@ instruction_t* emit_global_variable_address_calculation_oir(three_addr_var_t* as
 	lea->statement_type = THREE_ADDR_CODE_LEA_STMT;
 
 	//Global var address calc mode
-	lea->lea_statement_type = OIR_LEA_TYPE_RIP_RELATIVE;
+	lea->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
 
 	//We already know what the destination will be
 	lea->operands.oir.assignee = assignee;
@@ -6068,8 +6068,8 @@ instruction_t* emit_global_variable_address_calculation_oir(three_addr_var_t* as
 	//Op1 is the instruction pointer(relative addressing)
 	lea->operands.oir.address_operand1 = instruction_pointer;
 
-	//The op2 is always the global var itself
-	lea->operands.oir.address_operand2 = remediated_version;
+	//Store this in the rip-relative area
+	lea->operands.oir.rip_offset_var = remediated_version;
 
 	//And give it back
 	return lea;
@@ -6089,7 +6089,7 @@ instruction_t* emit_global_variable_address_calculation_with_offset_oir(three_ad
 	lea->statement_type = THREE_ADDR_CODE_LEA_STMT;
 
 	//Global var address calc mode
-	lea->lea_statement_type = OIR_LEA_TYPE_RIP_RELATIVE_WITH_OFFSET;
+	lea->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
 
 	//We already know what the destination will be
 	lea->operands.oir.assignee = assignee;
@@ -6101,8 +6101,8 @@ instruction_t* emit_global_variable_address_calculation_with_offset_oir(three_ad
 	//Op1 is the instruction pointer(relative addressing)
 	lea->operands.oir.address_operand1 = instruction_pointer;
 
-	//The op2 is always the global var itself
-	lea->operands.oir.address_operand2 = remediated_version;
+	//Store this in the dedicated rip offset area
+	lea->operands.oir.rip_offset_var = remediated_version;
 
 	//Store the constant offset here as well
 	lea->operands.oir.address_offset = constant;
