@@ -1193,7 +1193,7 @@ instruction_t* emit_lea_offset_only(three_addr_var_t* assignee, three_addr_var_t
 	stmt->operands.oir.address_offset = address_offset;
 
 	//This only has registers
-	stmt->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
+	stmt->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 	//And now we give it back
 	return stmt;
@@ -1216,7 +1216,7 @@ instruction_t* emit_lea_operands_only(three_addr_var_t* assignee, three_addr_var
 	stmt->operands.oir.address_operand2 = address_operand2;
 
 	//This only has registers
-	stmt->lea_statement_type = OIR_LEA_TYPE_REGISTERS_ONLY;
+	stmt->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
 
 	//And now we give it back
 	return stmt;
@@ -1240,7 +1240,7 @@ instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, thre
 	stmt->operands.oir.address_multiplier = type_size;
 
 	//This has registers and a multiplier
-	stmt->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_SCALE;
+	stmt->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
 
 	//And now we give it back
 	return stmt;
@@ -1258,10 +1258,11 @@ instruction_t* emit_lea_rip_relative_constant(three_addr_var_t* assignee, three_
 	stmt->statement_type = THREE_ADDR_CODE_LEA_STMT;
 	stmt->operands.oir.assignee = assignee;
 	stmt->operands.oir.address_operand1 = instruction_pointer;
-	stmt->operands.oir.address_operand2 = local_constant;
+	//This goes in the rip offset var
+	stmt->operands.oir.rip_offset_var = local_constant;
 
 	//This is a rip-relative lea
-	stmt->lea_statement_type = OIR_LEA_TYPE_RIP_RELATIVE;
+	stmt->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
 
 	//And now we give it back
 	return stmt;
@@ -1283,7 +1284,7 @@ instruction_t* emit_lea_index_and_scale_only(three_addr_var_t* assignee, three_a
 	stmt->operands.oir.address_multiplier = scale;
 
 	//This has registers and a multiplier
-	stmt->lea_statement_type = OIR_LEA_TYPE_INDEX_AND_SCALE;
+	stmt->addressing_mode = ADDRESSING_MODE_INDEX_AND_SCALE;
 
 	//And now we give it back
 	return stmt;
@@ -2944,9 +2945,117 @@ static void print_immediate_value_no_prefix(FILE* fl, three_addr_const_t* consta
 
 
 /**
- * Print out a complex addressing mode expression
+ * Print out an OIR addressing mode expression. This is specifically just for OIR instructions, there is a separate
+ * version for x86 instructions
  */
-static void print_addressing_mode_expression(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+static void print_OIR_addressing_mode_expression(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+	switch (instruction->addressing_mode) {
+		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+			fprintf(fl, "(");
+			print_variable(fl, instruction->operands.oir.address_operand1, mode);
+			fprintf(fl, ")");
+			break;
+
+		case ADDRESSING_MODE_RIP_RELATIVE:
+			//We want the actual var name here
+			print_variable(fl, instruction->operands.oir.rip_offset_var, mode);
+			fprintf(fl, "(");
+			print_variable(fl, instruction->operands.oir.address_operand1, mode);
+			fprintf(fl, ")");
+		   	break;
+
+		case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
+			print_three_addr_constant(fl, instruction->operands.oir.address_offset);
+			fprintf(fl, "+");
+			print_variable(fl, instruction->operands.oir.rip_offset_var, mode);
+			fprintf(fl, "(");
+			print_variable(fl, instruction->operands.x86.address_register1, mode);
+			fprintf(fl, ")");
+
+		   	break;
+
+		/**
+		 * If we get here, that means we have this kind
+		 * of address mode
+		 *
+		 * (%rax, %rbx, 2)
+		 * (address_calc_reg1, address_calc_reg2, lea_mult)
+		 *
+		 * TODO HERE AND BELOW NOT DONE
+		 */
+		case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+			fprintf(fl, "(");
+			print_variable(fl, instruction->operands.x86.address_register1, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->operands.x86.address_register2, mode);
+			fprintf(fl, ", ");
+			fprintf(fl, "%ld", instruction->operands.x86.address_multiplier);
+			fprintf(fl, ")");
+			break;
+
+		case ADDRESSING_MODE_OFFSET_ONLY:
+			//Only print this if it's not 0
+			print_immediate_value_no_prefix(fl, instruction->operands.x86.address_offset);
+			fprintf(fl, "(");
+			print_variable(fl, instruction->operands.x86.address_register1, mode);
+			fprintf(fl, ")");
+			break;
+
+		case ADDRESSING_MODE_REGISTERS_ONLY:
+			fprintf(fl, "(");
+			print_variable(fl, instruction->operands.x86.address_register1, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->operands.x86.address_register2, mode);
+			fprintf(fl, ")");
+			break;
+
+		case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+			//Only print this if it's not 0
+			print_immediate_value_no_prefix(fl, instruction->operands.x86.address_offset);
+			fprintf(fl, "(");
+			print_variable(fl, instruction->operands.x86.address_register1, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->operands.x86.address_register2, mode);
+			fprintf(fl, ")");
+			break;
+
+		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+			//Only print this if it's not 0
+			print_immediate_value_no_prefix(fl, instruction->operands.x86.address_offset);
+			fprintf(fl, "(");
+			print_variable(fl, instruction->operands.x86.address_register1, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->operands.x86.address_register2, mode);
+			fprintf(fl, ", %ld)", instruction->operands.x86.address_multiplier);
+			break;
+
+		//Index is in address calc reg 2 for this
+		case ADDRESSING_MODE_INDEX_AND_SCALE:
+			fprintf(fl, "( , ");
+			print_variable(fl, instruction->operands.x86.address_register2, mode);
+			fprintf(fl, ", %ld)", instruction->operands.x86.address_multiplier);
+			break;
+			
+		//Index is in address calc reg 2 for this
+		case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+			print_immediate_value_no_prefix(fl, instruction->operands.x86.address_offset);
+			fprintf(fl, "( , ");
+			print_variable(fl, instruction->operands.x86.address_register2, mode);
+			fprintf(fl, ", %ld)", instruction->operands.x86.address_multiplier);
+			break;
+
+		//Do nothing
+		default:
+			break;
+	}
+}
+
+
+/**
+ * Print out an x86 addressing mode expression. This is specifically just for x86 instructions, there is a separate
+ * version for regular OIR instructions
+ */
+static void print_x86_addressing_mode_expression(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	switch (instruction->addressing_mode) {
 		/**
 		 * This is the case where we only have a deref
@@ -3236,7 +3345,7 @@ static void print_general_purpose_register_to_memory_move(FILE* fl, instruction_
 
 	fprintf(fl, ", ");
 	//Let this handle it now
-	print_addressing_mode_expression(fl, instruction, mode);
+	print_x86_addressing_mode_expression(fl, instruction, mode);
 	fprintf(fl, "\n");
 }
 
@@ -3249,7 +3358,7 @@ static void print_general_purpose_memory_to_register_move(FILE* fl, instruction_
 	print_move_instruction(fl, instruction->instruction_type);
 	
 	//The address mode expression comes first
-	print_addressing_mode_expression(fl, instruction, mode);
+	print_x86_addressing_mode_expression(fl, instruction, mode);
 	fprintf(fl, ", ");
 	print_variable(fl, instruction->operands.x86.destination_register, mode);
 	fprintf(fl, "\n");
@@ -3400,7 +3509,7 @@ static void print_sse_register_to_memory_move(FILE* fl, instruction_t* instructi
 	
 	fprintf(fl, ", ");
 	//Let this handle it now
-	print_addressing_mode_expression(fl, instruction, mode);
+	print_x86_addressing_mode_expression(fl, instruction, mode);
 	fprintf(fl, "\n");
 }
 
@@ -3464,7 +3573,7 @@ static void print_sse_memory_to_register_move(FILE* fl, instruction_t* instructi
 	}
 	
 	//The address mode expression comes firsj
-	print_addressing_mode_expression(fl, instruction, mode);
+	print_x86_addressing_mode_expression(fl, instruction, mode);
 	fprintf(fl, ", ");
 	print_variable(fl, instruction->operands.x86.destination_register, mode);
 	fprintf(fl, "\n");
@@ -3927,7 +4036,7 @@ static void print_lea_instruction(FILE* fl, instruction_t* instruction, variable
 	}
 
 	//Now we'll print out one of the various complex addressing modes
-	print_addressing_mode_expression(fl, instruction, mode);
+	print_x86_addressing_mode_expression(fl, instruction, mode);
 
 	fprintf(fl, ", ");
 

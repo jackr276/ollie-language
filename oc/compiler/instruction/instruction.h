@@ -327,6 +327,12 @@ struct instruction_t{
 			three_addr_var_t* address_operand2;
 			//This can never be anything besides a 64 bit integer
 			u_int64_t address_multiplier;
+			/**
+			 * Some variables are represented as RIP offsets. We will use a special
+			 * space here so that they are excluded from the register allocator's
+			 * processing
+			 */
+			three_addr_var_t* rip_offset_var;
 		} oir; 
 
 		/**

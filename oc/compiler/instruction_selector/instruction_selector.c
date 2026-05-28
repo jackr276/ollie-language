@@ -1108,7 +1108,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(stack_offset, u64);
 
 						//This is a lea with an offset only
-						instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
+						instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 					/**
 					 * Otherwise, we'll just swap the var out with the stack pointer since
