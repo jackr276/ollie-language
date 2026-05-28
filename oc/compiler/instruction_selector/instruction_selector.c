@@ -10485,129 +10485,46 @@ static void handle_lea_statement(instruction_t* instruction){
 			break;
 	}
 
-	//This is always the same
-	instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
+	/**
+	 * Since the addressing mode is always the same here, we don't need to do any splitting
+	 * out by address register. In theory, everything that we have don't want should be NULL
+	 * so a blind copy from the OIR section to the x86 section is going to be fine
+	 *
+	 * We go through a standard Extract-Transform-Load(ETL) process to do this
+	 */
 
-	//Go based on whatever the type is
-	switch(instruction->addressing_mode){
-		case ADDRESSING_MODE_OFFSET_ONLY:
-			//The op1 is now our address calc register
-			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
+	/**
+	 * Step 1: Extract all fields(E)
+	 */
+	three_addr_var_t* destination_register = instruction->operands.oir.assignee;
+	three_addr_var_t* address_register1 = instruction->operands.oir.address_operand1;
+	three_addr_var_t* address_register2 = instruction->operands.oir.address_operand2;
+	three_addr_var_t* rip_offset_var = instruction->operands.oir.rip_offset_var;
+	three_addr_const_t* address_offset = instruction->operands.oir.address_offset;
+	u_int64_t address_multiplier = instruction->operands.oir.address_multiplier;
 
-			//Copy the offset constant over
-			instruction->operands.x86.address_offset = instruction->operands.oir.address_offset;
+	/**
+	 * Step 2: Transform the second address register if a type adjustment is needed(T) 
+	 */
+	if(address_register1 != NULL
+		&& address_register2 != NULL
+		&& is_converting_move_required(address_register1->type, address_register2->type) == TRUE){
 
-			break;
-
-		case ADDRESSING_MODE_REGISTERS_ONLY:
-			//Copy over the address calc registers
-			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
-			instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand2;
-
-			/**
-			 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-			 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-			 * must adhere to this one's type
-			 */
-			if(is_converting_move_required(instruction->operands.x86.address_register1->type, instruction->operands.x86.address_register2->type) == TRUE){
-				instruction->operands.x86.address_register2 = create_and_insert_converting_move_instruction(instruction, instruction->operands.x86.address_register2, instruction->operands.x86.address_register1->type);
-			}
-
-			break;
-
-		//Converts to an addressing mode with the trifecta
-		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
-			//Copy over the address calc registers & multiplier
-			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
-			instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand2;
-			instruction->operands.x86.address_multiplier = instruction->operands.oir.address_multiplier; 
-			instruction->operands.x86.address_offset = instruction->operands.oir.address_offset;
-
-			/**
-			 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-			 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-			 * must adhere to this one's type
-			 */
-			if(is_converting_move_required(instruction->operands.x86.address_register1->type, instruction->operands.x86.address_register2->type) == TRUE){
-				instruction->operands.x86.address_register2 = create_and_insert_converting_move_instruction(instruction, instruction->operands.x86.address_register2, instruction->operands.x86.address_register1->type);
-			}
-
-			break;
-
-		case ADDRESSING_MODE_RIP_RELATIVE:
-			//Copy over the address calc register
-			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
-			instruction->operands.x86.rip_offset_var = instruction->operands.oir.rip_offset_var;
-
-			break;
-
-		case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
-			//And the address calc registers
-			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
-			instruction->operands.x86.rip_offset_var = instruction->operands.oir.rip_offset_var;
-			instruction->operands.x86.address_offset = instruction->operands.oir.address_offset;
-
-			break;
-			
-
-		case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
-			//Copy over the address calc registers and offset
-			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
-			instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand2;
-			instruction->operands.x86.address_offset = instruction->operands.oir.address_offset;
-
-			/**
-			 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-			 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-			 * must adhere to this one's type
-			 */
-			if(is_converting_move_required(instruction->operands.x86.address_register1->type, instruction->operands.x86.address_register2->type) == TRUE){
-				instruction->operands.x86.address_register2 = create_and_insert_converting_move_instruction(instruction, instruction->operands.x86.address_register2,
-																														instruction->operands.x86.address_register1->type);
-			}
-
-			break;
-
-		//Translates to the address calc mode of the same name
-		case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-			//Copy over the address calc registers and the multiplier
-			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
-			instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand2;
-			instruction->operands.x86.address_multiplier = instruction->operands.oir.address_multiplier;
-
-			/**
-			 * The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-			 * We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-			 * must adhere to this one's type
-			 */
-			if(is_converting_move_required(instruction->operands.x86.address_register1->type, instruction->operands.x86.address_register2->type) == TRUE){
-				instruction->operands.x86.address_register2 = create_and_insert_converting_move_instruction(instruction, instruction->operands.x86.address_register2, instruction->operands.x86.address_register1->type);
-			}
-
-			//The scale is already stored in the multiplier
-			break;
-
-		case ADDRESSING_MODE_INDEX_AND_SCALE:
-			//Copy over the address register and multiplier
-			instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand2;
-			instruction->operands.x86.address_multiplier = instruction->operands.oir.address_multiplier;
-			
-			break;
-
-		case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
-			//Copy over the address register and the multiplier
-			instruction->operands.x86.address_register2 = instruction->operands.oir.address_operand2;
-			instruction->operands.x86.address_multiplier = instruction->operands.oir.address_multiplier;
-			instruction->operands.x86.address_offset = instruction->operands.oir.address_offset;
-
-			break;
-
-		//This is unreachable and should never happen. Hard error if it does
-		default:
-			printf("Fatal internal compiler error: Unreachable path detected in lea statement translator\n");
-			exit(1);
+		//Let the helper emit and insert the move
+		address_register2 = create_and_insert_converting_move_instruction(instruction, address_register2, address_register1->type);
 	}
+
+	/**
+	 * Step 3: Load the finalized values into their needed spots on the x86 version 
+	 */
+	instruction->operands.x86.destination_register = destination_register;
+	instruction->operands.x86.address_register1 = address_register1;
+	instruction->operands.x86.address_register2 = address_register2;
+	instruction->operands.x86.rip_offset_var = rip_offset_var;
+	instruction->operands.x86.address_offset = address_offset;
+	instruction->operands.x86.address_multiplier = address_multiplier;
 }
+
 
 /**
  * Handle a ret instruction. This will also dynamically
