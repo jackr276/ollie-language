@@ -10489,7 +10489,7 @@ static void handle_lea_statement(instruction_t* instruction){
 	instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
 
 	//Go based on whatever the type is
-	switch(instruction->lea_statement_type){
+	switch(instruction->addressing_mode){
 		case ADDRESSING_MODE_OFFSET_ONLY:
 			//The op1 is now our address calc register
 			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
@@ -12816,11 +12816,11 @@ static inline void handle_indirect_jump(instruction_window_t* window){
  */
 static void combine_lea_with_regular_load_instruction(instruction_window_t* window, instruction_t* lea_statement, instruction_t* load_statement){
 	//Go based on what kind of lea we have
-	switch(lea_statement->lea_statement_type){
+	switch(lea_statement->addressing_mode){
 		/**
 		 * This is our main target with this rule
 		 */
-		case OIR_LEA_TYPE_RIP_RELATIVE:
+		case ADDRESSING_MODE_RIP_RELATIVE:
 			//This will be a rip-relative address
 			load_statement->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
 
@@ -12828,7 +12828,7 @@ static void combine_lea_with_regular_load_instruction(instruction_window_t* wind
 			load_statement->operands.x86.address_register1 = instruction_pointer_variable;
 
 			//Store the rip rleative offset in the rip offset register
-			load_statement->operands.x86.rip_offset_var = lea_statement->operands.oir.address_operand2;
+			load_statement->operands.x86.rip_offset_var = lea_statement->operands.oir.rip_offset_var;
 
 			/**
 			 * We can delete this *if* it's not being used by someone else
@@ -13866,7 +13866,7 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 	if(window->instruction2 != NULL
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
-		&& window->instruction1->lea_statement_type != OIR_LEA_TYPE_RIP_RELATIVE //Nothing to do if we have this
+		&& window->instruction1->addressing_mode != ADDRESSING_MODE_RIP_RELATIVE //Nothing to do if we have this
 		//Is the lea's assignee equal to the offset of the load
 		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.address_operand2, TRUE) == TRUE){
 
@@ -13885,7 +13885,7 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 	if(window->instruction2 != NULL
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET 
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
-		&& window->instruction1->lea_statement_type != OIR_LEA_TYPE_RIP_RELATIVE //Nothing to do if we have this
+		&& window->instruction1->addressing_mode != ADDRESSING_MODE_RIP_RELATIVE //Nothing to do if we have this
 		//Is the lea's assignee equal to the offset of the store
 		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.address_operand2, TRUE) == TRUE){
 
