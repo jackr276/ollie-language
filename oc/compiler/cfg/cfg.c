@@ -812,6 +812,7 @@ static inline three_addr_var_t* emit_direct_floating_point_constant(basic_block_
 			local_constant_temp_var = emit_local_constant_temp_var(local_constant);
 
 			//Emit the load and add it into the block
+			//TODO CAN WE COMBINE TO ONE??
 			instruction_t* f32_lea_load = emit_lea_rip_relative_constant(emit_temp_var(u64), local_constant_temp_var, instruction_pointer_var);
 			add_statement(block, f32_lea_load);
 
@@ -841,6 +842,7 @@ static inline three_addr_var_t* emit_direct_floating_point_constant(basic_block_
 			add_statement(block, f64_lea_load);
 
 			//Now that we have an address, we can get the actual constant out by doing a load
+			//TODO CAN WE COMBINE TO ONE??
 			instruction_t* load_f64 = emit_load_base_address_only(emit_temp_var(f64), f64_lea_load->operands.oir.assignee, f64);
 			add_statement(block, f64_lea_load);
 
@@ -4155,6 +4157,7 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 			add_statement(basic_block, address_load);
 
 			//Emit a load instruction to grab the constant from said address
+			//TODO CAN WE COMBINE TO ONE??
 			const_assignment = emit_load_base_address_only(emit_temp_var(f32), address_load->operands.oir.assignee, f32);
 
 			//Now add the actual assignment into the block
@@ -4217,6 +4220,7 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 			add_statement(basic_block, address_load);
 
 			//Emit a load instruction to grab the constant from the above address
+			//TODO CAN WE COMBINE TO ONE??
 			const_assignment = emit_load_base_address_only(emit_temp_var(f64), address_load->operands.oir.assignee, f64);
 
 			//Get this into the block

@@ -5534,6 +5534,35 @@ instruction_t* emit_load_base_address_and_constant_offset(three_addr_var_t* assi
 
 
 /**
+ * Emit a rip-relative load. This maps to an addressing mode of RIP_RELATIVE
+ */
+instruction_t* emit_load_rip_relative(three_addr_var_t* assignee, three_addr_var_t* rip_relative_variable, three_addr_var_t* instruction_pointer, generic_type_t* memory_read_type){
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	stmt->statement_type = THREE_ADDR_CODE_LOAD_STATEMENT;
+
+	//This maps to an addressing mode of RIP_RELATIVE 
+	stmt->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
+
+	//The assignee that we're loading into
+	stmt->operands.oir.assignee = assignee;
+
+	//The base address is the instruction pointer
+	stmt->operands.oir.address_operand1 = instruction_pointer;
+
+	//The rip relative variable is stored in the special spot
+	stmt->operands.oir.rip_offset_var = rip_relative_variable;
+
+	//Important - store the type that we expect to be getting out of memory
+	stmt->type_storage.memory_read_write_type = memory_read_type;
+
+	//And give it back
+	return stmt;
+
+}
+
+
+/**
  * Emit a jump statement where we jump to the block with the ID provided
  */
 instruction_t* emit_jmp_instruction(void* jumping_to_block){

@@ -752,6 +752,11 @@ instruction_t* emit_load_base_address_and_index(three_addr_var_t* assignee, thre
 instruction_t* emit_load_base_address_and_constant_offset(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* constant_offset, generic_type_t* memory_read_type);
 
 /**
+ * Emit a rip-relative load. This maps to an addressing mode of RIP_RELATIVE
+ */
+instruction_t* emit_load_rip_relative(three_addr_var_t* assignee, three_addr_var_t* rip_relative_variable, three_addr_var_t* instruction_pointer, generic_type_t* memory_read_type);
+
+/**
  * Emit a statement that is assigning a const to a var i.e. var1 <- const
  */
 instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee, three_addr_const_t* constant);
