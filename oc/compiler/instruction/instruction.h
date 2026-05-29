@@ -746,10 +746,10 @@ instruction_t* emit_load_base_address_only(three_addr_var_t* assignee, three_add
 instruction_t* emit_load_base_address_and_index(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_var_t* index, generic_type_t* memory_read_type);
 
 /**
- * Emit a load with constant offset ir code. We take in a base address(op1), 
- * an offset(op1_const), and the value we're loading into(assignee)
+ * Emit a load with a base address and a constant offset. This maps to an
+ * addressing mode of OFFSET_ONLY
  */
-instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* offset, generic_type_t* memory_read_type);
+instruction_t* emit_load_base_address_and_constant_offset(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* constant_offset, generic_type_t* memory_read_type);
 
 /**
  * Emit a statement that is assigning a const to a var i.e. var1 <- const

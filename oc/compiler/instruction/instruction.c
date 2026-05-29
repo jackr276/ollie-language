@@ -5522,22 +5522,24 @@ instruction_t* emit_load_base_address_and_index(three_addr_var_t* assignee, thre
 
 
 /**
- * Emit a load with constant offset ir code. We take in a base address(op1), 
- * an offset(offset), and the value we're loading into(assignee)
+ * Emit a load with a base address and a constant offset. This maps to an
+ * addressing mode of OFFSET_ONLY
  */
-instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* offset, generic_type_t* memory_read_type){
-	//First allocate
+instruction_t* emit_load_base_address_and_constant_offset(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* constant_offset, generic_type_t* memory_read_type){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
-	//Now populate with values
-	stmt->statement_type = THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET;
+	stmt->statement_type = THREE_ADDR_CODE_LOAD_STATEMENT;
+
+	//This maps to an addressing mode of OFFSET_ONLY
+	stmt->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+
 	//The assignee that we're loading into
 	stmt->operands.oir.assignee = assignee;
 	//The op1 is our base address
 	stmt->operands.oir.address_operand1 = base_address;
 
 	//Our offset is stored in "offset", not constant operand
-	stmt->operands.oir.address_offset = offset;
+	stmt->operands.oir.address_offset = constant_offset;
 
 	//Important - store the type that we expect to be getting out of memory
 	stmt->type_storage.memory_read_write_type = memory_read_type;
