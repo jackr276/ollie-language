@@ -210,6 +210,15 @@ static inline three_addr_var_t* unpack_result_package(cfg_result_package_t* resu
 
 
 /**
+ * Simple helper to tell whether something is or is not a store operation. This also has a NULL
+ * guard. It's only real purpose is for code cleanliness
+ */
+static inline u_int8_t is_store_operation(instruction_t* statement){
+	return (statement != NULL && statement->statement_type == THREE_ADDR_CODE_STORE_STATEMENT) ? TRUE : FALSE;
+}
+
+
+/**
  * Is the given f32 negative? We need to use bit manipulation to deterine
  * this because regular float equality will not detect cases like -0.0 == 0.0
  */
@@ -5703,13 +5712,17 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 		//This is always the new final block
 		postoperation_package.final_block = current_block;
 
-	//Otherwise - it is possible that we have a stack variable or reference here. In that case, we'll need to emit a
-	//store to get the variable back to where it needs to be
+	/**
+	 * Otherwise - it is possible that we have a stack variable or reference here. In that case, we'll need to emit a
+	 * store to get the variable back to where it needs to be
+	 */
 	} else if (postfix_node->variable->stack_variable == TRUE){
 		generic_type_t* type = postfix_node->variable->type_defined_as; 
 
-		//Get the version that represents our memory indirection. Be sure to use the "true type" here
-		//just in case we were dealing with a reference
+		/**
+		 * Get the version that represents our memory indirection. Be sure to use the "true type" here
+		 * just in case we were dealing with a reference
+		 */
 		three_addr_var_t* memory_address_var = emit_memory_address_var(postfix_node->variable);
 
 		//Now we need to add the final store
@@ -5867,8 +5880,10 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					add_statement(current_block, assignment_instruction);
 				}
 
-			//Otherwise - it is possible that we have a stack variable or reference here. In that case, we'll need to emit a
-			//store to get the variable back to where it needs to be
+			/**
+			 * Otherwise - it is possible that we have a stack variable or reference here. In that case, we'll need to emit a
+			 * store to get the variable back to where it needs to be
+			 */
 			} else if (unary_expression_child->variable->stack_variable == TRUE){
 				//Type of the variable
 				generic_type_t* type = unary_expression_child->variable->type_defined_as; 
