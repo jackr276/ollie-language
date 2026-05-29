@@ -110,8 +110,6 @@ typedef enum {
 	THREE_ADDR_CODE_LEA_STMT,
 	//A phi function - for SSA analysis only
 	THREE_ADDR_CODE_PHI_FUNC,
-	//A memory access statement
-	THREE_ADDR_CODE_MEM_ACCESS_STMT,
 	//A specialized CLEAR instruction
 	THREE_ADDR_CODE_CLEAR_STMT,
 	//A specialized instruction used when we need temporary stack allocations

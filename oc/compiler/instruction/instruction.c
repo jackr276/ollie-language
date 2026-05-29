@@ -5215,22 +5215,6 @@ instruction_t* emit_memory_copy_instruction(three_addr_var_t* assignee_memory_re
 
 
 /**
- * Emit a memory access statement
- */
-instruction_t* emit_memory_access_instruction(three_addr_var_t* assignee, three_addr_var_t* op1){
-	//First we allocate
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	//Let's now populate it with values
-	stmt->statement_type = THREE_ADDR_CODE_MEM_ACCESS_STMT;
-	stmt->operands.oir.assignee = assignee;
-	stmt->operands.oir.operand1 = op1;
-
-	return stmt;
-}
-
-
-/**
  * Emit a load statement directly. This should only be used during spilling
  */
 instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_t* stack_pointer, type_symtab_t* symtab, u_int64_t offset){

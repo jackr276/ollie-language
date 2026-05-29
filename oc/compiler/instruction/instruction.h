@@ -757,11 +757,6 @@ instruction_t* emit_load_base_address_and_constant_offset(three_addr_var_t* assi
 instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee, three_addr_const_t* constant);
 
 /**
- * Emit a memory access statement
- */
-instruction_t* emit_memory_access_instruction(three_addr_var_t* assignee, three_addr_var_t* op1);
-
-/**
  * Emit a load statement directly. This should only be used during spilling in the register allocator
  */
 instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_t* stack_pointer, type_symtab_t* symtab, u_int64_t offset);
