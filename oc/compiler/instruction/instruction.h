@@ -723,16 +723,16 @@ instruction_t* emit_store_base_address_only(three_addr_var_t* base_address, thre
 instruction_t* emit_store_base_address_and_index(three_addr_var_t* base_address, three_addr_var_t* index, three_addr_var_t* storee, generic_type_t* memory_write_type);
 
 /**
- * Emit a store with offset ir code. We take in a base address(assignee), 
- * a constant offset(op1_const), and the value we're storing(op2)
+ * Emit a store with a base address and a constant offset value. This maps to 
+ * an addressing mode of OFFSET_ONLY
  */
-instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type);
+instruction_t* emit_store_base_address_and_constant_offset(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type);
 
 /**
- * Emit a store constant with offset ir code. We take in a base address(assignee), 
- * a constant offset(op1_const), and the value we're storing(op2)
+ * Emit a store with a base address and constant offset value. This specific
+ * overload allows us to store a constant instead of a variable
  */
-instruction_t* emit_store_const_with_constant_offset_ir_code(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_const_t* storee, generic_type_t* memory_write_type);
+instruction_t* emit_constant_store_base_address_and_constant_offset(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_const_t* storee, generic_type_t* memory_write_type);
 
 /**
  * Emit a load statement. This is like an assignment instruction, but we're explicitly

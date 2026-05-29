@@ -7601,11 +7601,11 @@ static inline void handle_parameter_storage(basic_block_t* basic_block, function
 						//Create the proper kind of store instruction based on the result that we're given
 						switch(result->result_type){
 							case PARAM_RESULT_TYPE_CONST:
-								store_operation = emit_store_const_with_constant_offset_ir_code(stack_pointer_variable, stack_offset, result->param_result.constant_result, parameter_type);
+								store_operation = emit_constant_store_base_address_and_constant_offset(stack_pointer_variable, stack_offset, result->param_result.constant_result, parameter_type);
 								break;
 
 							case PARAM_RESULT_TYPE_VAR:
-								store_operation = emit_store_with_constant_offset_ir_code(stack_pointer_variable, stack_offset, result->param_result.variable_result, parameter_type);
+								store_operation = emit_store_base_address_and_constant_offset(stack_pointer_variable, stack_offset, result->param_result.variable_result, parameter_type);
 								break;
 						}
 
@@ -7672,11 +7672,11 @@ static inline void handle_parameter_storage(basic_block_t* basic_block, function
 						//We need a different assignment based on what kind of result it is
 						switch(result->result_type){
 							case PARAM_RESULT_TYPE_CONST:
-								store_operation = emit_store_const_with_constant_offset_ir_code(stack_pointer_variable, stack_offset, result->param_result.constant_result, parameter_type);
+								store_operation = emit_constant_store_base_address_and_constant_offset(stack_pointer_variable, stack_offset, result->param_result.constant_result, parameter_type);
 								break;
 
 							case PARAM_RESULT_TYPE_VAR:
-								store_operation = emit_store_with_constant_offset_ir_code(stack_pointer_variable, stack_offset, result->param_result.variable_result, parameter_type);
+								store_operation = emit_store_base_address_and_constant_offset(stack_pointer_variable, stack_offset, result->param_result.variable_result, parameter_type);
 								break;
 						}
 
@@ -7717,7 +7717,7 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 	three_addr_const_t* paramcount_constant = emit_direct_integer_or_char_constant(paramcount, u32);
 
 	//Now we have the paramcount store instruction as the very first 4 bytes in this specific region
-	instruction_t* paramcount_store = emit_store_const_with_constant_offset_ir_code(stack_pointer_variable, storage_offset, paramcount_constant, u32);
+	instruction_t* paramcount_store = emit_constant_store_base_address_and_constant_offset(stack_pointer_variable, storage_offset, paramcount_constant, u32);
 
 	//Update this value for our stack management insertion later
 	if(*first_assignment_instruction == NULL){
@@ -7760,7 +7760,7 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 				three_addr_const_t* const_storage_offset = emit_direct_integer_or_char_constant(constant_result_region->function_local_base_address, u64);
 
 				//Now emit the store instruction for the result
-				instruction_t* const_elaborative_param_store = emit_store_const_with_constant_offset_ir_code(stack_pointer_variable, const_storage_offset, result_const, result_const->type); 
+				instruction_t* const_elaborative_param_store = emit_constant_store_base_address_and_constant_offset(stack_pointer_variable, const_storage_offset, result_const, result_const->type); 
 
 				//Add it into the block
 				add_statement(basic_block, const_elaborative_param_store);
@@ -7813,7 +7813,7 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 						var_storage_offset = emit_direct_integer_or_char_constant(variable_result_region->function_local_base_address, u64);
 
 						//Now emit the store instruction for the result
-						var_elaborative_param_store = emit_store_with_constant_offset_ir_code(stack_pointer_variable, var_storage_offset, result_var, equivalent_pointer_type);
+						var_elaborative_param_store = emit_store_base_address_and_constant_offset(stack_pointer_variable, var_storage_offset, result_var, equivalent_pointer_type);
 
 						//Add it into the block
 						add_statement(basic_block, var_elaborative_param_store);
@@ -7831,7 +7831,7 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 						var_storage_offset = emit_direct_integer_or_char_constant(variable_result_region->function_local_base_address, u64);
 
 						//Now emit the store instruction for the result
-						var_elaborative_param_store = emit_store_with_constant_offset_ir_code(stack_pointer_variable, var_storage_offset, result_var, result_var->type); 
+						var_elaborative_param_store = emit_store_base_address_and_constant_offset(stack_pointer_variable, var_storage_offset, result_var, result_var->type); 
 
 						//Add it into the block
 						add_statement(basic_block, var_elaborative_param_store);
@@ -11676,7 +11676,7 @@ static cfg_result_package_t emit_final_initialization(basic_block_t* current_blo
 	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(offset, u64);
 
 	//Now we need to emit the store operation
-	instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(base_address, offset_constant, NULL, inferred_type);
+	instruction_t* store_instruction = emit_store_base_address_and_constant_offset(base_address, offset_constant, NULL, inferred_type);
 
 	/**
 	 * Based on what result type we have we can process accordingly
@@ -11820,7 +11820,7 @@ static cfg_result_package_t emit_string_initializer(basic_block_t* current_block
 		three_addr_const_t* constant = emit_direct_integer_or_char_constant(char_value, char_type);
 
 		//Now finally we'll store it
-		instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(base_address, emit_direct_integer_or_char_constant(stack_offset, u64), NULL, char_type);
+		instruction_t* store_instruction = emit_store_base_address_and_constant_offset(base_address, emit_direct_integer_or_char_constant(stack_offset, u64), NULL, char_type);
 
 		//We can skip the assignment here and just directly put the constant in
 		store_instruction->operands.oir.constant_operand = constant;

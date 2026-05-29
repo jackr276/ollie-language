@@ -5388,6 +5388,9 @@ instruction_t* emit_store_base_address_and_index(three_addr_var_t* base_address,
 	//Now populate with values
 	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
 
+	//This maps to the REGISTERS_ONLY addressing mode
+	stmt->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+
 	//Base address is the first operand
 	stmt->operands.oir.address_operand1 = base_address;
 
@@ -5409,21 +5412,24 @@ instruction_t* emit_store_base_address_and_index(three_addr_var_t* base_address,
 
 
 /**
- * Emit a store with offset ir code. We take in a base address(assignee), 
- * a constant offset(offset), and the value we're storing(op2)
+ * Emit a store with a base address and a constant offset value. This maps to 
+ * an addressing mode of OFFSET_ONLY
  */
-instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type){
+instruction_t* emit_store_base_address_and_constant_offset(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type){
 	//First allocate
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Now populate with values
-	stmt->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
+	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
+
+	//This maps to the OFFSET ONLY addressing mode
+	stmt->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 	//The base address is the first operand
 	stmt->operands.oir.address_operand1 = base_address;
 
 	//This is being dereferenced
-	stmt->operands.oir.address_operand1->is_dereferenced = TRUE;
+	base_address->is_dereferenced = TRUE;
 
 	//The offset placeholder is used for our offset, not constant operand 
 	stmt->operands.oir.address_offset = offset;
@@ -5440,21 +5446,24 @@ instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_ad
 
 
 /**
- * Emit a store constant with offset ir code. We take in a base address(assignee), 
- * a constant offset(constant operand), and the value we're storing(op2)
+ * Emit a store with a base address and constant offset value. This specific
+ * overload allows us to store a constant instead of a variable
  */
-instruction_t* emit_store_const_with_constant_offset_ir_code(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_const_t* storee, generic_type_t* memory_write_type){
+instruction_t* emit_constant_store_base_address_and_constant_offset(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_const_t* storee, generic_type_t* memory_write_type){
 	//First allocate
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Now populate with values
-	stmt->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
+	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
+
+	//This is an OFFSET_ONLY type
+	stmt->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 	//The base address that we're assigning to
 	stmt->operands.oir.address_operand1 = base_address;
 
 	//This is being dereferenced
-	stmt->operands.oir.address_operand1->is_dereferenced = TRUE;
+	base_address->is_dereferenced = TRUE;
 
 	//The offset placeholder is used for our offset, not constant operand 
 	stmt->operands.oir.address_offset = offset;
