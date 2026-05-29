@@ -162,6 +162,24 @@ static void print_instruction_window(instruction_window_t* window){
 
 
 /**
+ * Does the given addressing mode make use of the offset constant field? This quick helper
+ * will let us find out
+ */
+static inline u_int8_t does_addressing_mode_use_offset_constant(memory_addressing_mode_t mode){
+	switch(mode){
+		case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+		case ADDRESSING_MODE_OFFSET_ONLY:
+		case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+		case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * For binary operation instructions, we store their overall "destination type" inside of the "result_type" field.
  * However, due to legacy implementations, this field is not always going to be populated. This special unpacker
  * function here will contain all the logic for every kind of binary operation to unpack and return that field
@@ -2105,8 +2123,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		case THREE_ADDR_CODE_BIN_OP_STMT:
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 		case THREE_ADDR_CODE_STORE_STATEMENT:
-		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 			/**
 			 * If have a value in operand1 *and* it's a memory address,
 			 * we will need to remediate it
@@ -2159,8 +2175,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		case THREE_ADDR_CODE_BIN_OP_STMT:
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 		case THREE_ADDR_CODE_STORE_STATEMENT:
-		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 			/**
 			 * If have a value in operand1 *and* it's a memory address,
 			 * we will need to remediate it
@@ -2214,8 +2228,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			case THREE_ADDR_CODE_BIN_OP_STMT:
 			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 			case THREE_ADDR_CODE_STORE_STATEMENT:
-			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 				/**
 				 * If have a value in operand1 *and* it's a memory address,
 				 * we will need to remediate it
@@ -2558,7 +2570,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	//If we have two consecutive assignment statements
 	if(window->instruction2 != NULL 
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT 
-		&& is_load_operation(window->instruction1) == TRUE){
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_LOAD_STATEMENT){
 		//Grab these out for convenience
 		instruction_t* load = window->instruction1;
 		instruction_t* move = window->instruction2;
@@ -3884,6 +3896,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		instruction_t* binary_operation = window->instruction1;
 		instruction_t* memory_movement = window->instruction2;
 
+
+		switch(memory_movement->statement_type){
+
+		}
+
+
+
 		/**
 		 * We will do simplifications as need be for binary operations
 		 */
@@ -4509,45 +4528,46 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	}
 
 	/**
-	 * Optimize constant offset loads with a 0 offset into regular loads
-	 *
-	 * This:
-	 * 	load t4 <- t3[0]
-	 *
-	 * can become
-	 *  load t4 <- t3
+	 * Optimize addressing modes that use the offset constant if the given offset
+	 * is 0. If we find an instruction with an addressing mode that uses the offset
+	 * constant, it is worth it to do a quick check and see if we can't eliminate
+	 * the offset here entirely
 	 */
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET
+	if(window->instruction1->addressing_mode != ADDRESSING_MODE_NONE
+		&& does_addressing_mode_use_offset_constant(window->instruction1->addressing_mode) == TRUE
 		&& is_constant_value_zero(window->instruction1->operands.oir.address_offset) == TRUE){
-		//First NULL out the constant
-		window->instruction1->operands.oir.address_offset = NULL;
+		//Extract this for ease of use
+		instruction_t* target = window->instruction1;
 
-		//Then just make this a normal load
-		window->instruction1->statement_type = THREE_ADDR_CODE_LOAD_STATEMENT;
+		//NULL out the offset constant
+		target->operands.oir.address_offset = NULL;
 
-		//Counts as a change
-		changed = TRUE;
-	}
+		/**
+		 * Run through all of the addressing modes and convert
+		 * them appropriately
+		 */
+		switch(target->addressing_mode){
+			case ADDRESSING_MODE_OFFSET_ONLY:
+				target->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
+				break;
 
-	/**
-	 * Optimize constant offset stores with a 0 offset into regular stores
-	 *
-	 * This:
-	 * 	store t4[0] <- t3
-	 *
-	 * can become
-	 *  store t4 <- t3
-	 */
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET 
-		&& is_constant_value_zero(window->instruction1->operands.oir.address_offset) == TRUE){
-		//First NULL out the constant
-		window->instruction1->operands.oir.address_offset = NULL;
+			case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+				target->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+				break;
 
-		//Then just make this a normal load
-		window->instruction1->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
+			case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+				target->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
+				break;
 
-		//Counts as a change
-		changed = TRUE;
+			case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
+				target->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
+				break;
+
+			//Should be impossible but just in case
+			default:
+				fprintf(stderr, "Fatal internal compiler error: Unreachable addressing mode hit in 0 simplifier\n");
+				exit(1);
+		}
 	}
 
 	//Return whether or not we changed the block return changed;
@@ -13743,6 +13763,8 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 	 * This is where *a lot* of instructions get generated, so it's worth it to spend compilation time
 	 * compressing these
 	 */
+
+	//TODO IN THEORY THIS IS NOW ALL USELESS
 
 	/**
 	 * Compressing lea constant loads with the rip-relative addressing that
