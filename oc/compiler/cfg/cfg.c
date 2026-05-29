@@ -807,17 +807,16 @@ static inline three_addr_var_t* emit_direct_floating_point_constant(basic_block_
 				add_local_constant_to_cfg(cfg, local_constant);
 			}
 
-			//Emit the temp var for this local function. Note that this temp
-			//var is also how we deal with reference counting for it
+			/**
+			 * Emit the temp var for this local function. Note that this temp
+			 * var is also how we deal with reference counting for it
+			 */
 			local_constant_temp_var = emit_local_constant_temp_var(local_constant);
 
-			//Emit the load and add it into the block
-			//TODO CAN WE COMBINE TO ONE??
-			instruction_t* f32_lea_load = emit_lea_rip_relative_constant(emit_temp_var(u64), local_constant_temp_var, instruction_pointer_var);
-			add_statement(block, f32_lea_load);
-
-			//Now that we have an address, we can get the actual constant out by doing a load
-			instruction_t* load_f32 = emit_load_base_address_only(emit_temp_var(f32), f32_lea_load->operands.oir.assignee, f32);
+			/**
+			 * Emit a rip-relative load for the floating point variable
+			 */
+			instruction_t* load_f32 = emit_load_rip_relative(emit_temp_var(f32), local_constant_temp_var, instruction_pointer_var, f32);
 			add_statement(block, load_f32);
 
 			//Give back whatever assignee we've got
@@ -833,18 +832,17 @@ static inline three_addr_var_t* emit_direct_floating_point_constant(basic_block_
 				add_local_constant_to_cfg(cfg, local_constant);
 			}
 
-			//Emit the temp var for it. This temp var will also handle all of our
-			//reference count tracking
+			/**
+			 * Emit the temp var for it. This temp var will also handle all of our
+			 * reference count tracking
+			 */
 			local_constant_temp_var = emit_local_constant_temp_var(local_constant);
 
-			//Emit the load and add it into the block
-			instruction_t* f64_lea_load = emit_lea_rip_relative_constant(emit_temp_var(u64), local_constant_temp_var, instruction_pointer_var);
-			add_statement(block, f64_lea_load);
-
-			//Now that we have an address, we can get the actual constant out by doing a load
-			//TODO CAN WE COMBINE TO ONE??
-			instruction_t* load_f64 = emit_load_base_address_only(emit_temp_var(f64), f64_lea_load->operands.oir.assignee, f64);
-			add_statement(block, f64_lea_load);
+			/**
+			 * Emit a rip-relative load for the floating point variable
+			 */
+			instruction_t* load_f64 = emit_load_rip_relative(emit_temp_var(f64), local_constant_temp_var, instruction_pointer_var, f64);
+			add_statement(block, load_f64);
 
 			//Give back whatever assignee we've got
 			return load_f64->operands.oir.assignee;
@@ -4072,7 +4070,6 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 	local_constant_t* local_constant;
 	//Holder for the constant assignment
 	instruction_t* const_assignment;
-	instruction_t* address_load;
 
 	/**
 	 * Constants that are: strings, f32, f64, and function pointers require
@@ -4148,17 +4145,9 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 			}
 
 			/**
-			 * We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
-			 * This only gets the address, we still need to do extra work for our constants
+			 * Emit a rip-relative load to get this local constant out
 			 */
-			address_load = emit_lea_rip_relative_constant(emit_temp_var(u64), local_constant_val, instruction_pointer_var);
-
-			//Add it into the block
-			add_statement(basic_block, address_load);
-
-			//Emit a load instruction to grab the constant from said address
-			//TODO CAN WE COMBINE TO ONE??
-			const_assignment = emit_load_base_address_only(emit_temp_var(f32), address_load->operands.oir.assignee, f32);
+			const_assignment = emit_load_rip_relative(emit_temp_var(f32), local_constant_val, instruction_pointer_var, f32);
 
 			//Now add the actual assignment into the block
 			add_statement(basic_block, const_assignment);
@@ -4211,17 +4200,9 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 			}
 
 			/**
-			 * We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
-			 * This only gets the address, we still need to do extra work for our constants
+			 * Emit a rip-relative load to get this local constant out
 			 */
-			address_load = emit_lea_rip_relative_constant(emit_temp_var(u64), local_constant_val, instruction_pointer_var);
-
-			//Add it into the block
-			add_statement(basic_block, address_load);
-
-			//Emit a load instruction to grab the constant from the above address
-			//TODO CAN WE COMBINE TO ONE??
-			const_assignment = emit_load_base_address_only(emit_temp_var(f64), address_load->operands.oir.assignee, f64);
+			const_assignment = emit_load_rip_relative(emit_temp_var(f64), local_constant_val, instruction_pointer_var, f64);
 
 			//Get this into the block
 			add_statement(basic_block, const_assignment);
