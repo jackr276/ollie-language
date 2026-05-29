@@ -3957,24 +3957,34 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 */
 	if(is_memory_movement_operation(window->instruction2) == TRUE
 		&& window->instruction1->operands.oir.assignee != NULL
-		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP){
+		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& window->instruction1->operands.oir.assignee->use_count <= 1){
 		//Extract the two instructions for convenience
 		instruction_t* to_be_combined = window->instruction1;
 		instruction_t* memory_movement = window->instruction2;
 
 		/**
-		 * Based on what this instruction is we may or may not 
-		 * be able to combined it with our memory movement instruction
+		 * There are now two paths that we have. We could have the temp
+		 * assignee as being equal to the very first address operand, which
+		 * will take use down one simplification path. The other option is that
+		 * the second address operand is equal to the assignee, which is a different
+		 * path. These paths are *mutually exclusive*. In the rare event that they
+		 * do match, it will be picked up in the next go around
 		 */
-		switch(to_be_combined->statement_type){
+		if(does_addressing_mode_use_address_operand1(memory_movement->addressing_mode) == TRUE
+			&& variables_equal(memory_movement->operands.oir.address_operand1, to_be_combined->operands.oir.assignee, TRUE) == TRUE){
+			switch(to_be_combined->statement_type){
+				//TODO
 
+			}
 
-			//By default we can't do anything so leave
-			default:
-				break;
+		} else if(does_addressing_mode_use_address_operand2(memory_movement->addressing_mode) == TRUE
+			&& variables_equal(memory_movement->operands.oir.address_operand2, to_be_combined->operands.oir.assignee, TRUE) == TRUE){
+			switch(to_be_combined->statement_type){
+				//TODO
+
+			}
 		}
-
-
 	}
 
 	if(window->instruction2 != NULL
