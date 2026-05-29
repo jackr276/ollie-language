@@ -2402,7 +2402,8 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		 */
 		case THREE_ADDR_CODE_STORE_STATEMENT:
 			fprintf(fl, "store ");
-			print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
+			//Print out the addressing mode expression
+			print_OIR_addressing_mode_expression(fl, stmt, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- ");
 
 			//Finally the storee(op1 or constant operand)
@@ -2412,58 +2413,6 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 				print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
 			}
 			fprintf(fl, "\n");
-			break;
-
-		/**
-		 * These print out like
-		 *
-		 * store x[offset] <- storee
-		 */
-		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-			//First the base address
-			fprintf(fl, "store ");
-			print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
-
-			//Then the constant offset
-			fprintf(fl, "["); 
-			print_three_addr_constant(fl, stmt->operands.oir.address_offset);
-			fprintf(fl, "] <- "); 
-
-			//Finally the storee(op1 or constant operand)
-			if(stmt->operands.oir.operand1 != NULL){
-				print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
-			} else {
-				print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
-			}
-
-			fprintf(fl, "\n");
-
-			break;
-
-		/**
-		 * These print out like
-		 *
-		 * store x[offset] <- storee
-		 */
-		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-			//First the base address(address operand 1)
-			fprintf(fl, "store ");
-			print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
-
-			//Then the variable offset
-			fprintf(fl, "["); 
-			print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
-			fprintf(fl, "] <- "); 
-
-			//Finally the storee(op1 or constant operand)
-			if(stmt->operands.oir.operand1 != NULL){
-				print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
-			} else {
-				print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
-			}
-
-			fprintf(fl, "\n");
-
 			break;
 
 
@@ -2476,52 +2425,8 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "load ");
 			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- "); 
-			print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
-			fprintf(fl, "\n");
-			break;
-
-		/**
-		 * These print out like
-		 *
-		 * load assignee <- x[offset] 
-		 */
-		case THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET:
-			//First the assignee
-			fprintf(fl, "load ");
-			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
-			fprintf(fl, " <- ");
-
-			//Now the base address
-			print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
-
-			//Then the constant offset
-			fprintf(fl, "["); 
-			print_three_addr_constant(fl, stmt->operands.oir.address_offset);
-			fprintf(fl, "]"); 
-
-			fprintf(fl, "\n");
-
-			break;
-
-		/**
-		 * These print out like
-		 *
-		 * store x[offset] <- storee
-		 */
-		case THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET:
-			//First the assignee
-			fprintf(fl, "load ");
-			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
-			fprintf(fl, " <- ");
-
-			//Now the base address
-			print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
-
-			//Then the variable offset
-			fprintf(fl, "["); 
-			print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
-			fprintf(fl, "]"); 
-
+			//Print out the addressing mode expression
+			print_OIR_addressing_mode_expression(fl, stmt, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 			break;
 
