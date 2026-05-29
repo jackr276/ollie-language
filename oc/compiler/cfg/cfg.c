@@ -4800,7 +4800,7 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 		//The current offset is not null, we need to emit some calculation here
 		if(*current_offset != NULL){
 			//Emit the load
-			load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(u64), *base_address, *current_offset, (*base_address)->type);
+			load_instruction = emit_load_base_address_and_index(emit_temp_var(u64), *base_address, *current_offset, (*base_address)->type);
 
 			//Add it into the block
 			add_statement(current_block, load_instruction);
@@ -4998,7 +4998,7 @@ static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block
 		//The current offset is not null, we need to emit some calculation here
 		if(*current_offset != NULL){
 			//Emit the load
-			load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(u64), *base_address, *current_offset, (*base_address)->type);
+			load_instruction = emit_load_base_address_and_index(emit_temp_var(u64), *base_address, *current_offset, (*base_address)->type);
 
 			//Add it into the block
 			add_statement(block, load_instruction);
@@ -5097,7 +5097,7 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 		//The current offset is not null, we need to emit some calculation here
 		if(*current_offset != NULL){
 			//Emit the load
-			load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(u64), *base_address, *current_offset, raw_struct_type);
+			load_instruction = emit_load_base_address_and_index(emit_temp_var(u64), *base_address, *current_offset, raw_struct_type);
 
 			//Add it into the block
 			add_statement(block, load_instruction);
@@ -5176,7 +5176,7 @@ static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block,
 		//The current offset is not null, we need to emit some calculation here
 		if(*current_offset != NULL){
 			//Emit the load
-			load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(u64), *base_address, *current_offset, (*base_address)->type);
+			load_instruction = emit_load_base_address_and_index(emit_temp_var(u64), *base_address, *current_offset, (*base_address)->type);
 
 			//Add it into the block
 			add_statement(block, load_instruction);
@@ -5242,7 +5242,7 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
 		//The current offset is not null, we need to emit some calculation here
 		if(*current_offset != NULL){
 			//Emit the load
-			load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(u64), *base_address, *current_offset, raw_union_type);
+			load_instruction = emit_load_base_address_and_index(emit_temp_var(u64), *base_address, *current_offset, raw_union_type);
 
 			//Add it into the block
 			add_statement(block, load_instruction);
@@ -5528,7 +5528,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 				//This will not be null in the case of structs & arrays
 				if(current_offset != NULL){
 					//Calculate our load here
-					load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(parent_node_type), base_address, current_offset, original_memory_access_type);
+					load_instruction = emit_load_base_address_and_index(emit_temp_var(parent_node_type), base_address, current_offset, original_memory_access_type);
 
 					//Add it into the block
 					add_statement(current_block, load_instruction);

@@ -740,10 +740,10 @@ instruction_t* emit_constant_store_base_address_and_constant_offset(three_addr_v
 instruction_t* emit_load_base_address_only(three_addr_var_t* assignee, three_addr_var_t* base_address, generic_type_t* memory_read_type);
 
 /**
- * Emit a load with offset ir code. We take in a base address(op1), 
- * an offset(op2), and the value we're loading into(assignee)
+ * Emit a load instruction with a base address and index value(variable offset). This maps
+ * to an addressing mode of REGISTERS_ONLY
  */
-instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_var_t* offset, generic_type_t* memory_read_type);
+instruction_t* emit_load_base_address_and_index(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_var_t* index, generic_type_t* memory_read_type);
 
 /**
  * Emit a load with constant offset ir code. We take in a base address(op1), 

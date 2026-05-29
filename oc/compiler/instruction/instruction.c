@@ -5351,10 +5351,8 @@ instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee
  * Emit a store statement that only uses the base address
  */
 instruction_t* emit_store_base_address_only(three_addr_var_t* base_address, three_addr_var_t* storee, generic_type_t* memory_write_type){
-	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
-	//Let's now populate it with values
 	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
 
 	//This is the base address only mode
@@ -5382,10 +5380,8 @@ instruction_t* emit_store_base_address_only(three_addr_var_t* base_address, thre
  * to an addressing mode of REGISTERS_ONLY
  */
 instruction_t* emit_store_base_address_and_index(three_addr_var_t* base_address, three_addr_var_t* index, three_addr_var_t* storee, generic_type_t* memory_write_type){
-	//First allocate
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
-	//Now populate with values
 	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
 
 	//This maps to the REGISTERS_ONLY addressing mode
@@ -5416,10 +5412,8 @@ instruction_t* emit_store_base_address_and_index(three_addr_var_t* base_address,
  * an addressing mode of OFFSET_ONLY
  */
 instruction_t* emit_store_base_address_and_constant_offset(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type){
-	//First allocate
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
-	//Now populate with values
 	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
 
 	//This maps to the OFFSET ONLY addressing mode
@@ -5450,10 +5444,8 @@ instruction_t* emit_store_base_address_and_constant_offset(three_addr_var_t* bas
  * overload allows us to store a constant instead of a variable
  */
 instruction_t* emit_constant_store_base_address_and_constant_offset(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_const_t* storee, generic_type_t* memory_write_type){
-	//First allocate
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
-	//Now populate with values
 	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
 
 	//This is an OFFSET_ONLY type
@@ -5483,10 +5475,8 @@ instruction_t* emit_constant_store_base_address_and_constant_offset(three_addr_v
  * Emit a load instruction that only uses the base address
  */
 instruction_t* emit_load_base_address_only(three_addr_var_t* assignee, three_addr_var_t* base_address, generic_type_t* memory_read_type){
-	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
-	//Let's now populate it with values
 	stmt->statement_type = THREE_ADDR_CODE_LOAD_STATEMENT;
 
 	//This maps to an addressing mode type of BASE_ADDRESS_ONLY
@@ -5505,22 +5495,23 @@ instruction_t* emit_load_base_address_only(three_addr_var_t* assignee, three_add
 
 
 /**
- * Emit a load with offset ir code. We take in a base address(op1), 
- * an offset(op2), and the value we're loading into(assignee)
+ * Emit a load instruction with a base address and index value(variable offset). This maps
+ * to an addressing mode of REGISTERS_ONLY
  */
-instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_var_t* offset, generic_type_t* memory_read_type){
-	//First allocate
+instruction_t* emit_load_base_address_and_index(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_var_t* index, generic_type_t* memory_read_type){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
-	//Now populate with values
-	stmt->statement_type = THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET;
+	stmt->statement_type = THREE_ADDR_CODE_LOAD_STATEMENT;
+
+	//This maps to the addressing mode of REGISTERS_ONLY
+	stmt->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+
 	//The base address that we're assigning to
 	stmt->operands.oir.assignee = assignee;
-	//The op1 is our base address
-	stmt->operands.oir.address_operand1 = base_address;
 
-	//And op2 is our offset
-	stmt->operands.oir.address_operand2 = offset;
+	//Populate the two address operands to reflect REGISTERS_ONLY
+	stmt->operands.oir.address_operand1 = base_address;
+	stmt->operands.oir.address_operand2 = index;
 
 	//Important - store the type that we expect to be getting out of memory
 	stmt->type_storage.memory_read_write_type = memory_read_type;
