@@ -180,6 +180,43 @@ static inline u_int8_t does_addressing_mode_use_offset_constant(memory_addressin
 
 
 /**
+ * Does the given addressing mode use the first address operand?
+ */
+static inline u_int8_t does_addressing_mode_use_address_operand1(memory_addressing_mode_t mode){
+	switch(mode){
+		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+		case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+		case ADDRESSING_MODE_RIP_RELATIVE:
+		case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
+		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+		case ADDRESSING_MODE_REGISTERS_ONLY:
+		case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Does the given addressing mode use the second address operand?
+ */
+static inline u_int8_t does_addressing_mode_use_address_operand2(memory_addressing_mode_t mode){
+	switch(mode){
+		case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+		case ADDRESSING_MODE_REGISTERS_ONLY:
+		case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+		case ADDRESSING_MODE_INDEX_AND_SCALE:
+		case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Is the given instruction some kind of memory movement instruction? This applies to loads and stores. This
  * rule will also check to see if the instruction is NULL
  */
@@ -3913,16 +3950,35 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 *
 	 * The same goes for loads. Since both loads and stores use the exact same addressing mode values, we can handle
 	 * them all in the same rule here
+	 *
+	 * If we have a memory movement operation preceeded by any kind of operation
+	 * that is resulting in a temp assignment(think binary operation, lea, constant assignment, etc.), then
+	 * we will look to see if we are able to combine anything here
 	 */
-	if(is_memory_movement_operation(window->instruction2) == TRUE){
+	if(is_memory_movement_operation(window->instruction2) == TRUE
+		&& window->instruction1->operands.oir.assignee != NULL
+		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP){
+		//Extract the two instructions for convenience
+		instruction_t* to_be_combined = window->instruction1;
+		instruction_t* memory_movement = window->instruction2;
+
+		/**
+		 * Based on what this instruction is we may or may not 
+		 * be able to combined it with our memory movement instruction
+		 */
+		switch(to_be_combined->statement_type){
+
+
+			//By default we can't do anything so leave
+			default:
+				break;
+		}
+
 
 	}
 
 	if(window->instruction2 != NULL
 		&& (window->instruction2->statement_type == THREE_ADDR_CODE_STORE_STATEMENT || window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_STATEMENT)){
-		//Extract for convenience
-		instruction_t* binary_operation = window->instruction1;
-		instruction_t* memory_movement = window->instruction2;
 
 
 		switch(memory_movement->statement_type){
