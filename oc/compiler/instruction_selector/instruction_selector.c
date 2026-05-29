@@ -180,6 +180,25 @@ static inline u_int8_t does_addressing_mode_use_offset_constant(memory_addressin
 
 
 /**
+ * Is the given instruction some kind of memory movement instruction? This applies to loads and stores. This
+ * rule will also check to see if the instruction is NULL
+ */
+static inline u_int8_t is_memory_movement_operation(instruction_t* instruction){
+	if(instruction == NULL){
+		return FALSE;
+	}
+
+	switch(instruction->statement_type){
+		case THREE_ADDR_CODE_LOAD_STATEMENT:
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * For binary operation instructions, we store their overall "destination type" inside of the "result_type" field.
  * However, due to legacy implementations, this field is not always going to be populated. This special unpacker
  * function here will contain all the logic for every kind of binary operation to unpack and return that field
@@ -3879,6 +3898,11 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	/**
 	 * ====================== Combining loads/stores and operations =============
 	 *
+	 *
+	 * TODO NEEDS A COMPLETE RETHINK BASED ON ADDRESSING MODE
+	 *
+	 * TODO ALSO BRING LEAs INTO THE FOLD FOR THIS GIANT RULE
+	 * TODO ALSO BRING CONST ASSIGNMENT IN
 	 * If we have:
 	 *
 	 * t8 <- t7 + 4
@@ -3890,6 +3914,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * The same goes for loads. Since both loads and stores use the exact same addressing mode values, we can handle
 	 * them all in the same rule here
 	 */
+	if(is_memory_movement_operation(window->instruction2) == TRUE){
+
+	}
+
 	if(window->instruction2 != NULL
 		&& (window->instruction2->statement_type == THREE_ADDR_CODE_STORE_STATEMENT || window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_STATEMENT)){
 		//Extract for convenience
@@ -4547,6 +4575,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		 * them appropriately
 		 */
 		switch(target->addressing_mode){
+			case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+				target->addressing_mode = ADDRESSING_MODE_INDEX_AND_SCALE;
+				break;
+
 			case ADDRESSING_MODE_OFFSET_ONLY:
 				target->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
 				break;
