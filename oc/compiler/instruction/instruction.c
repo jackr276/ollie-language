@@ -229,48 +229,6 @@ u_int8_t does_operator_generate_truthful_byte_value(ollie_token_t op){
 
 
 /**
- * Helper function to determine if we have a store operation
- */
-u_int8_t is_store_operation(instruction_t* statement){
-	//Input validation
-	if(statement == NULL){
-		return FALSE;
-	}
-
-	//Only 3 qualifying statements
-	switch(statement->statement_type){
-		case THREE_ADDR_CODE_STORE_STATEMENT:
-		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-			return TRUE;
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
- * Helper function to determine if we have a load operation
- */
-u_int8_t is_load_operation(instruction_t* statement){
-	//Input validation
-	if(statement == NULL){
-		return FALSE;
-	}
-
-	//Only 3 qualifying statements
-	switch(statement->statement_type){
-		case THREE_ADDR_CODE_LOAD_STATEMENT:
-		case THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET:
-		case THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET:
-			return TRUE;
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
  * Is the given instruction a load operation or not?
  */
 u_int8_t is_load_instruction(instruction_t* instruction){
@@ -2438,7 +2396,9 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		/**
 		 * These print out as
 		 *
-		 * store x <- storee
+		 * store <addressing mode> <- storee
+		 *
+		 * Store statements use the unified addressing mode architecture
 		 */
 		case THREE_ADDR_CODE_STORE_STATEMENT:
 			fprintf(fl, "store ");
@@ -2510,7 +2470,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		/**
 		 * These print out like
 		 *
-		 * load assignee <- x_0
+		 * Load statements utilize the addressing mode architecture
 		 */
 		case THREE_ADDR_CODE_LOAD_STATEMENT:
 			fprintf(fl, "load ");

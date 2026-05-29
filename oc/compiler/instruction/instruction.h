@@ -482,16 +482,6 @@ u_int8_t is_operator_relational_operator(ollie_token_t op);
 u_int8_t does_operator_generate_truthful_byte_value(ollie_token_t op);
 
 /**
- * Helper function to determine if we have a store operation
- */
-u_int8_t is_store_operation(instruction_t* statement);
-
-/**
- * Helper function to determine if we have a load operation
- */
-u_int8_t is_load_operation(instruction_t* statement);
-
-/**
  * Is the given instruction a load operation or not?
  */
 u_int8_t is_load_instruction(instruction_t* instruction);
