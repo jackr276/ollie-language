@@ -15,6 +15,7 @@
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/select.h>
 #include <sys/types.h>
 #include <threads.h>
@@ -3959,6 +3960,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction1->operands.oir.assignee != NULL
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction1->operands.oir.assignee->use_count <= 1){
+		//Needed declarations
+		three_addr_const_t* assigned_constant;
+
+
 		//Extract the two instructions for convenience
 		instruction_t* to_be_combined = window->instruction1;
 		instruction_t* memory_movement = window->instruction2;
@@ -3973,16 +3978,50 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		 */
 		if(does_addressing_mode_use_address_operand1(memory_movement->addressing_mode) == TRUE
 			&& variables_equal(memory_movement->operands.oir.address_operand1, to_be_combined->operands.oir.assignee, TRUE) == TRUE){
+			/**
+			 * Go based on what kind of statement we have as the first way to split
+			 */
 			switch(to_be_combined->statement_type){
+				case THREE_ADDR_CODE_ASSN_CONST_STMT:
+					//Extract the constant that we are going to assign
+					assigned_constant = to_be_combined->operands.oir.constant_operand;
+
+					switch(memory_movement->addressing_mode){
+
+					}
+
+
+					break;
+					
+
 				//TODO
 
+				//Unsupported statement combo - just leave
+				default:
+					break;
 			}
 
 		} else if(does_addressing_mode_use_address_operand2(memory_movement->addressing_mode) == TRUE
 			&& variables_equal(memory_movement->operands.oir.address_operand2, to_be_combined->operands.oir.assignee, TRUE) == TRUE){
+			/**
+			 * Go based on what kind of statement we have as the first way to split
+			 */
 			switch(to_be_combined->statement_type){
+				case THREE_ADDR_CODE_ASSN_CONST_STMT:
+					//Extract the constant that we are going to assign
+					assigned_constant = to_be_combined->operands.oir.constant_operand;
+
+					switch(memory_movement->addressing_mode){
+
+					}
+
+					break;
+
 				//TODO
 
+				//Unsupported statement combo - just leave
+				default:
+					break;
 			}
 		}
 	}
