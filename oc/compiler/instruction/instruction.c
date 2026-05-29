@@ -5424,6 +5424,35 @@ instruction_t* emit_store_base_address_and_constant_offset(three_addr_var_t* bas
 
 
 /**
+ * Emit a rip-relative store instruction. This maps to an addressing
+ * mode of RIP_RELATIVE
+ */
+instruction_t* emit_store_rip_relative(three_addr_var_t* instruction_pointer, three_addr_var_t* rip_relative_variable, three_addr_var_t* storee, generic_type_t* memory_write_type){
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
+
+	//This maps to the RIP_RELATIVE addressing mode
+	stmt->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
+
+	//The base address is the instruction pointer
+	stmt->operands.oir.address_operand1 = instruction_pointer;
+
+	//Store the rip relative variable in it's dedicated area
+	stmt->operands.oir.rip_offset_var = rip_relative_variable;
+
+	//What we're storing goes in op1
+	stmt->operands.oir.operand1 = storee;
+
+	//Important - add the type that we expect to be writing to in memory
+	stmt->type_storage.memory_read_write_type = memory_write_type;
+
+	//And give it back
+	return stmt;
+}
+
+
+/**
  * Emit a store with a base address and constant offset value. This specific
  * overload allows us to store a constant instead of a variable
  */

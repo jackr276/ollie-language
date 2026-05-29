@@ -729,6 +729,12 @@ instruction_t* emit_store_base_address_and_index(three_addr_var_t* base_address,
 instruction_t* emit_store_base_address_and_constant_offset(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type);
 
 /**
+ * Emit a rip-relative store instruction. This maps to an addressing
+ * mode of RIP_RELATIVE
+ */
+instruction_t* emit_store_rip_relative(three_addr_var_t* instruction_pointer, three_addr_var_t* rip_relative_variable, three_addr_var_t* storee, generic_type_t* memory_write_type);
+
+/**
  * Emit a store with a base address and constant offset value. This specific
  * overload allows us to store a constant instead of a variable
  */

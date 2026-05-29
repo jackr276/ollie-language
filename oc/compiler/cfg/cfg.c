@@ -11953,6 +11953,8 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 			} else if(let_variable->linked_var != NULL
 				&& (let_variable->linked_var->stack_variable == TRUE
 					|| is_variable_data_segment_variable(let_variable->linked_var) == TRUE)){
+
+				//TODO WHAT ABOUT THIS?
 				/**
 				 * Store the "true" stored type. This will only change if our type is a reference, because
 				 * we need to account for the implicit dereference that's happening
@@ -12035,6 +12037,8 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 			if(let_variable->linked_var != NULL
 				&& (let_variable->linked_var->stack_variable == TRUE
 					|| is_variable_data_segment_variable(let_variable->linked_var) == TRUE)){
+
+				//TODO WHAT ABOUT THIS?
 				/**
 				 * Store the "true" stored type. This will only change if our type is a reference, because
 				 * we need to account for the implicit dereference that's happening
