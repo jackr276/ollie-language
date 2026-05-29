@@ -5348,21 +5348,23 @@ instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee
 
 
 /**
- * Emit a store statement. This is like an assignment instruction, but we're explicitly
- * using stack memory here
+ * Emit a store statement that only uses the base address
  */
-instruction_t* emit_store_ir_code(three_addr_var_t* address, three_addr_var_t* storee, generic_type_t* memory_write_type){
+instruction_t* emit_store_base_address_only(three_addr_var_t* base_address, three_addr_var_t* storee, generic_type_t* memory_write_type){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it with values
 	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
 
+	//This is the base address only mode
+	stmt->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
+
 	//The first address op is the memory address
-	stmt->operands.oir.address_operand1 = address;
+	stmt->operands.oir.address_operand1 = base_address;
 
 	//This is being dereferenced
-	stmt->operands.oir.address_operand1->is_dereferenced = TRUE;
+	base_address->is_dereferenced = TRUE;
 
 	//Important - add the type that we expect to be writing to in memory
 	stmt->type_storage.memory_read_write_type = memory_write_type;
@@ -5376,24 +5378,24 @@ instruction_t* emit_store_ir_code(three_addr_var_t* address, three_addr_var_t* s
 
 
 /**
- * Emit a store with offset ir code. We take in a base address(address_operand1), 
- * a variable offset(address_operand2), and the value we're storing(op1)
+ * Emit a store with a base address and an index value(variable offset). This maps
+ * to an addressing mode of REGISTERS_ONLY
  */
-instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_address, three_addr_var_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type){
+instruction_t* emit_store_base_address_and_index(three_addr_var_t* base_address, three_addr_var_t* index, three_addr_var_t* storee, generic_type_t* memory_write_type){
 	//First allocate
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Now populate with values
-	stmt->statement_type = THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET;
+	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
 
-	//Base address is op1
+	//Base address is the first operand
 	stmt->operands.oir.address_operand1 = base_address;
 
 	//This is being dereferenced
-	stmt->operands.oir.address_operand1->is_dereferenced = TRUE;
+	base_address->is_dereferenced = TRUE;
 
-	//Leverage the address calculation region
-	stmt->operands.oir.address_operand2 = offset;
+	//Now the index goes in here
+	stmt->operands.oir.address_operand2 = index;
 
 	//What we're storing
 	stmt->operands.oir.operand1 = storee;

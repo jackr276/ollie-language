@@ -5501,7 +5501,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 				//This could not be null in the case of structs & arrays
 				if(current_offset != NULL){
 					//Intentionally leave the storee null, it will be populated down the line
-					store_instruction = emit_store_with_variable_offset_ir_code(base_address, current_offset, NULL, original_memory_access_type);
+					store_instruction = emit_store_base_address_and_index(base_address, current_offset, NULL, original_memory_access_type);
 
 					//Add it into the block
 					add_statement(current_block, store_instruction);
@@ -5512,7 +5512,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 				//Otherwise, this means that the current offset is null
 				} else {
 					//Emit the store here - remember we leave the op1 NULL so that a later rule can fill it in
-					store_instruction = emit_store_ir_code(base_address, NULL, original_memory_access_type);
+					store_instruction = emit_store_base_address_only(base_address, NULL, original_memory_access_type);
 
 					//Add it into our block
 					add_statement(current_block, store_instruction);
@@ -5726,7 +5726,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 		three_addr_var_t* memory_address_var = emit_memory_address_var(postfix_node->variable);
 
 		//Now we need to add the final store
-		instruction_t* store_instruction = emit_store_ir_code(memory_address_var, assignee, type);
+		instruction_t* store_instruction = emit_store_base_address_only(memory_address_var, assignee, type);
 
 		//Get this in there
 		add_statement(current_block, store_instruction);
@@ -5892,7 +5892,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				three_addr_var_t* memory_address_var = emit_memory_address_var(unary_expression_child->variable);
 
 				//Now we need to add the final store
-				instruction_t* store_instruction = emit_store_ir_code(memory_address_var, assignee, type);
+				instruction_t* store_instruction = emit_store_base_address_only(memory_address_var, assignee, type);
 
 				//Get this in there
 				add_statement(current_block, store_instruction);
@@ -5970,7 +5970,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			if(unary_expression_parent->side == SIDE_TYPE_LEFT &&
 				(unary_expression_parent->next_sibling != NULL && unary_expression_parent->next_sibling->side == SIDE_TYPE_RIGHT)){
 				//We will intentionally leave op1 blank so that it can be filled in down the line
-				instruction_t* store_instruction = emit_store_ir_code(assignee, NULL, dereferenced_type);
+				instruction_t* store_instruction = emit_store_base_address_only(assignee, NULL, dereferenced_type);
 
 				//Now let's get this into the block
 				add_statement(current_block, store_instruction);
@@ -6635,7 +6635,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				three_addr_var_t* memory_address = emit_memory_address_var(left_hand_var->linked_var);
 
 				//Now for the final store code
-				instruction_t* final_assignment = emit_store_ir_code(memory_address, result_var, left_hand_var->type);
+				instruction_t* final_assignment = emit_store_base_address_only(memory_address, result_var, left_hand_var->type);
 
 				//Now add thi statement in here
 				add_statement(current_block, final_assignment);
@@ -6733,7 +6733,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				three_addr_var_t* memory_address = emit_memory_address_var(left_hand_var->linked_var);
 
 				//Now for the final store code
-				instruction_t* final_assignment = emit_store_ir_code(memory_address, NULL, left_hand_var->type);
+				instruction_t* final_assignment = emit_store_base_address_only(memory_address, NULL, left_hand_var->type);
 
 				//This guy's operand is the result constant
 				final_assignment->operands.oir.constant_operand = right_hand_package.result_value.result_const;
@@ -11159,7 +11159,7 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 			three_addr_var_t* parameter_var = emit_memory_address_var(parameter);
 
 			//Now we'll need to do our initial load
-			instruction_t* store_code = emit_store_ir_code(parameter_var, emit_var(parameter), parameter->type_defined_as);
+			instruction_t* store_code = emit_store_base_address_only(parameter_var, emit_var(parameter), parameter->type_defined_as);
 
 			//Add it into the starting block
 			add_statement(function_entry_block, store_code);
@@ -11959,7 +11959,7 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 				three_addr_var_t* base_address = emit_memory_address_var(let_variable->linked_var);
 				
 				//Emit the store code
-				instruction_t* store_statement = emit_store_ir_code(base_address, let_result_var, true_stored_type);
+				instruction_t* store_statement = emit_store_base_address_only(base_address, let_result_var, true_stored_type);
 						
 				//Now add thi statement in here
 				add_statement(current_block, store_statement);
@@ -12041,7 +12041,7 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 				three_addr_var_t* base_address = emit_memory_address_var(let_variable->linked_var);
 				
 				//Emit the store code
-				instruction_t* store_statement = emit_store_ir_code(base_address, NULL, true_stored_type);
+				instruction_t* store_statement = emit_store_base_address_only(base_address, NULL, true_stored_type);
 
 				//Set the store statement's op1_const to be this
 				store_statement->operands.oir.constant_operand = expression_results.result_value.result_const;

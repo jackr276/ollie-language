@@ -712,16 +712,15 @@ instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_add
 instruction_t* emit_memory_copy_instruction(three_addr_var_t* assignee_memory_region, three_addr_var_t* source_memory_region, u_int64_t byte_amount_to_copy);
 
 /**
- * Emit a store statement. This is like an assignment instruction, but we're explicitly
- * using stack memory here
+ * Emit a store statement that only uses the base address
  */
-instruction_t* emit_store_ir_code(three_addr_var_t* address, three_addr_var_t* storee, generic_type_t* memory_write_type);
+instruction_t* emit_store_base_address_only(three_addr_var_t* base_address, three_addr_var_t* storee, generic_type_t* memory_write_type);
 
 /**
- * Emit a store with offset ir code. We take in a base address(assignee), 
- * an offset(op1), and the value we're storing(op2)
+ * Emit a store with a base address and an index value(variable offset). This maps
+ * to an addressing mode of REGISTERS_ONLY
  */
-instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_address, three_addr_var_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type);
+instruction_t* emit_store_base_address_and_index(three_addr_var_t* base_address, three_addr_var_t* index, three_addr_var_t* storee, generic_type_t* memory_write_type);
 
 /**
  * Emit a store with offset ir code. We take in a base address(assignee), 
