@@ -5480,17 +5480,21 @@ instruction_t* emit_constant_store_base_address_and_constant_offset(three_addr_v
 
 
 /**
- * Emit a load statement. This is like an assignment instruction, but we're explicitly
- * using stack memory here
+ * Emit a load instruction that only uses the base address
  */
-instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1, generic_type_t* memory_read_type){
+instruction_t* emit_load_base_address_only(three_addr_var_t* assignee, three_addr_var_t* base_address, generic_type_t* memory_read_type){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it with values
 	stmt->statement_type = THREE_ADDR_CODE_LOAD_STATEMENT;
+
+	//This maps to an addressing mode type of BASE_ADDRESS_ONLY
+	stmt->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
+
+	//The base address is in operand1
 	stmt->operands.oir.assignee = assignee;
-	stmt->operands.oir.address_operand1 = op1;
+	stmt->operands.oir.address_operand1 = base_address;
 
 	//Important - store the type that we expect to be getting out of memory
 	stmt->type_storage.memory_read_write_type = memory_read_type;

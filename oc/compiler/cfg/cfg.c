@@ -816,7 +816,7 @@ static inline three_addr_var_t* emit_direct_floating_point_constant(basic_block_
 			add_statement(block, f32_lea_load);
 
 			//Now that we have an address, we can get the actual constant out by doing a load
-			instruction_t* load_f32 = emit_load_ir_code(emit_temp_var(f32), f32_lea_load->operands.oir.assignee, f32);
+			instruction_t* load_f32 = emit_load_base_address_only(emit_temp_var(f32), f32_lea_load->operands.oir.assignee, f32);
 			add_statement(block, load_f32);
 
 			//Give back whatever assignee we've got
@@ -841,7 +841,7 @@ static inline three_addr_var_t* emit_direct_floating_point_constant(basic_block_
 			add_statement(block, f64_lea_load);
 
 			//Now that we have an address, we can get the actual constant out by doing a load
-			instruction_t* load_f64 = emit_load_ir_code(emit_temp_var(f64), f64_lea_load->operands.oir.assignee, f64);
+			instruction_t* load_f64 = emit_load_base_address_only(emit_temp_var(f64), f64_lea_load->operands.oir.assignee, f64);
 			add_statement(block, f64_lea_load);
 
 			//Give back whatever assignee we've got
@@ -4155,7 +4155,7 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 			add_statement(basic_block, address_load);
 
 			//Emit a load instruction to grab the constant from said address
-			const_assignment = emit_load_ir_code(emit_temp_var(f32), address_load->operands.oir.assignee, f32);
+			const_assignment = emit_load_base_address_only(emit_temp_var(f32), address_load->operands.oir.assignee, f32);
 
 			//Now add the actual assignment into the block
 			add_statement(basic_block, const_assignment);
@@ -4217,7 +4217,7 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 			add_statement(basic_block, address_load);
 
 			//Emit a load instruction to grab the constant from the above address
-			const_assignment = emit_load_ir_code(emit_temp_var(f64), address_load->operands.oir.assignee, f64);
+			const_assignment = emit_load_base_address_only(emit_temp_var(f64), address_load->operands.oir.assignee, f64);
 
 			//Get this into the block
 			add_statement(basic_block, const_assignment);
@@ -4388,7 +4388,7 @@ static inline three_addr_var_t* emit_automatic_load_from_memory(basic_block_t* b
 
 	//Emit the load instruction. We need to be sure to use the "true type" here in case we are dealing with 
 	//a reference
-	instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(type), memory_address, type);
+	instruction_t* load_instruction = emit_load_base_address_only(emit_temp_var(type), memory_address, type);
 
 	//Add it to the block
 	add_statement(block, load_instruction);
@@ -4814,7 +4814,7 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 		//If we get here, we have an empty offset so we just need a regular load
 		} else {
 			//Regular load here
-			load_instruction = emit_load_ir_code(emit_temp_var(u64), *base_address, (*base_address)->type);
+			load_instruction = emit_load_base_address_only(emit_temp_var(u64), *base_address, (*base_address)->type);
 			
 			//Get it into the block
 			add_statement(current_block, load_instruction);
@@ -5012,7 +5012,7 @@ static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block
 		//If we get here, we have an empty offset so we just need a regular load
 		} else {
 			//Regular load here
-			load_instruction = emit_load_ir_code(emit_temp_var(u64), *base_address, (*base_address)->type);
+			load_instruction = emit_load_base_address_only(emit_temp_var(u64), *base_address, (*base_address)->type);
 			
 			//Get it into the block
 			add_statement(block, load_instruction);
@@ -5111,7 +5111,7 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 		//If we get here, we have an empty offset so we just need a regular load
 		} else {
 			//Regular load here
-			load_instruction = emit_load_ir_code(emit_temp_var(u64), *base_address, raw_struct_type);
+			load_instruction = emit_load_base_address_only(emit_temp_var(u64), *base_address, raw_struct_type);
 			
 			//Get it into the block
 			add_statement(block, load_instruction);
@@ -5190,7 +5190,7 @@ static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block,
 		//If we get here, we have an empty offset so we just need a regular load
 		} else {
 			//Regular load here
-			load_instruction = emit_load_ir_code(emit_temp_var(u64), *base_address, (*base_address)->type);
+			load_instruction = emit_load_base_address_only(emit_temp_var(u64), *base_address, (*base_address)->type);
 			
 			//Get it into the block
 			add_statement(block, load_instruction);
@@ -5256,7 +5256,7 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
 		//If we get here, we have an empty offset so we just need a regular load
 		} else {
 			//Regular load here
-			load_instruction = emit_load_ir_code(emit_temp_var(u64), *base_address, raw_union_type);
+			load_instruction = emit_load_base_address_only(emit_temp_var(u64), *base_address, raw_union_type);
 			
 			//Get it into the block
 			add_statement(block, load_instruction);
@@ -5539,7 +5539,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 				//Otherwise we have a null current offset, so we're just relying on the base address
 				} else {
 					//Emit the load instruction between the base address and the parent node type
-					load_instruction = emit_load_ir_code(emit_temp_var(parent_node_type), base_address, original_memory_access_type);
+					load_instruction = emit_load_base_address_only(emit_temp_var(parent_node_type), base_address, original_memory_access_type);
 
 					//Add it into the block
 					add_statement(current_block, load_instruction);
@@ -5985,7 +5985,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 */
 			} else {
 				//If the side type here is right, we'll need a load instruction
-				instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(unary_expression_parent->inferred_type), assignee, dereferenced_type);
+				instruction_t* load_instruction = emit_load_base_address_only(emit_temp_var(unary_expression_parent->inferred_type), assignee, dereferenced_type);
 
 				//Add it in
 				add_statement(current_block, load_instruction);
@@ -6784,7 +6784,7 @@ static cfg_result_package_t visit_paramcount_statement(basic_block_t* basic_bloc
 	three_addr_var_t* paramcount_result = emit_temp_var(paramcount_node->inferred_type);
 
 	//Read the first 4 bytes(so in reality we have no offset)
-	instruction_t* paramcount_load = emit_load_ir_code(paramcount_result, base_address, paramcount_node->inferred_type);
+	instruction_t* paramcount_load = emit_load_base_address_only(paramcount_result, base_address, paramcount_node->inferred_type);
 
 	//Add it into the block
 	add_statement(basic_block, paramcount_load);

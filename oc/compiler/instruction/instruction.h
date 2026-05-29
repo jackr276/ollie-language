@@ -735,10 +735,9 @@ instruction_t* emit_store_base_address_and_constant_offset(three_addr_var_t* bas
 instruction_t* emit_constant_store_base_address_and_constant_offset(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_const_t* storee, generic_type_t* memory_write_type);
 
 /**
- * Emit a load statement. This is like an assignment instruction, but we're explicitly
- * using stack memory here
+ * Emit a load instruction that only uses the base address
  */
-instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1, generic_type_t* memory_read_type);
+instruction_t* emit_load_base_address_only(three_addr_var_t* assignee, three_addr_var_t* base_address, generic_type_t* memory_read_type);
 
 /**
  * Emit a load with offset ir code. We take in a base address(op1), 
