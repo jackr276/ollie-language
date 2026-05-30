@@ -4031,6 +4031,68 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				 * is equal to the result of the binary operation
 				 */
 				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+					switch(to_be_combined->addressing_mode){
+						/**
+						 * Combine:
+						 * 	t5 <- t6 + 4 
+						 * 	store (t5) <- 8
+						 *
+						 * Into
+						 * store 4(t6) <- 8
+						 */
+						case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+							//Copy the operands over
+							memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+							memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
+
+							//Update the addressing mode
+							memory_movement->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+
+							//Scrap the old binary operation
+							delete_statement(to_be_combined);
+
+							//Rebuilt around the memory movement
+							reconstruct_window(window, memory_movement);
+
+							changed = TRUE;
+							break;
+
+						/**
+						 * Combine:
+						 * 	t5 <- t6 + 4 
+						 * 	store 8(t5, t7) <- 8
+						 *
+						 * Into
+						 * store 12(t6, t7) <- 8
+						 */
+						case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+							//Add the first instruction's constant to the existing offset
+							add_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+
+							//Copy the operand over
+							memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+
+							//No mode changes, just delete the old bin op
+							delete_statement(to_be_combined);
+
+							//Rebuild around the memory movement
+							reconstruct_window(window, memory_movement);
+
+							changed = TRUE;
+							break;
+
+						case ADDRESSING_MODE_RIP_RELATIVE:
+						case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
+						case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+						case ADDRESSING_MODE_REGISTERS_ONLY:
+						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+
+
+						//Unsupported - just do nothing
+						default:
+							break;
+					}
+
 					//TODO
 					break;
 
