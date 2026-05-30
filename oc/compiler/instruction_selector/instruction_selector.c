@@ -3933,28 +3933,14 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
+
 	/**
 	 * ====================== Combining loads/stores and operations =============
-	 *
-	 *
-	 * TODO NEEDS A COMPLETE RETHINK BASED ON ADDRESSING MODE
-	 *
-	 * TODO ALSO BRING LEAs INTO THE FOLD FOR THIS GIANT RULE
-	 * TODO ALSO BRING CONST ASSIGNMENT IN
-	 * If we have:
-	 *
-	 * t8 <- t7 + 4
-	 * store t8 <- t5
-	 *
-	 * We can instead combine this to be
-	 * store t7[4] <- t5
-	 *
-	 * The same goes for loads. Since both loads and stores use the exact same addressing mode values, we can handle
-	 * them all in the same rule here
-	 *
 	 * If we have a memory movement operation preceeded by any kind of operation
 	 * that is resulting in a temp assignment(think binary operation, lea, constant assignment, etc.), then
-	 * we will look to see if we are able to combine anything here
+	 * we will look to see if we are able to combine anything here. There are instances where we are able
+	 * to smash two instructions into one big addressing mode expression, which is a win for us in terms
+	 * of overall complexity and instruction count
 	 */
 	if(is_memory_movement_operation(window->instruction2) == TRUE
 		&& window->instruction1->operands.oir.assignee != NULL
@@ -3997,13 +3983,18 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 					changed = TRUE;
 					break;
+					
+				case THREE_ADDR_CODE_BIN_OP_STMT:
+					//TODO
+					break;
 
-				//TODO
-				//
-				//
-				//
-				//
-				//
+				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+					//TODO
+					break;
+
+				case THREE_ADDR_CODE_LEA_STMT:
+					//TODO
+					break;
 
 				//Unsupported statement combo - just leave
 				default:
@@ -4053,6 +4044,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							//Add the two constants(result in the first operand)
 							add_constants(memory_movement->operands.oir.address_offset, assigned_constant);
 
+							//NULL out the old second operand
+							memory_movement->operands.oir.address_operand2 = NULL;
+
 							//Memory mode is now just an offset
 							memory_movement->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
@@ -4083,6 +4077,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							//Memory mode is now just an offset
 							memory_movement->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
+							//NULL out the old second operand
+							memory_movement->operands.oir.address_operand2 = NULL;
+
 							//Delete the constant assignment
 							delete_statement(to_be_combined);
 
@@ -4106,6 +4103,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 							//Change the addressing mode to OFFSET_ONLY
 							memory_movement->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+
+							//NULL out the old second operand
+							memory_movement->operands.oir.address_operand2 = NULL;
 
 							//Delete the constant assignment
 							delete_statement(to_be_combined);
@@ -4131,6 +4131,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							//Then bring it over as the address offset
 							memory_movement->operands.oir.address_offset = assigned_constant;
 
+							//NULL out the old second operand
+							memory_movement->operands.oir.address_operand2 = NULL;
+
 							//Change the addressing mode to OFFSET_ONLY
 							memory_movement->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
@@ -4150,13 +4153,17 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 					break;
 
-				//TODO
-				//
-				//
-				//
-				//
-				//
-				//
+				case THREE_ADDR_CODE_BIN_OP_STMT:
+					//TODO
+					break;
+
+				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+					//TODO
+					break;
+
+				case THREE_ADDR_CODE_LEA_STMT:
+					//TODO
+					break;
 
 				//Unsupported statement combo - just leave
 				default:
@@ -4604,98 +4611,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
-
-	/**
-	 * Optimize loads and stores with variable offsets into one's that have constant offsets. Also
-	 * reduce redundant copy operations if need be
-	 *
-	 * We'll take something like:
-	 * t3 <- 4
-	 * load t5 <- t4[t3]
-	 *
-	 * And make it:
-	 *
-	 * load t5 <- t4[4]
-	 *
-	 * Since loads and stores have the same underlying memory access architecture in OIR, we can
-	 * handle both instruction types in one go
-	 */
-	if(window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET
-		|| window->instruction2->statement_type == THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET){
-		//Extract these for our convenience
-		instruction_t* memory_access = window->instruction2;
-		instruction_t* preceeding_instruction = window->instruction1;
-
-		switch(preceeding_instruction->statement_type){
-			case THREE_ADDR_CODE_ASSN_CONST_STMT:
-				//These conditions must be met for it to be ok for us to do this
-				if(preceeding_instruction->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& preceeding_instruction->operands.oir.assignee->use_count == 1
-					&& variables_equal(preceeding_instruction->operands.oir.assignee, memory_access->operands.oir.address_operand2, FALSE) == TRUE){
-
-					//Update the type based on what we had previously
-					switch(memory_access->statement_type){
-						case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-							memory_access->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
-							break;
-
-						case THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET:
-							memory_access->statement_type = THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET;
-							break;
-
-						//Completely unreachable
-						default:
-							break;
-					}
-
-					//We don't want to have this in here anymore
-					memory_access->operands.oir.address_operand2->use_count--;
-					memory_access->operands.oir.address_operand2 = NULL;
-
-					//Copy the constant over
-					memory_access->operands.oir.address_offset = preceeding_instruction->operands.oir.constant_operand;
-
-					//We can delete the entire assignment statement
-					delete_statement(preceeding_instruction);
-
-					//Rebuilt around the memory access
-					reconstruct_window(window, memory_access);
-
-					//This counts as change
-					changed = TRUE;
-				}
-
-				break;
-
-			/**
-			 * Handle an assign statement. Unlike before we aren't fundamentally
-			 * changing the instruction, just replacing a variable
-			 */
-			case THREE_ADDR_CODE_ASSN_STMT:
-				if(preceeding_instruction->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& preceeding_instruction->operands.oir.assignee->use_count == 1
-					&& variables_equal(preceeding_instruction->operands.oir.assignee, memory_access->operands.oir.address_operand2, FALSE) == TRUE){
-
-					//Copy the value over
-					memory_access->operands.oir.address_operand2 = preceeding_instruction->operands.oir.operand1;
-
-					//The assignment instruction itself is now useless
-					delete_statement(preceeding_instruction);
-
-					//Rebuild the window around the one that we have now
-					reconstruct_window(window, memory_access);
-
-					//Counts as a change
-					changed = TRUE;
-				}
-
-				break;
-
-			//By default just ignore and do nothing
-			default:
-				break;
-		}
-	}
 
 	/**
 	 * Optimize addressing modes that use the offset constant if the given offset
