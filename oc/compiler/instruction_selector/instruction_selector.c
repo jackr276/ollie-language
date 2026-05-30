@@ -4101,14 +4101,28 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							changed = TRUE;
 							break;
 
+						/**
+						 * Combine:
+						 * 	t5 <- t6 + 4 
+						 * 	store 8(t5) <- 8
+						 *
+						 * Into
+						 * store 12(t6) <- 8
+						 */
 						case ADDRESSING_MODE_OFFSET_ONLY:
+							//Add the new constant to the existing offset
+							add_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
 
+							//Copy the operand over
+							memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
 
-							//TODO
-							//
-							//
-							//
-							//
+							//Scrap the old binary operation
+							delete_statement(to_be_combined);
+
+							//Rebuilt around the memory movement
+							reconstruct_window(window, memory_movement);
+
+							changed = TRUE;
 							break;
 
 						/**
