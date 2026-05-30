@@ -4081,8 +4081,55 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							changed = TRUE;
 							break;
 
+						/**
+						 * Combine:
+						 * 	t5 <- t6 + 4 
+						 * 	store x1(t5) <- 8
+						 *
+						 * Into
+						 * store 4+x1(t6) <- 8
+						 */
 						case ADDRESSING_MODE_RIP_RELATIVE:
+							//Copy the offset and operand over
+							memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+							memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
+
+							//This is now RIP-relative with an offset
+							memory_movement->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+
+							//Scrap the old binary operation
+							delete_statement(to_be_combined);
+
+							//Rebuild around the memory movement
+							reconstruct_window(window, memory_movement);
+
+							changed = TRUE;
+							break;
+
+						/**
+						 * Combine:
+						 * 	t5 <- t6 + 4 
+						 * 	store 8+x1(t5) <- 8
+						 *
+						 * Into
+						 * store 12+x1(t6) <- 8
+						 */
 						case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
+							//Add the first instruction's constant to the existing operand
+							add_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+
+							//Copy the operand over
+							memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+
+							//Scrap the old binary operation
+							delete_statement(to_be_combined);
+
+							//Rebuild around the memory movement
+							reconstruct_window(window, memory_movement);
+
+							changed = TRUE;
+							break;
+
 						case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
 						case ADDRESSING_MODE_REGISTERS_ONLY:
 						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
