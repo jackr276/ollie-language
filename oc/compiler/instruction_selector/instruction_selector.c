@@ -3982,6 +3982,22 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * Go based on what kind of statement we have as the first way to split
 			 */
 			switch(to_be_combined->statement_type){
+				/**
+				 * Easy case here - no addressing mode change just copy the result over
+				 */
+				case THREE_ADDR_CODE_ASSN_STMT:
+					//Copy it over
+					memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+
+					//Scrap the first statement
+					delete_statement(to_be_combined);
+
+					//Rebuilt the window around the memory movement
+					reconstruct_window(window, memory_movement);
+
+					changed = TRUE;
+					break;
+				
 				case THREE_ADDR_CODE_ASSN_CONST_STMT:
 					//Extract the constant that we are going to assign
 					assigned_constant = to_be_combined->operands.oir.constant_operand;
@@ -4007,6 +4023,22 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * Go based on what kind of statement we have as the first way to split
 			 */
 			switch(to_be_combined->statement_type){
+				/**
+				 * Easy case here - no addressing mode change just copy the result over
+				 */
+				case THREE_ADDR_CODE_ASSN_STMT:
+					//Copy it over into the second address operand
+					memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+
+					//Scrap the first statement
+					delete_statement(to_be_combined);
+
+					//Rebuilt the window around the memory movement
+					reconstruct_window(window, memory_movement);
+
+					changed = TRUE;
+					break;
+
 				case THREE_ADDR_CODE_ASSN_CONST_STMT:
 					//Extract the constant that we are going to assign
 					assigned_constant = to_be_combined->operands.oir.constant_operand;
@@ -4025,14 +4057,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			}
 		}
 	}
-
-	if(window->instruction2 != NULL
-		&& (window->instruction2->statement_type == THREE_ADDR_CODE_STORE_STATEMENT || window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_STATEMENT)){
-
-
-		switch(memory_movement->statement_type){
-
-		}
 
 
 
