@@ -186,6 +186,7 @@ static inline u_int8_t does_addressing_mode_use_offset_constant(memory_addressin
 static inline u_int8_t does_addressing_mode_use_address_operand1(memory_addressing_mode_t mode){
 	switch(mode){
 		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+		case ADDRESSING_MODE_OFFSET_ONLY:
 		case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
 		case ADDRESSING_MODE_RIP_RELATIVE:
 		case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
@@ -4019,6 +4020,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							changed = TRUE;
 							break;
 
+						case ADDRESSING_MODE_OFFSET_ONLY:
+							//TODO
+							break;
+
 						//Unsupported - do nothing
 						default:
 							break;
@@ -4055,6 +4060,16 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							reconstruct_window(window, memory_movement);
 
 							changed = TRUE;
+							break;
+
+						case ADDRESSING_MODE_OFFSET_ONLY:
+
+
+							//TODO
+							//
+							//
+							//
+							//
 							break;
 
 						/**
@@ -4130,17 +4145,38 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							changed = TRUE;
 							break;
 
+						/**
+						 * Combine:
+						 * 	t5 <- t6 + 4 
+						 * 	store 4(t5, t7, 8) <- 8
+						 *
+						 * Into
+						 * 	store 8(t6, t7, 8) <- 8
+						 */
 						case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+							//Add the first instruction's constant to the existing operand
+							add_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+
+							//Copy the operand over
+							memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+
+							//Scrap the old binary operation
+							delete_statement(to_be_combined);
+
+							//Rebuild around the memory movement
+							reconstruct_window(window, memory_movement);
+
+							changed = TRUE;
+							break;
+
 						case ADDRESSING_MODE_REGISTERS_ONLY:
 						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-
 
 						//Unsupported - just do nothing
 						default:
 							break;
 					}
 
-					//TODO
 					break;
 
 				case THREE_ADDR_CODE_LEA_STMT:
