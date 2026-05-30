@@ -3994,6 +3994,15 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				 * is equal to the result of the binary operation
 				 */
 				case THREE_ADDR_CODE_BIN_OP_STMT:
+					/**
+					 * We are only able to do this *if* we have an addition binary operation.
+					 * Anything else is not going to work *if* we're doing an address_operand1
+					 * compression
+					 */
+					if(to_be_combined->op != PLUS){
+						break;
+					}
+
 					switch(to_be_combined->addressing_mode){
 						/**
 						 * Combine:
@@ -4020,8 +4029,29 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							changed = TRUE;
 							break;
 
+						/**
+						 * Combine:
+						 * 	t5 <- t6 + t7
+						 * 	store 4(t5) <- 8
+						 *
+						 * Into
+						 * store 4(t6, t7) <- 8
+						 */
 						case ADDRESSING_MODE_OFFSET_ONLY:
-							//TODO
+							//Copy the two operands over
+							memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+							memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand2;
+
+							//This is now a REGISTERS_AND_OFFSET addressing mode
+							memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+
+							//Scrap the old binary operation
+							delete_statement(to_be_combined);
+
+							//Rebuilt around memory movement
+							reconstruct_window(window, memory_movement);
+
+							changed = TRUE;
 							break;
 
 						//Unsupported - do nothing
@@ -4036,6 +4066,15 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				 * is equal to the result of the binary operation
 				 */
 				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+					/**
+					 * We are only able to do this *if* we have an addition binary operation.
+					 * Anything else is not going to work *if* we're doing an address_operand1
+					 * compression
+					 */
+					if(to_be_combined->op != PLUS){
+						break;
+					}
+
 					switch(to_be_combined->addressing_mode){
 						/**
 						 * Combine:
