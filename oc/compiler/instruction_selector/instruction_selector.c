@@ -3836,6 +3836,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * ====================== Simplifying lea's internally =======================
 	 * We may end up with cases where lea statements have multipliers that are 1. If
 	 * this is the case, we'll want to remediate those
+	 *
+	 *
+	 * TODO - UNIVERSALIZE THIS, BRING IT FOR ANYTHING WITH AN ADDRESSING MODE THAT USES IT
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT){
 		//Grab it out
