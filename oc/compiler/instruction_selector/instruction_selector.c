@@ -3254,6 +3254,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 *
 	 * 		Turns into:
 	 * 		  t5 <- 48(, t7, 4)
+	 *
+	 * TODO COULD YOU COMBINE THIS WITH THE OTHER VALUES???
 	 */
 	if(window->instruction2 != NULL 
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
@@ -3942,6 +3944,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * to smash two instructions into one big addressing mode expression, which is a win for us in terms
 	 * of overall complexity and instruction count
 	 */
+
+	//TODO CAN WE UPDATE THIS TO ALL ADDRESSING MODES??
 	if(is_memory_movement_operation(window->instruction2) == TRUE
 		&& window->instruction1->operands.oir.assignee != NULL
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
@@ -3984,10 +3988,48 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					changed = TRUE;
 					break;
 					
+				/**
+				 * Combining an addressing mode with another binary operation where the first operand
+				 * is equal to the result of the binary operation
+				 */
 				case THREE_ADDR_CODE_BIN_OP_STMT:
-					//TODO
+					switch(to_be_combined->addressing_mode){
+						/**
+						 * Combine:
+						 * 	t5 <- t6 + t7
+						 * 	store (t5) <- 8
+						 *
+						 * Into
+						 * store (t6, t7) <- 8
+						 */
+						case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+							//Copy the two operands over
+							memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+							memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand2;
+
+							//This is now a REGISTERS_ONLY addressing mode
+							memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+
+							//Scrap the old binary operation
+							delete_statement(to_be_combined);
+
+							//Rebuilt around memory movement
+							reconstruct_window(window, memory_movement);
+
+							changed = TRUE;
+							break;
+
+						//Unsupported - do nothing
+						default:
+							break;
+					}
+
 					break;
 
+				/**
+				 * Combining an addressing mode with a constant binary operation where the first operand
+				 * is equal to the result of the binary operation
+				 */
 				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 					//TODO
 					break;
