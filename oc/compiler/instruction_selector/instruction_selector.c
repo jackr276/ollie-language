@@ -3997,20 +3997,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 					changed = TRUE;
 					break;
-				
-				case THREE_ADDR_CODE_ASSN_CONST_STMT:
-					//Extract the constant that we are going to assign
-					assigned_constant = to_be_combined->operands.oir.constant_operand;
-
-					switch(memory_movement->addressing_mode){
-
-					}
-
-
-					break;
-					
 
 				//TODO
+				//
+				//
+				//
+				//
+				//
 
 				//Unsupported statement combo - just leave
 				default:
@@ -4039,17 +4032,89 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					changed = TRUE;
 					break;
 
+				/**
+				 * Unlike for address operand1, we do support combining constants with address operand2
+				 * and this is quite a common case
+				 */
 				case THREE_ADDR_CODE_ASSN_CONST_STMT:
 					//Extract the constant that we are going to assign
 					assigned_constant = to_be_combined->operands.oir.constant_operand;
 
 					switch(memory_movement->addressing_mode){
+						/**
+						 * Going from:
+						 * 	t4 <- 2
+						 * 	store 4(t5, t4) <- x1
+						 *
+						 * To 
+						 *  store 6(t5) <- x1
+						 */
+						case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+							//Add the two constants(result in the first operand)
+							add_constants(memory_movement->operands.oir.address_offset, assigned_constant);
 
+							//Delete the first statement
+							delete_statement(to_be_combined);
+
+							//Memory mode is now just an offset
+							memory_movement->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+
+							//Rebuilt around the memory movement
+							reconstruct_window(window, memory_movement);
+
+							changed = TRUE;
+							break;
+
+						/**
+						 * Going from:
+						 * 	t4 <- 2
+						 * 	store 4(t5, t4, 8) <- x1
+						 *
+						 * To 
+						 *  store 20(t5) <- x1
+						 */
+						case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+							//Step 1: multiple the assigned constant with the multiplicand
+							multiply_constant_by_raw_int64_value(assigned_constant, i64, memory_movement->operands.oir.address_multiplier);
+
+							//Now add it with the actual offset
+							add_constants(memory_movement->operands.oir.address_offset, assigned_constant);
+
+							//Memory mode is now just an offset
+							memory_movement->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+
+							//Rebuilt around the memory movement
+							reconstruct_window(window, memory_movement);
+
+							changed = TRUE;
+							break;
+
+						case ADDRESSING_MODE_REGISTERS_ONLY:
+							break;
+
+
+						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+							break;
+
+						case ADDRESSING_MODE_INDEX_AND_SCALE:
+							break;
+						case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+							break;
+						
+						//Unsupported case - do nothing
+						default:
+							break;
 					}
 
 					break;
 
 				//TODO
+				//
+				//
+				//
+				//
+				//
+				//
 
 				//Unsupported statement combo - just leave
 				default:
