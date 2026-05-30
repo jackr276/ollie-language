@@ -4053,11 +4053,11 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							//Add the two constants(result in the first operand)
 							add_constants(memory_movement->operands.oir.address_offset, assigned_constant);
 
-							//Delete the first statement
-							delete_statement(to_be_combined);
-
 							//Memory mode is now just an offset
 							memory_movement->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+
+							//Delete the first statement
+							delete_statement(to_be_combined);
 
 							//Rebuilt around the memory movement
 							reconstruct_window(window, memory_movement);
@@ -4083,22 +4083,64 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							//Memory mode is now just an offset
 							memory_movement->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
+							//Delete the constant assignment
+							delete_statement(to_be_combined);
+
 							//Rebuilt around the memory movement
 							reconstruct_window(window, memory_movement);
 
 							changed = TRUE;
 							break;
 
+						/**
+						 * Going from:
+						 * 	t4 <- 2
+						 * 	store (t5, t4) <- x1
+						 *
+						 * To 
+						 *  store 2(t5) <- x1
+						 */
 						case ADDRESSING_MODE_REGISTERS_ONLY:
+							//Copy the offset over
+							memory_movement->operands.oir.address_offset = assigned_constant;
+
+							//Change the addressing mode to OFFSET_ONLY
+							memory_movement->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+
+							//Delete the constant assignment
+							delete_statement(to_be_combined);
+
+							//Rebuilt around the memory movement
+							reconstruct_window(window, memory_movement);
+
+							changed = TRUE;
 							break;
 
-
+						/**
+						 * Going from:
+						 * 	t4 <- 2
+						 * 	store (t5, t4, 8) <- x1
+						 *
+						 * To 
+						 *  store 16(t5) <- x1
+						 */
 						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-							break;
+							//First multipliy the constant
+							multiply_constant_by_raw_int64_value(assigned_constant, i64, memory_movement->operands.oir.address_multiplier);
 
-						case ADDRESSING_MODE_INDEX_AND_SCALE:
-							break;
-						case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+							//Then bring it over as the address offset
+							memory_movement->operands.oir.address_offset = assigned_constant;
+
+							//Change the addressing mode to OFFSET_ONLY
+							memory_movement->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+
+							//Delete the constant assignment
+							delete_statement(to_be_combined);
+
+							//Rebuilt around the memory movement
+							reconstruct_window(window, memory_movement);
+
+							changed = TRUE;
 							break;
 						
 						//Unsupported case - do nothing
@@ -4123,100 +4165,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
-
-
-		/**
-		 * We will do simplifications as need be for binary operations
-		 */
-		switch (binary_operation->statement_type) {
-			case THREE_ADDR_CODE_BIN_OP_STMT:
-				//If the first one is used less than once and they match
-				if(binary_operation->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP 
-					&& binary_operation->op == PLUS //We can only handle addition
-					&& variables_equal(binary_operation->operands.oir.assignee, memory_movement->operands.oir.address_operand1, FALSE) == TRUE){
-
-					//Convert to the appropriate new statement type
-					switch(memory_movement->statement_type){
-						case THREE_ADDR_CODE_LOAD_STATEMENT:
-							memory_movement->statement_type = THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET;
-							break;
-
-						case THREE_ADDR_CODE_STORE_STATEMENT:
-							memory_movement->statement_type = THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET;
-							break;
-
-						//Unreachable
-						default:
-							break;
-					}
-
-					//This is now a load with variable offset
-					memory_movement->statement_type = THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET;
-
-					//Translate these into the memory statement
-					memory_movement->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
-					memory_movement->operands.oir.address_operand2 = binary_operation->operands.oir.operand2;
-
-					//We no longer need the binary operation
-					delete_statement(binary_operation);
-
-					//Rebuild around instruction 2
-					reconstruct_window(window, memory_movement);
-
-					//Is a change
-					changed = TRUE;
-				}
-
-				break;
-
-			//Same treatment for if we have a binary operation with const here
-			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-				//If the first one is used less than once and they match
-				if(binary_operation->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& (binary_operation->op == PLUS || binary_operation->op == MINUS) //We can only handle addition/subtraction
-					&& variables_equal(binary_operation->operands.oir.assignee, memory_movement->operands.oir.address_operand1, FALSE) == TRUE){
-
-					//Convert to the appropriate new statement type
-					switch(memory_movement->statement_type){
-						case THREE_ADDR_CODE_LOAD_STATEMENT:
-							memory_movement->statement_type = THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET;
-							break;
-
-						case THREE_ADDR_CODE_STORE_STATEMENT:
-							memory_movement->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
-							break;
-
-						//Unreachable
-						default:
-							break;
-					}
-
-					//Update the address operand and offset
-					memory_movement->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
-					memory_movement->operands.oir.address_offset = binary_operation->operands.oir.constant_operand;
-
-					//If we have a minus, we'll just convert to a negative
-					if(binary_operation->op == MINUS){
-						memory_movement->operands.oir.address_offset->constant_value.signed_long_constant *= -1;
-					}
-
-					//Delete the bin op now
-					delete_statement(binary_operation);
-
-					//Rebuild around the memory movement
-					reconstruct_window(window, memory_movement);
-
-					//Is a change
-					changed = TRUE;
-				}
-
-				break;
-				
-			//By default do nothing
-			default:
-				break;
-		}
-	}
 
 	/**
 	 * ==================== On-the-fly logical and/or ========================
