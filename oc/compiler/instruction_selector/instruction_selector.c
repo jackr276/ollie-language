@@ -3881,11 +3881,28 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					 * Anything else is not going to work *if* we're doing an address_operand1
 					 * compression
 					 */
+
+					///
+					///
+					///
+					///
+					///
+					///
+					///
+					///TODO ADD MINUS SUPPORT
+					///
+					///
+					///
+					///
+					///
+					///
+					///
+					///
 					if(to_be_combined->op != PLUS){
 						break;
 					}
 
-					switch(to_be_combined->addressing_mode){
+					switch(memory_movement->addressing_mode){
 						/**
 						 * Combine:
 						 * 	t5 <- t6 + t7
@@ -3957,7 +3974,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						break;
 					}
 
-					switch(to_be_combined->addressing_mode){
+					switch(memory_movement->addressing_mode){
 						/**
 						 * Combine:
 						 * 	t5 <- t6 + 4 
