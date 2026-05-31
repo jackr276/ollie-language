@@ -1505,6 +1505,10 @@ static inline void emit_16_byte_copy_pair(instruction_t** last_instruction, thre
 	//The store goes right after the load
 	insert_instruction_after_given(store_instruction, load_instruction);
 
+	//Update the use counts
+	source_memory_address->use_count++;
+	dest_memory_address->use_count++;
+
 	//Finally update the reference
 	*last_instruction = store_instruction;
 }
@@ -1543,6 +1547,10 @@ static inline void emit_8_byte_copy_pair(instruction_t** last_instruction, three
 
 	//The store goes right after the load
 	insert_instruction_after_given(store_instruction, load_instruction);
+
+	//Update the use counts
+	source_memory_address->use_count++;
+	dest_memory_address->use_count++;
 
 	//Finally update the reference
 	*last_instruction = store_instruction;
@@ -1583,6 +1591,10 @@ static inline void emit_4_byte_copy_pair(instruction_t** last_instruction, three
 	//The store goes right after the load
 	insert_instruction_after_given(store_instruction, load_instruction);
 
+	//Update the use counts
+	source_memory_address->use_count++;
+	dest_memory_address->use_count++;
+
 	//Finally update the reference
 	*last_instruction = store_instruction;
 }
@@ -1621,6 +1633,10 @@ static inline void emit_2_byte_copy_pair(instruction_t** last_instruction, three
 
 	//The store goes right after the load
 	insert_instruction_after_given(store_instruction, load_instruction);
+
+	//Update the use counts
+	source_memory_address->use_count++;
+	dest_memory_address->use_count++;
 
 	//Finally update the reference
 	*last_instruction = store_instruction;
