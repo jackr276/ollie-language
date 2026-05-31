@@ -3726,7 +3726,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 	/**
 	 * ========================= Combining lea's with constant binary operations =======================
-	 * This is a rule that is not yet finalized. Scenarios will be added to it as they arise
+	 * Combine leas specifically for rip-relative addressing with binary operations. This is a very
+	 * unique case and as such does not come up much, but the benefit is there for this so we will do it
+	 *
 	 *
 	 * CASE 1:
 	 * 	 t45 <- global_var(t3)
@@ -3747,8 +3749,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP //Make sure it's a temp var
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT 
 		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.operand1, FALSE) == TRUE){
-
-		//TODO IS THIS EVER EVEN HIT???
 
 		//Grab these for convenience
 		instruction_t* first_lea = window->instruction1;

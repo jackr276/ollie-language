@@ -4,8 +4,8 @@
 */
 
 pub fn access_array(a:mut i32[10]*) -> i32{
-	(*a)[1] = 3;
-	(*a)[2] = 3;
+	(*a)[1] = 4;
+	(*a)[2] = 5;
 
 	ret (*a)[2];
 }
@@ -24,5 +24,7 @@ pub fn main() -> i32 {
 	//back in
 	@access_array(&arr);
 
-	ret arr[3];
+	//Should return 5 post modifications
+	OUNIT:[console = 5]
+	ret arr[2];
 }

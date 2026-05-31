@@ -17,7 +17,7 @@ define struct my_struct{
 * A function that will mutate a structure in its entirety
 */
 pub fn mutate_structure_pointer(struct_pointer:mut custom_struct*) -> i32 {
-	(*struct_pointer):y[2] = 32;
+	(*struct_pointer):y[1] = 32;
 	(*struct_pointer):lch = 'a';
 
 	ret (*struct_pointer):lch;
@@ -31,6 +31,7 @@ pub fn main(arg:i32, argv:char**) -> i32{
 	//Call the mutator
 	@mutate_structure_pointer(&a);
 
-	//Grab the value from the internal array argument
+	//Should come out as a 32
+	OUNIT:[console = 32]
 	ret a:y[1];
 }
