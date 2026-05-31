@@ -12220,28 +12220,27 @@ static inline alignment_type_t is_alignment_guaranteed_for_memory_operation(inst
 		//If we're just dealing with the offset we can also use that
 		case ADDRESSING_MODE_OFFSET_ONLY:
 			//If this is the stack pointer we can make guarantees
-			if(load_instruction->operands.x86.address_register1 == stack_pointer_variable){
+			if(instruction->operands.x86.address_register1 == stack_pointer_variable){
 				//Extract the value
-				u_int32_t offset_value = load_instruction->operands.x86.address_offset->constant_value.signed_integer_constant;
+				u_int32_t offset_value = instruction->operands.x86.address_offset->constant_value.signed_integer_constant;
 
 				//If we can mod by 16 then it's aligned, otherwise it's not
 				if(offset_value % 16 == 0){
-					source_region_alignment = ALIGNMENT_TYPE_GUARANTEED;
+					return ALIGNMENT_TYPE_GUARANTEED;
 				} else {
-					source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+					return ALIGNMENT_TYPE_NOT_GUARANTEED;
 				}
 
 			//Otherwise we can't guarantee anything
 			} else {
-				source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+				return ALIGNMENT_TYPE_NOT_GUARANTEED;
 			}
 
 			break;
 
 		//Anything else - we can't guarantee anything
 		default:
-			source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
-			break;
+			return ALIGNMENT_TYPE_NOT_GUARANTEED;
 	}
 }
 
@@ -12443,6 +12442,13 @@ static void handle_store_instruction(instruction_t* store_instruction){
 	handle_base_address_and_addressing_mode_for_instruction(store_instruction);
 
 	/**
+	 * Now that we've handled everything with the addressing operands, we will look to see if we are able
+	 * to guarantee alignment for our given memory operation. This will come into play when we select the
+	 * type of move instruction
+	 */
+	alignment_type_t destination_alignment = is_alignment_guaranteed_for_memory_operation(store_instruction);
+
+	/**
 	 * All store instructions have what they are actually storing cached inside of the 
 	 * very first operand
 	 */
@@ -12605,49 +12611,6 @@ static void handle_store_instruction(instruction_t* store_instruction){
 
 		//Put this into the immediate source
 		store_instruction->operands.x86.source_immediate = store_instruction->operands.oir.constant_operand;
-	}
-
-	//Now we need to determine the store instruction's alignment
-	alignment_type_t destination_alignment = );
-
-
-	//TODO STANDARDIZE ALIGNMENT GUARANTEES
-	switch(store_instruction->addressing_mode){
-		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
-			//If this is the stack pointer then we can guarantee alignmetn
-			if(store_instruction->operands.x86.address_register1 == stack_pointer_variable){
-				destination_alignment = ALIGNMENT_TYPE_GUARANTEED;
-			} else {
-				destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
-			}
-
-			break;
-
-		//If we're just dealing with the offset we can also use that
-		case ADDRESSING_MODE_OFFSET_ONLY:
-			//If this is the stack pointer we can make guarantees
-			if(store_instruction->operands.x86.address_register1 == stack_pointer_variable){
-				//Extract the value
-				u_int32_t offset_value = store_instruction->operands.x86.address_offset->constant_value.signed_integer_constant;
-
-				//If we can mod by 16 then it's aligned, otherwise it's not
-				if(offset_value % 16 == 0){
-					destination_alignment = ALIGNMENT_TYPE_GUARANTEED;
-				} else {
-					destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
-				}
-
-			//Otherwise we can't guarantee anything
-			} else {
-				destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
-			}
-
-			break;
-
-		//Anything else - we can't guarantee anything
-		default:
-			destination_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
-			break;
 	}
 
 	//Once we've done all the above assignments, we need to determine what our instruction type is. The source here is always clean, we are moving to memory
