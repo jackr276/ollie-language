@@ -4470,7 +4470,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							 * 	t4 <- t3 + 8
 							 * 	store 8(t2, t4, 8) <- 5
 							 *
-							 * 	Conceptuall this is the same as:
+							 * 	Conceptually this is the same as:
 							 * 		8 + t2 + (t3 + 8) * 8
 							 * 		8 + t2 + t3 * 8 + 64
 							 * 		72 + t2 + t3 * 8
@@ -4503,7 +4503,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							 * 	t4 <- t3 + 8
 							 * 	store (t2, t4, 8) <- 5
 							 *
-							 * 	Conceptuall this is the same as:
+							 * 	Conceptually this is the same as:
 							 * 		t2 + (t3 + 8) * 8
 							 * 		t2 + t3 * 8 + 64
 							 * 		64 + t2 + t3 * 8
@@ -4517,7 +4517,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, memory_movement->operands.oir.address_multiplier);
 
 								//This now has an offset
-								memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.address_offset;
+								memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
 
 								//Copy the address operand over
 								memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
@@ -4534,15 +4534,50 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								changed = TRUE;
 								break;
 
-							//TODO
-							//
+							/**
+							 * Case where we have:
+							 * 	t4 <- t3 + 8
+							 * 	leaq (, t4, 8), t7 
+							 *
+							 * 	Conceptually this is the same as:
+							 * 		(t3 + 8) * 8
+							 * 		t3 * 8 + 64
+							 * 		64 + t3 * 8
+							 * 		64(, t3, 8)
+							 *
+							 * 	Can become
+							 * 	leaq 64(, t4, 8), t7 
+							 */
 							case ADDRESSING_MODE_INDEX_AND_SCALE:
-							case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
-							//TODO
+								//Multiply the existing constant by the address multiplier
+								multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, memory_movement->operands.oir.address_multiplier);
 
-							default:
+								//This now has an offset
+								memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.address_offset;
+
+								//Copy the address operand over
+								memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+
+								//Update the addressing mode to reflect the offset
+								memory_movement->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+
+								//The first statement is now useless
+								delete_statement(to_be_combined);
+
+								//Rebuilt the window around the memory movement
+								reconstruct_window(window, memory_movement);
+
+								changed = TRUE;
 								break;
 
+							case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+								printf("HERE\n\n");
+								break;
+							//TODO
+
+							//Anything else we don't support so leave it as-is
+							default:
+								break;
 						}
 					} 
 
