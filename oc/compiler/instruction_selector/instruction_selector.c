@@ -362,61 +362,6 @@ static inline u_int8_t does_instruction_set_condition_codes(instruction_t* instr
 
 
 /**
- * Is an instruction valid for a memory read source argument? Some examples
- * include add and sub instructions.
- *
- * TODO NOT COMPLETE
- */
-static inline u_int8_t is_binary_operation_capable_of_memory_source_argument(instruction_t* instruction){
-	if(instruction == NULL){
-		return FALSE;
-	}
-
-	/**
-	 * Validation part 1: only certain binary operations are going to be valid for/worth bothering
-	 * with for this optimization. We will first weed out anything not worth dealing with here
-	 */
-	switch(instruction->instruction_type){
-		case THREE_ADDR_CODE_BIN_OP_STMT:
-			switch(instruction->op){
-				//If something is eligible we break out into part 2 of validations
-				case PLUS:
-				case MINUS:
-					break;
-				//TODO ELABORATE MORE
-				default:
-					return FALSE;
-			}
-
-			break;
-
-		//Anything else is (for now) not eligible
-		default:
-			return FALSE;
-	}
-
-	/**
-	 * There is a possibility that we could have survived the load instruction optimization check, but still
-	 * have a converting move being set as required by the binary operation. Here's an example:
-	 *
-	 * t6(i16) <- load from i16 region
-	 * result(i32) <- t7(i32) + t6(i16)
-	 *
-	 * This will not be caught by our original check, and as such we need to check again here to make extra
-	 * sure. There is nothing that we could do to "fix" this for our optimization, we just have to skip
-	 * this(it's pretty rare anyways)
-	 */
-	generic_type_t* destination_type = get_destination_type_for_binary_operation_instruction(instruction);
-	if(is_converting_move_required(destination_type, instruction->operands.oir.operand2->type) == TRUE){
-		return FALSE;
-	}
-
-	//If we survived to down here then we are all set
-	return TRUE;
-}
-
-
-/**
  * Is the given load instruction going to require any kind of converting move between the 
  * memory read/write type and the destination type? If so, we cannot use it for any
  * kind of binary operation condensation optimization
