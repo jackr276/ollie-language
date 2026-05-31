@@ -12911,12 +12911,52 @@ static void combine_lea_with_regular_load_instruction(instruction_window_t* wind
  * to
  */
 static inline void handle_base_address_and_addressing_mode_for_instruction(instruction_t* instruction){
-	//Assume there is no stack offset by default
+	//Needed declarations for later
 	int64_t stack_offset = 0;
-	//The first operand is always the base address
-	three_addr_var_t* base_address = instruction->operands.oir.address_operand1;
-	//For any linked vars that we have
-	symtab_variable_record_t* linked_var = base_address->linked_var;
+	three_addr_var_t* base_address;
+	symtab_variable_record_t* linked_var;
+
+	/**
+	 * First standardize everyting by moving it all over into the x86 registers off
+	 * the bat. This avoids any confusion/cross lookups and x86 register sections
+	 *
+	 * We go through a standard Extract-Transform-Load(ETL) process to do this
+	 */
+
+	/**
+	 * Step 1: Extract all fields(E)
+	 */
+	three_addr_var_t* destination_register = instruction->operands.oir.assignee;
+	three_addr_var_t* address_register1 = instruction->operands.oir.address_operand1;
+	three_addr_var_t* address_register2 = instruction->operands.oir.address_operand2;
+	three_addr_var_t* rip_offset_var = instruction->operands.oir.rip_offset_var;
+	three_addr_const_t* address_offset = instruction->operands.oir.address_offset;
+	u_int64_t address_multiplier = instruction->operands.oir.address_multiplier;
+
+	/**
+	 * Step 2: Transform the second address register if a type adjustment is needed(T)
+	 *
+	 * We are *always* using 64 bit registers for addressing operations in memory movements
+	 */
+	if(address_register1 != NULL
+		&& address_register2 != NULL
+		&& is_converting_move_required(u64, address_register2->type) == TRUE){
+
+		//Let the helper emit and insert the move
+		address_register2 = create_and_insert_converting_move_instruction(instruction, address_register2, u64);
+	}
+
+	/**
+	 * Step 3: Load the finalized values into their needed spots on the x86 version 
+	 */
+	instruction->operands.x86.destination_register = destination_register;
+	instruction->operands.x86.address_register1 = address_register1;
+	instruction->operands.x86.address_register2 = address_register2;
+	instruction->operands.x86.rip_offset_var = rip_offset_var;
+	instruction->operands.x86.address_offset = address_offset;
+	instruction->operands.x86.address_multiplier = address_multiplier;
+
+
 
 	/**
 	 * Go based on the variable type of the base address itself to make determinations
@@ -13051,17 +13091,22 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 
 
 /**
- * Handle the assignment of the source for a store instruction.
- *
- * This function will account for all edge cases, as well
- * as the unique case where our source is a 32 bit integer *but* we are saving to an
- * unsigned 64 bit memory region, as well as the unique case where we need to handle floating
- * point areas coming from bytes/shorts
+ * Handle a store instruction and account for all memory movement possibilities
+ * that take place when we do this store instruction
  */
-static inline void handle_store_instruction_sources_and_instruction_type(instruction_t* store_instruction){
+static void handle_store_instruction(instruction_t* store_instruction){
 	//We'll need the source and memory write types on hand
 	generic_type_t* source_type;
 	generic_type_t* destination_type = store_instruction->type_storage.memory_read_write_type;
+
+	//Store instructions are always going to memory
+	store_instruction->memory_access_type = WRITE_TO_MEMORY;
+
+	/**
+	 * Let the helper deal with everything around the base address/addressing mode for the store
+	 * instruction
+	 */
+	handle_base_address_and_addressing_mode_for_instruction(store_instruction);
 
 	/**
 	 * All store instructions have what they are actually storing cached inside of the 
@@ -13277,20 +13322,6 @@ static inline void handle_store_instruction_sources_and_instruction_type(instruc
 
 	//Once we've done all the above assignments, we need to determine what our instruction type is. The source here is always clean, we are moving to memory
 	store_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type), destination_alignment, WRITE_TO_MEMORY);
-}
-
-
-/**
- * Handle a store instruction and account for all memory movement possibilities
- * that take place when we do this store instruction
- */
-static void handle_store_instruction(instruction_t* instruction){
-	//Store instructions are always going to memory
-	instruction->memory_access_type = WRITE_TO_MEMORY;
-
-
-	//Invoke the helper to determine the type and instruction type
-	handle_store_instruction_sources_and_instruction_type(instruction);
 }
 
 
