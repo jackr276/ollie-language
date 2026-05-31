@@ -11727,234 +11727,6 @@ static instruction_t* emit_register_movement_instruction_directly(three_addr_var
 
 
 /**
- * This helper function will handle the source and destination assignment
- * of a load instruction. This will also handle the edge case where we are
- * loading from a 32 bit memory region into an unsigned 64 bit region
- *
- * Unlike stores, load instructions are capable of doing converting moves. This will impact how
- * we handle our byte/short to float/double logic. This function will return a destination
- * register that the rest of the load process will have to use
- *
- * NOTE: We assume that the load instruction is the very first instruction
- */
-static void handle_load_instruction_type_and_destination(instruction_window_t* window){
-	//As noted above this is the assumption
-	instruction_t* load_instruction = window->instruction1;
-
-	//What is the very last instruction that we've touched. By default it's just what was passed
-	instruction_t* last_instruction = load_instruction;
-
-	//For any converting moves that we may have
-	instruction_t* pxor_instruction;
-
-	//For any copying we need
-	instruction_t* converting_copy_instruction;
-
-	//Local variables for our eventual move selection
-	variable_size_t destination_size;
-	variable_size_t source_size;
-	u_int8_t is_destination_signed;
-
-	/**
-	 * For some of our load instructions, the memory alignment is very important. This is
-	 * most commonly true when we are doing 16 byte loads during large struct copy operations.
-	 * We will invoke a helper to determine whether or not the source memory region is aligned
-	 */
-	alignment_type_t source_region_alignment;
-
-	/**
-	 * If we have a stack pointer variable, we know that it itself
-	 * is 16 byte aligned. We can now go through and use the offset
-	 * if we have one to determine if it is aligned. If the offset
-	 * isn't there then we have to assume it's not
-	 */
-	switch(load_instruction->addressing_mode){
-		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
-			//If this is the stack pointer then we can guarantee alignment
-			if(load_instruction->operands.x86.address_register1 == stack_pointer_variable){
-				source_region_alignment = ALIGNMENT_TYPE_GUARANTEED;
-			} else {
-				source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
-			}
-
-			break;
-
-		//If we're just dealing with the offset we can also use that
-		case ADDRESSING_MODE_OFFSET_ONLY:
-			//If this is the stack pointer we can make guarantees
-			if(load_instruction->operands.x86.address_register1 == stack_pointer_variable){
-				//Extract the value
-				u_int32_t offset_value = load_instruction->operands.x86.address_offset->constant_value.signed_integer_constant;
-
-				//If we can mod by 16 then it's aligned, otherwise it's not
-				if(offset_value % 16 == 0){
-					source_region_alignment = ALIGNMENT_TYPE_GUARANTEED;
-				} else {
-					source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
-				}
-
-			//Otherwise we can't guarantee anything
-			} else {
-				source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
-			}
-
-			break;
-
-		//Anything else - we can't guarantee anything
-		default:
-			source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
-			break;
-	}
-
-	//By default, assume it's the assignee
-	three_addr_var_t* destination_register = load_instruction->operands.oir.assignee;
-
-	//This is always the memory region type
-	generic_type_t* memory_region_type = load_instruction->type_storage.memory_read_write_type;
-
-	/**
-	 * Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
-	 * movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
-	 * zero pad when 32 bit moves happen
-	 */
-	if(is_type_32_bit_int(memory_region_type) == TRUE
-		&& is_type_unsigned_64_bit(destination_register->type) == TRUE){
-
-		//Duplicate the destination
-		three_addr_var_t* type_adjusted_destination = emit_var_copy(destination_register);
-		//Fix the type to be 32 bits
-		type_adjusted_destination->type = memory_region_type;
-		//Be sure to get the size too
-		type_adjusted_destination->variable_size = get_type_size(type_adjusted_destination->type);
-
-		//This is the true destination now
-		load_instruction->operands.x86.destination_register = type_adjusted_destination;
-
-		//And we need to adjust this to be a MOVL type
-		load_instruction->instruction_type = MOVL;
-
-		//For this instance, we do not need to allow the helper to select for us since it's already done
-		//in here
-
-	/**
-	 * If we have a case where we are trying to move an 8/16 bit
-	 * value into an f32/f64 value, unfortunately no x86-64 instructions
-	 * exist to do that conversion. Instead, we'll need to first convert
-	 * this value into a 32 bit integer, and then convert that into
-	 * a floating point value
-	 */
-	} else if(is_type_floating_point(destination_register->type)
-				&& memory_region_type->type_size <= 2){
-
-		//We will need an intermediary destination to use in the load
-		three_addr_var_t* intermediary_destination;
-
-		switch(memory_region_type->basic_type_token){
-			//Signed types will use an I32 as the stopgap
-			case CHAR:
-			case I8:
-			case I16:
-				//The load instruction's destination will be the intermediary
-				intermediary_destination = emit_temp_var(i32);
-				load_instruction->operands.x86.destination_register = intermediary_destination;
-
-				//Populate all of these values now
-				destination_size = get_type_size(intermediary_destination->type);
-				source_size = get_type_size(memory_region_type);
-				is_destination_signed = is_type_signed(intermediary_destination->type);
-
-				//Let the helper select for us. We are passing clean as true, since we are coming from memory
-				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, source_region_alignment, READ_FROM_MEMORY);
-
-				//Since we know that this is a floating point conversion, we will emit the PXOR here
-				pxor_instruction = emit_sse_register_clear_instruction(destination_register);
-
-				//Get this in right before the given
-				insert_instruction_after_given(pxor_instruction, load_instruction);
-
-				//Now we need to add a separate copy instruction into the true destination
-				converting_copy_instruction = emit_register_movement_instruction_directly(load_instruction->operands.oir.assignee, intermediary_destination);
-
-				//This goes right after the pxor 
-				insert_instruction_after_given(converting_copy_instruction, pxor_instruction);
-
-				//This now is the last instruction
-				last_instruction = converting_copy_instruction;
-
-				break;
-
-			//Unsigned types will use a U32 as the stopgap
-			case U8:
-			case U16:
-				//The load instruction's destination will be the intermediary
-				intermediary_destination = emit_temp_var(u32);
-				load_instruction->operands.x86.destination_register = intermediary_destination;
-
-				//Populate all of these values now
-				destination_size = get_type_size(intermediary_destination->type);
-				source_size = get_type_size(memory_region_type);
-				is_destination_signed = is_type_signed(intermediary_destination->type);
-
-				//Let the helper select for us. We are passing clean as true, since we are coming from memory
-				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, source_region_alignment, READ_FROM_MEMORY);
-
-				//Since we know that this is a floating point conversion, we will emit the PXOR here
-				pxor_instruction = emit_sse_register_clear_instruction(destination_register);
-
-				//Get this in right before the given
-				insert_instruction_after_given(pxor_instruction, load_instruction);
-
-				//Now we need to add a separate copy instruction into the true destination
-				converting_copy_instruction = emit_register_movement_instruction_directly(load_instruction->operands.oir.assignee, intermediary_destination);
-
-				//This goes right after the pxor
-				insert_instruction_after_given(converting_copy_instruction, pxor_instruction);
-
-				//This now is the last instruction
-				last_instruction = converting_copy_instruction;
-
-				break;
-
-			//This should be unreachable
-			default:
-				break;
-		}
-
-	//Otherwise, we just assign the destination to be the destination register
-	} else {
-		load_instruction->operands.x86.destination_register = destination_register;
-
-		//Populate all of these variables
-		destination_size = get_type_size(destination_register->type);
-		source_size = get_type_size(memory_region_type);
-		is_destination_signed = is_type_signed(destination_register->type);
-
-		//Let the helper select for us. We are passing clean as true, since we are coming from memory
-		load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, source_region_alignment, READ_FROM_MEMORY);
-
-		/**
-		 * If we have a conversion instruction that has an SSE destination, we need to emit
-		 * a special "pxor" statement beforehand to completely wipe out said register
-		 */
-		if(is_integer_to_sse_conversion_instruction(load_instruction->instruction_type) == TRUE){
-			//We need to completely zero out the destination register here, so we will emit a pxor to do
-			//just that
-			pxor_instruction = emit_sse_register_clear_instruction(load_instruction->operands.oir.assignee);
-
-			//Get this in right before the given
-			insert_instruction_before_given(pxor_instruction, load_instruction);
-		}
-	}
-
-	//Load is from memory always
-	load_instruction->memory_access_type = READ_FROM_MEMORY;
-
-	//Rebuild the window around the last instruction, whatever that may be
-	reconstruct_window(window, last_instruction);
-}
-
-
-/**
  * Handle the base address for a load statement in all of its forms. This includes
  * global variables, stack variables, and plain variables as well. This is meant to
  * be used by the lea combiner rule. It will *not* modify addressing modes and it should
@@ -13047,10 +12819,206 @@ static void handle_load_instruction(instruction_window_t* window){
 	 */
 	handle_base_address_and_addressing_mode_for_instruction(load_instruction);
 
-//TODO
+	/**
+	 * After we've handled everything around the addressing modes, we will now handle
+	 * any/all conversions that are needed for the load instruction's destination type
+	 */
+	instruction_t* last_instruction = load_instruction;
+	instruction_t* pxor_instruction;
+	instruction_t* converting_copy_instruction;
+	variable_size_t destination_size;
+	variable_size_t source_size;
+	u_int8_t is_destination_signed;
 
-	//Invoke the helper to handle the assignee and any edge cases
-	handle_load_instruction_type_and_destination(window);
+	/**
+	 * For some of our load instructions, the memory alignment is very important. This is
+	 * most commonly true when we are doing 16 byte loads during large struct copy operations.
+	 * We will invoke a helper to determine whether or not the source memory region is aligned
+	 */
+	alignment_type_t source_region_alignment;
+
+	/**
+	 * If we have a stack pointer variable, we know that it itself
+	 * is 16 byte aligned. We can now go through and use the offset
+	 * if we have one to determine if it is aligned. If the offset
+	 * isn't there then we have to assume it's not
+	 */
+	switch(load_instruction->addressing_mode){
+		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+			//If this is the stack pointer then we can guarantee alignment
+			if(load_instruction->operands.x86.address_register1 == stack_pointer_variable){
+				source_region_alignment = ALIGNMENT_TYPE_GUARANTEED;
+			} else {
+				source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+			}
+
+			break;
+
+		//If we're just dealing with the offset we can also use that
+		case ADDRESSING_MODE_OFFSET_ONLY:
+			//If this is the stack pointer we can make guarantees
+			if(load_instruction->operands.x86.address_register1 == stack_pointer_variable){
+				//Extract the value
+				u_int32_t offset_value = load_instruction->operands.x86.address_offset->constant_value.signed_integer_constant;
+
+				//If we can mod by 16 then it's aligned, otherwise it's not
+				if(offset_value % 16 == 0){
+					source_region_alignment = ALIGNMENT_TYPE_GUARANTEED;
+				} else {
+					source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+				}
+
+			//Otherwise we can't guarantee anything
+			} else {
+				source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+			}
+
+			break;
+
+		//Anything else - we can't guarantee anything
+		default:
+			source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+			break;
+	}
+
+	//By default, assume it's the assignee
+	three_addr_var_t* destination_register = load_instruction->operands.oir.assignee;
+
+	//This is always the memory region type
+	generic_type_t* memory_region_type = load_instruction->type_storage.memory_read_write_type;
+
+	/**
+	 * Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
+	 * movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
+	 * zero pad when 32 bit moves happen
+	 */
+	if(is_type_32_bit_int(memory_region_type) == TRUE
+		&& is_type_unsigned_64_bit(destination_register->type) == TRUE){
+
+		//Duplicate the destination
+		three_addr_var_t* type_adjusted_destination = emit_var_copy(destination_register);
+		//Fix the type to be 32 bits
+		type_adjusted_destination->type = memory_region_type;
+		//Be sure to get the size too
+		type_adjusted_destination->variable_size = get_type_size(type_adjusted_destination->type);
+
+		//This is the true destination now
+		load_instruction->operands.x86.destination_register = type_adjusted_destination;
+
+		//And we need to adjust this to be a MOVL type
+		load_instruction->instruction_type = MOVL;
+
+	/**
+	 * If we have a case where we are trying to move an 8/16 bit
+	 * value into an f32/f64 value, unfortunately no x86-64 instructions
+	 * exist to do that conversion. Instead, we'll need to first convert
+	 * this value into a 32 bit integer, and then convert that into
+	 * a floating point value
+	 */
+	} else if(is_type_floating_point(destination_register->type)
+				&& memory_region_type->type_size <= 2){
+
+		//We will need an intermediary destination to use in the load
+		three_addr_var_t* intermediary_destination;
+
+		switch(memory_region_type->basic_type_token){
+			//Signed types will use an I32 as the stopgap
+			case CHAR:
+			case I8:
+			case I16:
+				//The load instruction's destination will be the intermediary
+				intermediary_destination = emit_temp_var(i32);
+				load_instruction->operands.x86.destination_register = intermediary_destination;
+
+				//Populate all of these values now
+				destination_size = get_type_size(intermediary_destination->type);
+				source_size = get_type_size(memory_region_type);
+				is_destination_signed = is_type_signed(intermediary_destination->type);
+
+				//Let the helper select for us. We are passing clean as true, since we are coming from memory
+				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, source_region_alignment, READ_FROM_MEMORY);
+
+				//Since we know that this is a floating point conversion, we will emit the PXOR here
+				pxor_instruction = emit_sse_register_clear_instruction(destination_register);
+
+				//Get this in right before the given
+				insert_instruction_after_given(pxor_instruction, load_instruction);
+
+				//Now we need to add a separate copy instruction into the true destination
+				converting_copy_instruction = emit_register_movement_instruction_directly(load_instruction->operands.oir.assignee, intermediary_destination);
+
+				//This goes right after the pxor 
+				insert_instruction_after_given(converting_copy_instruction, pxor_instruction);
+
+				//This now is the last instruction
+				last_instruction = converting_copy_instruction;
+
+				break;
+
+			//Unsigned types will use a U32 as the stopgap
+			case U8:
+			case U16:
+				//The load instruction's destination will be the intermediary
+				intermediary_destination = emit_temp_var(u32);
+				load_instruction->operands.x86.destination_register = intermediary_destination;
+
+				//Populate all of these values now
+				destination_size = get_type_size(intermediary_destination->type);
+				source_size = get_type_size(memory_region_type);
+				is_destination_signed = is_type_signed(intermediary_destination->type);
+
+				//Let the helper select for us. We are passing clean as true, since we are coming from memory
+				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, source_region_alignment, READ_FROM_MEMORY);
+
+				//Since we know that this is a floating point conversion, we will emit the PXOR here
+				pxor_instruction = emit_sse_register_clear_instruction(destination_register);
+
+				//Get this in right before the given
+				insert_instruction_after_given(pxor_instruction, load_instruction);
+
+				//Now we need to add a separate copy instruction into the true destination
+				converting_copy_instruction = emit_register_movement_instruction_directly(load_instruction->operands.oir.assignee, intermediary_destination);
+
+				//This goes right after the pxor
+				insert_instruction_after_given(converting_copy_instruction, pxor_instruction);
+
+				//This now is the last instruction
+				last_instruction = converting_copy_instruction;
+
+				break;
+
+			//This should be unreachable
+			default:
+				break;
+		}
+
+	//Otherwise, we just assign the destination to be the destination register
+	} else {
+		load_instruction->operands.x86.destination_register = destination_register;
+
+		//Populate all of these variables
+		destination_size = get_type_size(destination_register->type);
+		source_size = get_type_size(memory_region_type);
+		is_destination_signed = is_type_signed(destination_register->type);
+
+		//Let the helper select for us. We are passing clean as true, since we are coming from memory
+		load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, source_region_alignment, READ_FROM_MEMORY);
+
+		/**
+		 * If we have a conversion instruction that has an SSE destination, we need to emit
+		 * a special "pxor" statement beforehand to completely wipe out said register
+		 */
+		if(is_integer_to_sse_conversion_instruction(load_instruction->instruction_type) == TRUE){
+			//We need to completely zero out the destination register here, so we will emit a pxor to do just that
+			pxor_instruction = emit_sse_register_clear_instruction(load_instruction->operands.oir.assignee);
+
+			//Get this in right before the given
+			insert_instruction_before_given(pxor_instruction, load_instruction);
+		}
+	}
+
+	//Rebuild the window around the last instruction, whatever that may be
+	reconstruct_window(window, last_instruction);
 }
 
 
