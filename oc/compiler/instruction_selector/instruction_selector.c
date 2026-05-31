@@ -4340,7 +4340,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							 * 	store 8(t2, t4) <- 5
 							 *
 							 * 	Can become
-							 * 	store 8(t2, t3, 8)
+							 * 	store 8(t2, t3, 8) <- 5
 							 */
 							case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
 								//Copy the mulitplier over
@@ -4367,7 +4367,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							 * 	store (t2, t4) <- 5
 							 *
 							 * 	Can become
-							 * 	store (t2, t3, 8)
+							 * 	store (t2, t3, 8) <- 5
 							 */
 							case ADDRESSING_MODE_REGISTERS_ONLY:
 								//Copy the mulitplier over
@@ -4397,7 +4397,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							 * 	store (t2, t4, 8) <- 5
 							 *
 							 * 	Can become
-							 * 	store (t2, t3, 64)
+							 * 	store (t2, t3, 64) <- 5
 							 * 				   ^
 							 * 				   |
 							 * 				  BAD
@@ -4416,7 +4416,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							 * 	store (t2, t4) <- 5
 							 *
 							 * 	Can become
-							 * 	store 8(t2, t3)
+							 * 	store 8(t2, t3) <- 5
 							 */
 							case ADDRESSING_MODE_REGISTERS_ONLY:
 								//Copy the constant and address register over
@@ -4435,7 +4435,30 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								changed = TRUE;
 								break;
 
+							/**
+							 * Case where we have:
+							 * 	t4 <- t3 + 8
+							 * 	store 8(t2, t4) <- 5
+							 *
+							 * 	Can become
+							 * 	store 16(t2, t3) <- 5
+							 */
 							case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+								//Add the first operation's constant to the existing offset
+								add_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+
+								//Copy the address operand over
+								memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+
+								//The first statement is now useless
+								delete_statement(to_be_combined);
+
+								//Rebuild around the memory movement
+								reconstruct_window(window, memory_movement);
+
+								changed = TRUE;
+								break;
+
 							case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
 							case ADDRESSING_MODE_REGISTERS_AND_SCALE:
 							case ADDRESSING_MODE_INDEX_AND_SCALE:
