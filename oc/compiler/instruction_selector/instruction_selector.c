@@ -4361,18 +4361,63 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								changed = TRUE;
 								break;
 
-							case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+							/**
+							 * Case where we have:
+							 * 	t4 <- t3 * 8
+							 * 	store (t2, t4) <- 5
+							 *
+							 * 	Can become
+							 * 	store (t2, t3, 8)
+							 */
 							case ADDRESSING_MODE_REGISTERS_ONLY:
-							case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-							case ADDRESSING_MODE_INDEX_AND_SCALE:
-							case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+								//Copy the mulitplier over
+								memory_movement->operands.oir.address_multiplier = to_be_combined->operands.oir.constant_operand->constant_value.signed_long_constant;
 
-							default:
+								//Copy over the second address operand as well
+								memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+
+								//This now has an offset and a scale
+								memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
+
+								//We no longer need the first statement
+								delete_statement(to_be_combined);
+
+								//Rebuilt around the memory movement
+								reconstruct_window(window, memory_movement);
+
+								changed = TRUE;
 								break;
 
+							/**
+							 * Anything else that *already* has an existing scale would not be worth it for this
+							 * optimization becuase multipliying out would blow away the existing scale and
+							 * make it lea incompatible
+							 *
+							 * 	t4 <- t3 * 8
+							 * 	store (t2, t4, 8) <- 5
+							 *
+							 * 	Can become
+							 * 	store (t2, t3, 64)
+							 * 				   ^
+							 * 				   |
+							 * 				  BAD
+							 *
+							 * As such, we don't bother doing this with anything that already has a scale
+							 */
+							default:
+								break;
 						}
 
 					} else if(to_be_combined->op == PLUS){
+
+						//
+						//
+						//
+						//TODO
+						//
+						//
+						//
+						//
 						switch(memory_movement->addressing_mode){
 							/**
 							 */
