@@ -12,7 +12,6 @@
 #include "../utils/queue/heap_queue.h"
 #include "../utils/value_numbering_table/value_numbering_table.h"
 #include "../utils/constants.h"
-#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -12853,54 +12852,6 @@ static inline void handle_indirect_jump(instruction_window_t* window){
 	//Reconstruct the window with the indirect jump as the start
 	reconstruct_window(window, indirect_jump_statement);
 	return;
-}
-
-
-/**
- * Combine a lea with a regular load instruction. This is mainly intended to be used with the 
- * rip relative constant addressing, but we may extend it in the future
- */
-static void combine_lea_with_regular_load_instruction(instruction_window_t* window, instruction_t* lea_statement, instruction_t* load_statement){
-	//Go based on what kind of lea we have
-	switch(lea_statement->addressing_mode){
-		/**
-		 * This is our main target with this rule
-		 */
-		case ADDRESSING_MODE_RIP_RELATIVE:
-			//This will be a rip-relative address
-			load_statement->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
-
-			//The first thing we need is the %rip register
-			load_statement->operands.x86.address_register1 = instruction_pointer_variable;
-
-			//Store the rip rleative offset in the rip offset register
-			load_statement->operands.x86.rip_offset_var = lea_statement->operands.oir.rip_offset_var;
-
-			/**
-			 * We can delete this *if* it's not being used by someone else
-			 */
-			if(lea_statement->operands.oir.assignee->use_count <= 1){
-				delete_statement(lea_statement);
-			} else {
-				handle_lea_statement(lea_statement);
-			}
-
-			//Rebuild the window based on the load statement
-			reconstruct_window(window, load_statement);
-
-			//Let the helper deal with the load instruction's destination
-			handle_load_instruction_type_and_destination(window);
-
-			break;
-
-		/**
-		 * By default, just do nothing and leave the instruction window
-		 * as is. It will be picked up by the rest of the selector as
-		 * normal
-		 */
-		default:
-			break;
-	}
 }
 
 
