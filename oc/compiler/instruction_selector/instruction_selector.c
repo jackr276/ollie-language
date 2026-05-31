@@ -4321,24 +4321,74 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					break;
 
 				/**
-				 * Handle cases where the second addressin operand
+				 * Handle cases where the second addressing operand
 				 * has a binary operation with a constant offset
-				 * to be combined with it
+				 * to be combined with it. Unlike the first operand,
+				 * we need to consider cases where have a *(STAR) or
+				 * +(PLUS) operation here
+				 *
+				 * For the STAR case, we need to remember that only certain powers
+				 * of 2 are addressing mode compatible and account for that in our selection
 				 */
 				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-					//TODO
-					switch(memory_movement->addressing_mode){
-						case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
-						case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
-						case ADDRESSING_MODE_REGISTERS_ONLY:
-						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-						case ADDRESSING_MODE_INDEX_AND_SCALE:
-						case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+					if(to_be_combined->op == STAR
+						&& is_constant_lea_compatible_power_of_2(to_be_combined->operands.oir.constant_operand) == TRUE){
+						switch(memory_movement->addressing_mode){
+							/**
+							 * Case where we have:
+							 * 	t4 <- t3 * 8
+							 * 	store 8(t2, t4) <- 5
+							 *
+							 * 	Can become
+							 * 	store 8(t2, t3, 8)
+							 */
+							case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+								//Copy the mulitplier over
+								memory_movement->operands.oir.address_multiplier = to_be_combined->operands.oir.constant_operand->constant_value.signed_long_constant;
 
-						default:
-							break;
+								//Copy over the second address operand as well
+								memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
 
-					}
+								//This now has an offset and a scale
+								memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+
+								//We no longer need the first statement
+								delete_statement(to_be_combined);
+
+								//Rebuilt around the memory movement
+								reconstruct_window(window, memory_movement);
+
+								changed = TRUE;
+								break;
+
+							case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+							case ADDRESSING_MODE_REGISTERS_ONLY:
+							case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+							case ADDRESSING_MODE_INDEX_AND_SCALE:
+							case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+
+							default:
+								break;
+
+						}
+
+					} else if(to_be_combined->op == PLUS){
+						switch(memory_movement->addressing_mode){
+							/**
+							 */
+							case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+							case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+							case ADDRESSING_MODE_REGISTERS_ONLY:
+							case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+							case ADDRESSING_MODE_INDEX_AND_SCALE:
+							case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+
+							default:
+								break;
+
+						}
+					} 
+
 					break;
 
 				case THREE_ADDR_CODE_LEA_STMT:
