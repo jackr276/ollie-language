@@ -4423,16 +4423,17 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * 	We can convert it into t3 <- x + 4
 			 */
 			case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
-				//Clear this too
-				lea_statement->addressing_mode = ADDRESSING_MODE_NONE;
+				//No more addressing mode
+				addressing_mode_statement->addressing_mode = ADDRESSING_MODE_NONE;
 
 				//Convert it here
-				lea_statement->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+				addressing_mode_statement->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
 
 				//Convert the operands into where they need to go
-				lea_statement->operands.oir.operand1 = lea_statement->operands.oir.address_operand2;
-				lea_statement->operands.oir.constant_operand = lea_statement->operands.oir.address_offset;
+				addressing_mode_statement->operands.oir.operand1 = addressing_mode_statement->operands.oir.address_operand2;
+				addressing_mode_statement->operands.oir.constant_operand = addressing_mode_statement->operands.oir.address_offset;
 
+				changed = TRUE;
 				break;
 
 			/**
@@ -4443,9 +4444,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * 	t3 <- lea (x, y)
 			 */
 			case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-				//Convert the lea type
-				lea_statement->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+				addressing_mode_statement->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
 				
+				changed = TRUE;
 				break;
 
 			/**
@@ -4456,9 +4457,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * 	t3 <- lea 4(x, y)
 			 */
 			case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
-				//Convert the type
-				lea_statement->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+				addressing_mode_statement->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
+				changed = TRUE;
 				break;
 
 			//This should be impossible to reach, the default just makes the compiler happy
@@ -4468,6 +4469,53 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
+
+	/**
+	 * ======================= Addressing mode offset constant simplification =================================
+	 * Optimize addressing modes that use the offset constant if the given offset
+	 * is 0. If we find an instruction with an addressing mode that uses the offset
+	 * constant, it is worth it to do a quick check and see if we can't eliminate
+	 * the offset here entirely
+	 */
+	if(does_addressing_mode_use_offset_constant(window->instruction1->addressing_mode) == TRUE
+		&& is_constant_value_zero(window->instruction1->operands.oir.address_offset) == TRUE){
+		//Extract this for ease of use
+		instruction_t* target = window->instruction1;
+
+		//NULL out the offset constant
+		target->operands.oir.address_offset = NULL;
+
+		/**
+		 * Run through all of the addressing modes and convert
+		 * them appropriately
+		 */
+		switch(target->addressing_mode){
+			case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+				target->addressing_mode = ADDRESSING_MODE_INDEX_AND_SCALE;
+				break;
+
+			case ADDRESSING_MODE_OFFSET_ONLY:
+				target->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
+				break;
+
+			case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+				target->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+				break;
+
+			case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+				target->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
+				break;
+
+			case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
+				target->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
+				break;
+
+			//Should be impossible but just in case
+			default:
+				fprintf(stderr, "Fatal internal compiler error: Unreachable addressing mode hit in 0 simplifier\n");
+				exit(1);
+		}
+	}
 
 
 	/**
@@ -4905,54 +4953,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 			//This counts as a change because we deleted
 			changed = TRUE;
-		}
-	}
-
-
-	/**
-	 * Optimize addressing modes that use the offset constant if the given offset
-	 * is 0. If we find an instruction with an addressing mode that uses the offset
-	 * constant, it is worth it to do a quick check and see if we can't eliminate
-	 * the offset here entirely
-	 */
-	if(window->instruction1->addressing_mode != ADDRESSING_MODE_NONE
-		&& does_addressing_mode_use_offset_constant(window->instruction1->addressing_mode) == TRUE
-		&& is_constant_value_zero(window->instruction1->operands.oir.address_offset) == TRUE){
-		//Extract this for ease of use
-		instruction_t* target = window->instruction1;
-
-		//NULL out the offset constant
-		target->operands.oir.address_offset = NULL;
-
-		/**
-		 * Run through all of the addressing modes and convert
-		 * them appropriately
-		 */
-		switch(target->addressing_mode){
-			case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
-				target->addressing_mode = ADDRESSING_MODE_INDEX_AND_SCALE;
-				break;
-
-			case ADDRESSING_MODE_OFFSET_ONLY:
-				target->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
-				break;
-
-			case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
-				target->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
-				break;
-
-			case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
-				target->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
-				break;
-
-			case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
-				target->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
-				break;
-
-			//Should be impossible but just in case
-			default:
-				fprintf(stderr, "Fatal internal compiler error: Unreachable addressing mode hit in 0 simplifier\n");
-				exit(1);
 		}
 	}
 
