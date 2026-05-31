@@ -14098,81 +14098,6 @@ static inline void handle_stack_deallocation_statement(instruction_t* instructio
  * the pattern selector ran and perform one-to-one mappings on whatever is left.
  */
 static void select_instruction_patterns(instruction_window_t* window, symtab_function_record_t* function){
-	/**
-	 * ============================= Address Calculation Optimization  ==============================
-	 * These are patterns that span multiple instructions. Often we're able to
-	 * condense these multiple instructions into one singular x86 instruction
-	 * We want to ensure that we get the best possible outcome for memory movement address calculations.
-	 * This is where *a lot* of instructions get generated, so it's worth it to spend compilation time
-	 * compressing these
-	 */
-
-	//TODO IN THEORY THIS IS NOW ALL USELESS
-
-	/**
-	 * Compressing lea constant loads with the rip-relative addressing that
-	 * comes before them
-	 *
-	 * This would be something like:
-	 *  t4 <- .LC0(%rip)
-	 *  t5 <- load t4
-	 *
-	 *  We can combine this to be
-	 * 	t5 <- .LC0(%rip)
-	 */
-	if(window->instruction2 != NULL
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_STATEMENT
-		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
-		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.address_operand1, TRUE) == TRUE){
-
-		/**
-		 * Invoke a special helper here that will deal with the selection for us and also
-		 * modify our window
-		 */
-		combine_lea_with_regular_load_instruction(window, window->instruction1, window->instruction2);
-		return;
-	}
-
-
-	/**
-	 * Compressing variable offset loads with leas that come beforehand. We do this to turn
-	 * 2 expressions into one big addressing expression
-	 */
-	if(window->instruction2 != NULL
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET
-		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
-		&& window->instruction1->addressing_mode != ADDRESSING_MODE_RIP_RELATIVE //Nothing to do if we have this
-		//Is the lea's assignee equal to the offset of the load
-		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.address_operand2, TRUE) == TRUE){
-
-		/**
-		 * Let the helper deal with it. This helper handles all possible cases, so once it's done this whole
-		 * rule is done and we can return
-		 */
-		combine_lea_with_variable_offset_load_instruction(window, window->instruction1, window->instruction2);
-		return;
-	}
-
-	/**
-	 * Compressing variable offset stores with leas that come beforehand. We do this to turn
-	 * 2 expressions into one big addressing expression
-	 */
-	if(window->instruction2 != NULL
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET 
-		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
-		&& window->instruction1->addressing_mode != ADDRESSING_MODE_RIP_RELATIVE //Nothing to do if we have this
-		//Is the lea's assignee equal to the offset of the store
-		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.address_operand2, TRUE) == TRUE){
-
-		/**
-		 * Let the helper deal with it. This helper handles all possible cases, so once it's done this whole
-		 * rule is done and we can return
-		 */
-		combine_lea_with_variable_offset_store_instruction(window, window->instruction1, window->instruction2);
-		return;
-	}
-
 	//The instruction that we have here is the window's instruction 1
 	instruction_t* instruction = window->instruction1;
 
@@ -14239,20 +14164,8 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		case THREE_ADDR_CODE_LOAD_STATEMENT:
 			handle_load_instruction(window);
 			break;
-		case THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET:
-			handle_load_with_constant_offset_instruction(window);
-			break;
-		case THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET:
-			handle_load_with_variable_offset_instruction(window);
-			break;
 		case THREE_ADDR_CODE_STORE_STATEMENT:
 			handle_store_instruction(instruction);
-			break;
-		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-			handle_store_with_constant_offset_instruction(instruction);
-			break;
-		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-			handle_store_with_variable_offset_instruction(instruction);
 			break;
 		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
 			handle_test_if_not_zero_instruction(window);
