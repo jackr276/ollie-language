@@ -4553,7 +4553,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, memory_movement->operands.oir.address_multiplier);
 
 								//This now has an offset
-								memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.address_offset;
+								memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
 
 								//Copy the address operand over
 								memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
@@ -4570,10 +4570,38 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								changed = TRUE;
 								break;
 
+							/**
+							 * Case where we have:
+							 * 	t4 <- t3 + 8
+							 * 	leaq 72(, t4, 8), t7 
+							 *
+							 * 	Conceptually this is the same as:
+							 * 		72 + (t3 + 8) * 8
+							 * 		72 + t3 * 8 + 64
+							 * 		136 + t3 * 8
+							 * 		136(, t3, 8)
+							 *
+							 * 	Can become
+							 * 	leaq 136(, t4, 8), t7 
+							 */
 							case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
-								printf("HERE\n\n");
+								//Multiply the existing constant by the address multiplier
+								multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, memory_movement->operands.oir.address_multiplier);
+								
+								//Now add the result to the existing address offset
+								add_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+
+								//Copy the address operand over
+								memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+
+								//The first statement is now useless
+								delete_statement(to_be_combined);
+
+								//Rebuilt the window around the memory movement
+								reconstruct_window(window, memory_movement);
+
+								changed = TRUE;
 								break;
-							//TODO
 
 							//Anything else we don't support so leave it as-is
 							default:
