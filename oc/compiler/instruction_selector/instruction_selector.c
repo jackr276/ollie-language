@@ -12067,150 +12067,6 @@ static inline void handle_load_instruction_base_address(instruction_t* load_stat
 
 
 /**
- * Handle a load instruction. A load instruction is always converted into
- * a garden variety dereferencing move
- *
- * NOTE: We assume that the very fist instruction in this window is what we're after
- */
-static void handle_load_instruction(instruction_window_t* window){
-	int64_t stack_offset;
-
-	//The load instruction itself
-	instruction_t* load_instruction = window->instruction1;
-
-	//Extract the base address from the load instruction itself
-	three_addr_var_t* base_address = load_instruction->operands.oir.address_operand1;
-	symtab_variable_record_t* linked_var = base_address->linked_var;
-
-	/**
-	 * Handle based on what the variable type is
-	 */
-	switch(base_address->variable_type){
-		/**
-		 * We have a regular function-local stack frame address. This is super
-		 * common and our most broad case. We will need to support global variables
-		 * as well as stack offsets in this case
-		 */
-		case VARIABLE_TYPE_MEMORY_ADDRESS:
-			if(linked_var != NULL){
-				//Go based on what kind of variable that we have
-				switch(linked_var->membership){
-					/**
-					 * Global and static variables require special attention because they belong to the data
-					 * segment of the program
-					 */
-					case GLOBAL_VARIABLE:
-					case STATIC_VARIABLE:
-						//Global/static are rip-relative
-						load_instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
-
-						//The address calc reg1 is the instruction pointer
-						load_instruction->operands.x86.address_register1 = instruction_pointer_variable;
-						load_instruction->operands.x86.rip_offset_var = base_address;
-
-						break;
-
-					/**
-					 * Otherwise we have a regular variable that we're taking the memory address of
-					 */
-					default:
-						//This is our stack offset, it will be needed going forward
-						stack_offset = linked_var->stack_region->function_local_base_address;
-
-						//If we actually have a stack offset to deal with
-						if(stack_offset != 0){
-							//Let's get the offset from this memory address
-							three_addr_const_t* offset = emit_direct_integer_or_char_constant(linked_var->stack_region->function_local_base_address, u64);
-
-							//We now will have something like <offset>(%rsp)
-							load_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-
-							//This will be the stack pointer
-							load_instruction->operands.x86.address_register1 = stack_pointer_variable;
-
-							//Store the offset too
-							load_instruction->operands.x86.address_offset = offset;
-
-						//Otherwise there's no stack offset, so we're just dereferencing the stack pointer
-						} else {
-							//Change the mode
-							load_instruction->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
-							
-							//Source is now just the stack pointer
-							load_instruction->operands.x86.address_register1 = stack_pointer_variable;
-						}
-
-						break;
-				}
-
-			/**
-			 * If the linked variable is NULL then we're just doing a regular stack offset
-			 */
-			} else {
-				//This is our stack offset, it will be needed going forward
-				stack_offset = base_address->associated_memory_region.stack_region->function_local_base_address;
-
-				//If we actually have a stack offset to deal with
-				if(stack_offset != 0){
-					//Let's get the offset from this memory address
-					three_addr_const_t* offset = emit_direct_integer_or_char_constant(linked_var->stack_region->function_local_base_address, u64);
-
-					//We now will have something like <offset>(%rsp)
-					load_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-
-					//This will be the stack pointer
-					load_instruction->operands.x86.address_register1 = stack_pointer_variable;
-
-					//Store the offset too
-					load_instruction->operands.x86.address_offset = offset;
-
-				//Otherwise there's no stack offset, so we're just dereferencing the stack pointer
-				} else {
-					//Change the mode
-					load_instruction->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
-					
-					//Source is now just the stack pointer
-					load_instruction->operands.x86.address_register1 = stack_pointer_variable;
-				}
-			}
-
-			break;
-
-		/**
-		 * Unlike a function local stack address, a stack passed parameter address
-		 * has a few more restrictions. We know that the stack offset will never be 0 due
-		 * to the way that stack passed parameters work, and we know that this will never
-		 * be a global variable
-		 */
-		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-			//We now will have something like <offset>(%rsp)
-			load_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-
-			//This will be the stack pointer
-			load_instruction->operands.x86.address_register1 = stack_pointer_variable;
-
-			//The offset will come directly from the stack passed parameter region
-			load_instruction->operands.x86.address_offset = emit_stack_passed_parameter_offset_constant(base_address->associated_memory_region.stack_region, u64);
-
-			break;
-
-		//Most basic case is we just have a pointer or something
-		default:
-			//Just a base dereference
-			load_instruction->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
-
-			//Copy over the base address
-			load_instruction->operands.x86.address_register1 = base_address;
-
-			break;
-	}
-
-	//Invoke the helper to handle the assignee and any edge cases
-	handle_load_instruction_type_and_destination(window);
-}
-
-
-/**
  * Handle a load with constant offset instruction
  *
  * load t5 <- MEM<t23>[8] --> movx 16(%rsp), t5
@@ -13165,6 +13021,36 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 		default:
 			break;
 	}
+}
+
+
+/**
+ * Handle a load instruction. A load instruction is always converted into
+ * a garden variety dereferencing move
+ *
+ * NOTE: We assume that the very fist instruction in this window is what we're after
+ */
+static void handle_load_instruction(instruction_window_t* window){
+	//Extract the load instruction itself
+	instruction_t* load_instruction = window->instruction1;
+
+	//We'll need the source and memory write types on hand
+	generic_type_t* source_type;
+	generic_type_t* destination_type = load_instruction->type_storage.memory_read_write_type;
+
+	//Load instructions are always coming out from memory
+	load_instruction->memory_access_type = READ_FROM_MEMORY;
+
+	/**
+	 * Let the helper deal with everything around the base address/addressing mode for the laod
+	 * instruction
+	 */
+	handle_base_address_and_addressing_mode_for_instruction(load_instruction);
+
+//TODO
+
+	//Invoke the helper to handle the assignee and any edge cases
+	handle_load_instruction_type_and_destination(window);
 }
 
 
