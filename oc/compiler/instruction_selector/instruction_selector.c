@@ -13047,13 +13047,8 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 						 * to create a fresh offset and update the addressing mode
 						 */
 						if(does_addressing_mode_use_offset_constant(instruction->addressing_mode) == TRUE){
-							//
-							//
-							//TODO
-							//
-							//
-							//
-							//
+							//Let the helper sum with the existing offset value
+							sum_constant_with_raw_int64_value(instruction->operands.x86.address_offset, i64, stack_offset);
 
 						} else {
 							//Let's get the offset from this memory address
@@ -13083,7 +13078,6 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 									fprintf(stderr, "Fatal internal compiler error, invalid addressing mode hit\n");
 									exit(1);
 							}
-
 						}
 
 						break;
@@ -13094,30 +13088,57 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 			 * worry about anything regarding global/static vars, we can just emit the region
 			 */
 			} else {
+				//No matter what the address register is now the stack pointer
+				instruction->operands.x86.address_register1 = stack_pointer_variable;
+
 				//Get the stack offset
 				stack_offset = base_address->associated_memory_region.stack_region->function_local_base_address;
 
-				//If it's not 0, we need to do some arithmetic
-				if(stack_offset != 0){
+				/**
+				 * Early exit - if we don't have a stack offset to worry
+				 * about then bail out now
+				 */
+				if(stack_offset == 0){
+					break;
+				}
+
+				/**
+				 * If we already use the addressing mode, we're going to need to sum
+				 * the offset value with what we've already got. Otherwise, we'll need
+				 * to create a fresh offset and update the addressing mode
+				 */
+				if(does_addressing_mode_use_offset_constant(instruction->addressing_mode) == TRUE){
+					//Let the helper sum with the existing offset value
+					sum_constant_with_raw_int64_value(instruction->operands.x86.address_offset, i64, stack_offset);
+
+				} else {
 					//Let's get the offset from this memory address
 					three_addr_const_t* offset = emit_direct_integer_or_char_constant(stack_offset, u64);
 
-					//The first address calc register will be the stack pointer
-					instruction->operands.x86.address_register1 = stack_pointer_variable;
+					switch(instruction->addressing_mode){
+						case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+							instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+							break;
 
-					//And we need to store the offset
-					instruction->operands.x86.address_offset = offset;
+						case ADDRESSING_MODE_REGISTERS_ONLY:
+							instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+							break;
 
-					//This counts for our destination only
-					instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+						case ADDRESSING_MODE_RIP_RELATIVE:
+							instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+							break;
 
-				//If it is 0, we only need to deref the stack pointer
-				} else {
-					//This is the stack pointer, no offset is needed
-					instruction->operands.x86.address_register1 = stack_pointer_variable;
+						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+							instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE; 
+							break;
 
-					//Just dereference the destination here, nothing more
-					instruction->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
+						/**
+						 * Some invalid case here so we make the compiler panic
+						 */
+						default:
+							fprintf(stderr, "Fatal internal compiler error, invalid addressing mode hit\n");
+							exit(1);
+					}
 				}
 			}
 
