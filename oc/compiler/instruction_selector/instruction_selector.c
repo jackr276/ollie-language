@@ -4240,7 +4240,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							//Now copy over the addrss operand
 							memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
 
-							//This now has an offste so update the mode
+							//This now has an offset so update the mode
 							memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 							//Scrap the old binary operation
@@ -4261,6 +4261,23 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						 * 	store 4(t6, t7, 8) <- 8
 						 */
 						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+							//First copy the constant over
+							memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
+
+							//Now copy over the addrss operand
+							memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+
+							//This now has an offset so update the addressing mode
+							memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+
+							//Scrap the old binary operation
+							delete_statement(to_be_combined);
+
+							//Rebuild around the memory movement
+							reconstruct_window(window, memory_movement);
+
+							changed = TRUE;
+							break;
 
 						//Unsupported - just do nothing
 						default:
