@@ -12200,6 +12200,53 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 
 
 /**
+ * In order to know whether or not we can use certain kinds of AVX/SSE instructions, we need to determine
+ * whehter or not alignment can be guaranteed for an addressing mode instruction. This is done
+ * by seeing whether or not we have a stack pointer as the base address, and what kind of offset
+ * we have from there
+ */
+static inline alignment_type_t is_alignment_guaranteed_for_memory_operation(instruction_t* instruction){
+	switch(instruction->addressing_mode){
+		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+			//If this is the stack pointer then we can guarantee alignment
+			if(instruction->operands.x86.address_register1 == stack_pointer_variable){
+				return ALIGNMENT_TYPE_GUARANTEED;
+			} else {
+				return ALIGNMENT_TYPE_NOT_GUARANTEED;
+			}
+
+			break;
+
+		//If we're just dealing with the offset we can also use that
+		case ADDRESSING_MODE_OFFSET_ONLY:
+			//If this is the stack pointer we can make guarantees
+			if(load_instruction->operands.x86.address_register1 == stack_pointer_variable){
+				//Extract the value
+				u_int32_t offset_value = load_instruction->operands.x86.address_offset->constant_value.signed_integer_constant;
+
+				//If we can mod by 16 then it's aligned, otherwise it's not
+				if(offset_value % 16 == 0){
+					source_region_alignment = ALIGNMENT_TYPE_GUARANTEED;
+				} else {
+					source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+				}
+
+			//Otherwise we can't guarantee anything
+			} else {
+				source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+			}
+
+			break;
+
+		//Anything else - we can't guarantee anything
+		default:
+			source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
+			break;
+	}
+}
+
+
+/**
  * Handle a load instruction. A load instruction is always converted into
  * a garden variety dereferencing move
  *
@@ -12234,55 +12281,7 @@ static void handle_load_instruction(instruction_window_t* window){
 	 * most commonly true when we are doing 16 byte loads during large struct copy operations.
 	 * We will invoke a helper to determine whether or not the source memory region is aligned
 	 */
-	alignment_type_t source_region_alignment;
-
-	/**
-	 * If we have a stack pointer variable, we know that it itself
-	 * is 16 byte aligned. We can now go through and use the offset
-	 * if we have one to determine if it is aligned. If the offset
-	 * isn't there then we have to assume it's not
-	 *
-	 *
-	 */
-
-	//TODO STANDARDIZE ALIGNMENT GUARNATEES
-	switch(load_instruction->addressing_mode){
-		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
-			//If this is the stack pointer then we can guarantee alignment
-			if(load_instruction->operands.x86.address_register1 == stack_pointer_variable){
-				source_region_alignment = ALIGNMENT_TYPE_GUARANTEED;
-			} else {
-				source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
-			}
-
-			break;
-
-		//If we're just dealing with the offset we can also use that
-		case ADDRESSING_MODE_OFFSET_ONLY:
-			//If this is the stack pointer we can make guarantees
-			if(load_instruction->operands.x86.address_register1 == stack_pointer_variable){
-				//Extract the value
-				u_int32_t offset_value = load_instruction->operands.x86.address_offset->constant_value.signed_integer_constant;
-
-				//If we can mod by 16 then it's aligned, otherwise it's not
-				if(offset_value % 16 == 0){
-					source_region_alignment = ALIGNMENT_TYPE_GUARANTEED;
-				} else {
-					source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
-				}
-
-			//Otherwise we can't guarantee anything
-			} else {
-				source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
-			}
-
-			break;
-
-		//Anything else - we can't guarantee anything
-		default:
-			source_region_alignment = ALIGNMENT_TYPE_NOT_GUARANTEED;
-			break;
-	}
+	alignment_type_t source_region_alignment = is_alignment_guaranteed_for_memory_operation(load_instruction);
 
 	//By default, assume it's the assignee
 	three_addr_var_t* destination_register = load_instruction->operands.oir.assignee;
@@ -12609,14 +12608,8 @@ static void handle_store_instruction(instruction_t* store_instruction){
 	}
 
 	//Now we need to determine the store instruction's alignment
-	alignment_type_t destination_alignment;
+	alignment_type_t destination_alignment = );
 
-	/**
-	 * If we have a stack pointer variable, we know that it itself
-	 * is 16 byte aligned. We can now go through and use the offset
-	 * if we have one to determine if it is aligned. If the offset
-	 * isn't there then we have to assume it's not
-	 */
 
 	//TODO STANDARDIZE ALIGNMENT GUARANTEES
 	switch(store_instruction->addressing_mode){
