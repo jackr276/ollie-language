@@ -13150,13 +13150,14 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 		 * what this is
 		 */
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+			//No matter what this always becomes the stack pointer variable
+			instruction->operands.x86.address_register1 = stack_pointer_variable;
+
 			//TODO
 			//
 			//
 
 
-			//The first address calc register will be the stack pointer
-			instruction->operands.x86.address_register1 = stack_pointer_variable;
 
 			//And we need to store the offset
 			instruction->operands.x86.address_offset = emit_stack_passed_parameter_offset_constant(base_address->associated_memory_region.stack_region, u64);
@@ -13409,170 +13410,6 @@ static void handle_store_instruction(instruction_t* store_instruction){
 
 	//Once we've done all the above assignments, we need to determine what our instruction type is. The source here is always clean, we are moving to memory
 	store_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type), destination_alignment, WRITE_TO_MEMORY);
-}
-
-
-/**
- * Handle an instruction like
- *
- * store MEM<t5>[4] <- t7
- *
- * movX t7, 8(%rsp)
- *
- * This will always be an OFFSET_ONLY calculation type
- */
-static void handle_store_with_constant_offset_instruction(instruction_t* instruction){
-	int64_t stack_offset;
-
-	//Extract the base address and the variable(if any) that it is linked to
-	three_addr_var_t* base_address = instruction->operands.oir.address_operand1;
-	symtab_variable_record_t* linked_var = base_address->linked_var;
-
-	//This is a write regardless
-	instruction->memory_access_type = WRITE_TO_MEMORY;
-
-	//Go based on what kind of variable we have
-	switch(base_address->variable_type){
-		/**
-		 * This is by far the most common type. In this case, we will need to account
-		 * for when we have global variables or when we have stack offsets of 0
-		 */
-		case VARIABLE_TYPE_MEMORY_ADDRESS:
-			/**
-			 * Most of the time the linked var will not be NULL, but we need to account
-			 * for the cases(although rare) where it will be
-			 */
-			if(linked_var != NULL){
-				switch(linked_var->membership){
-					/**
-					 * Global and static variable require special rip-relative addressing to be done
-					 */
-					case GLOBAL_VARIABLE:
-					case STATIC_VARIABLE:
-						//The first address calc register is the instruction pointer always
-						instruction->operands.x86.address_register1 = instruction_pointer_variable;
-
-						//The offset is already in place, we just need to set the rip offset variable
-						instruction->operands.x86.rip_offset_var = base_address;
-
-						//Copy over the address offset
-						instruction->operands.x86.address_offset = instruction->operands.oir.address_offset;
-
-						//All that we need to do now is change the calculation mode to be rip with offset
-						instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
-						break;
-
-					/**
-					 * Not global or static - pure stack memory we're dealing with here
-					 */
-					default:
-						//Get the stack offset
-						stack_offset = linked_var->stack_region->function_local_base_address;
-
-						//If it's not 0, we need to do some arithmetic with the constants
-						if(stack_offset != 0){
-							//This is still the stack pointer
-							instruction->operands.x86.address_register1 = stack_pointer_variable;
-
-							//Copy over the address offset
-							instruction->operands.x86.address_offset = instruction->operands.oir.address_offset;
-
-							//We'll now add the stack offset to the offset that we already have in the "offset variable"
-							sum_constant_with_raw_int64_value(instruction->operands.x86.address_offset, i64, stack_offset);
-
-
-							//Once that's done, we just need to change the address calc mode
-							instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-
-						//Even if this is 0, we still need to account for the offset in the original statement
-						} else {
-							//The base address is the assignee
-							instruction->operands.x86.address_register1 = stack_pointer_variable;
-
-							//Copy over the address offset
-							instruction->operands.x86.address_offset = instruction->operands.oir.address_offset;
-							
-							//This has the address calc and the offset
-							instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-						}
-
-						break;
-				}
-
-			/**
-			 * When the variable is NULL we know that the stack offset will be coming from the 
-			 * actual three address var itself
-			 */
-			} else {
-				//Get the stack offset
-				stack_offset = base_address->associated_memory_region.stack_region->function_local_base_address;
-
-				//If it's not 0, we need to do some arithmetic with the constants
-				if(stack_offset != 0){
-					//This is still the stack pointer
-					instruction->operands.x86.address_register1 = stack_pointer_variable;
-
-					//Copy over the address offset
-					instruction->operands.x86.address_offset = instruction->operands.oir.address_offset;
-
-					//We'll now add the stack offset to the offset value
-					sum_constant_with_raw_int64_value(instruction->operands.x86.address_offset, i64, stack_offset);
-
-					//Once that's done, we just need to change the address calc mode
-					instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-
-				//Even if this is 0, we still need to account for the offset in the original statement
-				} else {
-					//The base address is the assignee
-					instruction->operands.x86.address_register1 = stack_pointer_variable;
-
-					//Copy over the address offset
-					instruction->operands.x86.address_offset = instruction->operands.oir.address_offset;
-					
-					//This has the address calc and the offset
-					instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-				}
-			}
-
-			break;
-
-		/**
-		 * A stack param address is different than a normal one. This address will never be 0 and it will
-		 * never be a global variable. We will emit a special kind of constant to handle this down the road
-		 */
-		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-			//This is still the stack pointer
-			instruction->operands.x86.address_register1 = stack_pointer_variable;
-
-			//Emit the value
-			three_addr_const_t* stack_param_offset = emit_stack_passed_parameter_offset_constant(instruction->operands.oir.assignee->associated_memory_region.stack_region, u64);
-
-			//Add these two together, the result will be in the new offset we just made
-			add_constants(stack_param_offset, instruction->operands.oir.address_offset);
-			
-			//And now assign the offset to be this new variable
-			instruction->operands.x86.address_offset = stack_param_offset;
-
-			//Once that's done, we just need to change the address calc mode
-			instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-
-			break;
-
-		//Non-special variable type means it's likely a pointer dereference
-		default:
-			//The base address is the assignee
-			instruction->operands.x86.address_register1 = instruction->operands.oir.address_operand1;
-
-			//Copy over the offset
-			instruction->operands.x86.address_offset = instruction->operands.oir.address_offset;
-
-			//Set the type
-			instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY; 
-			break;
-	}
-
-	//Invoke the helper for our source assignment
-	handle_store_instruction_sources_and_instruction_type(instruction);
 }
 
 
