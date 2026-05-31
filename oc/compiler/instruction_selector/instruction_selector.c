@@ -11997,7 +11997,8 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 							 * Anything else means that something has gone wrong here and we panic
 							 */
 							default:
-								fprintf(stderr, "Fatal internal compiler error: Unsupported addressing mode type in rip offset variable combiner\n");
+								fprintf(stderr, "Fatal internal compiler error: Unsupported addressing mode type in rip offset variable combiner: %s\n",
+										addressing_mode_to_string(instruction->addressing_mode));
 								exit(1);
 						}
 						
@@ -12060,7 +12061,8 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 								 * Some invalid case here so we make the compiler panic
 								 */
 								default:
-									fprintf(stderr, "Fatal internal compiler error, invalid addressing mode hit\n");
+									fprintf(stderr, "Fatal internal compiler error: invalid addressing mode %s hit\n",
+				 							addressing_mode_to_string(instruction->addressing_mode));
 									exit(1);
 							}
 						}
@@ -12124,7 +12126,8 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 						 * Some invalid case here so we make the compiler panic
 						 */
 						default:
-							fprintf(stderr, "Fatal internal compiler error, invalid addressing mode hit\n");
+							fprintf(stderr, "Fatal internal compiler error: invalid addressing mode %s hit\n",
+									addressing_mode_to_string(instruction->addressing_mode));
 							exit(1);
 					}
 				}
@@ -12182,7 +12185,8 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 					 * Some invalid case here so we make the compiler panic
 					 */
 					default:
-						fprintf(stderr, "Fatal internal compiler error, invalid addressing mode hit\n");
+						fprintf(stderr, "Fatal internal compiler error: invalid addressing mode %s hit\n",
+								addressing_mode_to_string(instruction->addressing_mode));
 						exit(1);
 				}
 			}

@@ -444,6 +444,11 @@ struct instruction_t{
 const char* variable_type_to_string(variable_type_t type);
 
 /**
+ * A debug function that converts an addressing mode to a human readable string
+ */
+const char* addressing_mode_to_string(memory_addressing_mode_t mode);
+
+/**
  * Initialize the memory management system
  */
 void initialize_varible_and_constant_system();

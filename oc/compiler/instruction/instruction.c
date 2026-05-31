@@ -82,6 +82,36 @@ const char* variable_type_to_string(variable_type_t type){
 
 
 /**
+ * A debug function that converts an addressing mode to a human readable string
+ */
+const char* addressing_mode_to_string(memory_addressing_mode_t mode){
+	switch(mode){
+		case ADDRESSING_MODE_NONE:
+			return "ADDRESSING_MODE_NONE";
+		case ADDRESSING_MODE_OFFSET_ONLY:
+			return "ADDRESSING_MODE_OFFSET_ONLY";
+		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+			return "ADDRESSING_MODE_BASE_ADDRESS_ONLY";
+		case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+			return "ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE";
+		case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+			return "ADDRESSING_MODE_REGISTERS_AND_OFFSET";
+		case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+			return "ADDRESSING_MODE_REGISTERS_AND_SCALE";
+		case ADDRESSING_MODE_REGISTERS_ONLY:
+			return "ADDRESSING_MODE_REGISTERS_ONLY";
+		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+			return "ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE";
+		case ADDRESSING_MODE_INDEX_AND_SCALE:
+			return "ADDRESSING_MODE_INDEX_AND_SCALE";
+		case ADDRESSING_MODE_RIP_RELATIVE:
+			return "ADDRESSING_MODE_RIP_RELATIVE";
+		case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
+			return "ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET";
+	}
+}
+
+/**
  * Initialize the memory management system
  */
 void initialize_varible_and_constant_system(){
