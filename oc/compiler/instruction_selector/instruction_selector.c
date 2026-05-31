@@ -6435,6 +6435,23 @@ static void simplify(cfg_t* cfg){
 
 			//Now run the simplifier
 			while(simplifier_pass(function_entry) == TRUE);
+
+		/**
+		 * Otherwise we were not able to value number anything, but we still may have redundant instructions
+		 * lying around. To fix this, we will now perform a mark and sweep pass but *no* additional simplifier
+		 * pass
+		 */
+		} else {
+			//Run the mark and sweep
+			simplification_type_t result = perform_mark_and_sweep_pass(function_entry, &(function->function_blocks));
+
+			/**
+			 * If we ended up doing control flow simplification, we are going to need
+			 * to reorder all of the blocks
+			 */
+			if(result == SIMPLIFICATION_INSTRUCTIONS_AND_CONTROL_FLOW){
+				order_blocks(cfg);
+			}
 		}
 	}
 }
