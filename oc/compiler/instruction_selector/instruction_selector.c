@@ -15,7 +15,6 @@
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/select.h>
 #include <sys/types.h>
 #include <threads.h>
@@ -4304,12 +4303,25 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 					break;
 
-				case THREE_ADDR_CODE_BIN_OP_STMT:
-					//TODO
-					break;
-
+				/**
+				 * Handle cases where the second addressin operand
+				 * has a binary operation with a constant offset
+				 * to be combined with it
+				 */
 				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 					//TODO
+					switch(memory_movement->addressing_mode){
+						case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+						case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+						case ADDRESSING_MODE_REGISTERS_ONLY:
+						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+						case ADDRESSING_MODE_INDEX_AND_SCALE:
+						case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+
+						default:
+							break;
+
+					}
 					break;
 
 				case THREE_ADDR_CODE_LEA_STMT:
