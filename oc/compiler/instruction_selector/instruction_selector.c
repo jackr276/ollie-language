@@ -4409,21 +4409,34 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						}
 
 					} else if(to_be_combined->op == PLUS){
-
-						//
-						//
-						//
-						//TODO
-						//
-						//
-						//
-						//
 						switch(memory_movement->addressing_mode){
 							/**
+							 * Case where we have:
+							 * 	t4 <- t3 + 8
+							 * 	store (t2, t4) <- 5
+							 *
+							 * 	Can become
+							 * 	store 8(t2, t3)
 							 */
+							case ADDRESSING_MODE_REGISTERS_ONLY:
+								//Copy the constant and address register over
+								memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
+								memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+
+								//Update the addressing mode
+								memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+
+								//The first statement is now useless
+								delete_statement(to_be_combined);
+
+								//Rebuild around the memory movement
+								reconstruct_window(window, memory_movement);
+
+								changed = TRUE;
+								break;
+
 							case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
 							case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
-							case ADDRESSING_MODE_REGISTERS_ONLY:
 							case ADDRESSING_MODE_REGISTERS_AND_SCALE:
 							case ADDRESSING_MODE_INDEX_AND_SCALE:
 							case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
