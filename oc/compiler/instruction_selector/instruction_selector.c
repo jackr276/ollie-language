@@ -12209,10 +12209,6 @@ static void handle_load_instruction(instruction_window_t* window){
 	//Extract the load instruction itself
 	instruction_t* load_instruction = window->instruction1;
 
-	//We'll need the source and memory write types on hand
-	generic_type_t* source_type;
-	generic_type_t* destination_type = load_instruction->type_storage.memory_read_write_type;
-
 	//Load instructions are always coming out from memory
 	load_instruction->memory_access_type = READ_FROM_MEMORY;
 
@@ -12245,7 +12241,11 @@ static void handle_load_instruction(instruction_window_t* window){
 	 * is 16 byte aligned. We can now go through and use the offset
 	 * if we have one to determine if it is aligned. If the offset
 	 * isn't there then we have to assume it's not
+	 *
+	 *
 	 */
+
+	//TODO STANDARDIZE ALIGNMENT GUARNATEES
 	switch(load_instruction->addressing_mode){
 		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
 			//If this is the stack pointer then we can guarantee alignment
@@ -12617,6 +12617,8 @@ static void handle_store_instruction(instruction_t* store_instruction){
 	 * if we have one to determine if it is aligned. If the offset
 	 * isn't there then we have to assume it's not
 	 */
+
+	//TODO STANDARDIZE ALIGNMENT GUARANTEES
 	switch(store_instruction->addressing_mode){
 		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
 			//If this is the stack pointer then we can guarantee alignmetn
@@ -12657,122 +12659,6 @@ static void handle_store_instruction(instruction_t* store_instruction){
 
 	//Once we've done all the above assignments, we need to determine what our instruction type is. The source here is always clean, we are moving to memory
 	store_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type), destination_alignment, WRITE_TO_MEMORY);
-}
-
-
-/**
- * Handle the base address for a store statement in all of its forms. This includes
- * global variables, stack variables, and plain variables as well. This is meant to
- * be used by the lea combiner rule. It will *not* modify addressing modes and it should
- * not be expected to give a full and complete result back. It will only modify
- * address calc reg1 and the offset if appropriate
- */
-static void handle_store_statement_base_address(instruction_t* store_instruction){
-	int64_t stack_offset;
-	instruction_t* global_variable_address;
-	
-	//Extract the base address and linked variable(if there is one)
-	three_addr_var_t* base_address = store_instruction->operands.oir.address_operand1;
-	symtab_variable_record_t* linked_var = base_address->linked_var;
-
-	switch(base_address->variable_type){
-		case VARIABLE_TYPE_MEMORY_ADDRESS:
-			if(linked_var != NULL){
-				switch(linked_var->membership){
-					/**
-					 * Global and static variables require specialized rip-relative addressing
-					 */
-					case GLOBAL_VARIABLE:
-					case STATIC_VARIABLE:
-						//Let the helper do the work
-						global_variable_address = emit_global_variable_address_calculation_x86(base_address, instruction_pointer_variable, u64);
-
-						//Now insert this before the given instruction
-						insert_instruction_before_given(global_variable_address, store_instruction);
-
-						/**
-						 * The destination of the global variable address will be our new address calc reg 1. 
-						 * We already have the offset loaded in, so that remains unchanged
-						 */
-						store_instruction->operands.x86.address_register1 = global_variable_address->operands.x86.destination_register;
-
-						break;
-
-					/**
-					 * Regular stack memory - default handling
-					 */
-					default:
-						//Get the stack offset
-						stack_offset = linked_var->stack_region->function_local_base_address;
-
-						//If it's not 0, we need to do some arithmetic with the constants
-						if(stack_offset != 0){
-							//Once that's done, we just need to change the address calc mode
-							store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-
-							//This is still the stack pointer
-							store_instruction->operands.x86.address_register1 = stack_pointer_variable;
-
-							//We will need to have a stack offset here since the memory base address has one
-							store_instruction->operands.x86.address_offset = emit_direct_integer_or_char_constant(stack_offset, i64);
-
-						//All that we need to do now is use the stack pointer
-						} else {
-							//The base address is the assignee
-							store_instruction->operands.x86.address_register1 = stack_pointer_variable;
-						}
-
-						break;
-				}
-
-			} else {
-				//Get the stack offset
-				stack_offset = base_address->associated_memory_region.stack_region->function_local_base_address;
-
-				//If it's not 0, we need to do some arithmetic with the constants
-				if(stack_offset != 0){
-					//Once that's done, we just need to change the address calc mode
-					store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-
-					//This is still the stack pointer
-					store_instruction->operands.x86.address_register1 = stack_pointer_variable;
-
-					//We will need to have a stack offset here since the memory base address has one
-					store_instruction->operands.x86.address_offset = emit_direct_integer_or_char_constant(stack_offset, i64);
-
-				//All that we need to do now is use the stack pointer
-				} else {
-					//The base address is the assignee
-					store_instruction->operands.x86.address_register1 = stack_pointer_variable;
-				}
-			}
-
-			break;
-
-		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-			//The first address calc register will be the stack pointer
-			store_instruction->operands.x86.address_register1 = stack_pointer_variable;
-
-			//And we need to store the offset
-			store_instruction->operands.x86.address_offset = emit_stack_passed_parameter_offset_constant(base_address->associated_memory_region.stack_region, u64);
-
-			//This counts for our destination only
-			store_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-
-			break;
-			
-		/**
-		 * Regular pointer dereference, nothing too bad here
-		 */
-		default:
-			//Otherwise this is just the destination register
-			store_instruction->operands.x86.address_register1 = base_address;
-
-			//This counts for our destination only
-			store_instruction->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
-			
-			break;
-	}
 }
 
 
