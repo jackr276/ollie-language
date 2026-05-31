@@ -11897,6 +11897,7 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 	int64_t stack_offset = 0;
 	three_addr_var_t* base_address;
 	symtab_variable_record_t* linked_var;
+	instruction_t* rip_offset_lea;
 
 	/**
 	 * First standardize everyting by moving it all over into the x86 registers off
@@ -11984,6 +11985,13 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 								
 								break;
 
+							/**
+							 * Going from
+							 * 	store 4(t4) <- 5
+							 *
+							 * To 
+							 * 	store 4+<var>(%rip) <- 5
+							 */
 							case ADDRESSING_MODE_OFFSET_ONLY:
 								//Update the mode
 								instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
@@ -11991,15 +11999,26 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 								//Update the two operands
 								instruction->operands.x86.rip_offset_var = base_address;
 								instruction->operands.x86.address_register1 = instruction_pointer_variable;
+
 								break;
 
 							/**
-							 * Anything else means that something has gone wrong here and we panic
+							 * For every other kind of addressing mode with the rip offset variable, we are actually
+							 * unable to combine it into one singular addressing mode value. Instead, we will need to calculate
+							 * the rip offset variable beforehand in a lea and then substitute that variable in for the 
+							 * base address
 							 */
 							default:
-								fprintf(stderr, "Fatal internal compiler error: Unsupported addressing mode type in rip offset variable combiner: %s\n",
-										addressing_mode_to_string(instruction->addressing_mode));
-								exit(1);
+								//Emit the rip offset address calculation here
+								rip_offset_lea = emit_global_variable_address_calculation_x86(base_address, instruction_pointer_variable, u64);
+
+								//Insert this right before our instruction
+								insert_instruction_before_given(rip_offset_lea, instruction);
+
+								//The base address now becomes this value
+								instruction->operands.x86.address_register1 = rip_offset_lea->operands.x86.destination_register;
+
+								break;
 						}
 						
 						break;

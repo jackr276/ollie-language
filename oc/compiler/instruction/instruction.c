@@ -108,6 +108,8 @@ const char* addressing_mode_to_string(memory_addressing_mode_t mode){
 			return "ADDRESSING_MODE_RIP_RELATIVE";
 		case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
 			return "ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET";
+		default:
+			return "INVALID ADDRESSING MODE";
 	}
 }
 
