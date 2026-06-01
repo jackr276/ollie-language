@@ -4149,6 +4149,23 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				 * of 2 are addressing mode compatible and account for that in our selection
 				 */
 				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+					///
+					///
+					///
+					///
+					///
+					///
+					///
+					///TODO ADD MINUS SUPPORT
+					///
+					///
+					///
+					///
+					///
+					///
+					///
+					///
+
 					if(to_be_combined->op == STAR
 						&& is_constant_lea_compatible_power_of_2(to_be_combined->operands.oir.constant_operand) == TRUE){
 						switch(memory_movement->addressing_mode){
