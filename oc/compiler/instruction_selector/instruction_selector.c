@@ -2902,8 +2902,65 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
+
 	/**
-	 * ------------------ Converting adjacent binary operations into LEA statements
+	 * ------------------ Converting adjacent binary operations into LEA statements ----------------------------------
+	 * If we have two adjacent binary operations where one is a bin_op_with_const
+	 * and one is a plain bin_op, there may be chances for us to convert them
+	 * into lea statements
+	 *
+	 * Example:
+	 * t20 <- t19 + t18
+	 * t21 <- t20 + 4
+	 *
+	 * Can become
+	 * t21 <- 4(t19, t18)
+	 */
+	if(window->instruction2 != NULL
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_STMT 
+		&& window->instruction1->op == PLUS
+		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction2->op == PLUS
+		&& variables_equal(window->instruction2->operands.oir.operand1, window->instruction1->operands.oir.assignee, TRUE) == TRUE) {
+
+		//Extract for convenience
+		instruction_t* binary_operation = window->instruction1;
+		instruction_t* constant_operation = window->instruction2;
+
+		//Grab the result type out
+		generic_type_t* result_type = get_destination_type_for_binary_operation_instruction(binary_operation);
+
+		/**
+		 * If we are lea compatible, we will convert
+		 * from two disparate binary operations into
+		 * one lea with an offset and two registers
+		 */
+		if(is_type_lea_compatible(result_type) == TRUE){
+			//We'll work on the second one
+			constant_operation->statement_type = THREE_ADDR_CODE_LEA_STMT;
+
+			//This is a register and offset lea type
+			constant_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+
+			//Copy over both operands from here
+			constant_operation->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
+			constant_operation->operands.oir.address_operand2 = binary_operation->operands.oir.operand2;
+			constant_operation->operands.oir.address_offset = constant_operation->operands.oir.constant_operand;
+
+			//Delete the old binary operation
+			delete_statement(binary_operation);
+
+			//Rebuilt the window around the constant operation
+			reconstruct_window(window, constant_operation);
+
+			//This is a change
+			changed = TRUE;
+		}
+	}
+
+
+	/**
 	 * If we have two adjacent binary operations where one is a bin_op_with_const
 	 * and one is a plain bin_op, there may be chances for us to convert them
 	 * into lea statements
@@ -2914,9 +2971,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 *
 	 * Can become
 	 * t22 <- (t19, ^t8_0, 4)
-	 *
-	 *
-	 * TODO CAN WE COMBINE WITH SEE HERE
 	 */
 	if(window->instruction2 != NULL
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
@@ -3104,66 +3158,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				default:
 					break;
 			}
-		}
-	}
-
-
-	/**
-	 * ------------------ Converting adjacent binary operations into LEA statements ----------------------------------
-	 * If we have two adjacent binary operations where one is a bin_op_with_const
-	 * and one is a plain bin_op, there may be chances for us to convert them
-	 * into lea statements
-	 *
-	 * Example:
-	 * t20 <- t19 + t18
-	 * t21 <- t20 + 4
-	 *
-	 * Can become
-	 * t21 <- 4(t19, t18)
-	 *
-	 *
-	 * TODO CAN WE COMBINE WITH SEE HERE
-	 */
-	if(window->instruction2 != NULL
-		&& window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_STMT 
-		&& window->instruction1->op == PLUS
-		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& window->instruction2->op == PLUS
-		&& variables_equal(window->instruction2->operands.oir.operand1, window->instruction1->operands.oir.assignee, TRUE) == TRUE) {
-
-		//Extract for convenience
-		instruction_t* binary_operation = window->instruction1;
-		instruction_t* constant_operation = window->instruction2;
-
-		//Grab the result type out
-		generic_type_t* result_type = get_destination_type_for_binary_operation_instruction(binary_operation);
-
-		/**
-		 * If we are lea compatible, we will convert
-		 * from two disparate binary operations into
-		 * one lea with an offset and two registers
-		 */
-		if(is_type_lea_compatible(result_type) == TRUE){
-			//We'll work on the second one
-			constant_operation->statement_type = THREE_ADDR_CODE_LEA_STMT;
-
-			//This is a register and offset lea type
-			constant_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-
-			//Copy over both operands from here
-			constant_operation->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
-			constant_operation->operands.oir.address_operand2 = binary_operation->operands.oir.operand2;
-			constant_operation->operands.oir.address_offset = constant_operation->operands.oir.constant_operand;
-
-			//Delete the old binary operation
-			delete_statement(binary_operation);
-
-			//Rebuilt the window around the constant operation
-			reconstruct_window(window, constant_operation);
-
-			//This is a change
-			changed = TRUE;
 		}
 	}
 
