@@ -3866,6 +3866,32 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					break;
 					
 				/**
+				 * For an assign const statement, we'll need to update positioning for
+				 * the second address operand. This really mainly exists to keep lea compatability
+				 */
+				case THREE_ADDR_CODE_ASSN_CONST_STMT:
+					switch(memory_movement->addressing_mode){
+						case ADDRESSING_MODE_OFFSET_ONLY:
+							break;
+
+						case ADDRESSING_MODE_REGISTERS_ONLY:
+							break;
+
+						case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+							break;
+
+						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+							break;
+
+						case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+							break;
+
+						default:
+							break;
+					}
+
+
+				/**
 				 * Combining an addressing mode with another binary operation where the first operand
 				 * is equal to the result of the binary operation
 				 */
