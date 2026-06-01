@@ -254,6 +254,28 @@ static inline u_int8_t is_memory_movement_operation(instruction_t* instruction){
 
 
 /**
+ * Does the given operation make use of an addressing mode expression?
+ * There are only certain operations that are at all eligible for this,
+ * and this rule will help us determine if they are. It also
+ * does a quick NULL check
+ */
+static inline u_int8_t does_operation_use_addressing_mode(instruction_t* instruction){
+	if(instruction == NULL){
+		return FALSE;
+	}
+
+	switch(instruction->statement_type){
+		case THREE_ADDR_CODE_LOAD_STATEMENT:
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+		case THREE_ADDR_CODE_LEA_STMT:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * For binary operation instructions, we store their overall "destination type" inside of the "result_type" field.
  * However, due to legacy implementations, this field is not always going to be populated. This special unpacker
  * function here will contain all the logic for every kind of binary operation to unpack and return that field
@@ -3823,7 +3845,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 */
 
 	//TODO CAN WE UPDATE THIS TO ALL ADDRESSING MODES??
-	if(is_memory_movement_operation(window->instruction2) == TRUE
+	if(does_operation_use_addressing_mode(window->instruction2) == TRUE
 		&& window->instruction1->operands.oir.assignee != NULL
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction1->operands.oir.assignee->use_count <= 1){
