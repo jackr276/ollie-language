@@ -3908,7 +3908,32 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							changed = TRUE;
 							break;
 
+						/**
+						 * Scenario
+						 * t4 <- 4
+						 * leaq (t4, t5), t6
+						 *
+						 * Can become
+						 * leaq 4(t5), t6
+						 */
 						case ADDRESSING_MODE_REGISTERS_ONLY:
+							//Copy the constant over
+							memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
+
+							//Move the address operand over, NULL out the second one
+							memory_movement->operands.oir.address_operand1 = memory_movement->operands.oir.address_operand2;
+							memory_movement->operands.oir.address_operand2 = NULL;
+
+							//Update the addressing mode
+							memory_movement->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+
+							//Delete the first statement
+							delete_statement(to_be_combined);
+
+							//Rebuild around the second
+							reconstruct_window(window, memory_movement);
+
+							changed = TRUE;
 							break;
 
 						case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
