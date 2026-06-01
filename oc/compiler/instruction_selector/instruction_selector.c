@@ -3964,12 +3964,39 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							changed = TRUE;
 							break;
 
+						/**
+						 * Scenario
+						 * t4 <- 4
+						 * leaq (t4, t5, 8), t6
+						 *
+						 * Can become
+						 * leaq 4(, t5, 8), t6
+						 */
 						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+							//Move the constant over
+							memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
+
+							//NULL out the first address operand
+							memory_movement->operands.oir.address_operand1 = NULL;
+
+							//Update the addressing mode
+							memory_movement->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+
+							//Delete the first statement
+							delete_statement(to_be_combined);
+
+							//Rebuild around the second
+							reconstruct_window(window, memory_movement);
+
+							changed = TRUE;
 							break;
 
 						case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
 							break;
 
+						/**
+						 * Generic unsupported case - we ignore this and keep going
+						 */
 						default:
 							break;
 					}
