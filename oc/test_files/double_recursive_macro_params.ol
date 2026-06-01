@@ -16,12 +16,15 @@ pub fn increment_tester(x:i32, y:i32) -> i32 {
 	/**
 	* Should expand to:
 	*  (x + 1) + (y + 1)
+	*  (x + y + 1 + 1)
+	*  (x + y + 2)
 	*/
 	ret ADD(INCREMENT(x), INCREMENT(y));
 }
 
 
 pub fn main() -> i32 {
-	ret 0;
+	OUNIT: [console = 7]
+	ret @increment_tester(2, 3);
 }
 
