@@ -3871,7 +3871,41 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				 */
 				case THREE_ADDR_CODE_ASSN_CONST_STMT:
 					switch(memory_movement->addressing_mode){
+						/**
+						 * LEA ONLY
+						 *
+						 * t4 <- 4
+						 * leaq 4(t4), t5
+						 *
+						 * Can become
+						 * t5 <- 8
+						 */
 						case ADDRESSING_MODE_OFFSET_ONLY:
+							//Skip if it is not a lea
+							if(memory_movement->statement_type != THREE_ADDR_CODE_LEA_STMT){
+								break;
+							}
+
+							//Add the two constants together
+							add_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+
+							//Move the address offset over, NULL out the old address operand
+							memory_movement->operands.oir.constant_operand = memory_movement->operands.oir.address_offset;
+							memory_movement->operands.oir.operand1 = memory_movement->operands.oir.address_operand1;
+
+							//Wipe away the addressing mode
+							memory_movement->addressing_mode = ADDRESSING_MODE_NONE;
+
+							//This is now an assign const statement
+							memory_movement->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+							//Delete the first operation
+							delete_statement(to_be_combined);
+
+							//Rebuild around the second
+							reconstruct_window(window, memory_movement);
+
+							changed = TRUE;
 							break;
 
 						case ADDRESSING_MODE_REGISTERS_ONLY:
