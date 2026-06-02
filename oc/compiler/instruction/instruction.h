@@ -492,11 +492,6 @@ u_int8_t does_operator_generate_truthful_byte_value(ollie_token_t op);
 u_int8_t is_load_instruction(instruction_t* instruction);
 
 /**
- * Helper function to determine if an instruction is a binary operation
- */
-u_int8_t is_instruction_binary_operation(instruction_t* instruction);
-
-/**
  * Helper function to determine if an instruction is an assignment operation
  */
 u_int8_t is_instruction_assignment_operation(instruction_t* instruction);

@@ -161,6 +161,42 @@ static void print_instruction_window(instruction_window_t* window){
 
 
 /**
+ * Quick helper to see if an instruction is a binary operation with a constant - this
+ * also handles NULL checking
+ */
+static inline u_int8_t is_instruction_binary_operation_with_const(instruction_t* instruction){
+	if(instruction == NULL){
+		return FALSE;
+	}
+
+	if(instruction->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
+		return TRUE;
+	} else {
+		return FALSE;
+
+	}
+}
+
+
+/**
+ * Quick helper to see if an instruction is a binary operation - this
+ * also handles NULL checking
+ */
+static inline u_int8_t is_instruction_binary_operation(instruction_t* instruction){
+	if(instruction == NULL){
+		return FALSE;
+	}
+
+	if(instruction->statement_type == THREE_ADDR_CODE_BIN_OP_STMT){
+		return TRUE;
+	} else {
+		return FALSE;
+
+	}
+}
+
+
+/**
  * Does the given addressing mode make use of the address mulitplier field? This quick helper
  * will let us find out
  */
@@ -2937,13 +2973,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 *
 	 * Can become
 	 * t21 <- 4(t19, t18)
+	 *
 	 */
-	if(window->instruction2 != NULL
-		&& window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_STMT 
+	if(is_instruction_binary_operation(window->instruction1) == TRUE
+		&& is_instruction_binary_operation_with_const(window->instruction2) == TRUE
 		&& window->instruction1->op == PLUS
-		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction2->op == PLUS
+		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& variables_equal(window->instruction2->operands.oir.operand1, window->instruction1->operands.oir.assignee, TRUE) == TRUE) {
 
 		//Extract for convenience
@@ -2994,12 +3030,11 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * Can become
 	 * t22 <- (t19, ^t8_0, 4)
 	 */
-	if(window->instruction2 != NULL
-		&& window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+	if(is_instruction_binary_operation_with_const(window->instruction1) == TRUE
+		&& is_instruction_binary_operation(window->instruction2) == TRUE
 		&& (window->instruction1->op == STAR || window->instruction1->op == PLUS)
-		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
 		&& window->instruction2->op == PLUS
+		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& variables_equal(window->instruction2->operands.oir.operand2, window->instruction1->operands.oir.assignee, TRUE) == TRUE) {
 
 		//Extract for convenience
@@ -3089,19 +3124,18 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * Example:
 	 * t21 <- ^t8_0 * 4
 	 * ........
-	 * t22 <- t19 + 21
+	 * t22 <- t19 + t21
 	 *
 	 * Can become
 	 * t22 <- (t19, ^t8_0, 4)
 	 *
 	 * And we can delete the first instruction
 	 */
-	if(window->instruction3 != NULL
-		&& window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+	if(is_instruction_binary_operation_with_const(window->instruction1) == TRUE
+		&& is_instruction_binary_operation(window->instruction3) == TRUE
 		&& (window->instruction1->op == STAR || window->instruction1->op == PLUS)
-		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& window->instruction3->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
 		&& window->instruction3->op == PLUS
+		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& variables_equal(window->instruction3->operands.oir.operand2, window->instruction1->operands.oir.assignee, TRUE) == TRUE) {
 
 		//Extract for convenience

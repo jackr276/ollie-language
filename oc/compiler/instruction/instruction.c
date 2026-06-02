@@ -304,26 +304,6 @@ u_int8_t is_load_instruction(instruction_t* instruction){
 
 
 /**
- * Helper function to determine if an instruction is a binary operation
- */
-u_int8_t is_instruction_binary_operation(instruction_t* instruction){
-	//Speedup with NULL processing
-	if(instruction == NULL){
-		return FALSE;
-	}
-
-	//Switch based on class
-	switch(instruction->statement_type){
-		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-		case THREE_ADDR_CODE_BIN_OP_STMT:
-			return TRUE;
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
  * Helper function to determine if an instruction is an assignment operation
  */
 u_int8_t is_instruction_assignment_operation(instruction_t* instruction){
