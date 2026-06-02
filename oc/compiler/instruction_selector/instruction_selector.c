@@ -4078,6 +4078,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 								//Copy the addressing mode over
 								addressing_operation->addressing_mode = to_be_combined->addressing_mode;
+
+								//Copy this values offset over
+								addressing_operation->operands.oir.address_offset = to_be_combined->operands.oir.address_offset;
 							
 							/**
 							 * If we get here, then the combined value does *not* use the addressing mode, but we know that our
@@ -4112,12 +4115,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 							}
 
-							//Copy all operands over
+							/**
+							 * Copy everything *except* the offset, that should have been handled above to avoid incorrect
+							 * NULL values where they should not be
+							 */
 							addressing_operation->operands.oir.address_operand1 = to_be_combined->operands.oir.address_operand1;
 							addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.address_operand2;
-							addressing_operation->operands.oir.address_offset = to_be_combined->operands.oir.address_offset;
 							addressing_operation->operands.oir.address_multiplier = to_be_combined->operands.oir.address_multiplier;
-
 
 							//Delete the redundant statement
 							delete_statement(to_be_combined);
