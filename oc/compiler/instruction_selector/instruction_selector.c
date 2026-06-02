@@ -4195,19 +4195,40 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 				case THREE_ADDR_CODE_LEA_STMT:
 					switch(addressing_operation->addressing_mode){
+						/**
+						 * Combine:
+						 * 	t5 <- 4(t4, t6, 2)
+						 * 	store (t5) <- 4
+						 *
+						 * Into 
+						 * 	store 4(t4, t6, 2) <- 4
+						 *
+						 * This is a case where we can just copy the child's mode over
+						 * completely along with all of it's data
+						 */
 						case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
-							//TODO
+							//Copy all operands over
+							addressing_operation->operands.oir.address_operand1 = to_be_combined->operands.oir.address_operand1;
+							addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.address_operand2;
+							addressing_operation->operands.oir.address_offset = to_be_combined->operands.oir.address_offset;
+							addressing_operation->operands.oir.address_multiplier = to_be_combined->operands.oir.address_multiplier;
+
+							//Now the addressing mode
+							addressing_operation->addressing_mode = to_be_combined->addressing_mode;
+
+							//Delete the redundant statement
+							delete_statement(to_be_combined);
+
+							//Rebuild around the second instruction
+							reconstruct_window(window, addressing_operation);
+
+							changed = TRUE;
 							break;
+
 						case ADDRESSING_MODE_OFFSET_ONLY:
 							//TODO
 							break;
 						case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
-							//TODO
-							break;
-						case ADDRESSING_MODE_RIP_RELATIVE:
-							//TODO
-							break;
-						case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
 							//TODO
 							break;
 						case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
@@ -4217,6 +4238,12 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							//TODO
 							break;
 						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+							//TODO
+							break;
+						case ADDRESSING_MODE_RIP_RELATIVE:
+							//TODO
+							break;
+						case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
 							//TODO
 							break;
 						
