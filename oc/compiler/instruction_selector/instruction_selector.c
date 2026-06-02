@@ -4260,30 +4260,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 							changed = TRUE;
 							break;
-
-						case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
-							//TODO
-							break;
-
-						case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
-							//TODO
-							break;
-
-						case ADDRESSING_MODE_REGISTERS_ONLY:
-							//TODO
-							break;
-
-						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-							//TODO
-							break;
-
-						case ADDRESSING_MODE_RIP_RELATIVE:
-							//TODO
-							break;
-
-						case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
-							//TODO
-							break;
 						
 						/**
 						 * Anything else is an unsupported combination so just leave
