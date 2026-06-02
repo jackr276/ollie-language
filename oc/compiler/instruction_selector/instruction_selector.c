@@ -4194,7 +4194,39 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					break;
 
 				case THREE_ADDR_CODE_LEA_STMT:
-					//TODO
+					switch(addressing_operation->addressing_mode){
+						case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+							//TODO
+							break;
+						case ADDRESSING_MODE_OFFSET_ONLY:
+							//TODO
+							break;
+						case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+							//TODO
+							break;
+						case ADDRESSING_MODE_RIP_RELATIVE:
+							//TODO
+							break;
+						case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
+							//TODO
+							break;
+						case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+							//TODO
+							break;
+						case ADDRESSING_MODE_REGISTERS_ONLY:
+							//TODO
+							break;
+						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+							//TODO
+							break;
+						
+						/**
+						 * Anything else is an unsupported combination so just leave
+						 */
+						default:
+							break;
+					}
+
 					break;
 
 				//Unsupported statement combo - just leave
