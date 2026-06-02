@@ -4241,6 +4241,41 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							//If we have an offset then add it. Make sure that the result is in the *first* instruction's offset
 							if(does_addressing_mode_use_offset_constant(to_be_combined->addressing_mode) == TRUE){
 								add_constants(to_be_combined->operands.oir.address_offset, addressing_operation->operands.oir.address_offset);
+
+								//Copy the addressing mode over
+								addressing_operation->addressing_mode = to_be_combined->addressing_mode;
+							
+							/**
+							 * If we get here, then the combined value does *not* use the addressing mode, but we know that our
+							 * original operation does. We will need to update the addressing mode to reflect that we do have
+							 * an offset
+							 */
+							} else {
+								switch(to_be_combined->addressing_mode){
+									case ADDRESSING_MODE_INDEX_AND_SCALE:
+										addressing_operation->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE; 
+										break;
+
+									case ADDRESSING_MODE_REGISTERS_ONLY:
+										addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET; 
+										break;
+
+									case ADDRESSING_MODE_RIP_RELATIVE:
+										addressing_operation->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET; 
+										break;
+
+									case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+										addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE; 
+										break;
+
+									/**
+									 * By default just copy the type over
+									 */
+									default:
+										addressing_operation->addressing_mode = to_be_combined->addressing_mode;
+										break;
+								}
+
 							}
 
 							//Copy all operands over
@@ -4249,8 +4284,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							addressing_operation->operands.oir.address_offset = to_be_combined->operands.oir.address_offset;
 							addressing_operation->operands.oir.address_multiplier = to_be_combined->operands.oir.address_multiplier;
 
-							//Now the addressing mode
-							addressing_operation->addressing_mode = to_be_combined->addressing_mode;
 
 							//Delete the redundant statement
 							delete_statement(to_be_combined);
