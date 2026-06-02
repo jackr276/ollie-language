@@ -953,6 +953,12 @@ three_addr_const_t* sum_constant_with_raw_int64_value(three_addr_const_t* consta
 three_addr_const_t* multiply_constant_by_raw_int64_value(three_addr_const_t* constant, generic_type_t* i64_type, int64_t raw_constant);
 
 /**
+ * Convert any given constant into an i64(signed long). This is mainly used for lea helpers
+ * where we want to guarantee that everything is consistent
+ */
+three_addr_const_t* convert_constant_to_i64(three_addr_const_t* constant, generic_type_t* i64_type);
+
+/**
  * Negate a three address constant
  */
 three_addr_const_t* negate_three_address_consant(three_addr_const_t* constant);

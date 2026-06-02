@@ -6337,6 +6337,60 @@ three_addr_const_t* multiply_constant_by_raw_int64_value(three_addr_const_t* con
 
 
 /**
+ * Convert any given constant into an i64(signed long). This is mainly used for lea helpers
+ * where we want to guarantee that everything is consistent
+ */
+three_addr_const_t* convert_constant_to_i64(three_addr_const_t* constant, generic_type_t* i64_type){
+	//Go based on the first one's type
+	switch(constant->const_type){
+		case SHORT_CONST:
+			constant->constant_value.signed_long_constant = constant->constant_value.signed_short_constant;
+			break;
+
+		case SHORT_CONST_FORCE_U:
+			constant->constant_value.signed_long_constant = constant->constant_value.unsigned_short_constant;
+			break;
+
+		case INT_CONST_FORCE_U:
+			constant->constant_value.signed_long_constant = constant->constant_value.unsigned_integer_constant;
+			break;
+
+		case INT_CONST:
+			constant->constant_value.signed_long_constant = constant->constant_value.signed_integer_constant;
+			break;
+
+		case LONG_CONST_FORCE_U:
+			constant->constant_value.signed_long_constant = constant->constant_value.unsigned_long_constant;
+			break;
+
+		case CHAR_CONST:
+			constant->constant_value.signed_long_constant = constant->constant_value.char_constant;
+			break;
+
+		case FLOAT_CONST:
+			constant->constant_value.signed_long_constant = constant->constant_value.float_constant;
+			break;
+			
+		case DOUBLE_CONST:
+			constant->constant_value.signed_long_constant = constant->constant_value.double_constant;
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant coercion operation\n");
+			exit(1);
+	}
+
+	//This will always be forced to be an i64
+	constant->type = i64_type;
+	constant->const_type = LONG_CONST;
+
+	//Give it back for clarity
+	return constant;
+}
+
+
+/**
  * Negate a three address constant
  */
 three_addr_const_t* negate_three_address_consant(three_addr_const_t* constant){
@@ -6380,7 +6434,7 @@ three_addr_const_t* negate_three_address_consant(three_addr_const_t* constant){
 
 		//This should never happen
 		default:
-			printf("Fatal internal compiler error: Unsupported constant multiplication operation\n");
+			printf("Fatal internal compiler error: Unsupported constant negation operation\n");
 			exit(1);
 	}
 
