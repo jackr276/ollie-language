@@ -6337,6 +6337,59 @@ three_addr_const_t* multiply_constant_by_raw_int64_value(three_addr_const_t* con
 
 
 /**
+ * Negate a three address constant
+ */
+three_addr_const_t* negate_three_address_consant(three_addr_const_t* constant){
+	//Go based on the first one's type
+	switch(constant->const_type){
+		case SHORT_CONST:
+			constant->constant_value.signed_short_constant *= -1;
+			break;
+
+		case SHORT_CONST_FORCE_U:
+			constant->constant_value.unsigned_short_constant *= -1;
+			break;
+
+		case INT_CONST_FORCE_U:
+			constant->constant_value.unsigned_integer_constant *= -1;
+			break;
+
+		case INT_CONST:
+			constant->constant_value.signed_integer_constant *= -1;
+			break;
+
+		case LONG_CONST_FORCE_U:
+			constant->constant_value.unsigned_long_constant *= -1;
+			break;
+
+		case LONG_CONST:
+			constant->constant_value.signed_long_constant *= -1;
+			break;
+
+		case CHAR_CONST:
+			constant->constant_value.char_constant *= -1;
+			break;
+
+		case FLOAT_CONST:
+			constant->constant_value.float_constant *= -1;
+			break;
+
+		case DOUBLE_CONST:
+			constant->constant_value.double_constant *= -1;
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant multiplication operation\n");
+			exit(1);
+	}
+
+	//Give it back for clarity
+	return constant;
+}
+
+
+/**
  * Multiply two constants together
  * 
  * NOTE: The result is always stored in the first one

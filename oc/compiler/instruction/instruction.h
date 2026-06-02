@@ -953,6 +953,11 @@ three_addr_const_t* sum_constant_with_raw_int64_value(three_addr_const_t* consta
 three_addr_const_t* multiply_constant_by_raw_int64_value(three_addr_const_t* constant, generic_type_t* i64_type, int64_t raw_constant);
 
 /**
+ * Negate a three address constant
+ */
+three_addr_const_t* negate_three_address_consant(three_addr_const_t* constant);
+
+/**
  * Emit the product of two given constants. The result will overwrite the first constant given
  *
  * The result will be: constant1 = constant1 * constant2
