@@ -3470,7 +3470,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 		//Extract the two instructions for convenience
 		instruction_t* to_be_combined = window->instruction1;
-		instruction_t* memory_movement = window->instruction2;
+		instruction_t* addressing_operation = window->instruction2;
 
 		/**
 		 * There are now two paths that we have. We could have the temp
@@ -3480,8 +3480,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		 * path. These paths are *mutually exclusive*. In the rare event that they
 		 * do match, it will be picked up in the next go around
 		 */
-		if(does_addressing_mode_use_address_operand1(memory_movement->addressing_mode) == TRUE
-			&& variables_equal(memory_movement->operands.oir.address_operand1, to_be_combined->operands.oir.assignee, TRUE) == TRUE){
+		if(does_addressing_mode_use_address_operand1(addressing_operation->addressing_mode) == TRUE
+			&& variables_equal(addressing_operation->operands.oir.address_operand1, to_be_combined->operands.oir.assignee, TRUE) == TRUE){
 			/**
 			 * Go based on what kind of statement we have as the first way to split
 			 */
@@ -3491,13 +3491,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				 */
 				case THREE_ADDR_CODE_ASSN_STMT:
 					//Copy it over
-					memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+					addressing_operation->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
 
 					//Scrap the first statement
 					delete_statement(to_be_combined);
 
-					//Rebuilt the window around the memory movement
-					reconstruct_window(window, memory_movement);
+					//Rebuilt the window around the addressing operation
+					reconstruct_window(window, addressing_operation);
 
 					changed = TRUE;
 					break;
@@ -3507,7 +3507,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				 * the second address operand. This really mainly exists to keep lea compatability
 				 */
 				case THREE_ADDR_CODE_ASSN_CONST_STMT:
-					switch(memory_movement->addressing_mode){
+					switch(addressing_operation->addressing_mode){
 						/**
 						 * LEA ONLY
 						 *
@@ -3519,28 +3519,28 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						 */
 						case ADDRESSING_MODE_OFFSET_ONLY:
 							//Skip if it is not a lea
-							if(memory_movement->statement_type != THREE_ADDR_CODE_LEA_STMT){
+							if(addressing_operation->statement_type != THREE_ADDR_CODE_LEA_STMT){
 								break;
 							}
 
 							//Add the two constants together
-							add_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+							add_constants(addressing_operation->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
 
 							//Move the address offset over, NULL out the old address operand
-							memory_movement->operands.oir.constant_operand = memory_movement->operands.oir.address_offset;
-							memory_movement->operands.oir.operand1 = memory_movement->operands.oir.address_operand1;
+							addressing_operation->operands.oir.constant_operand = addressing_operation->operands.oir.address_offset;
+							addressing_operation->operands.oir.operand1 = addressing_operation->operands.oir.address_operand1;
 
 							//Wipe away the addressing mode
-							memory_movement->addressing_mode = ADDRESSING_MODE_NONE;
+							addressing_operation->addressing_mode = ADDRESSING_MODE_NONE;
 
 							//This is now an assign const statement
-							memory_movement->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+							addressing_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
 							//Delete the first operation
 							delete_statement(to_be_combined);
 
 							//Rebuild around the second
-							reconstruct_window(window, memory_movement);
+							reconstruct_window(window, addressing_operation);
 
 							changed = TRUE;
 							break;
@@ -3555,20 +3555,20 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						 */
 						case ADDRESSING_MODE_REGISTERS_ONLY:
 							//Copy the constant over
-							memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
+							addressing_operation->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
 
 							//Move the address operand over, NULL out the second one
-							memory_movement->operands.oir.address_operand1 = memory_movement->operands.oir.address_operand2;
-							memory_movement->operands.oir.address_operand2 = NULL;
+							addressing_operation->operands.oir.address_operand1 = addressing_operation->operands.oir.address_operand2;
+							addressing_operation->operands.oir.address_operand2 = NULL;
 
 							//Update the addressing mode
-							memory_movement->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+							addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 							//Delete the first statement
 							delete_statement(to_be_combined);
 
 							//Rebuild around the second
-							reconstruct_window(window, memory_movement);
+							reconstruct_window(window, addressing_operation);
 
 							changed = TRUE;
 							break;
@@ -3583,20 +3583,20 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						 */
 						case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
 							//First add the constant with our existing offset
-							add_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+							add_constants(addressing_operation->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
 
 							//Move the address operand over, NULL out the second one
-							memory_movement->operands.oir.address_operand1 = memory_movement->operands.oir.address_operand2;
-							memory_movement->operands.oir.address_operand2 = NULL;
+							addressing_operation->operands.oir.address_operand1 = addressing_operation->operands.oir.address_operand2;
+							addressing_operation->operands.oir.address_operand2 = NULL;
 
 							//Update the addressing mode
-							memory_movement->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+							addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 							//Remove the first statement
 							delete_statement(to_be_combined);
 
 							//Rebuild around the second
-							reconstruct_window(window, memory_movement);
+							reconstruct_window(window, addressing_operation);
 
 							changed = TRUE;
 							break;
@@ -3611,19 +3611,19 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						 */
 						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
 							//Move the constant over
-							memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
+							addressing_operation->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
 
 							//NULL out the first address operand
-							memory_movement->operands.oir.address_operand1 = NULL;
+							addressing_operation->operands.oir.address_operand1 = NULL;
 
 							//Update the addressing mode
-							memory_movement->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+							addressing_operation->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
 
 							//Delete the first statement
 							delete_statement(to_be_combined);
 
 							//Rebuild around the second
-							reconstruct_window(window, memory_movement);
+							reconstruct_window(window, addressing_operation);
 
 							changed = TRUE;
 							break;
@@ -3638,19 +3638,19 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						 */
 						case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
 							//Add the first constant with the existing offset constant
-							add_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+							add_constants(addressing_operation->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
 
 							//NULL out the first address operand
-							memory_movement->operands.oir.address_operand1 = NULL;
+							addressing_operation->operands.oir.address_operand1 = NULL;
 
 							//Update the addressing mode
-							memory_movement->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+							addressing_operation->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
 
 							//Now delete the first statement
 							delete_statement(to_be_combined);
 
 							//Rebuild around the second
-							reconstruct_window(window, memory_movement);
+							reconstruct_window(window, addressing_operation);
 
 							changed = TRUE;
 							break;
@@ -3678,7 +3678,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						break;
 					}
 
-					switch(memory_movement->addressing_mode){
+					switch(addressing_operation->addressing_mode){
 						/**
 						 * Combine:
 						 * 	t5 <- t6 + t7
@@ -3689,17 +3689,17 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						 */
 						case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
 							//Copy the two operands over
-							memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
-							memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand2;
+							addressing_operation->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+							addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.operand2;
 
 							//This is now a REGISTERS_ONLY addressing mode
-							memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+							addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
 
 							//Scrap the old binary operation
 							delete_statement(to_be_combined);
 
-							//Rebuilt around memory movement
-							reconstruct_window(window, memory_movement);
+							//Rebuilt around addressing operation
+							reconstruct_window(window, addressing_operation);
 
 							changed = TRUE;
 							break;
@@ -3714,17 +3714,17 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						 */
 						case ADDRESSING_MODE_OFFSET_ONLY:
 							//Copy the two operands over
-							memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
-							memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand2;
+							addressing_operation->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+							addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.operand2;
 
 							//This is now a REGISTERS_AND_OFFSET addressing mode
-							memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+							addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 							//Scrap the old binary operation
 							delete_statement(to_be_combined);
 
-							//Rebuilt around memory movement
-							reconstruct_window(window, memory_movement);
+							//Rebuilt around addressing operation
+							reconstruct_window(window, addressing_operation);
 
 							changed = TRUE;
 							break;
@@ -3748,7 +3748,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					 */
 					switch(to_be_combined->op){
 						case PLUS:
-							switch(memory_movement->addressing_mode){
+							switch(addressing_operation->addressing_mode){
 								/**
 								 * Combine:
 								 * 	t5 <- t6 + 4 
@@ -3759,17 +3759,17 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								 */
 								case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
 									//Copy the operands over
-									memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
-									memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
+									addressing_operation->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
 
 									//Update the addressing mode
-									memory_movement->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+									addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 									//Scrap the old binary operation
 									delete_statement(to_be_combined);
 
-									//Rebuilt around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuilt around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -3784,16 +3784,16 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								 */
 								case ADDRESSING_MODE_OFFSET_ONLY:
 									//Add the new constant to the existing offset
-									add_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+									add_constants(addressing_operation->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
 
 									//Copy the operand over
-									memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
 
 									//Scrap the old binary operation
 									delete_statement(to_be_combined);
 
-									//Rebuilt around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuilt around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -3808,16 +3808,16 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								 */
 								case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
 									//Add the first instruction's constant to the existing offset
-									add_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+									add_constants(addressing_operation->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
 
 									//Copy the operand over
-									memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
 
 									//No mode changes, just delete the old bin op
 									delete_statement(to_be_combined);
 
-									//Rebuild around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuild around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -3832,17 +3832,17 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								 */
 								case ADDRESSING_MODE_RIP_RELATIVE:
 									//Copy the offset and operand over
-									memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
-									memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
+									addressing_operation->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
 
 									//This is now RIP-relative with an offset
-									memory_movement->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+									addressing_operation->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
 
 									//Scrap the old binary operation
 									delete_statement(to_be_combined);
 
-									//Rebuild around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuild around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -3857,16 +3857,16 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								 */
 								case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
 									//Add the first instruction's constant to the existing operand
-									add_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+									add_constants(addressing_operation->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
 
 									//Copy the operand over
-									memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
 
 									//Scrap the old binary operation
 									delete_statement(to_be_combined);
 
-									//Rebuild around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuild around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -3881,16 +3881,16 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								 */
 								case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
 									//Add the first instruction's constant to the existing operand
-									add_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+									add_constants(addressing_operation->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
 
 									//Copy the operand over
-									memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
 
 									//Scrap the old binary operation
 									delete_statement(to_be_combined);
 
-									//Rebuild around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuild around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -3905,19 +3905,19 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								 */
 								case ADDRESSING_MODE_REGISTERS_ONLY:
 									//First copy the constant over
-									memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
+									addressing_operation->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
 
 									//Now copy over the addrss operand
-									memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
 
 									//This now has an offset so update the mode
-									memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+									addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 									//Scrap the old binary operation
 									delete_statement(to_be_combined);
 
-									//Rebuild around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuild around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -3932,19 +3932,19 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								 */
 								case ADDRESSING_MODE_REGISTERS_AND_SCALE:
 									//First copy the constant over
-									memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
+									addressing_operation->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
 
 									//Now copy over the addrss operand
-									memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
 
 									//This now has an offset so update the addressing mode
-									memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+									addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
 									//Scrap the old binary operation
 									delete_statement(to_be_combined);
 
-									//Rebuild around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuild around the addressing operation 
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -3957,7 +3957,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							break;
 
 						case MINUS:
-							switch(memory_movement->addressing_mode){
+							switch(addressing_operation->addressing_mode){
 								/**
 								 * Combine:
 								 * 	t5 <- t6 - 4 
@@ -3972,17 +3972,17 @@ static u_int8_t simplify_window(instruction_window_t* window){
 									negate_three_address_consant(to_be_combined->operands.oir.constant_operand);
 
 									//Copy the operands over
-									memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
-									memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
+									addressing_operation->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
 
 									//Update the addressing mode
-									memory_movement->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+									addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 									//Scrap the old binary operation
 									delete_statement(to_be_combined);
 
-									//Rebuilt around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuilt around the addressing operation 
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -3997,19 +3997,19 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								 */
 								case ADDRESSING_MODE_OFFSET_ONLY:
 									//Make sure that we can go negative here if need be by forcing to an i64
-									convert_constant_to_i64(memory_movement->operands.oir.address_offset, i64);
+									convert_constant_to_i64(addressing_operation->operands.oir.address_offset, i64);
 
 									//Subtract from the existing offset
-									subtract_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+									subtract_constants(addressing_operation->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
 
 									//Copy the operand over
-									memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
 
 									//Scrap the old binary operation
 									delete_statement(to_be_combined);
 
-									//Rebuilt around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuilt around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -4024,19 +4024,19 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								 */
 								case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
 									//Make sure that we can go negative here if need be by forcing to an i64
-									convert_constant_to_i64(memory_movement->operands.oir.address_offset, i64);
+									convert_constant_to_i64(addressing_operation->operands.oir.address_offset, i64);
 
 									//Add the first instruction's constant to the existing offset
-									subtract_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+									subtract_constants(addressing_operation->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
 
 									//Copy the operand over
-									memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
 
 									//No mode changes, just delete the old bin op
 									delete_statement(to_be_combined);
 
-									//Rebuild around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuild around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -4055,17 +4055,17 @@ static u_int8_t simplify_window(instruction_window_t* window){
 									negate_three_address_consant(to_be_combined->operands.oir.constant_operand);
 
 									//Copy the offset and operand over
-									memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
-									memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
+									addressing_operation->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
 
 									//This is now RIP-relative with an offset
-									memory_movement->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+									addressing_operation->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
 
 									//Scrap the old binary operation
 									delete_statement(to_be_combined);
 
-									//Rebuild around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuild around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -4080,19 +4080,19 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								 */
 								case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
 									//Convert the existing offset to an i64 so that we can go negative if need be
-									convert_constant_to_i64(memory_movement->operands.oir.address_offset, i64);
+									convert_constant_to_i64(addressing_operation->operands.oir.address_offset, i64);
 
 									//Subtract the first instruction's constant from the existing operand
-									subtract_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+									subtract_constants(addressing_operation->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
 
 									//Copy the operand over
-									memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
 
 									//Scrap the old binary operation
 									delete_statement(to_be_combined);
 
-									//Rebuild around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuild around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -4107,19 +4107,19 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								 */
 								case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
 									//Convert this to an i64 so that we can go negative if need be
-									convert_constant_to_i64(memory_movement->operands.oir.address_offset, i64);
+									convert_constant_to_i64(addressing_operation->operands.oir.address_offset, i64);
 
 									//Subtrace the first instruction's constant from the existing operand
-									subtract_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+									subtract_constants(addressing_operation->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
 
 									//Copy the operand over
-									memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
 
 									//Scrap the old binary operation
 									delete_statement(to_be_combined);
 
-									//Rebuild around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuild around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -4140,19 +4140,19 @@ static u_int8_t simplify_window(instruction_window_t* window){
 									negate_three_address_consant(to_be_combined->operands.oir.constant_operand);
 
 									//First copy the constant over
-									memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
+									addressing_operation->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
 
 									//Now copy over the addrss operand
-									memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
 
 									//This now has an offset so update the mode
-									memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+									addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 									//Scrap the old binary operation
 									delete_statement(to_be_combined);
 
-									//Rebuild around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuild around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -4173,19 +4173,19 @@ static u_int8_t simplify_window(instruction_window_t* window){
 									negate_three_address_consant(to_be_combined->operands.oir.constant_operand);
 
 									//First copy the constant over
-									memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
+									addressing_operation->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
 
 									//Now copy over the addrss operand
-									memory_movement->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
 
 									//This now has an offset so update the addressing mode
-									memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+									addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
 									//Scrap the old binary operation
 									delete_statement(to_be_combined);
 
-									//Rebuild around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuild around the addressing operation 
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -4215,8 +4215,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					break;
 			}
 
-		} else if(does_addressing_mode_use_address_operand2(memory_movement->addressing_mode) == TRUE
-			&& variables_equal(memory_movement->operands.oir.address_operand2, to_be_combined->operands.oir.assignee, TRUE) == TRUE){
+		} else if(does_addressing_mode_use_address_operand2(addressing_operation->addressing_mode) == TRUE
+			&& variables_equal(addressing_operation->operands.oir.address_operand2, to_be_combined->operands.oir.assignee, TRUE) == TRUE){
 			/**
 			 * Go based on what kind of statement we have as the first way to split
 			 */
@@ -4226,13 +4226,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				 */
 				case THREE_ADDR_CODE_ASSN_STMT:
 					//Copy it over into the second address operand
-					memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+					addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
 
 					//Scrap the first statement
 					delete_statement(to_be_combined);
 
-					//Rebuilt the window around the memory movement
-					reconstruct_window(window, memory_movement);
+					//Rebuilt the window around the addressing operation
+					reconstruct_window(window, addressing_operation);
 
 					changed = TRUE;
 					break;
@@ -4245,7 +4245,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					//Extract the constant that we are going to assign
 					assigned_constant = to_be_combined->operands.oir.constant_operand;
 
-					switch(memory_movement->addressing_mode){
+					switch(addressing_operation->addressing_mode){
 						/**
 						 * Going from:
 						 * 	t4 <- 2
@@ -4256,19 +4256,19 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						 */
 						case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
 							//Add the two constants(result in the first operand)
-							add_constants(memory_movement->operands.oir.address_offset, assigned_constant);
+							add_constants(addressing_operation->operands.oir.address_offset, assigned_constant);
 
 							//NULL out the old second operand
-							memory_movement->operands.oir.address_operand2 = NULL;
+							addressing_operation->operands.oir.address_operand2 = NULL;
 
 							//Memory mode is now just an offset
-							memory_movement->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+							addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 							//Delete the first statement
 							delete_statement(to_be_combined);
 
-							//Rebuilt around the memory movement
-							reconstruct_window(window, memory_movement);
+							//Rebuilt around the addressing operation
+							reconstruct_window(window, addressing_operation);
 
 							changed = TRUE;
 							break;
@@ -4283,22 +4283,22 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						 */
 						case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
 							//Step 1: multiple the assigned constant with the multiplicand
-							multiply_constant_by_raw_int64_value(assigned_constant, i64, memory_movement->operands.oir.address_multiplier);
+							multiply_constant_by_raw_int64_value(assigned_constant, i64, addressing_operation->operands.oir.address_multiplier);
 
 							//Now add it with the actual offset
-							add_constants(memory_movement->operands.oir.address_offset, assigned_constant);
+							add_constants(addressing_operation->operands.oir.address_offset, assigned_constant);
 
 							//Memory mode is now just an offset
-							memory_movement->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+							addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 							//NULL out the old second operand
-							memory_movement->operands.oir.address_operand2 = NULL;
+							addressing_operation->operands.oir.address_operand2 = NULL;
 
 							//Delete the constant assignment
 							delete_statement(to_be_combined);
 
-							//Rebuilt around the memory movement
-							reconstruct_window(window, memory_movement);
+							//Rebuilt around the addressing operation
+							reconstruct_window(window, addressing_operation);
 
 							changed = TRUE;
 							break;
@@ -4313,19 +4313,19 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						 */
 						case ADDRESSING_MODE_REGISTERS_ONLY:
 							//Copy the offset over
-							memory_movement->operands.oir.address_offset = assigned_constant;
+							addressing_operation->operands.oir.address_offset = assigned_constant;
 
 							//Change the addressing mode to OFFSET_ONLY
-							memory_movement->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+							addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 							//NULL out the old second operand
-							memory_movement->operands.oir.address_operand2 = NULL;
+							addressing_operation->operands.oir.address_operand2 = NULL;
 
 							//Delete the constant assignment
 							delete_statement(to_be_combined);
 
-							//Rebuilt around the memory movement
-							reconstruct_window(window, memory_movement);
+							//Rebuilt around the addressing operation
+							reconstruct_window(window, addressing_operation);
 
 							changed = TRUE;
 							break;
@@ -4340,22 +4340,22 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						 */
 						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
 							//First multipliy the constant
-							multiply_constant_by_raw_int64_value(assigned_constant, i64, memory_movement->operands.oir.address_multiplier);
+							multiply_constant_by_raw_int64_value(assigned_constant, i64, addressing_operation->operands.oir.address_multiplier);
 
 							//Then bring it over as the address offset
-							memory_movement->operands.oir.address_offset = assigned_constant;
+							addressing_operation->operands.oir.address_offset = assigned_constant;
 
 							//NULL out the old second operand
-							memory_movement->operands.oir.address_operand2 = NULL;
+							addressing_operation->operands.oir.address_operand2 = NULL;
 
 							//Change the addressing mode to OFFSET_ONLY
-							memory_movement->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+							addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 							//Delete the constant assignment
 							delete_statement(to_be_combined);
 
-							//Rebuilt around the memory movement
-							reconstruct_window(window, memory_movement);
+							//Rebuilt around the addressing operation
+							reconstruct_window(window, addressing_operation);
 
 							changed = TRUE;
 							break;
@@ -4387,7 +4387,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								break;
 							}
 
-							switch(memory_movement->addressing_mode){
+							switch(addressing_operation->addressing_mode){
 								/**
 								 * Case where we have:
 								 * 	t4 <- t3 * 8
@@ -4398,19 +4398,19 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								 */
 								case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
 									//Copy the mulitplier over
-									memory_movement->operands.oir.address_multiplier = to_be_combined->operands.oir.constant_operand->constant_value.signed_long_constant;
+									addressing_operation->operands.oir.address_multiplier = to_be_combined->operands.oir.constant_operand->constant_value.signed_long_constant;
 
 									//Copy over the second address operand as well
-									memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
 
 									//This now has an offset and a scale
-									memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+									addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
 									//We no longer need the first statement
 									delete_statement(to_be_combined);
 
-									//Rebuilt around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuilt around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -4425,19 +4425,19 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								 */
 								case ADDRESSING_MODE_REGISTERS_ONLY:
 									//Copy the mulitplier over
-									memory_movement->operands.oir.address_multiplier = to_be_combined->operands.oir.constant_operand->constant_value.signed_long_constant;
+									addressing_operation->operands.oir.address_multiplier = to_be_combined->operands.oir.constant_operand->constant_value.signed_long_constant;
 
 									//Copy over the second address operand as well
-									memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
 
 									//This now has an offset and a scale
-									memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
+									addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
 
 									//We no longer need the first statement
 									delete_statement(to_be_combined);
 
-									//Rebuilt around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuilt around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -4465,7 +4465,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							break;
 
 						case PLUS:
-							switch(memory_movement->addressing_mode){
+							switch(addressing_operation->addressing_mode){
 								/**
 								 * Case where we have:
 								 * 	t4 <- t3 + 8
@@ -4476,17 +4476,17 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								 */
 								case ADDRESSING_MODE_REGISTERS_ONLY:
 									//Copy the constant and address register over
-									memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
-									memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
+									addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
 
 									//Update the addressing mode
-									memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+									addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 									//The first statement is now useless
 									delete_statement(to_be_combined);
 
-									//Rebuild around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuild around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -4501,16 +4501,16 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								 */
 								case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
 									//Add the first operation's constant to the existing offset
-									add_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+									add_constants(addressing_operation->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
 
 									//Copy the address operand over
-									memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
 
 									//The first statement is now useless
 									delete_statement(to_be_combined);
 
-									//Rebuild around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuild around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -4531,19 +4531,19 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								 */
 								case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
 									//Multiply the existing constant by the address multiplier
-									multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, memory_movement->operands.oir.address_multiplier);
+									multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, addressing_operation->operands.oir.address_multiplier);
 
 									//Now sum it into the existing offset
-									add_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+									add_constants(addressing_operation->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
 
 									//Copy the address operand over
-									memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
 
 									//The first statement is now useless
 									delete_statement(to_be_combined);
 
-									//Rebuilt the window around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuilt the window around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -4564,22 +4564,22 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								 */
 								case ADDRESSING_MODE_REGISTERS_AND_SCALE:
 									//Multiply the existing constant by the address multiplier
-									multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, memory_movement->operands.oir.address_multiplier);
+									multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, addressing_operation->operands.oir.address_multiplier);
 
 									//This now has an offset
-									memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
+									addressing_operation->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
 
 									//Copy the address operand over
-									memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
 
 									//Update the addressing mode to reflect the offset
-									memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+									addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
 									//The first statement is now useless
 									delete_statement(to_be_combined);
 
-									//Rebuilt the window around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuilt the window around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -4600,22 +4600,22 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								 */
 								case ADDRESSING_MODE_INDEX_AND_SCALE:
 									//Multiply the existing constant by the address multiplier
-									multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, memory_movement->operands.oir.address_multiplier);
+									multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, addressing_operation->operands.oir.address_multiplier);
 
 									//This now has an offset
-									memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
+									addressing_operation->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
 
 									//Copy the address operand over
-									memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
 
 									//Update the addressing mode to reflect the offset
-									memory_movement->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+									addressing_operation->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
 
 									//The first statement is now useless
 									delete_statement(to_be_combined);
 
-									//Rebuilt the window around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuilt the window around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -4636,19 +4636,19 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								 */
 								case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
 									//Multiply the existing constant by the address multiplier
-									multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, memory_movement->operands.oir.address_multiplier);
+									multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, addressing_operation->operands.oir.address_multiplier);
 									
 									//Now add the result to the existing address offset
-									add_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+									add_constants(addressing_operation->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
 
 									//Copy the address operand over
-									memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
 
 									//The first statement is now useless
 									delete_statement(to_be_combined);
 
-									//Rebuilt the window around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuilt the window around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -4661,7 +4661,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							break;
 
 						case MINUS:
-							switch(memory_movement->addressing_mode){
+							switch(addressing_operation->addressing_mode){
 								/**
 								 * Case where we have:
 								 * 	t4 <- t3 - 8
@@ -4676,17 +4676,17 @@ static u_int8_t simplify_window(instruction_window_t* window){
 									negate_three_address_consant(to_be_combined->operands.oir.constant_operand);
 
 									//Copy the constant and address register over
-									memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
-									memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
+									addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
 
 									//Update the addressing mode
-									memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+									addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 									//The first statement is now useless
 									delete_statement(to_be_combined);
 
-									//Rebuild around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuild around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -4701,19 +4701,19 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								 */
 								case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
 									//Convert the existing offset to an i64 so that it can go negative
-									convert_constant_to_i64(memory_movement->operands.oir.address_offset, i64);
+									convert_constant_to_i64(addressing_operation->operands.oir.address_offset, i64);
 
 									//Subtrace the first operation's constant from the existing offset
-									subtract_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+									subtract_constants(addressing_operation->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
 
 									//Copy the address operand over
-									memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
 
 									//The first statement is now useless
 									delete_statement(to_be_combined);
 
-									//Rebuild around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuild around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -4735,22 +4735,22 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
 									//Convert both of these constants to i64's so that they can go negative
 									convert_constant_to_i64(to_be_combined->operands.oir.constant_operand, i64);
-									convert_constant_to_i64(memory_movement->operands.oir.address_offset, i64);
+									convert_constant_to_i64(addressing_operation->operands.oir.address_offset, i64);
 
 									//Multiply the existing constant by the address multiplier
-									multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, memory_movement->operands.oir.address_multiplier);
+									multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, addressing_operation->operands.oir.address_multiplier);
 
 									//Now subtract from the existing offset
-									subtract_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+									subtract_constants(addressing_operation->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
 
 									//Copy the address operand over
-									memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
 
 									//The first statement is now useless
 									delete_statement(to_be_combined);
 
-									//Rebuilt the window around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuilt the window around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -4775,22 +4775,22 @@ static u_int8_t simplify_window(instruction_window_t* window){
 									negate_three_address_consant(to_be_combined->operands.oir.constant_operand);
 
 									//Multiply the existing constant by the address multiplier
-									multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, memory_movement->operands.oir.address_multiplier);
+									multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, addressing_operation->operands.oir.address_multiplier);
 
 									//This now has an offset
-									memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
+									addressing_operation->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
 
 									//Copy the address operand over
-									memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
 
 									//Update the addressing mode to reflect the offset
-									memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+									addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
 									//The first statement is now useless
 									delete_statement(to_be_combined);
 
-									//Rebuilt the window around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuilt the window around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -4815,22 +4815,22 @@ static u_int8_t simplify_window(instruction_window_t* window){
 									negate_three_address_consant(to_be_combined->operands.oir.constant_operand);
 
 									//Multiply the existing constant by the address multiplier
-									multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, memory_movement->operands.oir.address_multiplier);
+									multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, addressing_operation->operands.oir.address_multiplier);
 
 									//This now has an offset
-									memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
+									addressing_operation->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
 
 									//Copy the address operand over
-									memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
 
 									//Update the addressing mode to reflect the offset
-									memory_movement->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+									addressing_operation->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
 
 									//The first statement is now useless
 									delete_statement(to_be_combined);
 
-									//Rebuilt the window around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuilt the window around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
@@ -4852,22 +4852,22 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
 									//First force these both to i64's
 									convert_constant_to_i64(to_be_combined->operands.oir.constant_operand, i64);
-									convert_constant_to_i64(memory_movement->operands.oir.address_offset, i64);
+									convert_constant_to_i64(addressing_operation->operands.oir.address_offset, i64);
 
 									//Multiply the existing constant by the address multiplier
-									multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, memory_movement->operands.oir.address_multiplier);
+									multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, addressing_operation->operands.oir.address_multiplier);
 									
 									//Now subtract the result from the existing offset
-									subtract_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+									subtract_constants(addressing_operation->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
 
 									//Copy the address operand over
-									memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+									addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
 
 									//The first statement is now useless
 									delete_statement(to_be_combined);
 
-									//Rebuilt the window around the memory movement
-									reconstruct_window(window, memory_movement);
+									//Rebuilt the window around the addressing operation
+									reconstruct_window(window, addressing_operation);
 
 									changed = TRUE;
 									break;
