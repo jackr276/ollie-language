@@ -3346,19 +3346,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				default:
 					break;
 			}
-			
-		/**
-		 * Rarer but still possible case, we have the assignee equalling the second operand
-		 *
-		 * THIS HAS NOT BEEN IMPLEMENTED TO DATE AND MAY BE DEPRECATED
-		 */
-		} else if(variables_equal(first_lea->operands.oir.assignee, second_lea->operands.oir.address_operand2, FALSE) == TRUE){
-			//Go based on the first one's type
-			switch(first_lea->addressing_mode){
-				//Just do nothing by default
-				default:
-					break;
-			}
 		}
 	}
 
@@ -4889,6 +4876,33 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					break;
 
 				case THREE_ADDR_CODE_LEA_STMT:
+					switch(addressing_operation->addressing_mode){
+						case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+							//TODO
+							break;
+						case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+							//TODO
+							break;
+						case ADDRESSING_MODE_REGISTERS_ONLY:
+							//TODO
+							break;
+						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+							//TODO
+							break;
+						case ADDRESSING_MODE_INDEX_AND_SCALE:
+							//TODO
+							break;
+						case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+							//TODO
+							break;
+							
+						/**
+						 * Everything else is unsupported so we will just skip it
+						 */
+						default:
+							break;
+					}
+
 					//TODO
 					break;
 
