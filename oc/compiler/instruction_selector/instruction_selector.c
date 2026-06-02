@@ -4718,8 +4718,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 									changed = TRUE;
 									break;
 
-								//TODO EVERYTHING BEYOND HERE
-
 								/**
 								 * Case where we have:
 								 * 	t4 <- t3 - 8
@@ -4735,11 +4733,15 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								 * 	store 56(t2, t3, 8) <- 5
 								 */
 								case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+									//Convert both of these constants to i64's so that they can go negative
+									convert_constant_to_i64(to_be_combined->operands.oir.constant_operand, i64);
+									convert_constant_to_i64(memory_movement->operands.oir.address_offset, i64);
+
 									//Multiply the existing constant by the address multiplier
 									multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, memory_movement->operands.oir.address_multiplier);
 
-									//Now sum it into the existing offset
-									add_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+									//Now subtract from the existing offset
+									subtract_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
 
 									//Copy the address operand over
 									memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
@@ -4755,19 +4757,23 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 								/**
 								 * Case where we have:
-								 * 	t4 <- t3 + 8
+								 * 	t4 <- t3 - 8
 								 * 	store (t2, t4, 8) <- 5
 								 *
 								 * 	Conceptually this is the same as:
-								 * 		t2 + (t3 + 8) * 8
-								 * 		t2 + t3 * 8 + 64
-								 * 		64 + t2 + t3 * 8
-								 * 		64(t2, t3, 8)
+								 * 		t2 + (t3 - 8) * 8
+								 * 		t2 + t3 * 8 - 64
+								 * 		-64 + t2 + t3 * 8
+								 * 		-64(t2, t3, 8)
 								 *
 								 * 	Can become
 								 * 	store 64(t2, t3, 8) <- 5
 								 */
 								case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+									//Convert the constant first and then negate it
+									convert_constant_to_i64(to_be_combined->operands.oir.constant_operand, i64);
+									negate_three_address_consant(to_be_combined->operands.oir.constant_operand);
+
 									//Multiply the existing constant by the address multiplier
 									multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, memory_movement->operands.oir.address_multiplier);
 
@@ -4791,19 +4797,23 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 								/**
 								 * Case where we have:
-								 * 	t4 <- t3 + 8
+								 * 	t4 <- t3 - 8
 								 * 	leaq (, t4, 8), t7 
 								 *
 								 * 	Conceptually this is the same as:
-								 * 		(t3 + 8) * 8
-								 * 		t3 * 8 + 64
-								 * 		64 + t3 * 8
-								 * 		64(, t3, 8)
+								 * 		(t3 - 8) * 8
+								 * 		t3 * 8 - 64
+								 * 		-64 + t3 * 8
+								 * 		-64(, t3, 8)
 								 *
 								 * 	Can become
 								 * 	leaq 64(, t4, 8), t7 
 								 */
 								case ADDRESSING_MODE_INDEX_AND_SCALE:
+									//Convert the constant first and then negate it
+									convert_constant_to_i64(to_be_combined->operands.oir.constant_operand, i64);
+									negate_three_address_consant(to_be_combined->operands.oir.constant_operand);
+
 									//Multiply the existing constant by the address multiplier
 									multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, memory_movement->operands.oir.address_multiplier);
 
@@ -4827,24 +4837,28 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 								/**
 								 * Case where we have:
-								 * 	t4 <- t3 + 8
+								 * 	t4 <- t3 - 8
 								 * 	leaq 72(, t4, 8), t7 
 								 *
 								 * 	Conceptually this is the same as:
-								 * 		72 + (t3 + 8) * 8
-								 * 		72 + t3 * 8 + 64
-								 * 		136 + t3 * 8
-								 * 		136(, t3, 8)
+								 * 		72 + (t3 - 8) * 8
+								 * 		72 + t3 * 8 - 64
+								 * 		8 + t3 * 8
+								 * 		8(, t3, 8)
 								 *
 								 * 	Can become
 								 * 	leaq 136(, t4, 8), t7 
 								 */
 								case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+									//First force these both to i64's
+									convert_constant_to_i64(to_be_combined->operands.oir.constant_operand, i64);
+									convert_constant_to_i64(memory_movement->operands.oir.address_offset, i64);
+
 									//Multiply the existing constant by the address multiplier
 									multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, memory_movement->operands.oir.address_multiplier);
 									
-									//Now add the result to the existing address offset
-									add_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+									//Now subtract the result from the existing offset
+									subtract_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
 
 									//Copy the address operand over
 									memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
