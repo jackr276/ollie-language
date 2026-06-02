@@ -4378,294 +4378,314 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				 * of 2 are addressing mode compatible and account for that in our selection
 				 */
 				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-					///
-					///
-					///
-					///
-					///
-					///
-					///
-					///TODO ADD MINUS SUPPORT
-					///
-					///
-					///
-					///
-					///
-					///
-					///
-					///
-
-					if(to_be_combined->op == STAR
-						&& is_constant_lea_compatible_power_of_2(to_be_combined->operands.oir.constant_operand) == TRUE){
-						switch(memory_movement->addressing_mode){
+					switch(to_be_combined->op){
+						case STAR:
 							/**
-							 * Case where we have:
-							 * 	t4 <- t3 * 8
-							 * 	store 8(t2, t4) <- 5
-							 *
-							 * 	Can become
-							 * 	store 8(t2, t3, 8) <- 5
+							 * For STAR, it has to be a lea compatible power of 2. If it is not then we leave now
 							 */
-							case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
-								//Copy the mulitplier over
-								memory_movement->operands.oir.address_multiplier = to_be_combined->operands.oir.constant_operand->constant_value.signed_long_constant;
-
-								//Copy over the second address operand as well
-								memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
-
-								//This now has an offset and a scale
-								memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
-
-								//We no longer need the first statement
-								delete_statement(to_be_combined);
-
-								//Rebuilt around the memory movement
-								reconstruct_window(window, memory_movement);
-
-								changed = TRUE;
+							if(is_constant_lea_compatible_power_of_2(to_be_combined->operands.oir.constant_operand) == FALSE){
 								break;
+							}
 
-							/**
-							 * Case where we have:
-							 * 	t4 <- t3 * 8
-							 * 	store (t2, t4) <- 5
-							 *
-							 * 	Can become
-							 * 	store (t2, t3, 8) <- 5
-							 */
-							case ADDRESSING_MODE_REGISTERS_ONLY:
-								//Copy the mulitplier over
-								memory_movement->operands.oir.address_multiplier = to_be_combined->operands.oir.constant_operand->constant_value.signed_long_constant;
+							switch(memory_movement->addressing_mode){
+								/**
+								 * Case where we have:
+								 * 	t4 <- t3 * 8
+								 * 	store 8(t2, t4) <- 5
+								 *
+								 * 	Can become
+								 * 	store 8(t2, t3, 8) <- 5
+								 */
+								case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+									//Copy the mulitplier over
+									memory_movement->operands.oir.address_multiplier = to_be_combined->operands.oir.constant_operand->constant_value.signed_long_constant;
 
-								//Copy over the second address operand as well
-								memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+									//Copy over the second address operand as well
+									memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
 
-								//This now has an offset and a scale
-								memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
+									//This now has an offset and a scale
+									memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
-								//We no longer need the first statement
-								delete_statement(to_be_combined);
+									//We no longer need the first statement
+									delete_statement(to_be_combined);
 
-								//Rebuilt around the memory movement
-								reconstruct_window(window, memory_movement);
+									//Rebuilt around the memory movement
+									reconstruct_window(window, memory_movement);
 
-								changed = TRUE;
-								break;
+									changed = TRUE;
+									break;
 
-							/**
-							 * Anything else that *already* has an existing scale would not be worth it for this
-							 * optimization becuase multipliying out would blow away the existing scale and
-							 * make it lea incompatible
-							 *
-							 * 	t4 <- t3 * 8
-							 * 	store (t2, t4, 8) <- 5
-							 *
-							 * 	Can become
-							 * 	store (t2, t3, 64) <- 5
-							 * 				   ^
-							 * 				   |
-							 * 				  BAD
-							 *
-							 * As such, we don't bother doing this with anything that already has a scale
-							 */
-							default:
-								break;
-						}
+								/**
+								 * Case where we have:
+								 * 	t4 <- t3 * 8
+								 * 	store (t2, t4) <- 5
+								 *
+								 * 	Can become
+								 * 	store (t2, t3, 8) <- 5
+								 */
+								case ADDRESSING_MODE_REGISTERS_ONLY:
+									//Copy the mulitplier over
+									memory_movement->operands.oir.address_multiplier = to_be_combined->operands.oir.constant_operand->constant_value.signed_long_constant;
 
-					} else if(to_be_combined->op == PLUS){
-						switch(memory_movement->addressing_mode){
-							/**
-							 * Case where we have:
-							 * 	t4 <- t3 + 8
-							 * 	store (t2, t4) <- 5
-							 *
-							 * 	Can become
-							 * 	store 8(t2, t3) <- 5
-							 */
-							case ADDRESSING_MODE_REGISTERS_ONLY:
-								//Copy the constant and address register over
-								memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
-								memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+									//Copy over the second address operand as well
+									memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
 
-								//Update the addressing mode
-								memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+									//This now has an offset and a scale
+									memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
 
-								//The first statement is now useless
-								delete_statement(to_be_combined);
+									//We no longer need the first statement
+									delete_statement(to_be_combined);
 
-								//Rebuild around the memory movement
-								reconstruct_window(window, memory_movement);
+									//Rebuilt around the memory movement
+									reconstruct_window(window, memory_movement);
 
-								changed = TRUE;
-								break;
+									changed = TRUE;
+									break;
 
-							/**
-							 * Case where we have:
-							 * 	t4 <- t3 + 8
-							 * 	store 8(t2, t4) <- 5
-							 *
-							 * 	Can become
-							 * 	store 16(t2, t3) <- 5
-							 */
-							case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
-								//Add the first operation's constant to the existing offset
-								add_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+								/**
+								 * Anything else that *already* has an existing scale would not be worth it for this
+								 * optimization becuase multipliying out would blow away the existing scale and
+								 * make it lea incompatible
+								 *
+								 * 	t4 <- t3 * 8
+								 * 	store (t2, t4, 8) <- 5
+								 *
+								 * 	Can become
+								 * 	store (t2, t3, 64) <- 5
+								 * 				   ^
+								 * 				   |
+								 * 				  BAD
+								 *
+								 * As such, we don't bother doing this with anything that already has a scale
+								 */
+								default:
+									break;
+							}
 
-								//Copy the address operand over
-								memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+							break;
 
-								//The first statement is now useless
-								delete_statement(to_be_combined);
+						case PLUS:
+							switch(memory_movement->addressing_mode){
+								/**
+								 * Case where we have:
+								 * 	t4 <- t3 + 8
+								 * 	store (t2, t4) <- 5
+								 *
+								 * 	Can become
+								 * 	store 8(t2, t3) <- 5
+								 */
+								case ADDRESSING_MODE_REGISTERS_ONLY:
+									//Copy the constant and address register over
+									memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
+									memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
 
-								//Rebuild around the memory movement
-								reconstruct_window(window, memory_movement);
+									//Update the addressing mode
+									memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
-								changed = TRUE;
-								break;
+									//The first statement is now useless
+									delete_statement(to_be_combined);
 
-							/**
-							 * Case where we have:
-							 * 	t4 <- t3 + 8
-							 * 	store 8(t2, t4, 8) <- 5
-							 *
-							 * 	Conceptually this is the same as:
-							 * 		8 + t2 + (t3 + 8) * 8
-							 * 		8 + t2 + t3 * 8 + 64
-							 * 		72 + t2 + t3 * 8
-							 * 		72(t2, t3, 8)
-							 *
-							 * 	Can become
-							 * 	store 72(t2, t3, 8) <- 5
-							 */
-							case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
-								//Multiply the existing constant by the address multiplier
-								multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, memory_movement->operands.oir.address_multiplier);
+									//Rebuild around the memory movement
+									reconstruct_window(window, memory_movement);
 
-								//Now sum it into the existing offset
-								add_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+									changed = TRUE;
+									break;
 
-								//Copy the address operand over
-								memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+								/**
+								 * Case where we have:
+								 * 	t4 <- t3 + 8
+								 * 	store 8(t2, t4) <- 5
+								 *
+								 * 	Can become
+								 * 	store 16(t2, t3) <- 5
+								 */
+								case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+									//Add the first operation's constant to the existing offset
+									add_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
 
-								//The first statement is now useless
-								delete_statement(to_be_combined);
+									//Copy the address operand over
+									memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
 
-								//Rebuilt the window around the memory movement
-								reconstruct_window(window, memory_movement);
+									//The first statement is now useless
+									delete_statement(to_be_combined);
 
-								changed = TRUE;
-								break;
+									//Rebuild around the memory movement
+									reconstruct_window(window, memory_movement);
 
-							/**
-							 * Case where we have:
-							 * 	t4 <- t3 + 8
-							 * 	store (t2, t4, 8) <- 5
-							 *
-							 * 	Conceptually this is the same as:
-							 * 		t2 + (t3 + 8) * 8
-							 * 		t2 + t3 * 8 + 64
-							 * 		64 + t2 + t3 * 8
-							 * 		64(t2, t3, 8)
-							 *
-							 * 	Can become
-							 * 	store 64(t2, t3, 8) <- 5
-							 */
-							case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-								//Multiply the existing constant by the address multiplier
-								multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, memory_movement->operands.oir.address_multiplier);
+									changed = TRUE;
+									break;
 
-								//This now has an offset
-								memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
+								/**
+								 * Case where we have:
+								 * 	t4 <- t3 + 8
+								 * 	store 8(t2, t4, 8) <- 5
+								 *
+								 * 	Conceptually this is the same as:
+								 * 		8 + t2 + (t3 + 8) * 8
+								 * 		8 + t2 + t3 * 8 + 64
+								 * 		72 + t2 + t3 * 8
+								 * 		72(t2, t3, 8)
+								 *
+								 * 	Can become
+								 * 	store 72(t2, t3, 8) <- 5
+								 */
+								case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+									//Multiply the existing constant by the address multiplier
+									multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, memory_movement->operands.oir.address_multiplier);
 
-								//Copy the address operand over
-								memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+									//Now sum it into the existing offset
+									add_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
 
-								//Update the addressing mode to reflect the offset
-								memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+									//Copy the address operand over
+									memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
 
-								//The first statement is now useless
-								delete_statement(to_be_combined);
+									//The first statement is now useless
+									delete_statement(to_be_combined);
 
-								//Rebuilt the window around the memory movement
-								reconstruct_window(window, memory_movement);
+									//Rebuilt the window around the memory movement
+									reconstruct_window(window, memory_movement);
 
-								changed = TRUE;
-								break;
+									changed = TRUE;
+									break;
 
-							/**
-							 * Case where we have:
-							 * 	t4 <- t3 + 8
-							 * 	leaq (, t4, 8), t7 
-							 *
-							 * 	Conceptually this is the same as:
-							 * 		(t3 + 8) * 8
-							 * 		t3 * 8 + 64
-							 * 		64 + t3 * 8
-							 * 		64(, t3, 8)
-							 *
-							 * 	Can become
-							 * 	leaq 64(, t4, 8), t7 
-							 */
-							case ADDRESSING_MODE_INDEX_AND_SCALE:
-								//Multiply the existing constant by the address multiplier
-								multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, memory_movement->operands.oir.address_multiplier);
+								/**
+								 * Case where we have:
+								 * 	t4 <- t3 + 8
+								 * 	store (t2, t4, 8) <- 5
+								 *
+								 * 	Conceptually this is the same as:
+								 * 		t2 + (t3 + 8) * 8
+								 * 		t2 + t3 * 8 + 64
+								 * 		64 + t2 + t3 * 8
+								 * 		64(t2, t3, 8)
+								 *
+								 * 	Can become
+								 * 	store 64(t2, t3, 8) <- 5
+								 */
+								case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+									//Multiply the existing constant by the address multiplier
+									multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, memory_movement->operands.oir.address_multiplier);
 
-								//This now has an offset
-								memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
+									//This now has an offset
+									memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
 
-								//Copy the address operand over
-								memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+									//Copy the address operand over
+									memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
 
-								//Update the addressing mode to reflect the offset
-								memory_movement->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+									//Update the addressing mode to reflect the offset
+									memory_movement->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
-								//The first statement is now useless
-								delete_statement(to_be_combined);
+									//The first statement is now useless
+									delete_statement(to_be_combined);
 
-								//Rebuilt the window around the memory movement
-								reconstruct_window(window, memory_movement);
+									//Rebuilt the window around the memory movement
+									reconstruct_window(window, memory_movement);
 
-								changed = TRUE;
-								break;
+									changed = TRUE;
+									break;
 
-							/**
-							 * Case where we have:
-							 * 	t4 <- t3 + 8
-							 * 	leaq 72(, t4, 8), t7 
-							 *
-							 * 	Conceptually this is the same as:
-							 * 		72 + (t3 + 8) * 8
-							 * 		72 + t3 * 8 + 64
-							 * 		136 + t3 * 8
-							 * 		136(, t3, 8)
-							 *
-							 * 	Can become
-							 * 	leaq 136(, t4, 8), t7 
-							 */
-							case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
-								//Multiply the existing constant by the address multiplier
-								multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, memory_movement->operands.oir.address_multiplier);
-								
-								//Now add the result to the existing address offset
-								add_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+								/**
+								 * Case where we have:
+								 * 	t4 <- t3 + 8
+								 * 	leaq (, t4, 8), t7 
+								 *
+								 * 	Conceptually this is the same as:
+								 * 		(t3 + 8) * 8
+								 * 		t3 * 8 + 64
+								 * 		64 + t3 * 8
+								 * 		64(, t3, 8)
+								 *
+								 * 	Can become
+								 * 	leaq 64(, t4, 8), t7 
+								 */
+								case ADDRESSING_MODE_INDEX_AND_SCALE:
+									//Multiply the existing constant by the address multiplier
+									multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, memory_movement->operands.oir.address_multiplier);
 
-								//Copy the address operand over
-								memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+									//This now has an offset
+									memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
 
-								//The first statement is now useless
-								delete_statement(to_be_combined);
+									//Copy the address operand over
+									memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
 
-								//Rebuilt the window around the memory movement
-								reconstruct_window(window, memory_movement);
+									//Update the addressing mode to reflect the offset
+									memory_movement->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
 
-								changed = TRUE;
-								break;
+									//The first statement is now useless
+									delete_statement(to_be_combined);
 
-							//Anything else we don't support so leave it as-is
-							default:
-								break;
-						}
-					} 
+									//Rebuilt the window around the memory movement
+									reconstruct_window(window, memory_movement);
+
+									changed = TRUE;
+									break;
+
+								/**
+								 * Case where we have:
+								 * 	t4 <- t3 + 8
+								 * 	leaq 72(, t4, 8), t7 
+								 *
+								 * 	Conceptually this is the same as:
+								 * 		72 + (t3 + 8) * 8
+								 * 		72 + t3 * 8 + 64
+								 * 		136 + t3 * 8
+								 * 		136(, t3, 8)
+								 *
+								 * 	Can become
+								 * 	leaq 136(, t4, 8), t7 
+								 */
+								case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+									//Multiply the existing constant by the address multiplier
+									multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.constant_operand, i64, memory_movement->operands.oir.address_multiplier);
+									
+									//Now add the result to the existing address offset
+									add_constants(memory_movement->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
+
+									//Copy the address operand over
+									memory_movement->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
+
+									//The first statement is now useless
+									delete_statement(to_be_combined);
+
+									//Rebuilt the window around the memory movement
+									reconstruct_window(window, memory_movement);
+
+									changed = TRUE;
+									break;
+
+								//Anything else we don't support so leave it as-is
+								default:
+									break;
+							}
+
+							break;
+
+						case MINUS:
+						
+						///
+						///
+						///
+						///
+						///
+						///
+						///
+						///TODO ADD MINUS SUPPORT
+						///
+						///
+						///
+						///
+						///
+						///
+						///
+						///
+
+							break;
+						/**
+						 * Anything else is an unsupported operation so we will not bother with it
+						 */
+						default:
+							break;
+					}
 
 					break;
 
