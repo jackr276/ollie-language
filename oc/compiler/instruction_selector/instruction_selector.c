@@ -4126,13 +4126,19 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 								/**
 								 * Combine:
-								 * 	t5 <- t6 + 4 
+								 * 	t5 <- t6 - 4 
 								 * 	store (t5, t7) <- 8
 								 *
 								 * Into
-								 * 	store 4(t6, t7) <- 8
+								 * 	store -4(t6, t7) <- 8
 								 */
 								case ADDRESSING_MODE_REGISTERS_ONLY:
+									//Convert this to an i64 so that we know for sure we can negate
+									convert_constant_to_i64(to_be_combined->operands.oir.constant_operand, i64);
+									
+									//No we can negate
+									negate_three_address_consant(to_be_combined->operands.oir.constant_operand);
+
 									//First copy the constant over
 									memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
 
@@ -4153,13 +4159,19 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 								/**
 								 * Combine:
-								 * 	t5 <- t6 + 4 
+								 * 	t5 <- t6 - 4 
 								 * 	store (t5, t7, 8) <- 8
 								 *
 								 * Into
-								 * 	store 4(t6, t7, 8) <- 8
+								 * 	store -4(t6, t7, 8) <- 8
 								 */
 								case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+									//Convert this to an i64 so that we know for sure we can negate
+									convert_constant_to_i64(to_be_combined->operands.oir.constant_operand, i64);
+									
+									//No we can negate
+									negate_three_address_consant(to_be_combined->operands.oir.constant_operand);
+
 									//First copy the constant over
 									memory_movement->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
 
@@ -4182,21 +4194,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 								default:
 									break;
 							}
-
-					///
-					///
-					///
-					///
-					///
-					///
-					///TODO ADD MINUS SUPPORT
-					///
-					///
-					///
-					///
-					///
-					///
-					///
 
 							break;
 

@@ -6343,6 +6343,14 @@ three_addr_const_t* multiply_constant_by_raw_int64_value(three_addr_const_t* con
 three_addr_const_t* convert_constant_to_i64(three_addr_const_t* constant, generic_type_t* i64_type){
 	//Go based on the first one's type
 	switch(constant->const_type){
+		case BYTE_CONST:
+			constant->constant_value.signed_long_constant = constant->constant_value.signed_byte_constant;
+			break;
+
+		case BYTE_CONST_FORCE_U:
+			constant->constant_value.signed_long_constant = constant->constant_value.unsigned_byte_constant;
+			break;
+
 		case SHORT_CONST:
 			constant->constant_value.signed_long_constant = constant->constant_value.signed_short_constant;
 			break;
@@ -6357,6 +6365,10 @@ three_addr_const_t* convert_constant_to_i64(three_addr_const_t* constant, generi
 
 		case INT_CONST:
 			constant->constant_value.signed_long_constant = constant->constant_value.signed_integer_constant;
+			break;
+
+		//Already accounted for so skip
+		case LONG_CONST:
 			break;
 
 		case LONG_CONST_FORCE_U:
