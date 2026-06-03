@@ -1007,6 +1007,158 @@ static inline void handle_floating_point_coercion(type_symtab_t* symtab, generic
 
 
 /**
+ * Determine the compatability for two types inside of a ternary expression. This presents a unqiue case
+ * because a ternary type is, in a way, both an assignment and an operation rolled together. There are also
+ * unqiue mutability constraints with ternary compatibility that will be explored here
+ */
+generic_type_t* determine_ternary_compatibility(void* symtab, generic_type_t** a, generic_type_t** b){
+	/**
+	 * For structs/unions, we can copy them over to eachother but they'll have
+	 * to be they have to be assignable to one another
+	 */
+	if((*a)->type_class == TYPE_CLASS_STRUCT || (*a)->type_class == TYPE_CLASS_UNION){
+		/**
+		 * If either way works(a to b or b to a), we will then go through and
+		 * perform mutability coercion on the two types. Mutability coercion
+		 * will ensure that we are maintaining the lowest level of mutability
+		 */
+		if(types_assignable(*a, *b) != NULL || types_assignable(*b, *a) != NULL){
+			/**
+			 * If a is mutable, then this all hinges on b being mutable or not. If 
+			 * b is also mutable, then we will have a mutable type. But if b is not
+			 * mutable, then we will have an immutable type. Either way it hinges
+			 * on b, so we just return b in the end regardless
+			 */
+			if((*a)->mutability == MUTABLE){
+				return *b;
+
+			/**
+			 * It's not mutable. Whatever b's mutability is, we preserve the lowest
+			 * mutability level which in this case is a's, so we return that
+			 */
+			} else {
+				return *a;
+			}
+
+		} else {
+			return NULL;
+		}
+	}
+
+	/**
+	 * For reference type assignability, the mutability level is very important
+	 * We need to be sure that we we are not setting something that is immutable
+	 * to a reference that is mutable or that would violate the entire structure
+	 * of the mutability. For this reason, if we're assigning pointers in a ternary,
+	 * we always take the lowest mutability level
+	 */
+	if((*a)->type_class == TYPE_CLASS_POINTER){
+		switch((*b)->type_class){
+			case TYPE_CLASS_POINTER:
+				if(pointer_types_compatible_ignore_mutability(*a, *b) == NULL){
+					return NULL;
+				}
+
+				/**
+				 * If a is not mutable, then we just return that. If a
+				 * is mutable, then we return whatever b has in store
+				 * for us
+				 */
+				if((*a)->mutability == MUTABLE){
+					return *b;
+				} else {
+					return *a;
+				}
+
+			/**
+			 * For basic types it needs to be an integer. We return 
+			 * a's type
+			 */
+			case TYPE_CLASS_BASIC:
+				switch((*b)->basic_type_token){
+					case VOID:
+					case F32:
+					case F64:
+						return NULL;
+					default:
+						return *a;
+				}
+
+			/**
+			 * Something invalid here
+			 */
+			default:
+				return NULL;
+		}
+	}
+	
+	/**
+	 * For reference type assignability, the mutability level is very important
+	 * We need to be sure that we we are not setting something that is immutable
+	 * to a reference that is mutable or that would violate the entire structure
+	 * of the mutability. For this reason, if we're assigning pointers in a ternary,
+	 * we always take the lowest mutability level
+	 */
+	if((*b)->type_class == TYPE_CLASS_POINTER){
+		switch((*a)->type_class){
+			case TYPE_CLASS_POINTER:
+				if(pointer_types_compatible_ignore_mutability(*b, *a) == NULL){
+					return NULL;
+				}
+
+				/**
+				 * If a is not mutable, then we just return that. If a
+				 * is mutable, then we return whatever b has in store
+				 * for us
+				 */
+				if((*b)->mutability == MUTABLE){
+					return *a;
+				} else {
+					return *b;
+				}
+
+			/**
+			 * For basic types it needs to be an integer. We return 
+			 * a's type
+			 */
+			case TYPE_CLASS_BASIC:
+				switch((*a)->basic_type_token){
+					case VOID:
+					case F32:
+					case F64:
+						return NULL;
+					default:
+						return *b;
+				}
+
+			/**
+			 * Something invalid here
+			 */
+			default:
+				return NULL;
+		}
+	}
+
+	//At this point if these are not basic types, we're done
+	if((*a)->type_class != TYPE_CLASS_BASIC || (*b)->type_class != TYPE_CLASS_BASIC){
+		return NULL;
+	}
+
+	//Floating point coercion handling
+	handle_floating_point_coercion(symtab, a, b);
+
+	//Perform any signedness correction that is needed
+	basic_type_signedness_coercion(symtab, a, b);
+
+	//We already know that we only have basic types here. We can apply the standard widening conversion
+	basic_type_widening_type_coercion(a, b);
+
+	//We'll return a final comparison type of bool 
+	return *a;
+}
+
+
+/**
  * Are two types compatible with one another for a given operator? Note that by the time 
  * we get here, we guarantee that the types themselves on their own are valid for this operator.
  * The question then becomes are they valid together
@@ -1301,155 +1453,6 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 			basic_type_widening_type_coercion(a, b);
 
 			//We'll give back *a once we're finished
-			return *a;
-
-		/**
-		 * Very unique case - ternary operator
-		 */
-		case QUESTION:
-			/**
-			 * For structs/unions, we can copy them over to eachother but they'll have
-			 * to be they have to be assignable to one another
-			 */
-			if((*a)->type_class == TYPE_CLASS_STRUCT || (*a)->type_class == TYPE_CLASS_UNION){
-				/**
-				 * If either way works(a to b or b to a), we will then go through and
-				 * perform mutability coercion on the two types. Mutability coercion
-				 * will ensure that we are maintaining the lowest level of mutability
-				 */
-				if(types_assignable(*a, *b) != NULL || types_assignable(*b, *a) != NULL){
-					/**
-					 * If a is mutable, then this all hinges on b being mutable or not. If 
-					 * b is also mutable, then we will have a mutable type. But if b is not
-					 * mutable, then we will have an immutable type. Either way it hinges
-					 * on b, so we just return b in the end regardless
-					 */
-					if((*a)->mutability == MUTABLE){
-						return *b;
-
-					/**
-					 * It's not mutable. Whatever b's mutability is, we preserve the lowest
-					 * mutability level which in this case is a's, so we return that
-					 */
-					} else {
-						return *a;
-					}
-
-				} else {
-					return NULL;
-				}
-			}
-
-			/**
-			 * For reference type assignability, the mutability level is very important
-			 * We need to be sure that we we are not setting something that is immutable
-			 * to a reference that is mutable or that would violate the entire structure
-			 * of the mutability. For this reason, if we're assigning pointers in a ternary,
-			 * we always take the lowest mutability level
-			 */
-			if((*a)->type_class == TYPE_CLASS_POINTER){
-				switch((*b)->type_class){
-					case TYPE_CLASS_POINTER:
-						if(pointer_types_compatible_ignore_mutability(*a, *b) == NULL){
-							return NULL;
-						}
-
-						/**
-						 * If a is not mutable, then we just return that. If a
-						 * is mutable, then we return whatever b has in store
-						 * for us
-						 */
-						if((*a)->mutability == MUTABLE){
-							return *b;
-						} else {
-							return *a;
-						}
-
-					/**
-					 * For basic types it needs to be an integer. We return 
-					 * a's type
-					 */
-					case TYPE_CLASS_BASIC:
-						switch((*b)->basic_type_token){
-							case VOID:
-							case F32:
-							case F64:
-								return NULL;
-							default:
-								return *a;
-						}
-
-					/**
-					 * Something invalid here
-					 */
-					default:
-						return NULL;
-				}
-			}
-			
-			/**
-			 * For reference type assignability, the mutability level is very important
-			 * We need to be sure that we we are not setting something that is immutable
-			 * to a reference that is mutable or that would violate the entire structure
-			 * of the mutability. For this reason, if we're assigning pointers in a ternary,
-			 * we always take the lowest mutability level
-			 */
-			if((*b)->type_class == TYPE_CLASS_POINTER){
-				switch((*a)->type_class){
-					case TYPE_CLASS_POINTER:
-						if(pointer_types_compatible_ignore_mutability(*b, *a) == NULL){
-							return NULL;
-						}
-
-						/**
-						 * If a is not mutable, then we just return that. If a
-						 * is mutable, then we return whatever b has in store
-						 * for us
-						 */
-						if((*b)->mutability == MUTABLE){
-							return *a;
-						} else {
-							return *b;
-						}
-
-					/**
-					 * For basic types it needs to be an integer. We return 
-					 * a's type
-					 */
-					case TYPE_CLASS_BASIC:
-						switch((*a)->basic_type_token){
-							case VOID:
-							case F32:
-							case F64:
-								return NULL;
-							default:
-								return *b;
-						}
-
-					/**
-					 * Something invalid here
-					 */
-					default:
-						return NULL;
-				}
-			}
-
-			//At this point if these are not basic types, we're done
-			if((*a)->type_class != TYPE_CLASS_BASIC || (*b)->type_class != TYPE_CLASS_BASIC){
-				return NULL;
-			}
-
-			//Floating point coercion handling
-			handle_floating_point_coercion(symtab, a, b);
-		
-			//Perform any signedness correction that is needed
-			basic_type_signedness_coercion(symtab, a, b);
-
-			//We already know that we only have basic types here. We can apply
-			//the standard widening conversion
-			basic_type_widening_type_coercion(a, b);
-
-			//We'll return a final comparison type of bool 
 			return *a;
 
 		/**

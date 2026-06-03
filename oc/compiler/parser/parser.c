@@ -6463,7 +6463,7 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 	add_child_node(ternary_expression_node, else_branch);
 
 	//Determine the compatibility of these ternary nodes, and coerce it
-	ternary_expression_node->inferred_type = determine_compatibility_and_coerce(type_symtab, &(if_branch->inferred_type), &(else_branch->inferred_type), QUESTION);
+	ternary_expression_node->inferred_type = determine_ternary_compatibility(type_symtab, &(if_branch->inferred_type), &(else_branch->inferred_type));
 
 	//A ternary is not assignable
 	ternary_expression_node->is_assignable = FALSE;
