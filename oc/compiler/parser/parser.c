@@ -740,6 +740,8 @@ static generic_ast_node_t* print_and_return_error(char* error_message, u_int32_t
  * Example:
  * int* + 1 -> int* + 4(an int is 4 bytes), and so on...
  * Same goes for arrays
+ *
+ * TODO CAN WE MOVE UP AND OUT???
  */
 static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* pointer, ollie_token_t op, generic_ast_node_t* operand, side_type_t side){
 	//Grab the pointer/array type out

@@ -3138,6 +3138,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& variables_equal(window->instruction3->operands.oir.operand2, window->instruction1->operands.oir.assignee, TRUE) == TRUE) {
 
+		printf("HERE\n\n\n");
+		print_instruction_window_three_address_code(window);
 		//Extract for convenience
 		instruction_t* bin_operation_with_const = window->instruction1;
 		instruction_t* binary_operation = window->instruction3;

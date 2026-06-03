@@ -6322,6 +6322,8 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
  *
  * We will not be handling the quirks of the x86 arithmetic operations inside of this block. Rather we will
  * just be emitting the straight values and letting everything else deal with that
+ *
+ * TODO CAN WE INCORPORATE POINTER ARITHMETIC????
  */
 static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr){
 	//The return package here
