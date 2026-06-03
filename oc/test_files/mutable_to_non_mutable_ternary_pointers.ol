@@ -9,7 +9,7 @@ pub fn tester(param:i32) -> i32* {
 	let y:mut i32 = 3;
 	
 	let x_ptr:i32* = &x;
-	let y_ptr:mut i32* = &x;
+	let y_ptr:mut i32* = &y;
 
 	//Should work just fine becasuse the result is immutable
 	ret param > 5 ? y_ptr else x_ptr;

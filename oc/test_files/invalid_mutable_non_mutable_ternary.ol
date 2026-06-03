@@ -9,7 +9,7 @@ pub fn tester(param:i32) -> mut i32* {
 	let y:mut i32 = 5;
 	
 	let x_ptr: i32* = &x;
-	let y_ptr:mut i32* = &x;
+	let y_ptr:mut i32* = &y;
 
 	/**
 	* This should fail because x is immutable
