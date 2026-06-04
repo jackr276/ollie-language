@@ -2375,6 +2375,85 @@ static inline void combine_constant_assignment_with_address_operand1(instruction
 
 
 /**
+ * Combine a binary operation with the first address operand. Note that all
+ * equality has been determined by this point, so this helper exists only to do the work
+ *
+ * It can be assumed that the first instruction is the binary operation, and the second
+ * is the addressing operation
+ */
+static inline void combine_binary_operation_with_address_operand1(instruction_window_t* window, u_int8_t* changed){
+	//Extract for convenience
+	instruction_t* binary_operation = window->instruction1;
+	instruction_t* addressing_operation = window->instruction2;
+
+	/**
+	 * We are only able to do this *if* we have an addition binary operation.
+	 * Anything else is not going to work *if* we're doing an address_operand1
+	 * compression
+	 */
+	if(binary_operation->op != PLUS){
+		return;
+	}
+
+	switch(addressing_operation->addressing_mode){
+		/**
+		 * Combine:
+		 * 	t5 <- t6 + t7
+		 * 	store (t5) <- 8
+		 *
+		 * Into
+		 * store (t6, t7) <- 8
+		 */
+		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+			//Copy the two operands over
+			addressing_operation->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
+			addressing_operation->operands.oir.address_operand2 = binary_operation->operands.oir.operand2;
+
+			//This is now a REGISTERS_ONLY addressing mode
+			addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+
+			//Scrap the old binary operation
+			delete_statement(binary_operation);
+
+			//Rebuilt around addressing operation
+			reconstruct_window(window, addressing_operation);
+
+			*changed = TRUE;
+			break;
+
+		/**
+		 * Combine:
+		 * 	t5 <- t6 + t7
+		 * 	store 4(t5) <- 8
+		 *
+		 * Into
+		 * store 4(t6, t7) <- 8
+		 */
+		case ADDRESSING_MODE_OFFSET_ONLY:
+			//Copy the two operands over
+			addressing_operation->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
+			addressing_operation->operands.oir.address_operand2 = binary_operation->operands.oir.operand2;
+
+			//This is now a REGISTERS_AND_OFFSET addressing mode
+			addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+
+			//Scrap the old binary operation
+			delete_statement(binary_operation);
+
+			//Rebuilt around addressing operation
+			reconstruct_window(window, addressing_operation);
+
+			*changed = TRUE;
+			break;
+
+		//Unsupported - do nothing
+		default:
+			break;
+	}
+}
+
+
+/**
  * The pattern optimizer takes in a window and performs hyperlocal optimzations
  * on passing instructions. If we do end up deleting instructions, we'll need
  * to take care with how that affects the window that we take in
@@ -3549,71 +3628,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				 * is equal to the result of the binary operation
 				 */
 				case THREE_ADDR_CODE_BIN_OP_STMT:
-					/**
-					 * We are only able to do this *if* we have an addition binary operation.
-					 * Anything else is not going to work *if* we're doing an address_operand1
-					 * compression
-					 */
-					if(to_be_combined->op != PLUS){
-						break;
-					}
-
-					switch(addressing_operation->addressing_mode){
-						/**
-						 * Combine:
-						 * 	t5 <- t6 + t7
-						 * 	store (t5) <- 8
-						 *
-						 * Into
-						 * store (t6, t7) <- 8
-						 */
-						case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
-							//Copy the two operands over
-							addressing_operation->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
-							addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.operand2;
-
-							//This is now a REGISTERS_ONLY addressing mode
-							addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
-
-							//Scrap the old binary operation
-							delete_statement(to_be_combined);
-
-							//Rebuilt around addressing operation
-							reconstruct_window(window, addressing_operation);
-
-							changed = TRUE;
-							break;
-
-						/**
-						 * Combine:
-						 * 	t5 <- t6 + t7
-						 * 	store 4(t5) <- 8
-						 *
-						 * Into
-						 * store 4(t6, t7) <- 8
-						 */
-						case ADDRESSING_MODE_OFFSET_ONLY:
-							//Copy the two operands over
-							addressing_operation->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
-							addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.operand2;
-
-							//This is now a REGISTERS_AND_OFFSET addressing mode
-							addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-
-							//Scrap the old binary operation
-							delete_statement(to_be_combined);
-
-							//Rebuilt around addressing operation
-							reconstruct_window(window, addressing_operation);
-
-							changed = TRUE;
-							break;
-
-						//Unsupported - do nothing
-						default:
-							break;
-					}
-
+					combine_binary_operation_with_address_operand1(window, &changed);
 					break;
 
 				/**
