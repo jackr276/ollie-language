@@ -4945,6 +4945,30 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 						case ADDRESSING_MODE_REGISTERS_ONLY:
 							switch(to_be_combined->addressing_mode){
+								/**
+								 * Combine:
+								 * 	t5 <- 4(t4)
+								 * 	store (t3, t5) <- 5
+								 *
+								 * Into
+								 * 	store 4(t3, t4) <- 5
+								 */
+								case ADDRESSING_MODE_OFFSET_ONLY:
+									//Copy over the offset and the operand
+									addressing_operation->operands.oir.address_offset = to_be_combined->operands.oir.address_offset;
+									addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.address_operand1;
+
+									//Update the addressing mode to reflect the offset
+									addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+
+									//Scrap the old lea
+									delete_statement(to_be_combined);
+
+									//Rebuilt around the addressing operation
+									reconstruct_window(window, addressing_operation);
+
+									changed = TRUE;
+									break;
 
 								//TODO
 								
