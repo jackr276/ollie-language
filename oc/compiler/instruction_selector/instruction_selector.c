@@ -3057,6 +3057,31 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 
 
 /**
+ * Combine an assignment operation with the second address operand. Note that all
+ * equality has been determined by this point, so this helper exists only to do the work
+ *
+ * It can be assumed that the first instruction is the assignment, and the second
+ * is the addressing operation
+ */
+static inline void combine_assignment_with_address_operand2(instruction_window_t* window, u_int8_t* changed){
+	instruction_t* assignment = window->instruction1;
+	instruction_t* addressing_operation = window->instruction2;
+
+	//Copy it over
+	addressing_operation->operands.oir.address_operand2 = assignment->operands.oir.operand1;
+
+	//Scrap the first statement
+	delete_statement(assignment);
+
+	//Rebuilt the window around the addressing operation
+	reconstruct_window(window, addressing_operation);
+
+	//Flag that there was a change
+	*changed = TRUE;
+}
+
+
+/**
  * The pattern optimizer takes in a window and performs hyperlocal optimzations
  * on passing instructions. If we do end up deleting instructions, we'll need
  * to take care with how that affects the window that we take in
@@ -4262,20 +4287,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * Go based on what kind of statement we have as the first way to split
 			 */
 			switch(to_be_combined->statement_type){
-				/**
-				 * Easy case here - no addressing mode change just copy the result over
-				 */
 				case THREE_ADDR_CODE_ASSN_STMT:
-					//Copy it over into the second address operand
-					addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.operand1;
-
-					//Scrap the first statement
-					delete_statement(to_be_combined);
-
-					//Rebuilt the window around the addressing operation
-					reconstruct_window(window, addressing_operation);
-
-					changed = TRUE;
+					combine_assignment_with_address_operand2(window, &changed);
 					break;
 
 				/**
