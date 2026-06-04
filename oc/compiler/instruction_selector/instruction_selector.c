@@ -4983,6 +4983,40 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
 							switch(to_be_combined->addressing_mode){
+								/**
+								 * Combine
+								 * 	t5 <- 4(t4)
+								 * 	store (t3, t5, 8) <- 5
+								 *
+								 * Into
+								 * 	t3 + (4 + t4) * 8
+								 * 	t3 + t4 * 8 + 32
+								 * 	32 + t3 + t4 * 8
+								 * 	32(t3, t4, 8)
+								 *
+								 * store 32(t3, t4, 8)
+								 */
+								case ADDRESSING_MODE_OFFSET_ONLY:
+									//First multiply the existing offset by the multiplier
+									multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.address_offset, i64, addressing_operation->operands.oir.address_multiplier);
+
+									//Now move this value over
+									addressing_operation->operands.oir.address_offset = to_be_combined->operands.oir.address_offset;
+
+									//Copy the lea's first address operand over
+									addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.address_operand1;
+
+									//Update the addressing mode to reflect the offset
+									addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+
+									//Scrap the old lea
+									delete_statement(to_be_combined);
+
+									//Rebuild around the addressing mode operation
+									reconstruct_window(window, addressing_operation);
+
+									changed = TRUE;
+									break;
 
 								//TODO
 
