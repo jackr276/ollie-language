@@ -4853,49 +4853,58 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		instruction_t* first = window->instruction1;
 		instruction_t* second = window->instruction2;
 
+		/**
+		 * First switch based on the second operations operand, then further breakdown
+		 * by the first operand internally
+		 */
+		switch(second->op){
+			case PLUS:
+				switch(first->op){
+					//TODO
+					case PLUS:
+						printf("HERE PLUS PLUS");
+						break;
 
-		switch(in)
+					//TODO
+					case MINUS:
+						printf("HERE PLUS MINUS");
+						break;
+					
+					/**
+					 * Another unsupported case that we don't handle so we'll skip
+					 */
+					default:
+						break;
+				}
 
+				break;
+				
+			case MINUS:
+				switch(first->op){
+					//TODO
+					case PLUS:
+						printf("HERE MINUS PLUS");
+						break;
 
-	}
+					//TODO
+					case MINUS:
+						printf("HERE MINUS MINUS");
+						break;
 
+					/**
+					 * Another unsupported case that we don't handle so we'll skip
+					 */
+					default:
+						break;
+				}
 
-		&& window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT 
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& window->instruction2->op == PLUS 
-		&& window->instruction1->op == PLUS){
+				break;
 
-		printf("HERE\n\n\n\n");
-
-		//Let's do this for convenience
-		instruction_t* first = window->instruction1;
-		instruction_t* second = window->instruction2;
-
-		//Calculate this for now in case we need it
-		generic_type_t* final_type = types_assignable(second->operands.oir.constant_operand->type, first->operands.oir.constant_operand->type);
-
-		//If these are the same variable and the types are compatible, then we're good to go
-		if(variables_equal(first->operands.oir.assignee, second->operands.oir.operand1, FALSE) == TRUE && final_type != NULL){
 			/**
-			 * What we'll do first is add the two constants. The resultant constant will be stored
-			 * in the second instruction's constant
+			 * Some unsupported use case, we'll just bail out
 			 */
-			add_constants(second->operands.oir.constant_operand, first->operands.oir.constant_operand);
-
-			//Manage our use state here
-			replace_variable(second->operands.oir.operand1, first->operands.oir.operand1);
-
-			//Now that we've done that, we'll modify the second equation's op1 to be the first equation's op1
-			second->operands.oir.operand1 = first->operands.oir.operand1;
-
-			//Now that this is done, we can remove the first equation
-			delete_statement(first);
-
-			//We'll reconstruct the window with the second instruction being the first instruction now
-			reconstruct_window(window, second);
-
-			//This counts as a change because we deleted
-			changed = TRUE;
+			default:
+				break;
 		}
 	}
 
