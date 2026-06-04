@@ -4858,21 +4858,79 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				case THREE_ADDR_CODE_LEA_STMT:
 					switch(addressing_operation->addressing_mode){
 						case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
-							//TODO
+							switch(to_be_combined->addressing_mode){
+
+								/**
+								 * Anything else is unsupported so move along
+								 */
+								default:
+									break;
+							}
+
 							break;
+
 						case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+							switch(to_be_combined->addressing_mode){
+
+								/**
+								 * Anything else is unsupported so move along
+								 */
+								default:
+									break;
+							}
+
 							//TODO
 							break;
+
 						case ADDRESSING_MODE_REGISTERS_ONLY:
+							switch(to_be_combined->addressing_mode){
+
+								/**
+								 * Anything else is unsupported so move along
+								 */
+								default:
+									break;
+							}
+
 							//TODO
 							break;
+
 						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+							switch(to_be_combined->addressing_mode){
+
+								/**
+								 * Anything else is unsupported so move along
+								 */
+								default:
+									break;
+							}
+
 							//TODO
 							break;
+
 						case ADDRESSING_MODE_INDEX_AND_SCALE:
+							switch(to_be_combined->addressing_mode){
+
+								/**
+								 * Anything else is unsupported so move along
+								 */
+								default:
+									break;
+							}
+
 							//TODO
 							break;
+
 						case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+							switch(to_be_combined->addressing_mode){
+
+								/**
+								 * Anything else is unsupported so move along
+								 */
+								default:
+									break;
+							}
+
 							//TODO
 							break;
 							
@@ -4883,7 +4941,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							break;
 					}
 
-					//TODO
 					break;
 
 				//Unsupported statement combo - just leave
