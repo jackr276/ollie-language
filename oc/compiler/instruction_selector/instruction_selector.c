@@ -3064,6 +3064,7 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
  * is the addressing operation
  */
 static inline void combine_assignment_with_address_operand2(instruction_window_t* window, u_int8_t* changed){
+	//Extract for convenience
 	instruction_t* assignment = window->instruction1;
 	instruction_t* addressing_operation = window->instruction2;
 
@@ -3078,6 +3079,140 @@ static inline void combine_assignment_with_address_operand2(instruction_window_t
 
 	//Flag that there was a change
 	*changed = TRUE;
+}
+
+
+/**
+ * Combine a constant assignment operation with the second address operand. Note that all
+ * equality has been determined by this point, so this helper exists only to do the work
+ *
+ * It can be assumed that the first instruction is the constant assignment, and the second
+ * is the addressing operation
+ */
+static inline void combine_constant_assignment_with_address_operand2(instruction_window_t* window, u_int8_t* changed){
+	//Extract for convenience
+	instruction_t* constant_assignment = window->instruction1;
+	instruction_t* addressing_operation = window->instruction2;
+
+	switch(addressing_operation->addressing_mode){
+		/**
+		 * Going from:
+		 * 	t4 <- 2
+		 * 	store 4(t5, t4) <- x1
+		 *
+		 * To 
+		 *  store 6(t5) <- x1
+		 */
+		case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+			//Add the two constants(result in the first operand)
+			add_constants(addressing_operation->operands.oir.address_offset, constant_assignment->operands.oir.constant_operand);
+
+			//NULL out the old second operand
+			addressing_operation->operands.oir.address_operand2 = NULL;
+
+			//Memory mode is now just an offset
+			addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+
+			//Delete the first statement
+			delete_statement(constant_assignment);
+
+			//Rebuilt around the addressing operation
+			reconstruct_window(window, addressing_operation);
+
+			*changed = TRUE;
+			break;
+
+		/**
+		 * Going from:
+		 * 	t4 <- 2
+		 * 	store 4(t5, t4, 8) <- x1
+		 *
+		 * To 
+		 *  store 20(t5) <- x1
+		 */
+		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+			//Step 1: multiple the assigned constant with the multiplicand
+			multiply_constant_by_raw_int64_value(constant_assignment->operands.oir.constant_operand, i64, addressing_operation->operands.oir.address_multiplier);
+
+			//Now add it with the actual offset
+			add_constants(addressing_operation->operands.oir.address_offset, constant_assignment->operands.oir.constant_operand);
+
+			//Memory mode is now just an offset
+			addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+
+			//NULL out the old second operand
+			addressing_operation->operands.oir.address_operand2 = NULL;
+
+			//Delete the constant assignment
+			delete_statement(constant_assignment);
+
+			//Rebuilt around the addressing operation
+			reconstruct_window(window, addressing_operation);
+
+			*changed = TRUE;
+			break;
+
+		/**
+		 * Going from:
+		 * 	t4 <- 2
+		 * 	store (t5, t4) <- x1
+		 *
+		 * To 
+		 *  store 2(t5) <- x1
+		 */
+		case ADDRESSING_MODE_REGISTERS_ONLY:
+			//Copy the offset over
+			addressing_operation->operands.oir.address_offset = constant_assignment->operands.oir.constant_operand;
+
+			//Change the addressing mode to OFFSET_ONLY
+			addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+
+			//NULL out the old second operand
+			addressing_operation->operands.oir.address_operand2 = NULL;
+
+			//Delete the constant assignment
+			delete_statement(constant_assignment);
+
+			//Rebuilt around the addressing operation
+			reconstruct_window(window, addressing_operation);
+
+			*changed = TRUE;
+			break;
+
+		/**
+		 * Going from:
+		 * 	t4 <- 2
+		 * 	store (t5, t4, 8) <- x1
+		 *
+		 * To 
+		 *  store 16(t5) <- x1
+		 */
+		case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+			//First multipliy the constant
+			multiply_constant_by_raw_int64_value(constant_assignment->operands.oir.constant_operand, i64, addressing_operation->operands.oir.address_multiplier);
+
+			//Then bring it over as the address offset
+			addressing_operation->operands.oir.address_offset = constant_assignment->operands.oir.constant_operand;
+
+			//NULL out the old second operand
+			addressing_operation->operands.oir.address_operand2 = NULL;
+
+			//Change the addressing mode to OFFSET_ONLY
+			addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+
+			//Delete the constant assignment
+			delete_statement(constant_assignment);
+
+			//Rebuilt around the addressing operation
+			reconstruct_window(window, addressing_operation);
+
+			*changed = TRUE;
+			break;
+		
+		//Unsupported case - do nothing
+		default:
+			break;
+	}
 }
 
 
@@ -4221,8 +4356,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction1->operands.oir.assignee != NULL
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction1->operands.oir.assignee->use_count <= 1){
-		//Needed declarations
-		three_addr_const_t* assigned_constant;
 
 		//Extract the two instructions for convenience
 		instruction_t* to_be_combined = window->instruction1;
@@ -4296,129 +4429,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				 * and this is quite a common case
 				 */
 				case THREE_ADDR_CODE_ASSN_CONST_STMT:
-					//Extract the constant that we are going to assign
-					assigned_constant = to_be_combined->operands.oir.constant_operand;
-
-					switch(addressing_operation->addressing_mode){
-						/**
-						 * Going from:
-						 * 	t4 <- 2
-						 * 	store 4(t5, t4) <- x1
-						 *
-						 * To 
-						 *  store 6(t5) <- x1
-						 */
-						case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
-							//Add the two constants(result in the first operand)
-							add_constants(addressing_operation->operands.oir.address_offset, assigned_constant);
-
-							//NULL out the old second operand
-							addressing_operation->operands.oir.address_operand2 = NULL;
-
-							//Memory mode is now just an offset
-							addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-
-							//Delete the first statement
-							delete_statement(to_be_combined);
-
-							//Rebuilt around the addressing operation
-							reconstruct_window(window, addressing_operation);
-
-							changed = TRUE;
-							break;
-
-						/**
-						 * Going from:
-						 * 	t4 <- 2
-						 * 	store 4(t5, t4, 8) <- x1
-						 *
-						 * To 
-						 *  store 20(t5) <- x1
-						 */
-						case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
-							//Step 1: multiple the assigned constant with the multiplicand
-							multiply_constant_by_raw_int64_value(assigned_constant, i64, addressing_operation->operands.oir.address_multiplier);
-
-							//Now add it with the actual offset
-							add_constants(addressing_operation->operands.oir.address_offset, assigned_constant);
-
-							//Memory mode is now just an offset
-							addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-
-							//NULL out the old second operand
-							addressing_operation->operands.oir.address_operand2 = NULL;
-
-							//Delete the constant assignment
-							delete_statement(to_be_combined);
-
-							//Rebuilt around the addressing operation
-							reconstruct_window(window, addressing_operation);
-
-							changed = TRUE;
-							break;
-
-						/**
-						 * Going from:
-						 * 	t4 <- 2
-						 * 	store (t5, t4) <- x1
-						 *
-						 * To 
-						 *  store 2(t5) <- x1
-						 */
-						case ADDRESSING_MODE_REGISTERS_ONLY:
-							//Copy the offset over
-							addressing_operation->operands.oir.address_offset = assigned_constant;
-
-							//Change the addressing mode to OFFSET_ONLY
-							addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-
-							//NULL out the old second operand
-							addressing_operation->operands.oir.address_operand2 = NULL;
-
-							//Delete the constant assignment
-							delete_statement(to_be_combined);
-
-							//Rebuilt around the addressing operation
-							reconstruct_window(window, addressing_operation);
-
-							changed = TRUE;
-							break;
-
-						/**
-						 * Going from:
-						 * 	t4 <- 2
-						 * 	store (t5, t4, 8) <- x1
-						 *
-						 * To 
-						 *  store 16(t5) <- x1
-						 */
-						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-							//First multipliy the constant
-							multiply_constant_by_raw_int64_value(assigned_constant, i64, addressing_operation->operands.oir.address_multiplier);
-
-							//Then bring it over as the address offset
-							addressing_operation->operands.oir.address_offset = assigned_constant;
-
-							//NULL out the old second operand
-							addressing_operation->operands.oir.address_operand2 = NULL;
-
-							//Change the addressing mode to OFFSET_ONLY
-							addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-
-							//Delete the constant assignment
-							delete_statement(to_be_combined);
-
-							//Rebuilt around the addressing operation
-							reconstruct_window(window, addressing_operation);
-
-							changed = TRUE;
-							break;
-						
-						//Unsupported case - do nothing
-						default:
-							break;
-					}
-
+					combine_constant_assignment_with_address_operand2(window, &changed);
 					break;
 
 				/**
