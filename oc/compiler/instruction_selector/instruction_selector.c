@@ -3936,6 +3936,37 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 
 		case ADDRESSING_MODE_INDEX_AND_SCALE:
 			switch(lea_statement->addressing_mode){
+				/**
+				 * Combine:
+				 * 	t5 <- 4(t4)
+				 * 	store (, t5, 8) <- 5
+				 *
+				 * Into:
+				 * 	(t4 + 4) * 8
+				 * 	t4 * 8 + 32
+				 * 	32(, t4, 8)
+				 *
+				 * 	store 32(, t4, 8)
+				 */
+				case ADDRESSING_MODE_OFFSET_ONLY:
+					//First thing that we need to do is multiply the existing constant by the multiplier
+					multiply_constant_by_raw_int64_value(lea_statement->operands.oir.address_offset, i64, addressing_operation->operands.oir.address_multiplier);
+
+					//Now copy over the offset and replace the addressing mode's second operand
+					addressing_operation->operands.oir.address_offset = lea_statement->operands.oir.address_offset;
+					addressing_operation->operands.oir.address_operand2 = lea_statement->operands.oir.address_operand1;
+
+					//Update the addressing mode to reflect the offset
+					addressing_operation->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+
+					//Scrap the lea now
+					delete_statement(lea_statement);
+
+					//Rebuild around the addressing operation
+					reconstruct_window(window, addressing_operation);
+
+					*changed = TRUE;
+					break;
 
 				//TODO
 
