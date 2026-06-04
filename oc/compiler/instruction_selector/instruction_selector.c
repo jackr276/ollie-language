@@ -3801,6 +3801,10 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 					break;
 			}
 
+			//TODO INDEX AND SCALE
+
+			//TODO INDEX_OFFSET_AND_SCALE
+
 			break;
 
 		case ADDRESSING_MODE_REGISTERS_ONLY:
@@ -3856,7 +3860,7 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 					*changed = TRUE;
 					break;
 					
-				//TODO
+				//TODO INDEX_OFFSET_AND_SCALE
 				
 				/**
 				 * Anything else is unsupported so move along
@@ -4830,6 +4834,71 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
+	/**
+	 * ================== Simplifying Consecutive Binary Operation with Constant statements ==============
+	 * Here is an example:
+	 * t2 <- arr_0 + 24
+	 * t4 <- t2 + 4
+	 * 
+	 * We could turn this into
+	 * t4 <- arr_0 + 28
+	 *
+	 * There are several other combos that we may have with different kinds of operations, that we will explore here
+	 */
+	if(is_instruction_binary_operation_with_const(window->instruction1) == TRUE
+		&& is_instruction_binary_operation_with_const(window->instruction2) == TRUE
+		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.operand1, TRUE) == TRUE){
+		//Extract these both for convenience
+		instruction_t* first = window->instruction1;
+		instruction_t* second = window->instruction2;
+
+
+		switch(in)
+
+
+	}
+
+
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT 
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction2->op == PLUS 
+		&& window->instruction1->op == PLUS){
+
+		printf("HERE\n\n\n\n");
+
+		//Let's do this for convenience
+		instruction_t* first = window->instruction1;
+		instruction_t* second = window->instruction2;
+
+		//Calculate this for now in case we need it
+		generic_type_t* final_type = types_assignable(second->operands.oir.constant_operand->type, first->operands.oir.constant_operand->type);
+
+		//If these are the same variable and the types are compatible, then we're good to go
+		if(variables_equal(first->operands.oir.assignee, second->operands.oir.operand1, FALSE) == TRUE && final_type != NULL){
+			/**
+			 * What we'll do first is add the two constants. The resultant constant will be stored
+			 * in the second instruction's constant
+			 */
+			add_constants(second->operands.oir.constant_operand, first->operands.oir.constant_operand);
+
+			//Manage our use state here
+			replace_variable(second->operands.oir.operand1, first->operands.oir.operand1);
+
+			//Now that we've done that, we'll modify the second equation's op1 to be the first equation's op1
+			second->operands.oir.operand1 = first->operands.oir.operand1;
+
+			//Now that this is done, we can remove the first equation
+			delete_statement(first);
+
+			//We'll reconstruct the window with the second instruction being the first instruction now
+			reconstruct_window(window, second);
+
+			//This counts as a change because we deleted
+			changed = TRUE;
+		}
+	}
+
 
 	/**
 	 * ------------------ Converting adjacent binary operations into LEA statements ----------------------------------
@@ -5009,6 +5078,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction3->op == PLUS
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& variables_equal(window->instruction3->operands.oir.operand2, window->instruction1->operands.oir.assignee, TRUE) == TRUE) {
+
 		//Extract for convenience
 		instruction_t* bin_operation_with_const = window->instruction1;
 		instruction_t* binary_operation = window->instruction3;
@@ -5791,55 +5861,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				default:
 					break;
 			}
-		}
-	}
-
-
-	/**
-	 * ================== Simplifying Consecutive Binary Operation with Constant statements ==============
-	 * Here is an example:
-	 * t2 <- arr_0 + 24
-	 * t4 <- t2 + 4
-	 * 
-	 * We could turn this into
-	 * t4 <- arr_0 + 28
-	 *
-	 * This is incredibly common with array address calculations, which is why we do it. We focus on the special case
-	 * of two consecutive additions here for this reason. Any other two consecutive operations are usually quite uncommon
-	 */
-	if(window->instruction2 != NULL && window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& window->instruction2->op == PLUS && window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT 
-		&& window->instruction1->op == PLUS){
-
-		//Let's do this for convenience
-		instruction_t* first = window->instruction1;
-		instruction_t* second = window->instruction2;
-
-		//Calculate this for now in case we need it
-		generic_type_t* final_type = types_assignable(second->operands.oir.constant_operand->type, first->operands.oir.constant_operand->type);
-
-		//If these are the same variable and the types are compatible, then we're good to go
-		if(variables_equal(first->operands.oir.assignee, second->operands.oir.operand1, FALSE) == TRUE && final_type != NULL){
-			/**
-			 * What we'll do first is add the two constants. The resultant constant will be stored
-			 * in the second instruction's constant
-			 */
-			add_constants(second->operands.oir.constant_operand, first->operands.oir.constant_operand);
-
-			//Manage our use state here
-			replace_variable(second->operands.oir.operand1, first->operands.oir.operand1);
-
-			//Now that we've done that, we'll modify the second equation's op1 to be the first equation's op1
-			second->operands.oir.operand1 = first->operands.oir.operand1;
-
-			//Now that this is done, we can remove the first equation
-			delete_statement(first);
-
-			//We'll reconstruct the window with the second instruction being the first instruction now
-			reconstruct_window(window, second);
-
-			//This counts as a change because we deleted
-			changed = TRUE;
 		}
 	}
 
