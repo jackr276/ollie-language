@@ -2931,6 +2931,132 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 
 
 /**
+ * Combine a lea operation with the first address operand. Note that all
+ * equality has been determined by this point, so this helper exists only to do the work
+ *
+ * It can be assumed that the first instruction is the lea operation, and the second
+ * is the addressing operation
+ */
+static inline void combine_lea_with_address_operand1(instruction_window_t* window, u_int8_t* changed){
+	//Extract for convenience
+	instruction_t* lea_statement = window->instruction1;
+	instruction_t* addressing_operation = window->instruction2;
+
+
+	switch(addressing_operation->addressing_mode){
+		/**
+		 * Combine:
+		 * 	t5 <- 4(t4, t6, 2)
+		 * 	store (t5) <- 4
+		 *
+		 * Into 
+		 * 	store 4(t4, t6, 2) <- 4
+		 *
+		 * This is a case where we can just copy the child's mode over
+		 * completely along with all of it's data
+		 */
+		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+			//Copy all operands over
+			addressing_operation->operands.oir.address_operand1 = lea_statement->operands.oir.address_operand1;
+			addressing_operation->operands.oir.address_operand2 = lea_statement->operands.oir.address_operand2;
+			addressing_operation->operands.oir.address_offset = lea_statement->operands.oir.address_offset;
+			addressing_operation->operands.oir.address_multiplier = lea_statement->operands.oir.address_multiplier;
+
+			//Now the addressing mode
+			addressing_operation->addressing_mode = lea_statement->addressing_mode;
+
+			//Delete the redundant statement
+			delete_statement(lea_statement);
+
+			//Rebuild around the second instruction
+			reconstruct_window(window, addressing_operation);
+
+			*changed = TRUE;
+			break;
+
+		/**
+		 * Combine:
+		 * 	t5 <- 4(t4, t6, 2)
+		 * 	store 4(t5) <- 4
+		 *
+		 * Into 
+		 * 	store 8(t4, t6, 2) <- 4
+		 *
+		 * This is also a case where we can just copy the child's mode over
+		 * completely along with all of it's data, however we'll first need
+		 * to add the offset constant *if* one of them exists
+		 */
+		case ADDRESSING_MODE_OFFSET_ONLY:
+			//If we have an offset then add it. Make sure that the result is in the *first* instruction's offset
+			if(does_addressing_mode_use_offset_constant(lea_statement->addressing_mode) == TRUE){
+				add_constants(lea_statement->operands.oir.address_offset, addressing_operation->operands.oir.address_offset);
+
+				//Copy the addressing mode over
+				addressing_operation->addressing_mode = lea_statement->addressing_mode;
+
+				//Copy this values offset over
+				addressing_operation->operands.oir.address_offset = lea_statement->operands.oir.address_offset;
+			
+			/**
+			 * If we get here, then the combined value does *not* use the addressing mode, but we know that our
+			 * original operation does. We will need to update the addressing mode to reflect that we do have
+			 * an offset
+			 */
+			} else {
+				switch(lea_statement->addressing_mode){
+					case ADDRESSING_MODE_INDEX_AND_SCALE:
+						addressing_operation->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE; 
+						break;
+
+					case ADDRESSING_MODE_REGISTERS_ONLY:
+						addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET; 
+						break;
+
+					case ADDRESSING_MODE_RIP_RELATIVE:
+						addressing_operation->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET; 
+						break;
+
+					case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+						addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE; 
+						break;
+
+					/**
+					 * By default just copy the type over
+					 */
+					default:
+						addressing_operation->addressing_mode = lea_statement->addressing_mode;
+						break;
+				}
+
+			}
+
+			/**
+			 * Copy everything *except* the offset, that should have been handled above to avoid incorrect
+			 * NULL values where they should not be
+			 */
+			addressing_operation->operands.oir.address_operand1 = lea_statement->operands.oir.address_operand1;
+			addressing_operation->operands.oir.address_operand2 = lea_statement->operands.oir.address_operand2;
+			addressing_operation->operands.oir.address_multiplier = lea_statement->operands.oir.address_multiplier;
+
+			//Delete the redundant statement
+			delete_statement(lea_statement);
+
+			//Rebuild around the second instruction
+			reconstruct_window(window, addressing_operation);
+
+			*changed = TRUE;
+			break;
+		
+		/**
+		 * Anything else is an unsupported combination so just leave
+		 */
+		default:
+			break;
+	}
+}
+
+
+/**
  * The pattern optimizer takes in a window and performs hyperlocal optimzations
  * on passing instructions. If we do end up deleting instructions, we'll need
  * to take care with how that affects the window that we take in
@@ -4073,7 +4199,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		//Needed declarations
 		three_addr_const_t* assigned_constant;
 
-
 		//Extract the two instructions for convenience
 		instruction_t* to_be_combined = window->instruction1;
 		instruction_t* addressing_operation = window->instruction2;
@@ -4116,121 +4241,17 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					combine_constant_binary_operation_with_address_operand1(window, &changed);
 					break;
 
+				/**
+				 * Combining an addressing mode with a lea operation where the first operand
+				 * is equal to the result of the lea operation
+				 */
 				case THREE_ADDR_CODE_LEA_STMT:
-					switch(addressing_operation->addressing_mode){
-						/**
-						 * Combine:
-						 * 	t5 <- 4(t4, t6, 2)
-						 * 	store (t5) <- 4
-						 *
-						 * Into 
-						 * 	store 4(t4, t6, 2) <- 4
-						 *
-						 * This is a case where we can just copy the child's mode over
-						 * completely along with all of it's data
-						 */
-						case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
-							//Copy all operands over
-							addressing_operation->operands.oir.address_operand1 = to_be_combined->operands.oir.address_operand1;
-							addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.address_operand2;
-							addressing_operation->operands.oir.address_offset = to_be_combined->operands.oir.address_offset;
-							addressing_operation->operands.oir.address_multiplier = to_be_combined->operands.oir.address_multiplier;
-
-							//Now the addressing mode
-							addressing_operation->addressing_mode = to_be_combined->addressing_mode;
-
-							//Delete the redundant statement
-							delete_statement(to_be_combined);
-
-							//Rebuild around the second instruction
-							reconstruct_window(window, addressing_operation);
-
-							changed = TRUE;
-							break;
-
-						/**
-						 * Combine:
-						 * 	t5 <- 4(t4, t6, 2)
-						 * 	store 4(t5) <- 4
-						 *
-						 * Into 
-						 * 	store 8(t4, t6, 2) <- 4
-						 *
-						 * This is also a case where we can just copy the child's mode over
-						 * completely along with all of it's data, however we'll first need
-						 * to add the offset constant *if* one of them exists
-						 */
-						case ADDRESSING_MODE_OFFSET_ONLY:
-							//If we have an offset then add it. Make sure that the result is in the *first* instruction's offset
-							if(does_addressing_mode_use_offset_constant(to_be_combined->addressing_mode) == TRUE){
-								add_constants(to_be_combined->operands.oir.address_offset, addressing_operation->operands.oir.address_offset);
-
-								//Copy the addressing mode over
-								addressing_operation->addressing_mode = to_be_combined->addressing_mode;
-
-								//Copy this values offset over
-								addressing_operation->operands.oir.address_offset = to_be_combined->operands.oir.address_offset;
-							
-							/**
-							 * If we get here, then the combined value does *not* use the addressing mode, but we know that our
-							 * original operation does. We will need to update the addressing mode to reflect that we do have
-							 * an offset
-							 */
-							} else {
-								switch(to_be_combined->addressing_mode){
-									case ADDRESSING_MODE_INDEX_AND_SCALE:
-										addressing_operation->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE; 
-										break;
-
-									case ADDRESSING_MODE_REGISTERS_ONLY:
-										addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET; 
-										break;
-
-									case ADDRESSING_MODE_RIP_RELATIVE:
-										addressing_operation->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET; 
-										break;
-
-									case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-										addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE; 
-										break;
-
-									/**
-									 * By default just copy the type over
-									 */
-									default:
-										addressing_operation->addressing_mode = to_be_combined->addressing_mode;
-										break;
-								}
-
-							}
-
-							/**
-							 * Copy everything *except* the offset, that should have been handled above to avoid incorrect
-							 * NULL values where they should not be
-							 */
-							addressing_operation->operands.oir.address_operand1 = to_be_combined->operands.oir.address_operand1;
-							addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.address_operand2;
-							addressing_operation->operands.oir.address_multiplier = to_be_combined->operands.oir.address_multiplier;
-
-							//Delete the redundant statement
-							delete_statement(to_be_combined);
-
-							//Rebuild around the second instruction
-							reconstruct_window(window, addressing_operation);
-
-							changed = TRUE;
-							break;
-						
-						/**
-						 * Anything else is an unsupported combination so just leave
-						 */
-						default:
-							break;
-					}
-
+					combine_lea_with_address_operand1(window, &changed);
 					break;
 
-				//Unsupported statement combo - just leave
+				/**
+				 * Anything else we don't support so we just leave
+				 */
 				default:
 					break;
 			}
