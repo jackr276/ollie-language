@@ -6398,8 +6398,7 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 	//Declare the lookahead token
 	lexitem_t lookahead;
 
-	//We are first required to see a valid logical or expression. If we don't see this,
-	//then we fail
+	//We are first required to see a valid logical or expression. If we don't see this, then we fail
 	generic_ast_node_t* conditional = logical_or_expression(token_stream, side);
 
 	//If this is an error, then the whole thing is over - we're done here
@@ -6410,8 +6409,10 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 	//Let's now see what comes after this ternary expression
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
-	//If this is not a question mark, then we are done here, and we should push this token
-	//back and return the conditional
+	/**
+	 * If this is not a question mark, then we are done here, and we should push this token
+	 * back and return the conditional
+	 */
 	if(lookahead.tok != QUESTION){
 		push_back_token(token_stream, &parser_line_num);
 
@@ -6464,7 +6465,7 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 	add_child_node(ternary_expression_node, else_branch);
 
 	//Determine the compatibility of these ternary nodes, and coerce it
-	ternary_expression_node->inferred_type = determine_compatibility_and_coerce(type_symtab, &(if_branch->inferred_type), &(else_branch->inferred_type), QUESTION);
+	ternary_expression_node->inferred_type = determine_ternary_compatibility(type_symtab, &(if_branch->inferred_type), &(else_branch->inferred_type));
 
 	//A ternary is not assignable
 	ternary_expression_node->is_assignable = FALSE;

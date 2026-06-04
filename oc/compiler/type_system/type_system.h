@@ -256,6 +256,13 @@ u_int8_t is_type_valid_for_conditional(generic_type_t* type);
 u_int8_t is_converting_move_required(generic_type_t* destination_type, generic_type_t* source_type);
 
 /**
+ * Determine the compatability for two types inside of a ternary expression. This presents a unqiue case
+ * because a ternary type is, in a way, both an assignment and an operation rolled together. There are also
+ * unqiue mutability constraints with ternary compatibility that will be explored here
+ */
+generic_type_t* determine_ternary_compatibility(void* symtab, generic_type_t** a, generic_type_t** b);
+
+/**
  * Determine the compatibility of two types and coerce appropraitely. The double pointer
  * reference exists so that this method may transform types as appropriate
  */
