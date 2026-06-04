@@ -3130,6 +3130,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * t22 <- (t19, ^t8_0, 4)
 	 *
 	 * And we can delete the first instruction
+	 *
+	 * THIS WILL EVENTUALLY BECOME REDUNDANT
 	 */
 	if(is_instruction_binary_operation_with_const(window->instruction1) == TRUE
 		&& is_instruction_binary_operation(window->instruction3) == TRUE
@@ -3137,9 +3139,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction3->op == PLUS
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& variables_equal(window->instruction3->operands.oir.operand2, window->instruction1->operands.oir.assignee, TRUE) == TRUE) {
-
-		printf("HERE\n\n\n");
-		print_instruction_window_three_address_code(window);
 		//Extract for convenience
 		instruction_t* bin_operation_with_const = window->instruction1;
 		instruction_t* binary_operation = window->instruction3;
@@ -4856,9 +4855,37 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					break;
 
 				case THREE_ADDR_CODE_LEA_STMT:
+					/**
+					 * Go based on the addressing mode of the original addressing statement. Remember
+					 * that everything we go on here is based on the above lea having it's assignee
+					 * equal to the second address operand, which does limit our scope in ways
+					 */
 					switch(addressing_operation->addressing_mode){
 						case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
 							switch(to_be_combined->addressing_mode){
+								/**
+								 * Combine:
+								 * 	t4 <- 5(t8)
+								 * 	store 10(t5, t4) <- 5
+								 *
+								 * Into 
+								 * 	store 15(t5, t8) <- 5
+								 */
+								case ADDRESSING_MODE_OFFSET_ONLY:
+									//Add the two offsets together
+									add_constants(addressing_operation->operands.oir.address_offset, to_be_combined->operands.oir.address_offset);
+
+									//Replace the second address operand
+									addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.address_operand1;
+
+									//We can now scrap the lea
+									delete_statement(to_be_combined);
+
+									//Rebuild around the addressing mode
+									reconstruct_window(window, addressing_operation);
+
+									changed = TRUE;
+									break;
 
 								/**
 								 * Anything else is unsupported so move along
