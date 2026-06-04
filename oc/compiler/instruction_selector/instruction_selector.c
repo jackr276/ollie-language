@@ -2181,6 +2181,200 @@ static void convert_elaborative_param_offset_to_constant_assignment(instruction_
 
 
 /**
+ * Combine an assignment operation with the first address operand. Note that all
+ * equality has been determined by this point, so this helper exists only to do the work
+ *
+ * It can be assumed that the first instruction is the assignment, and the second
+ * is the addressing operation
+ */
+static inline void combine_assignment_with_address_operand1(instruction_window_t* window, u_int8_t* changed){
+	instruction_t* assignment = window->instruction1;
+	instruction_t* addressing_operation = window->instruction2;
+
+	//Copy it over
+	addressing_operation->operands.oir.address_operand1 = assignment->operands.oir.operand1;
+
+	//Scrap the first statement
+	delete_statement(assignment);
+
+	//Rebuilt the window around the addressing operation
+	reconstruct_window(window, addressing_operation);
+
+	//Flag that there was a change
+	*changed = TRUE;
+}
+
+
+/**
+ * Combine a constant assignment operation with the first address operand. Note that all
+ * equality has been determined by this point, so this helper exists only to do the work
+ *
+ * It can be assumed that the first instruction is the constant assignment, and the second
+ * is the addressing operation
+ */
+static inline void combine_constant_assignment_with_address_operand1(instruction_window_t* window, u_int8_t* changed){
+	//Extract these for convenience
+	instruction_t* constant_assignment = window->instruction1;
+	instruction_t* addressing_operation = window->instruction2;
+
+	switch(addressing_operation->addressing_mode){
+		/**
+		 * LEA ONLY
+		 *
+		 * t4 <- 4
+		 * leaq 4(t4), t5
+		 *
+		 * Can become
+		 * t5 <- 8
+		 */
+		case ADDRESSING_MODE_OFFSET_ONLY:
+			//Skip if it is not a lea
+			if(addressing_operation->statement_type != THREE_ADDR_CODE_LEA_STMT){
+				break;
+			}
+
+			//Add the two constants together
+			add_constants(addressing_operation->operands.oir.address_offset, constant_assignment->operands.oir.constant_operand);
+
+			//Move the address offset over, NULL out the old address operand
+			addressing_operation->operands.oir.constant_operand = addressing_operation->operands.oir.address_offset;
+			addressing_operation->operands.oir.operand1 = addressing_operation->operands.oir.address_operand1;
+
+			//Wipe away the addressing mode
+			addressing_operation->addressing_mode = ADDRESSING_MODE_NONE;
+
+			//This is now an assign const statement
+			addressing_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+			//Delete the first operation
+			delete_statement(constant_assignment);
+
+			//Rebuild around the second
+			reconstruct_window(window, addressing_operation);
+
+			*changed = TRUE;
+			break;
+
+		/**
+		 * Scenario
+		 * t4 <- 4
+		 * leaq (t4, t5), t6
+		 *
+		 * Can become
+		 * leaq 4(t5), t6
+		 */
+		case ADDRESSING_MODE_REGISTERS_ONLY:
+			//Copy the constant over
+			addressing_operation->operands.oir.address_offset = constant_assignment->operands.oir.constant_operand;
+
+			//Move the address operand over, NULL out the second one
+			addressing_operation->operands.oir.address_operand1 = addressing_operation->operands.oir.address_operand2;
+			addressing_operation->operands.oir.address_operand2 = NULL;
+
+			//Update the addressing mode
+			addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+
+			//Delete the first statement
+			delete_statement(constant_assignment);
+
+			//Rebuild around the second
+			reconstruct_window(window, addressing_operation);
+
+			*changed = TRUE;
+			break;
+
+		/**
+		 * Scenario
+		 * t4 <- 4
+		 * leaq 500(t4, t5), t6
+		 *
+		 * Can become
+		 * leaq 504(t5), t6
+		 */
+		case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+			//First add the constant with our existing offset
+			add_constants(addressing_operation->operands.oir.address_offset, constant_assignment->operands.oir.constant_operand);
+
+			//Move the address operand over, NULL out the second one
+			addressing_operation->operands.oir.address_operand1 = addressing_operation->operands.oir.address_operand2;
+			addressing_operation->operands.oir.address_operand2 = NULL;
+
+			//Update the addressing mode
+			addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+
+			//Remove the first statement
+			delete_statement(constant_assignment);
+
+			//Rebuild around the second
+			reconstruct_window(window, addressing_operation);
+
+			*changed = TRUE;
+			break;
+
+		/**
+		 * Scenario
+		 * t4 <- 4
+		 * leaq (t4, t5, 8), t6
+		 *
+		 * Can become
+		 * leaq 4(, t5, 8), t6
+		 */
+		case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+			//Move the constant over
+			addressing_operation->operands.oir.address_offset = constant_assignment->operands.oir.constant_operand;
+
+			//NULL out the first address operand
+			addressing_operation->operands.oir.address_operand1 = NULL;
+
+			//Update the addressing mode
+			addressing_operation->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+
+			//Delete the first statement
+			delete_statement(constant_assignment);
+
+			//Rebuild around the second
+			reconstruct_window(window, addressing_operation);
+
+			*changed = TRUE;
+			break;
+
+		/**
+		 * Scenario
+		 * t4 <- 4
+		 * leaq 500(t4, t5, 8), t6
+		 *
+		 * Can become
+		 * leaq 504(, t5, 8), t6
+		 */
+		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+			//Add the first constant with the existing offset constant
+			add_constants(addressing_operation->operands.oir.address_offset, constant_assignment->operands.oir.constant_operand);
+
+			//NULL out the first address operand
+			addressing_operation->operands.oir.address_operand1 = NULL;
+
+			//Update the addressing mode
+			addressing_operation->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+
+			//Now delete the first statement
+			delete_statement(constant_assignment);
+
+			//Rebuild around the second
+			reconstruct_window(window, addressing_operation);
+
+			*changed = TRUE;
+			break;
+
+		/**
+		 * Generic unsupported case - we ignore this and keep going
+		 */
+		default:
+			break;
+	}
+}
+
+
+/**
  * The pattern optimizer takes in a window and performs hyperlocal optimzations
  * on passing instructions. If we do end up deleting instructions, we'll need
  * to take care with how that affects the window that we take in
@@ -3342,182 +3536,12 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * Go based on what kind of statement we have as the first way to split
 			 */
 			switch(to_be_combined->statement_type){
-				/**
-				 * Easy case here - no addressing mode change just copy the result over
-				 */
 				case THREE_ADDR_CODE_ASSN_STMT:
-					//Copy it over
-					addressing_operation->operands.oir.address_operand1 = to_be_combined->operands.oir.operand1;
-
-					//Scrap the first statement
-					delete_statement(to_be_combined);
-
-					//Rebuilt the window around the addressing operation
-					reconstruct_window(window, addressing_operation);
-
-					changed = TRUE;
+					combine_assignment_with_address_operand1(window, &changed);
 					break;
 					
-				/**
-				 * For an assign const statement, we'll need to update positioning for
-				 * the second address operand. This really mainly exists to keep lea compatability
-				 */
 				case THREE_ADDR_CODE_ASSN_CONST_STMT:
-					switch(addressing_operation->addressing_mode){
-						/**
-						 * LEA ONLY
-						 *
-						 * t4 <- 4
-						 * leaq 4(t4), t5
-						 *
-						 * Can become
-						 * t5 <- 8
-						 */
-						case ADDRESSING_MODE_OFFSET_ONLY:
-							//Skip if it is not a lea
-							if(addressing_operation->statement_type != THREE_ADDR_CODE_LEA_STMT){
-								break;
-							}
-
-							//Add the two constants together
-							add_constants(addressing_operation->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
-
-							//Move the address offset over, NULL out the old address operand
-							addressing_operation->operands.oir.constant_operand = addressing_operation->operands.oir.address_offset;
-							addressing_operation->operands.oir.operand1 = addressing_operation->operands.oir.address_operand1;
-
-							//Wipe away the addressing mode
-							addressing_operation->addressing_mode = ADDRESSING_MODE_NONE;
-
-							//This is now an assign const statement
-							addressing_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-
-							//Delete the first operation
-							delete_statement(to_be_combined);
-
-							//Rebuild around the second
-							reconstruct_window(window, addressing_operation);
-
-							changed = TRUE;
-							break;
-
-						/**
-						 * Scenario
-						 * t4 <- 4
-						 * leaq (t4, t5), t6
-						 *
-						 * Can become
-						 * leaq 4(t5), t6
-						 */
-						case ADDRESSING_MODE_REGISTERS_ONLY:
-							//Copy the constant over
-							addressing_operation->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
-
-							//Move the address operand over, NULL out the second one
-							addressing_operation->operands.oir.address_operand1 = addressing_operation->operands.oir.address_operand2;
-							addressing_operation->operands.oir.address_operand2 = NULL;
-
-							//Update the addressing mode
-							addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-
-							//Delete the first statement
-							delete_statement(to_be_combined);
-
-							//Rebuild around the second
-							reconstruct_window(window, addressing_operation);
-
-							changed = TRUE;
-							break;
-
-						/**
-						 * Scenario
-						 * t4 <- 4
-						 * leaq 500(t4, t5), t6
-						 *
-						 * Can become
-						 * leaq 504(t5), t6
-						 */
-						case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
-							//First add the constant with our existing offset
-							add_constants(addressing_operation->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
-
-							//Move the address operand over, NULL out the second one
-							addressing_operation->operands.oir.address_operand1 = addressing_operation->operands.oir.address_operand2;
-							addressing_operation->operands.oir.address_operand2 = NULL;
-
-							//Update the addressing mode
-							addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-
-							//Remove the first statement
-							delete_statement(to_be_combined);
-
-							//Rebuild around the second
-							reconstruct_window(window, addressing_operation);
-
-							changed = TRUE;
-							break;
-
-						/**
-						 * Scenario
-						 * t4 <- 4
-						 * leaq (t4, t5, 8), t6
-						 *
-						 * Can become
-						 * leaq 4(, t5, 8), t6
-						 */
-						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-							//Move the constant over
-							addressing_operation->operands.oir.address_offset = to_be_combined->operands.oir.constant_operand;
-
-							//NULL out the first address operand
-							addressing_operation->operands.oir.address_operand1 = NULL;
-
-							//Update the addressing mode
-							addressing_operation->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
-
-							//Delete the first statement
-							delete_statement(to_be_combined);
-
-							//Rebuild around the second
-							reconstruct_window(window, addressing_operation);
-
-							changed = TRUE;
-							break;
-
-						/**
-						 * Scenario
-						 * t4 <- 4
-						 * leaq 500(t4, t5, 8), t6
-						 *
-						 * Can become
-						 * leaq 504(, t5, 8), t6
-						 */
-						case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
-							//Add the first constant with the existing offset constant
-							add_constants(addressing_operation->operands.oir.address_offset, to_be_combined->operands.oir.constant_operand);
-
-							//NULL out the first address operand
-							addressing_operation->operands.oir.address_operand1 = NULL;
-
-							//Update the addressing mode
-							addressing_operation->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
-
-							//Now delete the first statement
-							delete_statement(to_be_combined);
-
-							//Rebuild around the second
-							reconstruct_window(window, addressing_operation);
-
-							changed = TRUE;
-							break;
-
-						/**
-						 * Generic unsupported case - we ignore this and keep going
-						 */
-						default:
-							break;
-					}
-
+					combine_constant_assignment_with_address_operand1(window, &changed);
 					break;
 
 				/**
