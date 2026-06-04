@@ -4887,6 +4887,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 									changed = TRUE;
 									break;
 
+								//TODO
+
 								/**
 								 * Anything else is unsupported so move along
 								 */
@@ -4898,6 +4900,39 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 						case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
 							switch(to_be_combined->addressing_mode){
+								/**
+								 * Combine:
+								 * 	t4 <- 5(t8)
+								 * 	store 10(t3, t4, 8) <- 5
+								 *
+								 * Into:
+								 * 	10 + t3 + (t8 + 5) * 8
+								 * 	10 + t3 + t8 * 8 + 40
+								 * 	50 + t3 + t8 * 8
+								 * 	50(t3, t8, 8)
+								 *
+								 * 	store 50(t3, t8, 8) <- 5
+								 */
+								case ADDRESSING_MODE_OFFSET_ONLY:
+									//First multiply the old offset constant by the multiplier
+									multiply_constant_by_raw_int64_value(to_be_combined->operands.oir.address_offset, i64, addressing_operation->operands.oir.address_multiplier);
+
+									//Now add the two values together
+									add_constants(addressing_operation->operands.oir.address_offset, to_be_combined->operands.oir.address_offset);
+
+									//Copy over the second address operand
+									addressing_operation->operands.oir.address_operand2 = to_be_combined->operands.oir.address_operand1;
+
+									//Delete the lea now
+									delete_statement(to_be_combined);
+
+									//Rebuild around the address op
+									reconstruct_window(window, addressing_operation);
+
+									changed = TRUE;
+									break;
+
+								//TODO
 
 								/**
 								 * Anything else is unsupported so move along
@@ -4906,12 +4941,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 									break;
 							}
 
-							//TODO
 							break;
 
 						case ADDRESSING_MODE_REGISTERS_ONLY:
 							switch(to_be_combined->addressing_mode){
 
+								//TODO
+								
 								/**
 								 * Anything else is unsupported so move along
 								 */
@@ -4919,12 +4955,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 									break;
 							}
 
-							//TODO
 							break;
 
 						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
 							switch(to_be_combined->addressing_mode){
 
+								//TODO
+
 								/**
 								 * Anything else is unsupported so move along
 								 */
@@ -4932,12 +4969,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 									break;
 							}
 
-							//TODO
 							break;
 
 						case ADDRESSING_MODE_INDEX_AND_SCALE:
 							switch(to_be_combined->addressing_mode){
 
+								//TODO
+
 								/**
 								 * Anything else is unsupported so move along
 								 */
@@ -4945,12 +4983,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 									break;
 							}
 
-							//TODO
 							break;
 
 						case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
 							switch(to_be_combined->addressing_mode){
 
+								//TODO
+
 								/**
 								 * Anything else is unsupported so move along
 								 */
@@ -4958,7 +4997,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 									break;
 							}
 
-							//TODO
 							break;
 							
 						/**
