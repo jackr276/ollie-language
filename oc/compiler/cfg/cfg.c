@@ -6344,6 +6344,9 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 	//Prepackage up the results here
 	cfg_result_package_t results = {starting_block, starting_block, NULL, CFG_RESULT_TYPE_VAR};
 
+	//Holder for the current block as it changes
+	basic_block_t* current_block = starting_block;
+
 	//Extract the two child nodes that we'll be operating on
 	generic_ast_node_t* left_child = binary_operation->first_child;
 	generic_ast_node_t* right_child = left_child->next_sibling;
@@ -6351,7 +6354,44 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 	//The pointer type itself *always* comes from the left child
 	generic_type_t* pointer_type = left_child->inferred_type;
 
-	printf("POINTER TYPE IS %s\n", pointer_type->type_name.string);
+	//The assignee always has the same type as the binary operation
+	three_addr_var_t* assignee = emit_temp_var(binary_operation->inferred_type);
+
+	/**
+	 * Step 1: Emit the left operand's expression
+	 */
+	cfg_result_package_t left_operand_results = emit_binary_expression(current_block, left_child);
+
+	//Update the current block
+	current_block = left_operand_results.final_block;
+
+	/**
+	 * Step 2: Emit the right operand's expression
+	 */
+	cfg_result_package_t right_operand_results = emit_binary_expression(current_block, right_child);
+
+	//Update the current block
+	current_block = right_operand_results.final_block;
+
+	/**
+	 * Step 3: determine the size of what the pointer itself points
+	 * to. This is going to be our scale with which we have to multiply
+	 * the secondary operand by. Remember that we can have either pointers
+	 * or arrays here so we will account for both cases
+	 */
+	int64_t type_size_multiplier;
+
+	if(pointer_type->type_class == TYPE_CLASS_POINTER){
+		type_size_multiplier = pointer_type->internal_types.points_to->type_size;
+	} else {
+		type_size_multiplier = pointer_type->internal_types.member_type->type_size; 
+	}
+
+	/**
+	 * Step 4: unpack the first operand. This should always be a variable but we are
+	 * going to play it safe and use the unpacker regardless
+	 */
+	three_addr_var_t* operand1 = unpack_result_package(&left_operand_results, current_block);
 
 	/**
 	 * There are only two options for operators - PLUS or MINUS - so we don't need
@@ -6364,8 +6404,8 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 
 	}
 
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(1);
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
 
 	return results;
 }
