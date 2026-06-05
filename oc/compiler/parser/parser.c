@@ -4778,6 +4778,9 @@ static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_strea
 			return print_and_return_error(info, parser_line_num);
 		}
 
+
+		//TODO CONSTANT COERCION NEEDS FIXING
+
 		/**
 		 * For constant types, we need to perform type/storage
 		 * rememediation on the internal constant values based on 
