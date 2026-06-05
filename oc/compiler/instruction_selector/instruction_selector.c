@@ -4847,7 +4847,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 */
 	if(is_instruction_binary_operation_with_const(window->instruction1) == TRUE
 		&& is_instruction_binary_operation_with_const(window->instruction2) == TRUE
-		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.operand1, TRUE) == TRUE){
 		//Extract these both for convenience
 		instruction_t* first = window->instruction1;
@@ -4860,9 +4859,30 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		switch(second->op){
 			case PLUS:
 				switch(first->op){
-					//TODO
+					/**
+					 * Combine:
+					 * 	t5 <- t4 + 8
+					 * 	t6 <- t5 + 7
+					 *
+					 * 	t6 <- t4 + 8 + 7
+					 * 	t6 <- t4 + 15
+					 */
 					case PLUS:
-						printf("HERE PLUS PLUS");
+						//Add the two constants together
+						add_constants(second->operands.oir.constant_operand, first->operands.oir.constant_operand);
+						
+						//Replace operand1 in the second equation
+						second->operands.oir.operand1 = first->operands.oir.operand1;
+
+						//First statement is now useless *if* we had a temp var
+						if(window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP){
+							delete_statement(first);
+						}
+
+						//Rebuild around the second
+						reconstruct_window(window, second);
+
+						changed = TRUE;
 						break;
 
 					//TODO
@@ -4899,8 +4919,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						//Replace operand1 with the first instructions'
 						second->operands.oir.operand1 = first->operands.oir.operand1;
 
-						//Remove the first one now
-						delete_statement(first);
+						//First statement is now useless *if* we had a temp var
+						if(window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP){
+							delete_statement(first);
+						}
 
 						//Rebuild around the second
 						reconstruct_window(window, second);
@@ -4938,8 +4960,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							second->op = MINUS;
 						}
 
-						//Remove the first one now
-						delete_statement(first);
+						//First statement is now useless *if* we had a temp var
+						if(window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP){
+							delete_statement(first);
+						}
 
 						//Rebuild around the second
 						reconstruct_window(window, second);
