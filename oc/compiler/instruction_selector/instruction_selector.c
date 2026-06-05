@@ -3792,7 +3792,30 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 					*changed = TRUE;
 					break;
 
-				//TODO
+				/**
+				 * Combine:
+				 * 	t4 <- (, t8, 8)
+				 * 	store 10(t5, t4) <- 5
+				 *
+				 * Into 
+				 * 	store 15(t5, t8, 8) <- 5
+				 */
+				case ADDRESSING_MODE_INDEX_AND_SCALE:
+					//Copy over the address multiplier and the second operand
+					addressing_operation->operands.oir.address_multiplier = lea_statement->operands.oir.address_multiplier;
+					addressing_operation->operands.oir.address_operand2 = lea_statement->operands.oir.address_operand2;
+					
+					//Update the addressing mode to reflect these changes
+					addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+					
+					//Scrap the old lea
+					delete_statement(lea_statement);
+
+					//Rebuild the window around the addressing operation
+					reconstruct_window(window, addressing_operation);
+
+					*changed = TRUE;
+					break;
 
 				/**
 				 * Anything else is unsupported so move along
@@ -3801,7 +3824,6 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 					break;
 			}
 
-			//TODO INDEX AND SCALE
 
 			//TODO INDEX_OFFSET_AND_SCALE
 
