@@ -4908,9 +4908,43 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						changed = TRUE;
 						break;
 
-					//TODO
+					/**
+					 * Combine:
+					 * 	t5 <- t4 - 8
+					 * 	t6 <- t5 - 7
+					 *
+					 * 	t6 <- t4 - 8 - 7
+					 * 	t6 <- t4 - 15
+					 */
 					case MINUS:
-						printf("HERE MINUS MINUS");
+						//First thing that we'll do is negate these both
+						negate_three_address_consant(first->operands.oir.constant_operand);
+						negate_three_address_consant(second->operands.oir.constant_operand);
+
+						//Now we'll add them both here
+						add_constants(second->operands.oir.constant_operand, first->operands.oir.constant_operand);
+
+						//Replace operand1 with the first instruction's
+						second->operands.oir.operand1 = first->operands.oir.operand1;
+
+						/**
+						 * If the result is negative, we'll keep this as a minus and negate one last time. 
+						 * If it's positive, we'll make this a plus
+						 */
+						if(is_constant_value_positive(second->operands.oir.constant_operand)){
+							second->op = PLUS;
+						} else {
+							negate_three_address_consant(second->operands.oir.constant_operand);
+							second->op = MINUS;
+						}
+
+						//Remove the first one now
+						delete_statement(first);
+
+						//Rebuild around the second
+						reconstruct_window(window, second);
+
+						changed = TRUE;
 						break;
 
 					/**

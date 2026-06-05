@@ -456,6 +456,77 @@ u_int8_t is_constant_value_zero(three_addr_const_t* constant){
 
 
 /**
+ * Is this constant value positive?
+ */
+u_int8_t is_constant_value_positive(three_addr_const_t* constant){
+	switch(constant->const_type){
+		case INT_CONST:
+			if(constant->constant_value.signed_integer_constant > 0){
+				return TRUE;
+			}
+
+			return FALSE;
+
+		case INT_CONST_FORCE_U:
+			if(constant->constant_value.unsigned_integer_constant > 0){
+				return TRUE;
+			}
+
+			return FALSE;
+
+
+		case LONG_CONST:
+			if(constant->constant_value.signed_long_constant > 0){
+				return TRUE;
+			}
+
+			return FALSE;
+
+		case LONG_CONST_FORCE_U:
+			if(constant->constant_value.unsigned_long_constant > 0){
+				return TRUE;
+			}
+
+			return FALSE;
+
+		case SHORT_CONST:
+			if(constant->constant_value.signed_short_constant > 0){
+				return TRUE;
+			}
+			return FALSE;
+
+		case SHORT_CONST_FORCE_U:
+			if(constant->constant_value.unsigned_short_constant > 0){
+				return TRUE;
+			}
+			return FALSE;
+
+		case BYTE_CONST:
+			if(constant->constant_value.signed_byte_constant > 0){
+				return TRUE;
+			}
+			return FALSE;
+
+		case BYTE_CONST_FORCE_U:
+			if(constant->constant_value.unsigned_byte_constant > 0){
+				return TRUE;
+			}
+			return FALSE;
+
+		case CHAR_CONST:
+			if(constant->constant_value.char_constant > 0){
+				return TRUE;
+			}
+			return FALSE;
+
+		//By default just return false
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Is this constant value 1?
  */
 u_int8_t is_constant_value_one(three_addr_const_t* constant){

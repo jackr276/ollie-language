@@ -523,6 +523,11 @@ u_int8_t is_unsigned_multplication_instruction(instruction_t* instruction);
 u_int8_t is_constant_value_zero(three_addr_const_t* constant);
 
 /**
+ * Is this constant value positive?
+ */
+u_int8_t is_constant_value_positive(three_addr_const_t* constant);
+
+/**
  * Is this constant value 1?
  */
 u_int8_t is_constant_value_one(three_addr_const_t* constant);
