@@ -3118,8 +3118,6 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
-	//For any eventual duplication
-	generic_ast_node_t* left_hand_duplicate;
 
 	//This will hold onto the assignment operator for us
 	ollie_token_t assignment_operator = BLANK;

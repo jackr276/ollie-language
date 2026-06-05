@@ -6103,10 +6103,12 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					/**
 					 * Otherwise, this variable is already on the stack. As such, to get it's memory address,
 					 * all we need to do is take emit a specialized "memory address var" from the existing
-					 * stack region and slap it into a variable
+					 * stack region and slap it into a variable. One special thing here - we are going to
+					 * want to make sure that we stamp this memory address variable with the type that was
+					 * inferred in the parser in case we need it for later processing
 					 */
-					//The memory address itself
 					three_addr_var_t* memory_address_var = emit_memory_address_var(unary_expression_child->variable);
+					memory_address_var->type = unary_expression_parent->inferred_type;
 
 					//And package the value up as what we want here
 					unary_package.type = CFG_RESULT_TYPE_VAR;
