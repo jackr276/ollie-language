@@ -6428,7 +6428,6 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 					//We default to op1 for a constant
 					final_result_type = op1->type;
-
 					break;
 
 				/**
@@ -6440,7 +6439,6 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 					//Now use the helper to get the final result type
 					final_result_type = get_operand_type_for_relational_operation(type_symtab, op1->type, op2->type);
-
 					break;
 			}
 
@@ -6450,6 +6448,58 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 			 */
 			if(IS_FLOATING_POINT(final_result_type) == TRUE){
 				assignee->comes_from_fp_comparison = TRUE;
+			}
+
+			break;
+
+		/**
+		 * For addition and subtraction operations, we need to consider the possibility
+		 * that the first operand is a pointer, and as such we'll need to apply pointer
+		 * arithmetic operations here instead of the usual addition
+		 */
+		case PLUS:
+		case MINUS:
+			/**
+			 * We always unpack op1. In reality it should not be a constant but we will do this
+			 * just to be sure
+			 */
+			op1 = unpack_result_package(&left_side, current_block);
+
+			switch(op1->type->type_class){
+				/**
+				 * Pointer arithmetic is a unique case that will bypass our usual
+				 * pattern
+				 */
+				case TYPE_CLASS_POINTER:
+				case TYPE_CLASS_ARRAY:
+					printf("TODO NOT IMPLEMENTED\n");
+					exit(1);
+					break;
+
+				default:
+					/**
+					 * For op2, OIR supports constants in the right operand of a binary expression
+					 * so we will unpack the value here and go for it from there
+					 */
+					switch(right_side.type){
+						/**
+						 * If we have a constant, we can go straight for a bin_op_with_const statement
+						 * and save the extra assignments and simplifications down the road
+						 */
+						case CFG_RESULT_TYPE_CONST:
+							op1_const = right_side.result_value.result_const;
+							break;
+
+						/**
+						 * Otherwise we have a regular variable value so we will
+						 * unpack it accordingly and use it to help use get the result type
+						 */
+						case CFG_RESULT_TYPE_VAR:
+							op2 = right_side.result_value.result_var;
+							break;
+					}
+
+					break;
 			}
 
 			break;
@@ -6473,7 +6523,6 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 				 */
 				case CFG_RESULT_TYPE_CONST:
 					op1_const = right_side.result_value.result_const;
-
 					break;
 
 				/**
@@ -6482,7 +6531,6 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 				 */
 				case CFG_RESULT_TYPE_VAR:
 					op2 = right_side.result_value.result_var;
-
 					break;
 			}
 
