@@ -3070,7 +3070,7 @@ static inline void rename_all_variables(cfg_t* cfg){
  *
  * my_ptr++ will become my_ptr = my_ptr + ____
  */
-static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, ollie_token_t operator, three_addr_var_t* assignee){
+static inline three_addr_var_t* generate_pointer_arithmetic_for_unary_operation(basic_block_t* basic_block, ollie_token_t operator, three_addr_var_t* assignee){
 	//Emit the constant size
 	three_addr_const_t* constant = emit_direct_integer_or_char_constant(assignee->type->internal_types.points_to->type_size, u64);
 
@@ -5653,8 +5653,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 
 		//A pointer type is a special case
 		case TYPE_CLASS_POINTER:
-			//Let the helper deal with this
-			assignee = handle_pointer_arithmetic(current_block, node->unary_operator, assignee);
+			assignee = generate_pointer_arithmetic_for_unary_operation(current_block, node->unary_operator, assignee);
 			break;
 
 		//Everything else should be impossible
@@ -5823,8 +5822,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 				//The pointer type is a special case
 				case TYPE_CLASS_POINTER:
-					//Let the helper deal with this
-					assignee = handle_pointer_arithmetic(current_block, unary_operator_node->unary_operator, assignee);
+					assignee = generate_pointer_arithmetic_for_unary_operation(current_block, unary_operator_node->unary_operator, assignee);
 
 					break;
 				
