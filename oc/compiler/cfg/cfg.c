@@ -6340,7 +6340,35 @@ static inline u_int8_t does_binary_expression_use_pointer_arithmetic(generic_ast
  * Generate pointer arithmetic for a given binary operation. The only valid operands in here are PLUS and MINUS. It should be
  * impossible to reach this point with anything other than those. This function will package up and return a result package when done
  */
-//static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operation(basic_block_t* starting_block, basic_block_t* current_block, three_addr_var_t* pointer_operand, ollie_token_t operator, cfg_result_package_t* rhs_results){
+static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operation(basic_block_t* starting_block, generic_ast_node_t* binary_operation){
+	//Prepackage up the results here
+	cfg_result_package_t results = {starting_block, starting_block, NULL, CFG_RESULT_TYPE_VAR};
+
+	//Extract the two child nodes that we'll be operating on
+	generic_ast_node_t* left_child = binary_operation->first_child;
+	generic_ast_node_t* right_child = left_child->next_sibling;
+
+	//The pointer type itself *always* comes from the left child
+	generic_type_t* pointer_type = left_child->inferred_type;
+
+	printf("POINTER TYPE IS %s\n", pointer_type->type_name.string);
+
+	/**
+	 * There are only two options for operators - PLUS or MINUS - so we don't need
+	 * to bother checking for anything else. The flow of the parser should make it
+	 * impossible for anything to get here that is not a PLUS or MINUS
+	 */
+	if(binary_operation->binary_operator == PLUS){
+
+	} else {
+
+	}
+
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(1);
+
+	return results;
+}
 
 
 /**
@@ -6383,8 +6411,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	 * let a completely separate rule handle this
 	 */
 	if(does_binary_expression_use_pointer_arithmetic(logical_or_expr) == TRUE){
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(1);
+		return generate_pointer_arithmetic_for_binary_operation(basic_block, logical_or_expr);
 	}
 
 	/**
