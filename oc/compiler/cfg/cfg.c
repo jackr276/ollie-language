@@ -6342,7 +6342,7 @@ static inline u_int8_t does_binary_expression_use_pointer_arithmetic(generic_ast
  */
 static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operation(basic_block_t* starting_block, generic_ast_node_t* binary_operation){
 	//Prepackage up the results here
-	cfg_result_package_t results = {starting_block, starting_block, NULL, CFG_RESULT_TYPE_VAR};
+	cfg_result_package_t results = {starting_block, starting_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	//Holder for the current block as it changes
 	basic_block_t* current_block = starting_block;
