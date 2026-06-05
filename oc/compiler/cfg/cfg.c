@@ -6108,7 +6108,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					 * inferred in the parser in case we need it for later processing
 					 */
 					three_addr_var_t* memory_address_var = emit_memory_address_var(unary_expression_child->variable);
-					memory_address_var->type = unary_expression_parent->inferred_type;
 
 					//And package the value up as what we want here
 					unary_package.type = CFG_RESULT_TYPE_VAR;
@@ -6314,6 +6313,37 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 
 
 /**
+ * Does a given binary expression use pointer arithmetic? We can determine this by looking at the type
+ * of the first operand and the binary operator
+ */
+static inline u_int8_t does_binary_expression_use_pointer_arithmetic(generic_ast_node_t* binary_expression){
+	//Pointer arithmetic may only come from plus or minus
+	if(binary_expression->binary_operator != PLUS && binary_expression->binary_operator != MINUS){
+		return FALSE;
+	}
+
+	/**
+	 * The only types that could possible trigger pointer arithmetic are arrays
+	 * and pointers, everything else does not count
+	 */
+	switch(binary_expression->first_child->inferred_type->type_class){
+		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_POINTER:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Generate pointer arithmetic for a given binary operation. The only valid operands in here are PLUS and MINUS. It should be
+ * impossible to reach this point with anything other than those. This function will package up and return a result package when done
+ */
+//static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operation(basic_block_t* starting_block, basic_block_t* current_block, three_addr_var_t* pointer_operand, ollie_token_t operator, cfg_result_package_t* rhs_results){
+
+
+/**
  * Emit the abstract machine code needed for a binary expression. The lowest possible
  * thing that we could have here is a unary expression. If we have that, we just emit the
  * unary expression
@@ -6346,6 +6376,15 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	 */
 	if(logical_or_expr->ast_node_type != AST_NODE_TYPE_BINARY_EXPR){
 		return emit_unary_expression(current_block, logical_or_expr);
+	}
+
+	/**
+	 * Does this binary operation make use of pointer arithmetic? If so, we will 
+	 * let a completely separate rule handle this
+	 */
+	if(does_binary_expression_use_pointer_arithmetic(logical_or_expr) == TRUE){
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(1);
 	}
 
 	/**
@@ -6448,58 +6487,6 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 			 */
 			if(IS_FLOATING_POINT(final_result_type) == TRUE){
 				assignee->comes_from_fp_comparison = TRUE;
-			}
-
-			break;
-
-		/**
-		 * For addition and subtraction operations, we need to consider the possibility
-		 * that the first operand is a pointer, and as such we'll need to apply pointer
-		 * arithmetic operations here instead of the usual addition
-		 */
-		case PLUS:
-		case MINUS:
-			/**
-			 * We always unpack op1. In reality it should not be a constant but we will do this
-			 * just to be sure
-			 */
-			op1 = unpack_result_package(&left_side, current_block);
-
-			switch(op1->type->type_class){
-				/**
-				 * Pointer arithmetic is a unique case that will bypass our usual
-				 * pattern
-				 */
-				case TYPE_CLASS_POINTER:
-				case TYPE_CLASS_ARRAY:
-					printf("TODO NOT IMPLEMENTED\n");
-					exit(1);
-					break;
-
-				default:
-					/**
-					 * For op2, OIR supports constants in the right operand of a binary expression
-					 * so we will unpack the value here and go for it from there
-					 */
-					switch(right_side.type){
-						/**
-						 * If we have a constant, we can go straight for a bin_op_with_const statement
-						 * and save the extra assignments and simplifications down the road
-						 */
-						case CFG_RESULT_TYPE_CONST:
-							op1_const = right_side.result_value.result_const;
-							break;
-
-						/**
-						 * Otherwise we have a regular variable value so we will
-						 * unpack it accordingly and use it to help use get the result type
-						 */
-						case CFG_RESULT_TYPE_VAR:
-							op2 = right_side.result_value.result_var;
-							break;
-					}
-
-					break;
 			}
 
 			break;
