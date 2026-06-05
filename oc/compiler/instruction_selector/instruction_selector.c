@@ -3798,7 +3798,7 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 				 * 	store 10(t5, t4) <- 5
 				 *
 				 * Into 
-				 * 	store 15(t5, t8, 8) <- 5
+				 * 	store 10(t5, t8, 8) <- 5
 				 */
 				case ADDRESSING_MODE_INDEX_AND_SCALE:
 					//Copy over the address multiplier and the second operand
@@ -3816,6 +3816,31 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 
 					*changed = TRUE;
 					break;
+					
+				/**
+				 * Combine:
+				 * 	t4 <- 6(, t8, 8)
+				 * 	store 10(t5, t4) <- 5
+				 *
+				 * Into 
+				 * 	store 16(t5, t8, 8) <- 5
+				 */
+				case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+					//Add the two offsets together
+					add_constants(addressing_operation->operands.oir.address_offset, lea_statement->operands.oir.address_offset);
+
+					//Copy over the address multiplier and the second operand
+					addressing_operation->operands.oir.address_multiplier = lea_statement->operands.oir.address_multiplier;
+					addressing_operation->operands.oir.address_operand2 = lea_statement->operands.oir.address_operand2;
+
+					//Scrap the old lea
+					delete_statement(lea_statement);
+
+					//Rebuild the window around the addressing operation
+					reconstruct_window(window, addressing_operation);
+
+					*changed = TRUE;
+					break;
 
 				/**
 				 * Anything else is unsupported so move along
@@ -3823,9 +3848,6 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 				default:
 					break;
 			}
-
-
-			//TODO INDEX_OFFSET_AND_SCALE
 
 			break;
 
