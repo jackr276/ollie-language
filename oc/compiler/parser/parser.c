@@ -741,6 +741,8 @@ static generic_ast_node_t* print_and_return_error(char* error_message, u_int32_t
  * int* + 1 -> int* + 4(an int is 4 bytes), and so on...
  * Same goes for arrays
  */
+
+//TODO DEPRECATE
 static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* pointer, ollie_token_t op, generic_ast_node_t* operand, side_type_t side){
 	//Grab the pointer/array type out
 	generic_type_t* type = pointer->inferred_type;
@@ -3383,6 +3385,8 @@ loop_end:
 					sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_duplicate->inferred_type->type_name.string, right_hand_type->type_name.string, operator_token_to_string(binary_op));
 					return print_and_return_error(info, parser_line_num);
 				}
+
+				//TODO HERE AS WELL
 				
 				//We'll now generate the appropriate pointer arithmetic here where the right child is adjusted appropriately
 				generic_ast_node_t* pointer_arithmetic = generate_pointer_arithmetic(left_hand_duplicate, binary_op, expr, SIDE_TYPE_RIGHT);
@@ -4880,41 +4884,13 @@ static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_strea
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//Go based on what kind of type we have here
-		switch(temp_holder->inferred_type->type_class){
-			case TYPE_CLASS_POINTER:
-			case TYPE_CLASS_ARRAY:
-				//Let's first determine if they're compatible
-				return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
+		//Use the type compatibility function to determine compatibility and apply necessary coercions
+		return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
-				//If this fails, that means that we have an invalid operation
-				if(return_type == NULL){
-					sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
-					return print_and_return_error(info, parser_line_num);
-				}
-
-				//We'll now generate the appropriate pointer arithmetic here where the right child is adjusted appropriately
-				generic_ast_node_t* pointer_arithmetic = generate_pointer_arithmetic(temp_holder, op.tok, right_child, side);
-
-				//Copy the variable over here for later use
-				variable = temp_holder->variable;
-
-				//Once we're done here, the right child is the pointer arithmetic
-				right_child = pointer_arithmetic;
-				
-				break;
-				
-			default:
-				//Use the type compatibility function to determine compatibility and apply necessary coercions
-				return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
-
-				//If this fails, that means that we have an invalid operation
-				if(return_type == NULL){
-					sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
-					return print_and_return_error(info, parser_line_num);
-				}
-
-				break;
+		//If this fails, that means that we have an invalid operation
+		if(return_type == NULL){
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
+			return print_and_return_error(info, parser_line_num);
 		}
 
 		/**
