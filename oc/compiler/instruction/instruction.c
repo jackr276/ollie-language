@@ -82,6 +82,38 @@ const char* variable_type_to_string(variable_type_t type){
 
 
 /**
+ * A debug function that converts an addressing mode to a human readable string
+ */
+const char* addressing_mode_to_string(memory_addressing_mode_t mode){
+	switch(mode){
+		case ADDRESSING_MODE_NONE:
+			return "ADDRESSING_MODE_NONE";
+		case ADDRESSING_MODE_OFFSET_ONLY:
+			return "ADDRESSING_MODE_OFFSET_ONLY";
+		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+			return "ADDRESSING_MODE_BASE_ADDRESS_ONLY";
+		case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+			return "ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE";
+		case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+			return "ADDRESSING_MODE_REGISTERS_AND_OFFSET";
+		case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+			return "ADDRESSING_MODE_REGISTERS_AND_SCALE";
+		case ADDRESSING_MODE_REGISTERS_ONLY:
+			return "ADDRESSING_MODE_REGISTERS_ONLY";
+		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+			return "ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE";
+		case ADDRESSING_MODE_INDEX_AND_SCALE:
+			return "ADDRESSING_MODE_INDEX_AND_SCALE";
+		case ADDRESSING_MODE_RIP_RELATIVE:
+			return "ADDRESSING_MODE_RIP_RELATIVE";
+		case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
+			return "ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET";
+		default:
+			return "INVALID ADDRESSING MODE";
+	}
+}
+
+/**
  * Initialize the memory management system
  */
 void initialize_varible_and_constant_system(){
@@ -229,48 +261,6 @@ u_int8_t does_operator_generate_truthful_byte_value(ollie_token_t op){
 
 
 /**
- * Helper function to determine if we have a store operation
- */
-u_int8_t is_store_operation(instruction_t* statement){
-	//Input validation
-	if(statement == NULL){
-		return FALSE;
-	}
-
-	//Only 3 qualifying statements
-	switch(statement->statement_type){
-		case THREE_ADDR_CODE_STORE_STATEMENT:
-		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-			return TRUE;
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
- * Helper function to determine if we have a load operation
- */
-u_int8_t is_load_operation(instruction_t* statement){
-	//Input validation
-	if(statement == NULL){
-		return FALSE;
-	}
-
-	//Only 3 qualifying statements
-	switch(statement->statement_type){
-		case THREE_ADDR_CODE_LOAD_STATEMENT:
-		case THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET:
-		case THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET:
-			return TRUE;
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
  * Is the given instruction a load operation or not?
  */
 u_int8_t is_load_instruction(instruction_t* instruction){
@@ -307,26 +297,6 @@ u_int8_t is_load_instruction(instruction_t* instruction){
 			return FALSE;
 
 		//Otherwise no
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
- * Helper function to determine if an instruction is a binary operation
- */
-u_int8_t is_instruction_binary_operation(instruction_t* instruction){
-	//Speedup with NULL processing
-	if(instruction == NULL){
-		return FALSE;
-	}
-
-	//Switch based on class
-	switch(instruction->statement_type){
-		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-		case THREE_ADDR_CODE_BIN_OP_STMT:
-			return TRUE;
 		default:
 			return FALSE;
 	}
@@ -474,6 +444,77 @@ u_int8_t is_constant_value_zero(three_addr_const_t* constant){
 
 		case CHAR_CONST:
 			if(constant->constant_value.char_constant == 0){
+				return TRUE;
+			}
+			return FALSE;
+
+		//By default just return false
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Is this constant value positive?
+ */
+u_int8_t is_constant_value_positive(three_addr_const_t* constant){
+	switch(constant->const_type){
+		case INT_CONST:
+			if(constant->constant_value.signed_integer_constant > 0){
+				return TRUE;
+			}
+
+			return FALSE;
+
+		case INT_CONST_FORCE_U:
+			if(constant->constant_value.unsigned_integer_constant > 0){
+				return TRUE;
+			}
+
+			return FALSE;
+
+
+		case LONG_CONST:
+			if(constant->constant_value.signed_long_constant > 0){
+				return TRUE;
+			}
+
+			return FALSE;
+
+		case LONG_CONST_FORCE_U:
+			if(constant->constant_value.unsigned_long_constant > 0){
+				return TRUE;
+			}
+
+			return FALSE;
+
+		case SHORT_CONST:
+			if(constant->constant_value.signed_short_constant > 0){
+				return TRUE;
+			}
+			return FALSE;
+
+		case SHORT_CONST_FORCE_U:
+			if(constant->constant_value.unsigned_short_constant > 0){
+				return TRUE;
+			}
+			return FALSE;
+
+		case BYTE_CONST:
+			if(constant->constant_value.signed_byte_constant > 0){
+				return TRUE;
+			}
+			return FALSE;
+
+		case BYTE_CONST_FORCE_U:
+			if(constant->constant_value.unsigned_byte_constant > 0){
+				return TRUE;
+			}
+			return FALSE;
+
+		case CHAR_CONST:
+			if(constant->constant_value.char_constant > 0){
 				return TRUE;
 			}
 			return FALSE;
@@ -2438,11 +2479,14 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		/**
 		 * These print out as
 		 *
-		 * store x <- storee
+		 * store <addressing mode> <- storee
+		 *
+		 * Store statements use the unified addressing mode architecture
 		 */
 		case THREE_ADDR_CODE_STORE_STATEMENT:
 			fprintf(fl, "store ");
-			print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
+			//Print out the addressing mode expression
+			print_OIR_addressing_mode_expression(fl, stmt, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- ");
 
 			//Finally the storee(op1 or constant operand)
@@ -2454,114 +2498,18 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "\n");
 			break;
 
-		/**
-		 * These print out like
-		 *
-		 * store x[offset] <- storee
-		 */
-		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-			//First the base address
-			fprintf(fl, "store ");
-			print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
-
-			//Then the constant offset
-			fprintf(fl, "["); 
-			print_three_addr_constant(fl, stmt->operands.oir.address_offset);
-			fprintf(fl, "] <- "); 
-
-			//Finally the storee(op1 or constant operand)
-			if(stmt->operands.oir.operand1 != NULL){
-				print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
-			} else {
-				print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
-			}
-
-			fprintf(fl, "\n");
-
-			break;
 
 		/**
 		 * These print out like
 		 *
-		 * store x[offset] <- storee
-		 */
-		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-			//First the base address(address operand 1)
-			fprintf(fl, "store ");
-			print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
-
-			//Then the variable offset
-			fprintf(fl, "["); 
-			print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
-			fprintf(fl, "] <- "); 
-
-			//Finally the storee(op1 or constant operand)
-			if(stmt->operands.oir.operand1 != NULL){
-				print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
-			} else {
-				print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
-			}
-
-			fprintf(fl, "\n");
-
-			break;
-
-
-		/**
-		 * These print out like
-		 *
-		 * load assignee <- x_0
+		 * Load statements utilize the addressing mode architecture
 		 */
 		case THREE_ADDR_CODE_LOAD_STATEMENT:
 			fprintf(fl, "load ");
 			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- "); 
-			print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
-			fprintf(fl, "\n");
-			break;
-
-		/**
-		 * These print out like
-		 *
-		 * load assignee <- x[offset] 
-		 */
-		case THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET:
-			//First the assignee
-			fprintf(fl, "load ");
-			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
-			fprintf(fl, " <- ");
-
-			//Now the base address
-			print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
-
-			//Then the constant offset
-			fprintf(fl, "["); 
-			print_three_addr_constant(fl, stmt->operands.oir.address_offset);
-			fprintf(fl, "]"); 
-
-			fprintf(fl, "\n");
-
-			break;
-
-		/**
-		 * These print out like
-		 *
-		 * store x[offset] <- storee
-		 */
-		case THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET:
-			//First the assignee
-			fprintf(fl, "load ");
-			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
-			fprintf(fl, " <- ");
-
-			//Now the base address
-			print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
-
-			//Then the variable offset
-			fprintf(fl, "["); 
-			print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
-			fprintf(fl, "]"); 
-
+			//Print out the addressing mode expression
+			print_OIR_addressing_mode_expression(fl, stmt, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 			break;
 
@@ -5350,22 +5298,6 @@ instruction_t* emit_memory_copy_instruction(three_addr_var_t* assignee_memory_re
 
 
 /**
- * Emit a memory access statement
- */
-instruction_t* emit_memory_access_instruction(three_addr_var_t* assignee, three_addr_var_t* op1){
-	//First we allocate
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	//Let's now populate it with values
-	stmt->statement_type = THREE_ADDR_CODE_MEM_ACCESS_STMT;
-	stmt->operands.oir.assignee = assignee;
-	stmt->operands.oir.operand1 = op1;
-
-	return stmt;
-}
-
-
-/**
  * Emit a load statement directly. This should only be used during spilling
  */
 instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_t* stack_pointer, type_symtab_t* symtab, u_int64_t offset){
@@ -5483,21 +5415,21 @@ instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee
 
 
 /**
- * Emit a store statement. This is like an assignment instruction, but we're explicitly
- * using stack memory here
+ * Emit a store statement that only uses the base address
  */
-instruction_t* emit_store_ir_code(three_addr_var_t* address, three_addr_var_t* storee, generic_type_t* memory_write_type){
-	//First allocate it
+instruction_t* emit_store_base_address_only(three_addr_var_t* base_address, three_addr_var_t* storee, generic_type_t* memory_write_type){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
-	//Let's now populate it with values
 	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
 
+	//This is the base address only mode
+	stmt->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
+
 	//The first address op is the memory address
-	stmt->operands.oir.address_operand1 = address;
+	stmt->operands.oir.address_operand1 = base_address;
 
 	//This is being dereferenced
-	stmt->operands.oir.address_operand1->is_dereferenced = TRUE;
+	base_address->is_dereferenced = TRUE;
 
 	//Important - add the type that we expect to be writing to in memory
 	stmt->type_storage.memory_read_write_type = memory_write_type;
@@ -5511,24 +5443,25 @@ instruction_t* emit_store_ir_code(three_addr_var_t* address, three_addr_var_t* s
 
 
 /**
- * Emit a store with offset ir code. We take in a base address(address_operand1), 
- * a variable offset(address_operand2), and the value we're storing(op1)
+ * Emit a store with a base address and an index value(variable offset). This maps
+ * to an addressing mode of REGISTERS_ONLY
  */
-instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_address, three_addr_var_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type){
-	//First allocate
+instruction_t* emit_store_base_address_and_index(three_addr_var_t* base_address, three_addr_var_t* index, three_addr_var_t* storee, generic_type_t* memory_write_type){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
-	//Now populate with values
-	stmt->statement_type = THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET;
+	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
 
-	//Base address is op1
+	//This maps to the REGISTERS_ONLY addressing mode
+	stmt->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+
+	//Base address is the first operand
 	stmt->operands.oir.address_operand1 = base_address;
 
 	//This is being dereferenced
-	stmt->operands.oir.address_operand1->is_dereferenced = TRUE;
+	base_address->is_dereferenced = TRUE;
 
-	//Leverage the address calculation region
-	stmt->operands.oir.address_operand2 = offset;
+	//Now the index goes in here
+	stmt->operands.oir.address_operand2 = index;
 
 	//What we're storing
 	stmt->operands.oir.operand1 = storee;
@@ -5542,21 +5475,22 @@ instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_ad
 
 
 /**
- * Emit a store with offset ir code. We take in a base address(assignee), 
- * a constant offset(offset), and the value we're storing(op2)
+ * Emit a store with a base address and a constant offset value. This maps to 
+ * an addressing mode of OFFSET_ONLY
  */
-instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type){
-	//First allocate
+instruction_t* emit_store_base_address_and_constant_offset(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
-	//Now populate with values
-	stmt->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
+	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
+
+	//This maps to the OFFSET ONLY addressing mode
+	stmt->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 	//The base address is the first operand
 	stmt->operands.oir.address_operand1 = base_address;
 
 	//This is being dereferenced
-	stmt->operands.oir.address_operand1->is_dereferenced = TRUE;
+	base_address->is_dereferenced = TRUE;
 
 	//The offset placeholder is used for our offset, not constant operand 
 	stmt->operands.oir.address_offset = offset;
@@ -5573,21 +5507,51 @@ instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_ad
 
 
 /**
- * Emit a store constant with offset ir code. We take in a base address(assignee), 
- * a constant offset(constant operand), and the value we're storing(op2)
+ * Emit a rip-relative store instruction. This maps to an addressing
+ * mode of RIP_RELATIVE
  */
-instruction_t* emit_store_const_with_constant_offset_ir_code(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_const_t* storee, generic_type_t* memory_write_type){
-	//First allocate
+instruction_t* emit_store_rip_relative(three_addr_var_t* instruction_pointer, three_addr_var_t* rip_relative_variable, three_addr_var_t* storee, generic_type_t* memory_write_type){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
-	//Now populate with values
-	stmt->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
+	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
+
+	//This maps to the RIP_RELATIVE addressing mode
+	stmt->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
+
+	//The base address is the instruction pointer
+	stmt->operands.oir.address_operand1 = instruction_pointer;
+
+	//Store the rip relative variable in it's dedicated area
+	stmt->operands.oir.rip_offset_var = rip_relative_variable;
+
+	//What we're storing goes in op1
+	stmt->operands.oir.operand1 = storee;
+
+	//Important - add the type that we expect to be writing to in memory
+	stmt->type_storage.memory_read_write_type = memory_write_type;
+
+	//And give it back
+	return stmt;
+}
+
+
+/**
+ * Emit a store with a base address and constant offset value. This specific
+ * overload allows us to store a constant instead of a variable
+ */
+instruction_t* emit_constant_store_base_address_and_constant_offset(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_const_t* storee, generic_type_t* memory_write_type){
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
+
+	//This is an OFFSET_ONLY type
+	stmt->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 	//The base address that we're assigning to
 	stmt->operands.oir.address_operand1 = base_address;
 
 	//This is being dereferenced
-	stmt->operands.oir.address_operand1->is_dereferenced = TRUE;
+	base_address->is_dereferenced = TRUE;
 
 	//The offset placeholder is used for our offset, not constant operand 
 	stmt->operands.oir.address_offset = offset;
@@ -5604,17 +5568,19 @@ instruction_t* emit_store_const_with_constant_offset_ir_code(three_addr_var_t* b
 
 
 /**
- * Emit a load statement. This is like an assignment instruction, but we're explicitly
- * using stack memory here
+ * Emit a load instruction that only uses the base address
  */
-instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1, generic_type_t* memory_read_type){
-	//First allocate it
+instruction_t* emit_load_base_address_only(three_addr_var_t* assignee, three_addr_var_t* base_address, generic_type_t* memory_read_type){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
-	//Let's now populate it with values
 	stmt->statement_type = THREE_ADDR_CODE_LOAD_STATEMENT;
+
+	//This maps to an addressing mode type of BASE_ADDRESS_ONLY
+	stmt->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
+
+	//The base address is in operand1
 	stmt->operands.oir.assignee = assignee;
-	stmt->operands.oir.address_operand1 = op1;
+	stmt->operands.oir.address_operand1 = base_address;
 
 	//Important - store the type that we expect to be getting out of memory
 	stmt->type_storage.memory_read_write_type = memory_read_type;
@@ -5625,22 +5591,23 @@ instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* o
 
 
 /**
- * Emit a load with offset ir code. We take in a base address(op1), 
- * an offset(op2), and the value we're loading into(assignee)
+ * Emit a load instruction with a base address and index value(variable offset). This maps
+ * to an addressing mode of REGISTERS_ONLY
  */
-instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_var_t* offset, generic_type_t* memory_read_type){
-	//First allocate
+instruction_t* emit_load_base_address_and_index(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_var_t* index, generic_type_t* memory_read_type){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
-	//Now populate with values
-	stmt->statement_type = THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET;
+	stmt->statement_type = THREE_ADDR_CODE_LOAD_STATEMENT;
+
+	//This maps to the addressing mode of REGISTERS_ONLY
+	stmt->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+
 	//The base address that we're assigning to
 	stmt->operands.oir.assignee = assignee;
-	//The op1 is our base address
-	stmt->operands.oir.address_operand1 = base_address;
 
-	//And op2 is our offset
-	stmt->operands.oir.address_operand2 = offset;
+	//Populate the two address operands to reflect REGISTERS_ONLY
+	stmt->operands.oir.address_operand1 = base_address;
+	stmt->operands.oir.address_operand2 = index;
 
 	//Important - store the type that we expect to be getting out of memory
 	stmt->type_storage.memory_read_write_type = memory_read_type;
@@ -5651,28 +5618,59 @@ instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee
 
 
 /**
- * Emit a load with constant offset ir code. We take in a base address(op1), 
- * an offset(offset), and the value we're loading into(assignee)
+ * Emit a load with a base address and a constant offset. This maps to an
+ * addressing mode of OFFSET_ONLY
  */
-instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* offset, generic_type_t* memory_read_type){
-	//First allocate
+instruction_t* emit_load_base_address_and_constant_offset(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* constant_offset, generic_type_t* memory_read_type){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
-	//Now populate with values
-	stmt->statement_type = THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET;
+	stmt->statement_type = THREE_ADDR_CODE_LOAD_STATEMENT;
+
+	//This maps to an addressing mode of OFFSET_ONLY
+	stmt->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+
 	//The assignee that we're loading into
 	stmt->operands.oir.assignee = assignee;
 	//The op1 is our base address
 	stmt->operands.oir.address_operand1 = base_address;
 
 	//Our offset is stored in "offset", not constant operand
-	stmt->operands.oir.address_offset = offset;
+	stmt->operands.oir.address_offset = constant_offset;
 
 	//Important - store the type that we expect to be getting out of memory
 	stmt->type_storage.memory_read_write_type = memory_read_type;
 
 	//And give it back
 	return stmt;
+}
+
+
+/**
+ * Emit a rip-relative load. This maps to an addressing mode of RIP_RELATIVE
+ */
+instruction_t* emit_load_rip_relative(three_addr_var_t* assignee, three_addr_var_t* rip_relative_variable, three_addr_var_t* instruction_pointer, generic_type_t* memory_read_type){
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	stmt->statement_type = THREE_ADDR_CODE_LOAD_STATEMENT;
+
+	//This maps to an addressing mode of RIP_RELATIVE 
+	stmt->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
+
+	//The assignee that we're loading into
+	stmt->operands.oir.assignee = assignee;
+
+	//The base address is the instruction pointer
+	stmt->operands.oir.address_operand1 = instruction_pointer;
+
+	//The rip relative variable is stored in the special spot
+	stmt->operands.oir.rip_offset_var = rip_relative_variable;
+
+	//Important - store the type that we expect to be getting out of memory
+	stmt->type_storage.memory_read_write_type = memory_read_type;
+
+	//And give it back
+	return stmt;
+
 }
 
 
@@ -6383,6 +6381,125 @@ three_addr_const_t* multiply_constant_by_raw_int64_value(three_addr_const_t* con
 	//This will always be forced to be an i64
 	constant->type = i64_type;
 	constant->const_type = LONG_CONST;
+
+	//Give it back for clarity
+	return constant;
+}
+
+
+/**
+ * Convert any given constant into an i64(signed long). This is mainly used for lea helpers
+ * where we want to guarantee that everything is consistent
+ */
+three_addr_const_t* convert_constant_to_i64(three_addr_const_t* constant, generic_type_t* i64_type){
+	//Go based on the first one's type
+	switch(constant->const_type){
+		case BYTE_CONST:
+			constant->constant_value.signed_long_constant = constant->constant_value.signed_byte_constant;
+			break;
+
+		case BYTE_CONST_FORCE_U:
+			constant->constant_value.signed_long_constant = constant->constant_value.unsigned_byte_constant;
+			break;
+
+		case SHORT_CONST:
+			constant->constant_value.signed_long_constant = constant->constant_value.signed_short_constant;
+			break;
+
+		case SHORT_CONST_FORCE_U:
+			constant->constant_value.signed_long_constant = constant->constant_value.unsigned_short_constant;
+			break;
+
+		case INT_CONST_FORCE_U:
+			constant->constant_value.signed_long_constant = constant->constant_value.unsigned_integer_constant;
+			break;
+
+		case INT_CONST:
+			constant->constant_value.signed_long_constant = constant->constant_value.signed_integer_constant;
+			break;
+
+		//Already accounted for so skip
+		case LONG_CONST:
+			break;
+
+		case LONG_CONST_FORCE_U:
+			constant->constant_value.signed_long_constant = constant->constant_value.unsigned_long_constant;
+			break;
+
+		case CHAR_CONST:
+			constant->constant_value.signed_long_constant = constant->constant_value.char_constant;
+			break;
+
+		case FLOAT_CONST:
+			constant->constant_value.signed_long_constant = constant->constant_value.float_constant;
+			break;
+			
+		case DOUBLE_CONST:
+			constant->constant_value.signed_long_constant = constant->constant_value.double_constant;
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant coercion operation\n");
+			exit(1);
+	}
+
+	//This will always be forced to be an i64
+	constant->type = i64_type;
+	constant->const_type = LONG_CONST;
+
+	//Give it back for clarity
+	return constant;
+}
+
+
+/**
+ * Negate a three address constant
+ */
+three_addr_const_t* negate_three_address_consant(three_addr_const_t* constant){
+	//Go based on the first one's type
+	switch(constant->const_type){
+		case SHORT_CONST:
+			constant->constant_value.signed_short_constant *= -1;
+			break;
+
+		case SHORT_CONST_FORCE_U:
+			constant->constant_value.unsigned_short_constant *= -1;
+			break;
+
+		case INT_CONST_FORCE_U:
+			constant->constant_value.unsigned_integer_constant *= -1;
+			break;
+
+		case INT_CONST:
+			constant->constant_value.signed_integer_constant *= -1;
+			break;
+
+		case LONG_CONST_FORCE_U:
+			constant->constant_value.unsigned_long_constant *= -1;
+			break;
+
+		case LONG_CONST:
+			constant->constant_value.signed_long_constant *= -1;
+			break;
+
+		case CHAR_CONST:
+			constant->constant_value.char_constant *= -1;
+			break;
+
+		case FLOAT_CONST:
+			constant->constant_value.float_constant *= -1;
+			break;
+
+		case DOUBLE_CONST:
+			constant->constant_value.double_constant *= -1;
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant negation operation\n");
+			exit(1);
+	}
 
 	//Give it back for clarity
 	return constant;

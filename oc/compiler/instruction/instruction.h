@@ -444,6 +444,11 @@ struct instruction_t{
 const char* variable_type_to_string(variable_type_t type);
 
 /**
+ * A debug function that converts an addressing mode to a human readable string
+ */
+const char* addressing_mode_to_string(memory_addressing_mode_t mode);
+
+/**
  * Initialize the memory management system
  */
 void initialize_varible_and_constant_system();
@@ -482,24 +487,9 @@ u_int8_t is_operator_relational_operator(ollie_token_t op);
 u_int8_t does_operator_generate_truthful_byte_value(ollie_token_t op);
 
 /**
- * Helper function to determine if we have a store operation
- */
-u_int8_t is_store_operation(instruction_t* statement);
-
-/**
- * Helper function to determine if we have a load operation
- */
-u_int8_t is_load_operation(instruction_t* statement);
-
-/**
  * Is the given instruction a load operation or not?
  */
 u_int8_t is_load_instruction(instruction_t* instruction);
-
-/**
- * Helper function to determine if an instruction is a binary operation
- */
-u_int8_t is_instruction_binary_operation(instruction_t* instruction);
 
 /**
  * Helper function to determine if an instruction is an assignment operation
@@ -531,6 +521,11 @@ u_int8_t is_unsigned_multplication_instruction(instruction_t* instruction);
  * Is this constant value 0?
  */
 u_int8_t is_constant_value_zero(three_addr_const_t* constant);
+
+/**
+ * Is this constant value positive?
+ */
+u_int8_t is_constant_value_positive(three_addr_const_t* constant);
 
 /**
  * Is this constant value 1?
@@ -722,56 +717,60 @@ instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_add
 instruction_t* emit_memory_copy_instruction(three_addr_var_t* assignee_memory_region, three_addr_var_t* source_memory_region, u_int64_t byte_amount_to_copy);
 
 /**
- * Emit a store statement. This is like an assignment instruction, but we're explicitly
- * using stack memory here
+ * Emit a store statement that only uses the base address
  */
-instruction_t* emit_store_ir_code(three_addr_var_t* address, three_addr_var_t* storee, generic_type_t* memory_write_type);
+instruction_t* emit_store_base_address_only(three_addr_var_t* base_address, three_addr_var_t* storee, generic_type_t* memory_write_type);
 
 /**
- * Emit a store with offset ir code. We take in a base address(assignee), 
- * an offset(op1), and the value we're storing(op2)
+ * Emit a store with a base address and an index value(variable offset). This maps
+ * to an addressing mode of REGISTERS_ONLY
  */
-instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_address, three_addr_var_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type);
+instruction_t* emit_store_base_address_and_index(three_addr_var_t* base_address, three_addr_var_t* index, three_addr_var_t* storee, generic_type_t* memory_write_type);
 
 /**
- * Emit a store with offset ir code. We take in a base address(assignee), 
- * a constant offset(op1_const), and the value we're storing(op2)
+ * Emit a store with a base address and a constant offset value. This maps to 
+ * an addressing mode of OFFSET_ONLY
  */
-instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type);
+instruction_t* emit_store_base_address_and_constant_offset(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type);
 
 /**
- * Emit a store constant with offset ir code. We take in a base address(assignee), 
- * a constant offset(op1_const), and the value we're storing(op2)
+ * Emit a rip-relative store instruction. This maps to an addressing
+ * mode of RIP_RELATIVE
  */
-instruction_t* emit_store_const_with_constant_offset_ir_code(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_const_t* storee, generic_type_t* memory_write_type);
+instruction_t* emit_store_rip_relative(three_addr_var_t* instruction_pointer, three_addr_var_t* rip_relative_variable, three_addr_var_t* storee, generic_type_t* memory_write_type);
 
 /**
- * Emit a load statement. This is like an assignment instruction, but we're explicitly
- * using stack memory here
+ * Emit a store with a base address and constant offset value. This specific
+ * overload allows us to store a constant instead of a variable
  */
-instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1, generic_type_t* memory_read_type);
+instruction_t* emit_constant_store_base_address_and_constant_offset(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_const_t* storee, generic_type_t* memory_write_type);
 
 /**
- * Emit a load with offset ir code. We take in a base address(op1), 
- * an offset(op2), and the value we're loading into(assignee)
+ * Emit a load instruction that only uses the base address
  */
-instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_var_t* offset, generic_type_t* memory_read_type);
+instruction_t* emit_load_base_address_only(three_addr_var_t* assignee, three_addr_var_t* base_address, generic_type_t* memory_read_type);
 
 /**
- * Emit a load with constant offset ir code. We take in a base address(op1), 
- * an offset(op1_const), and the value we're loading into(assignee)
+ * Emit a load instruction with a base address and index value(variable offset). This maps
+ * to an addressing mode of REGISTERS_ONLY
  */
-instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* offset, generic_type_t* memory_read_type);
+instruction_t* emit_load_base_address_and_index(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_var_t* index, generic_type_t* memory_read_type);
+
+/**
+ * Emit a load with a base address and a constant offset. This maps to an
+ * addressing mode of OFFSET_ONLY
+ */
+instruction_t* emit_load_base_address_and_constant_offset(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* constant_offset, generic_type_t* memory_read_type);
+
+/**
+ * Emit a rip-relative load. This maps to an addressing mode of RIP_RELATIVE
+ */
+instruction_t* emit_load_rip_relative(three_addr_var_t* assignee, three_addr_var_t* rip_relative_variable, three_addr_var_t* instruction_pointer, generic_type_t* memory_read_type);
 
 /**
  * Emit a statement that is assigning a const to a var i.e. var1 <- const
  */
 instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee, three_addr_const_t* constant);
-
-/**
- * Emit a memory access statement
- */
-instruction_t* emit_memory_access_instruction(three_addr_var_t* assignee, three_addr_var_t* op1);
 
 /**
  * Emit a load statement directly. This should only be used during spilling in the register allocator
@@ -952,6 +951,17 @@ three_addr_const_t* sum_constant_with_raw_int64_value(three_addr_const_t* consta
  * a long constant. This is specifically designed for lea simplification
  */
 three_addr_const_t* multiply_constant_by_raw_int64_value(three_addr_const_t* constant, generic_type_t* i64_type, int64_t raw_constant);
+
+/**
+ * Convert any given constant into an i64(signed long). This is mainly used for lea helpers
+ * where we want to guarantee that everything is consistent
+ */
+three_addr_const_t* convert_constant_to_i64(three_addr_const_t* constant, generic_type_t* i64_type);
+
+/**
+ * Negate a three address constant
+ */
+three_addr_const_t* negate_three_address_consant(three_addr_const_t* constant);
 
 /**
  * Emit the product of two given constants. The result will overwrite the first constant given

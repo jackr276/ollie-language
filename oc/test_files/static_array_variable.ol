@@ -7,7 +7,7 @@
 
 
 pub fn static_array(input:i32, i:i32) -> i32 {
-	declare static x:mut i32[10];
+	let static x:mut i32[10] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 	x[i] = input;
 
@@ -16,5 +16,6 @@ pub fn static_array(input:i32, i:i32) -> i32 {
 
 
 pub fn main() -> i32 {
+	OUNIT: [console = 3]
 	ret @static_array(3, 1);
 }

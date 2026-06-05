@@ -583,8 +583,6 @@ static void mark(dynamic_array_t* function_blocks){
 				 * regardless of the actual use count tracking
 				 */
 				case THREE_ADDR_CODE_STORE_STATEMENT:
-				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
 					current_stmt->mark = TRUE;
 					//Add it to the list
 					dynamic_array_add(&worklist, current_stmt);
