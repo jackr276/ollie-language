@@ -6461,6 +6461,11 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 				 *
 				 */
 				if(is_raw_constant_valid_for_lea_multiplier(type_size_multiplier) == TRUE){
+					//Emit the lea directly
+					instruction_t* computation = emit_lea_multiplier_and_operands(assignee, operand1, operand2, type_size_multiplier);
+
+					//Add it into the block
+					add_statement(current_block, computation);
 
 				} else {
 					//Emit a constant for the type size multiplier
@@ -6525,9 +6530,6 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 				break;
 		}
 	}
-
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
 
 	/**
 	 * Package up the results. We have a variable return type always, 
