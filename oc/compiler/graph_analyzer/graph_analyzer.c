@@ -26,45 +26,110 @@ static inline void reset_visit_status_for_function(dynamic_array_t* function_blo
 
 
 /**
- * A recursive post order simplifies the code, so it's what we'll use here
+ * We'll go through in the regular traversal, pushing each node onto the stack in
+ * postorder. 
  */
-static void post_order_traversal_rec(dynamic_array_t* post_order_traversal, basic_block_t* entry){
-	//If we've visited this one before, skip
+static void reverse_post_order_traversal_reverse_cfg_rec(heap_stack_t* stack, basic_block_t* entry){
+	//If we've already seen this then we're done
 	if(entry->visited == TRUE){
 		return;
 	}
 
-	//Otherwise mark that we've visited
+	//Mark it as visited
 	entry->visited = TRUE;
 
-	//Run through every successor
-	for(u_int16_t _ = 0; _ < entry->successors.current_index; _++){
-		//Recursive call to every child first
-		post_order_traversal_rec(post_order_traversal, dynamic_array_get_at(&(entry->successors), _));
+	//For every child(predecessor-it's reverse), we visit it as well
+	for(u_int16_t _ = 0; _ < entry->predecessors.current_index; _++){
+		//Visit each of the blocks
+		reverse_post_order_traversal_reverse_cfg_rec(stack, dynamic_array_get_at(&(entry->predecessors), _));
 	}
-	
-	//Now we'll finally visit the node
-	dynamic_array_add(post_order_traversal, entry);
 
-	//And we're done
+	//Now we can push entry onto the stack
+	push(stack, entry);
 }
 
 
 /**
- * Get and return the regular postorder traversal for a function-level CFG
- *
- * NOTE: This assumes that the caller has already wiped the function's visited
- * status clean
+ * Get and return a reverse post order traversal of a function-level CFG where
+ * we are going in reverse order. This is used mainly for data flow(liveness)
  */
-dynamic_array_t compute_post_order_traversal(basic_block_t* entry){
-	//Create our dynamic array
-	dynamic_array_t post_order_traversal = dynamic_array_alloc();
+static dynamic_array_t compute_reverse_post_order_traversal_reverse_cfg(basic_block_t* entry){
+	//For our postorder traversal
+	heap_stack_t stack = heap_stack_alloc();
+	//We'll need this eventually for postorder
+	dynamic_array_t reverse_post_order_traversal = dynamic_array_alloc();
 
-	//Make the recursive call
-	post_order_traversal_rec(&post_order_traversal, entry);
+	//Go all the way to the bottom
+	while(entry->block_type != BLOCK_TYPE_FUNC_EXIT){
+		entry = entry->direct_successor;
+	}
 
-	//Give the traversal back
-	return post_order_traversal;
+	//Invoke the recursive helper
+	reverse_post_order_traversal_reverse_cfg_rec(&stack, entry);
+
+	/**
+	 * Now we'll pop everything off of the stack, and put it onto the RPO 
+	 * array in backwards order
+	 */
+	while(heap_stack_is_empty(&stack) == FALSE){
+		dynamic_array_add(&reverse_post_order_traversal, pop(&stack));
+	}
+
+	//And when we're done, get rid of the stack
+	heap_stack_dealloc(&stack);
+
+	//Give back the reverse post order traversal
+	return reverse_post_order_traversal;
+}
+
+
+/**
+ * We'll go through in the regular traversal, pushing each node onto the stack in
+ * postorder. 
+ */
+static void reverse_post_order_traversal_rec(heap_stack_t* stack, basic_block_t* entry){
+	//If we've already seen this then we're done
+	if(entry->visited == TRUE){
+		return;
+	}
+
+	//Mark it as visited
+	entry->visited = TRUE;
+
+	//For every child(successor), we visit it as well
+	for(u_int32_t i = 0; i < entry->successors.current_index; i++){
+		//Visit each of the blocks
+		reverse_post_order_traversal_rec(stack, dynamic_array_get_at(&(entry->successors), i));
+	}
+
+	//Now we can push entry onto the stack
+	push(stack, entry);
+}
+
+
+/**
+ * Get and return a reverse-post order traversal for a function level CFG
+ */
+dynamic_array_t compute_reverse_post_order_traversal(basic_block_t* entry){
+	//For our postorder traversal
+	heap_stack_t stack = heap_stack_alloc();
+	//We'll need this eventually for postorder
+	dynamic_array_t reverse_post_order_traversal = dynamic_array_alloc();
+
+	//Invoke the recursive helper
+	reverse_post_order_traversal_rec(&stack, entry);
+
+	//Now we'll pop everything off of the stack, and put it onto the RPO 
+	//array in backwards order
+	while(heap_stack_is_empty(&stack) == FALSE){
+		dynamic_array_add(&reverse_post_order_traversal, pop(&stack));
+	}
+
+	//And when we're done, get rid of the stack
+	heap_stack_dealloc(&stack);
+
+	//Give back the reverse post order traversal
+	return reverse_post_order_traversal;
 }
 
 
