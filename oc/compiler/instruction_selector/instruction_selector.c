@@ -1134,6 +1134,11 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 
 						break;
 
+					/**
+					 * For lea operations, to rememdiate we just need to do everything that we would normally do 
+					 * before the lea and insert that
+					 */
+
 					//This should never happen
 					default:
 						printf("Fatal internal compiler error: unreachable path hit in global/static variable memory address remediation\n");
@@ -1342,6 +1347,28 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					 */
 					} else {
 						instruction->operands.oir.operand1 = stack_pointer_variable;
+					}
+
+					break;
+
+				/**
+				 * If we have a lea statement, we'll just emit an address calculation beforehand
+				 * and throw it above the current one. The future lea simplifier
+				 * should be able to pick up on the simplification and compress if appropriate
+				 */
+				case THREE_ADDR_CODE_LEA_STMT:
+					if(stack_offset != 0){
+						//Emit the lea
+						instruction_t* above_lea = emit_lea_offset_only(emit_temp_var(i64), stack_pointer_variable, emit_direct_integer_or_char_constant(stack_offset, i64));
+
+						//Insert it before the current instruction
+						insert_instruction_before_given(above_lea, instruction);
+
+						//Replace the address operand
+						instruction->operands.oir.address_operand1 = above_lea->operands.oir.assignee;
+
+					} else {
+						instruction->operands.oir.address_operand1 = stack_pointer_variable;
 					}
 
 					break;
@@ -4164,10 +4191,20 @@ static inline void perform_memory_address_remediations(instruction_window_t* win
 		 * be a memory address. If this is the case then we need to remediate it now
 		 */
 		case THREE_ADDR_CODE_LEA_STMT:
+			if(instruction->operands.oir.address_operand1 != NULL){
+				switch(instruction->operands.oir.address_operand1->variable_type){
+					case VARIABLE_TYPE_MEMORY_ADDRESS:
+					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+						remediate_memory_address_variable_in_non_access_context(window, instruction);
+						*changed = TRUE;
+						break;
 
-			//TODO 
+					default:
+					break;
+				}
+			}
+
 			break;
-
 
 		/**
 		 * If we have an elaborative param offset calculation, now is the time
