@@ -8,6 +8,50 @@
 #include "../utils/queue/heap_queue.h"
 #include <sys/types.h>
 
+
+//TODO
+typedef struct immediate_dominator_values_t immediate_dominator_values_t;
+
+/**
+ * We will have a lot to pass back and forth between our helper
+ * functions when we are computing the immediate dominators using
+ * Lengauer-Tarjan. As such we'll define a struct that we can pass
+ * by reference to keep things clean
+ */
+struct immediate_dominator_values_t {
+	//The current DFS number for our DFS numbering
+	u_int32_t current_dfs_number;
+
+	/**
+	 * A list of DFS numbers that is keyed by the node's vertex ID
+	 *
+	 * For example:
+	 * Node with ID 3, DFS number 5
+	 * dfs_numbers[3] = 5
+	 */
+	u_int32_t* dfs_numbers;
+
+	/**
+	 * DOES NOT STORE A NODE ID
+	 */
+	u_int32_t* semi_dominators;
+
+	/**
+	 * Master map of vertices to vertex ID
+	 *
+	 * For example: if basic block "A" has ID 3
+	 * vertices[3] = A
+	 */
+	basic_block_t** vertices;
+
+	basic_block_t** DFS_parents;
+
+	basic_block_t** immediater_dominators;
+	basic_block_t** labels;
+	basic_block_t** ancestors;
+};
+
+
 /**
  * Run through an entire array of function blocks and reset the status for
  * every single one. We assume that the caller knows what they are doing, and
@@ -112,6 +156,20 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 
 
 /**
+ * Perform the immediate dominator DFS traversal for a given
+ * block. This traversal will assign the block it's given DFS
+ * number, and will perform bookkeeping for the semidominator,
+ * union-find ancestor, and minimum-semi representative.
+ *
+ * This function is recursive
+ */
+static void idom_dfs(basic_block_t* block, immediate_dominator_values_t* values){
+
+
+}
+
+
+/**
  * NOTE: This function operates on an entire function-level CFG, with the entry block
  * passed in. It will compute the immediate dominator for every single node in the
  * CFG in one run
@@ -144,8 +202,14 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 	//The number of blocks is static
 	u_int32_t number_of_blocks = function_blocks->current_index;
 
+	//TODO PREPARE STRUCT
+
 	//Maintain an array of DFS vertices where the 
 	basic_block_t** dfs_vertices;
+
+	basic_block_t* parent[number_of_blocks];
+	basic_block_t* ancestor[number_of_blocks];
+	basic_block_t* label[number_of_blocks];
 
 	/**
 	 * Maintain an immediate dominator DFS number for our DFS numbering
