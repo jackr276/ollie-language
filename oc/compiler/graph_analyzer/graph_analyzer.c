@@ -26,6 +26,92 @@ static inline void reset_visit_status_for_function(dynamic_array_t* function_blo
 
 
 /**
+ * Grab the immediate dominator of the block
+ * A IDOM B if A SDOM B and there does not exist a node C 
+ * such that C ≠ A, C ≠ B, A dom C, and C dom B
+ *
+ *
+ *
+ * TODO WE WILL REWORK THIS
+ */
+static basic_block_t* immediate_dominator(basic_block_t* B){
+	//If we've already found the immediate dominator, why find it again?
+	//We'll just give that back
+	if(B->immediate_dominator != NULL){
+		return B->immediate_dominator;
+	}
+
+	//Regular variable declarations
+	basic_block_t* A; 
+	basic_block_t* C;
+	u_int8_t A_is_IDOM;
+	
+	//For each node in B's Dominance Frontier set(we call this node A)
+	//These nodes are our candidates for immediate dominator
+	//If B even has a dominator ser
+	for(u_int16_t i = 0; i < B->dominator_set.current_index; i++){
+		//By default we assume A is an IDOM
+		A_is_IDOM = TRUE;
+
+		//A is our "candidate" for possibly being an immediate dominator
+		A = dynamic_array_get_at(&(B->dominator_set), i);
+
+		//If A == B, that means that A does NOT strictly dominate(SDOM)
+		//B, so it's disqualified
+		if(A == B){
+			continue;
+		}
+
+		//If we get here, we know that A SDOM B
+		//Now we must check, is there any "C" in the way.
+		//We can tell if this is the case by checking every other
+		//node in the dominance frontier of B, and seeing if that
+		//node is also dominated by A
+		
+		//For everything in B's dominator set that IS NOT A, we need
+		//to check if this is an intermediary. As in, does C get in-between
+		//A and B in the dominance chain
+		for(u_int16_t j = 0; j < B->dominator_set.current_index; j++){
+			//Skip this case
+			if(i == j){
+				continue;
+			}
+
+			//If it's aleady B or A, we're skipping
+			C = dynamic_array_get_at(&(B->dominator_set), j);
+
+			//If this is the case, disqualified
+			if(C == B || C == A){
+				continue;
+			}
+
+			//We can now see that C dominates B. The true test now is
+			//if C is dominated by A. If that's the case, then we do NOT
+			//have an immediate dominator in A.
+			//
+			//This would look like A -Doms> C -Doms> B, so A is not an immediate dominator
+			if(dynamic_array_contains(&(C->dominator_set), A) != NOT_FOUND){
+				//A is disqualified, it's not an IDOM
+				A_is_IDOM = FALSE;
+				break;
+			}
+		}
+
+		//If we survived, then we're done here
+		if(A_is_IDOM == TRUE){
+			//Mark this for any future runs...we won't waste any time doing this
+			//calculation over again
+			B->immediate_dominator = A;
+			return A;
+		}
+	}
+
+	//Otherwise we didn't find it, so there is no immediate dominator
+	return NULL;
+}
+
+
+/**
  * We'll go through in the regular traversal, pushing each node onto the stack in
  * postorder. 
  */
@@ -341,6 +427,55 @@ static void calculate_dominator_sets(basic_block_t* function_entry_block, dynami
 	dynamic_array_dealloc(&worklist);
 }
 
+/**
+ * Add a dominated block to the dominator block that we have
+ */
+static inline void add_dominated_block(basic_block_t* dominator, basic_block_t* dominated){
+	//If this is NULL, then we'll allocate it right now
+	if(dominator->dominator_children.internal_array == NULL){
+		dominator->dominator_children = dynamic_array_alloc();
+	}
+
+	//If we do not already have this in the dominator children, then we will add it
+	if(dynamic_array_contains(&(dominator->dominator_children), dominated) == NOT_FOUND){
+		dynamic_array_add(&(dominator->dominator_children), dominated);
+	}
+}
+
+
+/**
+ * Build the dominator tree for a given function's blocks
+ *
+ * For each node in the function, we will use that node's immediate
+ * dominator to build a dominator tree
+ */
+static inline void build_dominator_trees(dynamic_array_t* function_blocks){
+	//Hold the current block
+	basic_block_t* current;
+
+	//For each block in the CFG
+	for(int32_t _ = function_blocks->current_index - 1; _ >= 0; _--){
+		//Grab out whatever block we're on
+		current = dynamic_array_get_at(function_blocks, _);
+
+		/**
+		 * We will find this block's "immediate dominator". Once we have that,
+		 * we will add this block to the "dominator children" set of said immediate
+		 * dominator
+		 */
+		basic_block_t* immediate_dom = immediate_dominator(current);
+
+		/**
+		 * Now we'll go to the immediate dominator's list and add the dominated block in. Of course,
+		 * we'll account for the case where there is no immediate dominator. This is possible in
+		 * the case of function entry blocks
+		 */
+		if(immediate_dom != NULL){
+			add_dominated_block(immediate_dom, current);
+		}
+	}
+}
+
 
 /**
  * We will calculate:
@@ -361,8 +496,7 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	//Now calculate the dominator set for every function block
 	calculate_dominator_sets(function_entry_block, function_blocks);
 
-	//Now we'll build the dominator tree up
-	//TODO DOC
+	//We'll now use the immediate dominator to construct our dominator trees
 	build_dominator_trees(function_blocks);
 
 	//Now calculate the dominance frontier for every single block
