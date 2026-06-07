@@ -6446,6 +6446,9 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 				break;
 
 			case CFG_RESULT_TYPE_VAR:
+				//Extract it
+				operand2 = right_operand_results.result_value.result_var;
+
 				/**
 				 * If we can make this into a lea, then we will. If not, then we are
 				 * going to have to use 2 operations to achieve this. The outputs will
@@ -6460,7 +6463,16 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 				if(is_raw_constant_valid_for_lea_multiplier(type_size_multiplier) == TRUE){
 
 				} else {
+					//Emit a constant for the type size multiplier
+					constant_operand = emit_direct_integer_or_char_constant(type_size_multiplier, i64);
 
+					//First emit the multiplication expression
+					instruction_t* multiplication = emit_binary_operation_with_const_instruction(emit_temp_var(operand2->type), operand2, STAR, constant_operand);
+					add_statement(current_block, multiplication);
+
+					//Now we will use that one's result for the final computation
+					instruction_t* pointer_arithmetic = emit_binary_operation_instruction(assignee, operand1, PLUS, multiplication->operands.oir.assignee);
+					add_statement(current_block, pointer_arithmetic);
 				}
 
 				break;
