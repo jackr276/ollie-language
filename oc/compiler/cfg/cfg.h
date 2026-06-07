@@ -131,18 +131,21 @@ struct basic_block_t{
 	struct {
 		//Unique DFS number for the block
 		int32_t dfs_number;
-		//The semidominator number(THIS IS A DFS NUMBER)
+		//The semidominator number(THIS IS A DFS NUMBER FOR THE REFERENCED BLOCK)
 		int32_t semidominator_number;
 		//Dominator parent of the block
 		basic_block_t* dominator_parent;
 		//Block's immediate dominator
 		basic_block_t* idom;
 
-
-		//TODO DOCUMENT ME
+		//The block above this one in the DFS path
 		basic_block_t* ancestor;
-		//TODO DOCUMENT ME
-		basic_block_t* label;
+		/**
+		 * The best semidominator candidate. This will hold
+		 * the candidate along the ancestor path who has
+		 * the smallest DFS number
+		 */
+		basic_block_t* best_semidominator_candidate;
 
 		//TODO DOCUMENT ME
 		dynamic_array_t bucket;

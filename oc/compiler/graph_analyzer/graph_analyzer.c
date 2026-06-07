@@ -205,6 +205,49 @@ static void dfs_number_block(basic_block_t* block, basic_block_t** dfs_number_to
 
 
 /**
+ *
+ * NOTE: This is a recursive function
+ *
+ *
+ * TODO UNDERSTAND AND FULLY DOCUMENT
+ */
+static void path_compression(basic_block_t* block){
+	basic_block_t* ancestor = block->dominator_info.ancestor;
+
+	/**
+	 * Base case 1: we have no ancestor so we bail out
+	 */
+	if(ancestor == NULL){
+		return;
+	}
+
+	/**
+	 * Base case 2: the ancestor itself has no ancestor, so we
+	 * also bail out
+	 */
+	if(ancestor->dominator_info.ancestor == NULL){
+		return;
+	}
+
+	/**
+	 * Recursively call
+	 */
+
+	int32_t ancestor_label_semidominator = ancestor->dominator_info.label->dominator_info.semidominator_number;
+	int32_t block_semidominator = block->dominator_info.label->dominator_info.semidominator_number;
+
+	/**
+	 */
+	if(ancestor_label_semidominator < block_semidominator){
+		block->dominator_info.label = ancestor->dominator_info.label;
+	}
+
+	block->dominator_info.ancestor = ancestor->dominator_info.ancestor;
+
+}
+
+
+/**
  * Simple helper to link the ancestor to it's descendant
  */
 static inline void link_ancestor(basic_block_t* ancestor, basic_block_t* descendant){
@@ -241,6 +284,9 @@ static inline void link_ancestor(basic_block_t* ancestor, basic_block_t* descend
  *  2. Perform a reverse DFS to compute the semidominator sets
  *  3. Perform a reverse DFS to compute the tentative immediate dominator
  *  4. Perform one final pass to repair non-trivial cases
+ *
+ * The DFS numbers are very important because we need to perform a reverse DFS traversal over and over
+ * again. We also map semidominators to DFS numbers for lookup speed
  *
  *
  * procedure LT_IDOM(entry, block_set):
