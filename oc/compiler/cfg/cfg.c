@@ -6403,13 +6403,40 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 	 * impossible for anything to get here that is not a PLUS or MINUS
 	 */
 	if(binary_operation->binary_operator == PLUS){
+		/**
+		 * All of our logic depends on what kind of result type we have. If 
+		 * we have a constant, we will perform the multiplication right now. If not,
+		 * then there is an opportunity for us to create a lea statement *if* the
+		 * type size multiplier will behave
+		 */
+		switch(right_operand_results.type){
+			/**
+			 * This will become:
+			 * 	result <- operand1 + <type_size_multiplier> * constant_operand
+			 */
+			case CFG_RESULT_TYPE_CONST:
+				//Extract it
+				constant_operand = right_operand_results.result_value.result_const;
 
+				//Multiply this by the type size multiplier
+				multiply_constant_by_raw_int64_value(constant_operand, i64, type_size_multiplier);
+
+				//Emit the binary expression itself
+				instruction_t* computation = emit_binary_operation_with_const_instruction(assignee, operand1, PLUS, constant_operand);
+
+				//Throw this into the current block
+				add_statement(current_block, computation);
+				break;
+
+			case CFG_RESULT_TYPE_VAR:
+				break;
+		}
 
 	} else {
 		/**
 		 * All of our logic depends on what kind of result type we have. If 
 		 * we have a constant, we will perform the multiplication right now. If not,
-		 * for subtraction we'll need to create to expressions to achieve this
+		 * for subtraction we'll need to create two expressions to achieve this
 		 */
 		switch(right_operand_results.type){
 			/**
