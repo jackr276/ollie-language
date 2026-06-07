@@ -1037,11 +1037,18 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 	instruction_t* address_instruction;
 
 	/**
-	 * The associated varialbe will always come from operand1
-	 *
-	 * NOTE: this may be *NULL*
+	 * If we've survived to down here, we know that we don't have to deal with a global or static
+	 * variable. Because of that we can make a few more assumptions that allow us to
+	 * handle things in a different way with more potential to optimize several instructions together
 	 */
-	symtab_variable_record_t* associated_variable = instruction->operands.oir.operand1->linked_var;
+	three_addr_var_t* memory_address_operand;
+	if(instruction->statement_type != THREE_ADDR_CODE_LEA_STMT){
+		memory_address_operand = instruction->operands.oir.operand1;
+	} else {
+		memory_address_operand = instruction->operands.oir.address_operand1;
+	}
+
+	symtab_variable_record_t* associated_variable = memory_address_operand->linked_var;
 
 	/**
 	 * Special handling if this is a global variable. Global variables will generate 2 instructions on most occassions
@@ -1134,6 +1141,22 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 
 						break;
 
+					/**
+					 * For lea operations, to rememdiate we just need to do everything that we would normally do 
+					 * before the lea and insert that
+					 */
+					case THREE_ADDR_CODE_LEA_STMT:
+						//Let the helper emit the statement
+						address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->operands.oir.address_operand1, instruction_pointer_variable);
+
+						//Put this right before the store
+						insert_instruction_before_given(address_instruction, instruction);
+
+						//The assignee here now is our first address operand variable
+						instruction->operands.oir.address_operand1 = address_instruction->operands.oir.assignee;
+						
+						break;
+
 					//This should never happen
 					default:
 						printf("Fatal internal compiler error: unreachable path hit in global/static variable memory address remediation\n");
@@ -1153,13 +1176,6 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				break;
 		}
 	}
-
-	/**
-	 * If we've survived to down here, we know that we don't have to deal with a global or static
-	 * variable. Because of that we can make a few more assumptions that allow us to
-	 * handle things in a different way with more potential to optimize several instructions together
-	 */
-	three_addr_var_t* memory_address_operand = instruction->operands.oir.operand1;
 
 	/**
 	 * There are two things that we need to account for here: regular memory address vars that
@@ -1346,6 +1362,28 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 
 					break;
 
+				/**
+				 * If we have a lea statement, we'll just emit an address calculation beforehand
+				 * and throw it above the current one. The future lea simplifier
+				 * should be able to pick up on the simplification and compress if appropriate
+				 */
+				case THREE_ADDR_CODE_LEA_STMT:
+					if(stack_offset != 0){
+						//Emit the lea
+						instruction_t* above_lea = emit_lea_offset_only(emit_temp_var(i64), stack_pointer_variable, emit_direct_integer_or_char_constant(stack_offset, i64));
+
+						//Insert it before the current instruction
+						insert_instruction_before_given(above_lea, instruction);
+
+						//Replace the address operand
+						instruction->operands.oir.address_operand1 = above_lea->operands.oir.assignee;
+
+					} else {
+						instruction->operands.oir.address_operand1 = stack_pointer_variable;
+					}
+
+					break;
+
 				//This should never happen
 				default:
 					printf("Fatal internal compiler error: unreachable path hit in memory address remediation\n");
@@ -1511,6 +1549,26 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 
 					break;
 
+				/**
+				 * For a lea we'll just emit a lea to go above it and let the future simplifier run
+				 * determine if any compression can be done
+				 */
+				case THREE_ADDR_CODE_LEA_STMT:
+					//Create the offset constant
+					stack_offset_constant = emit_stack_passed_parameter_offset_constant(memory_address_operand->associated_memory_region.stack_region, u64);
+
+					//Add the additional offset in as an adjustment(it's usually 0)
+					stack_offset_constant->constant_adjustment = additional_offset;
+					
+					//Emit the lea and put it right before our current statement
+					instruction_t* lea_statement = emit_lea_offset_only(emit_temp_var(i64), stack_pointer_variable, stack_offset_constant);
+					insert_instruction_before_given(lea_statement, instruction);
+
+					//Update the first address operand
+					instruction->operands.oir.address_operand1 = lea_statement->operands.oir.assignee;
+
+					break;
+				
 				//This should never happen
 				default:
 					printf("Fatal internal compiler error: unreachable path hit in memory address remediation\n");
@@ -4122,6 +4180,93 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 
 
 /**
+ * Perform memory address remediations for a given instruction in our instruction window. This function
+ * will update the changed value in the event that a change does occur
+ */
+static inline void perform_memory_address_remediations(instruction_window_t* window, instruction_t* instruction, u_int8_t* changed){
+	/**
+	 * If it's NULL then leave
+	 */
+	if(instruction == NULL){
+		return;
+	}
+
+	//Check if we have any such cases for the first in the window
+	switch(instruction->statement_type){
+		case THREE_ADDR_CODE_ASSN_STMT:
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+			/**
+			 * If have a value in operand1 *and* it's a memory address,
+			 * we will need to remediate it
+			 */
+			if(instruction->operands.oir.operand1 != NULL){
+				//If we have any memory addresses now is the time
+				switch(instruction->operands.oir.operand1->variable_type){
+					case VARIABLE_TYPE_MEMORY_ADDRESS:
+					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+						remediate_memory_address_variable_in_non_access_context(window, instruction);
+						*changed = TRUE;
+						break;
+
+					default:
+						break;
+				}
+			}
+			
+			break;
+
+		/**
+		 * It is possible for a lea statement to have its address operand1
+		 * be a memory address. If this is the case then we need to remediate it now
+		 */
+		case THREE_ADDR_CODE_LEA_STMT:
+			if(instruction->operands.oir.address_operand1 != NULL){
+				switch(instruction->operands.oir.address_operand1->variable_type){
+					case VARIABLE_TYPE_MEMORY_ADDRESS:
+					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+						remediate_memory_address_variable_in_non_access_context(window, instruction);
+						*changed = TRUE;
+						break;
+
+					default:
+					break;
+				}
+			}
+
+			break;
+
+		/**
+		 * If we have an elaborative param offset calculation, now is the time
+		 * where we will convert it into a constant assignment
+		 */
+		case THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET:
+			convert_elaborative_param_offset_to_constant_assignment(instruction);
+
+			*changed = TRUE;
+			break;
+
+		/**
+		 * If we have a memory copy statement, we will need to convert it into the
+		 * loads/stores that we need now. This will reconstruct the window when done.
+		 */
+		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
+			convert_memory_copy_statement_into_loads_and_stores(window, instruction);
+
+			//This counts as a change
+			*changed = TRUE;
+			break;
+
+
+		//By default do nothing
+		default:
+			break;
+	}
+}
+
+
+/**
  * The pattern optimizer takes in a window and performs hyperlocal optimzations
  * on passing instructions. If we do end up deleting instructions, we'll need
  * to take care with how that affects the window that we take in
@@ -4147,170 +4292,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * pointer arithmetic or grabbing memory addresses. We know for a fact
 	 * that the "op1" is always going to be the memory address
 	 */
-	instruction_t* first = window->instruction1;
-	instruction_t* second = window->instruction2; 
-	instruction_t* third = window->instruction3; 
-
-	//Check if we have any such cases for the first in the window
-	switch(first->statement_type){
-		case THREE_ADDR_CODE_ASSN_STMT:
-		case THREE_ADDR_CODE_BIN_OP_STMT:
-		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-		case THREE_ADDR_CODE_STORE_STATEMENT:
-			/**
-			 * If have a value in operand1 *and* it's a memory address,
-			 * we will need to remediate it
-			 */
-			if(first->operands.oir.operand1 != NULL){
-				//If we have any memory addresses now is the time
-				switch(first->operands.oir.operand1->variable_type){
-					case VARIABLE_TYPE_MEMORY_ADDRESS:
-					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-						remediate_memory_address_variable_in_non_access_context(window, first);
-						break;
-
-					default:
-						break;
-				}
-			}
-			
-			break;
-
-		/**
-		 * If we have an elaborative param offset calculation, now is the time
-		 * where we will convert it into a constant assignment
-		 */
-		case THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET:
-			convert_elaborative_param_offset_to_constant_assignment(first);
-
-			changed = TRUE;
-			break;
-
-		/**
-		 * If we have a memory copy statement, we will need to convert it into the
-		 * loads/stores that we need now. This will reconstruct the window when done.
-		 */
-		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
-			convert_memory_copy_statement_into_loads_and_stores(window, first);
-
-			//This counts as a change
-			changed = TRUE;
-			break;
-
-
-		//By default do nothing
-		default:
-			break;
-	}
-
-	//Check if we have any such cases for the second in the window
-	switch(second->statement_type){
-		case THREE_ADDR_CODE_ASSN_STMT:
-		case THREE_ADDR_CODE_BIN_OP_STMT:
-		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-		case THREE_ADDR_CODE_STORE_STATEMENT:
-			/**
-			 * If have a value in operand1 *and* it's a memory address,
-			 * we will need to remediate it
-			 */
-			if(second->operands.oir.operand1 != NULL){
-				//If we have any memory addresses now is the time
-				switch(second->operands.oir.operand1->variable_type){
-					case VARIABLE_TYPE_MEMORY_ADDRESS:
-					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-						remediate_memory_address_variable_in_non_access_context(window, second);
-						break;
-
-					default:
-						break;
-				}
-			}
-			
-			break;
-
-		/**
-		 * If we have an elaborative param offset calculation, now is the time
-		 * where we will convert it into a constant assignment
-		 */
-		case THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET:
-			convert_elaborative_param_offset_to_constant_assignment(second);
-
-			changed = TRUE;
-			break;
-
-		/**
-		 * If we have a memory copy statement, we will need to convert it into the
-		 * loads/stores that we need now. This will reconstruct the window when done
-		 */
-		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
-			convert_memory_copy_statement_into_loads_and_stores(window, second);
-
-			//This counts as a change
-			changed = TRUE;
-			break;
-
-		//By default do nothing
-		default:
-			break;
-	}
-
-	//If we have a third - remember this is not a guarantee for all windows
-	if(third != NULL){
-		//Check if we have any such cases for the third in the window
-		switch(third->statement_type){
-			case THREE_ADDR_CODE_ASSN_STMT:
-			case THREE_ADDR_CODE_BIN_OP_STMT:
-			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-			case THREE_ADDR_CODE_STORE_STATEMENT:
-				/**
-				 * If have a value in operand1 *and* it's a memory address,
-				 * we will need to remediate it
-				 */
-				if(third->operands.oir.operand1 != NULL){
-					//If we have any memory addresses now is the time
-					switch(third->operands.oir.operand1->variable_type){
-						case VARIABLE_TYPE_MEMORY_ADDRESS:
-						case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-							remediate_memory_address_variable_in_non_access_context(window, third);
-							break;
-
-						default:
-							break;
-					}
-				}
-				
-				break;
-
-		/**
-		 * If we have an elaborative param offset calculation, now is the time
-		 * where we will convert it into a constant assignment
-		 */
-		case THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET:
-			convert_elaborative_param_offset_to_constant_assignment(third);
-
-			changed = TRUE;
-			break;
-
-		/**
-		 * If we have a memory copy statement, we will need to convert it into the
-		 * loads/stores that we need now. This will reconstruct the window when done
-		 */
-		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
-			convert_memory_copy_statement_into_loads_and_stores(window, third);
-				
-			//This counts as a change
-			changed = TRUE;
-			break;
-
-			//By default do nothing
-			default:
-				break;
-		}
-	}
-
-
-	//Now we'll match based off of a series of patterns. Depending on the pattern that we
-	//see, we perform one small optimization
+	perform_memory_address_remediations(window, window->instruction1, &changed);
+	perform_memory_address_remediations(window, window->instruction2, &changed);
+	perform_memory_address_remediations(window, window->instruction3, &changed);
 	
 	/**
 	 * ================== CONSTANT ASSINGNMENT FOLDING ==========================
@@ -5152,109 +5136,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		//Extract for convenience
 		instruction_t* bin_operation_with_const = window->instruction1;
 		instruction_t* binary_operation = window->instruction2;
-
-		//Grab the result type out
-		generic_type_t* result_type = get_destination_type_for_binary_operation_instruction(binary_operation);
-
-		/**
-		 * If the type here is actually compatible, then we can do this
-		 */
-		if(is_type_lea_compatible(result_type) == TRUE){
-			switch(bin_operation_with_const->op){
-				/**
-				 * For the case of a plus:
-				 * 	t21 <- t20 + 8
-				 * 	t22 <- t19 + t21
-				 *
-				 * 	t22 <- 8(t19, t20)
-				 */
-				case PLUS:
-					//Convert instruction2 into a lea
-					binary_operation->statement_type = THREE_ADDR_CODE_LEA_STMT;
-					binary_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-
-					//Translate the operands & constants
-					binary_operation->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
-					binary_operation->operands.oir.address_operand2 = bin_operation_with_const->operands.oir.operand1;
-					binary_operation->operands.oir.address_offset = bin_operation_with_const->operands.oir.constant_operand;
-					
-					//Once this is done we can scrap the first instruction
-					delete_statement(bin_operation_with_const);
-
-					//Rebuild the window around the binary operation
-					reconstruct_window(window, binary_operation);
-
-					//This is a change
-					changed = TRUE;
-					break;
-
-				/**
-				 * For the case of a *:
-				 * 	t21 <- t20 * 8
-				 * 	t22 <- t19 + t21
-				 *
-				 * 	t22 <- (t19, t20, 8)
-				 */
-				case STAR:
-					//We need to make sure that we have a compatible power of 2, otherwise this will all break down
-					if(is_constant_lea_compatible_power_of_2(bin_operation_with_const->operands.oir.constant_operand) == FALSE){
-						break;
-					}
-
-					//Convert instruction2 into a lea
-					binary_operation->statement_type = THREE_ADDR_CODE_LEA_STMT;
-					binary_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
-
-					//Convert to LEA form
-					binary_operation->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
-					binary_operation->operands.oir.address_operand2 = bin_operation_with_const->operands.oir.operand1;
-					binary_operation->operands.oir.address_multiplier = bin_operation_with_const->operands.oir.constant_operand->constant_value.signed_long_constant;
-					
-					//Once this is done we can scrap the first instruction
-					delete_statement(bin_operation_with_const);
-
-					//Rebuild the window around the binary operation
-					reconstruct_window(window, binary_operation);
-
-					//This is a change
-					changed = TRUE;
-
-					break;
-
-				//By default do nothing
-				default:
-					break;
-			}
-		}
-	}
-
-
-	/**
-	 * Apply the same strategy for instructions 1 and 3
-	 * 
-	 *
-	 * Example:
-	 * t21 <- ^t8_0 * 4
-	 * ........
-	 * t22 <- t19 + t21
-	 *
-	 * Can become
-	 * t22 <- (t19, ^t8_0, 4)
-	 *
-	 * And we can delete the first instruction
-	 *
-	 * THIS WILL EVENTUALLY BECOME REDUNDANT
-	 */
-	if(is_instruction_binary_operation_with_const(window->instruction1) == TRUE
-		&& is_instruction_binary_operation(window->instruction3) == TRUE
-		&& (window->instruction1->op == STAR || window->instruction1->op == PLUS)
-		&& window->instruction3->op == PLUS
-		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& variables_equal(window->instruction3->operands.oir.operand2, window->instruction1->operands.oir.assignee, TRUE) == TRUE) {
-
-		//Extract for convenience
-		instruction_t* bin_operation_with_const = window->instruction1;
-		instruction_t* binary_operation = window->instruction3;
 
 		//Grab the result type out
 		generic_type_t* result_type = get_destination_type_for_binary_operation_instruction(binary_operation);

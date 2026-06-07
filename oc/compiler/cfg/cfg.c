@@ -219,6 +219,23 @@ static inline u_int8_t is_store_operation(instruction_t* statement){
 
 
 /**
+ * Is the given raw constant a lea compatible power of 2?
+ * In order to work for lea, the constant must be one of: 1, 2, 4, 8. Anything else is incompatible
+ */
+static inline u_int8_t is_raw_constant_valid_for_lea_multiplier(int64_t constant){
+	switch(constant){
+		case 1:
+		case 2:
+		case 4:
+		case 8:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Is the given f32 negative? We need to use bit manipulation to deterine
  * this because regular float equality will not detect cases like -0.0 == 0.0
  */
@@ -3070,7 +3087,7 @@ static inline void rename_all_variables(cfg_t* cfg){
  *
  * my_ptr++ will become my_ptr = my_ptr + ____
  */
-static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, ollie_token_t operator, three_addr_var_t* assignee){
+static inline three_addr_var_t* generate_pointer_arithmetic_for_unary_operation(basic_block_t* basic_block, ollie_token_t operator, three_addr_var_t* assignee){
 	//Emit the constant size
 	three_addr_const_t* constant = emit_direct_integer_or_char_constant(assignee->type->internal_types.points_to->type_size, u64);
 
@@ -5653,8 +5670,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 
 		//A pointer type is a special case
 		case TYPE_CLASS_POINTER:
-			//Let the helper deal with this
-			assignee = handle_pointer_arithmetic(current_block, node->unary_operator, assignee);
+			assignee = generate_pointer_arithmetic_for_unary_operation(current_block, node->unary_operator, assignee);
 			break;
 
 		//Everything else should be impossible
@@ -5823,8 +5839,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 				//The pointer type is a special case
 				case TYPE_CLASS_POINTER:
-					//Let the helper deal with this
-					assignee = handle_pointer_arithmetic(current_block, unary_operator_node->unary_operator, assignee);
+					assignee = generate_pointer_arithmetic_for_unary_operation(current_block, unary_operator_node->unary_operator, assignee);
 
 					break;
 				
@@ -6105,9 +6120,10 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					/**
 					 * Otherwise, this variable is already on the stack. As such, to get it's memory address,
 					 * all we need to do is take emit a specialized "memory address var" from the existing
-					 * stack region and slap it into a variable
+					 * stack region and slap it into a variable. One special thing here - we are going to
+					 * want to make sure that we stamp this memory address variable with the type that was
+					 * inferred in the parser in case we need it for later processing
 					 */
-					//The memory address itself
 					three_addr_var_t* memory_address_var = emit_memory_address_var(unary_expression_child->variable);
 
 					//And package the value up as what we want here
@@ -6314,6 +6330,236 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 
 
 /**
+ * Does a given binary expression use pointer arithmetic? We can determine this by looking at the type
+ * of the first operand and the binary operator
+ */
+static inline u_int8_t does_binary_expression_use_pointer_arithmetic(generic_ast_node_t* binary_expression){
+	//Pointer arithmetic may only come from plus or minus
+	if(binary_expression->binary_operator != PLUS && binary_expression->binary_operator != MINUS){
+		return FALSE;
+	}
+
+	/**
+	 * The only types that could possible trigger pointer arithmetic are arrays
+	 * and pointers, everything else does not count
+	 */
+	switch(binary_expression->first_child->inferred_type->type_class){
+		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_POINTER:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Generate pointer arithmetic for a given binary operation. The only valid operands in here are PLUS and MINUS. It should be
+ * impossible to reach this point with anything other than those. This function will package up and return a result package when done
+ */
+static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operation(basic_block_t* starting_block, generic_ast_node_t* binary_operation){
+	//Holders for down the line
+	three_addr_const_t* constant_operand = NULL;
+	three_addr_var_t* operand2 = NULL;
+
+	//Prepackage up the results here
+	cfg_result_package_t results = {starting_block, starting_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+
+	//Holder for the current block as it changes
+	basic_block_t* current_block = starting_block;
+
+	//Extract the two child nodes that we'll be operating on
+	generic_ast_node_t* left_child = binary_operation->first_child;
+	generic_ast_node_t* right_child = left_child->next_sibling;
+
+	//The pointer type itself *always* comes from the left child
+	generic_type_t* pointer_type = left_child->inferred_type;
+
+	//The assignee always has the same type as the binary operation
+	three_addr_var_t* assignee = emit_temp_var(binary_operation->inferred_type);
+
+	/**
+	 * Step 1: Emit the left operand's expression
+	 */
+	cfg_result_package_t left_operand_results = emit_binary_expression(current_block, left_child);
+
+	//Update the current block
+	current_block = left_operand_results.final_block;
+
+	/**
+	 * Step 2: Emit the right operand's expression
+	 */
+	cfg_result_package_t right_operand_results = emit_binary_expression(current_block, right_child);
+
+	//Update the current block
+	current_block = right_operand_results.final_block;
+
+	/**
+	 * Step 3: determine the size of what the pointer itself points
+	 * to. This is going to be our scale with which we have to multiply
+	 * the secondary operand by. Remember that we can have either pointers
+	 * or arrays here so we will account for both cases
+	 */
+	int64_t type_size_multiplier;
+
+	if(pointer_type->type_class == TYPE_CLASS_POINTER){
+		type_size_multiplier = pointer_type->internal_types.points_to->type_size;
+	} else {
+		type_size_multiplier = pointer_type->internal_types.member_type->type_size; 
+	}
+
+	/**
+	 * Step 4: unpack the first operand. This should always be a variable but we are
+	 * going to play it safe and use the unpacker regardless
+	 */
+	three_addr_var_t* operand1 = unpack_result_package(&left_operand_results, current_block);
+
+	/**
+	 * There are only two options for operators - PLUS or MINUS - so we don't need
+	 * to bother checking for anything else. The flow of the parser should make it
+	 * impossible for anything to get here that is not a PLUS or MINUS
+	 */
+	if(binary_operation->binary_operator == PLUS){
+		/**
+		 * All of our logic depends on what kind of result type we have. If 
+		 * we have a constant, we will perform the multiplication right now. If not,
+		 * then there is an opportunity for us to create a lea statement *if* the
+		 * type size multiplier will behave
+		 */
+		switch(right_operand_results.type){
+			/**
+			 * This will become:
+			 * 	result <- operand1 + <type_size_multiplier> * constant_operand
+			 */
+			case CFG_RESULT_TYPE_CONST:
+				//Extract it
+				constant_operand = right_operand_results.result_value.result_const;
+
+				//Multiply this by the type size multiplier
+				multiply_constant_by_raw_int64_value(constant_operand, i64, type_size_multiplier);
+
+				//Emit the binary expression itself
+				instruction_t* computation = emit_binary_operation_with_const_instruction(assignee, operand1, PLUS, constant_operand);
+				//Store the computation type to make sure we use i64 operations
+				computation->type_storage.result_type = i64;
+
+				//Throw this into the current block
+				add_statement(current_block, computation);
+				break;
+
+			case CFG_RESULT_TYPE_VAR:
+				//Extract it
+				operand2 = right_operand_results.result_value.result_var;
+
+				/**
+				 * If we can make this into a lea, then we will. If not, then we are
+				 * going to have to use 2 operations to achieve this. The outputs will
+				 * either be
+				 *
+				 * result <- lea (operand1, operand2, <type_size_multiplier>)
+				 * OR
+				 * additive <- operand2 * <type_size_multiplier>
+				 * result <- operand1 + operand2
+				 *
+				 */
+				if(is_raw_constant_valid_for_lea_multiplier(type_size_multiplier) == TRUE){
+					//Emit the lea directly
+					instruction_t* computation = emit_lea_multiplier_and_operands(assignee, operand1, operand2, type_size_multiplier);
+
+					//Add it into the block
+					add_statement(current_block, computation);
+
+				} else {
+					//Emit a constant for the type size multiplier
+					constant_operand = emit_direct_integer_or_char_constant(type_size_multiplier, i64);
+
+					//First emit the multiplication expression
+					instruction_t* multiplication = emit_binary_operation_with_const_instruction(emit_temp_var(i64), operand2, STAR, constant_operand);
+					//Store the computation type to make sure we use i64 operations
+					multiplication->type_storage.result_type = i64;
+
+					add_statement(current_block, multiplication);
+
+					//Now we will use that one's result for the final computation
+					instruction_t* pointer_arithmetic = emit_binary_operation_instruction(assignee, operand1, PLUS, multiplication->operands.oir.assignee);
+					//Store the computation type to make sure we use i64 operations
+					pointer_arithmetic->type_storage.result_type = i64;
+
+					add_statement(current_block, pointer_arithmetic);
+				}
+
+				break;
+		}
+
+	} else {
+		/**
+		 * All of our logic depends on what kind of result type we have. If 
+		 * we have a constant, we will perform the multiplication right now. If not,
+		 * for subtraction we'll need to create two expressions to achieve this
+		 */
+		switch(right_operand_results.type){
+			/**
+			 * This will become:
+			 * 	result <- operand1 - <type_size_multiplier> * constant_operand
+			 */
+			case CFG_RESULT_TYPE_CONST:
+				//Extract it
+				constant_operand = right_operand_results.result_value.result_const;
+
+				//Multiply this by the type size multiplier
+				multiply_constant_by_raw_int64_value(constant_operand, i64, type_size_multiplier);
+
+				//Emit the binary expression itself
+				instruction_t* computation = emit_binary_operation_with_const_instruction(assignee, operand1, MINUS, constant_operand);
+				//Store the computation type to ensure we always use long math
+				computation->type_storage.result_type = i64;
+
+				//Throw this into the current block
+				add_statement(current_block, computation);
+				break;
+
+			/**
+			 * This will become:
+			 * 	subtrahend <- operand2 * <type_size_multiplier>
+			 * 	result <- operand1 - subtrahend
+			 */
+			case CFG_RESULT_TYPE_VAR:
+				//Extract it
+				operand2 = right_operand_results.result_value.result_var;
+
+				//Emit a constant for the type size multiplier
+				constant_operand = emit_direct_integer_or_char_constant(type_size_multiplier, i64);
+
+				//First emit the multiplication expression
+				instruction_t* multiplication = emit_binary_operation_with_const_instruction(emit_temp_var(i64), operand2, STAR, constant_operand);
+				//Store the computation type to ensure we always use long math
+				multiplication->type_storage.result_type = i64;
+
+				add_statement(current_block, multiplication);
+
+				//Now we will use that one's result for the final computation
+				instruction_t* pointer_arithmetic = emit_binary_operation_instruction(assignee, operand1, MINUS, multiplication->operands.oir.assignee);
+				//Store the computation type to ensure we always use long math
+				pointer_arithmetic->type_storage.result_type = i64;
+
+				add_statement(current_block, pointer_arithmetic);
+				break;
+		}
+	}
+
+	/**
+	 * Package up the results. We have a variable return type always, 
+	 * and the return value is always our assignee
+	 */
+	results.type = CFG_RESULT_TYPE_VAR;
+	results.result_value.result_var = assignee;
+	results.final_block = current_block;
+	results.operator = binary_operation->binary_operator;
+	return results;
+}
+
+
+/**
  * Emit the abstract machine code needed for a binary expression. The lowest possible
  * thing that we could have here is a unary expression. If we have that, we just emit the
  * unary expression
@@ -6346,6 +6592,14 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	 */
 	if(logical_or_expr->ast_node_type != AST_NODE_TYPE_BINARY_EXPR){
 		return emit_unary_expression(current_block, logical_or_expr);
+	}
+
+	/**
+	 * Does this binary operation make use of pointer arithmetic? If so, we will 
+	 * let a completely separate rule handle this
+	 */
+	if(does_binary_expression_use_pointer_arithmetic(logical_or_expr) == TRUE){
+		return generate_pointer_arithmetic_for_binary_operation(basic_block, logical_or_expr);
 	}
 
 	/**
@@ -6428,7 +6682,6 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 					//We default to op1 for a constant
 					final_result_type = op1->type;
-
 					break;
 
 				/**
@@ -6440,7 +6693,6 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 					//Now use the helper to get the final result type
 					final_result_type = get_operand_type_for_relational_operation(type_symtab, op1->type, op2->type);
-
 					break;
 			}
 
@@ -6473,7 +6725,6 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 				 */
 				case CFG_RESULT_TYPE_CONST:
 					op1_const = right_side.result_value.result_const;
-
 					break;
 
 				/**
@@ -6482,7 +6733,6 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 				 */
 				case CFG_RESULT_TYPE_VAR:
 					op2 = right_side.result_value.result_var;
-
 					break;
 			}
 
