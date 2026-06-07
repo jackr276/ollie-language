@@ -8,6 +8,11 @@
 #include "../utils/queue/heap_queue.h"
 #include <sys/types.h>
 
+/**
+ * Our "invalid" Lengauer-Tarjan DFS num is -1(sentinel value)
+ */
+#define LT_INVALID_DFS_NUM (-1)
+
 
 //TODO
 typedef struct immediate_dominator_values_t immediate_dominator_values_t;
@@ -20,35 +25,45 @@ typedef struct immediate_dominator_values_t immediate_dominator_values_t;
  */
 struct immediate_dominator_values_t {
 	//The current DFS number for our DFS numbering
-	u_int32_t current_dfs_number;
+	int32_t current_dfs_number;
+	//The number of blocks in the function
+	int32_t number_of_blocks;
 
 	/**
+	 * We need to maintain a map of DFS numbers and actual vertices(vertex ID)
+	 *
 	 * A list of DFS numbers that is keyed by the node's vertex ID
 	 *
-	 * For example:
-	 * Node with ID 3, DFS number 5
-	 * dfs_numbers[3] = 5
+	 * vertex_to_dfs_number_mapping[vertex Number] = DFS Number
+	 * dfs_number_to_vertex_mapping[DFS number] = actual vertex pointer
 	 */
-	u_int32_t* dfs_numbers;
+	int32_t* vertex_to_dfs_number_mapping;
+	basic_block_t** dfs_number_to_vertex_mapping;
 
 	/**
-	 * DOES NOT STORE A NODE ID
-	 */
-	u_int32_t* semi_dominators;
-
-	/**
-	 * Master map of vertices to vertex ID
+	 * Maintain a mapping of a block's vertex ID to the 
+	 * *** DFS NUMBER OF ITS SEMIDOMINATOR ***
 	 *
-	 * For example: if basic block "A" has ID 3
-	 * vertices[3] = A
+	 * NOTE: DOES NOT STORE A NODE ID
 	 */
-	basic_block_t** vertices;
+	int32_t* semidominators;
+
+	/**
+	 * Maintain a mapping of block id as index to DFS ancestor
+	 * block
+	 */
+	basic_block_t** ancestors;
 
 	basic_block_t** DFS_parents;
 
 	basic_block_t** immediater_dominators;
+
+	/**
+	 * Label is a union-find helper that tracks the "best candidate semidominator node"
+	 * seen so far along the path in the DFS tree. We key this by vertex number
+	 */
 	basic_block_t** labels;
-	basic_block_t** ancestors;
+
 };
 
 
@@ -162,8 +177,43 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
  * union-find ancestor, and minimum-semi representative.
  *
  * This function is recursive
+ *
+ * Procedure IDOM_DFS(block b):
+ * 	 vertex_to_dfs_number_mapping[block ID of b] = current_dfs_number
+ * 	 dfs_number_to_vertex_mapping[current_dfs_number] = b
+ * 	 semi_dominator[block ID of b] = current_DFS_number;
+ *	 labels[block ID of b] = b
+ *	 ancestors[block ID of b] = NULL
+ *
+ *	 current_dfs_number++;
+ * 	 
+ * 	
  */
 static void idom_dfs(basic_block_t* block, immediate_dominator_values_t* values){
+	/**
+	 * Store the needed mappings of Block ID to DFS number and DFS number to
+	 * block identifier
+	 */
+	values->vertex_to_dfs_number_mapping[block->lt_block_number] = values->current_dfs_number;
+	values->dfs_number_to_vertex_mapping[values->current_dfs_number] = block;
+
+	/**
+	 * Map the semidominator of this block ID to the current DFS number
+	 */
+	values->semidominators[block->lt_block_number] = values->current_dfs_number;
+
+	/**
+	 * Map the label of this block to itself for now
+	 */
+	values->labels[block->lt_block_number] = block;
+
+	/**
+	 * As of right now we have no ancestor for this block
+	 */
+	values->ancestors[block->lt_block_number] = NULL;
+
+	//Now bump the current DFS number
+	values->current_dfs_number++;
 
 
 }
@@ -192,6 +242,8 @@ static void idom_dfs(basic_block_t* block, immediate_dominator_values_t* values)
  * The Ollie Compiler uses a version of the Lengauer-Tarjan algorithm to compute
  * immediate dominators, given just one node
  *
+ * Ollie 
+ *
  * procedure LT_IDOM:
  * 	 
  *
@@ -202,19 +254,40 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 	//The number of blocks is static
 	u_int32_t number_of_blocks = function_blocks->current_index;
 
-	//TODO PREPARE STRUCT
-
-	//Maintain an array of DFS vertices where the 
-	basic_block_t** dfs_vertices;
-
-	basic_block_t* parent[number_of_blocks];
-	basic_block_t* ancestor[number_of_blocks];
-	basic_block_t* label[number_of_blocks];
+	/**
+	 * Run through and assign every block a unique Lengauer-Tarjan
+	 * block identifier. These IDs are only important for the duration
+	 * of this run
+	 */
+	for(u_int32_t i = 0; i < number_of_blocks; i++){
+		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
+		block->lt_block_number = i;
+	}
 
 	/**
-	 * Maintain an immediate dominator DFS number for our DFS numbering
+	 * Step 0: we need to populate our IDOM values so that we
+	 * can pass them around between functions easily
 	 */
-	u_int32_t idom_dfs_number = 0;
+	immediate_dominator_values_t values;
+	//Extract the block count
+	values.number_of_blocks = number_of_blocks;
+	//The current DFS number always starts at 0
+	values.current_dfs_number = 0;
+
+	/**
+	 * We already have an exhaustive list of vertices
+	 */
+	basic_block_t** vertices = (basic_block_t**)(function_blocks->internal_array);
+
+
+	/**
+	 * Maintain an array of DFS vertices where the index(vertex ID) maps to the actual
+	 * vertex that we have
+	 */
+
+
+
+
 
 }
 
