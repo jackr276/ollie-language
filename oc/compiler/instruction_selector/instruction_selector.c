@@ -1037,11 +1037,18 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 	instruction_t* address_instruction;
 
 	/**
-	 * The associated varialbe will always come from operand1
-	 *
-	 * NOTE: this may be *NULL*
+	 * If we've survived to down here, we know that we don't have to deal with a global or static
+	 * variable. Because of that we can make a few more assumptions that allow us to
+	 * handle things in a different way with more potential to optimize several instructions together
 	 */
-	symtab_variable_record_t* associated_variable = instruction->operands.oir.operand1->linked_var;
+	three_addr_var_t* memory_address_operand;
+	if(instruction->statement_type != THREE_ADDR_CODE_LEA_STMT){
+		memory_address_operand = instruction->operands.oir.operand1;
+	} else {
+		memory_address_operand = instruction->operands.oir.address_operand1;
+	}
+
+	symtab_variable_record_t* associated_variable = memory_address_operand->linked_var;
 
 	/**
 	 * Special handling if this is a global variable. Global variables will generate 2 instructions on most occassions
@@ -1138,6 +1145,17 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					 * For lea operations, to rememdiate we just need to do everything that we would normally do 
 					 * before the lea and insert that
 					 */
+					case THREE_ADDR_CODE_LEA_STMT:
+						//Let the helper emit the statement
+						address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->operands.oir.address_operand1, instruction_pointer_variable);
+
+						//Put this right before the store
+						insert_instruction_before_given(address_instruction, instruction);
+
+						//The assignee here now is our first address operand variable
+						instruction->operands.oir.address_operand1 = address_instruction->operands.oir.assignee;
+						
+						break;
 
 					//This should never happen
 					default:
@@ -1158,13 +1176,6 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				break;
 		}
 	}
-
-	/**
-	 * If we've survived to down here, we know that we don't have to deal with a global or static
-	 * variable. Because of that we can make a few more assumptions that allow us to
-	 * handle things in a different way with more potential to optimize several instructions together
-	 */
-	three_addr_var_t* memory_address_operand = instruction->operands.oir.operand1;
 
 	/**
 	 * There are two things that we need to account for here: regular memory address vars that
