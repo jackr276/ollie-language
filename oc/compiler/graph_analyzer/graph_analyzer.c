@@ -6,12 +6,13 @@
 
 #include "graph_analyzer.h"
 #include "../utils/queue/heap_queue.h"
+#include <stdint.h>
 #include <sys/types.h>
 
 /**
  * Our "invalid" Lengauer-Tarjan DFS num is -1(sentinel value)
  */
-#define LT_UNVISITED (-1)
+#define LT_UNNUMBERED (-1)
 
 /**
  * Run through an entire array of function blocks and reset the status for
@@ -125,9 +126,9 @@ static inline void initialize_block_for_idom_computation(basic_block_t* block){
 	block->dominator_info.ancestor = NULL;
 	block->dominator_info.idom = NULL;
 	block->dominator_info.label = NULL;
-	block->dominator_info.semidominator_number = LT_UNVISITED;
+	block->dominator_info.semidominator_number = LT_UNNUMBERED;
 	block->dominator_info.dominator_parent = NULL;
-	block->dominator_info.dfs_number = LT_UNVISITED;
+	block->dominator_info.dfs_number = LT_UNNUMBERED;
 }
 
 
@@ -192,7 +193,7 @@ static void dfs_number_block(basic_block_t* block, basic_block_t** dfs_number_to
 		 * If our successor does not yet have a DFS number, then we'll need to 
 		 * give it one now
 		 */
-		if(successor->dominator_info.dfs_number == LT_UNVISITED){
+		if(successor->dominator_info.dfs_number == LT_UNNUMBERED){
 			//This successor's parent is the current block
 			successor->dominator_info.dominator_parent = block;
 
@@ -244,9 +245,12 @@ static inline void link_ancestor(basic_block_t* ancestor, basic_block_t* descend
  *
  * procedure LT_IDOM(entry, block_set):
  * 	foreach block:
- * 		initalize block->dfs_number to -1(unvisited)
+ * 		clear the block's dominator info
  *
  * 	dfs_number_block(entry)
+ *
+ * 	foreach predecessor of the block:
+ * 		
  * 
  *
  * 	 
@@ -259,8 +263,7 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 	u_int32_t number_of_blocks = function_blocks->current_index;
 
 	/**
-	 * Step 0: wipe every block's existing dominator info completely
-	 * clean
+	 * Wipe every block's existing dominator info completely clean
 	 */
 	for(u_int32_t i = 0; i < number_of_blocks; i++){
 		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
@@ -268,7 +271,7 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 	}
 
 	/**
-	 * Step 1: Run the DFS numbering algorithm to populate
+	 * Run the DFS numbering algorithm to populate
 	 * the DFS numbers for every block. This also
 	 * initializes the "label", semidominator, and ancestor. This
 	 * helper recursively does the whole thing so all that we
@@ -278,9 +281,44 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 	basic_block_t** dfs_number_to_vertex_mapping = calloc(number_of_blocks, sizeof(basic_block_t*));
 	dfs_number_block(function_entry_block, dfs_number_to_vertex_mapping, &current_dfs_number);
 
+	/**
+	 * Now that we have the DFS numbers in place, we will run through
+	 * the blocks in reverse DFS order so that we are dealing with
+	 * the deepest blocks first
+	 */
+	for(int32_t i = current_dfs_number - 1; i > 0; i--){
+		//Extract the block that we're working on
+		basic_block_t* working_block = dfs_number_to_vertex_mapping[i];
+
+		/**
+		 * Compute the semidominators for each given block. Remember that semidominators
+		 * are the earliest DFS ancestor that can "almost" dominate a given block
+		 */
+		for(u_int32_t i = 0; i < working_block->predecessors.current_index; i++){
+			basic_block_t* semidominator_candidate = dynamic_array_get_at(&(working_block->predecessors), i);
+
+			/**
+			 * Just something to account for - if this is somehow unreachable
+			 * we skip ahead. This in theory should never happen but we don't
+			 * want to go down this road if it does so best to be safe
+			 */
+			if(semidominator_candidate->dominator_info.dfs_number == LT_UNNUMBERED){
+				continue;
+			}
+
+			//
+			//
+			//
+			//TODO EVAL
+			//
+			//
+			//
 
 
+		}
 
+
+	}
 
 
 	//We're done with this now so release it
