@@ -6341,6 +6341,10 @@ static inline u_int8_t does_binary_expression_use_pointer_arithmetic(generic_ast
  * impossible to reach this point with anything other than those. This function will package up and return a result package when done
  */
 static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operation(basic_block_t* starting_block, generic_ast_node_t* binary_operation){
+	//Holders for down the line
+	three_addr_const_t* constant_operand = NULL;
+	three_addr_var_t* operand2 = NULL;
+
 	//Prepackage up the results here
 	cfg_result_package_t results = {starting_block, starting_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
@@ -6401,11 +6405,45 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 	if(binary_operation->binary_operator == PLUS){
 
 	} else {
+		/**
+		 * All of our logic depends on what kind of result type we have. If 
+		 * we have a constant, we will perform the multiplication right now. If not,
+		 * for subtraction we'll need to create to expressions to achieve this
+		 */
+		switch(right_operand_results.type){
+			/**
+			 * This will become:
+			 * 	result <- operand1 - <type_size_multiplier> * constant_operand
+			 */
+			case CFG_RESULT_TYPE_CONST:
+				//Extract it
+				constant_operand = right_operand_results.result_value.result_const;
 
+				//Multiply this by the type size multiplier
+				multiply_constant_by_raw_int64_value(constant_operand, i64, type_size_multiplier);
+
+				//Emit the binary expression itself
+				instruction_t* computation = emit_binary_operation_with_const_instruction(assignee, operand1, MINUS, constant_operand);
+
+				//Throw this into the current block
+				add_statement(current_block, computation);
+				break;
+
+			case CFG_RESULT_TYPE_VAR:
+				operand2 = right_operand_results.result_value.result_var;
+				break;
+		}
 	}
 
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
+
+	/**
+	 * Package up the results. We have a variable return type always, 
+	 * and the return value is always our assignee
+	 */
+	results.type = CFG_RESULT_TYPE_VAR;
+	results.result_value.result_var = assignee;
 
 	return results;
 }
