@@ -1538,6 +1538,26 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 
 					break;
 
+				/**
+				 * For a lea we'll just emit a lea to go above it and let the future simplifier run
+				 * determine if any compression can be done
+				 */
+				case THREE_ADDR_CODE_LEA_STMT:
+					//Create the offset constant
+					stack_offset_constant = emit_stack_passed_parameter_offset_constant(memory_address_operand->associated_memory_region.stack_region, u64);
+
+					//Add the additional offset in as an adjustment(it's usually 0)
+					stack_offset_constant->constant_adjustment = additional_offset;
+					
+					//Emit the lea and put it right before our current statement
+					instruction_t* lea_statement = emit_lea_offset_only(emit_temp_var(i64), stack_pointer_variable, stack_offset_constant);
+					insert_instruction_before_given(lea_statement, instruction);
+
+					//Update the first address operand
+					instruction->operands.oir.address_operand1 = lea_statement->operands.oir.assignee;
+
+					break;
+				
 				//This should never happen
 				default:
 					printf("Fatal internal compiler error: unreachable path hit in memory address remediation\n");
