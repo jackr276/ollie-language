@@ -846,6 +846,15 @@ static inline void calculate_reverse_dominance_frontiers(dynamic_array_t* functi
 	}
 }
 
+/**
+ * Special exposes post order traversal API. The postorder traversal is needed
+ * specifically in branch reduction in the optimizer/postprocessor. In this case,
+ * we'll need a pre-allocated dynamic array to be passed in
+ */
+void get_post_order_traversal(basic_block_t* function_entry_block, dynamic_array_t* post_order_traversal){
+	post_order_traversal_rec(post_order_traversal, function_entry_block);
+}
+
 
 /**
  * We will calculate:

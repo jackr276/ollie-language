@@ -2237,10 +2237,13 @@ static inline void clean(cfg_t* cfg, dynamic_array_t* current_function_blocks, b
 		//Reset the function's visited status
 		reset_visit_status_for_function(current_function_blocks);
 
-		//Use the recursive function to compute the postorder traversal.
-		//Note that the result is going to be stored inside of the array that
-		//we've already allocated
-		post_order_traversal_rec(&postorder, function_entry_block);
+		/**
+		 * Use the API function to compute the postorder traversal.
+		 * Note that the result is going to be stored inside of the array that
+		 * we've already allocated
+		 */
+		get_post_order_traversal(function_entry_block, &postorder);
+
 
 		//Call onepass() for the reduction
 		changed = branch_reduce(cfg, &postorder);
@@ -2258,42 +2261,16 @@ static inline void clean(cfg_t* cfg, dynamic_array_t* current_function_blocks, b
  * of the dominance relations that are now useless. As such, we'll need to completely recompute all
  * of these key values
  */
-static inline void recompute_all_dominance_relations(dynamic_array_t* function_blocks, basic_block_t* function_entry_block){
-	//First, we'll go through and completely blow away anything related to
-	//a dominator in the entirety of the function 
-	//
-	//TOOD UPDATE
-	for(u_int32_t _ = 0; _ < function_blocks->current_index; _++){
-		//Grab the given block out
-		basic_block_t* block = dynamic_array_get_at(function_blocks, _);
+static inline void recompute_all_control_flow_relations_for_function(dynamic_array_t* function_blocks, basic_block_t* function_entry_block){
+	/**
+	 * First clean up all of the existing control relations
+	 */
+	cleanup_all_control_relations(function_blocks);
 
-		//Now we're going to reset everything about this block
-		block->immediate_dominator = NULL;
-		block->immediate_postdominator = NULL;
-
-		if(block->dominator_set.internal_array != NULL){
-			dynamic_array_dealloc(&(block->dominator_set));
-		}
-
-		if(block->postdominator_set.internal_array != NULL){
-			dynamic_array_dealloc(&(block->postdominator_set));
-		}
-
-		if(block->dominance_frontier.internal_array != NULL){
-			dynamic_array_dealloc(&(block->dominance_frontier));
-		}
-
-		if(block->dominator_children.internal_array != NULL){
-			dynamic_array_dealloc(&(block->dominator_children));
-		}
-
-		if(block->reverse_dominance_frontier.internal_array != NULL){
-			dynamic_array_dealloc(&(block->reverse_dominance_frontier));
-		}
-	}
-
-	//Now that that's finished, we can go back and calculate all of the control relations again
-	calculate_all_control_relations(function_entry_block, function_blocks);
+	/**
+	 * Now let the graph analyzer go through and recalculate everything else
+	 */
+	calculate_all_control_flow_relations_for_function(function_entry_block, function_blocks);
 }
 
 
@@ -2456,7 +2433,7 @@ cfg_t* optimize(cfg_t* cfg){
 			delete_all_unreachable_blocks(current_function_blocks, cfg);
 
 			//Recalculate all dominance relations
-			recompute_all_dominance_relations(current_function_blocks, function_entry_block);
+			recompute_all_control_flow_relations_for_function(current_function_blocks, function_entry_block);
 
 			//Invoke the marker
 			mark(current_function_blocks);
@@ -2494,7 +2471,7 @@ cfg_t* optimize(cfg_t* cfg){
 		 * etc. So, to remedy this, we will recalculate everything in the CFG. There is no advantage in splitting this section up by function, as 
 		 * all blocks are going to be traversed regardless. Due to this, we will be doing it over the entire CFG at the end
 		 */
-		recompute_all_dominance_relations(current_function_blocks, function_entry_block);
+		recompute_all_control_flow_relations_for_function(current_function_blocks, function_entry_block);
 	}
 
 	//Now that we are done we can free all of the reusable memory

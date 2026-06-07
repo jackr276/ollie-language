@@ -9,6 +9,7 @@
 #include "postprocessor.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
+#include "../graph_analyzer/graph_analyzer.h"
 #include <sys/types.h>
 
 /**
@@ -803,9 +804,11 @@ static void condense(cfg_t* cfg, basic_block_t* function_entry_block){
 		//Reset the array
 		clear_dynamic_array(&postorder);
 
-		//Compute the new postorder. Remember that the recursive
-		//rule puts the result inside of the array that we've allocated
-		post_order_traversal_rec(&postorder, function_entry_block);
+		/**
+		 * Compute the new postorder. Remember that this API
+		 * puts the result inside of the array that we've allocated
+		 */
+		get_post_order_traversal(function_entry_block, &postorder);
 
 		//Call onepass() for the reduction
 		changed = branch_reduce_postprocess(cfg, &postorder);
