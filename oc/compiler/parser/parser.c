@@ -3291,7 +3291,17 @@ loop_end:
 
 		//If the expression is a constant, we force it to be the final type
 		if(expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
-			expr->inferred_type = final_type;
+			/**
+			 * For constant coercion, there is a chance that we could be doing
+			 * pointer arithmetic here. If we are doing that, we don't want to
+			 * force this constant to be a pointer type. Instead, we'll transform
+			 * it into an i64
+			 */
+			if(final_type->type_class == TYPE_CLASS_BASIC){
+				expr->inferred_type = final_type;
+			} else {
+				expr->inferred_type = immut_i64;
+			}
 
 			coerce_constant(expr);
 		}
@@ -4778,21 +4788,30 @@ static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_strea
 			return print_and_return_error(info, parser_line_num);
 		}
 
-
-		//TODO CONSTANT COERCION NEEDS FIXING
-
 		/**
 		 * For constant types, we need to perform type/storage
 		 * rememediation on the internal constant values based on 
 		 * what the return type is. We will do this now. Remember
 		 * that the inferred types of the constant nodes have already
 		 * been manipulated by the type coercer above
+		 *
+		 * One slight caveat is that, for pointer arithmetic, we don't
+		 * want to coerce the constant into a pointer. Instead, we'll
+		 * make the constant an i64
 		 */
 		if(temp_holder_is_constant == TRUE){
+			if(return_type->type_class != TYPE_CLASS_BASIC){
+				temp_holder->inferred_type = immut_i64;
+			}
+
 			coerce_constant(temp_holder);
 		}
 
 		if(right_child_is_constant == TRUE){
+			if(return_type->type_class != TYPE_CLASS_BASIC){
+				right_child->inferred_type = immut_i64;
+			}
+
 			coerce_constant(right_child);
 		}
 
