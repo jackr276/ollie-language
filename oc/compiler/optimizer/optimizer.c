@@ -7,6 +7,7 @@
 #include "optimizer.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
+#include "../graph_analyzer/graph_analyzer.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
