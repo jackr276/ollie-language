@@ -5,8 +5,8 @@
  */
 
 #include "graph_analyzer.h"
+#include "../utils/queue/heap_queue.h"
 #include <sys/types.h>
-
 
 /**
  * Run through an entire array of function blocks and reset the status for
@@ -112,6 +112,72 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 
 
 /**
+ * The immediate postdominator is the first breadth-first 
+ * successor that post dominates a node
+ *
+ *
+ * TODO THIS ENTIRE THING IS GOING TO BE REWORKEDk
+ */
+static basic_block_t* immediate_postdominator(basic_block_t* B){
+	//If we've already found the immediate dominator, why find it again?
+	if(B->immediate_postdominator != NULL){
+		return B->immediate_postdominator;
+	}
+
+	heap_queue_t traversal_queue = heap_queue_alloc();
+
+	//The visited array
+	dynamic_array_t visited = dynamic_array_alloc();
+
+	//Save this for when we find it
+	basic_block_t* ipdom = NULL;
+
+	//Extract the postdominator set
+	dynamic_array_t postdominator_set = B->postdominator_set;
+
+	//Seed the search with B
+	enqueue(&traversal_queue, B);
+
+	//So long as the queue isn't empty
+	while(queue_is_empty(&traversal_queue) == FALSE){
+		//Pop off of the queue
+		basic_block_t* current = dequeue(&traversal_queue);
+
+		/**
+		 * If we have found the first breadth-first successor that postdominates B,
+		 * we are done
+		 */
+		if(current != B && dynamic_array_contains(&postdominator_set, current) != NOT_FOUND){
+			ipdom = current;
+			break;
+		}
+
+		//Add to the visited set
+		dynamic_array_add(&visited, current);
+
+		//Run through all successors
+		for(u_int16_t j = 0; j < current->successors.current_index; j++){
+			//Add the successor into the queue, if it has not yet been visited
+			basic_block_t* successor = current->successors.internal_array[j];
+
+			if(dynamic_array_contains(&visited, successor) == NOT_FOUND){
+				enqueue(&traversal_queue, successor);
+			}
+		}
+	}
+
+	//Destroy visited
+	dynamic_array_dealloc(&visited);
+
+	//GOING TO BE FIXED
+	heap_queue_dealloc(&traversal_queue);
+
+	//Give it back
+	return ipdom;
+}
+
+
+/**
  * We'll go through in the regular traversal, pushing each node onto the stack in
  * postorder. 
  */
@@ -125,9 +191,8 @@ static void reverse_post_order_traversal_reverse_cfg_rec(heap_stack_t* stack, ba
 	entry->visited = TRUE;
 
 	//For every child(predecessor-it's reverse), we visit it as well
-	for(u_int16_t _ = 0; _ < entry->predecessors.current_index; _++){
-		//Visit each of the blocks
-		reverse_post_order_traversal_reverse_cfg_rec(stack, dynamic_array_get_at(&(entry->predecessors), _));
+	for(u_int32_t i = 0; i < entry->predecessors.current_index; i++){
+		reverse_post_order_traversal_reverse_cfg_rec(stack, dynamic_array_get_at(&(entry->predecessors), i));
 	}
 
 	//Now we can push entry onto the stack
@@ -705,6 +770,82 @@ static void calculate_postdominator_sets(basic_block_t* function_entry_block, dy
 }
 
 
+/**
+ * Add a block to the reverse dominance frontier of the first block
+ */
+static inline void add_block_to_reverse_dominance_frontier(basic_block_t* block, basic_block_t* rdf_block){
+	//If the dominance frontier hasn't been allocated yet, we'll do that here
+	if(block->reverse_dominance_frontier.internal_array == NULL){
+		block->reverse_dominance_frontier = dynamic_array_alloc();
+	}
+
+	//Let's just check - is this already in there. If it is, we will not add it
+	for(u_int32_t i = 0; i < block->reverse_dominance_frontier.current_index; i++){
+		if(block->reverse_dominance_frontier.internal_array[i] == rdf_block){
+			return;
+		}
+	}
+
+	//Add this into the dominance frontier
+	dynamic_array_add(&(block->reverse_dominance_frontier), rdf_block);
+}
+
+
+/**
+ * Calculate the reverse dominance frontiers of every block in the CFG
+ *
+ * The reverse dominance frontier is every block, in relation to the current block, that:
+ * 	Is a predecessor of a block that IS postdominated by the current block
+ * 		BUT
+ * 	It itself is not postdominated by the current block
+ *
+ * To think of it, it's essentially every block that is "just barely not postdominated" by the current block
+ *
+ * Standard reverse dominance frontier algorithm:
+ * 	for all nodes b in the CFG
+ * 		if b has less than 2 successors 
+ * 			continue
+ * 		else
+ * 			for all successors p of b
+ * 				cursor = p
+ * 				while cursor is not IPDOM(b)
+ * 					add b to cursor RDF set
+ * 					cursor = IPDOM(cursor)
+ * 	
+ */
+static inline void calculate_reverse_dominance_frontiers(dynamic_array_t* function_blocks){
+	//Run through every block
+	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+		//Grab this from the array
+		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
+
+		//If we have less than 2 successors,the rest of the search here is useless
+		if(block->successors.internal_array == NULL || block->successors.current_index < 2){
+			continue;
+		}
+
+		//A cursor for traversing our successors 
+		basic_block_t* cursor;
+
+		//Now we run through every successor of the block
+		for(u_int32_t i = 0; i < block->successors.current_index; i++){
+			cursor = block->successors.internal_array[i];
+
+			//While cursor is not the immediate postdominator of block
+			while(cursor != immediate_postdominator(block)){
+				//Add block to cursor's reverse dominance frontier set
+				add_block_to_reverse_dominance_frontier(cursor, block);
+				
+				/**
+				 * Cursor now becomes it's own immediate postdominator, and
+				 * we crawl our way down the CFG
+				 */
+				cursor = immediate_postdominator(cursor);
+			}
+		}
+	}
+}
+
 
 /**
  * We will calculate:
@@ -731,12 +872,10 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	//Once we have the dominator tree, we can compute the dominance frontier
 	calculate_dominance_frontiers(function_blocks);
 
-	//Calculate the postdominator sets for later analysis in the optimizer
+	//Calculate the postdominator sets for analysis
 	calculate_postdominator_sets(function_entry_block, function_blocks);
 
-	//We'll also now calculate the reverse dominance frontier that will be used
-	//in later analysis by the optimizer
-	//TODO DOC
+	//And the reverse dominance frontier(needed for branch ops)
 	calculate_reverse_dominance_frontiers(function_blocks);
 }
 
