@@ -4122,6 +4122,83 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 
 
 /**
+ * Perform memory address remediations for a given instruction in our instruction window. This function
+ * will update the changed value in the event that a change does occur
+ */
+static inline void perform_memory_address_remediations(instruction_window_t* window, instruction_t* instruction, u_int8_t* changed){
+	/**
+	 * If it's NULL then leave
+	 */
+	if(instruction == NULL){
+		return;
+	}
+
+	//Check if we have any such cases for the first in the window
+	switch(instruction->statement_type){
+		case THREE_ADDR_CODE_ASSN_STMT:
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+			/**
+			 * If have a value in operand1 *and* it's a memory address,
+			 * we will need to remediate it
+			 */
+			if(instruction->operands.oir.operand1 != NULL){
+				//If we have any memory addresses now is the time
+				switch(instruction->operands.oir.operand1->variable_type){
+					case VARIABLE_TYPE_MEMORY_ADDRESS:
+					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+						remediate_memory_address_variable_in_non_access_context(window, instruction);
+						*changed = TRUE;
+						break;
+
+					default:
+						break;
+				}
+			}
+			
+			break;
+
+		/**
+		 * It is possible for a lea statement to have its address operand1
+		 * be a memory address. If this is the case then we need to remediate it now
+		 */
+		case THREE_ADDR_CODE_LEA_STMT:
+
+			//TODO 
+			break;
+
+
+		/**
+		 * If we have an elaborative param offset calculation, now is the time
+		 * where we will convert it into a constant assignment
+		 */
+		case THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET:
+			convert_elaborative_param_offset_to_constant_assignment(instruction);
+
+			*changed = TRUE;
+			break;
+
+		/**
+		 * If we have a memory copy statement, we will need to convert it into the
+		 * loads/stores that we need now. This will reconstruct the window when done.
+		 */
+		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
+			convert_memory_copy_statement_into_loads_and_stores(window, instruction);
+
+			//This counts as a change
+			*changed = TRUE;
+			break;
+
+
+		//By default do nothing
+		default:
+			break;
+	}
+}
+
+
+/**
  * The pattern optimizer takes in a window and performs hyperlocal optimzations
  * on passing instructions. If we do end up deleting instructions, we'll need
  * to take care with how that affects the window that we take in
@@ -4147,170 +4224,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * pointer arithmetic or grabbing memory addresses. We know for a fact
 	 * that the "op1" is always going to be the memory address
 	 */
-	instruction_t* first = window->instruction1;
-	instruction_t* second = window->instruction2; 
-	instruction_t* third = window->instruction3; 
-
-	//Check if we have any such cases for the first in the window
-	switch(first->statement_type){
-		case THREE_ADDR_CODE_ASSN_STMT:
-		case THREE_ADDR_CODE_BIN_OP_STMT:
-		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-		case THREE_ADDR_CODE_STORE_STATEMENT:
-			/**
-			 * If have a value in operand1 *and* it's a memory address,
-			 * we will need to remediate it
-			 */
-			if(first->operands.oir.operand1 != NULL){
-				//If we have any memory addresses now is the time
-				switch(first->operands.oir.operand1->variable_type){
-					case VARIABLE_TYPE_MEMORY_ADDRESS:
-					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-						remediate_memory_address_variable_in_non_access_context(window, first);
-						break;
-
-					default:
-						break;
-				}
-			}
-			
-			break;
-
-		/**
-		 * If we have an elaborative param offset calculation, now is the time
-		 * where we will convert it into a constant assignment
-		 */
-		case THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET:
-			convert_elaborative_param_offset_to_constant_assignment(first);
-
-			changed = TRUE;
-			break;
-
-		/**
-		 * If we have a memory copy statement, we will need to convert it into the
-		 * loads/stores that we need now. This will reconstruct the window when done.
-		 */
-		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
-			convert_memory_copy_statement_into_loads_and_stores(window, first);
-
-			//This counts as a change
-			changed = TRUE;
-			break;
-
-
-		//By default do nothing
-		default:
-			break;
-	}
-
-	//Check if we have any such cases for the second in the window
-	switch(second->statement_type){
-		case THREE_ADDR_CODE_ASSN_STMT:
-		case THREE_ADDR_CODE_BIN_OP_STMT:
-		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-		case THREE_ADDR_CODE_STORE_STATEMENT:
-			/**
-			 * If have a value in operand1 *and* it's a memory address,
-			 * we will need to remediate it
-			 */
-			if(second->operands.oir.operand1 != NULL){
-				//If we have any memory addresses now is the time
-				switch(second->operands.oir.operand1->variable_type){
-					case VARIABLE_TYPE_MEMORY_ADDRESS:
-					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-						remediate_memory_address_variable_in_non_access_context(window, second);
-						break;
-
-					default:
-						break;
-				}
-			}
-			
-			break;
-
-		/**
-		 * If we have an elaborative param offset calculation, now is the time
-		 * where we will convert it into a constant assignment
-		 */
-		case THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET:
-			convert_elaborative_param_offset_to_constant_assignment(second);
-
-			changed = TRUE;
-			break;
-
-		/**
-		 * If we have a memory copy statement, we will need to convert it into the
-		 * loads/stores that we need now. This will reconstruct the window when done
-		 */
-		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
-			convert_memory_copy_statement_into_loads_and_stores(window, second);
-
-			//This counts as a change
-			changed = TRUE;
-			break;
-
-		//By default do nothing
-		default:
-			break;
-	}
-
-	//If we have a third - remember this is not a guarantee for all windows
-	if(third != NULL){
-		//Check if we have any such cases for the third in the window
-		switch(third->statement_type){
-			case THREE_ADDR_CODE_ASSN_STMT:
-			case THREE_ADDR_CODE_BIN_OP_STMT:
-			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-			case THREE_ADDR_CODE_STORE_STATEMENT:
-				/**
-				 * If have a value in operand1 *and* it's a memory address,
-				 * we will need to remediate it
-				 */
-				if(third->operands.oir.operand1 != NULL){
-					//If we have any memory addresses now is the time
-					switch(third->operands.oir.operand1->variable_type){
-						case VARIABLE_TYPE_MEMORY_ADDRESS:
-						case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-							remediate_memory_address_variable_in_non_access_context(window, third);
-							break;
-
-						default:
-							break;
-					}
-				}
-				
-				break;
-
-		/**
-		 * If we have an elaborative param offset calculation, now is the time
-		 * where we will convert it into a constant assignment
-		 */
-		case THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET:
-			convert_elaborative_param_offset_to_constant_assignment(third);
-
-			changed = TRUE;
-			break;
-
-		/**
-		 * If we have a memory copy statement, we will need to convert it into the
-		 * loads/stores that we need now. This will reconstruct the window when done
-		 */
-		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
-			convert_memory_copy_statement_into_loads_and_stores(window, third);
-				
-			//This counts as a change
-			changed = TRUE;
-			break;
-
-			//By default do nothing
-			default:
-				break;
-		}
-	}
-
-
-	//Now we'll match based off of a series of patterns. Depending on the pattern that we
-	//see, we perform one small optimization
+	perform_memory_address_remediations(window, window->instruction1, &changed);
+	perform_memory_address_remediations(window, window->instruction2, &changed);
+	perform_memory_address_remediations(window, window->instruction3, &changed);
 	
 	/**
 	 * ================== CONSTANT ASSINGNMENT FOLDING ==========================
