@@ -899,6 +899,10 @@ void cleanup_all_control_relations(dynamic_array_t* function_blocks){
 		//Grab the block out
 		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
 
+		//Reset both of these as they will need to be recomputed
+		block->immediate_dominator = NULL;
+		block->immediate_postdominator = NULL;
+
 		if(block->postdominator_set.internal_array != NULL){
 			dynamic_array_dealloc(&(block->postdominator_set));
 		}
