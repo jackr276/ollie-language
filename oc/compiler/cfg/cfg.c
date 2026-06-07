@@ -1053,49 +1053,6 @@ dynamic_array_t compute_reverse_post_order_traversal(basic_block_t* entry){
 
 
 /**
- * A recursive post order simplifies the code, so it's what we'll use here
- */
-void post_order_traversal_rec(dynamic_array_t* post_order_traversal, basic_block_t* entry){
-	//If we've visited this one before, skip
-	if(entry->visited == TRUE){
-		return;
-	}
-
-	//Otherwise mark that we've visited
-	entry->visited = TRUE;
-
-	//Run through every successor
-	for(u_int16_t _ = 0; _ < entry->successors.current_index; _++){
-		//Recursive call to every child first
-		post_order_traversal_rec(post_order_traversal, dynamic_array_get_at(&(entry->successors), _));
-	}
-	
-	//Now we'll finally visit the node
-	dynamic_array_add(post_order_traversal, entry);
-
-	//And we're done
-}
-
-
-/**
- * Get and return the regular postorder traversal for a function-level CFG
- *
- * NOTE: This assumes that the caller has already wiped the function's visited
- * status clean
- */
-dynamic_array_t compute_post_order_traversal(basic_block_t* entry){
-	//Create our dynamic array
-	dynamic_array_t post_order_traversal = dynamic_array_alloc();
-
-	//Make the recursive call
-	post_order_traversal_rec(&post_order_traversal, entry);
-
-	//Give the traversal back
-	return post_order_traversal;
-}
-
-
-/**
  * Simply prints a parse message in a nice formatted way. For the CFG, there
  * are no parser line numbers
 */
@@ -11464,9 +11421,10 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	compute_use_and_def_sets_for_function(current_function_blocks);
 
 	/**
-	 * Now compute the dominance relations
+	 * Let the graph module compute all dominance relations for the given function. It is essential
+	 * that this be done *before* we do anything with liveness/SSA
 	 */
-	calculate_all_control_relations(function_starting_block, current_function_blocks);
+	calculate_all_control_flow_relations_for_function(function_starting_block, current_function_blocks);
 
 	/**
 	 * Finally, we will calculate the liveness sets for this function
@@ -12536,34 +12494,6 @@ void reset_function_visited_status(basic_block_t* function_entry_block, u_int8_t
 			current = temp;
 		}
 	}
-}
-
-
-/**
- * Calculate all reverse traversals for a given function
- */
-void calculate_all_reverse_traversals(basic_block_t* function_entry_block, dynamic_array_t* function_blocks){
-	//Set the RPO to be null
-	if(function_entry_block->reverse_post_order.internal_array != NULL){
-		dynamic_array_dealloc(&(function_entry_block->reverse_post_order));
-	}
-
-	//Set the RPO reverse CFG to be null
-	if(function_entry_block->reverse_post_order_reverse_cfg.internal_array != NULL){
-		dynamic_array_dealloc(&(function_entry_block->reverse_post_order_reverse_cfg));
-	}
-
-	//Reset the function visited status
-	reset_visit_status_for_function(function_blocks);
-
-	//Compute the reverse post order traversal
-	function_entry_block->reverse_post_order = compute_post_order_traversal(function_entry_block);
-
-	//Reset the function visited status
-	reset_visit_status_for_function(function_blocks);
-
-	//Now use the reverse CFG(successors are predecessors, and vice versa)
-	function_entry_block->reverse_post_order_reverse_cfg = compute_reverse_post_order_traversal_reverse_cfg(function_entry_block);
 }
 
 

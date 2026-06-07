@@ -11,7 +11,6 @@
 //Link to the CFG
 #include "../cfg/cfg.h"
 
-
 /**
  * We will calculate:
  *  1.) Dominator Sets
@@ -23,7 +22,7 @@
  *
  * For every block in the given function
  */
-void calculate_all_control_flow_relations_for_function(basic_block_t* function_entry, dynamic_array_t* function_blocks);
+void calculate_all_control_flow_relations_for_function(basic_block_t* function_entry_block, dynamic_array_t* function_blocks);
 
 /**
  * Destroy all old control relations in anticipation of new ones coming in. This
