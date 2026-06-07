@@ -219,6 +219,23 @@ static inline u_int8_t is_store_operation(instruction_t* statement){
 
 
 /**
+ * Is the given raw constant a lea compatible power of 2?
+ * In order to work for lea, the constant must be one of: 1, 2, 4, 8. Anything else is incompatible
+ */
+static inline u_int8_t is_raw_constant_valid_for_lea_multiplier(int64_t constant){
+	switch(constant){
+		case 1:
+		case 2:
+		case 4:
+		case 8:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Is the given f32 negative? We need to use bit manipulation to deterine
  * this because regular float equality will not detect cases like -0.0 == 0.0
  */
@@ -6429,6 +6446,23 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 				break;
 
 			case CFG_RESULT_TYPE_VAR:
+				/**
+				 * If we can make this into a lea, then we will. If not, then we are
+				 * going to have to use 2 operations to achieve this. The outputs will
+				 * either be
+				 *
+				 * result <- lea (operand1, operand2, <type_size_multiplier>)
+				 * OR
+				 * additive <- operand2 * <type_size_multiplier>
+				 * result <- operand1 + operand2
+				 *
+				 */
+				if(is_raw_constant_valid_for_lea_multiplier(type_size_multiplier) == TRUE){
+
+				} else {
+
+				}
+
 				break;
 		}
 
