@@ -6404,6 +6404,7 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 	 */
 	if(binary_operation->binary_operator == PLUS){
 
+
 	} else {
 		/**
 		 * All of our logic depends on what kind of result type we have. If 
@@ -6429,8 +6430,25 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 				add_statement(current_block, computation);
 				break;
 
+			/**
+			 * This will become:
+			 * 	subtrahend <- operand2 * <type_size_multiplier>
+			 * 	result <- operand1 - subtrahend
+			 */
 			case CFG_RESULT_TYPE_VAR:
+				//Extract it
 				operand2 = right_operand_results.result_value.result_var;
+
+				//Emit a constant for the type size multiplier
+				constant_operand = emit_direct_integer_or_char_constant(type_size_multiplier, i64);
+
+				//First emit the multiplication expression
+				instruction_t* multiplication = emit_binary_operation_with_const_instruction(emit_temp_var(operand2->type), operand2, STAR, constant_operand);
+				add_statement(current_block, multiplication);
+
+				//Now we will use that one's result for the final computation
+				instruction_t* pointer_arithmetic = emit_binary_operation_instruction(assignee, operand1, MINUS, multiplication->operands.oir.assignee);
+				add_statement(current_block, pointer_arithmetic);
 				break;
 		}
 	}
@@ -6444,7 +6462,8 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 	 */
 	results.type = CFG_RESULT_TYPE_VAR;
 	results.result_value.result_var = assignee;
-
+	results.final_block = current_block;
+	results.operator = binary_operation->binary_operator;
 	return results;
 }
 
