@@ -138,6 +138,8 @@ struct basic_block_t{
 	int32_t block_id;
 	//The number of instructions that the given block has
 	u_int32_t number_of_instructions;
+	//Every block has a DFS number for Lengauer-Tarjan
+	u_int32_t lt_dfs_number;
 	//The estimated execution frequency. This will change
 	//if a block is in a loop, etc.
 	u_int32_t estimated_execution_frequency;

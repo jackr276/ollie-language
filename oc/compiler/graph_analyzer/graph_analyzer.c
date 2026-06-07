@@ -112,6 +112,50 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 
 
 /**
+ * NOTE: This function operates on an entire function-level CFG, with the entry block
+ * passed in. It will compute the immediate dominator for every single node in the
+ * CFG in one run
+ *
+ * The immediate dominator of a vertex v, denoted IDOM(v), is the unique strict dominator
+ * of v that is closest to v in the dominator tree
+ *
+ * For example:
+ * 			A
+ * 		  /   \
+ * 		 B	   C
+ *		  \	  /
+ *		    D
+ *		    |
+ *		    E
+ *
+ * Even though E is dominated by A, D and E, it's immediate dominator is E because
+ * it is the closes strict dominator
+ *
+ * The Ollie Compiler uses a version of the Lengauer-Tarjan algorithm to compute
+ * immediate dominators, given just one node
+ *
+ * procedure LT_IDOM:
+ * 	 
+ *
+ *
+ * Property: Every node *except* the entry node has exactly one immediate dominator
+ */
+static void compute_immediate_dominators(basic_block_t* function_entry_block, dynamic_array_t* function_blocks){
+	//The number of blocks is static
+	u_int32_t number_of_blocks = function_blocks->current_index;
+
+	//Maintain an array of DFS vertices where the 
+	basic_block_t** dfs_vertices;
+
+	/**
+	 * Maintain an immediate dominator DFS number for our DFS numbering
+	 */
+	u_int32_t idom_dfs_number = 0;
+
+}
+
+
+/**
  * The immediate postdominator is the first breadth-first 
  * successor that post dominates a node
  *
@@ -528,6 +572,7 @@ static inline void build_dominator_trees(dynamic_array_t* function_blocks){
 		 * we will add this block to the "dominator children" set of said immediate
 		 * dominator
 		 */
+		//TODO FIX - WE SHOULD JUST BE ABLE TO GRAB
 		basic_block_t* immediate_dom = immediate_dominator(current);
 
 		/**
@@ -606,6 +651,7 @@ static inline void calculate_dominance_frontiers(dynamic_array_t* function_block
 			cursor = block->predecessors.internal_array[i];
 
 			//While cursor is not the immediate dominator of block
+			//TODO FIX - WE SHOULD JUST BE ABLE TO GRAB THE IDOM
 			while(cursor != immediate_dominator(block)){
 				//Add block to cursor's dominance frontier set
 				add_block_to_dominance_frontier(cursor, block);
@@ -614,6 +660,7 @@ static inline void calculate_dominance_frontiers(dynamic_array_t* function_block
 				 * Cursor now becomes it's own immediate dominator, and
 				 * we crawl our way up the CFG
 				 */
+				//TODO FIX - WE SHOULD JUST BE ABLE TO GRAB THE IDOM
 				cursor = immediate_dominator(cursor);
 			}
 		}
@@ -832,6 +879,7 @@ static inline void calculate_reverse_dominance_frontiers(dynamic_array_t* functi
 			cursor = block->successors.internal_array[i];
 
 			//While cursor is not the immediate postdominator of block
+			//TODO FIX - WE SHOULD JUST BE ABLE TO GRAB THE IPDOM
 			while(cursor != immediate_postdominator(block)){
 				//Add block to cursor's reverse dominance frontier set
 				add_block_to_reverse_dominance_frontier(cursor, block);
@@ -840,6 +888,7 @@ static inline void calculate_reverse_dominance_frontiers(dynamic_array_t* functi
 				 * Cursor now becomes it's own immediate postdominator, and
 				 * we crawl our way down the CFG
 				 */
+				//TODO FIX - WE SHOULD JUST BE ABLE TO GRAB THE IPDOM
 				cursor = immediate_postdominator(cursor);
 			}
 		}
@@ -874,6 +923,14 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	
 	//Now calculate the dominator set for every function block
 	calculate_dominator_sets(function_entry_block, function_blocks);
+
+	//
+	//
+	//
+	//TODO IDOM GOES HERE
+	//
+	//
+	//
 
 	//We'll now use the immediate dominator to construct our dominator trees
 	build_dominator_trees(function_blocks);
