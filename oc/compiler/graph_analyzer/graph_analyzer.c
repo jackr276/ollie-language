@@ -119,8 +119,10 @@ dynamic_array_t compute_reverse_post_order_traversal(basic_block_t* entry){
 	//Invoke the recursive helper
 	reverse_post_order_traversal_rec(&stack, entry);
 
-	//Now we'll pop everything off of the stack, and put it onto the RPO 
-	//array in backwards order
+	/**
+	 * Now we'll pop everything off of the stack, and put it onto the RPO 
+	 * array in backwards order
+	 */
 	while(heap_stack_is_empty(&stack) == FALSE){
 		dynamic_array_add(&reverse_post_order_traversal, pop(&stack));
 	}
@@ -176,6 +178,7 @@ static void calculate_all_reverse_traversals(basic_block_t* function_entry_block
  * the complexity behind it
  */
 void calculate_all_control_flow_relations_for_function(basic_block_t* function_entry_block, dynamic_array_t* function_blocks){
+	//Before any calculation can be done, we need to compute every single reverse traversal
 	calculate_all_reverse_traversals(function_entry_block, function_blocks);
 	
 	//We first need to calculate the dominator sets of every single node
