@@ -8497,54 +8497,6 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 
 
 /**
- * Destroy all old control relations in anticipation of new ones coming in. This 
- * operates on a per-function level
- */
-void cleanup_all_control_relations(dynamic_array_t* function_blocks){
-	//For each block in the CFG
-	for(u_int16_t _ = 0; _ < function_blocks->current_index; _++){
-		//Grab the block out
-		basic_block_t* block = dynamic_array_get_at(function_blocks, _);
-
-		//Run through and destroy all of these old control flow constructs
-		//Deallocate the postdominator set
-		if(block->postdominator_set.internal_array != NULL){
-			dynamic_array_dealloc(&(block->postdominator_set));
-		}
-
-		//Deallocate the dominator set
-		if(block->dominator_set.internal_array != NULL){
-			dynamic_array_dealloc(&(block->dominator_set));
-		}
-
-		//Deallocate the dominator children
-		if(block->dominator_children.internal_array != NULL){
-			dynamic_array_dealloc(&(block->dominator_children));
-		}
-
-		//Deallocate the domninance frontier
-		if(block->dominance_frontier.internal_array != NULL){
-			dynamic_array_dealloc(&(block->dominance_frontier));
-		}
-
-		//Deallocate the reverse dominance frontier
-		if(block->reverse_dominance_frontier.internal_array != NULL){
-			dynamic_array_dealloc(&(block->reverse_dominance_frontier));
-		}
-
-		//Deallocate the reverse post order set
-		if(block->reverse_post_order_reverse_cfg.internal_array != NULL){
-			dynamic_array_dealloc(&(block->reverse_post_order_reverse_cfg));
-		}
-
-		//Deallocate the reverse post order set
-		if(block->reverse_post_order.internal_array != NULL){
-			dynamic_array_dealloc(&(block->reverse_post_order));
-		}
-	}
-}
-
-/**
  * Deallocate a basic block
 */
 void basic_block_dealloc(basic_block_t* block){
@@ -12612,39 +12564,6 @@ void calculate_all_reverse_traversals(basic_block_t* function_entry_block, dynam
 
 	//Now use the reverse CFG(successors are predecessors, and vice versa)
 	function_entry_block->reverse_post_order_reverse_cfg = compute_reverse_post_order_traversal_reverse_cfg(function_entry_block);
-}
-
-
-/**
- * We will calculate:
- *  1.) Dominator Sets
- *  2.) Dominator Trees
- *  3.) Dominance Frontiers
- *  4.) Postdominator sets
- *  5.) Reverse Dominance frontiers
- *  6.) Reverse post order traversals
- *
- * For every block in the given function
- */
-void calculate_all_control_relations(basic_block_t* function_entry_block, dynamic_array_t* function_blocks){
-	//Calculate all reverse traversals
-	calculate_all_reverse_traversals(function_entry_block, function_blocks);
-	
-	//We first need to calculate the dominator sets of every single node
-	calculate_dominator_sets(function_entry_block, function_blocks);
-
-	//Now we'll build the dominator tree up
-	build_dominator_trees(function_blocks);
-
-	//Now calculate the dominance frontier for every single block
-	calculate_dominance_frontiers(function_blocks);
-
-	//Calculate the postdominator sets for later analysis in the optimizer
-	calculate_postdominator_sets(function_entry_block, function_blocks);
-
-	//We'll also now calculate the reverse dominance frontier that will be used
-	//in later analysis by the optimizer
-	calculate_reverse_dominance_frontiers(function_blocks);
 }
 
 

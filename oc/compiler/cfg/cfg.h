@@ -202,17 +202,6 @@ void add_predecessor_only(basic_block_t* target, basic_block_t* predecessor);
 void dealloc_cfg(cfg_t* cfg);
 
 /**
- * Destroy all old control relations in anticipation of new ones coming in. This
- * operates on a per-function level
- */
-void cleanup_all_control_relations(dynamic_array_t* function_blocks);
-
-/**
- * Calcualte/recalculate all control relations for a given function
- */
-void calculate_all_control_relations(basic_block_t* function_entry_block, dynamic_array_t* function_blocks);
-
-/**
  * Emit a jump statement directly into a block
  */
 instruction_t* emit_jump(basic_block_t* basic_block, basic_block_t* dest_block);
