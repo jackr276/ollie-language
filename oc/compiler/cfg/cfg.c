@@ -6440,6 +6440,8 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 
 				//Emit the binary expression itself
 				instruction_t* computation = emit_binary_operation_with_const_instruction(assignee, operand1, PLUS, constant_operand);
+				//Store the computation type to make sure we use i64 operations
+				computation->type_storage.result_type = i64;
 
 				//Throw this into the current block
 				add_statement(current_block, computation);
@@ -6472,11 +6474,17 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 					constant_operand = emit_direct_integer_or_char_constant(type_size_multiplier, i64);
 
 					//First emit the multiplication expression
-					instruction_t* multiplication = emit_binary_operation_with_const_instruction(emit_temp_var(operand2->type), operand2, STAR, constant_operand);
+					instruction_t* multiplication = emit_binary_operation_with_const_instruction(emit_temp_var(i64), operand2, STAR, constant_operand);
+					//Store the computation type to make sure we use i64 operations
+					multiplication->type_storage.result_type = i64;
+
 					add_statement(current_block, multiplication);
 
 					//Now we will use that one's result for the final computation
 					instruction_t* pointer_arithmetic = emit_binary_operation_instruction(assignee, operand1, PLUS, multiplication->operands.oir.assignee);
+					//Store the computation type to make sure we use i64 operations
+					pointer_arithmetic->type_storage.result_type = i64;
+
 					add_statement(current_block, pointer_arithmetic);
 				}
 
@@ -6503,6 +6511,8 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 
 				//Emit the binary expression itself
 				instruction_t* computation = emit_binary_operation_with_const_instruction(assignee, operand1, MINUS, constant_operand);
+				//Store the computation type to ensure we always use long math
+				computation->type_storage.result_type = i64;
 
 				//Throw this into the current block
 				add_statement(current_block, computation);
@@ -6521,11 +6531,17 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 				constant_operand = emit_direct_integer_or_char_constant(type_size_multiplier, i64);
 
 				//First emit the multiplication expression
-				instruction_t* multiplication = emit_binary_operation_with_const_instruction(emit_temp_var(operand2->type), operand2, STAR, constant_operand);
+				instruction_t* multiplication = emit_binary_operation_with_const_instruction(emit_temp_var(i64), operand2, STAR, constant_operand);
+				//Store the computation type to ensure we always use long math
+				multiplication->type_storage.result_type = i64;
+
 				add_statement(current_block, multiplication);
 
 				//Now we will use that one's result for the final computation
 				instruction_t* pointer_arithmetic = emit_binary_operation_instruction(assignee, operand1, MINUS, multiplication->operands.oir.assignee);
+				//Store the computation type to ensure we always use long math
+				pointer_arithmetic->type_storage.result_type = i64;
+
 				add_statement(current_block, pointer_arithmetic);
 				break;
 		}
