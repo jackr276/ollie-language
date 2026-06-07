@@ -123,25 +123,58 @@ struct basic_block_t{
 	dynamic_array_t live_in;
 	//The "LIVE_OUT" variables for this node
 	dynamic_array_t live_out;
+	/**
+	 * Dominator information that each and every block will own. This 
+	 * information is needed whenever we compute the immediate dominator
+	 * and/or postdominator
+	 */
+	struct {
+		//Unique DFS number for the block
+		int32_t dfs_number;
+		//The semidominator number
+		int32_t semidominator_number;
+		//Dominator parent of the block
+		basic_block_t* dominator_parent;
+		//Block's immediate dominator
+		basic_block_t* idom;
+
+
+		//TODO DOCUMENT ME
+		basic_block_t* ancestor;
+		//TODO DOCUMENT ME
+		basic_block_t* label;
+
+		//TODO DOCUMENT ME
+		dynamic_array_t bucket;
+	} dominator_info;
+
+	//TODO MOVE INTO DOM INFO
+	//
+	//
 	//The immediate dominator - this reference isn't always used, but if we go through the work
 	//of calculating it, we may as well store it
 	basic_block_t* immediate_dominator;
 	//The immediate postdominator reference
 	basic_block_t* immediate_postdominator;
+	//
+	//
+	//
+	//TODO MODE INTO DOM INFO
+	
 	//The reference to a jump table. This is often not used at all
+	//TODO CAN WE UNION THESE TWO???
 	jump_table_t* jump_table;
-	//The function that we're defined in
-	symtab_function_record_t* function_defined_in;
 	//The case statement value -- usually blank
 	int64_t case_stmt_val;
+	//TODO CAN WE UNION THESE TWO???
+
+	//The function that we're defined in
+	symtab_function_record_t* function_defined_in;
 	//An integer ID
 	int32_t block_id;
 	//The number of instructions that the given block has
 	u_int32_t number_of_instructions;
-	//Every block needs a unqiue block number for Lengauer-Tarjan
-	int32_t lt_block_number;
-	//The estimated execution frequency. This will change
-	//if a block is in a loop, etc.
+	//The estimated execution frequency. This will change if a block is in a loop, etc.
 	u_int32_t estimated_execution_frequency;
 	//What is the general classification of this block
 	block_type_t block_type;
