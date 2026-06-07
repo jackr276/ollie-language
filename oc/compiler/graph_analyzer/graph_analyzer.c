@@ -117,6 +117,21 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 
 
 /**
+ * Initialize a block for idom computation. Remember that we may compute the immediate
+ * dominators many times as the graph changes, so we *need* to ensure that we wipe
+ * the slate clean every time
+ */
+static inline void initialize_block_for_idom_computation(basic_block_t* block){
+	block->dominator_info.ancestor = NULL;
+	block->dominator_info.idom = NULL;
+	block->dominator_info.label = NULL;
+	block->dominator_info.semidominator_number = LT_UNVISITED;
+	block->dominator_info.dominator_parent = NULL;
+	block->dominator_info.dfs_number = LT_UNVISITED;
+}
+
+
+/**
  * Perform the immediate dominator DFS traversal for a given
  * block. This traversal will assign the block it's given DFS
  * number, and will perform bookkeeping for the semidominator,
@@ -129,15 +144,24 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
  * The main important mapping that we care about here is DFS number to basic block
  * because the semidominator set stores DFS numbers
  *
- * This function is recursive
+ * This function is recursive. The caller should only invoke this on the parent of the
+ * entire graph(i.e. the function entry) and let it do the rest
  *
  * Procedure IDOM_DFS(block b):
+ * 	b->dfs_number = current dfs number
+ * 	number_to_vertex[current dfs number] = block
+ * 	b->semidominator = current dfs number
+ * 	b->label = b
+ * 	b->ancestor = NULL
  *
- * TODO
- * 	 
- * 	
+ * 	current_dfs_number++
+ *
+ * 	foreach successor s of b:
+ * 		if b->dfs_number == -1:
+ * 			s->parent = b
+ * 			IDOM_DFS(s)
  */
-static void dfs_number_block(basic_block_t* block, basic_block_t** dfs_number_to_vertex_mapping, u_int32_t* current_dfs_number){
+static void dfs_number_block(basic_block_t* block, basic_block_t** dfs_number_to_vertex_mapping, int32_t* current_dfs_number){
 	//Assign this to be the current DFS number
 	block->dominator_info.dfs_number = *current_dfs_number;
 
@@ -180,6 +204,14 @@ static void dfs_number_block(basic_block_t* block, basic_block_t** dfs_number_to
 
 
 /**
+ * Simple helper to link the ancestor to it's descendant
+ */
+static inline void link_ancestor(basic_block_t* ancestor, basic_block_t* descendant){
+	descendant->dominator_info.ancestor = ancestor;
+}
+
+
+/**
  * NOTE: This function operates on an entire function-level CFG, with the entry block
  * passed in. It will compute the immediate dominator for every single node in the
  * CFG in one run
@@ -210,7 +242,13 @@ static void dfs_number_block(basic_block_t* block, basic_block_t** dfs_number_to
  *  4. Perform one final pass to repair non-trivial cases
  *
  *
- * procedure LT_IDOM:
+ * procedure LT_IDOM(entry, block_set):
+ * 	foreach block:
+ * 		initalize block->dfs_number to -1(unvisited)
+ *
+ * 	dfs_number_block(entry)
+ * 
+ *
  * 	 
  *
  *
@@ -221,13 +259,12 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 	u_int32_t number_of_blocks = function_blocks->current_index;
 
 	/**
-	 * Step 0: Initialize every block's special
-	 * "dfs number" to be -1. This flags that it
-	 * has not been visited
+	 * Step 0: wipe every block's existing dominator info completely
+	 * clean
 	 */
 	for(u_int32_t i = 0; i < number_of_blocks; i++){
 		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
-		block->dominator_info.dfs_number = LT_UNVISITED;
+		initialize_block_for_idom_computation(block);
 	}
 
 	/**
@@ -245,6 +282,9 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 
 
 
+
+	//We're done with this now so release it
+	free(dfs_number_to_vertex_mapping);
 }
 
 
@@ -1022,8 +1062,12 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	//
 	//TODO IDOM GOES HERE
 	//
+	//JUST FOR TESTING CURRENTLY HAS NO EFFECT
 	//
 	//
+	//
+	compute_immediate_dominators(function_entry_block, function_blocks);
+	
 
 	//We'll now use the immediate dominator to construct our dominator trees
 	build_dominator_trees(function_blocks);
