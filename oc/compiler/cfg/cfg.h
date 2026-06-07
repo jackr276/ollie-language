@@ -131,7 +131,7 @@ struct basic_block_t{
 	struct {
 		//Unique DFS number for the block
 		int32_t dfs_number;
-		//The semidominator number
+		//The semidominator number(THIS IS A DFS NUMBER)
 		int32_t semidominator_number;
 		//Dominator parent of the block
 		basic_block_t* dominator_parent;

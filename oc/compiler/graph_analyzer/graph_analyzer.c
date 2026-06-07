@@ -132,10 +132,30 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
  * This function is recursive
  *
  * Procedure IDOM_DFS(block b):
+ *
+ * TODO
  * 	 
  * 	
  */
-static void idom_dfs(basic_block_t* block, basic_block_t** dfs_number_to_vertex_mapping, u_int32_t current_dfs_number){
+static void dfs_number_block(basic_block_t* block, basic_block_t** dfs_number_to_vertex_mapping, u_int32_t* current_dfs_number){
+	//Assign this to be the current DFS number
+	block->dominator_info.dfs_number = *current_dfs_number;
+
+	//We'll also have a reverse mapping from number to block
+	dfs_number_to_vertex_mapping[*current_dfs_number] = block;
+
+	//Initialize the semidominator number to be this
+	block->dominator_info.semidominator_number = *current_dfs_number;
+
+	//The label here is our block(for now)
+	block->dominator_info.label = block;
+
+	//As of right now we don't have an ancestor so just make it NULL
+	block->dominator_info.ancestor = NULL;
+
+
+	//Bump the current number up
+	(*current_dfs_number)++;
 
 	/**
 	 * Now for every successor of this block, we need to perform
@@ -145,14 +165,15 @@ static void idom_dfs(basic_block_t* block, basic_block_t** dfs_number_to_vertex_
 		basic_block_t* successor = dynamic_array_get_at(&(block->successors), i);
 
 		/**
-		 * If the vertex to DFS number mapping shows that this value does
-		 * not have a DFS number yet, we'll need to go out and visit it
+		 * If our successor does not yet have a DFS number, then we'll need to 
+		 * give it one now
 		 */
-		if(values->vertex_to_dfs_number_mapping[successor->lt_block_number] == LT_UNVISITED){
-			//The parent of this successor is our current block
-			values->DFS_parents[successor->lt_block_number] = block;
-			//Recursively run the algorithm to number this
-			idom_dfs(block, values);
+		if(successor->dominator_info.dfs_number == LT_UNVISITED){
+			//This successor's parent is the current block
+			successor->dominator_info.dominator_parent = block;
+
+			//Recursively call out to have this block populated
+			dfs_number_block(successor, dfs_number_to_vertex_mapping, current_dfs_number);
 		}
 	}
 }
@@ -200,47 +221,25 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 	u_int32_t number_of_blocks = function_blocks->current_index;
 
 	/**
-	 * Run through and assign every block a unique Lengauer-Tarjan
-	 * block identifier. These IDs are only important for the duration
-	 * of this run
+	 * Step 0: Initialize every block's special
+	 * "dfs number" to be -1. This flags that it
+	 * has not been visited
 	 */
 	for(u_int32_t i = 0; i < number_of_blocks; i++){
 		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
-		block->lt_block_number = i;
+		block->dominator_info.dfs_number = LT_UNVISITED;
 	}
 
 	/**
-	 * Step 0: we need to populate our IDOM values so that we
-	 * can pass them around between functions easily
+	 * Step 1: Run the DFS numbering algorithm to populate
+	 * the DFS numbers for every block. This also
+	 * initializes the "label", semidominator, and ancestor. This
+	 * helper recursively does the whole thing so all that we
+	 * need to do is call it and pass in the entry
 	 */
-	immediate_dominator_values_t values;
-	//Extract the block count
-	values.number_of_blocks = number_of_blocks;
-	//The current DFS number always starts at 0
-	values.current_dfs_number = 0;
-
-	/**
-	 * Go through and perform all of our allocations
-	 */
-	values.DFS_parents = calloc(number_of_blocks, sizeof(basic_block_t*));
-	values.vertex_to_dfs_number_mapping = calloc(number_of_blocks, sizeof(int32_t));
-	values.dfs_number_to_vertex_mapping = calloc(number_of_blocks, sizeof(basic_block_t*));
-	values.semidominators = calloc(number_of_blocks, sizeof(int32_t));
-	values.ancestors = calloc(number_of_blocks, sizeof(basic_block_t*));
-	values.immediater_dominators = calloc(number_of_blocks, sizeof(basic_block_t*));
-
-	/**
-	 * We need to initialize all of DFS numbers to be 0 in this case. We do this because
-	 *
-	 */
-
-
-	/**
-	 * Maintain an array of DFS vertices where the index(vertex ID) maps to the actual
-	 * vertex that we have
-	 *
-	 * TODO INITIALIZE DFS NUMBERS, PARENTS to -1 TO SHOW INVALID
-	 */
+	int32_t current_dfs_number = 0;
+	basic_block_t** dfs_number_to_vertex_mapping = calloc(number_of_blocks, sizeof(basic_block_t*));
+	dfs_number_block(function_entry_block, dfs_number_to_vertex_mapping, &current_dfs_number);
 
 
 
