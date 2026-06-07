@@ -125,7 +125,7 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 static inline void initialize_block_for_idom_computation(basic_block_t* block){
 	block->dominator_info.ancestor = NULL;
 	block->dominator_info.idom = NULL;
-	block->dominator_info.label = NULL;
+	block->dominator_info.best_semi = NULL;
 	block->dominator_info.semidominator_number = LT_UNNUMBERED;
 	block->dominator_info.dominator_parent = NULL;
 	block->dominator_info.dfs_number = LT_UNNUMBERED;
@@ -173,7 +173,7 @@ static void dfs_number_block(basic_block_t* block, basic_block_t** dfs_number_to
 	block->dominator_info.semidominator_number = *current_dfs_number;
 
 	//The label here is our block(for now)
-	block->dominator_info.label = block;
+	block->dominator_info.best_semi = block;
 
 	//As of right now we don't have an ancestor so just make it NULL
 	block->dominator_info.ancestor = NULL;
@@ -205,13 +205,21 @@ static void dfs_number_block(basic_block_t* block, basic_block_t** dfs_number_to
 
 
 /**
+ * Idea of the path_compression:
+ * """
+ * 	walk from the block towards the root of the tree recursively
+ *
+ * 	while walking:
+ * 		remember the node on our path with the smallest semidominator
+ *
+ * 	rewire the ancestor pointers so that our next walk is shorter
+ * """
+ *
  *
  * NOTE: This is a recursive function
- *
- *
- * TODO UNDERSTAND AND FULLY DOCUMENT
  */
 static void path_compression(basic_block_t* block){
+	//Extract the current ancestor for our block
 	basic_block_t* ancestor = block->dominator_info.ancestor;
 
 	/**
@@ -230,20 +238,37 @@ static void path_compression(basic_block_t* block){
 	}
 
 	/**
-	 * Recursively call
+	 * Recursively compress the ancestor. We can think
+	 * of this as collapsing everything higher than us
+	 * recursively until we get down to this block
 	 */
-
-	int32_t ancestor_label_semidominator = ancestor->dominator_info.label->dominator_info.semidominator_number;
-	int32_t block_semidominator = block->dominator_info.label->dominator_info.semidominator_number;
+	path_compression(ancestor);
 
 	/**
+	 * Extract two values:
+	 * 	The ancestor holds onto what we consider to be the "best" semidominator on our path as of right now
+	 * 	The block contains what it believes the "best" semidominator is
+	 *
+	 * 	If the ancestor has a "better"(smaller DFS number) semidominator, then we will replace
+	 * 	what the block thinks is the the best candidate with what we know the best semidominator
+	 * 	candidate to be 
+	 *
+	 * This is how we "remember" what the best semidominator candidate is along our path for use down 
+	 * the road
 	 */
-	if(ancestor_label_semidominator < block_semidominator){
-		block->dominator_info.label = ancestor->dominator_info.label;
+	int32_t ancestor_semidominator = ancestor->dominator_info.best_semi->dominator_info.semidominator_number;
+	int32_t block_semidominator = block->dominator_info.best_semi->dominator_info.semidominator_number;
+
+	if(ancestor_semidominator < block_semidominator){
+		block->dominator_info.best_semi = ancestor->dominator_info.best_semi;
 	}
 
+	/**
+	 * Path compression: Update the block's current ancestor with
+	 * what comes before this ancestor. This makes all future
+	 * walks between the block and it's ancestor much shorter
+	 */
 	block->dominator_info.ancestor = ancestor->dominator_info.ancestor;
-
 }
 
 

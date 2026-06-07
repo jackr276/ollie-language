@@ -145,7 +145,7 @@ struct basic_block_t{
 		 * the candidate along the ancestor path who has
 		 * the smallest DFS number
 		 */
-		basic_block_t* best_semidominator_candidate;
+		basic_block_t* best_semi;
 
 		//TODO DOCUMENT ME
 		dynamic_array_t bucket;
