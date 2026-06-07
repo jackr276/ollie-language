@@ -478,6 +478,85 @@ static inline void build_dominator_trees(dynamic_array_t* function_blocks){
 
 
 /**
+ * Add a block to the dominance frontier of the first block
+ */
+static inline void add_block_to_dominance_frontier(basic_block_t* block, basic_block_t* df_block){
+	//If the dominance frontier hasn't been allocated yet, we'll do that here
+	if(block->dominance_frontier.internal_array == NULL){
+		block->dominance_frontier = dynamic_array_alloc();
+	}
+
+	//Let's just check - is this already in there. If it is, we will not add it
+	for(u_int32_t i = 0; i < block->dominance_frontier.current_index; i++){
+		//This is not a problem at all, we just won't add it
+		if(block->dominance_frontier.internal_array[i] == df_block){
+			return;
+		}
+	}
+
+	//Add this into the dominance frontier
+	dynamic_array_add(&(block->dominance_frontier), df_block);
+}
+
+
+/**
+ * Calculate the dominance frontiers of every block in the CFG
+ *
+ * The dominance frontier is every block, in relation to the current block, that:
+ * 	Is a successor of a block that IS dominated by the current block
+ * 		BUT
+ * 	It itself is not dominated by the current block
+ *
+ * To think of it, it's essentially every block that is "just barely not dominated" by the current block
+ *
+ * Standard dominance frontier algorithm:
+ * 	for all nodes b in the CFG
+ * 		if b has less than 2 predecessors
+ * 			continue
+ * 		else
+ * 			for all predecessors p of b
+ * 				cursor = p
+ * 				while cursor is not IDOM(b)
+ * 					add b to cursor DF set
+ * 					cursor = IDOM(cursor)
+ * 	
+ */
+static inline void calculate_dominance_frontiers(dynamic_array_t* function_blocks){
+	//Run through every block
+	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+		//Grab this from the array
+		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
+
+		//If we have less than 2 successors,the rest of the search here is useless
+		if(block->predecessors.internal_array == NULL || block->predecessors.current_index < 2){
+			continue;
+		}
+
+		//A cursor for traversing our predecessors
+		basic_block_t* cursor;
+
+		//Now we run through every predecessor of the block
+		for(u_int32_t i = 0; i < block->predecessors.current_index; i++){
+			//Grab it out
+			cursor = block->predecessors.internal_array[i];
+
+			//While cursor is not the immediate dominator of block
+			while(cursor != immediate_dominator(block)){
+				//Add block to cursor's dominance frontier set
+				add_block_to_dominance_frontier(cursor, block);
+				
+				/**
+				 * Cursor now becomes it's own immediate dominator, and
+				 * we crawl our way up the CFG
+				 */
+				cursor = immediate_dominator(cursor);
+			}
+		}
+	}
+}
+
+
+/**
  * We will calculate:
  *  1.) Reverse post order traversals
  *  2.) Dominator Sets
@@ -499,8 +578,7 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	//We'll now use the immediate dominator to construct our dominator trees
 	build_dominator_trees(function_blocks);
 
-	//Now calculate the dominance frontier for every single block
-	//TODO DOC
+	//Once we have the dominator tree, we can compute the dominance frontier
 	calculate_dominance_frontiers(function_blocks);
 
 	//Calculate the postdominator sets for later analysis in the optimizer

@@ -2261,6 +2261,8 @@ static inline void clean(cfg_t* cfg, dynamic_array_t* current_function_blocks, b
 static inline void recompute_all_dominance_relations(dynamic_array_t* function_blocks, basic_block_t* function_entry_block){
 	//First, we'll go through and completely blow away anything related to
 	//a dominator in the entirety of the function 
+	//
+	//TOOD UPDATE
 	for(u_int32_t _ = 0; _ < function_blocks->current_index; _++){
 		//Grab the given block out
 		basic_block_t* block = dynamic_array_get_at(function_blocks, _);
