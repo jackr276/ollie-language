@@ -719,172 +719,9 @@ static inline void calculate_all_reverse_traversals(basic_block_t* function_entr
 
 
 /**
- * Calculate the dominator sets for each and every node
- *
- * For each node in the nodeset:
- * 	dom(N) <- All nodes
- *	
- * Worklist = {StartNode}
- * while worklist is not empty
- * 	Remove any node Y from Worklist
- * 	New = {Y} U {X | X elem Pred(Y)}
- *
- * 	if new != dom 
- * 		Dom(Y) = New
- * 		For each successor X of Y
- * 			add X to the worklist
- *
- * This algorithm repeats indefinitely UNTIL a stable solution
- * is found(this is when new == DOM for every node, hence there's nowhere
- * left to go)
- *
- * NOTE: We repeat this for each and every function in the CFG. If blocks aren't in
- * the same function, then their dominance is completely unrelated
- *
- * This is the union-find algorithm. As of our migration to Lengauer-Tarjan for the 
- * immediate dominator this is not strictly necessary, but it is still going to be
- * exposed via an API in case it is needed in the future
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- * TODO DO IT NOW
- *
- * IMPORTANT NOTE: This is NOT the most efficient implementation. If this is needed in the
- * future, it should be rewritten to use the immediate dominator to build up the dominator
- * sets
- *
- * TODO DO IT NOW
- */
-void calculate_dominator_sets(basic_block_t* function_entry_block, dynamic_array_t* function_blocks){
-	/**
-	 * Every node in the CFG has a dominator set that is set
-	 * to be identical to the list of all nodes
-	 */
-	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
-		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
-
-		/**
-		 * We will initialize the block's dominator set to be the entire set of nodes
-		 * in the given function
-		 */
-		block->dominator_set = clone_dynamic_array(function_blocks);
-	}
-
-	//Initialize a "worklist" dynamic array for this particular function
-	dynamic_array_t worklist = dynamic_array_alloc();
-
-	//Add this into the worklist as a seed
-	dynamic_array_add(&worklist, function_entry_block);
-	
-	//The new dominance frontier that we have each time
-	dynamic_array_t new;
-
-	//So long as the worklist is not empty
-	while(dynamic_array_is_empty(&worklist) == FALSE){
-		//Remove a node Y from the worklist(remove from back - most efficient{O(1)})
-		basic_block_t* Y = dynamic_array_delete_from_back(&worklist);
-		
-		//Create the new dynamic array that will be used for the next dominator set
-		new = dynamic_array_alloc();
-
-		//We will add Y into it's own dominator set
-		dynamic_array_add(&new, Y);
-
-		//If Y has predecessors, we will find the intersection of their dominator sets
-		if(Y->predecessors.internal_array != NULL){
-			//Grab the very first predecessor's dominator set
-			dynamic_array_t pred_dom_set = ((basic_block_t*)(Y->predecessors.internal_array[0]))->dominator_set;
-
-			//Are we in the intersection of the dominator sets?
-			u_int8_t in_intersection;
-
-			//We will now search every item in this dominator set
-			for(u_int32_t i = 0; i < pred_dom_set.current_index; i++){
-				//Grab the dominator out
-				basic_block_t* dominator = dynamic_array_get_at(&pred_dom_set, i);
-
-				/**
-				 * By default we assume that this given dominator is in the set. If it
-				 * isn't we'll set it appropriately
-				 */
-				in_intersection = TRUE;
-
-				/**
-				 * An item is in the intersection if and only if it is contained 
-				 * in all of the dominator sets of the predecessors of Y
-				 *
-				 * We'll start at 1 here - we've already accounted for 0
-				*/
-				for(u_int32_t j = 1; j < Y->predecessors.current_index; j++){
-					//Grab our other predecessor
-					basic_block_t* other_predecessor = Y->predecessors.internal_array[j];
-
-					/**
-					 * Now we will go over this predecessor's dominator set, and see if "dominator"
-					 * is also contained within it
-					 */
-
-					//Let's check for it in here. If we can't find it, we set the flag to false and bail out
-					if(dynamic_array_contains(&(other_predecessor->dominator_set), dominator) == NOT_FOUND){
-						in_intersection = FALSE;
-						break;
-					}
-				
-					/**
-					 * Otherwise we did find it, so we'll look at the next predecessor, and see if it is also
-					 * in there. If we get to the end and "in_intersection" is true, then we know that we've
-					 * found this one dominator in every single set
-					 */
-				}
-
-				if(in_intersection == TRUE){
-					//Add the dominator in
-					dynamic_array_add(&new, dominator);
-				}
-			}
-		}
-
-		//Now we'll check - are these two dominator sets the same? If not, we'll need to update them
-		if(dynamic_arrays_equal(&new, &(Y->dominator_set)) == FALSE){
-			//Destroy the old one
-			dynamic_array_dealloc(&(Y->dominator_set));
-
-			//And replace it with the new
-			Y->dominator_set = new;
-
-			//Now for every successor of Y, add it into the worklist
-			for(u_int32_t i = 0; i < Y->successors.current_index; i++){
-				dynamic_array_add(&worklist, Y->successors.internal_array[i]);
-			}
-
-		//Otherwise they are the same, so destroy the one that we just made
-		} else {
-			dynamic_array_dealloc(&new);
-		}
-	}
-
-	//Destroy the worklist now that we're done with it
-	dynamic_array_dealloc(&worklist);
-}
-
-/**
  * Add a dominated block to the dominator block that we have
  */
-static inline void add_dominated_block(basic_block_t* dominator, basic_block_t* dominated){
+static inline void add_dominator_child(basic_block_t* dominator, basic_block_t* dominated){
 	//If this is NULL, then we'll allocate it right now
 	if(dominator->dominator_children.internal_array == NULL){
 		dominator->dominator_children = dynamic_array_alloc();
@@ -928,7 +765,7 @@ static inline void build_dominator_trees(dynamic_array_t* function_blocks){
 		 * the case of function entry blocks
 		 */
 		if(immediate_dominator != NULL){
-			add_dominated_block(immediate_dominator, current);
+			add_dominator_child(immediate_dominator, current);
 		}
 	}
 }
@@ -1320,10 +1157,6 @@ void cleanup_all_control_relations(dynamic_array_t* function_blocks){
 
 		if(block->postdominator_set.internal_array != NULL){
 			dynamic_array_dealloc(&(block->postdominator_set));
-		}
-
-		if(block->dominator_set.internal_array != NULL){
-			dynamic_array_dealloc(&(block->dominator_set));
 		}
 
 		if(block->dominator_children.internal_array != NULL){

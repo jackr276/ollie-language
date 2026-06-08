@@ -111,8 +111,6 @@ struct basic_block_t{
 	dynamic_array_t reverse_post_order;
 	//The reverse post order set on the reverse cfg
 	dynamic_array_t reverse_post_order_reverse_cfg;
-	//The dynamic array for the dominator set
-	dynamic_array_t dominator_set;
 	//The dynamic array for the postdominator set. The postdominator
 	//set is the equivalent of the dominator set on the reverse CFG
 	dynamic_array_t postdominator_set;

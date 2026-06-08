@@ -7718,11 +7718,6 @@ void basic_block_dealloc(basic_block_t* block){
 		dynamic_array_dealloc(&(block->postdominator_set));
 	}
 
-	//Deallocate the dominator set
-	if(block->dominator_set.internal_array != NULL){
-		dynamic_array_dealloc(&(block->dominator_set));
-	}
-
 	//Deallocate the dominator children
 	if(block->dominator_children.internal_array != NULL){
 		dynamic_array_dealloc(&(block->dominator_children));

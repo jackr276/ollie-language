@@ -18,17 +18,6 @@
  */
 void get_post_order_traversal(basic_block_t* function_entry_block, dynamic_array_t* post_order_traversal);
 
-
-/**
- * Calculate the dominator sets for each and every node
- *
- * This is the union-find algorithm. As of our migration to Lengauer-Tarjan for the 
- * immediate dominator this is not strictly necessary, but it is still going to be
- * exposed via an API in case it is needed in the future
- */
-void calculate_dominator_sets(basic_block_t* function_entry_block, dynamic_array_t* function_blocks);
-
-
 /**
  * We will calculate:
  *  1.) Dominator Sets
