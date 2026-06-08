@@ -214,6 +214,28 @@ static void dfs_number_block(basic_block_t* block, basic_block_t** dfs_number_to
  *
  * 	rewire the ancestor pointers so that our next walk is shorter
  * """
+ *  
+ * It helps to imagine this as us taking a block, recursively compressing
+ * everything above it, and then doing two things: updating the block's "label"
+ * which cache's the best semidominator candidate along the path from the block
+ * to the root *and* compressing this block's path to the root by replacing it's
+ * ancestor pointer with the ancestor of its ancestor
+ *
+ *
+ * Algorithm path_compression(block)
+ * 	if block has no ancestor:
+ * 		return
+ *
+ * 	if block's ancestor has no ancestor:
+ * 		return
+ *
+ * 	path_compression(ancestor)
+ *
+ * 	if(ancestor's cahced semidom number < block's cached semidom number){
+ * 		replace block's cached semidom with the ancestors
+ * 	}
+ *
+ * 	set block's ancestor to be its ancestor's ancestor(path compression)
  *
  *
  * NOTE: This is a recursive function
