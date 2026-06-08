@@ -972,7 +972,7 @@ static inline void build_dominator_trees(dynamic_array_t* function_blocks){
 		 * dominator
 		 */
 		//TODO FIX - WE SHOULD JUST BE ABLE TO GRAB
-		basic_block_t* immediate_dom = immediate_dominator(current);
+		basic_block_t* immediate_dom = current->dominator_info.idom;
 
 		/**
 		 * Now we'll go to the immediate dominator's list and add the dominated block in. Of course,
@@ -1051,7 +1051,7 @@ static inline void calculate_dominance_frontiers(dynamic_array_t* function_block
 
 			//While cursor is not the immediate dominator of block
 			//TODO FIX - WE SHOULD JUST BE ABLE TO GRAB THE IDOM
-			while(cursor != immediate_dominator(block)){
+			while(cursor != block->dominator_info.idom){
 				//Add block to cursor's dominance frontier set
 				add_block_to_dominance_frontier(cursor, block);
 				
@@ -1060,7 +1060,7 @@ static inline void calculate_dominance_frontiers(dynamic_array_t* function_block
 				 * we crawl our way up the CFG
 				 */
 				//TODO FIX - WE SHOULD JUST BE ABLE TO GRAB THE IDOM
-				cursor = immediate_dominator(cursor);
+				cursor = cursor->dominator_info.idom;
 			}
 		}
 	}
