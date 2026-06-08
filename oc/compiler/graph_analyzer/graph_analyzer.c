@@ -308,7 +308,7 @@ static inline void link_ancestor(basic_block_t* ancestor, basic_block_t* descend
  *  1. Perform a DFS to assign a DFS number to each block
  *  2. Perform a reverse DFS to compute the semidominator sets
  *  3. Perform a reverse DFS to compute the tentative immediate dominator
- *  4. Perform one final pass to repair non-trivial cases
+ *  4. Perform one final pass to repair non-trivial cases(where IDOM != semidominator)
  *
  * The DFS numbers are very important because we need to perform a reverse DFS traversal over and over
  * again. We also map semidominators to DFS numbers for lookup speed
@@ -335,9 +335,23 @@ static inline void link_ancestor(basic_block_t* ancestor, basic_block_t* descend
  * 			if candidate's semi # < w's semi #:
  * 				replace w's semi # with the candidate's
  *
+ * 		add block into it's semidominator's bucket
  *
- * 	 
+ * 		get the parent of block
  *
+ *		link_ancestor(parent, block)
+ *
+ *		foreach block b in the parent's bucket:
+ *			candidate = evaluate(b)
+ *
+ *			if candidate.semi # < b.semi #:
+ *				set b's IDOM to be candidate
+ *			else:
+ *				set b's IDOM to be parent
+ *
+ *	foreach block b:
+ *		if b's IDOM == b's semidominator:
+ *			set b's IDOM to be IDOM(IDOM(b))
  *
  * Property: Every node *except* the entry node has exactly one immediate dominator
  */
@@ -396,7 +410,7 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 			}
 
 			/**
-			 * If the predecessor's DFS number is higher up than the working block's,
+			 * If the predecessor's DFS number is higher up(smaller number) than the working block's,
 			 * then the predecessor is going to be our candidate for this. Otherwise, we'll
 			 * run evaluate on the predecessor which will walk the graph, compress the path,
 			 * and return what it thinks the best semidominator is
