@@ -330,6 +330,10 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 	 * initializes the "label", semidominator, and ancestor. This
 	 * helper recursively does the whole thing so all that we
 	 * need to do is call it and pass in the entry
+	 *
+	 * NOTE: While we could use C's VLA allocation to make this a stack array, we don't
+	 * know how big a function can get and we don't want to risk it. Using calloc()
+	 * here is much safer with more blocks and it's not much more expensive
 	 */
 	int32_t current_dfs_number = 0;
 	basic_block_t** dfs_number_to_vertex_mapping = calloc(number_of_blocks, sizeof(basic_block_t*));
@@ -963,7 +967,6 @@ static inline void calculate_dominance_frontiers(dynamic_array_t* function_block
 			cursor = block->predecessors.internal_array[i];
 
 			//While cursor is not the immediate dominator of block
-			//TODO FIX - WE SHOULD JUST BE ABLE TO GRAB THE IDOM
 			while(cursor != block->dominator_info.idom){
 				//Add block to cursor's dominance frontier set
 				add_block_to_dominance_frontier(cursor, block);
@@ -972,7 +975,6 @@ static inline void calculate_dominance_frontiers(dynamic_array_t* function_block
 				 * Cursor now becomes it's own immediate dominator, and
 				 * we crawl our way up the CFG
 				 */
-				//TODO FIX - WE SHOULD JUST BE ABLE TO GRAB THE IDOM
 				cursor = cursor->dominator_info.idom;
 			}
 		}
@@ -1267,8 +1269,10 @@ void cleanup_all_control_relations(dynamic_array_t* function_blocks){
 		//Grab the block out
 		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
 
+		//Wipe the immediate dominator slate clean
+		initialize_block_for_idom_computation(block);
+
 		//Reset both of these as they will need to be recomputed
-		block->immediate_dominator = NULL;
 		block->immediate_postdominator = NULL;
 
 		if(block->postdominator_set.internal_array != NULL){

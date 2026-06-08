@@ -154,9 +154,6 @@ struct basic_block_t{
 	//TODO MOVE INTO DOM INFO
 	//
 	//
-	//The immediate dominator - this reference isn't always used, but if we go through the work
-	//of calculating it, we may as well store it
-	basic_block_t* immediate_dominator;
 	//The immediate postdominator reference
 	basic_block_t* immediate_postdominator;
 	//
