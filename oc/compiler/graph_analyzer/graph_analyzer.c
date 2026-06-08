@@ -295,6 +295,33 @@ static void path_compression(basic_block_t* block){
 
 
 /**
+ * Evaluate does the following: given a block b, return the node on b's
+ * current ancestor path that has the smallest semidominator
+ *
+ * Our path compression helper stores the "best_semi" pointer for exactly
+ * this reason
+ */
+static inline basic_block_t* evaluate(basic_block_t* block){
+	/**
+	 * If we have no ancestor then path compression is useless
+	 * anyways, we'll just return our current best guess
+	 */
+	if(block->dominator_info.ancestor == NULL){
+		return block->dominator_info.best_semi;
+	}
+
+	/**
+	 * Run the path compressor to walk the graph towards the root
+	 * and update our best semidominator
+	 */
+	path_compression(block);
+
+	//Give back our best guess after we compress
+	return block->dominator_info.best_semi;
+}
+
+
+/**
  * Simple helper to link the ancestor to it's descendant
  */
 static inline void link_ancestor(basic_block_t* ancestor, basic_block_t* descendant){
