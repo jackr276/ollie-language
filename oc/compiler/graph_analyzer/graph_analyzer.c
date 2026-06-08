@@ -306,12 +306,13 @@ static inline void link_ancestor(basic_block_t* ancestor, basic_block_t* descend
  * General idea:
  *  
  *  1. Perform a DFS to assign a DFS number to each block
- *  2. Perform a reverse DFS to compute the semidominator sets
- *  3. Perform a reverse DFS to compute the tentative immediate dominator
+ *  2. Iterate over DFS in reverse to:
+ *  		 a. compute the semidominator sets
+ *  		 b. compute the tentative immediate dominator
+ *
  *  4. Perform one final pass to repair non-trivial cases(where IDOM != semidominator)
  *
- * The DFS numbers are very important because we need to perform a reverse DFS traversal over and over
- * again. We also map semidominators to DFS numbers for lookup speed
+ * The DFS numbers are very important because we need to map semidominators to DFS numbers for lookup speed
  *
  *
  * procedure LT_IDOM(entry, block_set):
@@ -512,6 +513,46 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 
 	//We're done with this now so release it
 	free(dfs_number_to_vertex_mapping);
+}
+
+
+/**
+ * NOTE: This function operates on an entire function-level CFG, with the entry block
+ * passed in. It will compute the immediate dominator for every single node in the
+ * CFG in one run
+ *
+ * The immediate postdominator of a vertex v, denoted IPDOM(v), is the unique strict postdominator
+ * of v that is closest to v in the postdominator tree
+ *
+ * For example:
+ * 			A
+ * 		  /   \
+ * 		 B	   C
+ *		  \	  /
+ *		    D
+ *		    |
+ *		    F
+ *		    |
+ *		    E
+ *
+ * The immediate postdominator of A is D, because D is the closest Node that A
+ * must pass through to reach the exit
+ *
+ * The Ollie Compiler uses a version of the Lengauer-Tarjan algorithm to compute
+ * immediate postdominators, given just one node
+ *
+ * General idea:
+ *  
+ *  1. Perform a reverse DFS(pred = succ) to assign a reverse DFS number to each block
+ *  2. Iterate over reverse DFS in reverse to:
+ *  		 a. compute the semipostdominator sets
+ *  		 b. compute the tentative immediate postdominator
+ *
+ *  4. Perform one final pass to repair non-trivial cases(where IPDOM != semipostdominator)
+ *
+ * The reverse DFS numbers are very important because we map semipostdominators to reverse DFS numbers for lookup speed
+ */
+static void compute_immediate_postdominators(basic_block_t* function_exit_block, dynamic_array_t* function_blocks){
 }
 
 
