@@ -134,18 +134,24 @@ struct basic_block_t{
 		//Dominator parent of the block
 		basic_block_t* dominator_parent;
 		//Block's immediate dominator
-		basic_block_t* idom;
-
-		//The block above this one in the DFS path
+		basic_block_t* immediate_dominator;
+		//Block's immediate postdominator
+		basic_block_t* immediate_postdominator;
+		/**
+		 * Ancestor block along our path from the 
+		 * root this given block
+		 */
 		basic_block_t* ancestor;
 		/**
 		 * The best semidominator candidate. This will hold
 		 * the candidate along the ancestor path who has
-		 * the smallest DFS number
+		 * the smallest DFS number. This caching is done
+		 * to improve efficicency
 		 */
 		basic_block_t* best_semi;
-
-		//TODO DOCUMENT ME
+		/**
+		 *
+		 */
 		dynamic_array_t bucket;
 	} dominator_info;
 

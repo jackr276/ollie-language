@@ -38,7 +38,34 @@ static inline void reset_visit_status_for_function(dynamic_array_t* function_blo
  */
 static inline void initialize_block_for_idom_computation(basic_block_t* block){
 	block->dominator_info.ancestor = NULL;
-	block->dominator_info.idom = NULL;
+	block->dominator_info.immediate_dominator = NULL;
+	block->dominator_info.best_semi = NULL;
+	block->dominator_info.semidominator_number = LT_UNNUMBERED;
+	block->dominator_info.dominator_parent = NULL;
+	block->dominator_info.dfs_number = LT_UNNUMBERED;
+
+	/**
+	 * If we already have a dynamic array we'll just wipe it, otherwise
+	 * we've got to allocate
+	 */
+	if(block->dominator_info.bucket.internal_array != NULL){
+		clear_dynamic_array(&(block->dominator_info.bucket));
+	} else {
+		block->dominator_info.bucket = dynamic_array_alloc();
+	}
+}
+
+
+/**
+ * Initialize a block for immediate postdominator computation. Remember that we may compute the immediate
+ * dominators many times as the graph changes, so we *need* to ensure that we wipe
+ * the slate clean every time
+ *
+ * NOTE: this *must* be used for ipdom calculation because it does not clear the IDOM
+ */
+static inline void initialize_block_for_ipdom_computation(basic_block_t* block){
+	block->dominator_info.ancestor = NULL;
+	block->dominator_info.immediate_postdominator = NULL;
 	block->dominator_info.best_semi = NULL;
 	block->dominator_info.semidominator_number = LT_UNNUMBERED;
 	block->dominator_info.dominator_parent = NULL;
@@ -307,6 +334,8 @@ static inline void link_ancestor(basic_block_t* ancestor, basic_block_t* descend
  *
  * 			if candidate's semi # < w's semi #:
  * 				replace w's semi # with the candidate's
+ *
+ *
  * 	 
  *
  *
@@ -427,9 +456,9 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 			 * we will set this block's IDOM to be the parent block
 			 */
 			if(candidate->dominator_info.semidominator_number < bucket_block->dominator_info.semidominator_number){
-				bucket_block->dominator_info.idom = candidate;
+				bucket_block->dominator_info.immediate_dominator = candidate;
 			} else {
-				bucket_block->dominator_info.idom = parent;
+				bucket_block->dominator_info.immediate_dominator = parent;
 			}
 		}
 
@@ -459,13 +488,13 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 		 * If the IDOM is not the semidominator, then the real IDOM is
 		 * the immediate dominator of said candidate
 		 */
-		if(working_block->dominator_info.idom != semidominator){
-			working_block->dominator_info.idom = working_block->dominator_info.idom->dominator_info.idom;
+		if(working_block->dominator_info.immediate_dominator != semidominator){
+			working_block->dominator_info.immediate_dominator = working_block->dominator_info.immediate_dominator->dominator_info.immediate_dominator;
 		}
 	}
 
 	//The function entry block itself never has an immediate dominator
-	function_entry_block->dominator_info.idom = NULL;
+	function_entry_block->dominator_info.immediate_dominator = NULL;
 
 	//We're done with this now so release it
 	free(dfs_number_to_vertex_mapping);
@@ -757,7 +786,7 @@ static inline void build_dominator_trees(dynamic_array_t* function_blocks){
 		 * we will add this block to the "dominator children" set of said immediate
 		 * dominator
 		 */
-		basic_block_t* immediate_dominator = current->dominator_info.idom;
+		basic_block_t* immediate_dominator = current->dominator_info.immediate_dominator;
 
 		/**
 		 * Now we'll go to the immediate dominator's list and add the dominated block in. Of course,
@@ -835,7 +864,7 @@ static inline void calculate_dominance_frontiers(dynamic_array_t* function_block
 			cursor = block->predecessors.internal_array[i];
 
 			//While cursor is not the immediate dominator of block
-			while(cursor != block->dominator_info.idom){
+			while(cursor != block->dominator_info.immediate_dominator){
 				//Add block to cursor's dominance frontier set
 				add_block_to_dominance_frontier(cursor, block);
 				
@@ -843,7 +872,7 @@ static inline void calculate_dominance_frontiers(dynamic_array_t* function_block
 				 * Cursor now becomes it's own immediate dominator, and
 				 * we crawl our way up the CFG
 				 */
-				cursor = cursor->dominator_info.idom;
+				cursor = cursor->dominator_info.immediate_dominator;
 			}
 		}
 	}
@@ -1128,7 +1157,11 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	 */
 	build_dominator_trees(function_blocks);
 
-	//Once we have the dominator tree, we can compute the dominance frontier
+	/**
+	 * Dominance frontiers are essential for inserting phi functions when performing
+	 * an SSA conversion. It is for this reason that we must calculate them upon every 
+	 * run of the control flow calculator
+	 */
 	calculate_dominance_frontiers(function_blocks);
 
 	//Calculate the postdominator sets for analysis
