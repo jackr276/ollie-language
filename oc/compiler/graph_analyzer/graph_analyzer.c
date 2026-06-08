@@ -434,10 +434,10 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 		 * Compute the semidominators for each given block. Remember that semidominators
 		 * are the earliest DFS ancestor that can "almost" dominate a given block
 		 */
-		for(u_int32_t i = 0; i < working_block->predecessors.current_index; i++){
+		for(u_int32_t j = 0; j < working_block->predecessors.current_index; j++){
 			//Our semidominator candidate
 			basic_block_t* candidate = NULL;
-			basic_block_t* predecessor = dynamic_array_get_at(&(working_block->predecessors), i);
+			basic_block_t* predecessor = dynamic_array_get_at(&(working_block->predecessors), j);
 
 			/**
 			 * Just something to account for - if this is somehow unreachable
@@ -477,10 +477,44 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 		basic_block_t* semidominator = dfs_number_to_vertex_mapping[working_block->dominator_info.semidominator_number];
 		dynamic_array_add(&(semidominator->dominator_info.bucket), working_block);
 
+		//We'll need the parent p of this block going forward
+		basic_block_t* parent = working_block->dominator_info.dominator_parent;
 
+		/**
+		 * Link the parent of the working block as it's ancestor
+		 */
+		link_ancestor(parent, working_block);
 
+		/**
+		 * Now process the bucket of this working block's parent
+		 */
+		dynamic_array_t* parent_block_bucket = &(parent->dominator_info.bucket);
+		for(u_int32_t k = 0; k < parent_block_bucket->current_index; k++){
+			/**
+			 * Extract our bucket block and use evaluate to perform path compression
+			 * and get compute the smallest semidominator number along this path
+			 */
+			basic_block_t* bucket_block = dynamic_array_get_at(parent_block_bucket, k);
+			basic_block_t* candidate = evaluate(bucket_block);
+
+			/**
+			 * If the candidate post evaluation has a smaller semidominator number than
+			 * the bucket block, we will set the candidate as this block's IDOM. Otherwise,
+			 * we will set this block's IDOM to be the parent block
+			 */
+			if(candidate->dominator_info.semidominator_number < bucket_block->dominator_info.semidominator_number){
+				bucket_block->dominator_info.idom = candidate;
+			} else {
+				bucket_block->dominator_info.idom = parent;
+			}
+		}
+
+		//Clear out the bucket now that we've processed
+		clear_dynamic_array(parent_block_bucket);
 	}
 
+	//The function entry block itself never has an immediate dominator
+	function_entry_block->dominator_info.idom = NULL;
 
 	//We're done with this now so release it
 	free(dfs_number_to_vertex_mapping);
