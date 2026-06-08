@@ -487,6 +487,12 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 
 		/**
 		 * Now process the bucket of this working block's parent
+		 *
+		 * Our core theory when processing a bucket is: The immediate
+		 * dominator of a block is either it's semidominator *or* some
+		 * dominator above said semidominator. *At this moment, we do
+		 * not know which one it is*. This is why a final correction pass is
+		 * needed after this
 		 */
 		dynamic_array_t* parent_block_bucket = &(parent->dominator_info.bucket);
 		for(u_int32_t k = 0; k < parent_block_bucket->current_index; k++){
@@ -511,6 +517,33 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 
 		//Clear out the bucket now that we've processed
 		clear_dynamic_array(parent_block_bucket);
+	}
+
+	/**
+	 * Even though we've processed every block, we still need a correction
+	 * pass here.
+	 *
+	 * Lengauer-Tarjan proves:
+	 * 	if idom(v) != semi(v):
+	 * 		idom(v) = idom(idom(v))
+	 *
+	 * In other words: "If the candidate is not the semidominator, then the true
+	 * immediate dominator is the immediate dominator of the candidate"
+	 */
+	for(int32_t i = 1; i < current_dfs_number; i++){
+		//Get the block to work on
+		basic_block_t* working_block = dfs_number_to_vertex_mapping[i];
+
+		//Extract this block's semidominator
+		basic_block_t* semidominator = dfs_number_to_vertex_mapping[working_block->dominator_info.semidominator_number];
+
+		/**
+		 * If the IDOM is not the semidominator, then the real IDOM is
+		 * the immediate dominator of said candidate
+		 */
+		if(working_block->dominator_info.idom != semidominator){
+			working_block->dominator_info.idom = working_block->dominator_info.idom->dominator_info.idom;
+		}
 	}
 
 	//The function entry block itself never has an immediate dominator
