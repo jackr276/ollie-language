@@ -127,32 +127,40 @@ struct basic_block_t{
 	 * and/or postdominator
 	 */
 	struct {
-		//Unique DFS number for the block
-		int32_t dfs_number;
-		//The semidominator number(THIS IS A DFS NUMBER FOR THE REFERENCED BLOCK)
-		int32_t semidominator_number;
-		//Dominator parent of the block
-		basic_block_t* dominator_parent;
 		//Block's immediate dominator
 		basic_block_t* immediate_dominator;
 		//Block's immediate postdominator
 		basic_block_t* immediate_postdominator;
 		/**
-		 * Ancestor block along our path from the 
-		 * root this given block
+		 * The DFS number of this block after it's been DFS(or reverse DFS)
+		 * numbered
+		 */
+		int32_t dfs_number;
+		/**
+		 * The DFS number of this block's semidominator
+		 */
+		int32_t semidominator_number;
+		/**
+		 * The parent of this block(NOT the ancestor)
+		 */
+		basic_block_t* parent;
+		/**
+		 * The union-find ancestor of this
+		 * block(NOT the parent)
 		 */
 		basic_block_t* ancestor;
 		/**
-		 * The best semidominator candidate. This will hold
-		 * the candidate along the ancestor path who has
-		 * the smallest DFS number. This caching is done
-		 * to improve efficicency
+		 * The node with the smallest semidominator
+		 * number along the currently known path - we 
+		 * cache this to avoid recomputation
 		 */
-		basic_block_t* best_semi;
+		basic_block_t* optimal_candidate;
 		/**
-		 *
+		 * The worklist is a deferred work queue that we use. It will
+		 * store the list of all nodes that are semidominated by this
+		 * given node
 		 */
-		dynamic_array_t bucket;
+		dynamic_array_t worklist;
 	} dominator_info;
 
 	//TODO MOVE INTO DOM INFO

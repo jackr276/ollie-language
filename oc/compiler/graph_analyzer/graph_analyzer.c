@@ -39,19 +39,19 @@ static inline void reset_visit_status_for_function(dynamic_array_t* function_blo
 static inline void initialize_block_for_idom_computation(basic_block_t* block){
 	block->dominator_info.ancestor = NULL;
 	block->dominator_info.immediate_dominator = NULL;
-	block->dominator_info.best_semi = NULL;
+	block->dominator_info.optimal_candidate = NULL;
 	block->dominator_info.semidominator_number = LT_UNNUMBERED;
-	block->dominator_info.dominator_parent = NULL;
+	block->dominator_info.parent = NULL;
 	block->dominator_info.dfs_number = LT_UNNUMBERED;
 
 	/**
 	 * If we already have a dynamic array we'll just wipe it, otherwise
 	 * we've got to allocate
 	 */
-	if(block->dominator_info.bucket.internal_array != NULL){
-		clear_dynamic_array(&(block->dominator_info.bucket));
+	if(block->dominator_info.worklist.internal_array != NULL){
+		clear_dynamic_array(&(block->dominator_info.worklist));
 	} else {
-		block->dominator_info.bucket = dynamic_array_alloc();
+		block->dominator_info.worklist = dynamic_array_alloc();
 	}
 }
 
@@ -66,19 +66,19 @@ static inline void initialize_block_for_idom_computation(basic_block_t* block){
 static inline void initialize_block_for_ipdom_computation(basic_block_t* block){
 	block->dominator_info.ancestor = NULL;
 	block->dominator_info.immediate_postdominator = NULL;
-	block->dominator_info.best_semi = NULL;
+	block->dominator_info.optimal_candidate = NULL;
 	block->dominator_info.semidominator_number = LT_UNNUMBERED;
-	block->dominator_info.dominator_parent = NULL;
+	block->dominator_info.parent = NULL;
 	block->dominator_info.dfs_number = LT_UNNUMBERED;
 
 	/**
 	 * If we already have a dynamic array we'll just wipe it, otherwise
 	 * we've got to allocate
 	 */
-	if(block->dominator_info.bucket.internal_array != NULL){
-		clear_dynamic_array(&(block->dominator_info.bucket));
+	if(block->dominator_info.worklist.internal_array != NULL){
+		clear_dynamic_array(&(block->dominator_info.worklist));
 	} else {
-		block->dominator_info.bucket = dynamic_array_alloc();
+		block->dominator_info.worklist = dynamic_array_alloc();
 	}
 }
 
@@ -123,12 +123,11 @@ static void dfs_number_block(basic_block_t* block, basic_block_t** dfs_number_to
 	//Initialize the semidominator number to be this
 	block->dominator_info.semidominator_number = *current_dfs_number;
 
-	//The label here is our block(for now)
-	block->dominator_info.best_semi = block;
+	//By default our optimal candidate so far is just this block
+	block->dominator_info.optimal_candidate = block;
 
-	//As of right now we don't have an ancestor so just make it NULL
+	//As of right now we don't have a union-find ancestor so just make it NULL
 	block->dominator_info.ancestor = NULL;
-
 
 	//Bump the current number up
 	(*current_dfs_number)++;
@@ -145,8 +144,8 @@ static void dfs_number_block(basic_block_t* block, basic_block_t** dfs_number_to
 		 * give it one now
 		 */
 		if(successor->dominator_info.dfs_number == LT_UNNUMBERED){
-			//This successor's parent is the current block
-			successor->dominator_info.dominator_parent = block;
+			//Simple parent is just this block
+			successor->dominator_info.parent = block;
 
 			//Recursively call out to have this block populated
 			dfs_number_block(successor, dfs_number_to_vertex_mapping, current_dfs_number);
@@ -229,11 +228,11 @@ static void path_compression(basic_block_t* block){
 	 * This is how we "remember" what the best semidominator candidate is along our path for use down 
 	 * the road
 	 */
-	int32_t ancestor_semidominator = ancestor->dominator_info.best_semi->dominator_info.semidominator_number;
-	int32_t block_semidominator = block->dominator_info.best_semi->dominator_info.semidominator_number;
+	int32_t ancestor_semidominator = ancestor->dominator_info.optimal_candidate->dominator_info.semidominator_number;
+	int32_t block_semidominator = block->dominator_info.optimal_candidate->dominator_info.semidominator_number;
 
 	if(ancestor_semidominator < block_semidominator){
-		block->dominator_info.best_semi = ancestor->dominator_info.best_semi;
+		block->dominator_info.optimal_candidate = ancestor->dominator_info.optimal_candidate;
 	}
 
 	/**
@@ -258,7 +257,7 @@ static inline basic_block_t* evaluate(basic_block_t* block){
 	 * anyways, we'll just return our current best guess
 	 */
 	if(block->dominator_info.ancestor == NULL){
-		return block->dominator_info.best_semi;
+		return block->dominator_info.optimal_candidate;
 	}
 
 	/**
@@ -267,13 +266,13 @@ static inline basic_block_t* evaluate(basic_block_t* block){
 	 */
 	path_compression(block);
 
-	//Give back our best guess after we compress
-	return block->dominator_info.best_semi;
+	//Give back the optimal candidate that we've found during compression
+	return block->dominator_info.optimal_candidate;
 }
 
 
 /**
- * Simple helper to link the ancestor to it's descendant
+ * Simple helper to link the union-find ancestor to it's descendant
  */
 static inline void link_ancestor(basic_block_t* ancestor, basic_block_t* descendant){
 	descendant->dominator_info.ancestor = ancestor;
@@ -437,26 +436,39 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 		 * First we'll need to use the DFS number to block mapping to get the actual semidominator
 		 */
 		basic_block_t* semidominator = dfs_number_to_vertex_mapping[working_block->dominator_info.semidominator_number];
-		dynamic_array_add(&(semidominator->dominator_info.bucket), working_block);
+		/**
+		 * Add the working block into the semidominator's worklist
+		 *
+		 * Remember: the "worklist" of the semidominator "x" contains all blocks
+		 * whose semidominator is "x"
+		 */
+		dynamic_array_add(&(semidominator->dominator_info.worklist), working_block);
 
 		//We'll need the parent p of this block going forward
-		basic_block_t* parent = working_block->dominator_info.dominator_parent;
+		basic_block_t* dominator_parent = working_block->dominator_info.parent;
 
 		/**
-		 * Link the parent of the working block as it's ancestor
+		 * The parent of the working block is it's union-find ancestor
 		 */
-		link_ancestor(parent, working_block);
+		link_ancestor(dominator_parent, working_block);
 
 		/**
-		 * Now process the bucket of this working block's parent
+		 * By the time we've reached here, we have enough information
+		 * to determine the *potential* IDOMs for all node's whose semidominator
+		 * is our working block's parent.
+		 *
+		 * The worklist is essentially a deferred work queue that allows our algorithm
+		 * to postpone any/all IDOM processing until the ancestor structure
+		 * has enough info to make the decision
 		 *
 		 * Our core theory when processing a bucket is: The immediate
 		 * dominator of a block is either it's semidominator *or* some
 		 * dominator above said semidominator. *At this moment, we do
 		 * not know which one it is*. This is why a final correction pass is
-		 * needed after this
+		 * needed after this. This only computes a provisional(or potential/best guess)
+		 * IDOM
 		 */
-		dynamic_array_t* parent_block_bucket = &(parent->dominator_info.bucket);
+		dynamic_array_t* parent_block_bucket = &(dominator_parent->dominator_info.worklist);
 		for(u_int32_t k = 0; k < parent_block_bucket->current_index; k++){
 			/**
 			 * Extract our bucket block and use evaluate to perform path compression
@@ -473,7 +485,7 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 			if(candidate->dominator_info.semidominator_number < bucket_block->dominator_info.semidominator_number){
 				bucket_block->dominator_info.immediate_dominator = candidate;
 			} else {
-				bucket_block->dominator_info.immediate_dominator = parent;
+				bucket_block->dominator_info.immediate_dominator = dominator_parent;
 			}
 		}
 
