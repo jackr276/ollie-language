@@ -469,6 +469,15 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 			}
 		}
 
+		/**
+		 * Now that we have what we think is the best semidominator number stored, we will
+		 * add the working block into our processing bucket for this given semidominator block.
+		 * First we'll need to use the DFS number to block mapping to get the actual semidominator
+		 */
+		basic_block_t* semidominator = dfs_number_to_vertex_mapping[working_block->dominator_info.semidominator_number];
+		dynamic_array_add(&(semidominator->dominator_info.bucket), working_block);
+
+
 
 	}
 
