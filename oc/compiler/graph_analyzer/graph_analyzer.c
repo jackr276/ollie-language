@@ -740,6 +740,12 @@ static inline void calculate_all_reverse_traversals(basic_block_t* function_entr
  *
  * NOTE: We repeat this for each and every function in the CFG. If blocks aren't in
  * the same function, then their dominance is completely unrelated
+ *
+ * This is the union-find algorithm. As of our migration to Lengauer-Tarjan for the 
+ * immediate dominator this is not strictly necessary, but it is still going to be
+ * exposed via an API in case it is needed in the future
+ *
+ * TODO EXPOSE VIA API
  */
 static void calculate_dominator_sets(basic_block_t* function_entry_block, dynamic_array_t* function_blocks){
 	/**
@@ -1234,9 +1240,6 @@ void get_post_order_traversal(basic_block_t* function_entry_block, dynamic_array
 void calculate_all_control_flow_relations_for_function(basic_block_t* function_entry_block, dynamic_array_t* function_blocks){
 	//Before any calculation can be done, we need to compute every single reverse traversal
 	calculate_all_reverse_traversals(function_entry_block, function_blocks);
-	
-	//Now calculate the dominator set for every function block
-	calculate_dominator_sets(function_entry_block, function_blocks);
 
 	/**
 	 * Before going forward, we must know the immediate dominator for every
