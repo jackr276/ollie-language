@@ -379,10 +379,20 @@ static inline void link_ancestor(basic_block_t* ancestor, basic_block_t* descend
  *
  * 	dfs_number_block(entry)
  *
- * 	foreach predecessor of the block:
- * 		
- * 
+ *  foreach block w in reverse DFS order:
+ * 		foreach predecessor p of the block:
+ * 			if predecessor has an unreachable DFS number:
+ * 				continue
  *
+ * 			declare candidate
+ *
+ * 			if p's DFS num < w's dfs num:
+ * 				candidate = p
+ * 			else:
+ * 				candidate = evaluate(p)
+ *
+ * 			if candidate's semi # < w's semi #:
+ * 				replace w's semi # with the candidate's
  * 	 
  *
  *
@@ -425,26 +435,38 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 		 * are the earliest DFS ancestor that can "almost" dominate a given block
 		 */
 		for(u_int32_t i = 0; i < working_block->predecessors.current_index; i++){
-			basic_block_t* semidominator_candidate = dynamic_array_get_at(&(working_block->predecessors), i);
+			//Our semidominator candidate
+			basic_block_t* candidate = NULL;
+			basic_block_t* predecessor = dynamic_array_get_at(&(working_block->predecessors), i);
 
 			/**
 			 * Just something to account for - if this is somehow unreachable
 			 * we skip ahead. This in theory should never happen but we don't
 			 * want to go down this road if it does so best to be safe
 			 */
-			if(semidominator_candidate->dominator_info.dfs_number == LT_UNNUMBERED){
+			if(predecessor->dominator_info.dfs_number == LT_UNNUMBERED){
 				continue;
 			}
 
-			//
-			//
-			//
-			//TODO EVAL
-			//
-			//
-			//
-
-
+			/**
+			 * If the predecessor's DFS number is higher up than the working block's,
+			 * then the predecessor is going to be our candidate for this. Otherwise, we'll
+			 * run evaluate on the predecessor which will walk the graph, compress the path,
+			 * and return what it thinks the best semidominator is
+			 */
+			if(predecessor->dominator_info.dfs_number < working_block->dominator_info.dfs_number){
+				candidate = predecessor;
+			} else {
+				candidate = evaluate(predecessor);
+			}
+			
+			/**
+			 * If this candidate has a superior(lower DFS numbered) semidominator, then we will
+			 * replace the one that we currently have in the working block with it's number
+			 */
+			if(candidate->dominator_info.semidominator_number < working_block->dominator_info.semidominator_number){
+				working_block->dominator_info.semidominator_number = candidate->dominator_info.semidominator_number;
+			}
 		}
 
 
