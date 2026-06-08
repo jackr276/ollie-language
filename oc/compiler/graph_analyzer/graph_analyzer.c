@@ -129,6 +129,16 @@ static inline void initialize_block_for_idom_computation(basic_block_t* block){
 	block->dominator_info.semidominator_number = LT_UNNUMBERED;
 	block->dominator_info.dominator_parent = NULL;
 	block->dominator_info.dfs_number = LT_UNNUMBERED;
+
+	/**
+	 * If we already have a dynamic array we'll just wipe it, otherwise
+	 * we've got to allocate
+	 */
+	if(block->dominator_info.bucket.internal_array != NULL){
+		clear_dynamic_array(&(block->dominator_info.bucket));
+	} else {
+		block->dominator_info.bucket = dynamic_array_alloc();
+	}
 }
 
 
