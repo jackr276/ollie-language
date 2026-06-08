@@ -867,6 +867,9 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
  * 	a.) A postdominator of B
  * 	b.) marked
  * we'll have our answer
+ *
+ *
+ * TODO LOOK INTO THIS
  */
 static basic_block_t* nearest_marked_postdominator(dynamic_array_t* function_blocks, basic_block_t* B){
 	//Wipe out the postdominator queue for this go around

@@ -1151,30 +1151,6 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 		printf("}\n");
 	}
 
-
-	//Only if this is false - global var blocks don't have any of these
-	printf("Dominator set: {");
-	if(block->dominator_set.internal_array != NULL){
-		//Run through and print them all out
-		for(u_int16_t i = 0; i < block->dominator_set.current_index; i++){
-			basic_block_t* printing_block = block->dominator_set.internal_array[i];
-
-			//Print the block's ID or the function name
-			if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-				printf("%s", printing_block->function_defined_in->func_name.string);
-			} else {
-				printf(".L%d", printing_block->block_id);
-			}
-			//If it isn't the very last one, we need a comma
-			if(i != block->dominator_set.current_index - 1){
-				printf(", ");
-			}
-		}
-
-	}
-	//And close it out
-	printf("}\n");
-
 	printf("Postdominator(reverse dominator) Set: {");
 	if(block->postdominator_set.internal_array != NULL){
 		//Run through and print them all out
