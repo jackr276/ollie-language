@@ -744,6 +744,30 @@ static inline void calculate_all_reverse_traversals(basic_block_t* function_entr
  * This is the union-find algorithm. As of our migration to Lengauer-Tarjan for the 
  * immediate dominator this is not strictly necessary, but it is still going to be
  * exposed via an API in case it is needed in the future
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ * TODO DO IT NOW
+ *
+ * IMPORTANT NOTE: This is NOT the most efficient implementation. If this is needed in the
+ * future, it should be rewritten to use the immediate dominator to build up the dominator
+ * sets
+ *
+ * TODO DO IT NOW
  */
 void calculate_dominator_sets(basic_block_t* function_entry_block, dynamic_array_t* function_blocks){
 	/**
@@ -878,6 +902,9 @@ static inline void add_dominated_block(basic_block_t* dominator, basic_block_t* 
  *
  * For each node in the function, we will use that node's immediate
  * dominator to build a dominator tree
+ *
+ * Dominator trees are used for SSA form conversion. It is absolutely
+ * essential that these be computed upon every run
  */
 static inline void build_dominator_trees(dynamic_array_t* function_blocks){
 	//Hold the current block
@@ -1005,6 +1032,9 @@ static inline void calculate_dominance_frontiers(dynamic_array_t* function_block
  *
  * We'll be using a change watcher algorithm for this one. This algorithm will repeat until a stable solution
  * is found
+ *
+ *
+ * TODO WE NEED TO REWORK THIS TO USE THE IMMEDIATE POSTDOMINATOR
  */
 static void calculate_postdominator_sets(basic_block_t* function_entry_block, dynamic_array_t* function_blocks){
 	basic_block_t* current;
@@ -1245,10 +1275,20 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	 * Before going forward, we must know the immediate dominator for every
 	 * single block. We use the efficient Lengauer-Tarjan algorithm to 
 	 * do this for all function blocks in one go
+	 *
+	 * Immediate dominators are a prerequisite for two other essential
+	 * graph relations: dominator trees and dominance frontiers. These
+	 * *must* be computed upon every run
 	 */
 	compute_immediate_dominators(function_entry_block, function_blocks);
 
-	//We'll now use the immediate dominator to construct our dominator trees
+	/**
+	 * Now that we have the immediate dominators needed, we can create
+	 * our dominator tree for this function.
+	 *
+	 * Dominator trees are used for SSA form conversion. It is absolutely
+	 * essential that these be computed upon every run
+	 */
 	build_dominator_trees(function_blocks);
 
 	//Once we have the dominator tree, we can compute the dominance frontier
