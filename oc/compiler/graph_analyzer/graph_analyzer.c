@@ -643,6 +643,47 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
  *  4. Perform one final pass to repair non-trivial cases(where IPDOM != semipostdominator)
  *
  * The reverse DFS numbers are very important because we map semipostdominators to reverse DFS numbers for lookup speed
+ *
+ * procedure LT_IPDOM(entry, block_set):
+ * 	foreach block:
+ * 		clear the block's dominator info
+ *
+ * 	reverse_dfs_number_block(entry)
+ *
+ *  foreach block w in reverse of reverse DFS order:
+ * 		foreach successor s of the block:
+ * 			if s has an unreachable DFS number:
+ * 				continue
+ *
+ * 			declare candidate
+ *
+ * 			if s's DFS num < w's dfs num:
+ * 				candidate = s
+ * 			else:
+ * 				candidate = evaluate(s)
+ *
+ * 			if candidate's semi # < w's semi #:
+ * 				replace w's semi # with the candidate's
+ *
+ * 		add block into it's semidominator's bucket
+ *
+ * 		get the parent of block
+ *
+ *		link_ancestor(parent, block)
+ *
+ *		foreach block b in the parent's bucket:
+ *			candidate = evaluate(b)
+ *
+ *			if candidate.semi # < b.semi #:
+ *				set b's IPDOM to be candidate
+ *			else:
+ *				set b's IPDOM to be parent
+ *
+ *	foreach block b:
+ *		if b's IPDOM == b's semipostdominator:
+ *			set b's IPDOM to be IPDOM(IPDOM(b))
+ *
+ * Property: Every node *except* the entry node has exactly one immediate dominator
  */
 static void compute_immediate_postdominators(basic_block_t* function_exit_block, dynamic_array_t* function_blocks){
 	//Extract the number of blocks that we have 
@@ -662,13 +703,33 @@ static void compute_immediate_postdominators(basic_block_t* function_exit_block,
 	 * for later parts of the algorithm because the higher the number,
 	 * the farther away from the exit node of the graph that we are
 	 *
-	 * The reverse DFS numbering algorithm also initializes 
+	 * The reverse DFS numbering algorithm also initializes the parent,
+	 * ancestor and "best candidate" fields, though these will be expanded
+	 * more upon later
 	 */
 	int32_t current_reverse_dfs_number = 0;
 	basic_block_t** reverse_dfs_number_to_vertex_mapping = calloc(number_of_blocks, sizeof(basic_block_t*));
 	reverse_dfs_number_block(function_exit_block, reverse_dfs_number_to_vertex_mapping, &current_reverse_dfs_number);
 
+	/**
+	 * Work our way through the graph from top to bottom(reverse traversal
+	 * of the reverse DFS numbers will do this for us)
+	 */
+	for(int32_t i = current_reverse_dfs_number - 1; i > 0; i--){
+		//Extract the block from our mapping
+		basic_block_t* working_block = reverse_dfs_number_to_vertex_mapping[i];
 
+	}
+
+
+
+	/**
+	 * By definition, the exit block may have no immediate postdominator
+	 */
+	function_exit_block->dominator_info.immediate_postdominator = NULL;
+
+	//Release the memory now that we're done
+	free(reverse_dfs_number_to_vertex_mapping);
 }
 
 
