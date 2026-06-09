@@ -10659,7 +10659,7 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	 * Let the graph module compute all dominance relations for the given function. It is essential
 	 * that this be done *before* we do anything with liveness/SSA
 	 */
-	calculate_all_control_flow_relations_for_function(function_starting_block, current_function_blocks);
+	calculate_all_control_flow_relations_for_function(function_starting_block, function_exit_block, current_function_blocks);
 
 	/**
 	 * Finally, we will calculate the liveness sets for this function

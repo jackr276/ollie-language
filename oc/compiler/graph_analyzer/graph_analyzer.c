@@ -748,9 +748,17 @@ static void compute_immediate_postdominators(basic_block_t* function_exit_block,
 				candidate = evaluate(successor);
 			}
 
-
-			
+			/**
+			 * If the candidate has a smaller(more optimal) semipostdominator number, then we will
+			 * replace the current semipostdominator number of our current working block with this
+			 * candidate
+			 */
+			if(candidate->dominator_info.semidominator_number < working_block->dominator_info.semidominator_number){
+				working_block->dominator_info.semidominator_number = candidate->dominator_info.semidominator_number;
+			}
 		}
+
+
 
 	}
 

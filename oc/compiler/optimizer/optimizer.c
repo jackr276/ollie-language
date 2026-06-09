@@ -2264,7 +2264,7 @@ static inline void clean(cfg_t* cfg, dynamic_array_t* current_function_blocks, b
  * of the dominance relations that are now useless. As such, we'll need to completely recompute all
  * of these key values
  */
-static inline void recompute_all_control_flow_relations_for_function(dynamic_array_t* function_blocks, basic_block_t* function_entry_block){
+static inline void recompute_all_control_flow_relations_for_function(dynamic_array_t* function_blocks, basic_block_t* function_entry_block, basic_block_t* function_exit_block){
 	/**
 	 * First clean up all of the existing control relations
 	 */
@@ -2273,7 +2273,7 @@ static inline void recompute_all_control_flow_relations_for_function(dynamic_arr
 	/**
 	 * Now let the graph analyzer go through and recalculate everything else
 	 */
-	calculate_all_control_flow_relations_for_function(function_entry_block, function_blocks);
+	calculate_all_control_flow_relations_for_function(function_entry_block, function_exit_block, function_blocks);
 }
 
 
@@ -2368,8 +2368,9 @@ cfg_t* optimize(cfg_t* cfg){
 	 */
 	//Run through all of the functions
 	for(u_int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
-		//Extract the function entry block
+		//Extract the entry and exit blocks
 		basic_block_t* function_entry_block = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
+		basic_block_t* function_exit_block = dynamic_array_get_at(&(cfg->function_exit_blocks), i);
 
 		//What function are we in?
 		symtab_function_record_t* current_function = function_entry_block->function_defined_in;
@@ -2436,7 +2437,7 @@ cfg_t* optimize(cfg_t* cfg){
 			delete_all_unreachable_blocks(current_function_blocks, cfg);
 
 			//Recalculate all dominance relations
-			recompute_all_control_flow_relations_for_function(current_function_blocks, function_entry_block);
+			recompute_all_control_flow_relations_for_function(current_function_blocks, function_entry_block, function_exit_block);
 
 			//Invoke the marker
 			mark(current_function_blocks);
@@ -2474,7 +2475,7 @@ cfg_t* optimize(cfg_t* cfg){
 		 * etc. So, to remedy this, we will recalculate everything in the CFG. There is no advantage in splitting this section up by function, as 
 		 * all blocks are going to be traversed regardless. Due to this, we will be doing it over the entire CFG at the end
 		 */
-		recompute_all_control_flow_relations_for_function(current_function_blocks, function_entry_block);
+		recompute_all_control_flow_relations_for_function(current_function_blocks, function_entry_block, function_exit_block);
 	}
 
 	//Now that we are done we can free all of the reusable memory
