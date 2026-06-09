@@ -5,7 +5,6 @@
  * it is implemented as one monolothic block
 */
 #include "optimizer.h"
-#include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
 #include "../graph_analyzer/graph_analyzer.h"
 #include <stdio.h>
@@ -16,9 +15,6 @@
 //Storage for the stack/instruction pointers
 static three_addr_var_t* stack_pointer_variable;
 static three_addr_var_t* instruction_pointer_variable;
-
-//A reusable queue for postdominator traversal
-static heap_queue_t postdominator_queue;
 
 //A pointer to the cfg
 static cfg_t* cfg_reference;
@@ -2169,16 +2165,12 @@ static inline void clean(cfg_t* cfg, dynamic_array_t* current_function_blocks, b
 		//Clear out the old postorder array
 		clear_dynamic_array(&postorder);
 
-		//Reset the function's visited status
-		reset_visit_status_for_function(current_function_blocks);
-
 		/**
 		 * Use the API function to compute the postorder traversal.
 		 * Note that the result is going to be stored inside of the array that
 		 * we've already allocated
 		 */
-		get_post_order_traversal(function_entry_block, &postorder);
-
+		get_post_order_traversal(current_function_blocks, function_entry_block, &postorder);
 
 		//Call onepass() for the reduction
 		changed = branch_reduce(cfg, &postorder);
@@ -2288,9 +2280,6 @@ cfg_t* optimize(cfg_t* cfg){
 	//Prepopulate these global variables so that we don't need to pass them around
 	stack_pointer_variable = cfg->stack_pointer;
 	instruction_pointer_variable = cfg->instruction_pointer;
-
-	//Allocate the reusable memory
-	postdominator_queue = heap_queue_alloc();
 
 	/**
 	 * We will optimize on a function by function basis. This is because functions are independent units 
@@ -2409,9 +2398,6 @@ cfg_t* optimize(cfg_t* cfg){
 		 */
 		recompute_all_control_flow_relations_for_function(current_function_blocks, function_entry_block, function_exit_block);
 	}
-
-	//Now that we are done we can free all of the reusable memory
-	heap_queue_dealloc(&postdominator_queue);
 
 	//Give back the CFG
 	return cfg;

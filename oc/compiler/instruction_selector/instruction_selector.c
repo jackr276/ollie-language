@@ -33,8 +33,6 @@ static generic_type_t* u8;
 
 //The dynamic string that we reuse for searching
 static dynamic_string_t value_name_searcher_string;
-//A queue that we will reuse for postdominator searching
-static heap_queue_t postdominator_queue;
 //A holder for the stack pointer
 static three_addr_var_t* stack_pointer_variable;
 //A holder for the instruction pointer
@@ -13884,7 +13882,6 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	 * time that we need something
 	 */
 	value_name_searcher_string = dynamic_string_alloc();
-	postdominator_queue = heap_queue_alloc();
 
 	//Stash the stack pointer & instruction pointer
 	stack_pointer_variable = cfg->stack_pointer;
@@ -13936,5 +13933,4 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	 * regions that we've been using
 	 */
 	dynamic_string_dealloc(&value_name_searcher_string);
-	heap_queue_dealloc(&postdominator_queue);
 }

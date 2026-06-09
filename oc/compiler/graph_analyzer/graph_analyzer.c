@@ -910,29 +910,6 @@ static dynamic_array_t compute_reverse_post_order_traversal_reverse_cfg(basic_bl
 
 
 /**
- * A recursive post order simplifies the code, so it's what we'll use here
- */
-static void post_order_traversal_rec(dynamic_array_t* post_order_traversal, basic_block_t* entry){
-	//If we've visited this one before, skip
-	if(entry->visited == TRUE){
-		return;
-	}
-
-	//Otherwise mark that we've visited
-	entry->visited = TRUE;
-
-	//Run through every successor
-	for(u_int32_t i = 0; i < entry->successors.current_index; i++){
-		//Recursive call to every child first
-		post_order_traversal_rec(post_order_traversal, dynamic_array_get_at(&(entry->successors), i));
-	}
-	
-	//Now we'll finally visit the node
-	dynamic_array_add(post_order_traversal, entry);
-}
-
-
-/**
  * Calculate all reverse traversals for a given function. A reverse traversal is simply a traversal on the graph
  * where every successor is a predecessor, and every predecessor is a successor. This is needed for the postdominance
  * computation
@@ -1153,12 +1130,40 @@ static inline void calculate_reverse_dominance_frontiers(dynamic_array_t* functi
 	}
 }
 
+
+/**
+ * A recursive post order simplifies the code, so it's what we'll use here
+ */
+static void post_order_traversal_rec(dynamic_array_t* post_order_traversal, basic_block_t* entry){
+	//If we've visited this one before, skip
+	if(entry->visited == TRUE){
+		return;
+	}
+
+	//Otherwise mark that we've visited
+	entry->visited = TRUE;
+
+	//Run through every successor
+	for(u_int32_t i = 0; i < entry->successors.current_index; i++){
+		//Recursive call to every child first
+		post_order_traversal_rec(post_order_traversal, dynamic_array_get_at(&(entry->successors), i));
+	}
+	
+	//Now we'll finally visit the node
+	dynamic_array_add(post_order_traversal, entry);
+}
+
+
 /**
  * Special exposes post order traversal API. The postorder traversal is needed
  * specifically in branch reduction in the optimizer/postprocessor. In this case,
  * we'll need a pre-allocated dynamic array to be passed in
  */
-void get_post_order_traversal(basic_block_t* function_entry_block, dynamic_array_t* post_order_traversal){
+void get_post_order_traversal(dynamic_array_t* function_blocks, basic_block_t* function_entry_block, dynamic_array_t* post_order_traversal){
+	//Reset the visited status
+	reset_visit_status_for_function(function_blocks);
+
+	//Seed the recursive helper with the entry block and let it do the rest
 	post_order_traversal_rec(post_order_traversal, function_entry_block);
 }
 
@@ -1190,6 +1195,8 @@ void get_post_order_traversal(basic_block_t* function_entry_block, dynamic_array
  * 				return cursor
  *
  * 			cursor = IPDOM(cursor)
+ *
+ * 		return NULL
  *
  *
  * NOTE: in order for this to be accurate, we must have already computed

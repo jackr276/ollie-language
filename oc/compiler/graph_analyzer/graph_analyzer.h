@@ -16,7 +16,7 @@
  * specifically in branch reduction in the optimizer/postprocessor. In this case,
  * we'll need a pre-allocated dynamic array to be passed in
  */
-void get_post_order_traversal(basic_block_t* function_entry_block, dynamic_array_t* post_order_traversal);
+void get_post_order_traversal(dynamic_array_t* function_blocks, basic_block_t* function_entry_block, dynamic_array_t* post_order_traversal);
 
 /**
  * Get the nearest marked postdominator of a given block
