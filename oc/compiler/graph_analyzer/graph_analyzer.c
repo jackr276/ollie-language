@@ -1445,8 +1445,7 @@ static inline void calculate_reverse_dominance_frontiers(dynamic_array_t* functi
 			cursor = block->successors.internal_array[i];
 
 			//While cursor is not the immediate postdominator of block
-			//TODO FIX - WE SHOULD JUST BE ABLE TO GRAB THE IPDOM
-			while(cursor != immediate_postdominator(block)){
+			while(cursor != block->dominator_info.immediate_postdominator){
 				//Add block to cursor's reverse dominance frontier set
 				add_block_to_reverse_dominance_frontier(cursor, block);
 				
@@ -1454,8 +1453,7 @@ static inline void calculate_reverse_dominance_frontiers(dynamic_array_t* functi
 				 * Cursor now becomes it's own immediate postdominator, and
 				 * we crawl our way down the CFG
 				 */
-				//TODO FIX - WE SHOULD JUST BE ABLE TO GRAB THE IPDOM
-				cursor = immediate_postdominator(cursor);
+				cursor = cursor->dominator_info.immediate_postdominator;
 			}
 		}
 	}
@@ -1489,7 +1487,6 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	//
 	//TODO EVALUATE THIS ONE'S USE
 	calculate_all_reverse_traversals(function_entry_block, function_blocks);
-
 	/**
 	 * Before going forward, we must know the immediate dominator for every
 	 * single block. We use the efficient Lengauer-Tarjan algorithm to 
