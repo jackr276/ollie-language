@@ -20,16 +20,18 @@ void get_post_order_traversal(basic_block_t* function_entry_block, dynamic_array
 
 /**
  * We will calculate:
- *  1.) Dominator Sets
- *  2.) Dominator Trees
- *  3.) Dominance Frontiers
- *  4.) Postdominator sets
- *  5.) Reverse Dominance frontiers
- *  6.) Reverse post order traversals
+ *  1.) Reverse post order traversals
+ *  2.) Immediate dominators
+ *  3.) Dominator Trees
+ *  4.) Dominance Frontiers
+ *  5.) Immediate Postdominators
+ *  6.) Postdominator sets
+ *  7.) Reverse Dominance frontiers
  *
- * For every block in the given function
+ * For every block in the given function. This externally facing API hides all of
+ * the complexity behind it
  */
-void calculate_all_control_flow_relations_for_function(basic_block_t* function_entry_block, dynamic_array_t* function_blocks);
+void calculate_all_control_flow_relations_for_function(basic_block_t* function_entry_block, basic_block_t* function_exit_block, dynamic_array_t* function_blocks);
 
 /**
  * Destroy all old control relations in anticipation of new ones coming in. This

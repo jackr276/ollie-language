@@ -719,6 +719,39 @@ static void compute_immediate_postdominators(basic_block_t* function_exit_block,
 		//Extract the block from our mapping
 		basic_block_t* working_block = reverse_dfs_number_to_vertex_mapping[i];
 
+		/**
+		 * Run through all of this block's successors to compute the semipostdominators.
+		 * Remember that a semipostdominator is a block that just barely does not postdominate
+		 * this one
+		 */
+		for(u_int32_t j = 0; j < working_block->successors.current_index; j++){
+			//Our semipostdominator candidate
+			basic_block_t* candidate;
+			basic_block_t* successor = dynamic_array_get_at(&(working_block->successors), j);
+
+			/**
+			 * Rare case but something we will account for just to be safe - we will
+			 * skip a block if it has an unreachable DFS number
+			 */
+			if(successor->dominator_info.dfs_number == LT_UNNUMBERED){
+				continue;
+			}
+
+			/**
+			 * If the successor has a smaller reverse DFS number than the working block, than
+			 * the successor is our candidate. Otherwise, we will find our candidate by running
+			 * the union-find + path compression algorihtm on the successor
+			 */
+			if(successor->dominator_info.dfs_number < working_block->dominator_info.dfs_number){
+				candidate = successor;
+			} else {
+				candidate = evaluate(successor);
+			}
+
+
+			
+		}
+
 	}
 
 
@@ -1354,16 +1387,17 @@ void get_post_order_traversal(basic_block_t* function_entry_block, dynamic_array
 /**
  * We will calculate:
  *  1.) Reverse post order traversals
- *  2.) Dominator Sets
+ *  2.) Immediate dominators
  *  3.) Dominator Trees
  *  4.) Dominance Frontiers
- *  5.) Postdominator sets
- *  6.) Reverse Dominance frontiers
+ *  5.) Immediate Postdominators
+ *  6.) Postdominator sets
+ *  7.) Reverse Dominance frontiers
  *
  * For every block in the given function. This externally facing API hides all of
  * the complexity behind it
  */
-void calculate_all_control_flow_relations_for_function(basic_block_t* function_entry_block, dynamic_array_t* function_blocks){
+void calculate_all_control_flow_relations_for_function(basic_block_t* function_entry_block, basic_block_t* function_exit_block, dynamic_array_t* function_blocks){
 	//Before any calculation can be done, we need to compute every single reverse traversal
 	//
 	//TODO EVALUATE THIS ONE'S USE
@@ -1395,6 +1429,9 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	 * run of the control flow calculator
 	 */
 	calculate_dominance_frontiers(function_blocks);
+
+	//TODO IPDOM
+	compute_immediate_postdominators(function_exit_block, function_blocks);
 
 	//Calculate the postdominator sets for analysis
 	calculate_postdominator_sets(function_entry_block, function_blocks);
