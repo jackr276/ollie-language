@@ -1420,12 +1420,39 @@ void get_post_order_traversal(basic_block_t* function_entry_block, dynamic_array
  * a cursor, walk up the tree by going from cursor to IPDOM(cursor), and 
  * bailing out whenever we have a marked value
  *
+ * Algorithm Nearest Marked Postdominator(Block b):
+ * 		cursor = IPDOM(b)
+ * 		
+ * 		while cursor != NULL:
+ * 			if cursor is marked:
+ * 				return cursor
+ *
+ * 			cursor = IPDOM(cursor)
+ *
+ *
  * NOTE: in order for this to be accurate, we must have already computed
  * the immediate postdominators of all blocks within the function that this
  * block comes from
  */
 basic_block_t* get_nearest_marked_postdominator(basic_block_t* block){
+	//We seed the search with the first(closest) dominator that we have
+	basic_block_t* cursor = block->dominator_info.immediate_postdominator;
 
+	while(cursor != NULL){
+		//This block contains a mark, so we give it back
+		if(cursor->contains_mark == TRUE){
+			return cursor;
+		}
+
+		//Otherwise, climb the tree by going up to this one's IPDOM
+		cursor = cursor->dominator_info.immediate_postdominator;
+	}
+
+	/**
+	 * If we get here, then the cursor went to NULL. In this case, there
+	 * is no nearest *marked* postdominator
+	 */
+	return NULL;
 }
 
 
