@@ -162,16 +162,6 @@ struct basic_block_t{
 		 */
 		dynamic_array_t worklist;
 	} dominator_info;
-
-	//TODO MOVE INTO DOM INFO
-	//
-	//
-	//The immediate postdominator reference
-	basic_block_t* immediate_postdominator;
-	//
-	//
-	//
-	//TODO MODE INTO DOM INFO
 	
 	//The reference to a jump table. This is often not used at all
 	//TODO CAN WE UNION THESE TWO???

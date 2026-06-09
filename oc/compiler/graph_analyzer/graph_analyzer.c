@@ -5,7 +5,6 @@
  */
 
 #include "graph_analyzer.h"
-#include "../utils/queue/heap_queue.h"
 #include <stdint.h>
 #include <sys/types.h>
 
@@ -219,7 +218,7 @@ static void reverse_dfs_number_block(basic_block_t* block, basic_block_t** rever
 			predecessor->dominator_info.parent = block;
 
 			//Recursively call out to have this block populated
-			dfs_number_block(predecessor, reverse_dfs_number_to_vertex_mapping, current_reverse_dfs_number);
+			reverse_dfs_number_block(predecessor, reverse_dfs_number_to_vertex_mapping, current_reverse_dfs_number);
 		}
 	}
 }
@@ -859,7 +858,6 @@ static void compute_immediate_postdominators(basic_block_t* function_exit_block,
  *
  *
  * TODO THIS ENTIRE THING IS GOING TO BE REWORKEDk
- */
 static basic_block_t* immediate_postdominator(basic_block_t* B){
 	//If we've already found the immediate dominator, why find it again?
 	if(B->immediate_postdominator != NULL){
@@ -885,10 +883,7 @@ static basic_block_t* immediate_postdominator(basic_block_t* B){
 		//Pop off of the queue
 		basic_block_t* current = dequeue(&traversal_queue);
 
-		/**
-		 * If we have found the first breadth-first successor that postdominates B,
 		 * we are done
-		 */
 		if(current != B && dynamic_array_contains(&postdominator_set, current) != NOT_FOUND){
 			ipdom = current;
 			break;
@@ -917,6 +912,7 @@ static basic_block_t* immediate_postdominator(basic_block_t* B){
 	//Give it back
 	return ipdom;
 }
+ */
 
 
 /**
@@ -1207,13 +1203,9 @@ static inline void calculate_dominance_frontiers(dynamic_array_t* function_block
 			continue;
 		}
 
-		//A cursor for traversing our predecessors
-		basic_block_t* cursor;
-
 		//Now we run through every predecessor of the block
-		for(u_int32_t i = 0; i < block->predecessors.current_index; i++){
-			//Grab it out
-			cursor = block->predecessors.internal_array[i];
+		for(u_int32_t j = 0; j < block->predecessors.current_index; j++){
+			basic_block_t* cursor = dynamic_array_get_at(&(block->predecessors), j);
 
 			//While cursor is not the immediate dominator of block
 			while(cursor != block->dominator_info.immediate_dominator){
@@ -1437,16 +1429,13 @@ static inline void calculate_reverse_dominance_frontiers(dynamic_array_t* functi
 			continue;
 		}
 
-		//A cursor for traversing our successors 
-		basic_block_t* cursor;
-
 		//Now we run through every successor of the block
-		for(u_int32_t i = 0; i < block->successors.current_index; i++){
-			cursor = block->successors.internal_array[i];
+		for(u_int32_t j  = 0; j  < block->successors.current_index; j++){
+			//Extract the successor
+			basic_block_t* cursor = dynamic_array_get_at(&(block->successors), j);
 
 			//While cursor is not the immediate postdominator of block
-			//TODO UPDATE
-			while(cursor != immediate_postdominator(block)){
+			while(cursor != block->dominator_info.immediate_postdominator){
 				//Add block to cursor's reverse dominance frontier set
 				add_block_to_reverse_dominance_frontier(cursor, block);
 				
@@ -1454,8 +1443,7 @@ static inline void calculate_reverse_dominance_frontiers(dynamic_array_t* functi
 				 * Cursor now becomes it's own immediate postdominator, and
 				 * we crawl our way down the CFG
 				 */
-				//TODO UPDATE
-				cursor = immediate_postdominator(block);
+				cursor = cursor->dominator_info.immediate_postdominator;
 			}
 		}
 	}
@@ -1517,7 +1505,7 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	calculate_dominance_frontiers(function_blocks);
 
 	//TODO IPDOM
-	//compute_immediate_postdominators(function_exit_block, function_blocks);
+	compute_immediate_postdominators(function_exit_block, function_blocks);
 
 	//Calculate the postdominator sets for analysis
 	calculate_postdominator_sets(function_entry_block, function_blocks);
@@ -1539,9 +1527,6 @@ void cleanup_all_control_relations(dynamic_array_t* function_blocks){
 
 		//Wipe the immediate dominator slate clean
 		initialize_block_for_idom_computation(block);
-
-		//Reset both of these as they will need to be recomputed
-		block->immediate_postdominator = NULL;
 
 		if(block->postdominator_set.internal_array != NULL){
 			dynamic_array_dealloc(&(block->postdominator_set));
