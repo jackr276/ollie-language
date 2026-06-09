@@ -11,6 +11,7 @@
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/value_numbering_table/value_numbering_table.h"
+#include "../graph_analyzer/graph_analyzer.h"
 #include "../utils/constants.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -6936,7 +6937,7 @@ static simplification_type_t sweep(dynamic_array_t* function_blocks, basic_block
 				 */
 				case THREE_ADDR_CODE_BRANCH_STMT:
 					//We'll first find the nearest marked postdominator
-					nearest_marked_postdom = nearest_marked_postdominator(function_blocks, block);
+					nearest_marked_postdom = get_nearest_marked_postdominator(block);
 
 					//We now need to unlink the successors that were in this branch
 					delete_successor(block, stmt->if_block);

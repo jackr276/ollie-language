@@ -1074,25 +1074,27 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 				case THREE_ADDR_CODE_JUMP_STMT:
 					stmt = stmt->next_statement;
 
-					//Break out of the switch
 					break;
 
-				//If we have a branch that is now useless,
-				//we'll need to replace it with a jump to
-				//it's nearest marked postdominator
+				/**
+				 * If we have a branch that is now useless,
+				 * we'll need to replace it with a jump to
+				 * it's nearest marked postdominator
+				 */
 				case THREE_ADDR_CODE_BRANCH_STMT:
 					//We'll first find the nearest marked postdominator
-					nearest_marked_postdom = nearest_marked_postdominator(function_blocks, block);
+					nearest_marked_postdom = get_nearest_marked_postdominator(block);
 
 					//This is now useless
 					delete_statement(stmt);
 
-					//Emit the jump statement to the nearest marked postdominator
-					//NOTE: the emit jump adds the successor in for us, so we don't need to
-					//do so here
+					/**
+					 * Emit the jump statement to the nearest marked postdominator
+					 * NOTE: the emit jump adds the successor in for us, so we don't need to
+					 * do so here
+					 */
 					stmt = emit_jump(block, nearest_marked_postdom);
 
-					//Break out of the switch
 					break;
 
 				/**
@@ -1119,7 +1121,6 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 					//Delete the statement, now that we know it is not a jump
 					delete_statement(temp);
 
-					//Break out of the switch
 					break;
 			}
 		}
