@@ -853,69 +853,6 @@ static void compute_immediate_postdominators(basic_block_t* function_exit_block,
 
 
 /**
- * The immediate postdominator is the first breadth-first 
- * successor that post dominates a node
- *
- *
- * TODO THIS ENTIRE THING IS GOING TO BE REWORKEDk
-static basic_block_t* immediate_postdominator(basic_block_t* B){
-	//If we've already found the immediate dominator, why find it again?
-	if(B->immediate_postdominator != NULL){
-		return B->immediate_postdominator;
-	}
-
-	heap_queue_t traversal_queue = heap_queue_alloc();
-
-	//The visited array
-	dynamic_array_t visited = dynamic_array_alloc();
-
-	//Save this for when we find it
-	basic_block_t* ipdom = NULL;
-
-	//Extract the postdominator set
-	dynamic_array_t postdominator_set = B->postdominator_set;
-
-	//Seed the search with B
-	enqueue(&traversal_queue, B);
-
-	//So long as the queue isn't empty
-	while(queue_is_empty(&traversal_queue) == FALSE){
-		//Pop off of the queue
-		basic_block_t* current = dequeue(&traversal_queue);
-
-		 * we are done
-		if(current != B && dynamic_array_contains(&postdominator_set, current) != NOT_FOUND){
-			ipdom = current;
-			break;
-		}
-
-		//Add to the visited set
-		dynamic_array_add(&visited, current);
-
-		//Run through all successors
-		for(u_int16_t j = 0; j < current->successors.current_index; j++){
-			//Add the successor into the queue, if it has not yet been visited
-			basic_block_t* successor = current->successors.internal_array[j];
-
-			if(dynamic_array_contains(&visited, successor) == NOT_FOUND){
-				enqueue(&traversal_queue, successor);
-			}
-		}
-	}
-
-	//Destroy visited
-	dynamic_array_dealloc(&visited);
-
-	//GOING TO BE FIXED
-	heap_queue_dealloc(&traversal_queue);
-
-	//Give it back
-	return ipdom;
-}
- */
-
-
-/**
  * We'll go through in the regular traversal, pushing each node onto the stack in
  * postorder. 
  */
@@ -1245,6 +1182,11 @@ static inline void calculate_dominance_frontiers(dynamic_array_t* function_block
  *
  *
  * TODO WE NEED TO REWORK THIS TO USE THE IMMEDIATE POSTDOMINATOR
+ *
+ *
+ * TODO - I don't think we actually need to compute this. What we are really trying to do with this is find 
+ * the *nearest marked postdominator* in the selector and optimizer. There is a more efficient algorithm for
+ * that that we can use instead that bypasses the need to do any of this
  */
 static void calculate_postdominator_sets(basic_block_t* function_entry_block, dynamic_array_t* function_blocks){
 	basic_block_t* current;
