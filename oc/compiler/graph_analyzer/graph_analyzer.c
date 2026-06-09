@@ -1445,7 +1445,8 @@ static inline void calculate_reverse_dominance_frontiers(dynamic_array_t* functi
 			cursor = block->successors.internal_array[i];
 
 			//While cursor is not the immediate postdominator of block
-			while(cursor != block->dominator_info.immediate_postdominator){
+			//TODO UPDATE
+			while(cursor != immediate_postdominator(block)){
 				//Add block to cursor's reverse dominance frontier set
 				add_block_to_reverse_dominance_frontier(cursor, block);
 				
@@ -1453,7 +1454,8 @@ static inline void calculate_reverse_dominance_frontiers(dynamic_array_t* functi
 				 * Cursor now becomes it's own immediate postdominator, and
 				 * we crawl our way down the CFG
 				 */
-				cursor = cursor->dominator_info.immediate_postdominator;
+				//TODO UPDATE
+				cursor = immediate_postdominator(block);
 			}
 		}
 	}
@@ -1515,7 +1517,7 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	calculate_dominance_frontiers(function_blocks);
 
 	//TODO IPDOM
-	compute_immediate_postdominators(function_exit_block, function_blocks);
+	//compute_immediate_postdominators(function_exit_block, function_blocks);
 
 	//Calculate the postdominator sets for analysis
 	calculate_postdominator_sets(function_entry_block, function_blocks);
