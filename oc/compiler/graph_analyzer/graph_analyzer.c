@@ -155,6 +155,77 @@ static void dfs_number_block(basic_block_t* block, basic_block_t** dfs_number_to
 
 
 /**
+ * Perform the immediate postdominator DFS traversal for a given
+ * block. This traversal will assign the block it's given reverse DFS
+ * number, and will perform bookkeeping for the semipostdominator,
+ * union-find postdominator ancestor, and label.
+ *
+ * The entire point of the reverse DFS traversal is to assign every value
+ * a reverse DFS number. This reverse DFS number will tell us how many hops away from the 
+ * exit node we are
+ *
+ * The main important mapping that we care about here is reverse DFS number to basic block
+ * because the semidominator set stores DFS numbers
+ *
+ * This function is recursive. The caller should only invoke this on the parent of the
+ * entire graph(i.e. the function entry) and let it do the rest
+ *
+ * Procedure IDOM_REVERSE_DFS(block b):
+ * 	b->dfs_number = current dfs number
+ * 	number_to_vertex[current dfs number] = block
+ * 	b->semidominator = current dfs number
+ * 	b->label = b
+ * 	b->ancestor = NULL
+ *
+ * 	current_dfs_number++
+ *
+ * 	foreach predecessor p of b:
+ * 		if b->dfs_number == -1:
+ * 			p->parent = b
+ * 			IDOM_REVERSE_DFS(p)
+ */
+static void reverse_dfs_number_block(basic_block_t* block, basic_block_t** reverse_dfs_number_to_vertex_mapping, int32_t* current_dfs_number){
+	//Assign this to be the current DFS number
+	block->dominator_info.dfs_number = *current_dfs_number;
+
+	//We'll also have a reverse mapping from number to block
+	reverse_dfs_number_to_vertex_mapping[*current_dfs_number] = block;
+
+	//Initialize the semidominator number to be this
+	block->dominator_info.semidominator_number = *current_dfs_number;
+
+	//By default our optimal candidate so far is just this block
+	block->dominator_info.optimal_candidate = block;
+
+	//As of right now we don't have a union-find ancestor so just make it NULL
+	block->dominator_info.ancestor = NULL;
+
+	//Bump the current number up
+	(*current_dfs_number)++;
+
+	/**
+	 * Now for every predecessor of this block, we need to perform
+	 * a reverse DFS and do the parent bookkeeping
+	 */
+	for(int32_t i = 0; i < block->predecessors.current_index; i++){
+		basic_block_t* predecessor = dynamic_array_get_at(&(block->predecessors), i);
+
+		/**
+		 * If our predecessor does not yet have a DFS number, then we'll need to 
+		 * give it one now
+		 */
+		if(predecessor->dominator_info.dfs_number == LT_UNNUMBERED){
+			//Simple parent is just this block
+			predecessor->dominator_info.parent = block;
+
+			//Recursively call out to have this block populated
+			dfs_number_block(predecessor, reverse_dfs_number_to_vertex_mapping, current_dfs_number);
+		}
+	}
+}
+
+
+/**
  * Idea of the path_compression:
  * """
  * 	walk from the block towards the root of the tree recursively
@@ -187,6 +258,8 @@ static void dfs_number_block(basic_block_t* block, basic_block_t** dfs_number_to
  *
  * 	set block's ancestor to be its ancestor's ancestor(path compression)
  *
+ * This is reusable for immediate dominator and immediate postdominator
+ * calculation, it's just context-dependant as to what the ancestor is
  *
  * NOTE: This is a recursive function
  */
@@ -250,6 +323,9 @@ static void path_compression(basic_block_t* block){
  *
  * Our path compression helper stores the "best_semi" pointer for exactly
  * this reason
+ *
+ * This is reusable for immediate dominator and immediate postdominator
+ * calculation, it's just context-dependant as to what the ancestor is
  */
 static inline basic_block_t* evaluate(basic_block_t* block){
 	/**
@@ -273,6 +349,9 @@ static inline basic_block_t* evaluate(basic_block_t* block){
 
 /**
  * Simple helper to link the union-find ancestor to it's descendant
+ *
+ * This is reusable for immediate dominator and immediate postdominator
+ * calculation, it's just context-dependant as to what the ancestor is
  */
 static inline void link_ancestor(basic_block_t* ancestor, basic_block_t* descendant){
 	descendant->dominator_info.ancestor = ancestor;
@@ -526,6 +605,7 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 	//We're done with this now so release it
 	free(dfs_number_to_vertex_mapping);
 }
+
 
 
 /**
