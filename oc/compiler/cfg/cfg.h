@@ -107,8 +107,6 @@ struct basic_block_t{
 	dynamic_array_t dominance_frontier;
 	//The reverse dominance frontier(for analysis)
 	dynamic_array_t reverse_dominance_frontier;
-	//The reverse post order set
-	dynamic_array_t reverse_post_order;
 	//The reverse post order set on the reverse cfg
 	dynamic_array_t reverse_post_order_reverse_cfg;
 	//The dominator children of a basic block. These are all

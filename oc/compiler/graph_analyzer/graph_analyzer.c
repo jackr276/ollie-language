@@ -910,58 +910,6 @@ static dynamic_array_t compute_reverse_post_order_traversal_reverse_cfg(basic_bl
 
 
 /**
- * We'll go through in the regular traversal, pushing each node onto the stack in
- * postorder. 
- */
-static void reverse_post_order_traversal_rec(heap_stack_t* stack, basic_block_t* entry){
-	//If we've already seen this then we're done
-	if(entry->visited == TRUE){
-		return;
-	}
-
-	//Mark it as visited
-	entry->visited = TRUE;
-
-	//For every child(successor), we visit it as well
-	for(u_int32_t i = 0; i < entry->successors.current_index; i++){
-		//Visit each of the blocks
-		reverse_post_order_traversal_rec(stack, dynamic_array_get_at(&(entry->successors), i));
-	}
-
-	//Now we can push entry onto the stack
-	push(stack, entry);
-}
-
-
-/**
- * Get and return a reverse-post order traversal for a function level CFG
- */
-dynamic_array_t compute_reverse_post_order_traversal(basic_block_t* entry){
-	//For our postorder traversal
-	heap_stack_t stack = heap_stack_alloc();
-	//We'll need this eventually for postorder
-	dynamic_array_t reverse_post_order_traversal = dynamic_array_alloc();
-
-	//Invoke the recursive helper
-	reverse_post_order_traversal_rec(&stack, entry);
-
-	/**
-	 * Now we'll pop everything off of the stack, and put it onto the RPO 
-	 * array in backwards order
-	 */
-	while(heap_stack_is_empty(&stack) == FALSE){
-		dynamic_array_add(&reverse_post_order_traversal, pop(&stack));
-	}
-
-	//And when we're done, get rid of the stack
-	heap_stack_dealloc(&stack);
-
-	//Give back the reverse post order traversal
-	return reverse_post_order_traversal;
-}
-
-
-/**
  * A recursive post order simplifies the code, so it's what we'll use here
  */
 static void post_order_traversal_rec(dynamic_array_t* post_order_traversal, basic_block_t* entry){
@@ -985,44 +933,15 @@ static void post_order_traversal_rec(dynamic_array_t* post_order_traversal, basi
 
 
 /**
- * Get and return the regular postorder traversal for a function-level CFG
- *
- * NOTE: This assumes that the caller has already wiped the function's visited
- * status clean
- */
-static dynamic_array_t compute_post_order_traversal(basic_block_t* entry){
-	//Create our dynamic array
-	dynamic_array_t post_order_traversal = dynamic_array_alloc();
-
-	//Make the recursive call
-	post_order_traversal_rec(&post_order_traversal, entry);
-
-	//Give the traversal back
-	return post_order_traversal;
-}
-
-
-/**
  * Calculate all reverse traversals for a given function. A reverse traversal is simply a traversal on the graph
  * where every successor is a predecessor, and every predecessor is a successor. This is needed for the postdominance
  * computation
  */
 static inline void calculate_all_reverse_traversals(basic_block_t* function_entry_block, dynamic_array_t* function_blocks){
-	//Set the RPO to be null
-	if(function_entry_block->reverse_post_order.internal_array != NULL){
-		dynamic_array_dealloc(&(function_entry_block->reverse_post_order));
-	}
-
 	//Set the RPO reverse CFG to be null
 	if(function_entry_block->reverse_post_order_reverse_cfg.internal_array != NULL){
 		dynamic_array_dealloc(&(function_entry_block->reverse_post_order_reverse_cfg));
 	}
-
-	//Reset the function visited status
-	reset_visit_status_for_function(function_blocks);
-
-	//Compute the reverse post order traversal
-	function_entry_block->reverse_post_order = compute_post_order_traversal(function_entry_block);
 
 	//Reset the function visited status
 	reset_visit_status_for_function(function_blocks);
@@ -1392,10 +1311,6 @@ void cleanup_all_control_relations(dynamic_array_t* function_blocks){
 
 		if(block->reverse_post_order_reverse_cfg.internal_array != NULL){
 			dynamic_array_dealloc(&(block->reverse_post_order_reverse_cfg));
-		}
-
-		if(block->reverse_post_order.internal_array != NULL){
-			dynamic_array_dealloc(&(block->reverse_post_order));
 		}
 	}
 }
