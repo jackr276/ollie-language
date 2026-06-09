@@ -1151,27 +1151,6 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 		printf("}\n");
 	}
 
-	printf("Postdominator(reverse dominator) Set: {");
-	if(block->postdominator_set.internal_array != NULL){
-		//Run through and print them all out
-		for(u_int16_t i = 0; i < block->postdominator_set.current_index; i++){
-			basic_block_t* postdominator = block->postdominator_set.internal_array[i];
-
-			//Print the block's ID or the function name
-			if(postdominator->block_type == BLOCK_TYPE_FUNC_ENTRY){
-				printf("%s", postdominator->function_defined_in->func_name.string);
-			} else {
-				printf(".L%d", postdominator->block_id);
-			}
-			//If it isn't the very last one, we need a comma
-			if(i != block->postdominator_set.current_index - 1){
-				printf(", ");
-			}
-		}
-	}
-	//And close it out
-	printf("}\n");
-
 	//Now print out the dominator children
 	printf("Dominator Children: {");
 	//If we have dominator children
@@ -7711,11 +7690,6 @@ void basic_block_dealloc(basic_block_t* block){
 	//Deallocate the assigned variable array
 	if(block->assigned_variables.internal_array != NULL){
 		dynamic_array_dealloc(&(block->assigned_variables));
-	}
-
-	//Deallocate the postdominator set
-	if(block->postdominator_set.internal_array != NULL){
-		dynamic_array_dealloc(&(block->postdominator_set));
 	}
 
 	//Deallocate the dominator children

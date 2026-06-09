@@ -1161,163 +1161,6 @@ static inline void calculate_dominance_frontiers(dynamic_array_t* function_block
 
 
 /**
- * Calculate the postdominator sets for each and every node
- *
- * Routing postdominators
- * 	For each basic block
- * 		if block is exit then Pdom <- exit else pdom = all nodes
- *
- * while change = true
- * 	changed = false
- * 	for each Basic Block w/o exit block
- * 		temp = BB + {x | x elem of intersect of pdom(s) | s is a successor to B}
- *
- * 		if temp != pdom
- * 			pdom = temp
- * 			change = true
- *
- *
- * We'll be using a change watcher algorithm for this one. This algorithm will repeat until a stable solution
- * is found
- *
- *
- * TODO WE NEED TO REWORK THIS TO USE THE IMMEDIATE POSTDOMINATOR
- *
- *
- * TODO - I don't think we actually need to compute this. What we are really trying to do with this is find 
- * the *nearest marked postdominator* in the selector and optimizer. There is a more efficient algorithm for
- * that that we can use instead that bypasses the need to do any of this
- */
-static void calculate_postdominator_sets(basic_block_t* function_entry_block, dynamic_array_t* function_blocks){
-	basic_block_t* current;
-
-	//Reset the function visited status
-	reset_visit_status_for_function(function_blocks);
-
-	//We'll first initialize everything here
-	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
-		//Grab the block out
-		current = dynamic_array_get_at(function_blocks, i);
-
-		//If it's an exit block, then it's postdominator set just has itself
-		if(current->block_type == BLOCK_TYPE_FUNC_EXIT){
-			//If it's an exit block, then this set just contains itself
-			current->postdominator_set = dynamic_array_alloc();
-			//Add the block to it's own set
-			dynamic_array_add(&(current->postdominator_set), current);
-
-		} else {
-			//If it's not an exit block, then we set this to be the entire body of blocks
-			current->postdominator_set = clone_dynamic_array(function_blocks);
-		}
-	}
-
-	//Copy over for our current function block
-	basic_block_t* current_function_block = function_entry_block;
-
-	//Have we seen a change
-	u_int8_t changed;
-	
-	//Now we will go through everything in this blocks reverse post order set
-	do {
-		//By default, we'll assume there was no change
-		changed = FALSE;
-
-		//Now for each basic block in the reverse post order set
-		for(u_int32_t _ = 0; _ < current_function_block->reverse_post_order.current_index; _++){
-			//Grab the block out
-			basic_block_t* current = dynamic_array_get_at(&(current_function_block->reverse_post_order), _);
-
-			/**
-			 * If it's the exit block, we don't need to bother with it. The exit block is always postdominated
-			 * by itself
-			 */
-			if(current->block_type == BLOCK_TYPE_FUNC_EXIT){
-				continue;
-			}
-
-			//The temporary array that we will use as a holder for this iteration's postdominator set 
-			dynamic_array_t temp = dynamic_array_alloc();
-
-			//The temp will always have this block in it
-			dynamic_array_add(&temp, current);
-
-			/**
-			 * The temporary array also has the intersection of all of the successor's of BB's postdominator 
-			 * sets in it. As such, we'll now compute those
-			 */
-
-			//If this block has any successors
-			if(current->successors.internal_array != NULL){
-				//Let's just grab out the very first successor
-				basic_block_t* first_successor = dynamic_array_get_at(&(current->successors), 0);
-
-				/**
-				 * Now, if a node IS in the set of all successor's postdominator sets, it must be in here. As such, any node that
-				 * is not in the set of all successors will NOT be in here, and every node that IS in the set
-				 * of all successors WILL be. So, we can just run through this entire array and see if each node is 
-				 * everywhere else
-				 */
-				if(first_successor->postdominator_set.internal_array != NULL){
-					//For each node in the first one's postdominator set
-					for(u_int32_t k = 0; k < first_successor->postdominator_set.current_index; k++){
-						//Are we in the intersection of the sets? By default we think so
-						u_int8_t in_intersection = TRUE;
-
-						//Grab out the postdominator
-						basic_block_t* postdominator = dynamic_array_get_at(&(first_successor->postdominator_set), k);
-
-						//Now let's see if this postdominator is in every other postdominator set for the remaining successors
-						for(u_int32_t l = 1; l < current->successors.current_index; l++){
-							//Grab the successor out
-							basic_block_t* other_successor = dynamic_array_get_at(&(current->successors), l);
-
-							/**
-							 * Now we'll check to see - is our given postdominator in this one's dominator set?
-							 * If it isn't, we'll set the flag and break out. If it is we'll move on to the next one
-							 */
-							if(dynamic_array_contains(&(other_successor->postdominator_set), postdominator) == NOT_FOUND){
-								//We didn't find it, set the flag and get out
-								in_intersection = FALSE;
-								break;
-							}
-
-							//Otherwise we did find it, so we'll keep going
-						}
-
-						/**
-						 * By the time we make it here, we'll either have our flag set to true or false. If the postdominator
-						 * made it to true, it's in the intersection, and will add it to the new set
-						 */
-						if(in_intersection == TRUE){
-							dynamic_array_add(&temp, postdominator);
-						}
-					}
-				}
-			}
-
-			//Let's compare the two dynamic arrays - if they aren't the same, we've found a difference
-			if(dynamic_arrays_equal(&temp, &(current->postdominator_set)) == FALSE){
-				//Set the flag
-				changed = TRUE;
-
-				//And we can get rid of the old one
-				dynamic_array_dealloc(&(current->postdominator_set));
-				
-				//Set temp to be the new postdominator set
-				current->postdominator_set = temp;
-
-			//Otherwise they weren't changed, so the new one that we made has to go
-			} else {
-				dynamic_array_dealloc(&temp);
-			}
-		}
-
-	} while(changed == TRUE);
-}
-
-
-/**
  * Add a block to the reverse dominance frontier of the first block
  */
 static inline void add_block_to_reverse_dominance_frontier(basic_block_t* block, basic_block_t* rdf_block){
@@ -1491,6 +1334,8 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	 *
 	 * Dominator trees are used for SSA form conversion. It is absolutely
 	 * essential that these be computed upon every run
+	 *
+	 * TODO I DOUBT WE NEED THIS
 	 */
 	build_dominator_trees(function_blocks);
 
@@ -1501,13 +1346,21 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	 */
 	calculate_dominance_frontiers(function_blocks);
 
-	//TODO IPDOM
+	/**
+	 * Immediate postdominators are also computed with the Lengauer-Tarjan linear
+	 * time algorithm, just on the reversed CFG. These are needed to find the reverse dominance
+	 * frontier, and they're also used when we perform branch reduction in the 
+	 * optimizer(see nearest_marked_postdominator)
+	 */
 	compute_immediate_postdominators(function_exit_block, function_blocks);
 
-	//Calculate the postdominator sets for analysis
-	calculate_postdominator_sets(function_entry_block, function_blocks);
-
-	//And the reverse dominance frontier(needed for branch ops)
+	/**
+	 * Reverse dominance frontiers are the same as regular dominance frontiers(just
+	 * barely not *post*dominated by a block X) and are used when we are doint
+	 * mark and sweep. The reverse dominance frontier is thus calculated every
+	 * time we do this. The algorithm relies on immediate postdominators, which is
+	 * why this comes last
+	 */
 	calculate_reverse_dominance_frontiers(function_blocks);
 }
 
@@ -1524,10 +1377,6 @@ void cleanup_all_control_relations(dynamic_array_t* function_blocks){
 
 		//Wipe the immediate dominator slate clean
 		initialize_block_for_idom_computation(block);
-
-		if(block->postdominator_set.internal_array != NULL){
-			dynamic_array_dealloc(&(block->postdominator_set));
-		}
 
 		if(block->dominator_children.internal_array != NULL){
 			dynamic_array_dealloc(&(block->dominator_children));
