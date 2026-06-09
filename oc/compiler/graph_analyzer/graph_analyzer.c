@@ -184,15 +184,15 @@ static void dfs_number_block(basic_block_t* block, basic_block_t** dfs_number_to
  * 			p->parent = b
  * 			IDOM_REVERSE_DFS(p)
  */
-static void reverse_dfs_number_block(basic_block_t* block, basic_block_t** reverse_dfs_number_to_vertex_mapping, int32_t* current_dfs_number){
+static void reverse_dfs_number_block(basic_block_t* block, basic_block_t** reverse_dfs_number_to_vertex_mapping, int32_t* current_reverse_dfs_number){
 	//Assign this to be the current DFS number
-	block->dominator_info.dfs_number = *current_dfs_number;
+	block->dominator_info.dfs_number = *current_reverse_dfs_number;
 
 	//We'll also have a reverse mapping from number to block
-	reverse_dfs_number_to_vertex_mapping[*current_dfs_number] = block;
+	reverse_dfs_number_to_vertex_mapping[*current_reverse_dfs_number] = block;
 
 	//Initialize the semidominator number to be this
-	block->dominator_info.semidominator_number = *current_dfs_number;
+	block->dominator_info.semidominator_number = *current_reverse_dfs_number;
 
 	//By default our optimal candidate so far is just this block
 	block->dominator_info.optimal_candidate = block;
@@ -201,7 +201,7 @@ static void reverse_dfs_number_block(basic_block_t* block, basic_block_t** rever
 	block->dominator_info.ancestor = NULL;
 
 	//Bump the current number up
-	(*current_dfs_number)++;
+	(*current_reverse_dfs_number)++;
 
 	/**
 	 * Now for every predecessor of this block, we need to perform
@@ -219,7 +219,7 @@ static void reverse_dfs_number_block(basic_block_t* block, basic_block_t** rever
 			predecessor->dominator_info.parent = block;
 
 			//Recursively call out to have this block populated
-			dfs_number_block(predecessor, reverse_dfs_number_to_vertex_mapping, current_dfs_number);
+			dfs_number_block(predecessor, reverse_dfs_number_to_vertex_mapping, current_reverse_dfs_number);
 		}
 	}
 }
@@ -436,7 +436,7 @@ static inline void link_ancestor(basic_block_t* ancestor, basic_block_t* descend
  */
 static void compute_immediate_dominators(basic_block_t* function_entry_block, dynamic_array_t* function_blocks){
 	//The number of blocks is static
-	u_int32_t number_of_blocks = function_blocks->current_index;
+	const u_int32_t number_of_blocks = function_blocks->current_index;
 
 	/**
 	 * Wipe every block's existing dominator info completely clean
@@ -645,6 +645,30 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
  * The reverse DFS numbers are very important because we map semipostdominators to reverse DFS numbers for lookup speed
  */
 static void compute_immediate_postdominators(basic_block_t* function_exit_block, dynamic_array_t* function_blocks){
+	//Extract the number of blocks that we have 
+	const u_int32_t number_of_blocks = function_blocks->current_index;
+
+	/**
+	 * The first thing that we need to do is initialize every block for IPDOM calculation
+	 */
+	for(u_int32_t i = 0; i < number_of_blocks; i++){
+		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
+		initialize_block_for_ipdom_computation(block);
+	}
+
+	/**
+	 * Let the reverse DFS numbering algorithm recursively give
+	 * every block a reverse DFS number. We'll need this number 
+	 * for later parts of the algorithm because the higher the number,
+	 * the farther away from the exit node of the graph that we are
+	 *
+	 * The reverse DFS numbering algorithm also initializes 
+	 */
+	int32_t current_reverse_dfs_number = 0;
+	basic_block_t** reverse_dfs_number_to_vertex_mapping = calloc(number_of_blocks, sizeof(basic_block_t*));
+	reverse_dfs_number_block(function_exit_block, reverse_dfs_number_to_vertex_mapping, &current_reverse_dfs_number);
+
+
 }
 
 
