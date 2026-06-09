@@ -806,9 +806,9 @@ static void compute_immediate_postdominators(basic_block_t* function_exit_block,
 			 * we will set this block's IPDOM to be the parent block
 			 */
 			if(candidate->dominator_info.semidominator_number < semipostdominated_block->dominator_info.semidominator_number){
-				semipostdominated_block->dominator_info.immediate_dominator = candidate;
+				semipostdominated_block->dominator_info.immediate_postdominator = candidate;
 			} else {
-				semipostdominated_block->dominator_info.immediate_dominator = postdominator_parent;
+				semipostdominated_block->dominator_info.immediate_postdominator = postdominator_parent;
 			}
 		}
 
@@ -816,7 +816,32 @@ static void compute_immediate_postdominators(basic_block_t* function_exit_block,
 		clear_dynamic_array(parent_worklist);
 	}
 
+	/**
+	 * Even though we've processed every block, we still need a correction
+	 * pass here.
+	 *
+	 * Lengauer-Tarjan proves:
+	 * 	if ipdom(v) != semipostdominator(v):
+	 * 		ipdom(v) = ipdom(ipdom(v))
+	 *
+	 * In other words: "If the candidate is not the semipostdominator, then the true
+	 * immediate postdominator is the immediate postdominator of the candidate"
+	 */
+	for(int32_t i = 1; i < current_reverse_dfs_number; i++){
+		//Get the block to work on
+		basic_block_t* working_block = reverse_dfs_number_to_vertex_mapping[i];
 
+		//Extract this block's semipostdominator
+		basic_block_t* semipostdominator = reverse_dfs_number_to_vertex_mapping[working_block->dominator_info.semidominator_number];
+
+		/**
+		 * If the IPDOM is not the semidominator, then the real IPDOM is
+		 * the immediate postdominator dominator of said candidate
+		 */
+		if(working_block->dominator_info.immediate_postdominator != semipostdominator){
+			working_block->dominator_info.immediate_postdominator = working_block->dominator_info.immediate_postdominator->dominator_info.immediate_postdominator;
+		}
+	}
 
 	/**
 	 * By definition, the exit block may have no immediate postdominator
