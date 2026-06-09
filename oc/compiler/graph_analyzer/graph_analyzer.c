@@ -1402,6 +1402,34 @@ void get_post_order_traversal(basic_block_t* function_entry_block, dynamic_array
 
 
 /**
+ * Get the nearest marked postdominator of a given block
+ *
+ * The algorithm here is simple: Since we already have all immediate
+ * postdominators calculated, we inherently have a postdominator tree
+ * that we can leverage and walk. 
+ *
+ * 			D
+ * 			|	
+ * 			C(mark)
+ *			|
+ * 			B
+ * 			|
+ * 			A
+ *
+ * If we are searching for A's nearest marked postdominator, we'll maintain
+ * a cursor, walk up the tree by going from cursor to IPDOM(cursor), and 
+ * bailing out whenever we have a marked value
+ *
+ * NOTE: in order for this to be accurate, we must have already computed
+ * the immediate postdominators of all blocks within the function that this
+ * block comes from
+ */
+basic_block_t* get_nearest_marked_postdominator(basic_block_t* block){
+
+}
+
+
+/**
  * We will calculate:
  *  1.) Reverse post order traversals
  *  2.) Immediate dominators

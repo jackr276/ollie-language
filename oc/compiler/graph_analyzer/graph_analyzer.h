@@ -19,6 +19,15 @@
 void get_post_order_traversal(basic_block_t* function_entry_block, dynamic_array_t* post_order_traversal);
 
 /**
+ * Get the nearest marked postdominator of a given block
+ *
+ * NOTE: in order for this to be accurate, we must have already computed
+ * the immediate postdominators of all blocks within the function that this
+ * block comes from
+ */
+basic_block_t* get_nearest_marked_postdominator(basic_block_t* block);
+
+/**
  * We will calculate:
  *  1.) Reverse post order traversals
  *  2.) Immediate dominators
