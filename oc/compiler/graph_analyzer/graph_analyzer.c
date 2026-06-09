@@ -515,6 +515,7 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 		 * First we'll need to use the DFS number to block mapping to get the actual semidominator
 		 */
 		basic_block_t* semidominator = dfs_number_to_vertex_mapping[working_block->dominator_info.semidominator_number];
+
 		/**
 		 * Add the working block into the semidominator's worklist
 		 *
@@ -547,29 +548,29 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 		 * needed after this. This only computes a provisional(or potential/best guess)
 		 * IDOM
 		 */
-		dynamic_array_t* parent_block_bucket = &(dominator_parent->dominator_info.worklist);
-		for(u_int32_t k = 0; k < parent_block_bucket->current_index; k++){
+		dynamic_array_t* parent_worklist = &(dominator_parent->dominator_info.worklist);
+		for(u_int32_t k = 0; k < parent_worklist->current_index; k++){
 			/**
 			 * Extract our bucket block and use evaluate to perform path compression
 			 * and get compute the smallest semidominator number along this path
 			 */
-			basic_block_t* bucket_block = dynamic_array_get_at(parent_block_bucket, k);
-			basic_block_t* candidate = evaluate(bucket_block);
+			basic_block_t* semidominated_block = dynamic_array_get_at(parent_worklist, k);
+			basic_block_t* candidate = evaluate(semidominated_block);
 
 			/**
 			 * If the candidate post evaluation has a smaller semidominator number than
 			 * the bucket block, we will set the candidate as this block's IDOM. Otherwise,
 			 * we will set this block's IDOM to be the parent block
 			 */
-			if(candidate->dominator_info.semidominator_number < bucket_block->dominator_info.semidominator_number){
-				bucket_block->dominator_info.immediate_dominator = candidate;
+			if(candidate->dominator_info.semidominator_number < semidominated_block->dominator_info.semidominator_number){
+				semidominated_block->dominator_info.immediate_dominator = candidate;
 			} else {
-				bucket_block->dominator_info.immediate_dominator = dominator_parent;
+				semidominated_block->dominator_info.immediate_dominator = dominator_parent;
 			}
 		}
 
 		//Clear out the bucket now that we've processed
-		clear_dynamic_array(parent_block_bucket);
+		clear_dynamic_array(parent_worklist);
 	}
 
 	/**
@@ -758,8 +759,61 @@ static void compute_immediate_postdominators(basic_block_t* function_exit_block,
 			}
 		}
 
+		/**
+		 * Now that we've found our best semipostdominator candidate, we are going to add this block
+		 * into said semipostdominators "worklist" that we'll use for deferred processing when
+		 * the time comes
+		 */
+		basic_block_t* semipostdominator = reverse_dfs_number_to_vertex_mapping[working_block->dominator_info.semidominator_number];
+		dynamic_array_add(&(semipostdominator->dominator_info.worklist), working_block);
 
+		//We'll need the postdominator parent p of this block going forward
+		basic_block_t* postdominator_parent = working_block->dominator_info.parent;
 
+		/**
+		 * The parent of the working block is it's union-find ancestor
+		 */
+		link_ancestor(postdominator_parent, working_block);
+
+		/**
+		 * By the time we've reached here, we have enough information
+		 * to determine the *potential* IPDOMs for all node's whose semipostdominator
+		 * is our working block's parent.
+		 *
+		 * The worklist is essentially a deferred work queue that allows our algorithm
+		 * to postpone any/all IPDOM processing until the ancestor structure
+		 * has enough info to make the decision
+		 *
+		 * Our core theory when processing a bucket is: The immediate
+		 * dominator of a block is either it's semipostdominator *or* some
+		 * dominator above said semipostdominator. *At this moment, we do
+		 * not know which one it is*. This is why a final correction pass is
+		 * needed after this. This only computes a provisional(or potential/best guess)
+		 * IPDOM
+		 */
+		dynamic_array_t* parent_worklist = &(postdominator_parent->dominator_info.worklist);
+		for(u_int32_t k = 0; k < parent_worklist->current_index; k++){
+			/**
+			 * Extract our semipostdominated block and use evaluate to perform path compression
+			 * and get compute the smallest semidominator number along this path
+			 */
+			basic_block_t* semipostdominated_block = dynamic_array_get_at(parent_worklist, k);
+			basic_block_t* candidate = evaluate(semipostdominated_block);
+
+			/**
+			 * If the candidate post evaluation has a smaller semidpostominator number than
+			 * the bucket block, we will set the candidate as this block's IPDOM. Otherwise,
+			 * we will set this block's IPDOM to be the parent block
+			 */
+			if(candidate->dominator_info.semidominator_number < semipostdominated_block->dominator_info.semidominator_number){
+				semipostdominated_block->dominator_info.immediate_dominator = candidate;
+			} else {
+				semipostdominated_block->dominator_info.immediate_dominator = postdominator_parent;
+			}
+		}
+
+		//Clear out the bucket now that we've processed
+		clear_dynamic_array(parent_worklist);
 	}
 
 
