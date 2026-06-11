@@ -36,9 +36,10 @@ basic_block_t* get_nearest_marked_postdominator(basic_block_t* block);
 /**
  * We will calculate:
  *  1.) Immediate dominators
- *  2.) Dominance Frontiers
- *  3.) Immediate Postdominators
- *  4.) Reverse Dominance frontiers
+ *  2.) Dominator Trees
+ *  3.) Dominance Frontiers
+ *  4.) Immediate Postdominators
+ *  5.) Reverse Dominance frontiers
  *
  * For every block in the given function. This externally facing API hides all of
  * the complexity behind it

@@ -1200,23 +1200,16 @@ static inline void construct_live_ranges_in_function(basic_block_t* function_ent
 
 
 /**
- * Reset the visited status and the liveness arrays for each block
+ * Reset the liveness arrays for all blocks given. This is a necessary step before we recompute
+ * everything
  */
-static inline void reset_function_blocks_for_liveness(basic_block_t* function_entry_block){
-	//This is our initial current
-	basic_block_t* current = function_entry_block;
-
-	//So long as we aren't null
-	while(current != NULL){
-		//Reset this
-		current->visited = FALSE;
+static inline void reset_function_blocks_for_liveness(dynamic_array_t* function_blocks){
+	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
 
 		//Also reset the liveness sets
-		clear_dynamic_array(&(current->live_in));
-		clear_dynamic_array(&(current->live_out));
-
-		//Push it up
-		current = current->direct_successor;
+		clear_dynamic_array(&(block->live_in));
+		clear_dynamic_array(&(block->live_out));
 	}
 }
 
@@ -1242,6 +1235,9 @@ static inline void reset_function_blocks_for_liveness(basic_block_t* function_en
  *
  */
 static void calculate_live_range_liveness_sets(dynamic_array_t* function_blocks, basic_block_t* function_entry_block, basic_block_t* function_exit_block){
+	//Reset all of the liveness sets for our function blocks
+	reset_function_blocks_for_liveness(function_blocks);
+
 	/**
 	 * Allocate storage for the reverse post order traversal over the reverse CFG.
 	 * Then let the graph utility compute it for this function
