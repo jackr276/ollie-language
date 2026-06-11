@@ -554,7 +554,7 @@ static inline void delete_block(basic_block_t* block){
  * every single one. We assume that the caller knows what they are doing, and
  * that the blocks inside of the array are really the correct blocks
  */
-static inline void reset_visit_status_for_function(dynamic_array_t* function_blocks){
+static inline void reset_visited_status_for_function(dynamic_array_t* function_blocks){
 	//Run through all of the blocks
 	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
 		//Extract the current block
@@ -1364,26 +1364,24 @@ void delete_statement(instruction_t* stmt){
 /**
  * Does the block assign this variable? We'll do a simple linear scan to find out
  */
-static u_int8_t does_block_assign_variable(basic_block_t* block, symtab_variable_record_t* variable){
+static inline u_int8_t does_block_assign_variable(basic_block_t* block, symtab_variable_record_t* variable){
 	//Sanity check - if this is NULL then it's false by default
 	if(block->assigned_variables.internal_array == NULL){
 		return FALSE;
 	}
 
-	//We'll need to use a special comparison here because we're comparing variables, not plain addresses.
-	//We will compare the linked var of each block in the assigned variables dynamic array
-	for(u_int16_t i = 0; i < block->assigned_variables.current_index; i++){
-		//Grab the variable out
+	/**
+	 * If the linked variable to this var is ours, we do assign
+	 */
+	for(u_int32_t i = 0; i < block->assigned_variables.current_index; i++){
 		three_addr_var_t* var = dynamic_array_get_at(&(block->assigned_variables), i);
 		
 		//Now we'll compare the linked variable to the record
 		if(var->linked_var == variable){
-			//If we found it bail out
 			return TRUE;
 		}
 	}
 
-	//If we make it all of the way down here and we didn't find it, fail out
 	return FALSE;
 }
 
@@ -1865,6 +1863,9 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
  * 				if it does not already have one of these
  * 					Insert a phi function for v at d
  *
+ *
+ * We will use the "visited" tag to keep track of whether or not we've already
+ * evaluated this block or not. We will need to reset this for every variable
  */
 static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 	/**
@@ -1875,10 +1876,6 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 	 */
 	dynamic_array_t worklist = dynamic_array_alloc();
 	dynamic_array_t already_has_phi_function = dynamic_array_alloc();
-	dynamic_array_t ever_on_worklist;
-
-	//A cursor that we can use
-	basic_block_t* block_cursor;
 
 	/**
 	 * Step 1: For every single sheaf(lexical level/scope) that we have in the symbol table,
@@ -1916,24 +1913,28 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 				symtab_function_record_t* variable_function = record->function_declared_in;
 				dynamic_array_t* function_blocks = &(variable_function->function_blocks);
 
-				//----------------------------------
-				// SECOND STEP: For each block that 
-				// defines(assigns) said variable
-				//----------------------------------
-				//Just run through the entire thing
-				for(u_int16_t k = 0; k < function_blocks->current_index; k++){
-					//Grab the block out of here
-					block_cursor = dynamic_array_get_at(function_blocks, k);
+				/**
+				 * Since we use the "visited" tag to keep track of whether or not a block
+				 * was ever on the worklist, we'll need to reset this here
+				 */
+				reset_visited_status_for_function(function_blocks);
 
-					//Does this block define(assign) our variable?
-					if(does_block_assign_variable(block_cursor, record) == TRUE){
-						//Then we add this block onto the "worklist"
-						dynamic_array_add(&worklist, block_cursor);
+				/**
+				 * Queue up every block that we have on record as assigning this
+				 * given variable
+				 */
+				for(u_int32_t k = 0; k < function_blocks->current_index; k++){
+					basic_block_t* block = dynamic_array_get_at(function_blocks, k);
+
+					/**
+					 * Enqueue to our worklist if the block assigns this variable. Also flag
+					 * the visited tag on the block so that we don't end up reprocessing this
+					 */
+					if(does_block_assign_variable(block, record) == TRUE){
+						dynamic_array_add(&worklist, block);
+						block->visited = TRUE;
 					}
 				}
-
-				//Now we can clone the "was ever on worklist" dynamic array
-				ever_on_worklist = clone_dynamic_array(&worklist);
 
 				//Now we can actually perform our insertions
 				//So long as the worklist is not empty
@@ -1982,21 +1983,19 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 						//We'll mark that this block already has one for the future
 						dynamic_array_add(&already_has_phi_function, df_node); 
 
-						//If this node has not ever been on the worklist, we'll add it
-						//to keep the search going
-						if(dynamic_array_contains(&ever_on_worklist, df_node) == NOT_FOUND){
-							//We did NOT find it, so we WILL add it
+						/**
+						 * If we haven't visited this block yet then we'll add it to our worklist
+						 * for the next go around
+						 */
+						if(df_node->visited == FALSE){
 							dynamic_array_add(&worklist, df_node);
-							dynamic_array_add(&ever_on_worklist, df_node);
 						}
 					}
 				}
 
 				/**
 				 * Wipe all of these out but do not wastefully de/reallocate
-				 * these each time. However, the "ever on worklist" comes from
-				 * a clone so we will need to deallocate that one
-				 *
+				 * these each time
 				 *
 				 * TODO DO WE EVEN NEED ALL OF THIS ARRAY NONSENSE?
 				 *
@@ -2004,7 +2003,6 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 				 */
 				clear_dynamic_array(&worklist);
 				clear_dynamic_array(&already_has_phi_function);
-				dynamic_array_dealloc(&ever_on_worklist);
 			
 				//Advance to the next record in the chain
 				record = record->next;
