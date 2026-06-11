@@ -22,7 +22,7 @@ void get_post_order_traversal(dynamic_array_t* function_blocks, basic_block_t* f
  * Get the reverse post order traversal over the reverse CFG(successors are predecessors and vice versa). This on-demand traversal
  * grabber requires a pre-allocated array to be passed in that will store the traversal
  */
-void get_reverse_post_order_reverse_cfg_traversal(dynamic_array_t* function_blocks, basic_block_t* function_entry_block, dynamic_array_t* reverse_post_order_traversal);
+void get_reverse_post_order_reverse_cfg_traversal(dynamic_array_t* function_blocks, basic_block_t* function_exit_block, dynamic_array_t* reverse_post_order_traversal);
 
 /**
  * Get the nearest marked postdominator of a given block

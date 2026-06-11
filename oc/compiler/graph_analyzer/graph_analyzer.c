@@ -1097,22 +1097,22 @@ void get_post_order_traversal(dynamic_array_t* function_blocks, basic_block_t* f
  * We'll go through in the regular traversal, pushing each node onto the stack in
  * postorder. 
  */
-static void reverse_post_order_traversal_reverse_cfg_rec(heap_stack_t* stack, basic_block_t* entry){
+static void reverse_post_order_traversal_reverse_cfg_rec(heap_stack_t* stack, basic_block_t* block){
 	//If we've already seen this then we're done
-	if(entry->visited == TRUE){
+	if(block->visited == TRUE){
 		return;
 	}
 
 	//Mark it as visited
-	entry->visited = TRUE;
+	block->visited = TRUE;
 
 	//For every child(predecessor-it's reverse), we visit it as well
-	for(u_int32_t i = 0; i < entry->predecessors.current_index; i++){
-		reverse_post_order_traversal_reverse_cfg_rec(stack, dynamic_array_get_at(&(entry->predecessors), i));
+	for(u_int32_t i = 0; i < block->predecessors.current_index; i++){
+		reverse_post_order_traversal_reverse_cfg_rec(stack, dynamic_array_get_at(&(block->predecessors), i));
 	}
 
 	//Now we can push entry onto the stack
-	push(stack, entry);
+	push(stack, block);
 }
 
 
@@ -1155,10 +1155,26 @@ static dynamic_array_t compute_reverse_post_order_traversal_reverse_cfg(basic_bl
  * Get the reverse post order traversal over the reverse CFG(successors are predecessors and vice versa). This on-demand traversal
  * grabber requires a pre-allocated array to be passed in that will store the traversal
  */
-void get_reverse_post_order_reverse_cfg_traversal(dynamic_array_t* function_blocks, basic_block_t* function_entry_block, dynamic_array_t* reverse_post_order_traversal){
+void get_reverse_post_order_reverse_cfg_traversal(dynamic_array_t* function_blocks, basic_block_t* function_exit_block, dynamic_array_t* reverse_post_order_traversal){
+	//Relies on a stack for traversal
+	heap_stack_t stack = heap_stack_alloc();
+
+	//Wipe the status for all of these blocks
 	reset_visit_status_for_function(function_blocks);
 
-	//TODO
+	//Seed the recursive traversal with the exit block and let it run
+	reverse_post_order_traversal_reverse_cfg_rec(&stack, function_exit_block);
+
+	/**
+	 * Offload the entire stack in order to give us the full reverse
+	 * traversal that we're after
+	 */
+	while(heap_stack_is_empty(&stack) == FALSE){
+		dynamic_array_add(reverse_post_order_traversal, pop(&stack));
+	}
+	
+	//Free this up when we're done
+	heap_stack_dealloc(&stack);
 }
 
 
