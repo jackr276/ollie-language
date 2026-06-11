@@ -1841,30 +1841,40 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
  *
  */
 static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
-	//We'll run through the variable symtab, finding every single variable in it
-	symtab_variable_sheaf_t* sheaf_cursor;
-	symtab_variable_record_t* record;
+	dynamic_array_t worklist = dynamic_array_alloc();
+	dynamic_array_t ever_on_worklist = dynamic_array_alloc();
+	dynamic_array_t already_has_phi_function = dynamic_array_alloc();
+
 	//A cursor that we can use
 	basic_block_t* block_cursor;
-	//Once we're done with all of this, we're finally ready to insert phi functions
 
-	//------------------------------------------
-	// FIRST STEP: FOR EACH variable we have
-	//------------------------------------------
-	//Run through all of the sheafs
+	/**
+	 * Step 1: For every single sheaf(lexical level/scope) that we have in the symbol table,
+	 * and within every sheaf run through every single defined variable
+	 */
 	for	(u_int16_t i = 0; i < var_symtab->sheafs.current_index; i++){
 		//Grab the current sheaf
-		sheaf_cursor = dynamic_array_get_at(&(var_symtab->sheafs), i);
+		symtab_variable_sheaf_t* sheaf_cursor = dynamic_array_get_at(&(var_symtab->sheafs), i);
 
-		//Now we'll free all non-null records
-		for(u_int16_t j = 0; j < VARIABLE_KEYSPACE; j++){
-			//Grab the record
-			record = sheaf_cursor->records[j];
+		for(u_int32_t j = 0; j < VARIABLE_KEYSPACE; j++){
+			symtab_variable_record_t* record = sheaf_cursor->records[j];
 
-			//Remember that symtab records can be chained in case
-			//of hash collisions, so we need to run through every
-			//variable like this
+			/**
+			 * Remember that symtab records can be chained in case
+			 * of hash collisions, so we need to run through every
+			 * variable like this
+			 */
 			while(record != NULL){
+				//TODO SKIP IF INELIGIBLE
+
+				/**
+				 * To improve efficiency, we will grab the list of all blocks for the given
+				 * function that this variable was contained within and only scan those. Remember
+				 * that things like global variables are ineligible for SSA to begin with
+				 * due to how they are stored, so this is fine for us
+				 */
+				symtab_function_record_t* variable_function = record->function_declared_in;
+
 				//----------------------------------
 				// SECOND STEP: For each block that 
 				// defines(assigns) said variable
