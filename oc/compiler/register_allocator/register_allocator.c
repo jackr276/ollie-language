@@ -1242,10 +1242,6 @@ static inline void reset_function_blocks_for_liveness(basic_block_t* function_en
  *
  */
 static void calculate_live_range_liveness_sets(dynamic_array_t* function_blocks, basic_block_t* function_entry_block, basic_block_t* function_exit_block){
-	//Reset the visited status and liveness sets
-	//TODO IS THIS NEEDED??
-	reset_function_blocks_for_liveness(function_entry_block);
-
 	/**
 	 * Allocate storage for the reverse post order traversal over the reverse CFG.
 	 * Then let the graph utility compute it for this function
@@ -1273,7 +1269,7 @@ static void calculate_live_range_liveness_sets(dynamic_array_t* function_blocks,
 		difference_found = FALSE;
 
 		//Now we can go through the entire RPO set
-		for(u_int16_t _ = 0; _ < reverse_post_order_reverse_cfg.current_index; _++){
+		for(u_int32_t _ = 0; _ < reverse_post_order_reverse_cfg.current_index; _++){
 			//The current block is whichever we grab
 			current = dynamic_array_get_at(&reverse_post_order_reverse_cfg, _);
 
@@ -1285,12 +1281,12 @@ static void calculate_live_range_liveness_sets(dynamic_array_t* function_blocks,
 			current->live_out = dynamic_array_alloc();
 
 			//Run through all of the successors
-			for(u_int16_t k = 0; k < current->successors.current_index; k++){
+			for(u_int32_t k = 0; k < current->successors.current_index; k++){
 				//Grab the successor out
 				basic_block_t* successor = dynamic_array_get_at(&(current->successors), k);
 
 				//Add everything in his live_in set into the live_out set
-				for(u_int16_t l = 0; l < successor->live_in.current_index; l++){
+				for(u_int32_t l = 0; l < successor->live_in.current_index; l++){
 					//Let's check to make sure we haven't already added this
 					live_range_t* successor_live_in_var = dynamic_array_get_at(&(successor->live_in), l);
 
@@ -1308,7 +1304,7 @@ static void calculate_live_range_liveness_sets(dynamic_array_t* function_blocks,
 			current->live_in = clone_dynamic_array(&(current->used_before_definition));
 
 			//Now we need to add every variable that is in LIVE_OUT but NOT in assigned
-			for(u_int16_t j = 0; j  < current->live_out.current_index; j++){
+			for(u_int32_t j = 0; j  < current->live_out.current_index; j++){
 				//Grab a reference for our use
 				live_range_t* live_out_var = dynamic_array_get_at(&(current->live_out), j);
 
