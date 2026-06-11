@@ -359,6 +359,32 @@ static inline u_int8_t is_variable_ssa_eligible(three_addr_var_t* variable){
 
 
 /**
+ * Is a given symtab variable SSA eligible?
+ * 
+ * Ineligible:
+ * 	Global variables
+ * 	Static variables
+ * 	Enum variables
+ * 	Struct variables
+ *
+ * These are all ineligible because they are fundamentally differnt than what an actual
+ * SSA variable is. For instance static and global variables are basically equivalent
+ * to variables stored in memory and as such do not count for SSA
+ */
+static inline u_int8_t is_symtab_variable_ssa_eligible(symtab_variable_record_t* variable){
+	switch(variable->membership){
+		case ENUM_MEMBER:
+		case STRUCT_MEMBER:
+		case STATIC_VARIABLE:
+		case GLOBAL_VARIABLE:
+			return FALSE;
+		default:
+			return TRUE;
+	}
+}
+
+
+/**
  * When we do stack passed parameters, array types and 
  * pointer types are always passed as pointers, while
  * struct types and union types are passed by copy
@@ -1841,9 +1867,15 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
  *
  */
 static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
+	/**
+	 * To do this we need:
+	 * 	A worklist of all blocks we must check
+	 * 	A list of blocks we've already validated
+	 * 	A list of blocks that we've already inserted a phi function into
+	 */
 	dynamic_array_t worklist = dynamic_array_alloc();
-	dynamic_array_t ever_on_worklist = dynamic_array_alloc();
 	dynamic_array_t already_has_phi_function = dynamic_array_alloc();
+	dynamic_array_t ever_on_worklist;
 
 	//A cursor that we can use
 	basic_block_t* block_cursor;
@@ -1865,7 +1897,15 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 			 * variable like this
 			 */
 			while(record != NULL){
-				//TODO SKIP IF INELIGIBLE
+				/**
+				 * Certain variable types are completely ineligible, so checking
+				 * them would be a waste. As such we will skip all of these ineligible
+				 * variables here
+				 */
+				if(is_symtab_variable_ssa_eligible(record) == FALSE){
+					record = record->next;
+					continue;
+				}
 
 				/**
 				 * To improve efficiency, we will grab the list of all blocks for the given
@@ -1874,24 +1914,16 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 				 * due to how they are stored, so this is fine for us
 				 */
 				symtab_function_record_t* variable_function = record->function_declared_in;
+				dynamic_array_t* function_blocks = &(variable_function->function_blocks);
 
 				//----------------------------------
 				// SECOND STEP: For each block that 
 				// defines(assigns) said variable
 				//----------------------------------
-				//We'll need a "worklist" here - just a dynamic array 
-				dynamic_array_t worklist = dynamic_array_alloc();
-				//Keep track of those that were ever on the worklist
-				dynamic_array_t ever_on_worklist;
-
-				//We'll also need a dynamic array that contains everything relating
-				//to if we did or did not already put a phi function into this block
-				dynamic_array_t already_has_phi_func = dynamic_array_alloc();
-				
 				//Just run through the entire thing
-				for(u_int16_t i = 0; i < cfg->created_blocks.current_index; i++){
+				for(u_int16_t k = 0; k < function_blocks->current_index; k++){
 					//Grab the block out of here
-					block_cursor = dynamic_array_get_at(&(cfg->created_blocks), i);
+					block_cursor = dynamic_array_get_at(function_blocks, k);
 
 					//Does this block define(assign) our variable?
 					if(does_block_assign_variable(block_cursor, record) == TRUE){
@@ -1910,12 +1942,12 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 					basic_block_t* node = dynamic_array_delete_from_back(&worklist);
 
 					//Now we will go through each node in this worklist's dominance frontier
-					for(u_int16_t j = 0; j < node->dominance_frontier.current_index; j++){
+					for(u_int16_t l = 0; l < node->dominance_frontier.current_index; l++){
 						//Grab this node out
-						basic_block_t* df_node = dynamic_array_get_at(&(node->dominance_frontier), j);
+						basic_block_t* df_node = dynamic_array_get_at(&(node->dominance_frontier), l);
 
 						//If this node already has a phi function, we're not gonna bother with it
-						if(dynamic_array_contains(&already_has_phi_func, df_node) != NOT_FOUND){
+						if(dynamic_array_contains(&already_has_phi_function, df_node) != NOT_FOUND){
 							//We DID find it, so we will NOT add anything, it already has one
 							continue;
 						}
@@ -1948,7 +1980,7 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 						add_phi_statement(df_node, phi_stmt);
 
 						//We'll mark that this block already has one for the future
-						dynamic_array_add(&already_has_phi_func, df_node); 
+						dynamic_array_add(&already_has_phi_function, df_node); 
 
 						//If this node has not ever been on the worklist, we'll add it
 						//to keep the search going
@@ -1960,11 +1992,19 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 					}
 				}
 
-				//Now that we're done with these, we'll remove them for
-				//the next round
-				dynamic_array_dealloc(&worklist);
+				/**
+				 * Wipe all of these out but do not wastefully de/reallocate
+				 * these each time. However, the "ever on worklist" comes from
+				 * a clone so we will need to deallocate that one
+				 *
+				 *
+				 * TODO DO WE EVEN NEED ALL OF THIS ARRAY NONSENSE?
+				 *
+				 * can't we just use flags that we clear each time?
+				 */
+				clear_dynamic_array(&worklist);
+				clear_dynamic_array(&already_has_phi_function);
 				dynamic_array_dealloc(&ever_on_worklist);
-				dynamic_array_dealloc(&already_has_phi_func);
 			
 				//Advance to the next record in the chain
 				record = record->next;
