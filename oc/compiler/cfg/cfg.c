@@ -1808,6 +1808,9 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
 	
 	//So long as this holds we repeat
 	} while(difference_found == TRUE);
+
+	//Done with this now so remove it
+	dynamic_array_dealloc(&reverse_post_order_reverse_cfg);
 }
 
 
