@@ -7707,11 +7707,6 @@ void basic_block_dealloc(basic_block_t* block){
 		dynamic_array_dealloc(&(block->reverse_dominance_frontier));
 	}
 
-	//Deallocate the reverse post order set
-	if(block->reverse_post_order_reverse_cfg.internal_array != NULL){
-		dynamic_array_dealloc(&(block->reverse_post_order_reverse_cfg));
-	}
-
 	//Deallocate the liveness sets
 	if(block->live_out.internal_array != NULL){
 		dynamic_array_dealloc(&(block->live_out));

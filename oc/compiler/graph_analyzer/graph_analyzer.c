@@ -915,11 +915,6 @@ static dynamic_array_t compute_reverse_post_order_traversal_reverse_cfg(basic_bl
  * computation
  */
 static inline void calculate_all_reverse_traversals(basic_block_t* function_entry_block, dynamic_array_t* function_blocks){
-	//Set the RPO reverse CFG to be null
-	if(function_entry_block->reverse_post_order_reverse_cfg.internal_array != NULL){
-		dynamic_array_dealloc(&(function_entry_block->reverse_post_order_reverse_cfg));
-	}
-
 	//Reset the function visited status
 	reset_visit_status_for_function(function_blocks);
 
