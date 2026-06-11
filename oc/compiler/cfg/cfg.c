@@ -1201,42 +1201,40 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
  * This statement also takes care of the linking that we need to do. When we have a phi-function, we'll
  * need to link it back to whichever variables it refers to
  */
-static void add_phi_statement(basic_block_t* target, instruction_t* phi_statement){
-	//Generic fail case - this should never happen
-	if(target == NULL){
-		print_parse_message(MESSAGE_TYPE_ERROR, "NULL BASIC BLOCK FOUND", 0);
-		exit(1);
-	}
-
-	//Special case -- we're adding the head
-	if(target->leader_statement == NULL || target->exit_statement == NULL){
-		//Assign this to be the head and the tail
-		target->leader_statement = phi_statement;
-		target->exit_statement = phi_statement;
-		//Mark the block that we're in
-		phi_statement->block_contained_in = target;
-		return;
-	}
-
+static inline void add_phi_statement(basic_block_t* target, instruction_t* phi_statement){
 	//Counts as an instruction
 	target->number_of_instructions++;
 
+	//Mark the block that we're in
+	phi_statement->block_contained_in = target;
+
+	/**
+	 * Special case -- we're adding the head so this 
+	 * is now the head and the tail
+	 */
+	if(target->leader_statement == NULL){
+		target->leader_statement = phi_statement;
+		target->exit_statement = phi_statement;
+		return;
+	}
+
 	//Otherwise we will add this in at the very front
 	phi_statement->next_statement = target->leader_statement;
+
 	//Update this reference
 	target->leader_statement->previous_statement = phi_statement;
+
 	//And then we can update this one
 	target->leader_statement = phi_statement;
-
-	//Mark what block we're in
-	phi_statement->block_contained_in = target;
 }
 
 
 /**
  * Add a parameter to a phi statement
+ *
+ * TODO WTF IS THE POINT OF THIS
  */
-static void add_phi_parameter(instruction_t* phi_statement, three_addr_var_t* var){
+static inline void add_phi_parameter(instruction_t* phi_statement, three_addr_var_t* var){
 	//If we've not yet given the dynamic array
 	if(phi_statement->parameters.internal_array == NULL){
 		//Take care of allocation then
@@ -1839,6 +1837,27 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
 
 
 /**
+ * Run through an entire array of function blocks and reset the status and 
+ * "already_has_phi_func" fields for every single one. We assume that 
+ * the caller knows what they are doing, and that the blocks inside of 
+ * the array are really the correct blocks
+ */
+static inline void reset_status_for_phi_function_insertion(dynamic_array_t* function_blocks){
+	//Run through all of the blocks
+	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+		//Extract the current block
+		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
+
+		//Flag it as false
+		current->visited = FALSE;
+
+		//Remove the phi function flag
+		current->already_has_phi_func = FALSE;
+	}
+}
+
+
+/**
  * if(x0 == 0){
  * 	x1 = 2;
  * } else {
@@ -1869,19 +1888,17 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
  */
 static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 	/**
-	 * To do this we need:
-	 * 	A worklist of all blocks we must check
-	 * 	A list of blocks we've already validated
-	 * 	A list of blocks that we've already inserted a phi function into
+	 * We need to maintain a worklist for our algorithm. Instead of constantly
+	 * reallocating and deallocating, we can just maintain one that we clear
+	 * whenever we're done using
 	 */
 	dynamic_array_t worklist = dynamic_array_alloc();
-	dynamic_array_t already_has_phi_function = dynamic_array_alloc();
 
 	/**
 	 * Step 1: For every single sheaf(lexical level/scope) that we have in the symbol table,
 	 * and within every sheaf run through every single defined variable
 	 */
-	for	(u_int16_t i = 0; i < var_symtab->sheafs.current_index; i++){
+	for	(u_int32_t i = 0; i < var_symtab->sheafs.current_index; i++){
 		//Grab the current sheaf
 		symtab_variable_sheaf_t* sheaf_cursor = dynamic_array_get_at(&(var_symtab->sheafs), i);
 
@@ -1917,7 +1934,7 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 				 * Since we use the "visited" tag to keep track of whether or not a block
 				 * was ever on the worklist, we'll need to reset this here
 				 */
-				reset_visited_status_for_function(function_blocks);
+				reset_status_for_phi_function_insertion(function_blocks);
 
 				/**
 				 * Queue up every block that we have on record as assigning this
@@ -1936,52 +1953,59 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 					}
 				}
 
-				//Now we can actually perform our insertions
 				//So long as the worklist is not empty
 				while(dynamic_array_is_empty(&worklist) == FALSE){
-					//Remove the node from the back - more efficient
+					//O(1) removal delete from back
 					basic_block_t* node = dynamic_array_delete_from_back(&worklist);
 
-					//Now we will go through each node in this worklist's dominance frontier
-					for(u_int16_t l = 0; l < node->dominance_frontier.current_index; l++){
-						//Grab this node out
+					/**
+					 * For each block that assigns our variable, run through
+					 * every block in that block's dominance frontier(just barely
+					 * not dominated by that block). If the block in the dominance
+					 * frontier either uses the variable, *or* the variable is
+					 * live_out at that block, we'll need to insert a phi function
+					 * join node
+					 */
+					for(u_int32_t l = 0; l < node->dominance_frontier.current_index; l++){
 						basic_block_t* df_node = dynamic_array_get_at(&(node->dominance_frontier), l);
 
-						//If this node already has a phi function, we're not gonna bother with it
-						if(dynamic_array_contains(&already_has_phi_function, df_node) != NOT_FOUND){
-							//We DID find it, so we will NOT add anything, it already has one
+						//If this already has a phi function for this run we skip it
+						if(df_node->already_has_phi_func == TRUE){
 							continue;
 						}
 
-						//Let's check to see if we really need one here.
-						//----------------------------------------
-						// CRITERION:
-						// If a variable is NOT Live-out at the join node,
-						// that means that it is not LIVE-IN at any of
-						// the successors of that block. If a variable
-						// is not active(used) at the join node either,
-						// that means that the phi function is useless.
-						//
-						// So, we will skip inserting a phi function
-						// if the variable is not used and not LIVE_OUT
-						// at N
-						//----------------------------------------
-
-						//Let's see if we can find it in one of these. We'll record if we can
+						/**
+						 * ----------------------------------------
+						 *  CRITERION:
+						 *  If a variable is NOT Live-out at the join node,
+						 *  that means that it is not LIVE-IN at any of
+						 *  the successors of that block. If a variable
+						 *  is not active(used) at the join node either,
+						 *  that means that the phi function is useless.
+						 *
+						 * So, we will skip inserting a phi function
+						 * if the variable is not used and not LIVE_OUT
+						 * at N
+						 * ----------------------------------------
+						 */
 						if(symtab_record_variable_dynamic_array_contains(&(df_node->used_before_definition), record) == NOT_FOUND
 							&& symtab_record_variable_dynamic_array_contains(&(df_node->live_out), record) == NOT_FOUND){
 							continue;
 						}
 
-						//If we make it here that means that we don't already have one, so we'll add it
-						//This function only emits the skeleton of a phi function
+						/**
+						 * If we make it here that means that we don't already have one, so we'll add it
+						 *
+						 * This only emits the skeleton of a phi function - variables will be added
+						 * later
+						 */
 						instruction_t* phi_stmt = emit_phi_function(record);
 
 						//Add the phi statement into the block	
 						add_phi_statement(df_node, phi_stmt);
 
-						//We'll mark that this block already has one for the future
-						dynamic_array_add(&already_has_phi_function, df_node); 
+						//Flag that this already has a phi function 
+						df_node->already_has_phi_func = TRUE;
 
 						/**
 						 * If we haven't visited this block yet then we'll add it to our worklist
@@ -1993,16 +2017,8 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 					}
 				}
 
-				/**
-				 * Wipe all of these out but do not wastefully de/reallocate
-				 * these each time
-				 *
-				 * TODO DO WE EVEN NEED ALL OF THIS ARRAY NONSENSE?
-				 *
-				 * can't we just use flags that we clear each time?
-				 */
+				//Wipe the worklist now
 				clear_dynamic_array(&worklist);
-				clear_dynamic_array(&already_has_phi_function);
 			
 				//Advance to the next record in the chain
 				record = record->next;

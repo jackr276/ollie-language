@@ -173,6 +173,8 @@ struct basic_block_t{
 	u_int8_t contains_mark;
 	//Was this block visited by traverser?
 	u_int8_t visited;
+	//Does this block already have a phi function for the given variable?
+	u_int8_t already_has_phi_func;
 };
 
 
