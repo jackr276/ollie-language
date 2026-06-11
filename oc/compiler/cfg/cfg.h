@@ -95,25 +95,22 @@ struct basic_block_t{
 	dynamic_array_t predecessors;
 	//Successor nodes
 	dynamic_array_t successors;
-	//For convenience here. This is the successor that we use to
-	//"drill" to the bottom
-	basic_block_t* direct_successor;
+	//The "LIVE_IN" variables for this node
+	dynamic_array_t live_in;
+	//The "LIVE_OUT" variables for this node
+	dynamic_array_t live_out;
 	//The set of "used_before_definition" defines all variables that were used
 	//before they were assigned in the block
 	dynamic_array_t used_before_definition;
 	//The array of all assigned variables
 	dynamic_array_t assigned_variables;
+	//For convenience here. This is the successor that we use to
+	//"drill" to the bottom
+	basic_block_t* direct_successor;
 	//The blocks dominance frontier
 	dynamic_array_t dominance_frontier;
 	//The reverse dominance frontier(for analysis)
 	dynamic_array_t reverse_dominance_frontier;
-	//The dominator children of a basic block. These are all
-	//of the blocks that this block directly dominates
-	dynamic_array_t dominator_children;
-	//The "LIVE_IN" variables for this node
-	dynamic_array_t live_in;
-	//The "LIVE_OUT" variables for this node
-	dynamic_array_t live_out;
 	/**
 	 * Dominator information that each and every block will own. This 
 	 * information is needed whenever we compute the immediate dominator
@@ -155,14 +152,11 @@ struct basic_block_t{
 		 */
 		dynamic_array_t worklist;
 	} dominator_info;
-	
+
 	//The reference to a jump table. This is often not used at all
-	//TODO CAN WE UNION THESE TWO???
 	jump_table_t* jump_table;
 	//The case statement value -- usually blank
 	int64_t case_stmt_val;
-	//TODO CAN WE UNION THESE TWO???
-
 	//The function that we're defined in
 	symtab_function_record_t* function_defined_in;
 	//An integer ID

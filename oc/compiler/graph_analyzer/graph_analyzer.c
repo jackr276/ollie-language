@@ -906,6 +906,16 @@ static inline void build_dominator_trees(dynamic_array_t* function_blocks){
 
 
 /**
+ * Get the dominator children set for a given block. This function assumes
+ * that we already have the immediate dominators calculated
+ *
+ *
+ * Remember that block b is a dominator child of a iff IDOM(b) = a
+ */
+
+
+
+/**
  * Add a block to the dominance frontier of the first block
  */
 static inline void add_block_to_dominance_frontier(basic_block_t* block, basic_block_t* df_block){
@@ -1117,41 +1127,6 @@ static void reverse_post_order_traversal_reverse_cfg_rec(heap_stack_t* stack, ba
 
 
 /**
- * Get and return a reverse post order traversal of a function-level CFG where
- * we are going in reverse order. This is used mainly for data flow(liveness)
- */
-static dynamic_array_t compute_reverse_post_order_traversal_reverse_cfg(basic_block_t* entry){
-	//For our postorder traversal
-	heap_stack_t stack = heap_stack_alloc();
-	//We'll need this eventually for postorder
-	dynamic_array_t reverse_post_order_traversal = dynamic_array_alloc();
-
-	//Go all the way to the bottom
-	while(entry->block_type != BLOCK_TYPE_FUNC_EXIT){
-		entry = entry->direct_successor;
-	}
-
-	//Invoke the recursive helper
-	reverse_post_order_traversal_reverse_cfg_rec(&stack, entry);
-
-	/**
-	 * Now we'll pop everything off of the stack, and put it onto the RPO 
-	 * array in backwards order
-	 */
-	while(heap_stack_is_empty(&stack) == FALSE){
-		dynamic_array_add(&reverse_post_order_traversal, pop(&stack));
-	}
-
-	//And when we're done, get rid of the stack
-	heap_stack_dealloc(&stack);
-
-	//Give back the reverse post order traversal
-	return reverse_post_order_traversal;
-}
-
-
-
-/**
  * Get the reverse post order traversal over the reverse CFG(successors are predecessors and vice versa). This on-demand traversal
  * grabber requires a pre-allocated array to be passed in that will store the traversal
  */
@@ -1306,10 +1281,6 @@ void cleanup_all_control_relations(dynamic_array_t* function_blocks){
 
 		//Wipe the immediate dominator slate clean
 		initialize_block_for_idom_computation(block);
-
-		if(block->dominator_children.internal_array != NULL){
-			dynamic_array_dealloc(&(block->dominator_children));
-		}
 
 		if(block->dominance_frontier.internal_array != NULL){
 			dynamic_array_dealloc(&(block->dominance_frontier));

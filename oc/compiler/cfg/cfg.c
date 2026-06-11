@@ -1151,28 +1151,6 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 		printf("}\n");
 	}
 
-	//Now print out the dominator children
-	printf("Dominator Children: {");
-	//If we have dominator children
-	if(block->dominator_children.internal_array != NULL){
-		for(u_int16_t i = 0; i < block->dominator_children.current_index; i++){
-			basic_block_t* printing_block = block->dominator_children.internal_array[i];
-
-			//Print the block's ID or the function name
-			if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-				printf("%s", printing_block->function_defined_in->func_name.string);
-			} else {
-				printf(".L%d", printing_block->block_id);
-			}
-			//If it isn't the very last one, we need a comma
-			if(i != block->dominator_children.current_index - 1){
-				printf(", ");
-			}
-		}
-	}
-
-	printf("}\n");
-
 	//Now grab a cursor and print out every statement that we 
 	//have
 	instruction_t* cursor = block->leader_statement;
@@ -2068,7 +2046,10 @@ static void rhs_new_name(three_addr_var_t* var){
  * 					pop(Stacks[V])
  * }
  */
-static void rename_block(basic_block_t* entry){
+static void rename_block(basic_block_t* entry, dynamic_array_t* dominator_children){
+	//This has already been allocated - just wipe it
+
+
 	//If we've previously visited this block, then return
 	if(entry->visited == TRUE){
 		return;
@@ -2170,7 +2151,7 @@ static void rename_block(basic_block_t* entry){
 	}
 
 	//Now for each successor of b, we'll need to add the phi-function parameters according
-	for(u_int16_t _ = 0; _ < entry->successors.current_index; _++){
+	for(u_int32_t _ = 0; _ < entry->successors.current_index; _++){
 		//Grab the successor out
 		basic_block_t* successor = dynamic_array_get_at(&(entry->successors), _);
 
@@ -2201,7 +2182,7 @@ static void rename_block(basic_block_t* entry){
 
 	//Now that we're done with the renaming, we'll go through each dominator child in this node
 	//and perform the same operation
-	for(u_int16_t _ = 0; _ < entry->dominator_children.current_index; _++){
+	for(u_int32_t _ = 0; _ < entry->dominator_children.current_index; _++){
 		rename_block(dynamic_array_get_at(&(entry->dominator_children), _));
 	}
 
@@ -2247,22 +2228,30 @@ static inline void rename_all_variables(cfg_t* cfg){
 	//Before we do this - let's reset the entire CFG
 	reset_visited_status(cfg, FALSE);
 
-	//All global variables have themselves been assigned. As such, we'll
-	//need to mark that by giving them a left hand rename
-	for(u_int16_t i = 0; i < cfg->global_variables.current_index; i++){
+	/**
+	 * All global variables have themselves been assigned. As such, we'll
+	 * need to mark that by giving them a left hand rename
+	 */
+	for(u_int32_t i = 0; i < cfg->global_variables.current_index; i++){
 		global_variable_t* variable = dynamic_array_get_at(&(cfg->global_variables), i);
 		lhs_new_name_direct(variable->variable);
 	}
 
-	//We will call the rename block function on the first block
-	//for each of our functions. The rename block function is 
-	//recursive, so that should in theory take care of everything for us
+	/**
+	 * We will call the rename block function on the first block
+	 * for each of our functions. The rename block function is 
+	 * recursive, so that should in theory take care of everything for us
+	 *
+	 * To make this more efficient, we will reserve one dynamic array that
+	 * will be cleared and reused for each block's computate
+	 */
+	dynamic_array_t dominator_children_sets = dynamic_array_alloc();
 	
-	//For each function block
-	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks.current_index; _++){
-		//Invoke the rename function on it
-		rename_block(dynamic_array_get_at(&(cfg->function_entry_blocks), _));
+	for(u_int32_t _ = 0; _ < cfg->function_entry_blocks.current_index; _++){
+		rename_block(dynamic_array_get_at(&(cfg->function_entry_blocks), _), dominator_children_sets);
 	}
+
+	dynamic_array_dealloc(&dominator_children_sets);
 }
 
 
@@ -7697,11 +7686,6 @@ void basic_block_dealloc(basic_block_t* block){
 	//Deallocate the assigned variable array
 	if(block->assigned_variables.internal_array != NULL){
 		dynamic_array_dealloc(&(block->assigned_variables));
-	}
-
-	//Deallocate the dominator children
-	if(block->dominator_children.internal_array != NULL){
-		dynamic_array_dealloc(&(block->dominator_children));
 	}
 
 	//Deallocate the domninance frontier
