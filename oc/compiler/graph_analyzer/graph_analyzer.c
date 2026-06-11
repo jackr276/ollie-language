@@ -854,8 +854,6 @@ static void compute_immediate_postdominators(basic_block_t* function_exit_block,
 
 /**
  * Add a dominated block to the dominator block that we have
- *
- * TODO DO WE NEED????
  */
 static inline void add_dominator_child(basic_block_t* dominator, basic_block_t* dominated){
 	//If this is NULL, then we'll allocate it right now
@@ -1262,9 +1260,11 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 /**
  * Destroy all old control relations in anticipation of new ones coming in. This 
  * operates on a per-function level
+ *
+ * It is *very* important that we clean these all up. Otherwise, we may be left
+ * over with artifacts from previous runs that skew our results
  */
 void cleanup_all_control_relations(dynamic_array_t* function_blocks){
-	//For each block in the CFG
 	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
 		//Grab the block out
 		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
@@ -1278,6 +1278,10 @@ void cleanup_all_control_relations(dynamic_array_t* function_blocks){
 
 		if(block->reverse_dominance_frontier.internal_array != NULL){
 			dynamic_array_dealloc(&(block->reverse_dominance_frontier));
+		}
+
+		if(block->dominator_children.internal_array != NULL){
+			dynamic_array_dealloc(&(block->dominator_children));
 		}
 	}
 }
