@@ -19,6 +19,12 @@
 void get_post_order_traversal(dynamic_array_t* function_blocks, basic_block_t* function_entry_block, dynamic_array_t* post_order_traversal);
 
 /**
+ * Get the reverse post order traversal over the reverse CFG(successors are predecessors and vice versa). This on-demand traversal
+ * grabber requires a pre-allocated array to be passed in that will store the traversal
+ */
+void get_reverse_post_order_reverse_cfg_traversal(dynamic_array_t* function_blocks, basic_block_t* function_entry_block, dynamic_array_t* reverse_post_order_traversal);
+
+/**
  * Get the nearest marked postdominator of a given block
  *
  * NOTE: in order for this to be accurate, we must have already computed
@@ -29,13 +35,10 @@ basic_block_t* get_nearest_marked_postdominator(basic_block_t* block);
 
 /**
  * We will calculate:
- *  1.) Reverse post order traversals
- *  2.) Immediate dominators
- *  3.) Dominator Trees
- *  4.) Dominance Frontiers
- *  5.) Immediate Postdominators
- *  6.) Postdominator sets
- *  7.) Reverse Dominance frontiers
+ *  1.) Immediate dominators
+ *  2.) Dominance Frontiers
+ *  3.) Immediate Postdominators
+ *  4.) Reverse Dominance frontiers
  *
  * For every block in the given function. This externally facing API hides all of
  * the complexity behind it
