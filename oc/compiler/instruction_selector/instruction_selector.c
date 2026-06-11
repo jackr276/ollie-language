@@ -11,6 +11,7 @@
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/value_numbering_table/value_numbering_table.h"
+#include "../graph_analyzer/graph_analyzer.h"
 #include "../utils/constants.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,8 +33,6 @@ static generic_type_t* u8;
 
 //The dynamic string that we reuse for searching
 static dynamic_string_t value_name_searcher_string;
-//A queue that we will reuse for postdominator searching
-static heap_queue_t postdominator_queue;
 //A holder for the stack pointer
 static three_addr_var_t* stack_pointer_variable;
 //A holder for the instruction pointer
@@ -6809,72 +6808,6 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 
 
 /**
- * To find the nearest marked postdominator, we can do a breadth-first
- * search starting at our block B. Whenever we find a node that is both:
- * 	a.) A postdominator of B
- * 	b.) marked
- * we'll have our answer
- */
-static basic_block_t* nearest_marked_postdominator(dynamic_array_t* function_blocks, basic_block_t* B){
-	//Reset the queue for this go around
-	heap_queue_clear(&postdominator_queue);
-
-	//First, we'll reset every single block here
-	reset_visit_status_for_function(function_blocks);
-
-	//Seed the search with B
-	enqueue(&postdominator_queue, B);
-
-	//The nearest marked postdominator and a holder for our candidates
-	basic_block_t* nearest_marked_postdominator = NULL;
-	basic_block_t* candidate;
-
-	//So long as the queue is not empty
-	while(queue_is_empty(&postdominator_queue) == FALSE){
-		//Grab the block off
-		candidate = dequeue(&postdominator_queue);
-		
-		//If we've been here before, continue;
-		if(candidate->visited == TRUE){
-			continue;
-		}
-
-		//Mark this for later
-		candidate->visited = TRUE;
-
-		/**
-		 * Now let's check for our criterion.
-		 * We want:
-		 *	it to be in the postdominator set
-		 *	it to have a mark
-		 *	it to not equal itself
-		 */
-		if(dynamic_array_contains(&(B->postdominator_set), candidate) != NOT_FOUND
-		  && candidate->contains_mark == TRUE && B != candidate){
-			//We've found it, so we're done
-			nearest_marked_postdominator = candidate;
-			//Get out
-			break;
-		}
-
-		//Enqueue all of the successors
-		for(u_int32_t i = 0; i < candidate->successors.current_index; i++){
-			//Grab the successor out
-			basic_block_t* successor = dynamic_array_get_at(&(candidate->successors), i);
-
-			//If it's already been visited, we won't bother with it. If it hasn't been visited, we'll add it in
-			if(successor->visited == FALSE){
-				enqueue(&postdominator_queue, successor);
-			}
-		}
-	}
-
-	//And give this back
-	return nearest_marked_postdominator;
-}
-
-
-/**
  * The sweep algorithm will go through and remove every operation that has not been marked
  *
  * procedure sweep:
@@ -6936,7 +6869,7 @@ static simplification_type_t sweep(dynamic_array_t* function_blocks, basic_block
 				 */
 				case THREE_ADDR_CODE_BRANCH_STMT:
 					//We'll first find the nearest marked postdominator
-					nearest_marked_postdom = nearest_marked_postdominator(function_blocks, block);
+					nearest_marked_postdom = get_nearest_marked_postdominator(block);
 
 					//We now need to unlink the successors that were in this branch
 					delete_successor(block, stmt->if_block);
@@ -13949,7 +13882,6 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	 * time that we need something
 	 */
 	value_name_searcher_string = dynamic_string_alloc();
-	postdominator_queue = heap_queue_alloc();
 
 	//Stash the stack pointer & instruction pointer
 	stack_pointer_variable = cfg->stack_pointer;
@@ -14001,5 +13933,4 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	 * regions that we've been using
 	 */
 	dynamic_string_dealloc(&value_name_searcher_string);
-	heap_queue_dealloc(&postdominator_queue);
 }

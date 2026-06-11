@@ -5,8 +5,8 @@
  * it is implemented as one monolothic block
 */
 #include "optimizer.h"
-#include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
+#include "../graph_analyzer/graph_analyzer.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -15,9 +15,6 @@
 //Storage for the stack/instruction pointers
 static three_addr_var_t* stack_pointer_variable;
 static three_addr_var_t* instruction_pointer_variable;
-
-//A reusable queue for postdominator traversal
-static heap_queue_t postdominator_queue;
 
 //A pointer to the cfg
 static cfg_t* cfg_reference;
@@ -861,72 +858,6 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 
 
 /**
- * To find the nearest marked postdominator, we can do a breadth-first
- * search starting at our block B. Whenever we find a node that is both:
- * 	a.) A postdominator of B
- * 	b.) marked
- * we'll have our answer
- */
-static basic_block_t* nearest_marked_postdominator(dynamic_array_t* function_blocks, basic_block_t* B){
-	//Wipe out the postdominator queue for this go around
-	heap_queue_clear(&postdominator_queue);
-
-	//First, we'll reset every single block here
-	reset_visit_status_for_function(function_blocks);
-
-	//Seed the search with B
-	enqueue(&postdominator_queue, B);
-
-	//The nearest marked postdominator and a holder for our candidates
-	basic_block_t* nearest_marked_postdominator = NULL;
-	basic_block_t* candidate;
-
-	//So long as the queue is not empty
-	while(queue_is_empty(&postdominator_queue) == FALSE){
-		//Grab the block off
-		candidate = dequeue(&postdominator_queue);
-		
-		//If we've been here before, continue;
-		if(candidate->visited == TRUE){
-			continue;
-		}
-
-		//Mark this for later
-		candidate->visited = TRUE;
-
-		/**
-		 * Now let's check for our criterion.
-		 * We want:
-		 *	it to be in the postdominator set
-		 *	it to have a mark
-		 *	it to not equal itself
-		 */
-		if(dynamic_array_contains(&(B->postdominator_set), candidate) != NOT_FOUND
-		  && candidate->contains_mark == TRUE && B != candidate){
-			//We've found it, so we're done
-			nearest_marked_postdominator = candidate;
-			//Get out
-			break;
-		}
-
-		//Enqueue all of the successors
-		for(u_int16_t i = 0; i < candidate->successors.current_index; i++){
-			//Grab the successor out
-			basic_block_t* successor = dynamic_array_get_at(&(candidate->successors), i);
-
-			//If it's already been visited, we won't bother with it. If it hasn't been visited, we'll add it in
-			if(successor->visited == FALSE){
-				enqueue(&postdominator_queue, successor);
-			}
-		}
-	}
-
-	//And give this back
-	return nearest_marked_postdominator;
-}
-
-
-/**
  * Part of optimizer's mark and sweep - remove any local constants
  * with a reference count of 0
  */
@@ -1070,25 +1001,27 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 				case THREE_ADDR_CODE_JUMP_STMT:
 					stmt = stmt->next_statement;
 
-					//Break out of the switch
 					break;
 
-				//If we have a branch that is now useless,
-				//we'll need to replace it with a jump to
-				//it's nearest marked postdominator
+				/**
+				 * If we have a branch that is now useless,
+				 * we'll need to replace it with a jump to
+				 * it's nearest marked postdominator
+				 */
 				case THREE_ADDR_CODE_BRANCH_STMT:
 					//We'll first find the nearest marked postdominator
-					nearest_marked_postdom = nearest_marked_postdominator(function_blocks, block);
+					nearest_marked_postdom = get_nearest_marked_postdominator(block);
 
 					//This is now useless
 					delete_statement(stmt);
 
-					//Emit the jump statement to the nearest marked postdominator
-					//NOTE: the emit jump adds the successor in for us, so we don't need to
-					//do so here
+					/**
+					 * Emit the jump statement to the nearest marked postdominator
+					 * NOTE: the emit jump adds the successor in for us, so we don't need to
+					 * do so here
+					 */
 					stmt = emit_jump(block, nearest_marked_postdom);
 
-					//Break out of the switch
 					break;
 
 				/**
@@ -1115,7 +1048,6 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 					//Delete the statement, now that we know it is not a jump
 					delete_statement(temp);
 
-					//Break out of the switch
 					break;
 			}
 		}
@@ -2233,13 +2165,12 @@ static inline void clean(cfg_t* cfg, dynamic_array_t* current_function_blocks, b
 		//Clear out the old postorder array
 		clear_dynamic_array(&postorder);
 
-		//Reset the function's visited status
-		reset_visit_status_for_function(current_function_blocks);
-
-		//Use the recursive function to compute the postorder traversal.
-		//Note that the result is going to be stored inside of the array that
-		//we've already allocated
-		post_order_traversal_rec(&postorder, function_entry_block);
+		/**
+		 * Use the API function to compute the postorder traversal.
+		 * Note that the result is going to be stored inside of the array that
+		 * we've already allocated
+		 */
+		get_post_order_traversal(current_function_blocks, function_entry_block, &postorder);
 
 		//Call onepass() for the reduction
 		changed = branch_reduce(cfg, &postorder);
@@ -2257,40 +2188,16 @@ static inline void clean(cfg_t* cfg, dynamic_array_t* current_function_blocks, b
  * of the dominance relations that are now useless. As such, we'll need to completely recompute all
  * of these key values
  */
-static inline void recompute_all_dominance_relations(dynamic_array_t* function_blocks, basic_block_t* function_entry_block){
-	//First, we'll go through and completely blow away anything related to
-	//a dominator in the entirety of the function 
-	for(u_int32_t _ = 0; _ < function_blocks->current_index; _++){
-		//Grab the given block out
-		basic_block_t* block = dynamic_array_get_at(function_blocks, _);
+static inline void recompute_all_control_flow_relations_for_function(dynamic_array_t* function_blocks, basic_block_t* function_entry_block, basic_block_t* function_exit_block){
+	/**
+	 * First clean up all of the existing control relations
+	 */
+	cleanup_all_control_relations(function_blocks);
 
-		//Now we're going to reset everything about this block
-		block->immediate_dominator = NULL;
-		block->immediate_postdominator = NULL;
-
-		if(block->dominator_set.internal_array != NULL){
-			dynamic_array_dealloc(&(block->dominator_set));
-		}
-
-		if(block->postdominator_set.internal_array != NULL){
-			dynamic_array_dealloc(&(block->postdominator_set));
-		}
-
-		if(block->dominance_frontier.internal_array != NULL){
-			dynamic_array_dealloc(&(block->dominance_frontier));
-		}
-
-		if(block->dominator_children.internal_array != NULL){
-			dynamic_array_dealloc(&(block->dominator_children));
-		}
-
-		if(block->reverse_dominance_frontier.internal_array != NULL){
-			dynamic_array_dealloc(&(block->reverse_dominance_frontier));
-		}
-	}
-
-	//Now that that's finished, we can go back and calculate all of the control relations again
-	calculate_all_control_relations(function_entry_block, function_blocks);
+	/**
+	 * Now let the graph analyzer go through and recalculate everything else
+	 */
+	calculate_all_control_flow_relations_for_function(function_entry_block, function_exit_block, function_blocks);
 }
 
 
@@ -2374,9 +2281,6 @@ cfg_t* optimize(cfg_t* cfg){
 	stack_pointer_variable = cfg->stack_pointer;
 	instruction_pointer_variable = cfg->instruction_pointer;
 
-	//Allocate the reusable memory
-	postdominator_queue = heap_queue_alloc();
-
 	/**
 	 * We will optimize on a function by function basis. This is because functions are independent units 
 	 * that do not have interlocking dependencies. Us doing this allows for more efficient operation because
@@ -2385,8 +2289,9 @@ cfg_t* optimize(cfg_t* cfg){
 	 */
 	//Run through all of the functions
 	for(u_int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
-		//Extract the function entry block
+		//Extract the entry and exit blocks
 		basic_block_t* function_entry_block = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
+		basic_block_t* function_exit_block = dynamic_array_get_at(&(cfg->function_exit_blocks), i);
 
 		//What function are we in?
 		symtab_function_record_t* current_function = function_entry_block->function_defined_in;
@@ -2453,7 +2358,7 @@ cfg_t* optimize(cfg_t* cfg){
 			delete_all_unreachable_blocks(current_function_blocks, cfg);
 
 			//Recalculate all dominance relations
-			recompute_all_dominance_relations(current_function_blocks, function_entry_block);
+			recompute_all_control_flow_relations_for_function(current_function_blocks, function_entry_block, function_exit_block);
 
 			//Invoke the marker
 			mark(current_function_blocks);
@@ -2491,11 +2396,8 @@ cfg_t* optimize(cfg_t* cfg){
 		 * etc. So, to remedy this, we will recalculate everything in the CFG. There is no advantage in splitting this section up by function, as 
 		 * all blocks are going to be traversed regardless. Due to this, we will be doing it over the entire CFG at the end
 		 */
-		recompute_all_dominance_relations(current_function_blocks, function_entry_block);
+		recompute_all_control_flow_relations_for_function(current_function_blocks, function_entry_block, function_exit_block);
 	}
-
-	//Now that we are done we can free all of the reusable memory
-	heap_queue_dealloc(&postdominator_queue);
 
 	//Give back the CFG
 	return cfg;

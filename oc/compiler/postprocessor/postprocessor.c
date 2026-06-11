@@ -9,6 +9,7 @@
 #include "postprocessor.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
+#include "../graph_analyzer/graph_analyzer.h"
 #include <sys/types.h>
 
 /**
@@ -791,7 +792,7 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
  * 	 compute Postorder of CFG
  * 	 branch_reduce_postprocess()
  */
-static void condense(cfg_t* cfg, basic_block_t* function_entry_block){
+static void condense(cfg_t* cfg, dynamic_array_t* function_blocks, basic_block_t* function_entry_block){
 	//Have we seen change(modification) at all?
 	u_int8_t changed;
 
@@ -803,9 +804,11 @@ static void condense(cfg_t* cfg, basic_block_t* function_entry_block){
 		//Reset the array
 		clear_dynamic_array(&postorder);
 
-		//Compute the new postorder. Remember that the recursive
-		//rule puts the result inside of the array that we've allocated
-		post_order_traversal_rec(&postorder, function_entry_block);
+		/**
+		 * Compute the new postorder. Remember that this API
+		 * puts the result inside of the array that we've allocated
+		 */
+		get_post_order_traversal(function_blocks, function_entry_block, &postorder);
 
 		//Call onepass() for the reduction
 		changed = branch_reduce_postprocess(cfg, &postorder);
@@ -932,6 +935,9 @@ void postprocess(cfg_t* cfg){
 		//Extract the given function block
 		basic_block_t* function_entry_block = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
+		//We'll need the list of all function blocks too
+		dynamic_array_t* function_blocks = &(function_entry_block->function_defined_in->function_blocks);
+
 		/**
 		 * PASS 1: remove any/all useless move operations from the CFG
 		 */
@@ -940,7 +946,7 @@ void postprocess(cfg_t* cfg){
 		/**
 		 * PASS 2: perform a modified branch reduction to condense the code
 		*/
-		condense(cfg, function_entry_block);
+		condense(cfg, function_blocks, function_entry_block);
 
 		/**
 		 * PASS 3: final reordering

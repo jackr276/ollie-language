@@ -95,51 +95,77 @@ struct basic_block_t{
 	dynamic_array_t predecessors;
 	//Successor nodes
 	dynamic_array_t successors;
-	//For convenience here. This is the successor that we use to
-	//"drill" to the bottom
-	basic_block_t* direct_successor;
+	//The "LIVE_IN" variables for this node
+	dynamic_array_t live_in;
+	//The "LIVE_OUT" variables for this node
+	dynamic_array_t live_out;
 	//The set of "used_before_definition" defines all variables that were used
 	//before they were assigned in the block
 	dynamic_array_t used_before_definition;
 	//The array of all assigned variables
 	dynamic_array_t assigned_variables;
+	//For convenience here. This is the successor that we use to
+	//"drill" to the bottom
+	basic_block_t* direct_successor;
 	//The blocks dominance frontier
 	dynamic_array_t dominance_frontier;
 	//The reverse dominance frontier(for analysis)
 	dynamic_array_t reverse_dominance_frontier;
-	//The reverse post order set
-	dynamic_array_t reverse_post_order;
-	//The reverse post order set on the reverse cfg
-	dynamic_array_t reverse_post_order_reverse_cfg;
-	//The dynamic array for the dominator set
-	dynamic_array_t dominator_set;
-	//The dynamic array for the postdominator set. The postdominator
-	//set is the equivalent of the dominator set on the reverse CFG
-	dynamic_array_t postdominator_set;
-	//The dominator children of a basic block. These are all
-	//of the blocks that this block directly dominates
+	//The dominator children of this block
 	dynamic_array_t dominator_children;
-	//The "LIVE_IN" variables for this node
-	dynamic_array_t live_in;
-	//The "LIVE_OUT" variables for this node
-	dynamic_array_t live_out;
-	//The immediate dominator - this reference isn't always used, but if we go through the work
-	//of calculating it, we may as well store it
-	basic_block_t* immediate_dominator;
-	//The immediate postdominator reference
-	basic_block_t* immediate_postdominator;
+	/**
+	 * Dominator information that each and every block will own. This 
+	 * information is needed whenever we compute the immediate dominator
+	 * and/or postdominator
+	 */
+	struct {
+		//Block's immediate dominator
+		basic_block_t* immediate_dominator;
+		//Block's immediate postdominator
+		basic_block_t* immediate_postdominator;
+		/**
+		 * The DFS number of this block after it's been DFS(or reverse DFS)
+		 * numbered
+		 */
+		int32_t dfs_number;
+		/**
+		 * The DFS number of this block's semidominator
+		 */
+		int32_t semidominator_number;
+		/**
+		 * The parent of this block(NOT the ancestor)
+		 */
+		basic_block_t* parent;
+		/**
+		 * The union-find ancestor of this
+		 * block(NOT the parent)
+		 */
+		basic_block_t* ancestor;
+		/**
+		 * The node with the smallest semidominator
+		 * number along the currently known path - we 
+		 * cache this to avoid recomputation
+		 */
+		basic_block_t* optimal_candidate;
+		/**
+		 * The worklist is a deferred work queue that we use. It will
+		 * store the list of all nodes that are semidominated by this
+		 * given node
+		 */
+		dynamic_array_t worklist;
+	} dominator_info;
+
 	//The reference to a jump table. This is often not used at all
 	jump_table_t* jump_table;
-	//The function that we're defined in
-	symtab_function_record_t* function_defined_in;
 	//The case statement value -- usually blank
 	int64_t case_stmt_val;
+	//The function that we're defined in
+	symtab_function_record_t* function_defined_in;
 	//An integer ID
 	int32_t block_id;
 	//The number of instructions that the given block has
 	u_int32_t number_of_instructions;
-	//The estimated execution frequency. This will change
-	//if a block is in a loop, etc.
+	//The estimated execution frequency. This will change if a block is in a loop, etc.
 	u_int32_t estimated_execution_frequency;
 	//What is the general classification of this block
 	block_type_t block_type;
@@ -202,17 +228,6 @@ void add_predecessor_only(basic_block_t* target, basic_block_t* predecessor);
 void dealloc_cfg(cfg_t* cfg);
 
 /**
- * Destroy all old control relations in anticipation of new ones coming in. This
- * operates on a per-function level
- */
-void cleanup_all_control_relations(dynamic_array_t* function_blocks);
-
-/**
- * Calcualte/recalculate all control relations for a given function
- */
-void calculate_all_control_relations(basic_block_t* function_entry_block, dynamic_array_t* function_blocks);
-
-/**
  * Emit a jump statement directly into a block
  */
 instruction_t* emit_jump(basic_block_t* basic_block, basic_block_t* dest_block);
@@ -238,20 +253,5 @@ void reset_function_visited_status(basic_block_t* function_entry_block, u_int8_t
  * Deallocate a block
  */
 void basic_block_dealloc(basic_block_t* block);
-
-/**
- * A recursive post order simplifies the code, so it's what we'll use here
- */
-void post_order_traversal_rec(dynamic_array_t* post_order_traversal, basic_block_t* entry);
-
-/**
- * Compute the postorder traversal for a function-level cfg
- */
-dynamic_array_t compute_post_order_traversal(basic_block_t* entry);
-
-/**
- * Get and return a reverse post order traversal for the CFG
- */
-dynamic_array_t compute_reverse_post_order_traversal(basic_block_t* entry);
 
 #endif /* CFG_H */

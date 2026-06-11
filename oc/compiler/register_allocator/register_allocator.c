@@ -14,6 +14,7 @@
 #include "../interference_graph/interference_graph.h"
 #include "../postprocessor/postprocessor.h"
 #include "../utils/queue/max_priority_queue.h"
+#include "../graph_analyzer/graph_analyzer.h"
 #include "../cfg/cfg.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -1199,23 +1200,16 @@ static inline void construct_live_ranges_in_function(basic_block_t* function_ent
 
 
 /**
- * Reset the visited status and the liveness arrays for each block
+ * Reset the liveness arrays for all blocks given. This is a necessary step before we recompute
+ * everything
  */
-static inline void reset_function_blocks_for_liveness(basic_block_t* function_entry_block){
-	//This is our initial current
-	basic_block_t* current = function_entry_block;
-
-	//So long as we aren't null
-	while(current != NULL){
-		//Reset this
-		current->visited = FALSE;
+static inline void reset_function_blocks_for_liveness(dynamic_array_t* function_blocks){
+	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
 
 		//Also reset the liveness sets
-		clear_dynamic_array(&(current->live_in));
-		clear_dynamic_array(&(current->live_out));
-
-		//Push it up
-		current = current->direct_successor;
+		clear_dynamic_array(&(block->live_in));
+		clear_dynamic_array(&(block->live_out));
 	}
 }
 
@@ -1240,9 +1234,16 @@ static inline void reset_function_blocks_for_liveness(basic_block_t* function_en
  * As such, we'll go back to front here
  *
  */
-static void calculate_live_range_liveness_sets(basic_block_t* function_entry_block){
-	//Reset the visited status and liveness sets
-	reset_function_blocks_for_liveness(function_entry_block);
+static void calculate_live_range_liveness_sets(dynamic_array_t* function_blocks, basic_block_t* function_entry_block, basic_block_t* function_exit_block){
+	//Reset all of the liveness sets for our function blocks
+	reset_function_blocks_for_liveness(function_blocks);
+
+	/**
+	 * Allocate storage for the reverse post order traversal over the reverse CFG.
+	 * Then let the graph utility compute it for this function
+	 */
+	dynamic_array_t reverse_post_order_reverse_cfg = dynamic_array_alloc();
+	get_reverse_post_order_reverse_cfg_traversal(function_blocks, function_exit_block, &reverse_post_order_reverse_cfg);
 
 	//Did we find a difference
 	u_int8_t difference_found;
@@ -1264,9 +1265,9 @@ static void calculate_live_range_liveness_sets(basic_block_t* function_entry_blo
 		difference_found = FALSE;
 
 		//Now we can go through the entire RPO set
-		for(u_int16_t _ = 0; _ < function_entry_block->reverse_post_order_reverse_cfg.current_index; _++){
+		for(u_int32_t _ = 0; _ < reverse_post_order_reverse_cfg.current_index; _++){
 			//The current block is whichever we grab
-			current = dynamic_array_get_at(&(function_entry_block->reverse_post_order_reverse_cfg), _);
+			current = dynamic_array_get_at(&reverse_post_order_reverse_cfg, _);
 
 			//Transfer the pointers over
 			in_prime = current->live_in;
@@ -1276,12 +1277,12 @@ static void calculate_live_range_liveness_sets(basic_block_t* function_entry_blo
 			current->live_out = dynamic_array_alloc();
 
 			//Run through all of the successors
-			for(u_int16_t k = 0; k < current->successors.current_index; k++){
+			for(u_int32_t k = 0; k < current->successors.current_index; k++){
 				//Grab the successor out
 				basic_block_t* successor = dynamic_array_get_at(&(current->successors), k);
 
 				//Add everything in his live_in set into the live_out set
-				for(u_int16_t l = 0; l < successor->live_in.current_index; l++){
+				for(u_int32_t l = 0; l < successor->live_in.current_index; l++){
 					//Let's check to make sure we haven't already added this
 					live_range_t* successor_live_in_var = dynamic_array_get_at(&(successor->live_in), l);
 
@@ -1299,7 +1300,7 @@ static void calculate_live_range_liveness_sets(basic_block_t* function_entry_blo
 			current->live_in = clone_dynamic_array(&(current->used_before_definition));
 
 			//Now we need to add every variable that is in LIVE_OUT but NOT in assigned
-			for(u_int16_t j = 0; j  < current->live_out.current_index; j++){
+			for(u_int32_t j = 0; j  < current->live_out.current_index; j++){
 				//Grab a reference for our use
 				live_range_t* live_out_var = dynamic_array_get_at(&(current->live_out), j);
 
@@ -1337,6 +1338,9 @@ static void calculate_live_range_liveness_sets(basic_block_t* function_entry_blo
 
 	//So long as there is a difference
 	} while(difference_found == TRUE);
+
+	//Done with this now so remove it
+	dynamic_array_dealloc(&reverse_post_order_reverse_cfg);
 }
 
 
@@ -4676,6 +4680,9 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
  * Perform our function level allocation process
  */
 static void allocate_registers_for_function(compiler_options_t* options, cfg_t* cfg, basic_block_t* function_entry, basic_block_t* function_exit){
+	//Extract the function blocks
+	dynamic_array_t* function_blocks = &(function_entry->function_defined_in->function_blocks);
+
 	//Save whether or not we want to actually print IRs
 	u_int8_t print_irs = options->print_irs;
 	u_int8_t debug_printing = options->enable_debug_printing;
@@ -4735,8 +4742,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	 * We will need to do this every single time we reallocate. This is also a "2-for-1",
 	 * meaning that it will count for both general purpose and SSE registers
 	*/
-	calculate_live_range_liveness_sets(function_entry);
-
+	calculate_live_range_liveness_sets(function_blocks, function_entry, function_exit);
 
 	//Show our IR's here
 	if(print_irs == TRUE){
@@ -4829,7 +4835,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 
 				//Recalculate all liveness sets as well. Again this hits
 				//everything but nothing's changed for SSE so it's fine
-				calculate_live_range_liveness_sets(function_entry);
+				calculate_live_range_liveness_sets(function_blocks, function_entry, function_exit);
 
 				//Calculate only the general purpose interferences
 				calculate_target_interferences_in_function(function_entry, LIVE_RANGE_CLASS_GEN_PURPOSE);
@@ -4856,7 +4862,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 
 				//Recalculate all liveness sets as well. Again this hits
 				//everything but nothing's changed for GP so it's fine
-				calculate_live_range_liveness_sets(function_entry);
+				calculate_live_range_liveness_sets(function_blocks, function_entry, function_exit);
 
 				//Calculate only the SSE interferences
 				calculate_target_interferences_in_function(function_entry, LIVE_RANGE_CLASS_SSE);
@@ -4885,7 +4891,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 				compute_spill_costs(&sse_live_ranges);
 
 				//Now recompute all liveness sets
-				calculate_live_range_liveness_sets(function_entry);
+				calculate_live_range_liveness_sets(function_blocks, function_entry, function_exit);
 
 				//Now we build all of our interferences
 				calculate_all_interferences_in_function(function_entry);
@@ -4964,7 +4970,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 		 * Following that, we need to go through and calculate
 		 * all of our liveness sets again
 		 */
-		calculate_live_range_liveness_sets(function_entry);
+		calculate_live_range_liveness_sets(function_blocks, function_entry, function_exit);
 
 		/**
 		 * Now we will compute the interferences for our given
@@ -5042,7 +5048,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 			 * Following that we'll go through and redo all liveness
 			 * for the entire function
 			 */
-			calculate_live_range_liveness_sets(function_entry);
+			calculate_live_range_liveness_sets(function_blocks, function_entry, function_exit);
 
 			/**
 			 * Now we'll recalculate all target interferences for the
