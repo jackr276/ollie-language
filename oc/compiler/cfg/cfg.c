@@ -1726,11 +1726,21 @@ static void variable_dynamic_array_add(dynamic_array_t* array, three_addr_var_t*
  * NOTE: The algorithm converges very fast when the CFG is done in reverse order.
  * As such, we'll go back to front here
  */
-static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_block_t* function_entry_block){
+static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_block_t* function_exit_block){
 	//Reset the visited status for the function
+	//TODO IS THIS NEEDED???
 	reset_visit_status_for_function(function_blocks);
+
 	//Did we find a difference
 	u_int8_t difference_found;
+
+	/**
+	 * Create an array to hold our entire reverse traversal for the function. We know how large
+	 * the function is already so we can give it an initial size. Then call the graph utility
+	 * to get the reverse post order traversal over the reverse CFG
+	 */
+	dynamic_array_t reverse_post_order_reverse_cfg = dynamic_array_alloc_initial_size(function_blocks->current_max_size);
+	get_reverse_post_order_reverse_cfg_traversal(function_blocks, function_exit_block, &reverse_post_order_reverse_cfg);
 
 	//The "Prime" blocks are just ways to hold the old dynamic arrays
 	dynamic_array_t in_prime;
@@ -1750,9 +1760,9 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
 		difference_found = FALSE;
 
 		//Now we can go through the entire RPO set
-		for(u_int16_t _ = 0; _ < function_entry_block->reverse_post_order_reverse_cfg.current_index; _++){
+		for(u_int16_t _ = 0; _ < reverse_post_order_reverse_cfg.current_index; _++){
 			//The current block is whichever we grab
-			current = dynamic_array_get_at(&(function_entry_block->reverse_post_order_reverse_cfg), _);
+			current = dynamic_array_get_at(&reverse_post_order_reverse_cfg, _);
 
 			//Transfer the pointers over
 			in_prime = current->live_in;
@@ -10628,7 +10638,7 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	/**
 	 * Finally, we will calculate the liveness sets for this function
 	 */
-	calculate_liveness_sets(current_function_blocks, function_starting_block);
+	calculate_liveness_sets(current_function_blocks, function_exit_block);
 
 	//Now that we're done, we will clear this current function parameter
 	current_function = NULL;

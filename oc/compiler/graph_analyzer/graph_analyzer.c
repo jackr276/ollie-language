@@ -1246,10 +1246,6 @@ basic_block_t* get_nearest_marked_postdominator(basic_block_t* block){
  * the complexity behind it
  */
 void calculate_all_control_flow_relations_for_function(basic_block_t* function_entry_block, basic_block_t* function_exit_block, dynamic_array_t* function_blocks){
-	//Before any calculation can be done, we need to compute every single reverse traversal
-	//
-	//TODO EVALUATE THIS ONE'S USE
-	calculate_all_reverse_traversals(function_entry_block, function_blocks);
 	/**
 	 * Before going forward, we must know the immediate dominator for every
 	 * single block. We use the efficient Lengauer-Tarjan algorithm to 
