@@ -2046,10 +2046,7 @@ static void rhs_new_name(three_addr_var_t* var){
  * 					pop(Stacks[V])
  * }
  */
-static void rename_block(basic_block_t* entry, dynamic_array_t* dominator_children){
-	//This has already been allocated - just wipe it
-
-
+static void rename_block(basic_block_t* entry){
 	//If we've previously visited this block, then return
 	if(entry->visited == TRUE){
 		return;
@@ -2071,8 +2068,7 @@ static void rename_block(basic_block_t* entry, dynamic_array_t* dominator_childr
 	//Otherwise we'll flag it for the future
 	entry->visited = TRUE;
 
-	//Grab out our leader statement here. We will iterate over all statements
-	//looking for phi functions
+	//Grab out our leader statement here. We will iterate over all statements looking for phi functions
 	instruction_t* cursor = entry->leader_statement;
 
 	//So long as this isn't null
@@ -2096,11 +2092,9 @@ static void rename_block(basic_block_t* entry, dynamic_array_t* dominator_childr
 				}
 				
 				//Special case - do we have a function call?
-				//Grab it out
 				dynamic_array_t func_params = cursor->parameters;
 
 				//If we have any
-				//Run through them all
 				for(u_int16_t k = 0; k < func_params.current_index; k++){
 					//Grab it out
 					three_addr_var_t* current_param = dynamic_array_get_at(&func_params, k);
@@ -2180,8 +2174,10 @@ static void rename_block(basic_block_t* entry, dynamic_array_t* dominator_childr
 		}
 	}
 
-	//Now that we're done with the renaming, we'll go through each dominator child in this node
-	//and perform the same operation
+	/**
+	 * Now that we're done with the renaming, we'll go through each dominator child in this node
+	 * and perform the same operation
+	 */
 	for(u_int32_t _ = 0; _ < entry->dominator_children.current_index; _++){
 		rename_block(dynamic_array_get_at(&(entry->dominator_children), _));
 	}
@@ -2241,17 +2237,10 @@ static inline void rename_all_variables(cfg_t* cfg){
 	 * We will call the rename block function on the first block
 	 * for each of our functions. The rename block function is 
 	 * recursive, so that should in theory take care of everything for us
-	 *
-	 * To make this more efficient, we will reserve one dynamic array that
-	 * will be cleared and reused for each block's computate
 	 */
-	dynamic_array_t dominator_children_sets = dynamic_array_alloc();
-	
 	for(u_int32_t _ = 0; _ < cfg->function_entry_blocks.current_index; _++){
-		rename_block(dynamic_array_get_at(&(cfg->function_entry_blocks), _), dominator_children_sets);
+		rename_block(dynamic_array_get_at(&(cfg->function_entry_blocks), _));
 	}
-
-	dynamic_array_dealloc(&dominator_children_sets);
 }
 
 
@@ -7696,6 +7685,11 @@ void basic_block_dealloc(basic_block_t* block){
 	//Deallocate the reverse dominance frontier
 	if(block->reverse_dominance_frontier.internal_array != NULL){
 		dynamic_array_dealloc(&(block->reverse_dominance_frontier));
+	}
+
+	//Deallocate the dominator children frontier
+	if(block->dominator_children.internal_array != NULL){
+		dynamic_array_dealloc(&(block->dominator_children));
 	}
 
 	//Deallocate the liveness sets

@@ -111,6 +111,8 @@ struct basic_block_t{
 	dynamic_array_t dominance_frontier;
 	//The reverse dominance frontier(for analysis)
 	dynamic_array_t reverse_dominance_frontier;
+	//The dominator children of this block
+	dynamic_array_t dominator_children;
 	/**
 	 * Dominator information that each and every block will own. This 
 	 * information is needed whenever we compute the immediate dominator

@@ -854,6 +854,8 @@ static void compute_immediate_postdominators(basic_block_t* function_exit_block,
 
 /**
  * Add a dominated block to the dominator block that we have
+ *
+ * TODO DO WE NEED????
  */
 static inline void add_dominator_child(basic_block_t* dominator, basic_block_t* dominated){
 	//If this is NULL, then we'll allocate it right now
@@ -903,16 +905,6 @@ static inline void build_dominator_trees(dynamic_array_t* function_blocks){
 		}
 	}
 }
-
-
-/**
- * Get the dominator children set for a given block. This function assumes
- * that we already have the immediate dominators calculated
- *
- *
- * Remember that block b is a dominator child of a iff IDOM(b) = a
- */
-
 
 
 /**
@@ -1238,8 +1230,6 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	 *
 	 * Dominator trees are used for SSA form conversion. It is absolutely
 	 * essential that these be computed upon every run
-	 *
-	 * TODO I DOUBT WE NEED THIS
 	 */
 	build_dominator_trees(function_blocks);
 
