@@ -1410,36 +1410,6 @@ static int16_t variable_dynamic_array_contains(dynamic_array_t* variable_array, 
 
 
 /**
- * A special helper function that we use for dynamic arrays of variables. Since variables
- * can be duplicated, we need to compare the symtab variable record, not the three address
- * variable itself
- */
-static int16_t symtab_record_variable_dynamic_array_contains(dynamic_array_t* variable_array, symtab_variable_record_t* variable){
-	//No question here -- we won't be finding it
-	if(variable_array == NULL){
-		return NOT_FOUND;
-	}
-
-	//We assume that everything in here is a variable and will cast as such
-	three_addr_var_t* current_var;
-
-	//Run through every record in here
-	for(u_int16_t i = 0; i < variable_array->current_index; i++){
-		//Grab a reference
-		current_var = variable_array->internal_array[i];
-
-		//If we found it, give back the index
-		if(current_var->linked_var == variable){
-			return i;
-		}
-	}
-
-	//We couldn't find this one, so give back not found
-	return NOT_FOUND;
-}
-
-
-/**
  * Add a variable into the USE set *if* it's appropriate. Remember that we do not care
  * about temporary variables here, and we need to ensure that this variable is not
  * also in the DEF set when we're adding this, because USE specifically is for
@@ -1853,6 +1823,26 @@ static inline void reset_status_for_phi_function_insertion(dynamic_array_t* func
 
 
 /**
+ * A special helper function that we use for dynamic arrays of variables. Since variables
+ * can be duplicated, we need to compare the symtab variable record, not the three address
+ * variable itself. This does a simple linear scan to search
+ */
+static inline u_int8_t does_variable_dynamic_array_contain_symtab_variable(dynamic_array_t* variable_array, symtab_variable_record_t* variable){
+	for(u_int32_t i = 0; i < variable_array->current_index; i++){
+		//Avoid a function call by grabbing directly
+		three_addr_var_t* candidate = variable_array->internal_array[i];
+
+		//Only a hit if the linked var matches
+		if(candidate->linked_var == variable){
+			return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+
+
+/**
  * if(x0 == 0){
  * 	x1 = 2;
  * } else {
@@ -1880,6 +1870,9 @@ static inline void reset_status_for_phi_function_insertion(dynamic_array_t* func
  *
  * 			for each dominance frontier block D of block B:
  * 				if D already has a phi function for V: <-------- avoid double insertions
+ * 					continue
+ *
+ * 				if a variable is not LIVE_OUT AND it's not USED at D:
  * 					continue
  *
  * 				Add the phi function
@@ -1995,15 +1988,10 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 						 * So, we will skip inserting a phi function
 						 * if the variable is not used and not LIVE_OUT
 						 * at N
-						 *
-						 * TODO DOCUMENT THIS ABOVE, MAY BE FASTER
-						 * IF WE SEARCH LIVE OUT FIRST BECAUSE A LOT
-						 * OF BLOCKS THAT WE WANNA EXCLUDE HAVE
-						 * NO LIVE OUT TO BEGIN WITH
 						 * ----------------------------------------
 						 */
-						if(symtab_record_variable_dynamic_array_contains(&(df_node->used_before_definition), record) == NOT_FOUND
-							&& symtab_record_variable_dynamic_array_contains(&(df_node->live_out), record) == NOT_FOUND){
+						if(does_variable_dynamic_array_contain_symtab_variable(&(df_node->used_before_definition), record) == FALSE 
+							&& does_variable_dynamic_array_contain_symtab_variable(&(df_node->live_out), record) == FALSE){
 							continue;
 						}
 
