@@ -359,6 +359,32 @@ static inline u_int8_t is_variable_ssa_eligible(three_addr_var_t* variable){
 
 
 /**
+ * Is a given symtab variable SSA eligible?
+ * 
+ * Ineligible:
+ * 	Global variables
+ * 	Static variables
+ * 	Enum variables
+ * 	Struct variables
+ *
+ * These are all ineligible because they are fundamentally differnt than what an actual
+ * SSA variable is. For instance static and global variables are basically equivalent
+ * to variables stored in memory and as such do not count for SSA
+ */
+static inline u_int8_t is_symtab_variable_ssa_eligible(symtab_variable_record_t* variable){
+	switch(variable->membership){
+		case ENUM_MEMBER:
+		case STRUCT_MEMBER:
+		case STATIC_VARIABLE:
+		case GLOBAL_VARIABLE:
+			return FALSE;
+		default:
+			return TRUE;
+	}
+}
+
+
+/**
  * When we do stack passed parameters, array types and 
  * pointer types are always passed as pointers, while
  * struct types and union types are passed by copy
@@ -528,7 +554,7 @@ static inline void delete_block(basic_block_t* block){
  * every single one. We assume that the caller knows what they are doing, and
  * that the blocks inside of the array are really the correct blocks
  */
-static inline void reset_visit_status_for_function(dynamic_array_t* function_blocks){
+static inline void reset_visited_status_for_function(dynamic_array_t* function_blocks){
 	//Run through all of the blocks
 	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
 		//Extract the current block
@@ -1175,50 +1201,31 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
  * This statement also takes care of the linking that we need to do. When we have a phi-function, we'll
  * need to link it back to whichever variables it refers to
  */
-static void add_phi_statement(basic_block_t* target, instruction_t* phi_statement){
-	//Generic fail case - this should never happen
-	if(target == NULL){
-		print_parse_message(MESSAGE_TYPE_ERROR, "NULL BASIC BLOCK FOUND", 0);
-		exit(1);
-	}
-
-	//Special case -- we're adding the head
-	if(target->leader_statement == NULL || target->exit_statement == NULL){
-		//Assign this to be the head and the tail
-		target->leader_statement = phi_statement;
-		target->exit_statement = phi_statement;
-		//Mark the block that we're in
-		phi_statement->block_contained_in = target;
-		return;
-	}
-
+static inline void add_phi_statement(basic_block_t* target, instruction_t* phi_statement){
 	//Counts as an instruction
 	target->number_of_instructions++;
 
-	//Otherwise we will add this in at the very front
-	phi_statement->next_statement = target->leader_statement;
-	//Update this reference
-	target->leader_statement->previous_statement = phi_statement;
-	//And then we can update this one
-	target->leader_statement = phi_statement;
-
-	//Mark what block we're in
+	//Mark the block that we're in
 	phi_statement->block_contained_in = target;
-}
 
-
-/**
- * Add a parameter to a phi statement
- */
-static void add_phi_parameter(instruction_t* phi_statement, three_addr_var_t* var){
-	//If we've not yet given the dynamic array
-	if(phi_statement->parameters.internal_array == NULL){
-		//Take care of allocation then
-		phi_statement->parameters = dynamic_array_alloc();
+	/**
+	 * Special case -- we're adding the head so this 
+	 * is now the head and the tail
+	 */
+	if(target->leader_statement == NULL){
+		target->leader_statement = phi_statement;
+		target->exit_statement = phi_statement;
+		return;
 	}
 
-	//Add this to the phi statement parameters
-	dynamic_array_add(&(phi_statement->parameters), var);
+	//Otherwise we will add this in at the very front
+	phi_statement->next_statement = target->leader_statement;
+
+	//Update this reference
+	target->leader_statement->previous_statement = phi_statement;
+
+	//And then we can update this one
+	target->leader_statement = phi_statement;
 }
 
 
@@ -1338,26 +1345,19 @@ void delete_statement(instruction_t* stmt){
 /**
  * Does the block assign this variable? We'll do a simple linear scan to find out
  */
-static u_int8_t does_block_assign_variable(basic_block_t* block, symtab_variable_record_t* variable){
-	//Sanity check - if this is NULL then it's false by default
-	if(block->assigned_variables.internal_array == NULL){
-		return FALSE;
-	}
-
-	//We'll need to use a special comparison here because we're comparing variables, not plain addresses.
-	//We will compare the linked var of each block in the assigned variables dynamic array
-	for(u_int16_t i = 0; i < block->assigned_variables.current_index; i++){
-		//Grab the variable out
+static inline u_int8_t does_block_assign_variable(basic_block_t* block, symtab_variable_record_t* variable){
+	/**
+	 * If the linked variable to this var is ours, we do assign
+	 */
+	for(u_int32_t i = 0; i < block->assigned_variables.current_index; i++){
 		three_addr_var_t* var = dynamic_array_get_at(&(block->assigned_variables), i);
 		
 		//Now we'll compare the linked variable to the record
 		if(var->linked_var == variable){
-			//If we found it bail out
 			return TRUE;
 		}
 	}
 
-	//If we make it all of the way down here and we didn't find it, fail out
 	return FALSE;
 }
 
@@ -1383,36 +1383,6 @@ static int16_t variable_dynamic_array_contains(dynamic_array_t* variable_array, 
 
 		//If we found it, give back the index
 		if(current_var->linked_var == variable->linked_var){
-			return i;
-		}
-	}
-
-	//We couldn't find this one, so give back not found
-	return NOT_FOUND;
-}
-
-
-/**
- * A special helper function that we use for dynamic arrays of variables. Since variables
- * can be duplicated, we need to compare the symtab variable record, not the three address
- * variable itself
- */
-static int16_t symtab_record_variable_dynamic_array_contains(dynamic_array_t* variable_array, symtab_variable_record_t* variable){
-	//No question here -- we won't be finding it
-	if(variable_array == NULL){
-		return NOT_FOUND;
-	}
-
-	//We assume that everything in here is a variable and will cast as such
-	three_addr_var_t* current_var;
-
-	//Run through every record in here
-	for(u_int16_t i = 0; i < variable_array->current_index; i++){
-		//Grab a reference
-		current_var = variable_array->internal_array[i];
-
-		//If we found it, give back the index
-		if(current_var->linked_var == variable){
 			return i;
 		}
 	}
@@ -1815,6 +1785,47 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
 
 
 /**
+ * Run through an entire array of function blocks and reset the status and 
+ * "already_has_phi_func" fields for every single one. We assume that 
+ * the caller knows what they are doing, and that the blocks inside of 
+ * the array are really the correct blocks
+ */
+static inline void reset_status_for_phi_function_insertion(dynamic_array_t* function_blocks){
+	//Run through all of the blocks
+	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+		//Extract the current block
+		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
+
+		//Flag it as false
+		current->visited = FALSE;
+
+		//Remove the phi function flag
+		current->already_has_phi_func = FALSE;
+	}
+}
+
+
+/**
+ * A special helper function that we use for dynamic arrays of variables. Since variables
+ * can be duplicated, we need to compare the symtab variable record, not the three address
+ * variable itself. This does a simple linear scan to search
+ */
+static inline u_int8_t does_variable_dynamic_array_contain_symtab_variable(dynamic_array_t* variable_array, symtab_variable_record_t* variable){
+	for(u_int32_t i = 0; i < variable_array->current_index; i++){
+		//Avoid a function call by grabbing directly
+		three_addr_var_t* candidate = variable_array->internal_array[i];
+
+		//Only a hit if the linked var matches
+		if(candidate->linked_var == variable){
+			return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+
+
+/**
  * if(x0 == 0){
  * 	x1 = 2;
  * } else {
@@ -1827,147 +1838,193 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
  * from the second branch
  *
  * To insert phi functions, we take the following approach:
- * 	For each variable
- * 		Find all basic blocks that define this variable
- * 		For each of these basic blocks that contains the variable as assigned to then 
- * 			add it onto the "worklist"
+ * 	worklist <- {}
  *
- * 		Then:
- * 			While worklist is not empty
- * 			Remove some node from the worklist
- * 			for each dominance frontier d
- * 				if it does not already have one of these
- * 					Insert a phi function for v at d
+ * 	For each SSA eligible variable V:
+ * 		For each block B in the function assigns V:
+ * 			add it onto the worklist
+ * 			Flag B as having been on the worklist
  *
+ * 		While worklist is not empty:
+ * 			Remove block B from the worklist
+ *
+ * 			if B was ever on the worklist: 	<------ avoid revisiting blocks
+ * 				continue
+ *
+ * 			for each dominance frontier block D of block B:
+ * 				if D already has a phi function for V: <-------- avoid double insertions
+ * 					continue
+ *
+ * 				if a variable is not LIVE_OUT AND it's not USED at D:
+ * 					continue
+ *
+ * 				Add the phi function
+ * 				Add D to the worklist
+ * 				Flag D as having been on the worklist
+ *
+ *
+ * We will use the "visited" tag to keep track of whether or not we've already
+ * evaluated this block or not. We will need to reset this for every variable
+ *
+ * The phi function inserter runs over the entire CFG(so all functions, files, everything).
+ * We may change this in the future, but doing this over the entire CFG allows us to keep
+ * all of our work down to very few allocations(one initial worklist allocation + some
+ * resizes) which is a big win if we have 100s or 1000s of functions to do
  */
-static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
-	//We'll run through the variable symtab, finding every single variable in it
-	symtab_variable_sheaf_t* sheaf_cursor;
-	symtab_variable_record_t* record;
-	//A cursor that we can use
-	basic_block_t* block_cursor;
-	//Once we're done with all of this, we're finally ready to insert phi functions
+static void insert_phi_functions(variable_symtab_t* var_symtab){
+	/**
+	 * We need to maintain a worklist for our algorithm. Instead of constantly
+	 * reallocating and deallocating, we can just maintain one that we clear
+	 * whenever we're done using
+	 */
+	dynamic_array_t worklist = dynamic_array_alloc();
 
-	//------------------------------------------
-	// FIRST STEP: FOR EACH variable we have
-	//------------------------------------------
-	//Run through all of the sheafs
-	for	(u_int16_t i = 0; i < var_symtab->sheafs.current_index; i++){
+	/**
+	 * Step 1: For every single sheaf(lexical level/scope) that we have in the symbol table,
+	 * and within every sheaf run through every single defined variable
+	 */
+	for	(u_int32_t i = 0; i < var_symtab->sheafs.current_index; i++){
 		//Grab the current sheaf
-		sheaf_cursor = dynamic_array_get_at(&(var_symtab->sheafs), i);
+		symtab_variable_sheaf_t* sheaf_cursor = dynamic_array_get_at(&(var_symtab->sheafs), i);
 
-		//Now we'll free all non-null records
-		for(u_int16_t j = 0; j < VARIABLE_KEYSPACE; j++){
-			//Grab the record
-			record = sheaf_cursor->records[j];
+		for(u_int32_t j = 0; j < VARIABLE_KEYSPACE; j++){
+			symtab_variable_record_t* record = sheaf_cursor->records[j];
 
-			//Remember that symtab records can be chained in case
-			//of hash collisions, so we need to run through every
-			//variable like this
+			/**
+			 * Remember that symtab records can be chained in case
+			 * of hash collisions, so we need to run through every
+			 * variable like this
+			 */
 			while(record != NULL){
-				//----------------------------------
-				// SECOND STEP: For each block that 
-				// defines(assigns) said variable
-				//----------------------------------
-				//We'll need a "worklist" here - just a dynamic array 
-				dynamic_array_t worklist = dynamic_array_alloc();
-				//Keep track of those that were ever on the worklist
-				dynamic_array_t ever_on_worklist;
+				/**
+				 * Certain variable types are completely ineligible, so checking
+				 * them would be a waste. As such we will skip all of these ineligible
+				 * variables here
+				 */
+				if(is_symtab_variable_ssa_eligible(record) == FALSE){
+					record = record->next;
+					continue;
+				}
 
-				//We'll also need a dynamic array that contains everything relating
-				//to if we did or did not already put a phi function into this block
-				dynamic_array_t already_has_phi_func = dynamic_array_alloc();
-				
-				//Just run through the entire thing
-				for(u_int16_t i = 0; i < cfg->created_blocks.current_index; i++){
-					//Grab the block out of here
-					block_cursor = dynamic_array_get_at(&(cfg->created_blocks), i);
+				/**
+				 * To improve efficiency, we will grab the list of all blocks for the given
+				 * function that this variable was contained within and only scan those. Remember
+				 * that things like global variables are ineligible for SSA to begin with
+				 * due to how they are stored, so this is fine for us
+				 */
+				symtab_function_record_t* variable_function = record->function_declared_in;
+				dynamic_array_t* function_blocks = &(variable_function->function_blocks);
 
-					//Does this block define(assign) our variable?
-					if(does_block_assign_variable(block_cursor, record) == TRUE){
-						//Then we add this block onto the "worklist"
-						dynamic_array_add(&worklist, block_cursor);
+				/**
+				 * Since we use the "visited" tag to keep track of whether or not a block
+				 * was ever on the worklist, we'll need to reset this here
+				 */
+				reset_status_for_phi_function_insertion(function_blocks);
+
+				/**
+				 * Queue up every block that we have on record as assigning this
+				 * given variable
+				 */
+				for(u_int32_t k = 0; k < function_blocks->current_index; k++){
+					basic_block_t* block = dynamic_array_get_at(function_blocks, k);
+
+					/**
+					 * Enqueue to our worklist if the block assigns this variable. Also flag
+					 * the visited tag on the block so that we don't end up reprocessing this
+					 */
+					if(does_block_assign_variable(block, record) == TRUE){
+						dynamic_array_add(&worklist, block);
+						block->visited = TRUE;
 					}
 				}
 
-				//Now we can clone the "was ever on worklist" dynamic array
-				ever_on_worklist = clone_dynamic_array(&worklist);
-
-				//Now we can actually perform our insertions
 				//So long as the worklist is not empty
 				while(dynamic_array_is_empty(&worklist) == FALSE){
-					//Remove the node from the back - more efficient
+					//O(1) removal delete from back
 					basic_block_t* node = dynamic_array_delete_from_back(&worklist);
 
-					//Now we will go through each node in this worklist's dominance frontier
-					for(u_int16_t j = 0; j < node->dominance_frontier.current_index; j++){
-						//Grab this node out
-						basic_block_t* df_node = dynamic_array_get_at(&(node->dominance_frontier), j);
+					/**
+					 * For each block that assigns our variable, run through
+					 * every block in that block's dominance frontier(just barely
+					 * not dominated by that block). If the block in the dominance
+					 * frontier either uses the variable, *or* the variable is
+					 * live_out at that block, we'll need to insert a phi function
+					 * join node
+					 */
+					for(u_int32_t l = 0; l < node->dominance_frontier.current_index; l++){
+						basic_block_t* df_node = dynamic_array_get_at(&(node->dominance_frontier), l);
 
-						//If this node already has a phi function, we're not gonna bother with it
-						if(dynamic_array_contains(&already_has_phi_func, df_node) != NOT_FOUND){
-							//We DID find it, so we will NOT add anything, it already has one
+						//If this already has a phi function for this run we skip it
+						if(df_node->already_has_phi_func == TRUE){
 							continue;
 						}
 
-						//Let's check to see if we really need one here.
-						//----------------------------------------
-						// CRITERION:
-						// If a variable is NOT Live-out at the join node,
-						// that means that it is not LIVE-IN at any of
-						// the successors of that block. If a variable
-						// is not active(used) at the join node either,
-						// that means that the phi function is useless.
-						//
-						// So, we will skip inserting a phi function
-						// if the variable is not used and not LIVE_OUT
-						// at N
-						//----------------------------------------
-
-						//Let's see if we can find it in one of these. We'll record if we can
-						if(symtab_record_variable_dynamic_array_contains(&(df_node->used_before_definition), record) == NOT_FOUND
-							&& symtab_record_variable_dynamic_array_contains(&(df_node->live_out), record) == NOT_FOUND){
+						/**
+						 * ----------------------------------------
+						 *  CRITERION:
+						 *  If a variable is NOT Live-out at the join node,
+						 *  that means that it is not LIVE-IN at any of
+						 *  the successors of that block. If a variable
+						 *  is not active(used) at the join node either,
+						 *  that means that the phi function is useless.
+						 *
+						 * So, we will skip inserting a phi function
+						 * if the variable is not used and not LIVE_OUT
+						 * at N
+						 * ----------------------------------------
+						 */
+						if(does_variable_dynamic_array_contain_symtab_variable(&(df_node->used_before_definition), record) == FALSE 
+							&& does_variable_dynamic_array_contain_symtab_variable(&(df_node->live_out), record) == FALSE){
 							continue;
 						}
 
-						//If we make it here that means that we don't already have one, so we'll add it
-						//This function only emits the skeleton of a phi function
+						/**
+						 * If we make it here that means that we don't already have one, so we'll add it
+						 *
+						 * This only emits the skeleton of a phi function - variables will be added
+						 * later
+						 */
 						instruction_t* phi_stmt = emit_phi_function(record);
 
 						//Add the phi statement into the block	
 						add_phi_statement(df_node, phi_stmt);
 
-						//We'll mark that this block already has one for the future
-						dynamic_array_add(&already_has_phi_func, df_node); 
+						//Flag that this already has a phi function 
+						df_node->already_has_phi_func = TRUE;
 
-						//If this node has not ever been on the worklist, we'll add it
-						//to keep the search going
-						if(dynamic_array_contains(&ever_on_worklist, df_node) == NOT_FOUND){
-							//We did NOT find it, so we WILL add it
+						/**
+						 * If we haven't visited this block yet then we'll add it to our worklist
+						 * for the next go around
+						 */
+						if(df_node->visited == FALSE){
 							dynamic_array_add(&worklist, df_node);
-							dynamic_array_add(&ever_on_worklist, df_node);
 						}
 					}
 				}
 
-				//Now that we're done with these, we'll remove them for
-				//the next round
-				dynamic_array_dealloc(&worklist);
-				dynamic_array_dealloc(&ever_on_worklist);
-				dynamic_array_dealloc(&already_has_phi_func);
+				//Wipe the worklist now
+				clear_dynamic_array(&worklist);
 			
 				//Advance to the next record in the chain
 				record = record->next;
 			}
 		}
 	}
+
+	//Scrap this once done
+	dynamic_array_dealloc(&worklist);
 }
 
 
 /**
  * Generate a new name for the given three address variable
+ *
+ * For a left hand side(assignment) new name:
+ * 	push the current SSA generation number onto the counter stack
+ * 	variable's SSA generation is the current number
+ * 	bump the SSA generation number for the next go 
  */
-static void lhs_new_name(three_addr_var_t* var){
+static inline void lhs_new_name(three_addr_var_t* var){
 	//Grab the linked variable out
 	symtab_variable_record_t* linked_var = var->linked_var;
 
@@ -1986,13 +2043,11 @@ static void lhs_new_name(three_addr_var_t* var){
 
 
 /**
- * Directly increment the counter without need
- * for a three_addr_var_t that's holding it. This
- * is used exclusively for function parameters that in 
- * all technicality have already been assignedby virtue of 
- * existing
+ * For a left hand side(assignment) new name:
+ * 	push the current SSA generation number onto the counter stack
+ * 	bump the SSA generation number
  */
-static void lhs_new_name_direct(symtab_variable_record_t* variable){
+static inline void lhs_new_name_direct(symtab_variable_record_t* variable){
 	//Store the old generation level
 	u_int16_t generation_level = variable->counter;
 
@@ -2001,16 +2056,14 @@ static void lhs_new_name_direct(symtab_variable_record_t* variable){
 
 	//Push the old generation level onto here
 	lightstack_push(&(variable->counter_stack), generation_level);
-
-	//And that should be all
 }
 
 
 /**
- * Rename the variable with the top of the stack. This DOES NOT
- * manipulate the stack in any way
+ * For an RHS(use) new name:
+ * 	Get the generation number by peeking the stack and assigning
  */
-static void rhs_new_name(three_addr_var_t* var){
+static inline void rhs_new_name(three_addr_var_t* var){
 	//Grab the linked var out
 	symtab_variable_record_t* linked_var = var->linked_var;
 
@@ -2028,25 +2081,26 @@ static void rhs_new_name(three_addr_var_t* var){
  * Algorithm:
  *
  * rename(){
- * 	for each block b
- * 		if b previously visited continue
- * 		for each phi-function p in b
- * 			v = LHS(p)
- * 			vn = GenName(v) and replace v with vn
- * 		for each statement s in b
- * 			for each variable v in the RHS of s
- * 				replace V with Top(Stacks[V]);
- * 			for each variable V in the LHS
- * 				vn = GenName(V) and replace v with vn
- * 			for each CFG successor of b
- * 				j <- position in s's phi-functon belonging to b
- * 				for each phi function p in s
- * 					replace the jth operand of RHS(p) with Top(Stacks[V])
- * 			for each s in the dominator children of b
- * 				Rename(s)
- * 			for each phi-function or statement t in b
- * 				for each vi in the LHS(T)
- * 					pop(Stacks[V])
+ * 	if b previously visited:
+ * 		return
+ * 		
+ *	for each phi-function p in b
+ * 		v = LHS(p)
+ * 		vn = GenName(v) and replace v with vn
+ * 	for each statement s in b
+ * 		for each variable v in the RHS of s
+ * 			replace V with Top(Stacks[V]);
+ * 		for each variable V in the LHS
+ * 			vn = GenName(V) and replace v with vn
+ * 		for each CFG successor s of b
+ * 			j <- position in s's phi-functon belonging to b
+ * 			for each phi function p in s
+ * 				replace the jth operand of RHS(p) with Top(Stacks[V])
+ * 		for each s in the dominator children of b
+ * 			Rename(s)
+ * 		for each phi-function or statement t in b
+ * 			for each vi in the LHS(T)
+ * 				pop(Stacks[V])
  * }
  */
 static void rename_block(basic_block_t* entry){
@@ -2055,65 +2109,68 @@ static void rename_block(basic_block_t* entry){
 		return;
 	}
 
-	//If this is a function entry block, then all of it's
-	//parameters have technically already been "assigned"
+	//Flag that we've visited
+	entry->visited = TRUE;
+
+	/**
+	 * If this is a function entry block, then all of it's
+	 * parameters have technically already been "assigned" by the
+	 * time we end up in here. As such we'll give them all a direct
+	 * left hand new name
+	 */
 	if(entry->block_type == BLOCK_TYPE_FUNC_ENTRY){
-		//Grab the record out
 		symtab_function_record_t* function_defined_in = entry->function_defined_in;
 		
-		//We'll run through the parameters and mark them as assigned
-		for(u_int16_t i = 0; i < function_defined_in->function_parameters.current_index; i++){
-			//make the new name here
+		/**
+		 * We store function parameters as symtab variables so we'll need to perform a direct
+		 * rename here
+		 */
+		for(u_int32_t i = 0; i < function_defined_in->function_parameters.current_index; i++){
 			lhs_new_name_direct(dynamic_array_get_at(&(function_defined_in->function_parameters), i));
 		}
 	}
 
-	//Otherwise we'll flag it for the future
-	entry->visited = TRUE;
-
-	//Grab out our leader statement here. We will iterate over all statements looking for phi functions
 	instruction_t* cursor = entry->leader_statement;
-
-	//So long as this isn't null
+	
+	/**
+	 * We'll now crawl the block renaming every single instruction. Some instructions require
+	 * special consideration/handling as seen below
+	 */
 	while(cursor != NULL){
 		switch(cursor->statement_type){
 			case THREE_ADDR_CODE_PHI_FUNC:
-				//We will rewrite the assigneed of the phi function(LHS) with the new name
 				lhs_new_name(cursor->operands.oir.assignee);
 				break;
 				
+			/**
+			 * Function calls are a special case because they have a parameter
+			 * array that we'll need to conisder
+			 */
 			case THREE_ADDR_CODE_FUNC_CALL:
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
-				//If we have a non-temp variable, rename it
 				if(is_variable_ssa_eligible(cursor->operands.oir.operand1) == TRUE){
 					rhs_new_name(cursor->operands.oir.operand1);
 				}
-
-				//Same goes for the assignee, except this one is the LHS
-				if(is_variable_ssa_eligible(cursor->operands.oir.assignee) == TRUE){
-					lhs_new_name(cursor->operands.oir.assignee);
-				}
 				
-				//Special case - do we have a function call?
-				dynamic_array_t func_params = cursor->parameters;
+				//Function calls contain parameters that count as RHS vars
+				dynamic_array_t* func_params = &(cursor->parameters);
 
-				//If we have any
-				for(u_int16_t k = 0; k < func_params.current_index; k++){
-					//Grab it out
-					three_addr_var_t* current_param = dynamic_array_get_at(&func_params, k);
+				for(u_int32_t k = 0; k < func_params->current_index; k++){
+					three_addr_var_t* current_param = dynamic_array_get_at(func_params, k);
 
-					//If it's not temporary, we rename
 					if(is_variable_ssa_eligible(current_param) == TRUE){
 						rhs_new_name(current_param);
 					}
 				}
 
+				if(is_variable_ssa_eligible(cursor->operands.oir.assignee) == TRUE){
+					lhs_new_name(cursor->operands.oir.assignee);
+				}
+
 				break;
 
 			/**
-			 * And now if it's anything else that has an assignee, operands, etc,
-			 * we'll need to rewrite all of those as well
-			 * We'll exclude direct jump statements, these we don't care about
+			 * All other cases we just rename as we see appropriate
 			 */
 			default:
 				if(is_variable_ssa_eligible(cursor->operands.oir.operand1) == TRUE){
@@ -2147,32 +2204,31 @@ static void rename_block(basic_block_t* entry){
 		cursor = cursor->next_statement;
 	}
 
-	//Now for each successor of b, we'll need to add the phi-function parameters according
-	for(u_int32_t _ = 0; _ < entry->successors.current_index; _++){
-		//Grab the successor out
-		basic_block_t* successor = dynamic_array_get_at(&(entry->successors), _);
-
-		//Now for each phi-function in this successor that uses something in the defined variables
-		//here, we'll want to add that newly renamed defined variable into the phi function parameters
-		
-		//Yet another cursor
+	/**
+	 * For each successor of i, we'll need to update the phi functions with the new names
+	 * that we've given for variables in this block
+	 */
+	for(u_int32_t i = 0; i < entry->successors.current_index; i++){
+		basic_block_t* successor = dynamic_array_get_at(&(entry->successors), i);
 		instruction_t* succ_cursor = successor->leader_statement;
 
-		//So long as it isn't null AND it's a phi function
+		/**
+		 * Crawl through every phi function in the successor(they're all at the top) and
+		 * for each one generate a new variable and add it in
+		 */
 		while(succ_cursor != NULL && succ_cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
 			//We have a phi function, so what are we assigning to it?
-			symtab_variable_record_t* phi_func_var = succ_cursor->operands.oir.assignee->linked_var;
+			symtab_variable_record_t* phi_func_assignee = succ_cursor->operands.oir.assignee->linked_var;
 
 			//Emit a new variable for this one
-			three_addr_var_t* phi_func_param = emit_var(phi_func_var);
+			three_addr_var_t* phi_func_param = emit_var(phi_func_assignee);
 
 			//Emit the name for this variable
 			rhs_new_name(phi_func_param);
 
-			//Now add it into the phi function
-			add_phi_parameter(succ_cursor, phi_func_param);
+			//Add this as a parameter
+			dynamic_array_add(&(succ_cursor->parameters), phi_func_param);
 
-			//Advance this up
 			succ_cursor = succ_cursor->next_statement;
 		}
 	}
@@ -2185,15 +2241,15 @@ static void rename_block(basic_block_t* entry){
 		rename_block(dynamic_array_get_at(&(entry->dominator_children), _));
 	}
 
-	//Again if this is a function entry block, then we need to unwind the stack
-	//so that we avoid excessive variable numbers here as well
+	/**
+	 * Again if this is a function entry block, then we need to unwind the stack
+	 * so that we avoid excessive variable numbers here as well
+	 */
 	if(entry->block_type == BLOCK_TYPE_FUNC_ENTRY){
-		//Grab the record out
 		symtab_function_record_t* function_defined_in = entry->function_defined_in;
 		
-		//We need to pop these all only once so that we have parity with what we
-		//did up top
-		for(u_int16_t i = 0; i < function_defined_in->function_parameters.current_index; i++){
+		//We need to pop these all only once so that we have parity with what we did up top
+		for(u_int32_t i = 0; i < function_defined_in->function_parameters.current_index; i++){
 			//Get the function parameter out
 			symtab_variable_record_t* function_param = dynamic_array_get_at(&(function_defined_in->function_parameters), i);
 
@@ -2224,25 +2280,16 @@ static void rename_block(basic_block_t* entry){
  * Rename all of the variables in the CFG
  */
 static inline void rename_all_variables(cfg_t* cfg){
-	//Before we do this - let's reset the entire CFG
-	reset_visited_status(cfg, FALSE);
-
-	/**
-	 * All global variables have themselves been assigned. As such, we'll
-	 * need to mark that by giving them a left hand rename
-	 */
-	for(u_int32_t i = 0; i < cfg->global_variables.current_index; i++){
-		global_variable_t* variable = dynamic_array_get_at(&(cfg->global_variables), i);
-		lhs_new_name_direct(variable->variable);
-	}
+	//Before we do this - let's reset the entire CFG(all created blocks)
+	reset_visited_status_for_function(&(cfg->created_blocks));
 
 	/**
 	 * We will call the rename block function on the first block
 	 * for each of our functions. The rename block function is 
 	 * recursive, so that should in theory take care of everything for us
 	 */
-	for(u_int32_t _ = 0; _ < cfg->function_entry_blocks.current_index; _++){
-		rename_block(dynamic_array_get_at(&(cfg->function_entry_blocks), _));
+	for(u_int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+		rename_block(dynamic_array_get_at(&(cfg->function_entry_blocks), i));
 	}
 }
 
@@ -11725,6 +11772,16 @@ static void mangle_static_variable_names(dynamic_array_t* global_variables){
 
 
 /**
+ * Perform all SSA generation in the CFG by first inserting all needed
+ * phi functions and then by renaming all eligible variables
+ */
+static inline void ssa_generator(cfg_t* cfg, variable_symtab_t* variables){
+	insert_phi_functions(variables);
+	rename_all_variables(cfg);
+}
+
+
+/**
  * Build a cfg from the ground up
 */
 cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_int32_t* num_warnings){
@@ -11802,11 +11859,10 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	 */
 	mangle_static_variable_names(&(cfg->global_variables));
 
-	//Add all phi functions for SSA
-	insert_phi_functions(cfg, results->variable_symtab);
-
-	//Rename all variables after we're done with the phi functions
-	rename_all_variables(cfg);
+	/**
+	 * Call out to do all SSA generation
+	 */
+	ssa_generator(cfg, results->variable_symtab);
 
 	//Once we get here, we're done with these two stacks
 	heap_stack_dealloc(&break_stack);	

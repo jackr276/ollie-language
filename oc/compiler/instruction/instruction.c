@@ -5995,6 +5995,9 @@ instruction_t* emit_phi_function(symtab_variable_record_t* variable){
 	//We'll just store the assignee here, no need for anything else
 	stmt->operands.oir.assignee = emit_var(variable);
 
+	//Create our parameter array
+	stmt->parameters = dynamic_array_alloc();
+
 	//Note what kind of node this is
 	stmt->statement_type = THREE_ADDR_CODE_PHI_FUNC;
 
