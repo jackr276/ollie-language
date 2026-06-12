@@ -2036,7 +2036,9 @@ static void insert_phi_functions(variable_symtab_t* var_symtab){
 /**
  * Generate a new name for the given three address variable
  *
- * WHY NOT INLINE
+ * For a left hand side(assignment) new name:
+ * 	push the current SSA generation number onto the counter stack
+ * 	bump the SSA generation number
  */
 static void lhs_new_name(three_addr_var_t* var){
 	//Grab the linked variable out
@@ -2057,14 +2059,11 @@ static void lhs_new_name(three_addr_var_t* var){
 
 
 /**
- * Directly increment the counter without need
- * for a three_addr_var_t that's holding it. This
- * is used exclusively for function parameters that in 
- * all technicality have already been assignedby virtue of 
- * existing
- * WHY NOT INLINE
+ * For a left hand side(assignment) new name:
+ * 	push the current SSA generation number onto the counter stack
+ * 	bump the SSA generation number
  */
-static void lhs_new_name_direct(symtab_variable_record_t* variable){
+static inline void lhs_new_name_direct(symtab_variable_record_t* variable){
 	//Store the old generation level
 	u_int16_t generation_level = variable->counter;
 
@@ -2073,8 +2072,6 @@ static void lhs_new_name_direct(symtab_variable_record_t* variable){
 
 	//Push the old generation level onto here
 	lightstack_push(&(variable->counter_stack), generation_level);
-
-	//And that should be all
 }
 
 
@@ -2128,15 +2125,20 @@ static void rename_block(basic_block_t* entry){
 		return;
 	}
 
-	//If this is a function entry block, then all of it's
-	//parameters have technically already been "assigned"
+	/**
+	 * If this is a function entry block, then all of it's
+	 * parameters have technically already been "assigned" by the
+	 * time we end up in here. As such we'll give them all a direct
+	 * left hand new name
+	 */
 	if(entry->block_type == BLOCK_TYPE_FUNC_ENTRY){
-		//Grab the record out
 		symtab_function_record_t* function_defined_in = entry->function_defined_in;
 		
-		//We'll run through the parameters and mark them as assigned
-		for(u_int16_t i = 0; i < function_defined_in->function_parameters.current_index; i++){
-			//make the new name here
+		/**
+		 * We store function parameters as symtab variables so we'll need to perform a direct
+		 * rename here
+		 */
+		for(u_int32_t i = 0; i < function_defined_in->function_parameters.current_index; i++){
 			lhs_new_name_direct(dynamic_array_get_at(&(function_defined_in->function_parameters), i));
 		}
 	}
@@ -2297,25 +2299,16 @@ static void rename_block(basic_block_t* entry){
  * Rename all of the variables in the CFG
  */
 static inline void rename_all_variables(cfg_t* cfg){
-	//Before we do this - let's reset the entire CFG
-	reset_visited_status(cfg, FALSE);
-
-	/**
-	 * All global variables have themselves been assigned. As such, we'll
-	 * need to mark that by giving them a left hand rename
-	 */
-	for(u_int32_t i = 0; i < cfg->global_variables.current_index; i++){
-		global_variable_t* variable = dynamic_array_get_at(&(cfg->global_variables), i);
-		lhs_new_name_direct(variable->variable);
-	}
+	//Before we do this - let's reset the entire CFG(all created blocks)
+	reset_visited_status_for_function(&(cfg->created_blocks));
 
 	/**
 	 * We will call the rename block function on the first block
 	 * for each of our functions. The rename block function is 
 	 * recursive, so that should in theory take care of everything for us
 	 */
-	for(u_int32_t _ = 0; _ < cfg->function_entry_blocks.current_index; _++){
-		rename_block(dynamic_array_get_at(&(cfg->function_entry_blocks), _));
+	for(u_int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+		rename_block(dynamic_array_get_at(&(cfg->function_entry_blocks), i));
 	}
 }
 
