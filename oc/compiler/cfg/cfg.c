@@ -8320,8 +8320,46 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
  * Convert a loop statement AST subtree into valid OIR
  */
 static cfg_result_package_t visit_loop_statement(generic_ast_node_t* root_node){
+	//Initialize the result package
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
+
+	//Initialize the loop end block outside of the loop nesting so that the estimate is accurate
+	basic_block_t* loop_end_block = basic_block_alloc_and_estimate();
+	loop_end_block->block_type = BLOCK_TYPE_LOOP_EXIT;
+
+	//Update the nesting stack to represent that we are in a loop
+	push_nesting_level(&nesting_stack, NESTING_LOOP_STATEMENT);
+
+	//Now that we're in the loop allocate the start block
+	basic_block_t* loop_start_block = basic_block_alloc_and_estimate();
+	loop_start_block->block_type = BLOCK_TYPE_LOOP_ENTRY;
+
+	//Emit the compound statement interior
+	cfg_result_package_t compound_statement_results = visit_compound_statement(root_node->first_child);
+
+	/**
+	 * Loop start -> compound_statement start .... -> compound_satement_end 
+	 *  |	^												   ^
+	 * 	|	| ------------------------------------------------ |
+	 *  |
+	 *  |  TODO HOW DO WE DO THIS
+	 * 	Loop End
+	 *    
+	 *
+	 */
+	emit_jump(loop_start_block, compound_statement_results.starting_block);
+
+	//Once done pop this off as we have left the loop
+	pop_nesting_level(&nesting_stack);
+	
+
 	printf("TODO NOT IMPLEMENTED CFG\n");
 	exit(1);
+
+	//Populate and give back the result package
+	result_package.starting_block = loop_start_block;
+	result_package.final_block = loop_end_block;
+	return result_package;
 }
 
 
