@@ -9,12 +9,16 @@
  * If we see a case like this, I think we are going to assume that the
  * author wants this to be a trapping loop and *not* optimize it away
  */
-pub fn infinite_loop() -> void {
+pub fn infinite_loop() -> i32 {
 	let x:mut i32 = 5;
 
 	loop {
 		x++;
 	}
+
+	//See what happens to the stuff after
+	x += 2;
+	ret x;
 }
 
 

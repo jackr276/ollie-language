@@ -2740,27 +2740,12 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 			 *
 			 * If regular branch -> jump to if always
 			 * If inverse branch -> jump to else always
-			 *
-			 * The "virtual_out_edge_required" concept has to do with the way that
-			 * we currently handle postdominator analysis. If we have an infinite loop,
-			 * the analysis will fail. We can fix this by adding virtual out edges
-			 * when we do have such cases. These add successors, but they do not add jumps.
-			 * This allows us to maintain the loop properties without looping forever
 			 */
 			case BRANCH_CONDITIONAL_ALWAYS_TRUE:
 				if(branch_category == BRANCH_CATEGORY_NORMAL){
 					emit_jump(current_block, if_block);
-
-					if(virtual_out_edge_required == TRUE){
-						add_successor(current_block, else_block);
-					}
-
 				} else {
 					emit_jump(current_block, else_block);
-
-					if(virtual_out_edge_required == TRUE){
-						add_successor(current_block, if_block);
-					}
 				}
 
 				return results;
@@ -2774,17 +2759,8 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 			case BRANCH_CONDITIONAL_ALWAYS_FALSE:
 				if(branch_category == BRANCH_CATEGORY_NORMAL){
 					emit_jump(current_block, else_block);
-
-					if(virtual_out_edge_required == TRUE){
-						add_successor(current_block, if_block);
-					}
-
 				} else {
 					emit_jump(current_block, if_block);
-
-					if(virtual_out_edge_required == TRUE){
-						add_successor(current_block, else_block);
-					}
 				}
 
 				return results;

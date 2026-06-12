@@ -1715,6 +1715,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				replace_all_branch_targets(current, jumping_to_block);
 
 				//Current is no longer in the picture
+				//TODO WHAT ABOUT FUNCTION BLOCKS?????
 				dynamic_array_delete(&(cfg->created_blocks), current);
 
 				//Counts as a change
