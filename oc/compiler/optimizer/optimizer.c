@@ -2245,7 +2245,7 @@ static inline void delete_all_unreachable_blocks(basic_block_t* function_entry, 
 	 * For each block reset visited flag to false
 	 */
 	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
-		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
+		basic_block_t* block = function_blocks->internal_array[i];
 		block->visited = FALSE;
 	}
 
@@ -2264,7 +2264,7 @@ static inline void delete_all_unreachable_blocks(basic_block_t* function_entry, 
 	 * as reachable is going to be deleted
 	 */
 	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
-		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
+		basic_block_t* block = function_blocks->internal_array[i];
 
 		/**
 		 * Throw it into the temp holding array
@@ -2292,6 +2292,8 @@ static inline void delete_all_unreachable_blocks(basic_block_t* function_entry, 
  * We consider any block with no predecessors that *is not* a function entry block
  * to be unreachable. We must also be mindful that, once we start deleting blocks, we may
  * be creating even more unreachable blocks, so we need to take care of those too 
+ *
+ * TODO DELETE ME
  */
 static inline void delete_all_unreachable_blocks2(dynamic_array_t* function_blocks, cfg_t* cfg){
 	//Array of all blocks that are to be deleted
