@@ -1888,7 +1888,7 @@ static inline u_int8_t does_variable_dynamic_array_contain_symtab_variable(dynam
  * all of our work down to very few allocations(one initial worklist allocation + some
  * resizes) which is a big win if we have 100s or 1000s of functions to do
  */
-static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
+static void insert_phi_functions(variable_symtab_t* var_symtab){
 	/**
 	 * We need to maintain a worklist for our algorithm. Instead of constantly
 	 * reallocating and deallocating, we can just maintain one that we clear
@@ -11798,6 +11798,16 @@ static void mangle_static_variable_names(dynamic_array_t* global_variables){
 
 
 /**
+ * Perform all SSA generation in the CFG by first inserting all needed
+ * phi functions and then by renaming all eligible variables
+ */
+static inline void ssa_generator(cfg_t* cfg, variable_symtab_t* variables){
+	insert_phi_functions(variables);
+	rename_all_variables(cfg);
+}
+
+
+/**
  * Build a cfg from the ground up
 */
 cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_int32_t* num_warnings){
@@ -11875,11 +11885,10 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	 */
 	mangle_static_variable_names(&(cfg->global_variables));
 
-	//Add all phi functions for SSA
-	insert_phi_functions(cfg, results->variable_symtab);
-
-	//Rename all variables after we're done with the phi functions
-	rename_all_variables(cfg);
+	/**
+	 * Call out to do all SSA generation
+	 */
+	ssa_generator(cfg, results->variable_symtab);
 
 	//Once we get here, we're done with these two stacks
 	heap_stack_dealloc(&break_stack);	
