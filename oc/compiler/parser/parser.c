@@ -10177,14 +10177,13 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 static generic_ast_node_t* while_statement(ollie_token_stream_t* token_stream){
 	//The lookahead token
 	lexitem_t lookahead;
-	//Freeze the line number
-	u_int32_t current_line = parser_line_num;
 
 	//Push the looping statement onto here
 	push_nesting_level(&nesting_stack, NESTING_LOOP_STATEMENT);
 
 	//First create the actual node
 	generic_ast_node_t* while_stmt_node = ast_node_alloc(AST_NODE_TYPE_WHILE_STMT, SIDE_TYPE_LEFT);
+	while_stmt_node->line_number = parser_line_num;
 
 	//We already have seen the while keyword, so now we need to see parenthesis surrounding a conditional expression
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -10237,8 +10236,6 @@ static generic_ast_node_t* while_statement(ollie_token_stream_t* token_stream){
 
 	//Otherwise we'll add it in as a child
 	add_child_node(while_stmt_node, compound_stmt_node);
-	//Store the current line number
-	while_stmt_node->line_number = current_line;
 
 	//And now that we're done, pop this off of the nesting stack
 	pop_nesting_level(&nesting_stack);
@@ -10252,10 +10249,32 @@ static generic_ast_node_t* while_statement(ollie_token_stream_t* token_stream){
  * An Ollie loop statement allows the user to intentionally define loops with no condition.
  * These loops will either be infinite loops(useful in some cases), or they allow the user
  * to define special exit conditions as they see fit using breaks/returns internally
+ *
+ * BNF Rule: <loop-statement> ::= loop <compound_statement>
  */
 static generic_ast_node_t* loop_statement(ollie_token_stream_t* token_stream){
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
+	//Allocate our overall node
+	generic_ast_node_t* loop_statement = ast_node_alloc(AST_NODE_TYPE_LOOP_STMT, SIDE_TYPE_LEFT);
+
+	//This is a valid nesting level for breaks/continues
+	push_nesting_level(&nesting_stack, NESTING_LOOP_STATEMENT);
+
+	//Now we need to see a valid compound statement
+	generic_ast_node_t* compound_statement_node = compound_statement(token_stream, TRUE);
+
+	//Catch the error and leave
+	if(compound_statement_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return print_and_return_error("Invalid body given to loop statement", parser_line_num);
+	}
+
+	//Add this in as the child
+	add_child_node(loop_statement, compound_statement_node);
+
+	//Now that we're done remove the nesting level
+	pop_nesting_level(&nesting_stack);
+
+	//Give this one back
+	return compound_statement_node;
 }
 
 
@@ -10268,8 +10287,6 @@ static generic_ast_node_t* loop_statement(ollie_token_stream_t* token_stream){
  * BNF Rule: <do-while-statement> ::= do <compound-statement> while( <logical-or-expression> );
  */
 static generic_ast_node_t* do_while_statement(ollie_token_stream_t* token_stream){
-	//Freeze the current line number
-	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -10278,6 +10295,7 @@ static generic_ast_node_t* do_while_statement(ollie_token_stream_t* token_stream
 
 	//Let's first create the overall global root node
 	generic_ast_node_t* do_while_stmt_node = ast_node_alloc(AST_NODE_TYPE_DO_WHILE_STMT, SIDE_TYPE_LEFT);
+	do_while_stmt_node->line_number = parser_line_num;
 
 	//Remember by the time that we've gotten here, we have already seen the do keyword
 	//Let's first find a valid compound statement
@@ -10285,7 +10303,7 @@ static generic_ast_node_t* do_while_statement(ollie_token_stream_t* token_stream
 
 	//If we fail, then we are done here
 	if(compound_stmt->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		return print_and_return_error("Invalid compound statement given to do-while statement", current_line);
+		return print_and_return_error("Invalid compound statement given to do-while statement", parser_line_num);
 	}
 
 	//Otherwise we know that it was valid, so we can add it in as a child of the root
@@ -10347,8 +10365,6 @@ static generic_ast_node_t* do_while_statement(ollie_token_stream_t* token_stream
 	if(lookahead.tok != SEMICOLON){
 		return print_and_return_error("Semicolon expected at the end of do while statement", parser_line_num);
 	}
-	//Store the line number
-	do_while_stmt_node->line_number = current_line;
 
 	//Now that we're done, remove this from the stack
 	pop_nesting_level(&nesting_stack);
