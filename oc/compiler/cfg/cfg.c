@@ -2241,15 +2241,15 @@ static void rename_block(basic_block_t* entry){
 		rename_block(dynamic_array_get_at(&(entry->dominator_children), _));
 	}
 
-	//Again if this is a function entry block, then we need to unwind the stack
-	//so that we avoid excessive variable numbers here as well
+	/**
+	 * Again if this is a function entry block, then we need to unwind the stack
+	 * so that we avoid excessive variable numbers here as well
+	 */
 	if(entry->block_type == BLOCK_TYPE_FUNC_ENTRY){
-		//Grab the record out
 		symtab_function_record_t* function_defined_in = entry->function_defined_in;
 		
-		//We need to pop these all only once so that we have parity with what we
-		//did up top
-		for(u_int16_t i = 0; i < function_defined_in->function_parameters.current_index; i++){
+		//We need to pop these all only once so that we have parity with what we did up top
+		for(u_int32_t i = 0; i < function_defined_in->function_parameters.current_index; i++){
 			//Get the function parameter out
 			symtab_variable_record_t* function_param = dynamic_array_get_at(&(function_defined_in->function_parameters), i);
 
