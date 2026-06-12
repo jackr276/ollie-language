@@ -1714,13 +1714,6 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				//Replace all jumps to the current block with those to the jumping block
 				replace_all_branch_targets(current, jumping_to_block);
 
-				//Current is no longer in the picture
-				//TODO WHAT ABOUT FUNCTION BLOCKS????? Why does adding that line make the function
-				//I THINK THIS IS WRONG TO DELETE PERIOD
-				//blocks no longer show up need to figure out
-				dynamic_array_delete(&(cfg->created_blocks), current);
-				//dynamic_array_delete(&(jumping_to_block->function_defined_in->function_blocks), current);
-
 				//Counts as a change
 				changed = TRUE;
 
@@ -2220,6 +2213,17 @@ static inline void delete_all_unreachable_blocks(dynamic_array_t* function_block
 
 	//First bulid the array of things that need to go. A block is considered
 	//unreachable if it has no predecessors and it is *not* an entry block
+	//
+	//
+	//
+	//
+	//
+	//
+	//
+	//
+	//
+	//TODO
+	//BAD!!!!!!!!
 	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
 		basic_block_t* current_block = dynamic_array_get_at(function_blocks, i);
 

@@ -8323,7 +8323,6 @@ static cfg_result_package_t visit_loop_statement(generic_ast_node_t* root_node){
 	 *  |	^												   ^
 	 * 	|	| ------------------------------------------------ |
 	 *  |
-	 *  |  TODO HOW DO WE DO THIS
 	 * 	Loop End
 	 *
 	 * In theory due to the way that this works, we have no direct connection
@@ -8335,10 +8334,6 @@ static cfg_result_package_t visit_loop_statement(generic_ast_node_t* root_node){
 
 	//Once done pop this off as we have left the loop
 	pop_nesting_level(&nesting_stack);
-
-	//TODO should we flag that a loop is infinite here? we could be just seeing
-	//how many predecessors the end loop has BUT remember we could be returning
-	//from inside of here too
 
 	//Populate and give back the result package
 	result_package.starting_block = loop_start_block;

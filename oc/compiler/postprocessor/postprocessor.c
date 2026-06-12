@@ -699,10 +699,6 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 				//Replace all jumps to the current block with those to the jumping block
 				replace_all_branch_targets(current, jumping_to_block);
 
-				//Current is no longer in the picture
-				//TODO I THINK THIS IS WRONG
-				dynamic_array_delete(&(cfg->created_blocks), current);
-
 				//Counts as a change
 				changed = TRUE;
 
