@@ -8334,6 +8334,11 @@ static cfg_result_package_t visit_loop_statement(generic_ast_node_t* root_node){
 	basic_block_t* loop_start_block = basic_block_alloc_and_estimate();
 	loop_start_block->block_type = BLOCK_TYPE_LOOP_ENTRY;
 
+	//Any/all breaks go to the exit
+	push(&break_stack, loop_end_block);
+	//Any/all continues go to the starting block
+	push(&continue_stack, loop_start_block);
+
 	//Emit the compound statement interior
 	cfg_result_package_t compound_statement_results = visit_compound_statement(root_node->first_child);
 
@@ -8344,7 +8349,6 @@ static cfg_result_package_t visit_loop_statement(generic_ast_node_t* root_node){
 	 *  |
 	 *  |  TODO HOW DO WE DO THIS
 	 * 	Loop End
-	 *    
 	 *
 	 * In theory due to the way that this works, we have no direct connection
 	 * to the loop exit block from here. Any/all exit would have to be internal
