@@ -2199,6 +2199,57 @@ static inline void recompute_all_control_flow_relations_for_function(dynamic_arr
 
 
 /**
+ * Perform a DFS reachability traversal based on this block
+ *
+ * We use the "visited" flag to represent reachable/unreachable
+ *
+ * This function is recursive
+ */
+static void dfs_block_rec(basic_block_t* block){
+	//We've already dealt with this one
+	if(block->visited == TRUE){
+		return;
+	}
+
+	//It is reachable
+	block->visited = TRUE;
+
+	//For each of the successors recursively flag as reachable
+	for(u_int32_t i = 0; i < block->successors.current_index; i++){
+
+	}
+}
+
+
+/**
+ * Delete all blocks that are not reachable from the function entry blocks. To do this, 
+ * we will perform a DFS from the function block and flag every block that can be reached. 
+ * Follwoing that, if we see that there are any blocks with a value of (-1), then we delete
+ * them because they cannot be reached from the function entry
+ *
+ * Here we will hijack the visited flag and use it to mean reachable(TRUE) or unreachable(FALSE)
+ *
+ * Algorithm remove unreachable blocks:
+ * 	for each block B:
+ * 		reset the visited flag to false
+ *
+ */
+static inline void delete_all_unreachable_blocks(basic_block_t* function_entry, dynamic_array_t* function_blocks){
+	/**
+	 * For each block reset visited flag to false
+	 */
+	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
+		block->visited = FALSE;
+	}
+
+
+
+
+}
+
+
+/**
  * For any blocks that are completely impossible to reach, we will scrap them all now
  * to avoid any confusion later in the process
  *
@@ -2206,7 +2257,7 @@ static inline void recompute_all_control_flow_relations_for_function(dynamic_arr
  * to be unreachable. We must also be mindful that, once we start deleting blocks, we may
  * be creating even more unreachable blocks, so we need to take care of those too 
  */
-static inline void delete_all_unreachable_blocks(dynamic_array_t* function_blocks, cfg_t* cfg){
+static inline void delete_all_unreachable_blocks2(dynamic_array_t* function_blocks, cfg_t* cfg){
 	//Array of all blocks that are to be deleted
 	dynamic_array_t to_be_deleted = dynamic_array_alloc();
 	dynamic_array_t to_be_deleted_successors = dynamic_array_alloc();
