@@ -10274,7 +10274,7 @@ static generic_ast_node_t* loop_statement(ollie_token_stream_t* token_stream){
 	pop_nesting_level(&nesting_stack);
 
 	//Give this one back
-	return compound_statement_node;
+	return loop_statement;
 }
 
 

@@ -8317,8 +8317,16 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 
 
 /**
- * A while statement is a very simple control flow construct. As always, the "direct successor" path is the path
- * that reliably leads us down and out
+ * Convert a loop statement AST subtree into valid OIR
+ */
+static cfg_result_package_t visit_loop_statement(generic_ast_node_t* root_node){
+	printf("TODO NOT IMPLEMENTED CFG\n");
+	exit(1);
+}
+
+
+/**
+ * Convert a while statement AST subtree into valid OIR
  */
 static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node){
 	//Initialize the result package
@@ -9476,6 +9484,23 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 				break;
 
+			case AST_NODE_TYPE_LOOP_STMT:
+				generic_results = visit_loop_statement(ast_cursor);
+
+				//We'll now add it in
+				if(starting_block == NULL){
+					starting_block = generic_results.starting_block;
+					current_block = generic_results.final_block;
+				//We never merge do-while's, they are strictly successors
+				} else {
+					//Emit a jump from the current block to this
+					emit_jump(current_block, generic_results.starting_block);
+					//And we now know that the current block is just the end block
+					current_block = generic_results.final_block;
+				}
+
+				break;
+
 			case AST_NODE_TYPE_FOR_STMT:
 				//First visit the statement
 				generic_results = visit_for_statement(ast_cursor);
@@ -9948,6 +9973,23 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 			case AST_NODE_TYPE_DO_WHILE_STMT:
 				//Visit the statement
 				generic_results = visit_do_while_statement(ast_cursor);
+
+				//We'll now add it in
+				if(starting_block == NULL){
+					starting_block = generic_results.starting_block;
+					current_block = generic_results.final_block;
+				//We never merge do-while's, they are strictly successors
+				} else {
+					//Emit a jump from the current block to this
+					emit_jump(current_block, generic_results.starting_block);
+					//And we now know that the current block is just the end block
+					current_block = generic_results.final_block;
+				}
+
+				break;
+
+			case AST_NODE_TYPE_LOOP_STMT:
+				generic_results = visit_loop_statement(ast_cursor);
 
 				//We'll now add it in
 				if(starting_block == NULL){
