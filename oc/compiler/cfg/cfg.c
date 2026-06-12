@@ -8346,15 +8346,19 @@ static cfg_result_package_t visit_loop_statement(generic_ast_node_t* root_node){
 	 * 	Loop End
 	 *    
 	 *
+	 * In theory due to the way that this works, we have no direct connection
+	 * to the loop exit block from here. Any/all exit would have to be internal
+	 * to the loop itself
 	 */
 	emit_jump(loop_start_block, compound_statement_results.starting_block);
+	emit_jump(compound_statement_results.final_block, loop_start_block);
 
 	//Once done pop this off as we have left the loop
 	pop_nesting_level(&nesting_stack);
-	
 
-	printf("TODO NOT IMPLEMENTED CFG\n");
-	exit(1);
+	//TODO should we flag that a loop is infinite here? we could be just seeing
+	//how many predecessors the end loop has BUT remember we could be returning
+	//from inside of here too
 
 	//Populate and give back the result package
 	result_package.starting_block = loop_start_block;

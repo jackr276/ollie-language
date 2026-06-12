@@ -10,7 +10,7 @@
  * author wants this to be a trapping loop and *not* optimize it away
  */
 pub fn infinite_loop() -> void {
-	let x:i32 = 5;
+	let x:mut i32 = 5;
 
 	loop {
 		x++;
