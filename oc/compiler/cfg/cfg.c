@@ -1230,23 +1230,6 @@ static inline void add_phi_statement(basic_block_t* target, instruction_t* phi_s
 
 
 /**
- * Add a parameter to a phi statement
- *
- * TODO WTF IS THE POINT OF THIS
- */
-static inline void add_phi_parameter(instruction_t* phi_statement, three_addr_var_t* var){
-	//If we've not yet given the dynamic array
-	if(phi_statement->parameters.internal_array == NULL){
-		//Take care of allocation then
-		phi_statement->parameters = dynamic_array_alloc();
-	}
-
-	//Add this to the phi statement parameters
-	dynamic_array_add(&(phi_statement->parameters), var);
-}
-
-
-/**
  * Add a statement to the target block, following all standard linked-list protocol
  */
 void add_statement(basic_block_t* target, instruction_t* statement_node){
@@ -2038,9 +2021,10 @@ static void insert_phi_functions(variable_symtab_t* var_symtab){
  *
  * For a left hand side(assignment) new name:
  * 	push the current SSA generation number onto the counter stack
- * 	bump the SSA generation number
+ * 	variable's SSA generation is the current number
+ * 	bump the SSA generation number for the next go 
  */
-static void lhs_new_name(three_addr_var_t* var){
+static inline void lhs_new_name(three_addr_var_t* var){
 	//Grab the linked variable out
 	symtab_variable_record_t* linked_var = var->linked_var;
 
@@ -2076,11 +2060,10 @@ static inline void lhs_new_name_direct(symtab_variable_record_t* variable){
 
 
 /**
- * Rename the variable with the top of the stack. This DOES NOT
- * manipulate the stack in any way
- * WHY NOT INLINE
+ * For an RHS(use) new name:
+ * 	Get the generation number by peeking the stack and assigning
  */
-static void rhs_new_name(three_addr_var_t* var){
+static inline void rhs_new_name(three_addr_var_t* var){
 	//Grab the linked var out
 	symtab_variable_record_t* linked_var = var->linked_var;
 
@@ -2098,25 +2081,26 @@ static void rhs_new_name(three_addr_var_t* var){
  * Algorithm:
  *
  * rename(){
- * 	for each block b
- * 		if b previously visited continue
- * 		for each phi-function p in b
- * 			v = LHS(p)
- * 			vn = GenName(v) and replace v with vn
- * 		for each statement s in b
- * 			for each variable v in the RHS of s
- * 				replace V with Top(Stacks[V]);
- * 			for each variable V in the LHS
- * 				vn = GenName(V) and replace v with vn
- * 			for each CFG successor of b
- * 				j <- position in s's phi-functon belonging to b
- * 				for each phi function p in s
- * 					replace the jth operand of RHS(p) with Top(Stacks[V])
- * 			for each s in the dominator children of b
- * 				Rename(s)
- * 			for each phi-function or statement t in b
- * 				for each vi in the LHS(T)
- * 					pop(Stacks[V])
+ * 	if b previously visited:
+ * 		return
+ * 		
+ *	for each phi-function p in b
+ * 		v = LHS(p)
+ * 		vn = GenName(v) and replace v with vn
+ * 	for each statement s in b
+ * 		for each variable v in the RHS of s
+ * 			replace V with Top(Stacks[V]);
+ * 		for each variable V in the LHS
+ * 			vn = GenName(V) and replace v with vn
+ * 		for each CFG successor s of b
+ * 			j <- position in s's phi-functon belonging to b
+ * 			for each phi function p in s
+ * 				replace the jth operand of RHS(p) with Top(Stacks[V])
+ * 		for each s in the dominator children of b
+ * 			Rename(s)
+ * 		for each phi-function or statement t in b
+ * 			for each vi in the LHS(T)
+ * 				pop(Stacks[V])
  * }
  */
 static void rename_block(basic_block_t* entry){
@@ -2124,6 +2108,9 @@ static void rename_block(basic_block_t* entry){
 	if(entry->visited == TRUE){
 		return;
 	}
+
+	//Flag that we've visited
+	entry->visited = TRUE;
 
 	/**
 	 * If this is a function entry block, then all of it's
@@ -2143,52 +2130,47 @@ static void rename_block(basic_block_t* entry){
 		}
 	}
 
-	//Otherwise we'll flag it for the future
-	entry->visited = TRUE;
-
-	//Grab out our leader statement here. We will iterate over all statements looking for phi functions
 	instruction_t* cursor = entry->leader_statement;
-
-	//So long as this isn't null
+	
+	/**
+	 * We'll now crawl the block renaming every single instruction. Some instructions require
+	 * special consideration/handling as seen below
+	 */
 	while(cursor != NULL){
 		switch(cursor->statement_type){
 			case THREE_ADDR_CODE_PHI_FUNC:
-				//We will rewrite the assigneed of the phi function(LHS) with the new name
 				lhs_new_name(cursor->operands.oir.assignee);
 				break;
 				
+			/**
+			 * Function calls are a special case because they have a parameter
+			 * array that we'll need to conisder
+			 */
 			case THREE_ADDR_CODE_FUNC_CALL:
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
-				//If we have a non-temp variable, rename it
 				if(is_variable_ssa_eligible(cursor->operands.oir.operand1) == TRUE){
 					rhs_new_name(cursor->operands.oir.operand1);
 				}
-
-				//Same goes for the assignee, except this one is the LHS
-				if(is_variable_ssa_eligible(cursor->operands.oir.assignee) == TRUE){
-					lhs_new_name(cursor->operands.oir.assignee);
-				}
 				
-				//Special case - do we have a function call?
-				dynamic_array_t func_params = cursor->parameters;
+				//Function calls contain parameters that count as RHS vars
+				dynamic_array_t* func_params = &(cursor->parameters);
 
-				//If we have any
-				for(u_int16_t k = 0; k < func_params.current_index; k++){
-					//Grab it out
-					three_addr_var_t* current_param = dynamic_array_get_at(&func_params, k);
+				for(u_int32_t k = 0; k < func_params->current_index; k++){
+					three_addr_var_t* current_param = dynamic_array_get_at(func_params, k);
 
-					//If it's not temporary, we rename
 					if(is_variable_ssa_eligible(current_param) == TRUE){
 						rhs_new_name(current_param);
 					}
 				}
 
+				if(is_variable_ssa_eligible(cursor->operands.oir.assignee) == TRUE){
+					lhs_new_name(cursor->operands.oir.assignee);
+				}
+
 				break;
 
 			/**
-			 * And now if it's anything else that has an assignee, operands, etc,
-			 * we'll need to rewrite all of those as well
-			 * We'll exclude direct jump statements, these we don't care about
+			 * All other cases we just rename as we see appropriate
 			 */
 			default:
 				if(is_variable_ssa_eligible(cursor->operands.oir.operand1) == TRUE){
@@ -2222,32 +2204,31 @@ static void rename_block(basic_block_t* entry){
 		cursor = cursor->next_statement;
 	}
 
-	//Now for each successor of b, we'll need to add the phi-function parameters according
-	for(u_int32_t _ = 0; _ < entry->successors.current_index; _++){
-		//Grab the successor out
-		basic_block_t* successor = dynamic_array_get_at(&(entry->successors), _);
-
-		//Now for each phi-function in this successor that uses something in the defined variables
-		//here, we'll want to add that newly renamed defined variable into the phi function parameters
-		
-		//Yet another cursor
+	/**
+	 * For each successor of i, we'll need to update the phi functions with the new names
+	 * that we've given for variables in this block
+	 */
+	for(u_int32_t i = 0; i < entry->successors.current_index; i++){
+		basic_block_t* successor = dynamic_array_get_at(&(entry->successors), i);
 		instruction_t* succ_cursor = successor->leader_statement;
 
-		//So long as it isn't null AND it's a phi function
+		/**
+		 * Crawl through every phi function in the successor(they're all at the top) and
+		 * for each one generate a new variable and add it in
+		 */
 		while(succ_cursor != NULL && succ_cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
 			//We have a phi function, so what are we assigning to it?
-			symtab_variable_record_t* phi_func_var = succ_cursor->operands.oir.assignee->linked_var;
+			symtab_variable_record_t* phi_func_assignee = succ_cursor->operands.oir.assignee->linked_var;
 
 			//Emit a new variable for this one
-			three_addr_var_t* phi_func_param = emit_var(phi_func_var);
+			three_addr_var_t* phi_func_param = emit_var(phi_func_assignee);
 
 			//Emit the name for this variable
 			rhs_new_name(phi_func_param);
 
-			//Now add it into the phi function
-			add_phi_parameter(succ_cursor, phi_func_param);
+			//Add this as a parameter
+			dynamic_array_add(&(succ_cursor->parameters), phi_func_param);
 
-			//Advance this up
 			succ_cursor = succ_cursor->next_statement;
 		}
 	}
