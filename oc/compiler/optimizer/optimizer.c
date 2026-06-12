@@ -1715,8 +1715,11 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				replace_all_branch_targets(current, jumping_to_block);
 
 				//Current is no longer in the picture
-				//TODO WHAT ABOUT FUNCTION BLOCKS?????
+				//TODO WHAT ABOUT FUNCTION BLOCKS????? Why does adding that line make the function
+				//I THINK THIS IS WRONG TO DELETE PERIOD
+				//blocks no longer show up need to figure out
 				dynamic_array_delete(&(cfg->created_blocks), current);
+				//dynamic_array_delete(&(jumping_to_block->function_defined_in->function_blocks), current);
 
 				//Counts as a change
 				changed = TRUE;
