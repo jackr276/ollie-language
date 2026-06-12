@@ -1363,11 +1363,6 @@ void delete_statement(instruction_t* stmt){
  * Does the block assign this variable? We'll do a simple linear scan to find out
  */
 static inline u_int8_t does_block_assign_variable(basic_block_t* block, symtab_variable_record_t* variable){
-	//Sanity check - if this is NULL then it's false by default
-	if(block->assigned_variables.internal_array == NULL){
-		return FALSE;
-	}
-
 	/**
 	 * If the linked variable to this var is ours, we do assign
 	 */
@@ -1870,21 +1865,35 @@ static inline void reset_status_for_phi_function_insertion(dynamic_array_t* func
  * from the second branch
  *
  * To insert phi functions, we take the following approach:
- * 	For each variable
- * 		Find all basic blocks that define this variable
- * 		For each of these basic blocks that contains the variable as assigned to then 
- * 			add it onto the "worklist"
+ * 	worklist <- {}
  *
- * 		Then:
- * 			While worklist is not empty
- * 			Remove some node from the worklist
- * 			for each dominance frontier d
- * 				if it does not already have one of these
- * 					Insert a phi function for v at d
+ * 	For each SSA eligible variable V:
+ * 		For each block B in the function assigns V:
+ * 			add it onto the worklist
+ * 			Flag B as having been on the worklist
+ *
+ * 		While worklist is not empty:
+ * 			Remove block B from the worklist
+ *
+ * 			if B was ever on the worklist: 	<------ avoid revisiting blocks
+ * 				continue
+ *
+ * 			for each dominance frontier block D of block B:
+ * 				if D already has a phi function for V: <-------- avoid double insertions
+ * 					continue
+ *
+ * 				Add the phi function
+ * 				Add D to the worklist
+ * 				Flag D as having been on the worklist
  *
  *
  * We will use the "visited" tag to keep track of whether or not we've already
  * evaluated this block or not. We will need to reset this for every variable
+ *
+ * The phi function inserter runs over the entire CFG(so all functions, files, everything).
+ * We may change this in the future, but doing this over the entire CFG allows us to keep
+ * all of our work down to very few allocations(one initial worklist allocation + some
+ * resizes) which is a big win if we have 100s or 1000s of functions to do
  */
 static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 	/**
@@ -1986,6 +1995,11 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 						 * So, we will skip inserting a phi function
 						 * if the variable is not used and not LIVE_OUT
 						 * at N
+						 *
+						 * TODO DOCUMENT THIS ABOVE, MAY BE FASTER
+						 * IF WE SEARCH LIVE OUT FIRST BECAUSE A LOT
+						 * OF BLOCKS THAT WE WANNA EXCLUDE HAVE
+						 * NO LIVE OUT TO BEGIN WITH
 						 * ----------------------------------------
 						 */
 						if(symtab_record_variable_dynamic_array_contains(&(df_node->used_before_definition), record) == NOT_FOUND
@@ -2025,11 +2039,16 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 			}
 		}
 	}
+
+	//Scrap this once done
+	dynamic_array_dealloc(&worklist);
 }
 
 
 /**
  * Generate a new name for the given three address variable
+ *
+ * WHY NOT INLINE
  */
 static void lhs_new_name(three_addr_var_t* var){
 	//Grab the linked variable out
@@ -2055,6 +2074,7 @@ static void lhs_new_name(three_addr_var_t* var){
  * is used exclusively for function parameters that in 
  * all technicality have already been assignedby virtue of 
  * existing
+ * WHY NOT INLINE
  */
 static void lhs_new_name_direct(symtab_variable_record_t* variable){
 	//Store the old generation level
@@ -2073,6 +2093,7 @@ static void lhs_new_name_direct(symtab_variable_record_t* variable){
 /**
  * Rename the variable with the top of the stack. This DOES NOT
  * manipulate the stack in any way
+ * WHY NOT INLINE
  */
 static void rhs_new_name(three_addr_var_t* var){
 	//Grab the linked var out
