@@ -2205,7 +2205,7 @@ static inline void recompute_all_control_flow_relations_for_function(dynamic_arr
  *
  * This function is recursive
  */
-static void dfs_block_rec(basic_block_t* block){
+static void dfs_flag_block_reachability_rec(basic_block_t* block){
 	//We've already dealt with this one
 	if(block->visited == TRUE){
 		return;
@@ -2216,7 +2216,8 @@ static void dfs_block_rec(basic_block_t* block){
 
 	//For each of the successors recursively flag as reachable
 	for(u_int32_t i = 0; i < block->successors.current_index; i++){
-
+		basic_block_t* successor = dynamic_array_get_at(&(block->successors), i);
+		dfs_flag_block_reachability_rec(successor);
 	}
 }
 
@@ -2233,6 +2234,11 @@ static void dfs_block_rec(basic_block_t* block){
  * 	for each block B:
  * 		reset the visited flag to false
  *
+ * 	perform DFS reachability starting at the function entry(see above)
+ *
+ * 	for each block B in the function:
+ * 		if B is not flagged as reachable then:
+ * 			delete B
  */
 static inline void delete_all_unreachable_blocks(basic_block_t* function_entry, dynamic_array_t* function_blocks){
 	/**
@@ -2243,9 +2249,39 @@ static inline void delete_all_unreachable_blocks(basic_block_t* function_entry, 
 		block->visited = FALSE;
 	}
 
+	/**
+	 * Now invoke the flagger to go through, starting at the function entry,
+	 * and flag everything that we are able to reach
+	 */
+	dfs_flag_block_reachability_rec(function_entry);
 
+	//We know the maximum size of how many we'd have to delete so allocate here
+	basic_block_t* to_be_deleted[function_blocks->current_index];
+	u_int32_t to_be_deleted_next_index = 0;
 
+	/**
+	 * Now run through our blocks again. Anything that is not flagged
+	 * as reachable is going to be deleted
+	 */
+	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
 
+		/**
+		 * Throw it into the temp holding array
+		 */
+		if(block->visited == FALSE){
+			to_be_deleted[to_be_deleted_next_index] = block;
+			to_be_deleted_next_index++;
+		}
+	}
+
+	/**
+	 * Now we can go through and delete everything that we need to
+	 * from the temporary holding array
+	 */
+	for(u_int32_t i = 0; i < to_be_deleted_next_index; i++){
+		dynamic_array_delete(function_blocks, to_be_deleted[i]);
+	}
 }
 
 
@@ -2412,9 +2448,7 @@ cfg_t* optimize(cfg_t* cfg){
 			 * then we are going to have to recompute all of the dominance relations. Mark
 			 * specifically relies on the "RDF"(reverse dominance frontier).
 			 */
-
-			//Delete any orphaned blocks
-			delete_all_unreachable_blocks(current_function_blocks, cfg);
+			delete_all_unreachable_blocks(function_entry_block, current_function_blocks);
 
 			//Recalculate all dominance relations
 			recompute_all_control_flow_relations_for_function(current_function_blocks, function_entry_block, function_exit_block);
@@ -2440,7 +2474,7 @@ cfg_t* optimize(cfg_t* cfg){
 		 * remove them now. This step is absolutely essential. If we do not do this,
 		 * then the dominance relation computation will not work
 		 */
-		delete_all_unreachable_blocks(current_function_blocks, cfg);
+		delete_all_unreachable_blocks(function_entry_block, current_function_blocks);
 
 		/**
 		 * PASS 5.5: Now that all of our marking and sweeping is done, it is possible that we'll
