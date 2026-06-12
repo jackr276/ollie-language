@@ -10249,6 +10249,17 @@ static generic_ast_node_t* while_statement(ollie_token_stream_t* token_stream){
 
 
 /**
+ * An Ollie loop statement allows the user to intentionally define loops with no condition.
+ * These loops will either be infinite loops(useful in some cases), or they allow the user
+ * to define special exit conditions as they see fit using breaks/returns internally
+ */
+static generic_ast_node_t* loop_statement(ollie_token_stream_t* token_stream){
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
+}
+
+
+/**
  * A do-while statement ensures that the body is executes once before the condition is checked. Like all other
  * rules, this function returns a reference to the root node of the subtree that it creates
  *
@@ -10890,6 +10901,10 @@ static generic_ast_node_t* statement(ollie_token_stream_t* token_stream){
 		case WHILE:
 			//This rule relies on while already being consumed, so we won't put it back
 			return while_statement(token_stream);
+
+		//Ollie loop statement
+		case LOOP:
+			return loop_statement(token_stream);
 
 		//Idle statement
 		case IDLE:
