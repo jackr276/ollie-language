@@ -1699,6 +1699,12 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				continue;
 			}
 
+			if(jumping_to_block == NULL){
+				printf("NULL JUMPING TO BLOCK in .L%d\n", current->block_id);
+			}
+
+			printf("JUMPING TO BLOCK IS + .L%d", jumping_to_block->block_id);
+
 			/**
 			 * If j only has one predecessor then
 			 * 	merge i and j
