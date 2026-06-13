@@ -116,13 +116,6 @@ typedef struct{
 } cfg_result_package_t;
 
 
-//Are we emitting the dominance frontier or not?
-typedef enum{
-	EMIT_DOMINANCE_FRONTIER,
-	DO_NOT_EMIT_DOMINANCE_FRONTIER
-} emit_dominance_frontier_selection_t;
-
-
 //Enum for branch conditional types
 typedef enum {
 	BRANCH_CONDITIONAL_UNKNOWN,
@@ -989,7 +982,7 @@ static inline void print_cfg_message(error_message_type_t message_type, char* in
 /**
  * Print a block our for reading
 */
-static void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_selection_t print_df){
+void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_selection_t print_df){
 	//If this is some kind of switch block, we first print the jump table
 	if(block->jump_table != NULL){
 		print_jump_table(stdout, block->jump_table);
@@ -8307,6 +8300,8 @@ static cfg_result_package_t visit_loop_statement(generic_ast_node_t* root_node){
 	basic_block_t* loop_start_block = basic_block_alloc_and_estimate();
 	loop_start_block->block_type = BLOCK_TYPE_LOOP_ENTRY;
 
+	printf("LOOP END BLOCK IS .L%d\n", loop_end_block->block_id);
+
 	//Any/all breaks go to the exit
 	push(&break_stack, loop_end_block);
 	//Any/all continues go to the starting block
@@ -8316,18 +8311,37 @@ static cfg_result_package_t visit_loop_statement(generic_ast_node_t* root_node){
 	cfg_result_package_t compound_statement_results = visit_compound_statement(root_node->first_child);
 
 	/**
+	 * If it's null, that means that we were given an empty while loop here.
+	 * We'll just allocate our own and use that
+	 */
+	if(compound_statement_results.starting_block == NULL){
+		compound_statement_results.starting_block = basic_block_alloc_and_estimate();
+		compound_statement_results.final_block = compound_statement_results.starting_block;
+	}
+
+	/**
 	 * Loop start -> compound_statement start .... -> compound_satement_end 
-	 *  |	^												   ^
-	 * 	|	| ------------------------------------------------ |
-	 *  |
-	 * 	Loop End
+	 *  	^												   ^
+	 * 		| ------------------------------------------------ |
 	 *
 	 * In theory due to the way that this works, we have no direct connection
 	 * to the loop exit block from here. Any/all exit would have to be internal
 	 * to the loop itself
 	 */
 	emit_jump(loop_start_block, compound_statement_results.starting_block);
-	emit_jump(compound_statement_results.final_block, loop_start_block);
+
+	/**
+	 * IF AND ONLY IF our block does not already end in some kind of terminal statement
+	 * here(branch, jump, ret or raise), then we will emit a jump from the final block to
+	 * the loop start
+	 */
+	if(does_block_end_in_terminal_statement(compound_statement_results.final_block) == FALSE){
+		emit_jump(compound_statement_results.final_block, loop_start_block);
+	}
+
+	//Remove these from the continue stack before returning
+	pop(&continue_stack);
+	pop(&break_stack);
 
 	//Once done pop this off as we have left the loop
 	pop_nesting_level(&nesting_stack);
@@ -9505,7 +9519,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				if(starting_block == NULL){
 					starting_block = generic_results.starting_block;
 					current_block = generic_results.final_block;
-				//We never merge do-while's, they are strictly successors
+
 				} else {
 					//Emit a jump from the current block to this
 					emit_jump(current_block, generic_results.starting_block);

@@ -16,7 +16,7 @@ pub fn ollie_loops(arr:i32[3][5]) -> i32 {
 		loop {
 			sum += arr[row][col];
 			col++;
-			break when(col == 3);
+			break when(col == 5);
 		}
 		
 		row++;

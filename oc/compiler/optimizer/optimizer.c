@@ -1682,6 +1682,11 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			//Extract the block(j) that we're going to
 			basic_block_t* jumping_to_block = current->exit_statement->if_block;
 
+			if(jumping_to_block == NULL){
+				print_block_three_addr_code(current, EMIT_DOMINANCE_FRONTIER);
+				printf("INVALID JUMP STMT WITH NULL BLOCK .L%d\n", current->block_id);
+			}
+
 			/**
 			 * If i is empty then
 			 * 	replace transfers to i with transfers to j
@@ -1689,6 +1694,10 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			//We know it's empty if these are the same
 			if(current->exit_statement == current->leader_statement
 				&& current->block_type != BLOCK_TYPE_FUNC_ENTRY){
+
+				if(jumping_to_block == NULL){
+					printf("REPLACING BRANCH TARGETS WITH NULL JUMPING BLOCK\n");
+				}
 				//Replace all jumps to the current block with those to the jumping block
 				replace_all_branch_targets(current, jumping_to_block);
 
