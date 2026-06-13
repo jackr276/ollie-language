@@ -757,9 +757,9 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 	dynamic_array_t clone = clone_dynamic_array(&(empty_block->predecessors));
 
 	//For everything in the predecessor set of the empty block
-	for(u_int16_t _ = 0; _ < clone.current_index; _++){
+	for(u_int32_t i = 0; i < clone.current_index; i++){
 		//Grab a given predecessor out
-		basic_block_t* predecessor = dynamic_array_get_at(&clone, _);
+		basic_block_t* predecessor = dynamic_array_get_at(&clone, i);
 
 		//The empty block is no longer a successor of this predecessor
 		delete_successor(predecessor, empty_block);
@@ -768,11 +768,11 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 		//we won't hit this because num_nodes will be 0. In the times that we do though, this is
 		//what will ensure that switch statements are not corrupted by the optimization process
 		if(predecessor->jump_table != NULL){
-			for(u_int16_t idx = 0; idx < predecessor->jump_table->num_nodes; idx++){
+			for(u_int32_t jump_table_index = 0; jump_table_index < predecessor->jump_table->num_nodes; jump_table_index++){
 				//If this equals the other node, we'll need to replace it
-				if(dynamic_array_get_at(&(predecessor->jump_table->nodes), idx) == empty_block){
+				if(dynamic_array_get_at(&(predecessor->jump_table->nodes), jump_table_index) == empty_block){
 					//This now points to the replacement
-					dynamic_array_set_at(&(predecessor->jump_table->nodes), replacement, idx);
+					dynamic_array_set_at(&(predecessor->jump_table->nodes), replacement, jump_table_index);
 
 					//The replacement is now a successor of this predecessor
 					add_successor(predecessor, replacement);
