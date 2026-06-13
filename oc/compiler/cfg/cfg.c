@@ -8300,8 +8300,6 @@ static cfg_result_package_t visit_loop_statement(generic_ast_node_t* root_node){
 	basic_block_t* loop_start_block = basic_block_alloc_and_estimate();
 	loop_start_block->block_type = BLOCK_TYPE_LOOP_ENTRY;
 
-	printf("LOOP END BLOCK IS .L%d\n", loop_end_block->block_id);
-
 	//Any/all breaks go to the exit
 	push(&break_stack, loop_end_block);
 	//Any/all continues go to the starting block
