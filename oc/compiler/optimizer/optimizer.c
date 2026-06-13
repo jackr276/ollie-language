@@ -487,28 +487,6 @@ static void mark(dynamic_array_t* function_blocks){
 					break;
 
 				/**
-				 * For jump statements, *if* we detect that
-				 * we have a virtual edge(i.e., we have a jump
-				 * but somehow have more than one successor), then
-				 * this jump is considered as important and needs
-				 * to have the consideration that normally happens
-				 * with marking. If this is not the case and it's a regular
-				 * jump, then we don't care and while it won't be swept,
-				 * it does not need to be marked like this one does
-				 */
-				case THREE_ADDR_CODE_JUMP_STMT:
-					if(current->successors.current_index > 1){
-						//Mark this as useful
-						current_stmt->mark = TRUE;
-						//Add it to the list
-						dynamic_array_add(&worklist, current_stmt);
-						//The block now has a mark
-						current->contains_mark = TRUE;
-					}
-
-					break;
-
-				/**
 				 * Raise statements are equivalent to ret statements
 				 * and are thus also always considered important
 				 */
@@ -779,9 +757,9 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 	dynamic_array_t clone = clone_dynamic_array(&(empty_block->predecessors));
 
 	//For everything in the predecessor set of the empty block
-	for(u_int16_t _ = 0; _ < clone.current_index; _++){
+	for(u_int32_t i = 0; i < clone.current_index; i++){
 		//Grab a given predecessor out
-		basic_block_t* predecessor = dynamic_array_get_at(&clone, _);
+		basic_block_t* predecessor = dynamic_array_get_at(&clone, i);
 
 		//The empty block is no longer a successor of this predecessor
 		delete_successor(predecessor, empty_block);
@@ -790,11 +768,11 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 		//we won't hit this because num_nodes will be 0. In the times that we do though, this is
 		//what will ensure that switch statements are not corrupted by the optimization process
 		if(predecessor->jump_table != NULL){
-			for(u_int16_t idx = 0; idx < predecessor->jump_table->num_nodes; idx++){
+			for(u_int32_t jump_table_index = 0; jump_table_index < predecessor->jump_table->num_nodes; jump_table_index++){
 				//If this equals the other node, we'll need to replace it
-				if(dynamic_array_get_at(&(predecessor->jump_table->nodes), idx) == empty_block){
+				if(dynamic_array_get_at(&(predecessor->jump_table->nodes), jump_table_index) == empty_block){
 					//This now points to the replacement
-					dynamic_array_set_at(&(predecessor->jump_table->nodes), replacement, idx);
+					dynamic_array_set_at(&(predecessor->jump_table->nodes), replacement, jump_table_index);
 
 					//The replacement is now a successor of this predecessor
 					add_successor(predecessor, replacement);
@@ -1711,11 +1689,9 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			//We know it's empty if these are the same
 			if(current->exit_statement == current->leader_statement
 				&& current->block_type != BLOCK_TYPE_FUNC_ENTRY){
+
 				//Replace all jumps to the current block with those to the jumping block
 				replace_all_branch_targets(current, jumping_to_block);
-
-				//Current is no longer in the picture
-				dynamic_array_delete(&(cfg->created_blocks), current);
 
 				//Counts as a change
 				changed = TRUE;
@@ -2202,71 +2178,115 @@ static inline void recompute_all_control_flow_relations_for_function(dynamic_arr
 
 
 /**
- * For any blocks that are completely impossible to reach, we will scrap them all now
- * to avoid any confusion later in the process
+ * Perform a DFS reachability traversal based on this block
  *
- * We consider any block with no predecessors that *is not* a function entry block
- * to be unreachable. We must also be mindful that, once we start deleting blocks, we may
- * be creating even more unreachable blocks, so we need to take care of those too 
+ * We use the "visited" flag to represent reachable/unreachable
+ *
+ * This function is recursive
  */
-static inline void delete_all_unreachable_blocks(dynamic_array_t* function_blocks, cfg_t* cfg){
-	//Array of all blocks that are to be deleted
-	dynamic_array_t to_be_deleted = dynamic_array_alloc();
-	dynamic_array_t to_be_deleted_successors = dynamic_array_alloc();
+static void dfs_flag_block_reachability_rec(basic_block_t* block){
+	//We've already dealt with this one
+	if(block->visited == TRUE){
+		return;
+	}
 
-	//First bulid the array of things that need to go. A block is considered
-	//unreachable if it has no predecessors and it is *not* an entry block
+	//It is reachable
+	block->visited = TRUE;
+
+	//For each of the successors recursively flag as reachable
+	for(u_int32_t i = 0; i < block->successors.current_index; i++){
+		basic_block_t* successor = dynamic_array_get_at(&(block->successors), i);
+		dfs_flag_block_reachability_rec(successor);
+	}
+}
+
+
+/**
+ * Delete all blocks that are not reachable from the function entry blocks. To do this, 
+ * we will perform a DFS from the function block and flag every block that can be reached. 
+ * Follwoing that, if we see that there are any blocks with a value of (-1), then we delete
+ * them because they cannot be reached from the function entry
+ *
+ * Here we will hijack the visited flag and use it to mean reachable(TRUE) or unreachable(FALSE)
+ *
+ * Algorithm remove unreachable blocks:
+ * 	for each block B:
+ * 		reset the visited flag to false
+ *
+ * 	perform DFS reachability starting at the function entry(see above)
+ *
+ * 	for each block B in the function:
+ * 		if B is not flagged as reachable then:
+ * 			delete B
+ */
+static inline void delete_all_unreachable_blocks(basic_block_t* function_entry, dynamic_array_t* function_blocks){
+	/**
+	 * For each block reset visited flag to false
+	 */
 	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
-		basic_block_t* current_block = dynamic_array_get_at(function_blocks, i);
+		basic_block_t* block = function_blocks->internal_array[i];
+		block->visited = FALSE;
+	}
 
-		//Doesn't count
-		if(current_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-			continue;
-		}
+	/**
+	 * Now invoke the flagger to go through, starting at the function entry,
+	 * and flag everything that we are able to reach
+	 */
+	dfs_flag_block_reachability_rec(function_entry);
 
-		//This is our case for something that has to go
-		if(current_block->predecessors.current_index == 0){
-			dynamic_array_add(&to_be_deleted, current_block);
+	//We know the maximum size of how many we'd have to delete so allocate here
+	basic_block_t* to_be_deleted[function_blocks->current_index];
+	u_int32_t to_be_deleted_next_index = 0;
+
+	/**
+	 * Now run through our blocks again. Anything that is not flagged
+	 * as reachable is going to be deleted
+	 */
+	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* block = function_blocks->internal_array[i];
+
+		/**
+		 * Throw it into the temp holding array
+		 */
+		if(block->visited == FALSE){
+			to_be_deleted[to_be_deleted_next_index] = block;
+			to_be_deleted_next_index++;
 		}
 	}
 
-	//Run through all of the blocks that need to be deleted
-	while(dynamic_array_is_empty(&to_be_deleted) == FALSE){
-		//O(1) removal
-		basic_block_t* target = dynamic_array_delete_from_back(&to_be_deleted);
+	/**
+	 * Now we can go through and delete everything that we need to
+	 * from the temporary holding array
+	 *
+	 * For each block that we do delete, we'll need to also remove
+	 * it from the successor/predecessor lists of all blocks that 
+	 * it is related to
+	 */
+	for(u_int32_t i = 0; i < to_be_deleted_next_index; i++){
+		//Extract the block
+		basic_block_t* target = to_be_deleted[i];
 
-		//Every successor needs to be uncoupled
-		for(u_int32_t i = 0; i < target->successors.current_index; i++){
-			//Extract it
-			basic_block_t* successor = dynamic_array_get_at(&(target->successors), i);
-
-			//Add this link in
-			dynamic_array_add(&to_be_deleted_successors, successor);
+		/**
+		 * For each predecessor of the target, remove the target as
+		 * a successor
+		 */
+		for(u_int32_t j = 0; j < target->predecessors.current_index; j++){
+			basic_block_t* predecessor = target->predecessors.internal_array[j];
+			delete_successor_only(predecessor, target);
 		}
 
-		//Now run through all of the successors that we need to delete. This is done to avoid
-		//any funniness with the indices
-		while(dynamic_array_is_empty(&to_be_deleted_successors) == FALSE){
-			//Extract the successor
-			basic_block_t* successor = dynamic_array_delete_from_back(&(to_be_deleted_successors));
-
-			//Undo the link
-			delete_successor(target, successor);
-
-			//What if the successor now has now predecessors? That means it needs to go too
-			if(successor->predecessors.current_index == 0){
-				dynamic_array_add(&to_be_deleted, successor);
-			}
+		/**
+		 * For each successor of the target, remove the target 
+		 * as a predecessor
+		 */
+		for(u_int32_t j = 0; j < target->successors.current_index; j++){
+			basic_block_t* successor = target->successors.internal_array[j];
+			delete_predecessor_only(successor, target);
 		}
 
-		//Actually delete the block from both sets
-		dynamic_array_delete(&(cfg->created_blocks), target);
-		dynamic_array_delete(function_blocks, target);
+		//Once we've fully decoupled we can then remove this block from the function
+		dynamic_array_delete(function_blocks, to_be_deleted[i]);
 	}
-
-	//Deallocate this once we're done
-	dynamic_array_dealloc(&to_be_deleted);
-	dynamic_array_dealloc(&to_be_deleted_successors);
 }
 
 
@@ -2353,9 +2373,7 @@ cfg_t* optimize(cfg_t* cfg){
 			 * then we are going to have to recompute all of the dominance relations. Mark
 			 * specifically relies on the "RDF"(reverse dominance frontier).
 			 */
-
-			//Delete any orphaned blocks
-			delete_all_unreachable_blocks(current_function_blocks, cfg);
+			delete_all_unreachable_blocks(function_entry_block, current_function_blocks);
 
 			//Recalculate all dominance relations
 			recompute_all_control_flow_relations_for_function(current_function_blocks, function_entry_block, function_exit_block);
@@ -2381,7 +2399,7 @@ cfg_t* optimize(cfg_t* cfg){
 		 * remove them now. This step is absolutely essential. If we do not do this,
 		 * then the dominance relation computation will not work
 		 */
-		delete_all_unreachable_blocks(current_function_blocks, cfg);
+		delete_all_unreachable_blocks(function_entry_block, current_function_blocks);
 
 		/**
 		 * PASS 5.5: Now that all of our marking and sweeping is done, it is possible that we'll

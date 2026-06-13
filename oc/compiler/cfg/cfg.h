@@ -23,6 +23,11 @@ typedef struct cfg_node_holder_t cfg_node_holder_t;
 //A memory tracking structure for freeing
 typedef struct cfg_statement_holder_t cfg_statement_holder_t;
 
+//Are we emitting the dominance frontier or not?
+typedef enum{
+	EMIT_DOMINANCE_FRONTIER,
+	DO_NOT_EMIT_DOMINANCE_FRONTIER
+} emit_dominance_frontier_selection_t;
 
 /**
  * What is the general type of the block. Again most
@@ -240,6 +245,11 @@ instruction_t* emit_jump(basic_block_t* basic_block, basic_block_t* dest_block);
  * via the header file
  */
 void print_all_cfg_blocks(cfg_t* cfg);
+
+/**
+ * Print a block our for reading
+*/
+void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_selection_t print_df);
 
 /**
  * Reset the visited status of the CFG
