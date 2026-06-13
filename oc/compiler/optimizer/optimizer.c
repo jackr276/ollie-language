@@ -2257,8 +2257,34 @@ static inline void delete_all_unreachable_blocks(basic_block_t* function_entry, 
 	/**
 	 * Now we can go through and delete everything that we need to
 	 * from the temporary holding array
+	 *
+	 * For each block that we do delete, we'll need to also remove
+	 * it from the successor/predecessor lists of all blocks that 
+	 * it is related to
 	 */
 	for(u_int32_t i = 0; i < to_be_deleted_next_index; i++){
+		//Extract the block
+		basic_block_t* target = to_be_deleted[i];
+
+		/**
+		 * For each predecessor of the target, remove the target as
+		 * a successor
+		 */
+		for(u_int32_t j = 0; j < target->predecessors.current_index; j++){
+			basic_block_t* predecessor = target->predecessors.internal_array[j];
+			delete_successor_only(predecessor, target);
+		}
+
+		/**
+		 * For each successor of the target, remove the target 
+		 * as a predecessor
+		 */
+		for(u_int32_t j = 0; j < target->successors.current_index; j++){
+			basic_block_t* successor = target->successors.internal_array[j];
+			delete_predecessor_only(successor, target);
+		}
+
+		//Once we've fully decoupled we can then remove this block from the function
 		dynamic_array_delete(function_blocks, to_be_deleted[i]);
 	}
 }
