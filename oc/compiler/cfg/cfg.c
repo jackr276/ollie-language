@@ -2706,9 +2706,6 @@ static inline branch_conditional_truthfullness_t get_branch_conditional_truthful
  * Emit a branch statement with an if destination and else destination. We will also handle the emittal of the conditional node here
  * for the purposes of doing the branch. The returned result package will include the starting & ending blocks for the branch. The
  * branch category is also given and will be used when we're accounting for how to place things
- *
- * The "virtual_out_edge_required" will be used for loop statements, where we require, for dominator analysis, that a virtual
- * edge(not a jump, but a successor) be added *if* we have a nonterminating loop(always true/false loop statement)
  */
 static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_ast_node_t* conditional_node, basic_block_t* if_block, basic_block_t* else_block, branch_category_t branch_category){
 	instruction_t* constant_assignment;
