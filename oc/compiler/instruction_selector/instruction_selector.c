@@ -10264,6 +10264,9 @@ static void handle_signed_multiplication_instruction(instruction_window_t* windo
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
 
+	//We are going to be using a signed imull instruction regardless so let's get it now
+	multiplication_instruction->instruction_type = select_signed_multiplication_instruction(size);
+
 	/**
 	 * Does op1 need an expanding/converting move? If so we will do that right now
 	 * and create it
@@ -10273,15 +10276,26 @@ static void handle_signed_multiplication_instruction(instruction_window_t* windo
 	}
 
 	/**
-	 * What about op2(if we even have op2)
+	 * If we have no memory access here, then we can either have a register or a constant occupying the second
+	 * area. Otherwise, we have an addressing operation as the second operand which we can handle using the helper
 	 */
-	if(multiplication_instruction->operands.oir.operand2 != NULL
-		&& is_converting_move_required(destination_type, multiplication_instruction->operands.oir.operand2->type) == TRUE){
-		multiplication_instruction->operands.oir.operand2 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->operands.oir.operand2, destination_type);
-	}
+	if(multiplication_instruction->memory_access_type == NO_MEMORY_ACCESS){
+		if(multiplication_instruction->operands.oir.operand2 != NULL){
+			//Emit a converting move if we need it
+			if(is_converting_move_required(destination_type, multiplication_instruction->operands.oir.operand2->type) == TRUE){
+				multiplication_instruction->operands.oir.operand2 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->operands.oir.operand2, destination_type);
+			}
 
-	//We are going to be using a signed imull instruction regardless so let's get it now
-	multiplication_instruction->instruction_type = select_signed_multiplication_instruction(size);
+			multiplication_instruction->operands.x86.source_register1 = multiplication_instruction->operands.oir.operand2;
+
+		} else {
+			multiplication_instruction->operands.x86.source_immediate = multiplication_instruction->operands.oir.constant_operand;
+		}
+
+	} else {
+		//Let the helper handle the memory addressing
+		handle_base_address_and_addressing_mode_for_instruction(multiplication_instruction);
+	}
 
 	/**
 	 * If we already have the setup we need where op1 and the assignee are the same variable,
@@ -10291,13 +10305,6 @@ static void handle_signed_multiplication_instruction(instruction_window_t* windo
 	if(variables_equal_no_ssa(multiplication_instruction->operands.oir.assignee, multiplication_instruction->operands.oir.operand1) == TRUE){
 		//Destination is just the assignee
 		multiplication_instruction->operands.x86.destination_register = multiplication_instruction->operands.oir.assignee;
-
-		//Assign the source or the source immediate based on which we need
-		if(multiplication_instruction->operands.oir.operand2 != NULL){
-			multiplication_instruction->operands.x86.source_register1 = multiplication_instruction->operands.oir.operand2;
-		} else {
-			multiplication_instruction->operands.x86.source_immediate = multiplication_instruction->operands.oir.constant_operand;
-		}
 
 		//Rebuild around the instruction
 		reconstruct_window(window, multiplication_instruction);
@@ -10332,13 +10339,6 @@ static void handle_signed_multiplication_instruction(instruction_window_t* windo
 
 		//The destination register is op1
 		multiplication_instruction->operands.x86.destination_register = multiplication_instruction->operands.oir.operand1;
-
-		//Assign the source or the source immediate based on which we need
-		if(multiplication_instruction->operands.oir.operand2 != NULL){
-			multiplication_instruction->operands.x86.source_register1 = multiplication_instruction->operands.oir.operand2;
-		} else {
-			multiplication_instruction->operands.x86.source_immediate = multiplication_instruction->operands.oir.constant_operand;
-		}
 
 		//Move the destination register into the actual assignee now
 		instruction_t* assignment_instruction = emit_move_instruction(multiplication_instruction->operands.oir.assignee, multiplication_instruction->operands.x86.destination_register);
@@ -11176,15 +11176,11 @@ static void handle_subtraction_instruction(instruction_window_t* window){
 	if(subtraction_instruction->memory_access_type == NO_MEMORY_ACCESS){
 		//Assign the source or the source immediate based on which we need
 		if(subtraction_instruction->operands.oir.operand2 != NULL){
-			/**
-			 * If we need to have a converting move for operand2, this is where we'll do it
-			 */
 			if(is_converting_move_required(destination_type, subtraction_instruction->operands.oir.operand2->type) == TRUE){
 				subtraction_instruction->operands.oir.operand2 = create_and_insert_converting_move_instruction(subtraction_instruction, subtraction_instruction->operands.oir.operand2, destination_type);
 			}
 
 			subtraction_instruction->operands.x86.source_register1 = subtraction_instruction->operands.oir.operand2;
-
 		} else {
 			subtraction_instruction->operands.x86.source_immediate = subtraction_instruction->operands.oir.constant_operand;
 		}
