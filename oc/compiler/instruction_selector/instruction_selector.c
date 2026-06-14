@@ -10600,6 +10600,52 @@ static inline instruction_t* emit_movd_instruction(three_addr_var_t* general_pur
 
 
 /**
+ * Use a standard pipeline to convert from an OIR addressing mode into an x86 addressing mode,
+ * including any converting moves that are required along the way
+ */
+static inline void convert_oir_addressing_mode_to_x86_addressing_mode(instruction_t* instruction){
+	/**
+	 * Since the addressing mode is always the same here, we don't need to do any splitting
+	 * out by address register. In theory, everything that we have don't want should be NULL
+	 * so a blind copy from the OIR section to the x86 section is going to be fine
+	 *
+	 * We go through a standard Extract-Transform-Load(ETL) process to do this
+	 */
+
+	/**
+	 * Step 1: Extract all fields(E)
+	 */
+	three_addr_var_t* destination_register = instruction->operands.oir.assignee;
+	three_addr_var_t* address_register1 = instruction->operands.oir.address_operand1;
+	three_addr_var_t* address_register2 = instruction->operands.oir.address_operand2;
+	three_addr_var_t* rip_offset_var = instruction->operands.oir.rip_offset_var;
+	three_addr_const_t* address_offset = instruction->operands.oir.address_offset;
+	u_int64_t address_multiplier = instruction->operands.oir.address_multiplier;
+
+	/**
+	 * Step 2: Transform the second address register if a type adjustment is needed(T) 
+	 */
+	if(address_register1 != NULL
+		&& address_register2 != NULL
+		&& is_converting_move_required(address_register1->type, address_register2->type) == TRUE){
+
+		//Let the helper emit and insert the move
+		address_register2 = create_and_insert_converting_move_instruction(instruction, address_register2, address_register1->type);
+	}
+
+	/**
+	 * Step 3: Load the finalized values into their needed spots on the x86 version 
+	 */
+	instruction->operands.x86.destination_register = destination_register;
+	instruction->operands.x86.address_register1 = address_register1;
+	instruction->operands.x86.address_register2 = address_register2;
+	instruction->operands.x86.rip_offset_var = rip_offset_var;
+	instruction->operands.x86.address_offset = address_offset;
+	instruction->operands.x86.address_multiplier = address_multiplier;
+}
+
+
+/**
  * Handle a cmp operation. This is used whenever we have
  * relational operation.
  *
@@ -10803,11 +10849,34 @@ static void handle_subtraction_instruction(instruction_window_t* window){
 	}
 
 	/**
-	 * What about op2(if we even have op2)
+	 * Handling the second operand: operand2/constant_operand/addressing mode operation
+	 *
+	 * Subtraction instructions are one of the several instructions in x86 that allow for the source
+	 * to be a memory access operation. If we are configured to do that, then operand2 *and* the 
+	 * constant operand will be NULL, so we will need to have special handling to support it
 	 */
-	if(subtraction_instruction->operands.oir.operand2 != NULL
-		&& is_converting_move_required(destination_type, subtraction_instruction->operands.oir.operand2->type) == TRUE){
-		subtraction_instruction->operands.oir.operand2 = create_and_insert_converting_move_instruction(subtraction_instruction, subtraction_instruction->operands.oir.operand2, destination_type);
+	if(subtraction_instruction->memory_access_type == NO_MEMORY_ACCESS){
+		//Assign the source or the source immediate based on which we need
+		if(subtraction_instruction->operands.oir.operand2 != NULL){
+			/**
+			 * If we need to have a converting move for operand2, this is where we'll do it
+			 */
+			if(is_converting_move_required(destination_type, subtraction_instruction->operands.oir.operand2->type) == TRUE){
+				subtraction_instruction->operands.oir.operand2 = create_and_insert_converting_move_instruction(subtraction_instruction, subtraction_instruction->operands.oir.operand2, destination_type);
+			}
+
+			subtraction_instruction->operands.x86.source_register1 = subtraction_instruction->operands.oir.operand2;
+
+		} else {
+			subtraction_instruction->operands.x86.source_immediate = subtraction_instruction->operands.oir.constant_operand;
+		}
+
+	/**
+	 * If we get here then we do have a from-memory movement. We will need to handle the addressing mode
+	 * and cut out somme of the validations that we had to do above
+	 */
+	} else {
+		convert_oir_addressing_mode_to_x86_addressing_mode(subtraction_instruction);
 	}
 
 	//We are going to be using a subtraction instruction regardless so let's get it now
@@ -10821,13 +10890,6 @@ static void handle_subtraction_instruction(instruction_window_t* window){
 	if(variables_equal_no_ssa(subtraction_instruction->operands.oir.assignee, subtraction_instruction->operands.oir.operand1) == TRUE){
 		//Destination is just the assignee
 		subtraction_instruction->operands.x86.destination_register = subtraction_instruction->operands.oir.assignee;
-
-		//Assign the source or the source immediate based on which we need
-		if(subtraction_instruction->operands.oir.operand2 != NULL){
-			subtraction_instruction->operands.x86.source_register1 = subtraction_instruction->operands.oir.operand2;
-		} else {
-			subtraction_instruction->operands.x86.source_immediate = subtraction_instruction->operands.oir.constant_operand;
-		}
 
 		//Rebuild around the subtraction instruction
 		reconstruct_window(window, subtraction_instruction);
@@ -10862,13 +10924,6 @@ static void handle_subtraction_instruction(instruction_window_t* window){
 
 		//The destination register is op1
 		subtraction_instruction->operands.x86.destination_register = subtraction_instruction->operands.oir.operand1;
-
-		//Assign the source or the source immediate based on which we need
-		if(subtraction_instruction->operands.oir.operand2 != NULL){
-			subtraction_instruction->operands.x86.source_register1 = subtraction_instruction->operands.oir.operand2;
-		} else {
-			subtraction_instruction->operands.x86.source_immediate = subtraction_instruction->operands.oir.constant_operand;
-		}
 
 		//Move the destination register into the actual assignee now
 		instruction_t* assignment_instruction = emit_move_instruction(subtraction_instruction->operands.oir.assignee, subtraction_instruction->operands.x86.destination_register);
@@ -11905,52 +11960,6 @@ static void handle_constant_to_register_move_instruction(instruction_t* instruct
 	instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
 	//Set the source immediate here
 	instruction->operands.x86.source_immediate = instruction->operands.oir.constant_operand;
-}
-
-
-/**
- * Use a standard pipeline to convert from an OIR addressing mode into an x86 addressing mode,
- * including any converting moves that are required along the way
- */
-static inline void convert_oir_addressing_mode_to_x86_addressing_mode(instruction_t* instruction){
-	/**
-	 * Since the addressing mode is always the same here, we don't need to do any splitting
-	 * out by address register. In theory, everything that we have don't want should be NULL
-	 * so a blind copy from the OIR section to the x86 section is going to be fine
-	 *
-	 * We go through a standard Extract-Transform-Load(ETL) process to do this
-	 */
-
-	/**
-	 * Step 1: Extract all fields(E)
-	 */
-	three_addr_var_t* destination_register = instruction->operands.oir.assignee;
-	three_addr_var_t* address_register1 = instruction->operands.oir.address_operand1;
-	three_addr_var_t* address_register2 = instruction->operands.oir.address_operand2;
-	three_addr_var_t* rip_offset_var = instruction->operands.oir.rip_offset_var;
-	three_addr_const_t* address_offset = instruction->operands.oir.address_offset;
-	u_int64_t address_multiplier = instruction->operands.oir.address_multiplier;
-
-	/**
-	 * Step 2: Transform the second address register if a type adjustment is needed(T) 
-	 */
-	if(address_register1 != NULL
-		&& address_register2 != NULL
-		&& is_converting_move_required(address_register1->type, address_register2->type) == TRUE){
-
-		//Let the helper emit and insert the move
-		address_register2 = create_and_insert_converting_move_instruction(instruction, address_register2, address_register1->type);
-	}
-
-	/**
-	 * Step 3: Load the finalized values into their needed spots on the x86 version 
-	 */
-	instruction->operands.x86.destination_register = destination_register;
-	instruction->operands.x86.address_register1 = address_register1;
-	instruction->operands.x86.address_register2 = address_register2;
-	instruction->operands.x86.rip_offset_var = rip_offset_var;
-	instruction->operands.x86.address_offset = address_offset;
-	instruction->operands.x86.address_multiplier = address_multiplier;
 }
 
 
