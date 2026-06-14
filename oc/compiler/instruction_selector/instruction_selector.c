@@ -4349,6 +4349,30 @@ static inline u_int8_t is_instruction_non_converting_load_operation(instruction_
  * be the binary operation
  */
 static inline void combine_binary_operation_with_source_operand_load(instruction_window_t* window){
+	//Extract these for convenience
+	instruction_t* load_operation = window->instruction1;
+	instruction_t* binary_operation = window->instruction2;
+
+	/**
+	 * Step 1: copy over all of the addressing information from the load
+	 * operation over into the binary operation. We will also
+	 * need to copy over the addressing mode itself
+	 */
+	binary_operation->operands.oir.address_multiplier = load_operation->operands.oir.address_multiplier;
+	binary_operation->operands.oir.address_offset = load_operation->operands.oir.address_offset;
+	binary_operation->operands.oir.address_operand1 = load_operation->operands.oir.address_operand1;
+	binary_operation->operands.oir.address_operand2 = load_operation->operands.oir.address_operand2;
+	binary_operation->addressing_mode = load_operation->addressing_mode;
+
+	/**
+	 * Step 2: flag that we are a "from memory" movement operation on the binary operation itself. This
+	 * will flag to the selector/printer that we are expecting addressing info here
+	 */
+
+
+
+
+
 	printf("HERE INSTRUCTIONS 1 AND 2\n\n\n");
 	print_instruction_window_three_address_code(window);
 }
@@ -6021,7 +6045,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& variables_equal(window->instruction2->operands.oir.operand2, window->instruction1->operands.oir.assignee, TRUE) == TRUE){
 
 		//Let the helper take care of the whole thing
-		combine_binary_operation_with_source_operand_load(window);
+		//combine_binary_operation_with_source_operand_load(window);
 
 		//TODO CHANGED IS TRUE UNCOMMENT
 		//changed = TRUE;
