@@ -9656,6 +9656,12 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	//We'll need to know the variables size
 	variable_size_t size = get_type_size(destination_type);
 
+	/**
+	 * Unsigned multiplication instructions have a primary rax destination, a spillover
+	 * rdx destination, and an implicit rax source
+	 */
+	three_addr_var_t* rax_destination = emit_temp_var(destination_type);
+	three_addr_var_t* rdx_destination = emit_temp_var(destination_type);
 	three_addr_var_t* implicit_rax_source;
 
 	/**
@@ -9667,7 +9673,7 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 
 	} else {
 		//We first need to move the first operand into RAX
-		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(multiplication_instruction->operands.oir.operand2->type), multiplication_instruction->operands.oir.operand2);
+		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(multiplication_instruction->operands.oir.operand1->type), multiplication_instruction->operands.oir.operand1);
 
 		//Insert the move to rax before the multiplication instruction
 		insert_instruction_before_given(move_to_rax, multiplication_instruction);
@@ -9676,32 +9682,36 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 		implicit_rax_source = move_to_rax->operands.x86.destination_register;
 	}
 
-
-	//Let's also check is any conversions are needed for the first source register
-	if(is_converting_move_required(destination_type, multiplication_instruction->operands.oir.operand1->type) == TRUE){
-		source = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->operands.oir.operand1, multiplication_instruction->operands.oir.assignee->type);
-
-	//Otherwise we'll just assign this to be op1
-	} else {
-		source = multiplication_instruction->operands.oir.operand1;
-	}
-
-	//Select the actual instruction
+	/**
+	 * Step 2: Setup the multiplication instruction itself. This will include moving
+	 * over the implicit source into source_register1 and dealing with the two destinations
+	 */
 	multiplication_instruction->instruction_type = select_unsigned_mulitplication_instruction(size);
-
-	//This is the case where we have two source registers
-	multiplication_instruction->operands.x86.source_register1 = source;
-	//The other source register is in RAX
-	multiplication_instruction->operands.x86.source_register2 = source2;
-
-	//This is the assignee, we just don't see it
-	multiplication_instruction->operands.x86.destination_register = emit_temp_var(destination_type);
+	multiplication_instruction->operands.x86.source_register1 = implicit_rax_source;
+	multiplication_instruction->operands.x86.destination_register = rax_destination;
+	multiplication_instruction->operands.x86.destination_register2 = rdx_destination;
 
 	/**
-	 * Populate the second destination register for clobbering. This will be updated
-	 * to be %rdx by the precolorer by the time we reach the register allocator
+	 * Step 3: Handle the second operand. This is what will actually show up on the instruction itself.
+	 * The second operand can be one of a few things:
+	 * 	1.) A regular register, in which case we'll need to do some converting move checks
+	 * 	2.) A constant, in which case we'll need to assign the constant over
 	 */
-	multiplication_instruction->operands.x86.destination_register2 = emit_temp_var(destination_type);
+	if(multiplication_instruction->operands.oir.operand2 != NULL) {
+		if(is_converting_move_required(destination_type, multiplication_instruction->operands.oir.operand2->type) == TRUE){
+			multiplication_instruction->operands.oir.operand2 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->operands.oir.operand2, destination_type);
+		}
+
+		multiplication_instruction->operands.x86.source_register2 = multiplication_instruction->operands.oir.operand2;
+
+	} else {
+		//Move the constant into a register
+		instruction_t* constant_movement = emit_constant_move_instruction(emit_temp_var(destination_type), multiplication_instruction->operands.oir.constant_operand);
+		insert_instruction_before_given(constant_movement, multiplication_instruction);
+
+		multiplication_instruction->operands.x86.source_register2 = constant_movement->operands.x86.destination_register;
+	}
+
 
 	//Once we've done all that, we need one final movement operation
 	instruction_t* result_movement = emit_move_instruction(multiplication_instruction->operands.oir.assignee, multiplication_instruction->operands.x86.destination_register);
