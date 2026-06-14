@@ -11322,6 +11322,15 @@ static void handle_addition_instruction(instruction_window_t* window){
 	}
 
 	/**
+	 * Do the same thing for op2. Do remember that there is a good chance it is NULL though
+	 */
+	if(original_addition->operands.oir.operand2 != NULL){
+		if(is_converting_move_required(destination_type, original_addition->operands.oir.operand2->type) == TRUE){
+			original_addition->operands.oir.operand2 = create_and_insert_converting_move_instruction(original_addition, original_addition->operands.oir.operand2, destination_type);
+		}
+	}
+
+	/**
 	 * If we have a case where there is *no* memory access, we have a few
 	 * options:
 	 *  NO Memory access:
@@ -11344,13 +11353,7 @@ static void handle_addition_instruction(instruction_window_t* window){
 
 			//Assign the source or the source immediate based on which we need
 			if(original_addition->operands.oir.operand2 != NULL){
-				//If we need to convert op2 we do it here
-				if(is_converting_move_required(destination_type, original_addition->operands.oir.operand2->type) == TRUE){
-					original_addition->operands.oir.operand2 = create_and_insert_converting_move_instruction(original_addition, original_addition->operands.oir.operand2, destination_type);
-				}
-
 				original_addition->operands.x86.source_register1 = original_addition->operands.oir.operand2;
-
 			} else {
 				original_addition->operands.x86.source_immediate = original_addition->operands.oir.constant_operand;
 			}
@@ -11372,11 +11375,6 @@ static void handle_addition_instruction(instruction_window_t* window){
 			
 			//Based on the constant status we do it one way or the other
 			if(original_addition->statement_type == THREE_ADDR_CODE_BIN_OP_STMT){
-				//Convert op2 if need be
-				if(is_converting_move_required(destination_type, original_addition->operands.oir.operand2->type) == TRUE){
-					original_addition->operands.oir.operand2 = create_and_insert_converting_move_instruction(original_addition, original_addition->operands.oir.operand2, destination_type);
-				}
-
 				original_addition->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
 				original_addition->operands.x86.address_register2 = original_addition->operands.oir.operand2;
 
@@ -11454,13 +11452,7 @@ static void handle_addition_instruction(instruction_window_t* window){
 
 			//Assign the source or the source immediate based on which we need
 			if(original_addition->operands.oir.operand2 != NULL){
-				//Convert op2 if need be
-				if(is_converting_move_required(destination_type, original_addition->operands.oir.operand2->type) == TRUE){
-					original_addition->operands.oir.operand2 = create_and_insert_converting_move_instruction(original_addition, original_addition->operands.oir.operand2, destination_type);
-				}
-
 				original_addition->operands.x86.source_register1 = original_addition->operands.oir.operand2;
-
 			} else {
 				original_addition->operands.x86.source_immediate = original_addition->operands.oir.constant_operand;
 			}
