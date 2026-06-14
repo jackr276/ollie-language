@@ -4342,6 +4342,19 @@ static inline u_int8_t is_instruction_non_converting_load_operation(instruction_
 
 
 /**
+ * Combine a given binary operation with a source operand load
+ *
+ * NOTE: It is assumed that, in the instruction window that is given,
+ * instruction 1 will always be the load and instruction 2 will always
+ * be the binary operation
+ */
+static inline void combine_binary_operation_with_source_operand_load(instruction_window_t* window){
+	printf("HERE INSTRUCTIONS 1 AND 2\n\n\n");
+	print_instruction_window_three_address_code(window);
+}
+
+
+/**
  * The pattern optimizer takes in a window and performs hyperlocal optimzations
  * on passing instructions. If we do end up deleting instructions, we'll need
  * to take care with how that affects the window that we take in
@@ -5998,20 +6011,20 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * ================== Combining loads with source arguments for binary operations =========================
 	 * In x86, many binary operations support having a source operand that is from memory. Doing this condenses
 	 * what would normally be a load and then an op into just one operation, which reduces overall register
-	 * pressure and looks cleaner. We will try to do this with instructions 1 and 2 and instructions 1 and 3
-	 * in the window
-	 */
-
-	/**
-	 * First see if we are able to do this with instructions 1 and 2
+	 * pressure and looks cleaner. Due to the way this usually works in OIR we're only going to have to check
+	 * this for instructions 1 and 2(1 being the load source, 2 being the load destination)
 	 */
 	if(is_instruction_non_converting_load_operation(window->instruction1) == TRUE
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& window->instruction1->operands.oir.assignee->use_count <= 1
 		&& is_instruction_memory_operand_compatible_binary_operation(window->instruction2) == TRUE
 		&& variables_equal(window->instruction2->operands.oir.operand2, window->instruction1->operands.oir.assignee, TRUE) == TRUE){
 
-		printf("HERE INSTRUCTIONS 1 AND 2\n\n\n");
-		print_instruction_window_three_address_code(window);
+		//Let the helper take care of the whole thing
+		combine_binary_operation_with_source_operand_load(window);
+
+		//TODO CHANGED IS TRUE UNCOMMENT
+		//changed = TRUE;
 	}
 
 	//Return whether or not we changed the block return changed;
