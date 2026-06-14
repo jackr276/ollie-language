@@ -4276,7 +4276,7 @@ static inline void perform_memory_address_remediations(instruction_window_t* win
  */
 static inline u_int8_t is_instruction_memory_operand_compatible_binary_operation(instruction_t* instruction){
 	//First disqualifier is this
-	if(instruction->statement_type != THREE_ADDR_CODE_BIN_OP_STMT){
+	if(instruction == NULL || instruction->statement_type != THREE_ADDR_CODE_BIN_OP_STMT){
 		return FALSE;
 	}
 
@@ -4313,6 +4313,30 @@ static inline u_int8_t is_instruction_memory_operand_compatible_binary_operation
 	}
 
 	//If we've survived to here then we at least know that the binary operation is compatible
+	return TRUE;
+}
+
+
+/**
+ * Is the given instruction a load operation that will *not* require a converting load? This is used
+ * for determining if we are able to combine a load with a binary operation. If the load requires any
+ * kind of converting move from the memory region to itself, we are immediately unable to do the combination
+ */
+static inline u_int8_t is_instruction_non_converting_load_operation(instruction_t* instruction){
+	//First disqualifiers here
+	if(instruction == NULL || instruction->statement_type != THREE_ADDR_CODE_LOAD_STATEMENT){
+		return FALSE;
+	}
+
+	//Extract the two types that we'll need to compare
+	generic_type_t* destination_type = instruction->operands.oir.assignee->type;
+	generic_type_t* source_type = instruction->type_storage.memory_read_write_type;
+
+	//If we need to do any conversions at all this will not work
+	if(is_converting_move_required(destination_type, source_type) == TRUE){
+		return FALSE;
+	}
+
 	return TRUE;
 }
 
@@ -5971,6 +5995,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	}
 
 
+	/**
+	 * ================== Combining loads with source arguments for binary operations =========================
+	 * In x86, many binary operations support having a source operand that is from memory. Doing this condenses
+	 * what would normally be a load and then an op into just one operation, which reduces overall register
+	 * pressure and looks cleaner. We will try to do this with instructions 1 and 2 and instructions 1 and 3
+	 * in the window
+	 */
 	if(is_instruction_memory_operand_compatible_binary_operation(window->instruction1) == TRUE){
 		printf("HERE\n\n\n");
 		print_instruction_window_three_address_code(window);
