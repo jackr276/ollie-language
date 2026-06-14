@@ -6053,9 +6053,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 		//Let the helper take care of the whole thing
 		combine_binary_operation_with_source_operand_load(window);
-
-		//TODO CHANGED IS TRUE UNCOMMENT
-		//changed = TRUE;
+		changed = TRUE;
 	}
 
 	//Return whether or not we changed the block return changed;
@@ -11911,31 +11909,10 @@ static void handle_constant_to_register_move_instruction(instruction_t* instruct
 
 
 /**
- * Handle a lea statement(in the three address code statement form)
- *
- * Lea statements carry their own lea type, so it should be very easy to
- * convert into x86 addressing mode expresssions
+ * Use a standard pipeline to convert from an OIR addressing mode into an x86 addressing mode,
+ * including any converting moves that are required along the way
  */
-static void handle_lea_statement(instruction_t* instruction){
-	//Select the size of our variable
-	variable_size_t size = get_type_size(instruction->operands.oir.assignee->type);
-
-	//Select the appropriate instruction first
-	switch(size){
-		case QUAD_WORD:
-			instruction->instruction_type = LEAQ;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = LEAL;
-			break;
-		case BYTE:
-		case WORD:
-			instruction->instruction_type = LEAW;
-			break;
-		default:
-			break;
-	}
-
+static inline void convert_oir_addressing_mode_to_x86_addressing_mode(instruction_t* instruction){
 	/**
 	 * Since the addressing mode is always the same here, we don't need to do any splitting
 	 * out by address register. In theory, everything that we have don't want should be NULL
@@ -11974,6 +11951,37 @@ static void handle_lea_statement(instruction_t* instruction){
 	instruction->operands.x86.rip_offset_var = rip_offset_var;
 	instruction->operands.x86.address_offset = address_offset;
 	instruction->operands.x86.address_multiplier = address_multiplier;
+}
+
+
+/**
+ * Handle a lea statement(in the three address code statement form)
+ *
+ * Lea statements carry their own lea type, so it should be very easy to
+ * convert into x86 addressing mode expresssions
+ */
+static void handle_lea_statement(instruction_t* instruction){
+	//Select the size of our variable
+	variable_size_t size = get_type_size(instruction->operands.oir.assignee->type);
+
+	//Select the appropriate instruction first
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = LEAQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = LEAL;
+			break;
+		case BYTE:
+		case WORD:
+			instruction->instruction_type = LEAW;
+			break;
+		default:
+			break;
+	}
+
+	//Let the helper perform our conversion
+	convert_oir_addressing_mode_to_x86_addressing_mode(instruction);
 }
 
 
