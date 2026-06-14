@@ -8494,7 +8494,7 @@ static instruction_t* emit_div_instruction(generic_type_t* destination_type, thr
 
 	//Dividend is always the implicit source(%rax)
 	instruction->operands.x86.source_register1 = dividend;
-	//Address register2 is used for overflow(higher order bits(%rx))
+	//Address register2 is used for overflow(higher order bits(%rdx))
 	instruction->operands.x86.address_register1 = higher_order_dividend_bits;
 	//The divisor is what will actually show up on the instruction
 	instruction->operands.x86.source_register2 = divisor;
@@ -9382,25 +9382,21 @@ static inline void handle_signed_modulus(instruction_window_t* window, generic_t
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* modulus_instruction = window->instruction1;
 
-	three_addr_var_t* dividend;
 	three_addr_var_t* divisor;
 
 	//If we need to convert, we'll do that here
 	if(is_converting_move_required(result_type, modulus_instruction->operands.oir.operand1->type) == TRUE){
-		//Let the helper deal with it
-		dividend = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->operands.oir.operand1, result_type);
-
-	//Otherwise this can be moved directly
-	} else {
-		//We first need to move the first operand into RAX
-		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(modulus_instruction->operands.oir.operand1->type), modulus_instruction->operands.oir.operand1);
-
-		//Insert the move to rax before the multiplication instruction
-		insert_instruction_before_given(move_to_rax, modulus_instruction);
-
-		//This is just the destination register here
-		dividend = move_to_rax->operands.x86.destination_register;
+		modulus_instruction->operands.oir.operand1 = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->operands.oir.operand1, result_type);
 	}
+
+	//We first need to move the first operand into RAX
+	instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(modulus_instruction->operands.oir.operand1->type), modulus_instruction->operands.oir.operand1);
+
+	//Insert the move to rax before the multiplication instruction
+	insert_instruction_before_given(move_to_rax, modulus_instruction);
+
+	//This is just the destination register here
+	three_addr_var_t* dividend = move_to_rax->operands.x86.destination_register;
 
 	/**
 	 * For a signed division, the CXXX instruction will 
@@ -9488,25 +9484,21 @@ static inline void handle_unsigned_modulus(instruction_window_t* window, generic
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* modulus_instruction = window->instruction1;
 
-	three_addr_var_t* dividend;
 	three_addr_var_t* divisor;
 
 	//If we need to convert, we'll do that here
 	if(is_converting_move_required(result_type, modulus_instruction->operands.oir.operand1->type) == TRUE){
-		//Let the helper deal with it
-		dividend = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->operands.oir.operand1, result_type);
-
-	//Otherwise this can be moved directly
-	} else {
-		//We first need to move the first operand into RAX
-		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(modulus_instruction->operands.oir.operand1->type), modulus_instruction->operands.oir.operand1);
-
-		//Insert the move to rax before the multiplication instruction
-		insert_instruction_before_given(move_to_rax, modulus_instruction);
-
-		//This is just the destination register here
-		dividend = move_to_rax->operands.x86.destination_register;
+		modulus_instruction->operands.oir.operand1 = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->operands.oir.operand1, result_type);
 	}
+
+	//We first need to move the first operand into RAX
+	instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(modulus_instruction->operands.oir.operand1->type), modulus_instruction->operands.oir.operand1);
+
+	//Insert the move to rax before the multiplication instruction
+	insert_instruction_before_given(move_to_rax, modulus_instruction);
+
+	//This is just the destination register here
+	three_addr_var_t* dividend = move_to_rax->operands.x86.destination_register;
 
 	/**
 	 * Handle all converting moves/constant assignment moves that we need to here
@@ -9650,6 +9642,8 @@ static inline instruction_type_t select_unsigned_mulitplication_instruction(vari
  * An important note - since we use the one operand unsigned multiplication instruction, we
  * clobber the %rdx register whenever we do this. Even though we do not use it, this is 
  * something that we need to account for
+ *
+ * NOTE: THE EXPLICIT SOURCE IS ALWAYS IN THE SECOND SOURCE REGISTER
 */
 static void handle_unsigned_multiplication_instruction(instruction_window_t* window, generic_type_t* destination_type){
 	//Instruction 1 is the multiplication instruction
@@ -9664,25 +9658,23 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	 */
 	three_addr_var_t* rax_destination = emit_temp_var(destination_type);
 	three_addr_var_t* rdx_destination = emit_temp_var(destination_type);
-	three_addr_var_t* implicit_rax_source;
 
 	/**
 	 * Step 1: Move the first operand into %rax. This is also known as the "implicit source". We will first check
 	 * if we need to do any conversions here
 	 */
 	if(is_converting_move_required(destination_type, multiplication_instruction->operands.oir.operand1->type) == TRUE){
-		implicit_rax_source = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->operands.oir.operand1, destination_type);
-
-	} else {
-		//We first need to move the first operand into RAX
-		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(multiplication_instruction->operands.oir.operand1->type), multiplication_instruction->operands.oir.operand1);
-
-		//Insert the move to rax before the multiplication instruction
-		insert_instruction_before_given(move_to_rax, multiplication_instruction);
-
-		//This is just the destination register here
-		implicit_rax_source = move_to_rax->operands.x86.destination_register;
+		multiplication_instruction->operands.oir.address_operand1 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->operands.oir.operand1, destination_type);
 	}
+
+	//We first need to move the first operand into RAX
+	instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(multiplication_instruction->operands.oir.operand1->type), multiplication_instruction->operands.oir.operand1);
+
+	//Insert the move to rax before the multiplication instruction
+	insert_instruction_before_given(move_to_rax, multiplication_instruction);
+
+	//This is just the destination register here
+	three_addr_var_t* implicit_rax_source = move_to_rax->operands.x86.destination_register;
 
 	/**
 	 * Step 2: Setup the multiplication instruction itself. This will include moving
@@ -10024,25 +10016,21 @@ static void handle_signed_division(instruction_window_t* window, generic_type_t*
 	instruction_t* division_instruction = window->instruction1;
 
 	//A temp holder for the final second source variable
-	three_addr_var_t* dividend;
 	three_addr_var_t* divisor;
 
 	//If we need to convert, we'll do that here
 	if(is_converting_move_required(destination_type, division_instruction->operands.oir.operand1->type) == TRUE){
-		//Let the helper deal with it
-		dividend = create_and_insert_converting_move_instruction(division_instruction, division_instruction->operands.oir.operand1, destination_type);
-
-	//Otherwise this can be moved directly
-	} else {
-		//We first need to move the first operand into RAX
-		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(division_instruction->operands.oir.operand1->type), division_instruction->operands.oir.operand1);
-
-		//Insert the move to rax before the multiplication instruction
-		insert_instruction_before_given(move_to_rax, division_instruction);
-
-		//This is just the destination register here
-		dividend = move_to_rax->operands.x86.destination_register;
+		division_instruction->operands.oir.operand1 = create_and_insert_converting_move_instruction(division_instruction, division_instruction->operands.oir.operand1, destination_type);
 	}
+
+	//We first need to move the first operand into RAX
+	instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(division_instruction->operands.oir.operand1->type), division_instruction->operands.oir.operand1);
+
+	//Insert the move to rax before the multiplication instruction
+	insert_instruction_before_given(move_to_rax, division_instruction);
+
+	//This is just the destination register here
+	three_addr_var_t* dividend = move_to_rax->operands.x86.destination_register;
 
 	/**
 	 * For a signed division, the CXXX instruction will 
@@ -10136,25 +10124,22 @@ static void handle_unsigned_division(instruction_window_t* window, generic_type_
 	instruction_t* division_instruction = window->instruction1;
 
 	//A temp holder for the final second source variable
-	three_addr_var_t* dividend;
 	three_addr_var_t* divisor;
 
 	//If we need to convert, we'll do that here
 	if(is_converting_move_required(destination_type, division_instruction->operands.oir.operand1->type) == TRUE){
 		//Let the helper deal with it
-		dividend = create_and_insert_converting_move_instruction(division_instruction, division_instruction->operands.oir.operand1, destination_type);
-
-	//Otherwise this can be moved directly
-	} else {
-		//We first need to move the first operand into RAX
-		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(division_instruction->operands.oir.operand1->type), division_instruction->operands.oir.operand1);
-
-		//Insert the move to rax before the multiplication instruction
-		insert_instruction_before_given(move_to_rax, division_instruction);
-
-		//This is just the destination register here
-		dividend = move_to_rax->operands.x86.destination_register;
+		division_instruction->operands.oir.operand1 = create_and_insert_converting_move_instruction(division_instruction, division_instruction->operands.oir.operand1, destination_type);
 	}
+
+	//We first need to move the first operand into RAX
+	instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(division_instruction->operands.oir.operand1->type), division_instruction->operands.oir.operand1);
+
+	//Insert the move to rax before the multiplication instruction
+	insert_instruction_before_given(move_to_rax, division_instruction);
+
+	//This is just the destination register here
+	three_addr_var_t* dividend = move_to_rax->operands.x86.destination_register;
 
 	/**
 	 * If we have an op2(dividing two variables), we'll handle all of our converting moves here. We'll
