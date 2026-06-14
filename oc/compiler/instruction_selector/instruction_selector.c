@@ -8768,6 +8768,342 @@ static three_addr_var_t* emit_byte_copy_of_variable(three_addr_var_t* source){
 
 
 /**
+ * Handle the base address for a given memory movement instruction. This rule does not care
+ * whether we are a load or a store, it is completely agnostic. This will handle the
+ * base address appropriately and update any/all addressing mode values that it needs
+ * to
+ */
+static inline void handle_base_address_and_addressing_mode_for_instruction(instruction_t* instruction){
+	//Needed declarations for later
+	int64_t stack_offset = 0;
+	three_addr_var_t* base_address;
+	symtab_variable_record_t* linked_var;
+	instruction_t* rip_offset_lea;
+
+	/**
+	 * First standardize everyting by moving it all over into the x86 registers off
+	 * the bat. This avoids any confusion/cross lookups and x86 register sections
+	 *
+	 * We go through a standard Extract-Transform-Load(ETL) process to do this
+	 */
+
+	/**
+	 * Step 1: Extract all fields(E)
+	 */
+	three_addr_var_t* address_register1 = instruction->operands.oir.address_operand1;
+	three_addr_var_t* address_register2 = instruction->operands.oir.address_operand2;
+	three_addr_var_t* rip_offset_var = instruction->operands.oir.rip_offset_var;
+	three_addr_const_t* address_offset = instruction->operands.oir.address_offset;
+	u_int64_t address_multiplier = instruction->operands.oir.address_multiplier;
+
+	/**
+	 * Step 2: Transform the second address register if a type adjustment is needed(T)
+	 *
+	 * We are *always* using 64 bit registers for addressing operations in memory movements
+	 */
+	if(address_register1 != NULL
+		&& address_register2 != NULL
+		&& is_converting_move_required(u64, address_register2->type) == TRUE){
+
+		//Let the helper emit and insert the move
+		address_register2 = create_and_insert_converting_move_instruction(instruction, address_register2, u64);
+	}
+
+	/**
+	 * Step 3: Load the finalized values into their needed spots on the x86 version 
+	 */
+	instruction->operands.x86.address_register1 = address_register1;
+	instruction->operands.x86.address_register2 = address_register2;
+	instruction->operands.x86.rip_offset_var = rip_offset_var;
+	instruction->operands.x86.address_offset = address_offset;
+	instruction->operands.x86.address_multiplier = address_multiplier;
+
+	/**
+	 * Now that everything has been moved over into the x86 region, we need
+	 * to now handle the memory address variables that often end up inside
+	 * of the base address(address_register1) field. Let's first extract
+	 * the values that we have in there to process
+	 */
+	base_address = instruction->operands.x86.address_register1;
+	//Remember there is a chance that this is NULL, it's not a guaranteed field
+	linked_var = base_address->linked_var;
+
+	/**
+	 * Go based on the variable type of the base address itself to make determinations
+	 */
+	switch(base_address->variable_type){
+		/**
+		 * This is the most common case. When we have a memory address, we are going to need
+		 * to handle it differently based on whether or not it's a global variable, and based
+		 * on what the stack offset is
+		 */
+		case VARIABLE_TYPE_MEMORY_ADDRESS:
+			/**
+			 * Use the linked variable and it's membership if it does exist
+			 */
+			if(linked_var != NULL){
+				switch(linked_var->membership){
+					/**
+					 * Global or static variable, we will need to load these as rip-relative
+					 */
+					case GLOBAL_VARIABLE:
+					case STATIC_VARIABLE:
+						switch(instruction->addressing_mode){
+							/**
+							 * Going from
+							 * 	store (t4) <- 5
+							 *
+							 * To 
+							 * 	store <var>(%rip) <- 5
+							 */
+							case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+								//Update the mode
+								instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
+
+								//Update the two operands
+								instruction->operands.x86.rip_offset_var = base_address;
+								instruction->operands.x86.address_register1 = instruction_pointer_variable;
+								
+								break;
+
+							/**
+							 * Going from
+							 * 	store 4(t4) <- 5
+							 *
+							 * To 
+							 * 	store 4+<var>(%rip) <- 5
+							 */
+							case ADDRESSING_MODE_OFFSET_ONLY:
+								//Update the mode
+								instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+
+								//Update the two operands
+								instruction->operands.x86.rip_offset_var = base_address;
+								instruction->operands.x86.address_register1 = instruction_pointer_variable;
+
+								break;
+
+							/**
+							 * For every other kind of addressing mode with the rip offset variable, we are actually
+							 * unable to combine it into one singular addressing mode value. Instead, we will need to calculate
+							 * the rip offset variable beforehand in a lea and then substitute that variable in for the 
+							 * base address
+							 */
+							default:
+								//Emit the rip offset address calculation here
+								rip_offset_lea = emit_global_variable_address_calculation_x86(base_address, instruction_pointer_variable, u64);
+
+								//Insert this right before our instruction
+								insert_instruction_before_given(rip_offset_lea, instruction);
+
+								//The base address now becomes this value
+								instruction->operands.x86.address_register1 = rip_offset_lea->operands.x86.destination_register;
+
+								break;
+						}
+						
+						break;
+
+					/**
+					 * We have a non global memory address variable. Any/all changes here are going to 
+					 * hinge around whether or not there is a present stack offset for us to consider. 
+					 * This will only change the addressing mode if we were not using the offset before
+					 */
+					default:
+						//No matter what the address register is now the stack pointer
+						instruction->operands.x86.address_register1 = stack_pointer_variable;
+
+						//Get the stack offset
+						stack_offset = linked_var->stack_region->function_local_base_address;
+
+						/**
+						 * Early exit - if we don't have a stack offset to worry
+						 * about then bail out now
+						 */
+						if(stack_offset == 0){
+							break;
+						}
+
+						/**
+						 * If we already use the addressing mode, we're going to need to sum
+						 * the offset value with what we've already got. Otherwise, we'll need
+						 * to create a fresh offset and update the addressing mode
+						 */
+						if(does_addressing_mode_use_offset_constant(instruction->addressing_mode) == TRUE){
+							//Let the helper sum with the existing offset value
+							sum_constant_with_raw_int64_value(instruction->operands.x86.address_offset, i64, stack_offset);
+
+						} else {
+							//Let's get the offset from this memory address
+							three_addr_const_t* offset = emit_direct_integer_or_char_constant(stack_offset, u64);
+
+							//Store the offset in the operands
+							instruction->operands.x86.address_offset = offset;
+
+							switch(instruction->addressing_mode){
+								case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+									instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+									break;
+
+								case ADDRESSING_MODE_REGISTERS_ONLY:
+									instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+									break;
+
+								case ADDRESSING_MODE_RIP_RELATIVE:
+									instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+									break;
+
+								case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+									instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE; 
+									break;
+
+								/**
+								 * Some invalid case here so we make the compiler panic
+								 */
+								default:
+									fprintf(stderr, "Fatal internal compiler error: invalid addressing mode %s hit\n",
+				 							addressing_mode_to_string(instruction->addressing_mode));
+									exit(1);
+							}
+						}
+
+						break;
+				}
+
+			/**
+			 * Otherwise we have a temporary variable. If this is the case then we don't need to
+			 * worry about anything regarding global/static vars, we can just emit the region
+			 */
+			} else {
+				//No matter what the address register is now the stack pointer
+				instruction->operands.x86.address_register1 = stack_pointer_variable;
+
+				//Get the stack offset
+				stack_offset = base_address->associated_memory_region.stack_region->function_local_base_address;
+
+				/**
+				 * Early exit - if we don't have a stack offset to worry
+				 * about then bail out now
+				 */
+				if(stack_offset == 0){
+					break;
+				}
+
+				/**
+				 * If we already use the addressing mode, we're going to need to sum
+				 * the offset value with what we've already got. Otherwise, we'll need
+				 * to create a fresh offset and update the addressing mode
+				 */
+				if(does_addressing_mode_use_offset_constant(instruction->addressing_mode) == TRUE){
+					//Let the helper sum with the existing offset value
+					sum_constant_with_raw_int64_value(instruction->operands.x86.address_offset, i64, stack_offset);
+
+				} else {
+					//Let's get the offset from this memory address
+					three_addr_const_t* offset = emit_direct_integer_or_char_constant(stack_offset, u64);
+
+					//Store the offset in the operands
+					instruction->operands.x86.address_offset = offset;
+
+					switch(instruction->addressing_mode){
+						case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+							instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+							break;
+
+						case ADDRESSING_MODE_REGISTERS_ONLY:
+							instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+							break;
+
+						case ADDRESSING_MODE_RIP_RELATIVE:
+							instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+							break;
+
+						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+							instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE; 
+							break;
+
+						/**
+						 * Some invalid case here so we make the compiler panic
+						 */
+						default:
+							fprintf(stderr, "Fatal internal compiler error: invalid addressing mode %s hit\n",
+									addressing_mode_to_string(instruction->addressing_mode));
+							exit(1);
+					}
+				}
+			}
+
+			break;
+
+		/**
+		 * A parameter address is a different type entirely. This will never be a global var
+		 * and it will never be 0. We need to emit a special kind of constant here to represent
+		 * what this is
+		 */
+		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+			//No matter what this always becomes the stack pointer variable
+			instruction->operands.x86.address_register1 = stack_pointer_variable;
+
+			//We need a special stack passed parameter offset for this
+			three_addr_const_t* stack_passed_parameter_offset = emit_stack_passed_parameter_offset_constant(base_address->associated_memory_region.stack_region, u64);
+
+			/**
+			 * If we already use the addressing mode, we're going to need to sum
+			 * the offset value with what we've already got. Otherwise, we'll need
+			 * to create a fresh offset and update the addressing mode
+			 */
+			if(does_addressing_mode_use_offset_constant(instruction->addressing_mode) == TRUE){
+				//Add the two constants, store the result in the paraemeter constant
+				add_constants(stack_passed_parameter_offset, instruction->operands.x86.address_offset);
+
+				//Replace the old offset with this new one
+				instruction->operands.x86.address_offset = stack_passed_parameter_offset;
+
+			} else {
+				//Update the offset in here
+				instruction->operands.x86.address_offset = stack_passed_parameter_offset;
+
+				//Now update the addressing mode to reflect that we have an offset
+				switch(instruction->addressing_mode){
+					case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+						instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+						break;
+
+					case ADDRESSING_MODE_REGISTERS_ONLY:
+						instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+						break;
+
+					case ADDRESSING_MODE_RIP_RELATIVE:
+						instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+						break;
+
+					case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+						instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE; 
+						break;
+
+					/**
+					 * Some invalid case here so we make the compiler panic
+					 */
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid addressing mode %s hit\n",
+								addressing_mode_to_string(instruction->addressing_mode));
+						exit(1);
+				}
+			}
+
+			break;
+			
+		/**
+		 * Nothing to do here. We will keep whatever addressing mode we entered into this instruction with
+		 * and simply update the address register from there
+		 */
+		default:
+			break;
+	}
+}
+
+
+/**
  * Select the appropriate left shift instruction based on the size and signedness
  */
 static inline instruction_type_t select_left_shift_instruction(variable_size_t size, u_int8_t is_signed){
@@ -10051,6 +10387,9 @@ static void handle_sse_multiplication_instruction(instruction_window_t* window, 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
 
+	//We are going to be using a mulsX instruction regardless so let's get it now
+	multiplication_instruction->instruction_type = select_sse_multiplication_instruction(size);
+
 	/**
 	 * Does op1 need an expanding/converting move? If so we will do that right now
 	 * and create it
@@ -10060,14 +10399,25 @@ static void handle_sse_multiplication_instruction(instruction_window_t* window, 
 	}
 
 	/**
-	 * Do the same for op2. Note that we are guaranteed an op2 here becuase this is a floating point multiplication
+	 * SSE multiplication instructions will either have a register source or a memory
+	 * movement source. We will need to handle both cases here
 	 */
-	if(is_converting_move_required(destination_type, multiplication_instruction->operands.oir.operand2->type) == TRUE){
-		multiplication_instruction->operands.oir.operand2 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->operands.oir.operand2, destination_type);
-	}
+	if(multiplication_instruction->memory_access_type == NO_MEMORY_ACCESS){
+		//We know that we are going to have an op2 here so now is the time to check
+		if(is_converting_move_required(destination_type, multiplication_instruction->operands.oir.operand2->type) == TRUE){
+			multiplication_instruction->operands.oir.operand2 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->operands.oir.operand2, destination_type);
+		}
 
-	//We are going to be using a mulsX instruction regardless so let's get it now
-	multiplication_instruction->instruction_type = select_sse_multiplication_instruction(size);
+		//This is always the source register
+		multiplication_instruction->operands.x86.source_register1 = multiplication_instruction->operands.oir.operand2;
+
+	/**
+	 * Otherwise, we have an addressing operation source so we will call out to the handler to let that take care of it
+	 */
+	} else {
+		//Let the helper take care of it
+		handle_base_address_and_addressing_mode_for_instruction(multiplication_instruction);
+	}
 
 	/**
 	 * If we already have the setup we need where op1 and the assignee are the same variable,
@@ -10077,8 +10427,6 @@ static void handle_sse_multiplication_instruction(instruction_window_t* window, 
 	if(variables_equal_no_ssa(multiplication_instruction->operands.oir.assignee, multiplication_instruction->operands.oir.operand1) == TRUE){
 		//Destination is just the assignee
 		multiplication_instruction->operands.x86.destination_register = multiplication_instruction->operands.oir.assignee;
-		//This is always op2
-		multiplication_instruction->operands.x86.source_register1 = multiplication_instruction->operands.oir.operand2;
 
 		//Rebuild around the instruction
 		reconstruct_window(window, multiplication_instruction);
@@ -10114,8 +10462,6 @@ static void handle_sse_multiplication_instruction(instruction_window_t* window, 
 		//The destination register is op1
 		multiplication_instruction->operands.x86.destination_register = multiplication_instruction->operands.oir.operand1;
 
-		//This is always the source register
-		multiplication_instruction->operands.x86.source_register1 = multiplication_instruction->operands.oir.operand2;
 
 		//Move the destination register into the actual assignee now
 		instruction_t* assignment_instruction = emit_move_instruction(multiplication_instruction->operands.oir.assignee, multiplication_instruction->operands.x86.destination_register);
@@ -10614,342 +10960,6 @@ static inline instruction_t* emit_movd_instruction(three_addr_var_t* general_pur
 
 	//And finally, we give it back
 	return stmt;
-}
-
-
-/**
- * Handle the base address for a given memory movement instruction. This rule does not care
- * whether we are a load or a store, it is completely agnostic. This will handle the
- * base address appropriately and update any/all addressing mode values that it needs
- * to
- */
-static inline void handle_base_address_and_addressing_mode_for_instruction(instruction_t* instruction){
-	//Needed declarations for later
-	int64_t stack_offset = 0;
-	three_addr_var_t* base_address;
-	symtab_variable_record_t* linked_var;
-	instruction_t* rip_offset_lea;
-
-	/**
-	 * First standardize everyting by moving it all over into the x86 registers off
-	 * the bat. This avoids any confusion/cross lookups and x86 register sections
-	 *
-	 * We go through a standard Extract-Transform-Load(ETL) process to do this
-	 */
-
-	/**
-	 * Step 1: Extract all fields(E)
-	 */
-	three_addr_var_t* address_register1 = instruction->operands.oir.address_operand1;
-	three_addr_var_t* address_register2 = instruction->operands.oir.address_operand2;
-	three_addr_var_t* rip_offset_var = instruction->operands.oir.rip_offset_var;
-	three_addr_const_t* address_offset = instruction->operands.oir.address_offset;
-	u_int64_t address_multiplier = instruction->operands.oir.address_multiplier;
-
-	/**
-	 * Step 2: Transform the second address register if a type adjustment is needed(T)
-	 *
-	 * We are *always* using 64 bit registers for addressing operations in memory movements
-	 */
-	if(address_register1 != NULL
-		&& address_register2 != NULL
-		&& is_converting_move_required(u64, address_register2->type) == TRUE){
-
-		//Let the helper emit and insert the move
-		address_register2 = create_and_insert_converting_move_instruction(instruction, address_register2, u64);
-	}
-
-	/**
-	 * Step 3: Load the finalized values into their needed spots on the x86 version 
-	 */
-	instruction->operands.x86.address_register1 = address_register1;
-	instruction->operands.x86.address_register2 = address_register2;
-	instruction->operands.x86.rip_offset_var = rip_offset_var;
-	instruction->operands.x86.address_offset = address_offset;
-	instruction->operands.x86.address_multiplier = address_multiplier;
-
-	/**
-	 * Now that everything has been moved over into the x86 region, we need
-	 * to now handle the memory address variables that often end up inside
-	 * of the base address(address_register1) field. Let's first extract
-	 * the values that we have in there to process
-	 */
-	base_address = instruction->operands.x86.address_register1;
-	//Remember there is a chance that this is NULL, it's not a guaranteed field
-	linked_var = base_address->linked_var;
-
-	/**
-	 * Go based on the variable type of the base address itself to make determinations
-	 */
-	switch(base_address->variable_type){
-		/**
-		 * This is the most common case. When we have a memory address, we are going to need
-		 * to handle it differently based on whether or not it's a global variable, and based
-		 * on what the stack offset is
-		 */
-		case VARIABLE_TYPE_MEMORY_ADDRESS:
-			/**
-			 * Use the linked variable and it's membership if it does exist
-			 */
-			if(linked_var != NULL){
-				switch(linked_var->membership){
-					/**
-					 * Global or static variable, we will need to load these as rip-relative
-					 */
-					case GLOBAL_VARIABLE:
-					case STATIC_VARIABLE:
-						switch(instruction->addressing_mode){
-							/**
-							 * Going from
-							 * 	store (t4) <- 5
-							 *
-							 * To 
-							 * 	store <var>(%rip) <- 5
-							 */
-							case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
-								//Update the mode
-								instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
-
-								//Update the two operands
-								instruction->operands.x86.rip_offset_var = base_address;
-								instruction->operands.x86.address_register1 = instruction_pointer_variable;
-								
-								break;
-
-							/**
-							 * Going from
-							 * 	store 4(t4) <- 5
-							 *
-							 * To 
-							 * 	store 4+<var>(%rip) <- 5
-							 */
-							case ADDRESSING_MODE_OFFSET_ONLY:
-								//Update the mode
-								instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
-
-								//Update the two operands
-								instruction->operands.x86.rip_offset_var = base_address;
-								instruction->operands.x86.address_register1 = instruction_pointer_variable;
-
-								break;
-
-							/**
-							 * For every other kind of addressing mode with the rip offset variable, we are actually
-							 * unable to combine it into one singular addressing mode value. Instead, we will need to calculate
-							 * the rip offset variable beforehand in a lea and then substitute that variable in for the 
-							 * base address
-							 */
-							default:
-								//Emit the rip offset address calculation here
-								rip_offset_lea = emit_global_variable_address_calculation_x86(base_address, instruction_pointer_variable, u64);
-
-								//Insert this right before our instruction
-								insert_instruction_before_given(rip_offset_lea, instruction);
-
-								//The base address now becomes this value
-								instruction->operands.x86.address_register1 = rip_offset_lea->operands.x86.destination_register;
-
-								break;
-						}
-						
-						break;
-
-					/**
-					 * We have a non global memory address variable. Any/all changes here are going to 
-					 * hinge around whether or not there is a present stack offset for us to consider. 
-					 * This will only change the addressing mode if we were not using the offset before
-					 */
-					default:
-						//No matter what the address register is now the stack pointer
-						instruction->operands.x86.address_register1 = stack_pointer_variable;
-
-						//Get the stack offset
-						stack_offset = linked_var->stack_region->function_local_base_address;
-
-						/**
-						 * Early exit - if we don't have a stack offset to worry
-						 * about then bail out now
-						 */
-						if(stack_offset == 0){
-							break;
-						}
-
-						/**
-						 * If we already use the addressing mode, we're going to need to sum
-						 * the offset value with what we've already got. Otherwise, we'll need
-						 * to create a fresh offset and update the addressing mode
-						 */
-						if(does_addressing_mode_use_offset_constant(instruction->addressing_mode) == TRUE){
-							//Let the helper sum with the existing offset value
-							sum_constant_with_raw_int64_value(instruction->operands.x86.address_offset, i64, stack_offset);
-
-						} else {
-							//Let's get the offset from this memory address
-							three_addr_const_t* offset = emit_direct_integer_or_char_constant(stack_offset, u64);
-
-							//Store the offset in the operands
-							instruction->operands.x86.address_offset = offset;
-
-							switch(instruction->addressing_mode){
-								case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
-									instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-									break;
-
-								case ADDRESSING_MODE_REGISTERS_ONLY:
-									instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-									break;
-
-								case ADDRESSING_MODE_RIP_RELATIVE:
-									instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
-									break;
-
-								case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-									instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE; 
-									break;
-
-								/**
-								 * Some invalid case here so we make the compiler panic
-								 */
-								default:
-									fprintf(stderr, "Fatal internal compiler error: invalid addressing mode %s hit\n",
-				 							addressing_mode_to_string(instruction->addressing_mode));
-									exit(1);
-							}
-						}
-
-						break;
-				}
-
-			/**
-			 * Otherwise we have a temporary variable. If this is the case then we don't need to
-			 * worry about anything regarding global/static vars, we can just emit the region
-			 */
-			} else {
-				//No matter what the address register is now the stack pointer
-				instruction->operands.x86.address_register1 = stack_pointer_variable;
-
-				//Get the stack offset
-				stack_offset = base_address->associated_memory_region.stack_region->function_local_base_address;
-
-				/**
-				 * Early exit - if we don't have a stack offset to worry
-				 * about then bail out now
-				 */
-				if(stack_offset == 0){
-					break;
-				}
-
-				/**
-				 * If we already use the addressing mode, we're going to need to sum
-				 * the offset value with what we've already got. Otherwise, we'll need
-				 * to create a fresh offset and update the addressing mode
-				 */
-				if(does_addressing_mode_use_offset_constant(instruction->addressing_mode) == TRUE){
-					//Let the helper sum with the existing offset value
-					sum_constant_with_raw_int64_value(instruction->operands.x86.address_offset, i64, stack_offset);
-
-				} else {
-					//Let's get the offset from this memory address
-					three_addr_const_t* offset = emit_direct_integer_or_char_constant(stack_offset, u64);
-
-					//Store the offset in the operands
-					instruction->operands.x86.address_offset = offset;
-
-					switch(instruction->addressing_mode){
-						case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
-							instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-							break;
-
-						case ADDRESSING_MODE_REGISTERS_ONLY:
-							instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-							break;
-
-						case ADDRESSING_MODE_RIP_RELATIVE:
-							instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
-							break;
-
-						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-							instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE; 
-							break;
-
-						/**
-						 * Some invalid case here so we make the compiler panic
-						 */
-						default:
-							fprintf(stderr, "Fatal internal compiler error: invalid addressing mode %s hit\n",
-									addressing_mode_to_string(instruction->addressing_mode));
-							exit(1);
-					}
-				}
-			}
-
-			break;
-
-		/**
-		 * A parameter address is a different type entirely. This will never be a global var
-		 * and it will never be 0. We need to emit a special kind of constant here to represent
-		 * what this is
-		 */
-		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-			//No matter what this always becomes the stack pointer variable
-			instruction->operands.x86.address_register1 = stack_pointer_variable;
-
-			//We need a special stack passed parameter offset for this
-			three_addr_const_t* stack_passed_parameter_offset = emit_stack_passed_parameter_offset_constant(base_address->associated_memory_region.stack_region, u64);
-
-			/**
-			 * If we already use the addressing mode, we're going to need to sum
-			 * the offset value with what we've already got. Otherwise, we'll need
-			 * to create a fresh offset and update the addressing mode
-			 */
-			if(does_addressing_mode_use_offset_constant(instruction->addressing_mode) == TRUE){
-				//Add the two constants, store the result in the paraemeter constant
-				add_constants(stack_passed_parameter_offset, instruction->operands.x86.address_offset);
-
-				//Replace the old offset with this new one
-				instruction->operands.x86.address_offset = stack_passed_parameter_offset;
-
-			} else {
-				//Update the offset in here
-				instruction->operands.x86.address_offset = stack_passed_parameter_offset;
-
-				//Now update the addressing mode to reflect that we have an offset
-				switch(instruction->addressing_mode){
-					case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
-						instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-						break;
-
-					case ADDRESSING_MODE_REGISTERS_ONLY:
-						instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-						break;
-
-					case ADDRESSING_MODE_RIP_RELATIVE:
-						instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
-						break;
-
-					case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-						instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE; 
-						break;
-
-					/**
-					 * Some invalid case here so we make the compiler panic
-					 */
-					default:
-						fprintf(stderr, "Fatal internal compiler error: invalid addressing mode %s hit\n",
-								addressing_mode_to_string(instruction->addressing_mode));
-						exit(1);
-				}
-			}
-
-			break;
-			
-		/**
-		 * Nothing to do here. We will keep whatever addressing mode we entered into this instruction with
-		 * and simply update the address register from there
-		 */
-		default:
-			break;
-	}
 }
 
 
