@@ -203,10 +203,6 @@ struct three_addr_var_t{
 	//What is the parameter number of this var? Used for parameter passing. If
 	//it is 0, it's ignored
 	u_int32_t class_relative_parameter_order;
-	//What is the indirection level
-	//Is this variable dereferenced in some way
-	//(either loaded from or stored to)
-	u_int8_t is_dereferenced;
 	//Does this set condition codes?
 	u_int8_t sets_cc;
 	//Does this derive from an FP comparison

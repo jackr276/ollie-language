@@ -5428,9 +5428,6 @@ instruction_t* emit_store_base_address_only(three_addr_var_t* base_address, thre
 	//The first address op is the memory address
 	stmt->operands.oir.address_operand1 = base_address;
 
-	//This is being dereferenced
-	base_address->is_dereferenced = TRUE;
-
 	//Important - add the type that we expect to be writing to in memory
 	stmt->type_storage.memory_read_write_type = memory_write_type;
 
@@ -5456,9 +5453,6 @@ instruction_t* emit_store_base_address_and_index(three_addr_var_t* base_address,
 
 	//Base address is the first operand
 	stmt->operands.oir.address_operand1 = base_address;
-
-	//This is being dereferenced
-	base_address->is_dereferenced = TRUE;
 
 	//Now the index goes in here
 	stmt->operands.oir.address_operand2 = index;
@@ -5488,9 +5482,6 @@ instruction_t* emit_store_base_address_and_constant_offset(three_addr_var_t* bas
 
 	//The base address is the first operand
 	stmt->operands.oir.address_operand1 = base_address;
-
-	//This is being dereferenced
-	base_address->is_dereferenced = TRUE;
 
 	//The offset placeholder is used for our offset, not constant operand 
 	stmt->operands.oir.address_offset = offset;
@@ -5549,9 +5540,6 @@ instruction_t* emit_constant_store_base_address_and_constant_offset(three_addr_v
 
 	//The base address that we're assigning to
 	stmt->operands.oir.address_operand1 = base_address;
-
-	//This is being dereferenced
-	base_address->is_dereferenced = TRUE;
 
 	//The offset placeholder is used for our offset, not constant operand 
 	stmt->operands.oir.address_offset = offset;
@@ -8617,11 +8605,6 @@ u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t igno
 		return FALSE;
 	}
 
-	//Are we ignoring indirection? If not, we need to compare the dereference here
-	if(ignore_indirection == FALSE && a->is_dereferenced != b->is_dereferenced){
-		return FALSE;
-	}
-
 	//Another easy way to tell
 	if(a->variable_type != b->variable_type){
 		return FALSE;
@@ -8659,11 +8642,6 @@ u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t igno
 u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirection){
 	//Easy way to tell here
 	if(a == NULL || b == NULL){
-		return FALSE;
-	}
-
-	//Are we ignoring indirection? If not, we need to compare the dereference here
-	if(ignore_indirection == FALSE && a->is_dereferenced != b->is_dereferenced){
 		return FALSE;
 	}
 
