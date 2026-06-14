@@ -4266,6 +4266,42 @@ static inline void perform_memory_address_remediations(instruction_window_t* win
 
 
 /**
+ * If the given instruction a memory operand compatible binary operation?
+ *
+ * There are a few critera for this to be true:
+ * 	1.) It must be one of the types of binary operations that support memory source operands(for
+ * 		example, shifts don't count because they do not support it)
+ * 	2.) There must be *no* converting moves required. If there are, then doing this work is actually
+ * 		only going to make our lives more difficult in the end
+ */
+static inline u_int8_t is_instruction_memory_operand_compatible_binary_operation(instruction_t* instruction){
+	//First disqualifier is this
+	if(instruction->statement_type != THREE_ADDR_CODE_BIN_OP_STMT){
+		return FALSE;
+	}
+
+	generic_type_t* type_operating_over;
+
+	switch(instruction->op){
+		/**
+		 * Everything here is allowed to have a source operand
+		 * that is 
+		 */
+		case PLUS:
+		case MINUS:
+			break;
+		//TODO ADD MORE
+		default:
+			return FALSE;
+	}
+
+
+
+}
+
+
+
+/**
  * The pattern optimizer takes in a window and performs hyperlocal optimzations
  * on passing instructions. If we do end up deleting instructions, we'll need
  * to take care with how that affects the window that we take in
@@ -5916,6 +5952,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			}
 		}
 	}
+
+
+
 
 	//Return whether or not we changed the block return changed;
 	return changed;
