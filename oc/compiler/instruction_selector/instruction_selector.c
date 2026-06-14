@@ -11315,9 +11315,10 @@ static void handle_addition_instruction(instruction_window_t* window){
 	 *  NO Memory access:
 	 * 		1.) Assignee and operand1 are equal, we can just turn it into an addX instruction directly
 	 * 		2.) They're not equal, the size is valid for lea, and it is advantageous for us to do so -> convert to lea
-	 * 		3.) Not valid for lea/we don't want do, may it work normally
+	 * 		3.) Not valid for lea/we don't want do, make it work by creating a fake assignee so that they match
 	 * 	WITH Memory Access:
-	 * 		1.) Convert the addressing mode as need be, there is only one thing to do here
+	 * 		1.) Assignee and operand1 are equal, we can just turn it into an addX instruction directly
+	 * 		3.) Not valid for lea/we don't want do, make it work by creating a fake assignee so that they match
 	 */
 	if(original_addition->memory_access_type == NO_MEMORY_ACCESS){
 		/**
@@ -11462,9 +11463,72 @@ static void handle_addition_instruction(instruction_window_t* window){
 			reconstruct_window(window, assignment_instruction);
 		}
 
+	/**
+	 * Otherwise we have a from memory movement. If this is the case then we always have to handle the 
+	 * addressing mode in the same way
+	 */
 	} else {
-		printf("TODO NOT IMPLEMENTED\n");
-		
+		/**
+		 * Case 1: equal variables like x_1 <- x_0 + LOAD(<address>), we can just make this addq LOAD(<address>), x_1
+		 */
+		if(variables_equal_no_ssa(original_addition->operands.oir.assignee, original_addition->operands.oir.operand1) == TRUE){
+			//Get the appropriate add instuction
+			original_addition->instruction_type = select_add_instruction(size);
+
+			//This is always our destination
+			original_addition->operands.x86.destination_register = original_addition->operands.oir.assignee;
+
+			//Let the helper take care of this
+			handle_base_address_and_addressing_mode_for_instruction(original_addition);
+
+			//Rebuilt the entire window around this
+			reconstruct_window(window, original_addition);
+
+		/**
+		 * Case 3: Otherwise we've got something like:
+		 * 	t4 <- t3 + LOAD(<address>)
+		 *
+		 * 	We'll need to make it so that the assignee and the op1 are the same. We'd do something
+		 * 	like
+		 * 	
+		 * 	t3 <- t3 + LOAD(<address>)
+		 * 	t4 <- t3
+		 */
+		} else {
+			//Get the appropriate add instuction
+			original_addition->instruction_type = select_add_instruction(size);
+
+			/**
+			 * If this is a not a temp var *or* we have a higher use count, we'll emit
+			 * an extra assignment to ensure we aren't overwriting things here
+			 */
+			if(original_addition->operands.oir.operand1->variable_type != VARIABLE_TYPE_TEMP
+				|| original_addition->operands.oir.operand1->was_value_named == TRUE){
+
+				instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), original_addition->operands.oir.operand1);
+
+				//Put this before the instruction
+				insert_instruction_before_given(temp_assigment, original_addition);
+
+				//This now is op1
+				original_addition->operands.oir.operand1 = temp_assigment->operands.x86.destination_register;
+			}
+
+			//The destination register is op1
+			original_addition->operands.x86.destination_register = original_addition->operands.oir.operand1;
+
+			//Now we handle the addressing mode
+			handle_base_address_and_addressing_mode_for_instruction(original_addition);
+
+			//Move the destination register into the actual assignee now
+			instruction_t* assignment_instruction = emit_move_instruction(original_addition->operands.oir.assignee, original_addition->operands.x86.destination_register);
+
+			//This goes in *after* the subtraction
+			insert_instruction_after_given(assignment_instruction, original_addition);
+
+			//Rebuild the whole window around this
+			reconstruct_window(window, assignment_instruction);
+		}
 	}
 }
 
