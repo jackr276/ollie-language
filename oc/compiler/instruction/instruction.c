@@ -2373,7 +2373,18 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			//Now we'll do the first and second operands
 			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, " %s ", op_to_string(stmt->op));
-			print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
+
+			/**
+			 * If we have *no* memory access, then just print operand 2. Otherwise,
+			 * we do have memory access, and we'll need to print out our addressing
+			 * mode expression
+			 */
+			if(stmt->memory_access_type == NO_MEMORY_ACCESS){
+				print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
+			} else {
+				printf("LOAD ");
+				print_OIR_addressing_mode_expression(fl, stmt, PRINTING_VAR_INLINE);
+			}
 
 			//And end it out here
 			fprintf(fl, "\n");
