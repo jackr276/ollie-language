@@ -3549,9 +3549,15 @@ static void print_unsigned_multiplication_instruction(FILE* fl, instruction_t* i
 			break;
 	}
 
-	//We'll only print the source register, there is no explicit destination
-	//register
-	print_variable(fl, instruction->operands.x86.source_register1, mode);
+	/**
+	 * We'll only print the source register or addressing operation,
+	 * there is no explicit destination for mulX
+	 */
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
+	} else {
+		print_OIR_addressing_mode_expression(fl, instruction, mode);
+	}
 
 	//Print where this went
 	fprintf(fl, " /* Implicit Source: ");
@@ -3592,11 +3598,19 @@ static void print_signed_multiplication_instruction(FILE* fl, instruction_t* ins
 			break;
 	}
 
-	//Print the appropriate variable here
-	if(instruction->operands.x86.source_register1 != NULL){
-		print_variable(fl, instruction->operands.x86.source_register1, mode);
+	/**
+	 * We may have a register, immediate *or* memory destination
+	 * source and we need to account for all of that here
+	 */
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		if(instruction->operands.x86.source_register1 != NULL){
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
+		} else {
+			print_immediate_value(fl, instruction->operands.x86.source_immediate);
+		}
+
 	} else {
-		print_immediate_value(fl, instruction->operands.x86.source_immediate);
+		print_x86_addressing_mode_expression(fl, instruction, mode);
 	}
 
 	//Needed comma
@@ -3844,8 +3858,12 @@ static inline void print_sse_multiplication_instruction(FILE* fl, instruction_t*
 			break;
 	}
 
-	//We don't ever need to worry about an immediate value for SSE instructions
-	print_variable(fl, instruction->operands.x86.source_register1, mode);
+	//We will either have a register source or a memmory movement source
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
+	} else {
+		print_x86_addressing_mode_expression(fl, instruction, mode);
+	}
 
 	//Needed comma
 	fprintf(fl, ", ");
