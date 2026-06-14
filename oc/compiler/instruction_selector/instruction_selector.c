@@ -4287,6 +4287,14 @@ static inline u_int8_t is_instruction_memory_operand_compatible_binary_operation
 		return FALSE;
 	}
 
+	/**
+	 * If the second operand is NULL, it means that we've already done the memory operand
+	 * conversion. As such, we can just bail out because we cannot do this twice
+	 */
+	if(instruction->operands.oir.operand2 == NULL){
+		return FALSE;
+	}
+
 	generic_type_t* type_operating_over;
 
 	switch(instruction->op){
