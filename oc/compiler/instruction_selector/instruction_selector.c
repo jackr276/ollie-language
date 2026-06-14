@@ -4285,18 +4285,35 @@ static inline u_int8_t is_instruction_memory_operand_compatible_binary_operation
 	switch(instruction->op){
 		/**
 		 * Everything here is allowed to have a source operand
-		 * that is 
+		 * that is from memory. We will also determine the operating
+		 * type at this point 
 		 */
 		case PLUS:
 		case MINUS:
+			type_operating_over = get_destination_type_for_binary_operation_instruction(instruction);
 			break;
+
 		//TODO ADD MORE
 		default:
 			return FALSE;
 	}
 
+	/**
+	 * If we need to convert for op1 then we can't do this
+	 */
+	if(is_converting_move_required(type_operating_over, instruction->operands.oir.operand1->type) == TRUE){
+		return FALSE;
+	}
 
+	/**
+	 * Same story for operand2
+	 */
+	if(is_converting_move_required(type_operating_over, instruction->operands.oir.operand2->type) == TRUE){
+		return FALSE;
+	}
 
+	//If we've survived to here then we at least know that the binary operation is compatible
+	return TRUE;
 }
 
 
@@ -5954,7 +5971,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	}
 
 
-
+	if(is_instruction_memory_operand_compatible_binary_operation(window->instruction1) == TRUE){
+		printf("HERE\n\n\n");
+		print_instruction_window_three_address_code(window);
+	}
 
 	//Return whether or not we changed the block return changed;
 	return changed;
