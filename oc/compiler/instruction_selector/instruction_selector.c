@@ -299,13 +299,14 @@ static inline u_int8_t does_operation_use_addressing_mode(instruction_t* instruc
 		return FALSE;
 	}
 
-	switch(instruction->statement_type){
-		case THREE_ADDR_CODE_LOAD_STATEMENT:
-		case THREE_ADDR_CODE_STORE_STATEMENT:
-		case THREE_ADDR_CODE_LEA_STMT:
-			return TRUE;
-		default:
-			return FALSE;
+	/**
+	 * If we use any addressing mode at all, then this counts as an addressing mode
+	 * instruction
+	 */
+	if(instruction->addressing_mode != ADDRESSING_MODE_NONE){
+		return TRUE;
+	} else {
+		return FALSE;
 	}
 }
 
