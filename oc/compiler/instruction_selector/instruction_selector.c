@@ -4304,7 +4304,7 @@ static inline u_int8_t is_instruction_memory_operand_compatible_binary_operation
 		 * type at this point 
 		 */
 		case MINUS:
-		case PLUS:
+		//case PLUS:
 		//TODO UNCOMMENT AS WE SUPPORT MORE AND MORE
 			type_operating_over = get_destination_type_for_binary_operation_instruction(instruction);
 			break;
@@ -11310,141 +11310,161 @@ static void handle_addition_instruction(instruction_window_t* window){
 	}
 
 	/**
-	 * What about op2(if we even have op2)
+	 * If we have a case where there is *no* memory access, we have a few
+	 * options:
+	 *  NO Memory access:
+	 * 		1.) Assignee and operand1 are equal, we can just turn it into an addX instruction directly
+	 * 		2.) They're not equal, the size is valid for lea, and it is advantageous for us to do so -> convert to lea
+	 * 		3.) Not valid for lea/we don't want do, may it work normally
+	 * 	WITH Memory Access:
+	 * 		1.) Convert the addressing mode as need be, there is only one thing to do here
 	 */
-	if(original_addition->operands.oir.operand2 != NULL
-		&& is_converting_move_required(destination_type, original_addition->operands.oir.operand2->type) == TRUE){
-		original_addition->operands.oir.operand2 = create_and_insert_converting_move_instruction(original_addition, original_addition->operands.oir.operand2, destination_type);
-	}
-
-	/**
-	 * If these two are equal, then we have something like x1 <- x0 + 2. This can simply be
-	 * turned into addl $2, x_1
-	 */
-	if(variables_equal_no_ssa(original_addition->operands.oir.assignee, original_addition->operands.oir.operand1) == TRUE){
-		//Get the appropriate add instuction
-		original_addition->instruction_type = select_add_instruction(size);
-
-		original_addition->operands.x86.destination_register = original_addition->operands.oir.assignee;
-
-		//Assign the source or the source immediate based on which we need
-		if(original_addition->operands.oir.operand2 != NULL){
-			original_addition->operands.x86.source_register1 = original_addition->operands.oir.operand2;
-		} else {
-			original_addition->operands.x86.source_immediate = original_addition->operands.oir.constant_operand;
-		}
-
-		//Rebuilt the entire window around this
-		reconstruct_window(window, original_addition);
-
-	/**
-	 * Otherwise they're not equal. For most other binary operations we'd
-	 * need to force it to work at this point. However since this is addition
-	 * we can use a lea instead *if* we have valid types *and* we have a non
-	 * temp variable here. If we have a temp destination, then there is
-	 * no benefit from an instruction count perspective to doing this
-	 */
-	} else if(is_type_valid_for_addition_to_lea_conversion(size) == TRUE
-				&& (original_addition->operands.oir.assignee->variable_type != VARIABLE_TYPE_TEMP
-					|| original_addition->operands.oir.operand1 == stack_pointer_variable)){
-		//Get the lea that we need
-		original_addition->instruction_type = select_lea_instruction(size);
-
-		//Address calc 1 is always op1
-		original_addition->operands.x86.address_register1 = original_addition->operands.oir.operand1;
-		
-		//Based on the constant status we do it one way or the other
-		if(original_addition->statement_type == THREE_ADDR_CODE_BIN_OP_STMT){
-			original_addition->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
-			original_addition->operands.x86.address_register2 = original_addition->operands.oir.operand2;
-
-		} else {
-			original_addition->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-			original_addition->operands.x86.address_offset = original_addition->operands.oir.constant_operand;
-		}
-
+	if(original_addition->memory_access_type == NO_MEMORY_ACCESS){
 		/**
-		 * If we require a converting move between the original assignee and this one, we will need
-		 * to use a temp var as the actual assignee and insert that here
+		 * Case 1: equal variables like x_1 <- x_0 + 2, we can just make this addq $2, x_1
 		 */
-		if(is_converting_move_required(original_addition->operands.oir.assignee->type, destination_type) == TRUE){
-			//We'll need a temp var for this
-			three_addr_var_t* temp_destination = emit_temp_var(destination_type);
+		if(variables_equal_no_ssa(original_addition->operands.oir.assignee, original_addition->operands.oir.operand1) == TRUE){
+			//Get the appropriate add instuction
+			original_addition->instruction_type = select_add_instruction(size);
 
-			//The fianl destination actually comes from the instruction
-			three_addr_var_t* final_destination = original_addition->operands.oir.assignee;
-
-			//This is what the lea will point to
-			original_addition->operands.x86.destination_register = temp_destination;
-
-			//Now we can emit the move
-			instruction_t* move_instruction = emit_move_instruction(final_destination, temp_destination);
-
-			//This goes right after the addition
-			insert_instruction_after_given(move_instruction, original_addition);
-
-			//Let the helper deal with the pxor clear
-			insert_pxor_clear_if_needed(move_instruction);
-
-			//Rebuild everything around is
-			reconstruct_window(window, move_instruction);
-
-		} else {
-			//We can just use the assignee directly
 			original_addition->operands.x86.destination_register = original_addition->operands.oir.assignee;
+
+			//Assign the source or the source immediate based on which we need
+			if(original_addition->operands.oir.operand2 != NULL){
+				//If we need to convert op2 we do it here
+				if(is_converting_move_required(destination_type, original_addition->operands.oir.operand2->type) == TRUE){
+					original_addition->operands.oir.operand2 = create_and_insert_converting_move_instruction(original_addition, original_addition->operands.oir.operand2, destination_type);
+				}
+
+				original_addition->operands.x86.source_register1 = original_addition->operands.oir.operand2;
+
+			} else {
+				original_addition->operands.x86.source_immediate = original_addition->operands.oir.constant_operand;
+			}
 
 			//Rebuilt the entire window around this
 			reconstruct_window(window, original_addition);
-		}
-
-	/**
-	 * Otherwise we've got something like:
-	 * 	t4 <- t3 + 2
-	 *
-	 * 	We'll need to make it so that the assignee and the op1 are the same. We'd do something
-	 * 	like
-	 * 	
-	 * 	t3 <- t3 + 2
-	 * 	t4 <- t3
-	 */
-	} else {
-		//Get the appropriate add instuction
-		original_addition->instruction_type = select_add_instruction(size);
 
 		/**
-		 * If this is a not a temp var *or* we have a higher use count, we'll emit
-		 * an extra assignment to ensure we aren't overwriting things here
+		 * Case 2: we have unequal variables *and* we can make this into a lea like: x_1 <- y_1 + 2 ==> leaq 2(y_1), x_1
 		 */
-		if(original_addition->operands.oir.operand1->variable_type != VARIABLE_TYPE_TEMP
-			|| original_addition->operands.oir.operand1->was_value_named == TRUE){
+		} else if(is_type_valid_for_addition_to_lea_conversion(size) == TRUE
+				&& (original_addition->operands.oir.assignee->variable_type != VARIABLE_TYPE_TEMP
+					|| original_addition->operands.oir.operand1 == stack_pointer_variable)){
+			//Get the lea that we need
+			original_addition->instruction_type = select_lea_instruction(size);
 
-			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), original_addition->operands.oir.operand1);
+			//Address calc 1 is always op1
+			original_addition->operands.x86.address_register1 = original_addition->operands.oir.operand1;
+			
+			//Based on the constant status we do it one way or the other
+			if(original_addition->statement_type == THREE_ADDR_CODE_BIN_OP_STMT){
+				//Convert op2 if need be
+				if(is_converting_move_required(destination_type, original_addition->operands.oir.operand2->type) == TRUE){
+					original_addition->operands.oir.operand2 = create_and_insert_converting_move_instruction(original_addition, original_addition->operands.oir.operand2, destination_type);
+				}
 
-			//Put this before the instruction
-			insert_instruction_before_given(temp_assigment, original_addition);
+				original_addition->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+				original_addition->operands.x86.address_register2 = original_addition->operands.oir.operand2;
 
-			//This now is op1
-			original_addition->operands.oir.operand1 = temp_assigment->operands.x86.destination_register;
-		}
+			} else {
+				original_addition->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+				original_addition->operands.x86.address_offset = original_addition->operands.oir.constant_operand;
+			}
 
-		//The destination register is op1
-		original_addition->operands.x86.destination_register = original_addition->operands.oir.operand1;
+			/**
+			 * If we require a converting move between the original assignee and this one, we will need
+			 * to use a temp var as the actual assignee and insert that here
+			 */
+			if(is_converting_move_required(original_addition->operands.oir.assignee->type, destination_type) == TRUE){
+				//We'll need a temp var for this
+				three_addr_var_t* temp_destination = emit_temp_var(destination_type);
 
-		//Assign the source or the source immediate based on which we need
-		if(original_addition->operands.oir.operand2 != NULL){
-			original_addition->operands.x86.source_register1 = original_addition->operands.oir.operand2;
+				//The fianl destination actually comes from the instruction
+				three_addr_var_t* final_destination = original_addition->operands.oir.assignee;
+
+				//This is what the lea will point to
+				original_addition->operands.x86.destination_register = temp_destination;
+
+				//Now we can emit the move
+				instruction_t* move_instruction = emit_move_instruction(final_destination, temp_destination);
+
+				//This goes right after the addition
+				insert_instruction_after_given(move_instruction, original_addition);
+
+				//Let the helper deal with the pxor clear
+				insert_pxor_clear_if_needed(move_instruction);
+
+				//Rebuild everything around is
+				reconstruct_window(window, move_instruction);
+
+			} else {
+				//We can just use the assignee directly
+				original_addition->operands.x86.destination_register = original_addition->operands.oir.assignee;
+
+				//Rebuilt the entire window around this
+				reconstruct_window(window, original_addition);
+			}
+
+		/**
+		 * Case 3: Otherwise we've got something like:
+		 * 	t4 <- t3 + 2
+		 *
+		 * 	We'll need to make it so that the assignee and the op1 are the same. We'd do something
+		 * 	like
+		 * 	
+		 * 	t3 <- t3 + 2
+		 * 	t4 <- t3
+		 */
 		} else {
-			original_addition->operands.x86.source_immediate = original_addition->operands.oir.constant_operand;
+			//Get the appropriate add instuction
+			original_addition->instruction_type = select_add_instruction(size);
+
+			/**
+			 * If this is a not a temp var *or* we have a higher use count, we'll emit
+			 * an extra assignment to ensure we aren't overwriting things here
+			 */
+			if(original_addition->operands.oir.operand1->variable_type != VARIABLE_TYPE_TEMP
+				|| original_addition->operands.oir.operand1->was_value_named == TRUE){
+
+				instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), original_addition->operands.oir.operand1);
+
+				//Put this before the instruction
+				insert_instruction_before_given(temp_assigment, original_addition);
+
+				//This now is op1
+				original_addition->operands.oir.operand1 = temp_assigment->operands.x86.destination_register;
+			}
+
+			//The destination register is op1
+			original_addition->operands.x86.destination_register = original_addition->operands.oir.operand1;
+
+			//Assign the source or the source immediate based on which we need
+			if(original_addition->operands.oir.operand2 != NULL){
+				//Convert op2 if need be
+				if(is_converting_move_required(destination_type, original_addition->operands.oir.operand2->type) == TRUE){
+					original_addition->operands.oir.operand2 = create_and_insert_converting_move_instruction(original_addition, original_addition->operands.oir.operand2, destination_type);
+				}
+
+				original_addition->operands.x86.source_register1 = original_addition->operands.oir.operand2;
+
+			} else {
+				original_addition->operands.x86.source_immediate = original_addition->operands.oir.constant_operand;
+			}
+
+			//Move the destination register into the actual assignee now
+			instruction_t* assignment_instruction = emit_move_instruction(original_addition->operands.oir.assignee, original_addition->operands.x86.destination_register);
+
+			//This goes in *after* the subtraction
+			insert_instruction_after_given(assignment_instruction, original_addition);
+
+			//Rebuild the whole window around this
+			reconstruct_window(window, assignment_instruction);
 		}
 
-		//Move the destination register into the actual assignee now
-		instruction_t* assignment_instruction = emit_move_instruction(original_addition->operands.oir.assignee, original_addition->operands.x86.destination_register);
-
-		//This goes in *after* the subtraction
-		insert_instruction_after_given(assignment_instruction, original_addition);
-
-		//Rebuild the whole window around this
-		reconstruct_window(window, assignment_instruction);
+	} else {
+		printf("TODO NOT IMPLEMENTED\n");
+		
 	}
 }
 
