@@ -2089,7 +2089,7 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		 * Turns into 
 		 * x_1 <- x_0 & 1
 		 */
-		if(variables_equal_no_ssa(mod_instruction->operands.oir.assignee, mod_instruction->operands.oir.operand1, TRUE) == TRUE){
+		if(variables_equal_no_ssa(mod_instruction->operands.oir.assignee, mod_instruction->operands.oir.operand1) == TRUE){
 			//Make this constant the mask now
 			mod_instruction->operands.oir.constant_operand->constant_value.unsigned_long_constant = mask;
 
@@ -4429,7 +4429,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction1->operands.oir.assignee->use_count <= 1
 		&& window->instruction2 != NULL
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT 
-		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.operand1, FALSE) == TRUE){
+		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.operand1) == TRUE){
 
 		//Grab this out for convenience
 		instruction_t* constant_assignment = window->instruction1;
@@ -4472,7 +4472,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instruction2? Let's check.
 		if(constant_assignment->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 			&& constant_assignment->operands.oir.assignee->use_count <= 1
-			&& variables_equal(constant_assignment->operands.oir.assignee, binary_operation->operands.oir.operand2, FALSE) == TRUE){
+			&& variables_equal(constant_assignment->operands.oir.assignee, binary_operation->operands.oir.operand2) == TRUE){
 
 			//Let's mark that this is now a binary op with const statement
 			binary_operation->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
@@ -4512,7 +4512,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instruction2? Let's check.
 		if(constant_assignment->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 			&& constant_assignment->operands.oir.assignee->use_count <= 1
-			&& variables_equal(constant_assignment->operands.oir.assignee, binary_operation->operands.oir.operand2, FALSE) == TRUE){
+			&& variables_equal(constant_assignment->operands.oir.assignee, binary_operation->operands.oir.operand2) == TRUE){
 
 			//Let's mark that this is now a binary op with const statement
 			binary_operation->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
@@ -4551,7 +4551,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& binary_operator_valid_for_inplace_constant_match(window->instruction2->op) == TRUE
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& variables_equal(window->instruction2->operands.oir.operand1, window->instruction1->operands.oir.assignee, FALSE) == TRUE){
+		&& variables_equal(window->instruction2->operands.oir.operand1, window->instruction1->operands.oir.assignee) == TRUE){
 
 		//Extract these two for convenience
 		instruction_t* constant_assignment = window->instruction1;
@@ -4623,7 +4623,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction3->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& binary_operator_valid_for_inplace_constant_match(window->instruction3->op) == TRUE
 		&& window->instruction2->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& variables_equal(window->instruction3->operands.oir.operand1, window->instruction2->operands.oir.assignee, FALSE) == TRUE){
+		&& variables_equal(window->instruction3->operands.oir.operand1, window->instruction2->operands.oir.assignee) == TRUE){
 
 		//Extract these two for convenience
 		instruction_t* constant_assignment = window->instruction2;
@@ -4707,7 +4707,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		
 		//If the variables are temp and the first one's assignee is the same as the second's op1, we can fold
 		if(load->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP 
-			&& variables_equal(load->operands.oir.assignee, move->operands.oir.operand1, TRUE) == TRUE
+			&& variables_equal(load->operands.oir.assignee, move->operands.oir.operand1) == TRUE
 			&& load->operands.oir.assignee->use_count <= 1){
 
 			//The load's assignee now is the move's assignee
@@ -4750,7 +4750,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 *  t4 <- x
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
-		&& variables_equal(window->instruction1->operands.oir.operand1, window->instruction1->operands.oir.operand2, TRUE) == TRUE){
+		&& variables_equal(window->instruction1->operands.oir.operand1, window->instruction1->operands.oir.operand2) == TRUE){
 		//Grab this out
 		instruction_t* binary_operation = window->instruction1; 
 
@@ -5010,7 +5010,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 */
 	if(is_instruction_binary_operation_with_const(window->instruction1) == TRUE
 		&& is_instruction_binary_operation_with_const(window->instruction2) == TRUE
-		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.operand1, TRUE) == TRUE){
+		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.operand1) == TRUE){
 		//Extract these both for convenience
 		instruction_t* first = window->instruction1;
 		instruction_t* second = window->instruction2;
@@ -5188,7 +5188,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction1->op == PLUS
 		&& window->instruction2->op == PLUS
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& variables_equal(window->instruction2->operands.oir.operand1, window->instruction1->operands.oir.assignee, TRUE) == TRUE) {
+		&& variables_equal(window->instruction2->operands.oir.operand1, window->instruction1->operands.oir.assignee) == TRUE) {
 
 		//Extract for convenience
 		instruction_t* binary_operation = window->instruction1;
@@ -5243,7 +5243,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& (window->instruction1->op == STAR || window->instruction1->op == PLUS)
 		&& window->instruction2->op == PLUS
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& variables_equal(window->instruction2->operands.oir.operand2, window->instruction1->operands.oir.assignee, TRUE) == TRUE) {
+		&& variables_equal(window->instruction2->operands.oir.operand2, window->instruction1->operands.oir.assignee) == TRUE) {
 
 		//Extract for convenience
 		instruction_t* bin_operation_with_const = window->instruction1;
@@ -5349,7 +5349,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP //Make sure it's a temp var
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT 
-		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.operand1, FALSE) == TRUE){
+		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.operand1) == TRUE){
 
 		//Grab these for convenience
 		instruction_t* first_lea = window->instruction1;
@@ -5440,7 +5440,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		 * do match, it will be picked up in the next go around
 		 */
 		if(does_addressing_mode_use_address_operand1(addressing_operation->addressing_mode) == TRUE
-			&& variables_equal(addressing_operation->operands.oir.address_operand1, to_be_combined->operands.oir.assignee, TRUE) == TRUE){
+			&& variables_equal(addressing_operation->operands.oir.address_operand1, to_be_combined->operands.oir.assignee) == TRUE){
 			/**
 			 * Go based on what kind of statement we have as the first way to split
 			 */
@@ -5473,7 +5473,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			}
 
 		} else if(does_addressing_mode_use_address_operand2(addressing_operation->addressing_mode) == TRUE
-			&& variables_equal(addressing_operation->operands.oir.address_operand2, to_be_combined->operands.oir.assignee, TRUE) == TRUE){
+			&& variables_equal(addressing_operation->operands.oir.address_operand2, to_be_combined->operands.oir.assignee) == TRUE){
 			/**
 			 * Go based on what kind of statement we have as the first way to split
 			 */
@@ -5658,7 +5658,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction2 != NULL
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& (window->instruction2->op == DOUBLE_AND || window->instruction2->op == DOUBLE_OR)
-		&& variables_equal(window->instruction2->operands.oir.operand1, window->instruction1->operands.oir.assignee, FALSE) == TRUE){
+		&& variables_equal(window->instruction2->operands.oir.operand1, window->instruction1->operands.oir.assignee) == TRUE){
 
 		//Grab these two out for convenience
 		instruction_t* constant_assignment = window->instruction1;
@@ -5905,7 +5905,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					/**
 					 * If we don't have something like x_1 = x_0 + 1, we can't be doing this so we'll leave
 					 */
-					if(variables_equal_no_ssa(first_instruction->operands.oir.assignee, first_instruction->operands.oir.operand1, TRUE) == FALSE){
+					if(variables_equal_no_ssa(first_instruction->operands.oir.assignee, first_instruction->operands.oir.operand1) == FALSE){
 						break;
 					}
 
@@ -5923,7 +5923,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					/**
 					 * If we don't have something like x_1 = x_0 - 1, we can't be doing this so we'll leave
 					 */
-					if(variables_equal_no_ssa(first_instruction->operands.oir.assignee, first_instruction->operands.oir.operand1, TRUE) == FALSE){
+					if(variables_equal_no_ssa(first_instruction->operands.oir.assignee, first_instruction->operands.oir.operand1) == FALSE){
 						break;
 					}
 
@@ -6042,7 +6042,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction1->operands.oir.assignee->use_count <= 1
 		&& is_instruction_memory_operand_compatible_binary_operation(window->instruction2) == TRUE
-		&& variables_equal(window->instruction2->operands.oir.operand2, window->instruction1->operands.oir.assignee, TRUE) == TRUE){
+		&& variables_equal(window->instruction2->operands.oir.operand2, window->instruction1->operands.oir.assignee) == TRUE){
 
 		//Let the helper take care of the whole thing
 		//combine_binary_operation_with_source_operand_load(window);
@@ -6232,7 +6232,7 @@ static inline u_int8_t convert_phi_function_if_redundant(value_numbering_table_t
 		three_addr_var_t* compare_to_param = dynamic_array_get_at(parameters, i);
 
 		//If these aren't equal then we fail out
-		if(variables_equal(first_parameter, compare_to_param, FALSE) == FALSE){
+		if(variables_equal(first_parameter, compare_to_param) == FALSE){
 			return FALSE;
 		}
 	}
@@ -8859,7 +8859,7 @@ static void handle_left_shift_instruction(instruction_window_t* window){
 	 * Now if op1 and the assignee line up, we are good. Otherwise we will
 	 * need to make them align and insert some actual instructions
 	 */
-	if(variables_equal_no_ssa(left_shift_instruction->operands.oir.assignee, left_shift_instruction->operands.oir.operand1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(left_shift_instruction->operands.oir.assignee, left_shift_instruction->operands.oir.operand1) == TRUE){
 		//Destination is the assignee
 		left_shift_instruction->operands.x86.destination_register = left_shift_instruction->operands.oir.assignee;
 
@@ -9041,7 +9041,7 @@ static void handle_right_shift_instruction(instruction_window_t* window){
 	 * Now if op1 and the assignee line up, we are good. Otherwise we will
 	 * need to make them align and insert some actual instructions
 	 */
-	if(variables_equal_no_ssa(right_shift_instruction->operands.oir.assignee, right_shift_instruction->operands.oir.operand1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(right_shift_instruction->operands.oir.assignee, right_shift_instruction->operands.oir.operand1) == TRUE){
 		//Destination is the assignee
 		right_shift_instruction->operands.x86.destination_register = right_shift_instruction->operands.oir.assignee;
 
@@ -9168,7 +9168,7 @@ static void handle_bitwise_inclusive_or_instruction(instruction_window_t* window
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(bitwise_or->operands.oir.assignee, bitwise_or->operands.oir.operand1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(bitwise_or->operands.oir.assignee, bitwise_or->operands.oir.operand1) == TRUE){
 		//Destination is just the assignee
 		bitwise_or->operands.x86.destination_register = bitwise_or->operands.oir.assignee;
 
@@ -9296,7 +9296,7 @@ static void handle_bitwise_and_instruction(instruction_window_t* window){
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(bitwise_and->operands.oir.assignee, bitwise_and->operands.oir.operand1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(bitwise_and->operands.oir.assignee, bitwise_and->operands.oir.operand1) == TRUE){
 		//Destination is just the assignee
 		bitwise_and->operands.x86.destination_register = bitwise_and->operands.oir.assignee;
 
@@ -9425,7 +9425,7 @@ static void handle_bitwise_exclusive_or_instruction(instruction_window_t* window
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(bitwise_xor->operands.oir.assignee, bitwise_xor->operands.oir.operand1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(bitwise_xor->operands.oir.assignee, bitwise_xor->operands.oir.operand1) == TRUE){
 		//Destination is just the assignee
 		bitwise_xor->operands.x86.destination_register = bitwise_xor->operands.oir.assignee;
 
@@ -9929,7 +9929,7 @@ static void handle_signed_multiplication_instruction(instruction_window_t* windo
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(multiplication_instruction->operands.oir.assignee, multiplication_instruction->operands.oir.operand1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(multiplication_instruction->operands.oir.assignee, multiplication_instruction->operands.oir.operand1) == TRUE){
 		//Destination is just the assignee
 		multiplication_instruction->operands.x86.destination_register = multiplication_instruction->operands.oir.assignee;
 
@@ -10051,7 +10051,7 @@ static void handle_sse_multiplication_instruction(instruction_window_t* window, 
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(multiplication_instruction->operands.oir.assignee, multiplication_instruction->operands.oir.operand1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(multiplication_instruction->operands.oir.assignee, multiplication_instruction->operands.oir.operand1) == TRUE){
 		//Destination is just the assignee
 		multiplication_instruction->operands.x86.destination_register = multiplication_instruction->operands.oir.assignee;
 		//This is always op2
@@ -10414,7 +10414,7 @@ static void handle_sse_division_instruction(instruction_window_t* window, generi
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(division_instruction->operands.oir.assignee, division_instruction->operands.oir.operand1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(division_instruction->operands.oir.assignee, division_instruction->operands.oir.operand1) == TRUE){
 		//Destination is just the assignee
 		division_instruction->operands.x86.destination_register = division_instruction->operands.oir.assignee;
 		//This is always op2
@@ -10813,7 +10813,7 @@ static void handle_subtraction_instruction(instruction_window_t* window){
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(subtraction_instruction->operands.oir.assignee, subtraction_instruction->operands.oir.operand1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(subtraction_instruction->operands.oir.assignee, subtraction_instruction->operands.oir.operand1) == TRUE){
 		//Destination is just the assignee
 		subtraction_instruction->operands.x86.destination_register = subtraction_instruction->operands.oir.assignee;
 
@@ -10955,7 +10955,7 @@ static void handle_addition_instruction(instruction_window_t* window){
 	 * If these two are equal, then we have something like x1 <- x0 + 2. This can simply be
 	 * turned into addl $2, x_1
 	 */
-	if(variables_equal_no_ssa(original_addition->operands.oir.assignee, original_addition->operands.oir.operand1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(original_addition->operands.oir.assignee, original_addition->operands.oir.operand1) == TRUE){
 		//Get the appropriate add instuction
 		original_addition->instruction_type = select_add_instruction(size);
 
@@ -11524,13 +11524,13 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 			 * if the operation that made it generated a truthful byte value(0 or 1)
 			 * or not
 			 */
-			if(variables_equal(logical_and->operands.oir.operand1, cursor->operands.oir.assignee, FALSE)){
+			if(variables_equal(logical_and->operands.oir.operand1, cursor->operands.oir.assignee)){
 				if(does_operator_generate_truthful_byte_value(cursor->op) == TRUE){
 					op1_came_from_setX = TRUE;
 				}
 
 			//Give op2 the exact same treatment
-			} else if(variables_equal(logical_and->operands.oir.operand2, cursor->operands.oir.assignee, FALSE)){
+			} else if(variables_equal(logical_and->operands.oir.operand2, cursor->operands.oir.assignee)){
 				if(does_operator_generate_truthful_byte_value(cursor->op) == TRUE){
 					op2_came_from_setX = TRUE;
 				}

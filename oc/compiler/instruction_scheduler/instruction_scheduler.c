@@ -68,7 +68,7 @@ static void update_dependence_for_variable(data_dependency_graph_t* graph, instr
 			case TESTW:
 			case TESTQ:
 				//The cmp instructions store their symbolic assignees in the assignee slot
-				if(variables_equal(current->operands.oir.assignee, variable, TRUE) == TRUE){
+				if(variables_equal(current->operands.oir.assignee, variable) == TRUE){
 					//Add it in
 					add_dependence(graph, given, current);
 					return;
@@ -83,7 +83,7 @@ static void update_dependence_for_variable(data_dependency_graph_t* graph, instr
 				destination2 = current->operands.x86.destination_register2;
 
 				//If they're equal then we're good
-				if(variables_equal(destination, variable, TRUE) == TRUE){
+				if(variables_equal(destination, variable) == TRUE){
 					//Given depends on current
 					add_dependence(graph, given, current);
 
@@ -92,7 +92,7 @@ static void update_dependence_for_variable(data_dependency_graph_t* graph, instr
 				}
 
 				//We're also done here
-				if(variables_equal(destination2, variable, TRUE) == TRUE){
+				if(variables_equal(destination2, variable) == TRUE){
 					//Given depends on current
 					add_dependence(graph, given, current);
 
