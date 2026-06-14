@@ -4304,8 +4304,8 @@ static inline u_int8_t is_instruction_memory_operand_compatible_binary_operation
 		 * type at this point 
 		 */
 		case MINUS:
+		case PLUS:
 		//TODO UNCOMMENT AS WE SUPPORT MORE AND MORE
-		//case PLUS:
 			type_operating_over = get_destination_type_for_binary_operation_instruction(instruction);
 			break;
 
@@ -6331,8 +6331,6 @@ static inline void generate_value_name_key_for_instruction(instruction_t* instru
 
 			//Actual opcode
 			dynamic_string_add_char_to_back(textual_key, instruction->op);
-			
-			//TODO NEED TO UPDATE
 
 			//Second op
 			concatenate_value_name_string(instruction->operands.oir.operand2, textual_key);

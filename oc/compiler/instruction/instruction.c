@@ -3688,11 +3688,20 @@ static void print_addition_instruction(FILE* fl, instruction_t* instruction, var
 			break;
 	}
 
-	//Print the appropriate variable here
-	if(instruction->operands.x86.source_register1 != NULL){
-		print_variable(fl, instruction->operands.x86.source_register1, mode);
+	/**
+	 * If we do not have any memory access, then we may have a constant or register
+	 * source operand. Otherwise, we will have an addressing mode expression for 
+	 * the source
+	 */
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		if(instruction->operands.x86.source_register1 != NULL){
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
+		} else {
+			print_immediate_value(fl, instruction->operands.x86.source_immediate);
+		}
+
 	} else {
-		print_immediate_value(fl, instruction->operands.x86.source_immediate);
+		print_x86_addressing_mode_expression(fl, instruction, mode);
 	}
 
 	//Needed comma
