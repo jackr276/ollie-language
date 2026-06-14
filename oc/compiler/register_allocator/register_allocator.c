@@ -2142,8 +2142,8 @@ static void precolor_instruction(instruction_t* instruction){
 		case IDIVW:
 		case IDIVL:
 		case IDIVQ:
-			//The source register for a division must be in RAX
-			instruction->operands.x86.source_register2->associated_live_range->reg.gen_purpose = RAX;
+			//The dividend is in RAX
+			instruction->operands.x86.source_register1->associated_live_range->reg.gen_purpose = RAX;
 
 			/**
 			 * We've hijacked the address_calc_reg1 register for the higher order bits in

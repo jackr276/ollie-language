@@ -8443,6 +8443,8 @@ static instruction_t* emit_or_instruction(three_addr_var_t* destination, three_a
  *
  * Division instructions have no destination that need be written out. They only have two sources - a direct
  * source and an implicit source
+ *
+ * NOTE: THE IMPLICIT SOURCE(DIVIDEND) IS ALWAYS IN SOURCE REGISTER 1
  */
 static instruction_t* emit_div_instruction(generic_type_t* destination_type, three_addr_var_t* divisor, three_addr_var_t* dividend, three_addr_var_t* higher_order_dividend_bits, u_int8_t is_signed){
 	//First we'll allocate it
@@ -8490,12 +8492,12 @@ static instruction_t* emit_div_instruction(generic_type_t* destination_type, thr
 			exit(1);
 	}
 
-	//Finally we set the sources
-	instruction->operands.x86.source_register1 = divisor;
-	//This implicit source is important for our uses in the register allocator
-	instruction->operands.x86.source_register2 = dividend;
-	//We will use address calc reg 1 for this purpose
+	//Dividend is always the implicit source(%rax)
+	instruction->operands.x86.source_register1 = dividend;
+	//Address register2 is used for overflow(higher order bits(%rx))
 	instruction->operands.x86.address_register1 = higher_order_dividend_bits;
+	//The divisor is what will actually show up on the instruction
+	instruction->operands.x86.source_register2 = divisor;
 
 	//Quotient register
 	instruction->operands.x86.destination_register = emit_temp_var(destination_type);
