@@ -4288,8 +4288,9 @@ static inline u_int8_t is_instruction_memory_operand_compatible_binary_operation
 		 * that is from memory. We will also determine the operating
 		 * type at this point 
 		 */
-		case PLUS:
 		case MINUS:
+		//TODO UNCOMMENT AS WE SUPPORT MORE AND MORE
+		//case PLUS:
 			type_operating_over = get_destination_type_for_binary_operation_instruction(instruction);
 			break;
 
@@ -4354,7 +4355,7 @@ static inline void combine_binary_operation_with_source_operand_load(instruction
 	instruction_t* binary_operation = window->instruction2;
 
 	/**
-	 * Step 1: copy over all of the addressing information from the load
+	 * Step 1: Copy over all of the addressing information from the load
 	 * operation over into the binary operation. We will also
 	 * need to copy over the addressing mode itself
 	 */
@@ -4365,16 +4366,22 @@ static inline void combine_binary_operation_with_source_operand_load(instruction
 	binary_operation->addressing_mode = load_operation->addressing_mode;
 
 	/**
-	 * Step 2: flag that we are a "from memory" movement operation on the binary operation itself. This
+	 * Step 2: NULL out the old operand2 as it is no longer in use
+	 */
+	binary_operation->operands.oir.operand2 = NULL;
+
+	/**
+	 * Step 3: Flag that we are a "from memory" movement operation on the binary operation itself. This
 	 * will flag to the selector/printer that we are expecting addressing info here
 	 */
+	binary_operation->memory_access_type = READ_FROM_MEMORY;
 
-
-
-
-
-	printf("HERE INSTRUCTIONS 1 AND 2\n\n\n");
-	print_instruction_window_three_address_code(window);
+	/**
+	 * Step 4: The load is now useless, so delete it and then rebuild the entire window around
+	 * the binary operation
+	 */
+	delete_statement(load_operation);
+	reconstruct_window(window, binary_operation);
 }
 
 
@@ -6045,7 +6052,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& variables_equal(window->instruction2->operands.oir.operand2, window->instruction1->operands.oir.assignee) == TRUE){
 
 		//Let the helper take care of the whole thing
-		//combine_binary_operation_with_source_operand_load(window);
+		combine_binary_operation_with_source_operand_load(window);
 
 		//TODO CHANGED IS TRUE UNCOMMENT
 		//changed = TRUE;
