@@ -9638,6 +9638,7 @@ static inline instruction_type_t select_unsigned_mulitplication_instruction(vari
  *
  * mov $3, %rax <- Source is always in RAX
  * mull %rcx -> result in rax
+ * The second operand is what the argument is
  *
  * NOTE: this is always the first instruction in the instruction window
  *
@@ -9655,41 +9656,26 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	//We'll need to know the variables size
 	variable_size_t size = get_type_size(destination_type);
 
-	//A temp holder for the final second source variable
-	three_addr_var_t* source;
-	three_addr_var_t* source2;
+	three_addr_var_t* implicit_rax_source;
 
-	//If we have a BIN_OP with const statement, we need to 
-	if(multiplication_instruction->statement_type == THREE_ADDR_CODE_BIN_OP_STMT){
-		//If we need to convert, we'll do that here
-		if(is_converting_move_required(destination_type, multiplication_instruction->operands.oir.operand2->type) == TRUE){
-			//Let the helper deal with it
-			source2 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->operands.oir.operand2, destination_type);
+	/**
+	 * Step 1: Move the first operand into %rax. This is also known as the "implicit source". We will first check
+	 * if we need to do any conversions here
+	 */
+	if(is_converting_move_required(destination_type, multiplication_instruction->operands.oir.operand1->type) == TRUE){
+		implicit_rax_source = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->operands.oir.operand1, destination_type);
 
-		//Otherwise this can be moved directly
-		} else {
-			//We first need to move the first operand into RAX
-			instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(multiplication_instruction->operands.oir.operand2->type), multiplication_instruction->operands.oir.operand2);
-
-			//Insert the move to rax before the multiplication instruction
-			insert_instruction_before_given(move_to_rax, multiplication_instruction);
-
-			//This is just the destination register here
-			source2 = move_to_rax->operands.x86.destination_register;
-		}
-
-	//Otherwise, we have a BIN_OP_WITH_CONST statement. We're actually going to need a temp assignment for the second operand(the constant)
-	//here for this to work
 	} else {
-		//Emit the move instruction here
-		instruction_t* move_to_rax = emit_constant_move_instruction(emit_temp_var(destination_type), multiplication_instruction->operands.oir.constant_operand);
+		//We first need to move the first operand into RAX
+		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(multiplication_instruction->operands.oir.operand2->type), multiplication_instruction->operands.oir.operand2);
 
-		//Put it before our multiplication
+		//Insert the move to rax before the multiplication instruction
 		insert_instruction_before_given(move_to_rax, multiplication_instruction);
 
-		//Our source2 now is this
-		source2 = move_to_rax->operands.x86.destination_register;
+		//This is just the destination register here
+		implicit_rax_source = move_to_rax->operands.x86.destination_register;
 	}
+
 
 	//Let's also check is any conversions are needed for the first source register
 	if(is_converting_move_required(destination_type, multiplication_instruction->operands.oir.operand1->type) == TRUE){
