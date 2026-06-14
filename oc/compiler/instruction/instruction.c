@@ -3756,11 +3756,18 @@ static void print_subtraction_instruction(FILE* fl, instruction_t* instruction, 
 			break;
 	}
 
-	//Print the appropriate variable here
-	if(instruction->operands.x86.source_register1 != NULL){
-		print_variable(fl, instruction->operands.x86.source_register1, mode);
+	//If we have no memory access then print out the source register or immediate source
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		//Print the appropriate variable here
+		if(instruction->operands.x86.source_register1 != NULL){
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
+		} else {
+			print_immediate_value(fl, instruction->operands.x86.source_immediate);
+		}
+
+	//Otherwise there won't be a source register and instead we'll have an addressing operation
 	} else {
-		print_immediate_value(fl, instruction->operands.x86.source_immediate);
+		print_x86_addressing_mode_expression(fl, instruction, mode);
 	}
 
 	//Needed comma
@@ -3789,8 +3796,14 @@ static inline void print_sse_subtraction_instruction(FILE* fl, instruction_t* in
 			break;
 	}
 
-	//We don't ever need to worry about an immediate value for SSE instructions
-	print_variable(fl, instruction->operands.x86.source_register1, mode);
+	//If we have no memory access then print out the source register
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
+
+	//Otherwise there won't be a source register and instead we'll have an addressing operation
+	} else {
+		print_x86_addressing_mode_expression(fl, instruction, mode);
+	}
 
 	//Needed comma
 	fprintf(fl, ", ");
