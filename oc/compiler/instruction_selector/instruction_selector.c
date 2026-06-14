@@ -469,7 +469,14 @@ static inline basic_block_t* does_block_end_in_jump(basic_block_t* block){
  */
 static inline u_int8_t is_expression_eligible_for_value_numbering(instruction_t* instruction){
 	switch(instruction->statement_type){
+		//These are only eligible if there is no memory access
 		case THREE_ADDR_CODE_BIN_OP_STMT:
+			if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+				return TRUE;
+			} else {
+				return FALSE;
+			}
+
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 			return TRUE;
 		default:
@@ -4363,6 +4370,7 @@ static inline void combine_binary_operation_with_source_operand_load(instruction
 	binary_operation->operands.oir.address_offset = load_operation->operands.oir.address_offset;
 	binary_operation->operands.oir.address_operand1 = load_operation->operands.oir.address_operand1;
 	binary_operation->operands.oir.address_operand2 = load_operation->operands.oir.address_operand2;
+	binary_operation->operands.oir.rip_offset_var = load_operation->operands.oir.rip_offset_var;
 	binary_operation->addressing_mode = load_operation->addressing_mode;
 
 	/**
@@ -6315,6 +6323,8 @@ static inline void generate_value_name_key_for_instruction(instruction_t* instru
 
 			//Actual opcode
 			dynamic_string_add_char_to_back(textual_key, instruction->op);
+			
+			//TODO NEED TO UPDATE
 
 			//Second op
 			concatenate_value_name_string(instruction->operands.oir.operand2, textual_key);
