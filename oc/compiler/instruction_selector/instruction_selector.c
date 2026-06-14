@@ -9712,8 +9712,9 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 		multiplication_instruction->operands.x86.source_register2 = constant_movement->operands.x86.destination_register;
 	}
 
-
-	//Once we've done all that, we need one final movement operation
+	/**
+	 * Step 4: once everything is done, we'll need to move the result out of %rax destination into what our actual assignee was
+	 */
 	instruction_t* result_movement = emit_move_instruction(multiplication_instruction->operands.oir.assignee, multiplication_instruction->operands.x86.destination_register);
 
 	//Insert the result movement instruction to be after the multiplication operation
@@ -9748,7 +9749,6 @@ static inline instruction_type_t select_signed_multiplication_instruction(variab
 			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in multiplication instruction\n");
 			exit(1);
 	}
-
 }
 
 
@@ -10117,7 +10117,7 @@ static void handle_signed_division(instruction_window_t* window, generic_type_t*
  * Will become:
  * movl t2, t5(rax)
  * xorl %edx MUST CLEAR EDX
- * idivl t3(divide by t3, we already guarantee this is a temp var(register))
+ * divl t3(divide by t3, we already guarantee this is a temp var(register))
  * movl t5, t4 (rax has quotient)
  * 
  * As such, this will generate additional instructions for us, making it not
