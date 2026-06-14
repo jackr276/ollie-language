@@ -2073,7 +2073,7 @@ static void precolor_instruction(instruction_t* instruction){
 		case MULL:
 		case MULQ:
 			//When we do an unsigned multiplication, the implicit source register must be in RAX
-			instruction->operands.x86.source_register2->associated_live_range->reg.gen_purpose = RAX;
+			instruction->operands.x86.source_register1->associated_live_range->reg.gen_purpose = RAX;
 
 			//The destination must also be in RAX here
 			instruction->operands.x86.destination_register->associated_live_range->reg.gen_purpose = RAX;
