@@ -4341,7 +4341,6 @@ static inline u_int8_t is_instruction_non_converting_load_operation(instruction_
 }
 
 
-
 /**
  * The pattern optimizer takes in a window and performs hyperlocal optimzations
  * on passing instructions. If we do end up deleting instructions, we'll need
@@ -6002,8 +6001,16 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * pressure and looks cleaner. We will try to do this with instructions 1 and 2 and instructions 1 and 3
 	 * in the window
 	 */
-	if(is_instruction_memory_operand_compatible_binary_operation(window->instruction1) == TRUE){
-		printf("HERE\n\n\n");
+
+	/**
+	 * First see if we are able to do this with instructions 1 and 2
+	 */
+	if(is_instruction_non_converting_load_operation(window->instruction1) == TRUE
+		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& is_instruction_memory_operand_compatible_binary_operation(window->instruction2) == TRUE
+		&& variables_equal(window->instruction2->operands.oir.operand2, window->instruction1->operands.oir.assignee, TRUE) == TRUE){
+
+		printf("HERE INSTRUCTIONS 1 AND 2\n\n\n");
 		print_instruction_window_three_address_code(window);
 	}
 
