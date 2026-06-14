@@ -3730,8 +3730,12 @@ static inline void print_sse_addition_instruction(FILE* fl, instruction_t* instr
 			break;
 	}
 
-	//No chance for an immediate value here
-	print_variable(fl, instruction->operands.x86.source_register1, mode);
+	//We either have a source register or we have an addressing operation
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
+	} else {
+		print_x86_addressing_mode_expression(fl, instruction, mode);
+	}
 
 	//Needed comma
 	fprintf(fl, ", ");

@@ -4304,7 +4304,7 @@ static inline u_int8_t is_instruction_memory_operand_compatible_binary_operation
 		 * type at this point 
 		 */
 		case MINUS:
-		//case PLUS:
+		case PLUS:
 		//TODO UNCOMMENT AS WE SUPPORT MORE AND MORE
 			type_operating_over = get_destination_type_for_binary_operation_instruction(instruction);
 			break;
