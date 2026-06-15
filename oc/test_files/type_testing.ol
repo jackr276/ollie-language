@@ -5,5 +5,7 @@ pub fn main() -> i32 {
 
 	let a:mut i32 = x * k ;
 
+	//Should return 194
+	OUNIT: [console = 194]
 	ret a;
 }
