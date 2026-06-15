@@ -9683,54 +9683,57 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	 * we're doing multiplication here. Division and modulo it would never work. This will allow 
 	 * us to minimize the number of move instructions
 	 */
-	if(multiplication_instruction->operands.oir.operand2 != NULL){
+	if(multiplication_instruction->operands.oir.constant_operand == NULL){
+		/**
+		 * If we do *not* have a constant operand, then we will move op1 into rax, and use op2 as the
+		 * explicit source
+		 */
+		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(multiplication_instruction->operands.oir.operand1->type), multiplication_instruction->operands.oir.operand1);
 
+		//This goes in before the given
+		insert_instruction_before_given(move_to_rax, multiplication_instruction);
 
-	} else {
+		//The implicit source comes from the move
+		implicit_rax_source = move_to_rax->operands.x86.destination_register;
 
-	}
-
-
-
-
-	//We first need to move the first operand into RAX
-	instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(multiplication_instruction->operands.oir.operand1->type), multiplication_instruction->operands.oir.operand1);
-
-	//Insert the move to rax before the multiplication instruction
-	insert_instruction_before_given(move_to_rax, multiplication_instruction);
-
-	//This is just the destination register here
-	three_addr_var_t* implicit_rax_source = move_to_rax->operands.x86.destination_register;
-
-	/**
-	 * Step 2: Setup the multiplication instruction itself. This will include moving
-	 * over the implicit source into source_register1 and dealing with the two destinations
-	 */
-	multiplication_instruction->instruction_type = select_unsigned_mulitplication_instruction(size);
-	multiplication_instruction->operands.x86.source_register1 = implicit_rax_source;
-	multiplication_instruction->operands.x86.destination_register = rax_destination;
-	multiplication_instruction->operands.x86.destination_register2 = rdx_destination;
-
-	/**
-	 * Step 3: Handle the second operand. This is what will actually show up on the instruction itself.
-	 * The second operand can be one of a few things:
-	 * 	1.) A regular register, in which case we'll need to do some converting move checks
-	 * 	2.) A constant, in which case we'll need to assign the constant over
-	 */
-	if(multiplication_instruction->operands.oir.operand2 != NULL) {
+		/**
+		 * If we are here then we know that we have a second operand. We'll check and see if conversions
+		 * are needed
+		 */
 		if(is_converting_move_required(destination_type, multiplication_instruction->operands.oir.operand2->type) == TRUE){
 			multiplication_instruction->operands.oir.operand2 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->operands.oir.operand2, destination_type);
 		}
 
-		multiplication_instruction->operands.x86.source_register2 = multiplication_instruction->operands.oir.operand2;
+		//This is the explicit source
+		explicit_source = multiplication_instruction->operands.oir.operand2;
 
+	/**
+	 * This means we do have a constant. In this case, we will reorder the operands to put the constant into %rax, and
+	 * first operand as the explicit source
+	 */
 	} else {
-		//Move the constant into a register
-		instruction_t* constant_movement = emit_constant_move_instruction(emit_temp_var(destination_type), multiplication_instruction->operands.oir.constant_operand);
-		insert_instruction_before_given(constant_movement, multiplication_instruction);
+		//We first need to move the first operand into RAX
+		instruction_t* constant_move_to_rax = emit_constant_move_instruction(emit_temp_var(multiplication_instruction->operands.oir.operand1->type), multiplication_instruction->operands.oir.constant_operand);
 
-		multiplication_instruction->operands.x86.source_register2 = constant_movement->operands.x86.destination_register;
+		//Insert the move to rax before the multiplication instruction
+		insert_instruction_before_given(constant_move_to_rax, multiplication_instruction);
+
+		//The implicit source comes from here
+		implicit_rax_source = constant_move_to_rax->operands.x86.destination_register;
+
+		//And the explicit source is operand1
+		explicit_source = multiplication_instruction->operands.oir.operand1;
 	}
+
+	/**
+	 * Step 3: Setup the multiplication instruction itself. This will include moving
+	 * over the implicit source into source_register1 and dealing with the two destinations
+	 */
+	multiplication_instruction->instruction_type = select_unsigned_mulitplication_instruction(size);
+	multiplication_instruction->operands.x86.source_register1 = implicit_rax_source;
+	multiplication_instruction->operands.x86.source_register2 = explicit_source;
+	multiplication_instruction->operands.x86.destination_register = rax_destination;
+	multiplication_instruction->operands.x86.destination_register2 = rdx_destination;
 
 	/**
 	 * Step 4: once everything is done, we'll need to move the result out of %rax destination into what our actual assignee was
