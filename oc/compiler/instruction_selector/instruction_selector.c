@@ -4306,12 +4306,10 @@ static inline u_int8_t is_instruction_memory_operand_compatible_binary_operation
 		 */
 		case MINUS:
 		case PLUS:
-		//case STAR:
-		//TODO UNCOMMENT AS WE SUPPORT MORE AND MORE
+		case STAR:
 			type_operating_over = get_destination_type_for_binary_operation_instruction(instruction);
 			break;
 
-		//TODO ADD MORE
 		default:
 			return FALSE;
 	}
