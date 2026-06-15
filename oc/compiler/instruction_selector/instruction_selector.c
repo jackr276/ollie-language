@@ -9660,12 +9660,38 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	three_addr_var_t* rdx_destination = emit_temp_var(destination_type);
 
 	/**
+	 * We'll need holders for the implicit and explicit sources here because
+	 * we may intelligently reorder to save on instructions
+	 */
+	three_addr_var_t* implicit_rax_source;
+	three_addr_var_t* explicit_source;
+
+	/**
 	 * Step 1: Move the first operand into %rax. This is also known as the "implicit source". We will first check
 	 * if we need to do any conversions here
 	 */
 	if(is_converting_move_required(destination_type, multiplication_instruction->operands.oir.operand1->type) == TRUE){
 		multiplication_instruction->operands.oir.address_operand1 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->operands.oir.operand1, destination_type);
 	}
+
+	/**
+	 * Step 2: Determine what our implicit source(rax) and explicit source(on the instruction)
+	 * should be.
+	 *
+	 * We should be intelligently reordering instructions here so that if we do have a constant
+	 * operand, we treat that as the implicit source. The only way that that works is because
+	 * we're doing multiplication here. Division and modulo it would never work. This will allow 
+	 * us to minimize the number of move instructions
+	 */
+	if(multiplication_instruction->operands.oir.operand2 != NULL){
+
+
+	} else {
+
+	}
+
+
+
 
 	//We first need to move the first operand into RAX
 	instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(multiplication_instruction->operands.oir.operand1->type), multiplication_instruction->operands.oir.operand1);
