@@ -3517,6 +3517,8 @@ static void print_dec_instruction(FILE* fl, instruction_t* instruction, variable
 
 /**
  * Print an usigned multiplication instruction, in all the forms it can take
+ *
+ * NOTE: IMPLICIT SOURCES ARE ALWAYS IN SOURCE REGISTER 1
  */
 static void print_unsigned_multiplication_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	//First we'll print out the appropriate variety of addition
@@ -3538,14 +3540,15 @@ static void print_unsigned_multiplication_instruction(FILE* fl, instruction_t* i
 			break;
 	}
 
-	//We'll only print the source register, there is no explicit destination
-	//register
-	print_variable(fl, instruction->operands.x86.source_register1, mode);
+	/**
+	 * Source register *2* is the explicit source
+	 */
+	print_variable(fl, instruction->operands.x86.source_register2, mode);
 
 	//Print where this went
 	fprintf(fl, " /* Implicit Source: ");
 	//Print out the implied source
-	print_variable(fl, instruction->operands.x86.source_register2, mode);
+	print_variable(fl, instruction->operands.x86.source_register1, mode);
 
 	//Print where this went
 	fprintf(fl, " -->  ");
@@ -3632,19 +3635,21 @@ static void print_division_instruction(FILE* fl, instruction_t* instruction, var
 			break;
 	}
 
-	//We'll only have a source register here
-	print_variable(fl, instruction->operands.x86.source_register1, mode);
+	//The divisor is in the second source register
+	print_variable(fl, instruction->operands.x86.source_register2, mode);
 
 	//Print the implied source
 	fprintf(fl, " /* Dividend: ");
 	
-	//Print out the higher order bit source if need be
+	/**
+	 * The dividend always comes from source register 1 and occasionally the address register
+	 */
 	if(instruction->operands.x86.address_register1 != NULL){
 		print_variable(fl, instruction->operands.x86.address_register1, mode);
 		fprintf(fl, ":");
 	}
+	print_variable(fl, instruction->operands.x86.source_register1, mode);
 
-	print_variable(fl, instruction->operands.x86.source_register2, mode);
 	//Print out both the quotient and the remainder
 	fprintf(fl, " --> Quotient: ");
 	print_variable(fl, instruction->operands.x86.destination_register, mode);
