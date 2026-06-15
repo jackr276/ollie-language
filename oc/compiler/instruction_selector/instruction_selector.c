@@ -9671,7 +9671,7 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	 * if we need to do any conversions here
 	 */
 	if(is_converting_move_required(destination_type, multiplication_instruction->operands.oir.operand1->type) == TRUE){
-		multiplication_instruction->operands.oir.address_operand1 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->operands.oir.operand1, destination_type);
+		multiplication_instruction->operands.oir.operand1 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->operands.oir.operand1, destination_type);
 	}
 
 	/**
@@ -9688,7 +9688,7 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 		 * If we do *not* have a constant operand, then we will move op1 into rax, and use op2 as the
 		 * explicit source
 		 */
-		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(multiplication_instruction->operands.oir.operand1->type), multiplication_instruction->operands.oir.operand1);
+		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(destination_type), multiplication_instruction->operands.oir.operand1);
 
 		//This goes in before the given
 		insert_instruction_before_given(move_to_rax, multiplication_instruction);
@@ -9713,7 +9713,7 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	 */
 	} else {
 		//We first need to move the first operand into RAX
-		instruction_t* constant_move_to_rax = emit_constant_move_instruction(emit_temp_var(multiplication_instruction->operands.oir.operand1->type), multiplication_instruction->operands.oir.constant_operand);
+		instruction_t* constant_move_to_rax = emit_constant_move_instruction(emit_temp_var(destination_type), multiplication_instruction->operands.oir.constant_operand);
 
 		//Insert the move to rax before the multiplication instruction
 		insert_instruction_before_given(constant_move_to_rax, multiplication_instruction);
