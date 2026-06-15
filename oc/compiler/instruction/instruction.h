@@ -203,10 +203,6 @@ struct three_addr_var_t{
 	//What is the parameter number of this var? Used for parameter passing. If
 	//it is 0, it's ignored
 	u_int32_t class_relative_parameter_order;
-	//What is the indirection level
-	//Is this variable dereferenced in some way
-	//(either loaded from or stored to)
-	u_int8_t is_dereferenced;
 	//Does this set condition codes?
 	u_int8_t sets_cc;
 	//Does this derive from an FP comparison
@@ -923,13 +919,13 @@ instruction_t* emit_elaborative_param_starting_offset_calculation(three_addr_var
 /**
  * Are two variables equal? A helper method for searching
  */
-u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirection);
+u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b);
 
 /**
  * Are two variables equal regardless of their SSA status? This function should only ever be used
  * by the instruction selector, under very careful circumstances
  */
-u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirection);
+u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b);
 
 /**
  * Emit a complete, one-for-one copy of an instruction

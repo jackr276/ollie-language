@@ -2373,7 +2373,18 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			//Now we'll do the first and second operands
 			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, " %s ", op_to_string(stmt->op));
-			print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
+
+			/**
+			 * If we have *no* memory access, then just print operand 2. Otherwise,
+			 * we do have memory access, and we'll need to print out our addressing
+			 * mode expression
+			 */
+			if(stmt->memory_access_type == NO_MEMORY_ACCESS){
+				print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
+			} else {
+				printf("LOAD ");
+				print_OIR_addressing_mode_expression(fl, stmt, PRINTING_VAR_INLINE);
+			}
 
 			//And end it out here
 			fprintf(fl, "\n");
@@ -3541,9 +3552,15 @@ static void print_unsigned_multiplication_instruction(FILE* fl, instruction_t* i
 	}
 
 	/**
-	 * Source register *2* is the explicit source
+	 * There are 2 options here for our explicit source:
+	 * 	1.) We could have a variable in the second source register
+	 * 	2.) We could have an addressing mode expression
 	 */
-	print_variable(fl, instruction->operands.x86.source_register2, mode);
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		print_variable(fl, instruction->operands.x86.source_register2, mode);
+	} else {
+		print_x86_addressing_mode_expression(fl, instruction, mode);
+	}
 
 	//Print where this went
 	fprintf(fl, " /* Implicit Source: ");
@@ -3584,11 +3601,19 @@ static void print_signed_multiplication_instruction(FILE* fl, instruction_t* ins
 			break;
 	}
 
-	//Print the appropriate variable here
-	if(instruction->operands.x86.source_register1 != NULL){
-		print_variable(fl, instruction->operands.x86.source_register1, mode);
+	/**
+	 * We may have a register, immediate *or* memory destination
+	 * source and we need to account for all of that here
+	 */
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		if(instruction->operands.x86.source_register1 != NULL){
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
+		} else {
+			print_immediate_value(fl, instruction->operands.x86.source_immediate);
+		}
+
 	} else {
-		print_immediate_value(fl, instruction->operands.x86.source_immediate);
+		print_x86_addressing_mode_expression(fl, instruction, mode);
 	}
 
 	//Needed comma
@@ -3682,11 +3707,20 @@ static void print_addition_instruction(FILE* fl, instruction_t* instruction, var
 			break;
 	}
 
-	//Print the appropriate variable here
-	if(instruction->operands.x86.source_register1 != NULL){
-		print_variable(fl, instruction->operands.x86.source_register1, mode);
+	/**
+	 * If we do not have any memory access, then we may have a constant or register
+	 * source operand. Otherwise, we will have an addressing mode expression for 
+	 * the source
+	 */
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		if(instruction->operands.x86.source_register1 != NULL){
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
+		} else {
+			print_immediate_value(fl, instruction->operands.x86.source_immediate);
+		}
+
 	} else {
-		print_immediate_value(fl, instruction->operands.x86.source_immediate);
+		print_x86_addressing_mode_expression(fl, instruction, mode);
 	}
 
 	//Needed comma
@@ -3715,8 +3749,12 @@ static inline void print_sse_addition_instruction(FILE* fl, instruction_t* instr
 			break;
 	}
 
-	//No chance for an immediate value here
-	print_variable(fl, instruction->operands.x86.source_register1, mode);
+	//We either have a source register or we have an addressing operation
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
+	} else {
+		print_x86_addressing_mode_expression(fl, instruction, mode);
+	}
 
 	//Needed comma
 	fprintf(fl, ", ");
@@ -3750,11 +3788,18 @@ static void print_subtraction_instruction(FILE* fl, instruction_t* instruction, 
 			break;
 	}
 
-	//Print the appropriate variable here
-	if(instruction->operands.x86.source_register1 != NULL){
-		print_variable(fl, instruction->operands.x86.source_register1, mode);
+	//If we have no memory access then print out the source register or immediate source
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		//Print the appropriate variable here
+		if(instruction->operands.x86.source_register1 != NULL){
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
+		} else {
+			print_immediate_value(fl, instruction->operands.x86.source_immediate);
+		}
+
+	//Otherwise there won't be a source register and instead we'll have an addressing operation
 	} else {
-		print_immediate_value(fl, instruction->operands.x86.source_immediate);
+		print_x86_addressing_mode_expression(fl, instruction, mode);
 	}
 
 	//Needed comma
@@ -3783,8 +3828,14 @@ static inline void print_sse_subtraction_instruction(FILE* fl, instruction_t* in
 			break;
 	}
 
-	//We don't ever need to worry about an immediate value for SSE instructions
-	print_variable(fl, instruction->operands.x86.source_register1, mode);
+	//If we have no memory access then print out the source register
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
+
+	//Otherwise there won't be a source register and instead we'll have an addressing operation
+	} else {
+		print_x86_addressing_mode_expression(fl, instruction, mode);
+	}
 
 	//Needed comma
 	fprintf(fl, ", ");
@@ -3812,8 +3863,12 @@ static inline void print_sse_multiplication_instruction(FILE* fl, instruction_t*
 			break;
 	}
 
-	//We don't ever need to worry about an immediate value for SSE instructions
-	print_variable(fl, instruction->operands.x86.source_register1, mode);
+	//We will either have a register source or a memmory movement source
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
+	} else {
+		print_x86_addressing_mode_expression(fl, instruction, mode);
+	}
 
 	//Needed comma
 	fprintf(fl, ", ");
@@ -5433,9 +5488,6 @@ instruction_t* emit_store_base_address_only(three_addr_var_t* base_address, thre
 	//The first address op is the memory address
 	stmt->operands.oir.address_operand1 = base_address;
 
-	//This is being dereferenced
-	base_address->is_dereferenced = TRUE;
-
 	//Important - add the type that we expect to be writing to in memory
 	stmt->type_storage.memory_read_write_type = memory_write_type;
 
@@ -5461,9 +5513,6 @@ instruction_t* emit_store_base_address_and_index(three_addr_var_t* base_address,
 
 	//Base address is the first operand
 	stmt->operands.oir.address_operand1 = base_address;
-
-	//This is being dereferenced
-	base_address->is_dereferenced = TRUE;
 
 	//Now the index goes in here
 	stmt->operands.oir.address_operand2 = index;
@@ -5493,9 +5542,6 @@ instruction_t* emit_store_base_address_and_constant_offset(three_addr_var_t* bas
 
 	//The base address is the first operand
 	stmt->operands.oir.address_operand1 = base_address;
-
-	//This is being dereferenced
-	base_address->is_dereferenced = TRUE;
 
 	//The offset placeholder is used for our offset, not constant operand 
 	stmt->operands.oir.address_offset = offset;
@@ -5554,9 +5600,6 @@ instruction_t* emit_constant_store_base_address_and_constant_offset(three_addr_v
 
 	//The base address that we're assigning to
 	stmt->operands.oir.address_operand1 = base_address;
-
-	//This is being dereferenced
-	base_address->is_dereferenced = TRUE;
 
 	//The offset placeholder is used for our offset, not constant operand 
 	stmt->operands.oir.address_offset = offset;
@@ -8616,14 +8659,9 @@ u_int32_t get_estimated_cycle_count(instruction_t* instruction){
 /**
  * Are two variables equal? A helper method for searching
  */
-u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirection){
+u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b){
 	//Easy way to tell here
 	if(a == NULL || b == NULL){
-		return FALSE;
-	}
-
-	//Are we ignoring indirection? If not, we need to compare the dereference here
-	if(ignore_indirection == FALSE && a->is_dereferenced != b->is_dereferenced){
 		return FALSE;
 	}
 
@@ -8661,14 +8699,9 @@ u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t igno
 /**
  * Are two variables equal regardless of their SSA level? A helper method for searching
  */
-u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirection){
+u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b){
 	//Easy way to tell here
 	if(a == NULL || b == NULL){
-		return FALSE;
-	}
-
-	//Are we ignoring indirection? If not, we need to compare the dereference here
-	if(ignore_indirection == FALSE && a->is_dereferenced != b->is_dereferenced){
 		return FALSE;
 	}
 

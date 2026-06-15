@@ -1367,7 +1367,7 @@ static inline u_int8_t does_block_assign_variable(basic_block_t* block, three_ad
 		three_addr_var_t* candidate = dynamic_array_get_at(&(block->assigned_variables), i);
 
 		//If they're equal then get out
-		if(variables_equal(variable, candidate, FALSE) == TRUE){
+		if(variables_equal(variable, candidate) == TRUE){
 			return TRUE;
 		}
 	}
@@ -1827,7 +1827,7 @@ static inline conditional_status_t determine_conditional_status(instruction_t* c
 					 * we would be looking for a three_addr_code_assn_const statement. If we don't have
 					 * that we'll also leave
 					 */
-					if(variables_equal(conditional->operands.oir.operand1, instruction_cursor->operands.oir.assignee, FALSE) == TRUE){
+					if(variables_equal(conditional->operands.oir.operand1, instruction_cursor->operands.oir.assignee) == TRUE){
 						//This has to be an assn const statement to work, so if it's not then leave
 						if(instruction_cursor->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
 							break;
@@ -1866,7 +1866,7 @@ static inline conditional_status_t determine_conditional_status(instruction_t* c
 			 * If we end up with cases where op1 == op2, then we are going to be able to simplify
 			 * accordingly
 			 */
-			if(variables_equal(conditional->operands.oir.operand1, conditional->operands.oir.operand2, FALSE) == TRUE){
+			if(variables_equal(conditional->operands.oir.operand1, conditional->operands.oir.operand2) == TRUE){
 				switch(conditional->op){
 					/**
 					 * For logical and/logical or, we won't be able to completely
@@ -1993,7 +1993,7 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 		//Let's now trace back until we can find what it relies on
 		while(statement_cursor != NULL){
 			//If they're equal we can leave
-			if(variables_equal(branch_relies_on, statement_cursor->operands.oir.assignee, FALSE) == TRUE){
+			if(variables_equal(branch_relies_on, statement_cursor->operands.oir.assignee) == TRUE){
 				break;
 			}
 

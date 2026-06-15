@@ -805,7 +805,7 @@ static inline live_range_t* find_live_range_with_variable(dynamic_array_t* live_
 
 		//If the variables are equal(ignoring SSA and dereferencing) then we have a match
 		for(u_int16_t j  = 0 ; j  < current->variables.current_index; j++){
-			if(variables_equal_no_ssa(variable, dynamic_array_get_at(&(current->variables), j), TRUE) == TRUE){
+			if(variables_equal_no_ssa(variable, dynamic_array_get_at(&(current->variables), j)) == TRUE){
 				return current;
 			}
 		}

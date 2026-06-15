@@ -1430,7 +1430,7 @@ static void add_variable_to_use_set(three_addr_var_t* variable, basic_block_t* b
 		three_addr_var_t* defined = dynamic_array_get_at(def_set, i);
 
 		//It's been defined in this block, so we don't care
-		if(variables_equal_no_ssa(defined, variable, TRUE) == TRUE){
+		if(variables_equal_no_ssa(defined, variable) == TRUE){
 			return;
 		}
 	}
@@ -1442,7 +1442,7 @@ static void add_variable_to_use_set(three_addr_var_t* variable, basic_block_t* b
 		three_addr_var_t* used = dynamic_array_get_at(use_set, i);
 
 		//If it's already been used then we don't need to care
-		if(variables_equal_no_ssa(used, variable, TRUE) == TRUE){
+		if(variables_equal_no_ssa(used, variable) == TRUE){
 			return;
 		}
 	}
@@ -1492,7 +1492,7 @@ static inline void add_variable_to_def_set(three_addr_var_t* variable, basic_blo
 		three_addr_var_t* defined = dynamic_array_get_at(def_set, i);
 
 		//It's been defined in this block, so we don't care
-		if(variables_equal_no_ssa(defined, variable, TRUE) == TRUE){
+		if(variables_equal_no_ssa(defined, variable) == TRUE){
 			return;
 		}
 	}
@@ -2637,7 +2637,7 @@ static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, t
 	} else {
 		if(basic_block->exit_statement != NULL
 	 		&& basic_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-			&& variables_equal(basic_block->exit_statement->operands.oir.assignee, tested_variable, FALSE) == TRUE){
+			&& variables_equal(basic_block->exit_statement->operands.oir.assignee, tested_variable) == TRUE){
 			//Use the constant enhancment to make this happen
 			instruction_t* test_if_not_zero = emit_test_if_not_zero_for_const_statement(emit_temp_var(u8), basic_block->exit_statement->operands.oir.constant_operand);
 
@@ -2806,7 +2806,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		u_int8_t type_signed;
 		if(current_block->exit_statement != NULL
 			&& is_binary_operation(current_block->exit_statement)
-			&& variables_equal(current_block->exit_statement->operands.oir.assignee, conditional_decider, FALSE) == TRUE){
+			&& variables_equal(current_block->exit_statement->operands.oir.assignee, conditional_decider) == TRUE){
 
 			//If we have a result type use that, otherwise take from op1
 			if(current_block->exit_statement->type_storage.result_type != NULL){
@@ -3093,7 +3093,7 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 		u_int8_t type_signed;
 		if(current_block->exit_statement != NULL
 			&& is_binary_operation(current_block->exit_statement)
-			&& variables_equal(current_block->exit_statement->operands.oir.assignee, conditional_decider, FALSE) == TRUE){
+			&& variables_equal(current_block->exit_statement->operands.oir.assignee, conditional_decider) == TRUE){
 
 			//If we have a result type use that, otherwise take from op1
 			if(current_block->exit_statement->type_storage.result_type != NULL){
@@ -6073,7 +6073,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				if(last_instruction != NULL
 					&& last_instruction->operands.oir.assignee != NULL
 					&& last_instruction->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& variables_equal_no_ssa(last_instruction->operands.oir.assignee, result_var, FALSE) == TRUE){
+					&& variables_equal_no_ssa(last_instruction->operands.oir.assignee, result_var) == TRUE){
 
 					switch(last_instruction->statement_type){
 						case THREE_ADDR_CODE_BIN_OP_STMT:

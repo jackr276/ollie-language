@@ -299,13 +299,14 @@ static inline u_int8_t does_operation_use_addressing_mode(instruction_t* instruc
 		return FALSE;
 	}
 
-	switch(instruction->statement_type){
-		case THREE_ADDR_CODE_LOAD_STATEMENT:
-		case THREE_ADDR_CODE_STORE_STATEMENT:
-		case THREE_ADDR_CODE_LEA_STMT:
-			return TRUE;
-		default:
-			return FALSE;
+	/**
+	 * If we use any addressing mode at all, then this counts as an addressing mode
+	 * instruction
+	 */
+	if(instruction->addressing_mode != ADDRESSING_MODE_NONE){
+		return TRUE;
+	} else {
+		return FALSE;
 	}
 }
 
@@ -469,7 +470,14 @@ static inline basic_block_t* does_block_end_in_jump(basic_block_t* block){
  */
 static inline u_int8_t is_expression_eligible_for_value_numbering(instruction_t* instruction){
 	switch(instruction->statement_type){
+		//These are only eligible if there is no memory access
 		case THREE_ADDR_CODE_BIN_OP_STMT:
+			if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+				return TRUE;
+			} else {
+				return FALSE;
+			}
+
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 			return TRUE;
 		default:
@@ -2089,7 +2097,7 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		 * Turns into 
 		 * x_1 <- x_0 & 1
 		 */
-		if(variables_equal_no_ssa(mod_instruction->operands.oir.assignee, mod_instruction->operands.oir.operand1, TRUE) == TRUE){
+		if(variables_equal_no_ssa(mod_instruction->operands.oir.assignee, mod_instruction->operands.oir.operand1) == TRUE){
 			//Make this constant the mask now
 			mod_instruction->operands.oir.constant_operand->constant_value.unsigned_long_constant = mask;
 
@@ -4266,6 +4274,134 @@ static inline void perform_memory_address_remediations(instruction_window_t* win
 
 
 /**
+ * If the given instruction a memory operand compatible binary operation?
+ *
+ * There are a few critera for this to be true:
+ * 	1.) It must be one of the types of binary operations that support memory source operands(for
+ * 		example, shifts don't count because they do not support it)
+ * 	2.) There must be *no* converting moves required. If there are, then doing this work is actually
+ * 		only going to make our lives more difficult in the end
+ */
+static inline u_int8_t is_instruction_memory_operand_compatible_binary_operation(instruction_t* instruction){
+	//First disqualifier is this
+	if(instruction == NULL || instruction->statement_type != THREE_ADDR_CODE_BIN_OP_STMT){
+		return FALSE;
+	}
+
+	/**
+	 * If the second operand is NULL, it means that we've already done the memory operand
+	 * conversion. As such, we can just bail out because we cannot do this twice
+	 */
+	if(instruction->operands.oir.operand2 == NULL){
+		return FALSE;
+	}
+
+	generic_type_t* type_operating_over;
+
+	switch(instruction->op){
+		/**
+		 * Everything here is allowed to have a source operand
+		 * that is from memory. We will also determine the operating
+		 * type at this point 
+		 */
+		case MINUS:
+		case PLUS:
+		case STAR:
+			type_operating_over = get_destination_type_for_binary_operation_instruction(instruction);
+			break;
+
+		default:
+			return FALSE;
+	}
+
+	/**
+	 * If we need to convert for op1 then we can't do this
+	 */
+	if(is_converting_move_required(type_operating_over, instruction->operands.oir.operand1->type) == TRUE){
+		return FALSE;
+	}
+
+	/**
+	 * Same story for operand2
+	 */
+	if(is_converting_move_required(type_operating_over, instruction->operands.oir.operand2->type) == TRUE){
+		return FALSE;
+	}
+
+	//If we've survived to here then we at least know that the binary operation is compatible
+	return TRUE;
+}
+
+
+/**
+ * Is the given instruction a load operation that will *not* require a converting load? This is used
+ * for determining if we are able to combine a load with a binary operation. If the load requires any
+ * kind of converting move from the memory region to itself, we are immediately unable to do the combination
+ */
+static inline u_int8_t is_instruction_non_converting_load_operation(instruction_t* instruction){
+	//First disqualifiers here
+	if(instruction == NULL || instruction->statement_type != THREE_ADDR_CODE_LOAD_STATEMENT){
+		return FALSE;
+	}
+
+	//Extract the two types that we'll need to compare
+	generic_type_t* destination_type = instruction->operands.oir.assignee->type;
+	generic_type_t* source_type = instruction->type_storage.memory_read_write_type;
+
+	//If we need to do any conversions at all this will not work
+	if(is_converting_move_required(destination_type, source_type) == TRUE){
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+
+/**
+ * Combine a given binary operation with a source operand load
+ *
+ * NOTE: It is assumed that, in the instruction window that is given,
+ * instruction 1 will always be the load and instruction 2 will always
+ * be the binary operation
+ */
+static inline void combine_binary_operation_with_source_operand_load(instruction_window_t* window){
+	//Extract these for convenience
+	instruction_t* load_operation = window->instruction1;
+	instruction_t* binary_operation = window->instruction2;
+
+	/**
+	 * Step 1: Copy over all of the addressing information from the load
+	 * operation over into the binary operation. We will also
+	 * need to copy over the addressing mode itself
+	 */
+	binary_operation->operands.oir.address_multiplier = load_operation->operands.oir.address_multiplier;
+	binary_operation->operands.oir.address_offset = load_operation->operands.oir.address_offset;
+	binary_operation->operands.oir.address_operand1 = load_operation->operands.oir.address_operand1;
+	binary_operation->operands.oir.address_operand2 = load_operation->operands.oir.address_operand2;
+	binary_operation->operands.oir.rip_offset_var = load_operation->operands.oir.rip_offset_var;
+	binary_operation->addressing_mode = load_operation->addressing_mode;
+
+	/**
+	 * Step 2: NULL out the old operand2 as it is no longer in use
+	 */
+	binary_operation->operands.oir.operand2 = NULL;
+
+	/**
+	 * Step 3: Flag that we are a "from memory" movement operation on the binary operation itself. This
+	 * will flag to the selector/printer that we are expecting addressing info here
+	 */
+	binary_operation->memory_access_type = READ_FROM_MEMORY;
+
+	/**
+	 * Step 4: The load is now useless, so delete it and then rebuild the entire window around
+	 * the binary operation
+	 */
+	delete_statement(load_operation);
+	reconstruct_window(window, binary_operation);
+}
+
+
+/**
  * The pattern optimizer takes in a window and performs hyperlocal optimzations
  * on passing instructions. If we do end up deleting instructions, we'll need
  * to take care with how that affects the window that we take in
@@ -4316,7 +4452,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction1->operands.oir.assignee->use_count <= 1
 		&& window->instruction2 != NULL
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT 
-		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.operand1, FALSE) == TRUE){
+		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.operand1) == TRUE){
 
 		//Grab this out for convenience
 		instruction_t* constant_assignment = window->instruction1;
@@ -4359,7 +4495,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instruction2? Let's check.
 		if(constant_assignment->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 			&& constant_assignment->operands.oir.assignee->use_count <= 1
-			&& variables_equal(constant_assignment->operands.oir.assignee, binary_operation->operands.oir.operand2, FALSE) == TRUE){
+			&& variables_equal(constant_assignment->operands.oir.assignee, binary_operation->operands.oir.operand2) == TRUE){
 
 			//Let's mark that this is now a binary op with const statement
 			binary_operation->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
@@ -4399,7 +4535,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instruction2? Let's check.
 		if(constant_assignment->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 			&& constant_assignment->operands.oir.assignee->use_count <= 1
-			&& variables_equal(constant_assignment->operands.oir.assignee, binary_operation->operands.oir.operand2, FALSE) == TRUE){
+			&& variables_equal(constant_assignment->operands.oir.assignee, binary_operation->operands.oir.operand2) == TRUE){
 
 			//Let's mark that this is now a binary op with const statement
 			binary_operation->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
@@ -4438,7 +4574,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& binary_operator_valid_for_inplace_constant_match(window->instruction2->op) == TRUE
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& variables_equal(window->instruction2->operands.oir.operand1, window->instruction1->operands.oir.assignee, FALSE) == TRUE){
+		&& variables_equal(window->instruction2->operands.oir.operand1, window->instruction1->operands.oir.assignee) == TRUE){
 
 		//Extract these two for convenience
 		instruction_t* constant_assignment = window->instruction1;
@@ -4510,7 +4646,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction3->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& binary_operator_valid_for_inplace_constant_match(window->instruction3->op) == TRUE
 		&& window->instruction2->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& variables_equal(window->instruction3->operands.oir.operand1, window->instruction2->operands.oir.assignee, FALSE) == TRUE){
+		&& variables_equal(window->instruction3->operands.oir.operand1, window->instruction2->operands.oir.assignee) == TRUE){
 
 		//Extract these two for convenience
 		instruction_t* constant_assignment = window->instruction2;
@@ -4594,7 +4730,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		
 		//If the variables are temp and the first one's assignee is the same as the second's op1, we can fold
 		if(load->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP 
-			&& variables_equal(load->operands.oir.assignee, move->operands.oir.operand1, TRUE) == TRUE
+			&& variables_equal(load->operands.oir.assignee, move->operands.oir.operand1) == TRUE
 			&& load->operands.oir.assignee->use_count <= 1){
 
 			//The load's assignee now is the move's assignee
@@ -4637,7 +4773,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 *  t4 <- x
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
-		&& variables_equal(window->instruction1->operands.oir.operand1, window->instruction1->operands.oir.operand2, TRUE) == TRUE){
+		&& variables_equal(window->instruction1->operands.oir.operand1, window->instruction1->operands.oir.operand2) == TRUE){
 		//Grab this out
 		instruction_t* binary_operation = window->instruction1; 
 
@@ -4897,7 +5033,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 */
 	if(is_instruction_binary_operation_with_const(window->instruction1) == TRUE
 		&& is_instruction_binary_operation_with_const(window->instruction2) == TRUE
-		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.operand1, TRUE) == TRUE){
+		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.operand1) == TRUE){
 		//Extract these both for convenience
 		instruction_t* first = window->instruction1;
 		instruction_t* second = window->instruction2;
@@ -5075,7 +5211,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction1->op == PLUS
 		&& window->instruction2->op == PLUS
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& variables_equal(window->instruction2->operands.oir.operand1, window->instruction1->operands.oir.assignee, TRUE) == TRUE) {
+		&& variables_equal(window->instruction2->operands.oir.operand1, window->instruction1->operands.oir.assignee) == TRUE) {
 
 		//Extract for convenience
 		instruction_t* binary_operation = window->instruction1;
@@ -5130,7 +5266,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& (window->instruction1->op == STAR || window->instruction1->op == PLUS)
 		&& window->instruction2->op == PLUS
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& variables_equal(window->instruction2->operands.oir.operand2, window->instruction1->operands.oir.assignee, TRUE) == TRUE) {
+		&& variables_equal(window->instruction2->operands.oir.operand2, window->instruction1->operands.oir.assignee) == TRUE) {
 
 		//Extract for convenience
 		instruction_t* bin_operation_with_const = window->instruction1;
@@ -5236,7 +5372,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP //Make sure it's a temp var
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT 
-		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.operand1, FALSE) == TRUE){
+		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.operand1) == TRUE){
 
 		//Grab these for convenience
 		instruction_t* first_lea = window->instruction1;
@@ -5327,7 +5463,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		 * do match, it will be picked up in the next go around
 		 */
 		if(does_addressing_mode_use_address_operand1(addressing_operation->addressing_mode) == TRUE
-			&& variables_equal(addressing_operation->operands.oir.address_operand1, to_be_combined->operands.oir.assignee, TRUE) == TRUE){
+			&& variables_equal(addressing_operation->operands.oir.address_operand1, to_be_combined->operands.oir.assignee) == TRUE){
 			/**
 			 * Go based on what kind of statement we have as the first way to split
 			 */
@@ -5360,7 +5496,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			}
 
 		} else if(does_addressing_mode_use_address_operand2(addressing_operation->addressing_mode) == TRUE
-			&& variables_equal(addressing_operation->operands.oir.address_operand2, to_be_combined->operands.oir.assignee, TRUE) == TRUE){
+			&& variables_equal(addressing_operation->operands.oir.address_operand2, to_be_combined->operands.oir.assignee) == TRUE){
 			/**
 			 * Go based on what kind of statement we have as the first way to split
 			 */
@@ -5545,7 +5681,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction2 != NULL
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& (window->instruction2->op == DOUBLE_AND || window->instruction2->op == DOUBLE_OR)
-		&& variables_equal(window->instruction2->operands.oir.operand1, window->instruction1->operands.oir.assignee, FALSE) == TRUE){
+		&& variables_equal(window->instruction2->operands.oir.operand1, window->instruction1->operands.oir.assignee) == TRUE){
 
 		//Grab these two out for convenience
 		instruction_t* constant_assignment = window->instruction1;
@@ -5792,7 +5928,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					/**
 					 * If we don't have something like x_1 = x_0 + 1, we can't be doing this so we'll leave
 					 */
-					if(variables_equal_no_ssa(first_instruction->operands.oir.assignee, first_instruction->operands.oir.operand1, TRUE) == FALSE){
+					if(variables_equal_no_ssa(first_instruction->operands.oir.assignee, first_instruction->operands.oir.operand1) == FALSE){
 						break;
 					}
 
@@ -5810,7 +5946,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					/**
 					 * If we don't have something like x_1 = x_0 - 1, we can't be doing this so we'll leave
 					 */
-					if(variables_equal_no_ssa(first_instruction->operands.oir.assignee, first_instruction->operands.oir.operand1, TRUE) == FALSE){
+					if(variables_equal_no_ssa(first_instruction->operands.oir.assignee, first_instruction->operands.oir.operand1) == FALSE){
 						break;
 					}
 
@@ -5915,6 +6051,25 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					break;
 			}
 		}
+	}
+
+
+	/**
+	 * ================== Combining loads with source arguments for binary operations =========================
+	 * In x86, many binary operations support having a source operand that is from memory. Doing this condenses
+	 * what would normally be a load and then an op into just one operation, which reduces overall register
+	 * pressure and looks cleaner. Due to the way this usually works in OIR we're only going to have to check
+	 * this for instructions 1 and 2(1 being the load source, 2 being the load destination)
+	 */
+	if(is_instruction_non_converting_load_operation(window->instruction1) == TRUE
+		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& window->instruction1->operands.oir.assignee->use_count <= 1
+		&& is_instruction_memory_operand_compatible_binary_operation(window->instruction2) == TRUE
+		&& variables_equal(window->instruction2->operands.oir.operand2, window->instruction1->operands.oir.assignee) == TRUE){
+
+		//Let the helper take care of the whole thing
+		combine_binary_operation_with_source_operand_load(window);
+		changed = TRUE;
 	}
 
 	//Return whether or not we changed the block return changed;
@@ -6098,7 +6253,7 @@ static inline u_int8_t convert_phi_function_if_redundant(value_numbering_table_t
 		three_addr_var_t* compare_to_param = dynamic_array_get_at(parameters, i);
 
 		//If these aren't equal then we fail out
-		if(variables_equal(first_parameter, compare_to_param, FALSE) == FALSE){
+		if(variables_equal(first_parameter, compare_to_param) == FALSE){
 			return FALSE;
 		}
 	}
@@ -8613,6 +8768,342 @@ static three_addr_var_t* emit_byte_copy_of_variable(three_addr_var_t* source){
 
 
 /**
+ * Handle the base address for a given memory movement instruction. This rule does not care
+ * whether we are a load or a store, it is completely agnostic. This will handle the
+ * base address appropriately and update any/all addressing mode values that it needs
+ * to
+ */
+static inline void handle_base_address_and_addressing_mode_for_instruction(instruction_t* instruction){
+	//Needed declarations for later
+	int64_t stack_offset = 0;
+	three_addr_var_t* base_address;
+	symtab_variable_record_t* linked_var;
+	instruction_t* rip_offset_lea;
+
+	/**
+	 * First standardize everyting by moving it all over into the x86 registers off
+	 * the bat. This avoids any confusion/cross lookups and x86 register sections
+	 *
+	 * We go through a standard Extract-Transform-Load(ETL) process to do this
+	 */
+
+	/**
+	 * Step 1: Extract all fields(E)
+	 */
+	three_addr_var_t* address_register1 = instruction->operands.oir.address_operand1;
+	three_addr_var_t* address_register2 = instruction->operands.oir.address_operand2;
+	three_addr_var_t* rip_offset_var = instruction->operands.oir.rip_offset_var;
+	three_addr_const_t* address_offset = instruction->operands.oir.address_offset;
+	u_int64_t address_multiplier = instruction->operands.oir.address_multiplier;
+
+	/**
+	 * Step 2: Transform the second address register if a type adjustment is needed(T)
+	 *
+	 * We are *always* using 64 bit registers for addressing operations in memory movements
+	 */
+	if(address_register1 != NULL
+		&& address_register2 != NULL
+		&& is_converting_move_required(u64, address_register2->type) == TRUE){
+
+		//Let the helper emit and insert the move
+		address_register2 = create_and_insert_converting_move_instruction(instruction, address_register2, u64);
+	}
+
+	/**
+	 * Step 3: Load the finalized values into their needed spots on the x86 version 
+	 */
+	instruction->operands.x86.address_register1 = address_register1;
+	instruction->operands.x86.address_register2 = address_register2;
+	instruction->operands.x86.rip_offset_var = rip_offset_var;
+	instruction->operands.x86.address_offset = address_offset;
+	instruction->operands.x86.address_multiplier = address_multiplier;
+
+	/**
+	 * Now that everything has been moved over into the x86 region, we need
+	 * to now handle the memory address variables that often end up inside
+	 * of the base address(address_register1) field. Let's first extract
+	 * the values that we have in there to process
+	 */
+	base_address = instruction->operands.x86.address_register1;
+	//Remember there is a chance that this is NULL, it's not a guaranteed field
+	linked_var = base_address->linked_var;
+
+	/**
+	 * Go based on the variable type of the base address itself to make determinations
+	 */
+	switch(base_address->variable_type){
+		/**
+		 * This is the most common case. When we have a memory address, we are going to need
+		 * to handle it differently based on whether or not it's a global variable, and based
+		 * on what the stack offset is
+		 */
+		case VARIABLE_TYPE_MEMORY_ADDRESS:
+			/**
+			 * Use the linked variable and it's membership if it does exist
+			 */
+			if(linked_var != NULL){
+				switch(linked_var->membership){
+					/**
+					 * Global or static variable, we will need to load these as rip-relative
+					 */
+					case GLOBAL_VARIABLE:
+					case STATIC_VARIABLE:
+						switch(instruction->addressing_mode){
+							/**
+							 * Going from
+							 * 	store (t4) <- 5
+							 *
+							 * To 
+							 * 	store <var>(%rip) <- 5
+							 */
+							case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+								//Update the mode
+								instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
+
+								//Update the two operands
+								instruction->operands.x86.rip_offset_var = base_address;
+								instruction->operands.x86.address_register1 = instruction_pointer_variable;
+								
+								break;
+
+							/**
+							 * Going from
+							 * 	store 4(t4) <- 5
+							 *
+							 * To 
+							 * 	store 4+<var>(%rip) <- 5
+							 */
+							case ADDRESSING_MODE_OFFSET_ONLY:
+								//Update the mode
+								instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+
+								//Update the two operands
+								instruction->operands.x86.rip_offset_var = base_address;
+								instruction->operands.x86.address_register1 = instruction_pointer_variable;
+
+								break;
+
+							/**
+							 * For every other kind of addressing mode with the rip offset variable, we are actually
+							 * unable to combine it into one singular addressing mode value. Instead, we will need to calculate
+							 * the rip offset variable beforehand in a lea and then substitute that variable in for the 
+							 * base address
+							 */
+							default:
+								//Emit the rip offset address calculation here
+								rip_offset_lea = emit_global_variable_address_calculation_x86(base_address, instruction_pointer_variable, u64);
+
+								//Insert this right before our instruction
+								insert_instruction_before_given(rip_offset_lea, instruction);
+
+								//The base address now becomes this value
+								instruction->operands.x86.address_register1 = rip_offset_lea->operands.x86.destination_register;
+
+								break;
+						}
+						
+						break;
+
+					/**
+					 * We have a non global memory address variable. Any/all changes here are going to 
+					 * hinge around whether or not there is a present stack offset for us to consider. 
+					 * This will only change the addressing mode if we were not using the offset before
+					 */
+					default:
+						//No matter what the address register is now the stack pointer
+						instruction->operands.x86.address_register1 = stack_pointer_variable;
+
+						//Get the stack offset
+						stack_offset = linked_var->stack_region->function_local_base_address;
+
+						/**
+						 * Early exit - if we don't have a stack offset to worry
+						 * about then bail out now
+						 */
+						if(stack_offset == 0){
+							break;
+						}
+
+						/**
+						 * If we already use the addressing mode, we're going to need to sum
+						 * the offset value with what we've already got. Otherwise, we'll need
+						 * to create a fresh offset and update the addressing mode
+						 */
+						if(does_addressing_mode_use_offset_constant(instruction->addressing_mode) == TRUE){
+							//Let the helper sum with the existing offset value
+							sum_constant_with_raw_int64_value(instruction->operands.x86.address_offset, i64, stack_offset);
+
+						} else {
+							//Let's get the offset from this memory address
+							three_addr_const_t* offset = emit_direct_integer_or_char_constant(stack_offset, u64);
+
+							//Store the offset in the operands
+							instruction->operands.x86.address_offset = offset;
+
+							switch(instruction->addressing_mode){
+								case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+									instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+									break;
+
+								case ADDRESSING_MODE_REGISTERS_ONLY:
+									instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+									break;
+
+								case ADDRESSING_MODE_RIP_RELATIVE:
+									instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+									break;
+
+								case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+									instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE; 
+									break;
+
+								/**
+								 * Some invalid case here so we make the compiler panic
+								 */
+								default:
+									fprintf(stderr, "Fatal internal compiler error: invalid addressing mode %s hit\n",
+				 							addressing_mode_to_string(instruction->addressing_mode));
+									exit(1);
+							}
+						}
+
+						break;
+				}
+
+			/**
+			 * Otherwise we have a temporary variable. If this is the case then we don't need to
+			 * worry about anything regarding global/static vars, we can just emit the region
+			 */
+			} else {
+				//No matter what the address register is now the stack pointer
+				instruction->operands.x86.address_register1 = stack_pointer_variable;
+
+				//Get the stack offset
+				stack_offset = base_address->associated_memory_region.stack_region->function_local_base_address;
+
+				/**
+				 * Early exit - if we don't have a stack offset to worry
+				 * about then bail out now
+				 */
+				if(stack_offset == 0){
+					break;
+				}
+
+				/**
+				 * If we already use the addressing mode, we're going to need to sum
+				 * the offset value with what we've already got. Otherwise, we'll need
+				 * to create a fresh offset and update the addressing mode
+				 */
+				if(does_addressing_mode_use_offset_constant(instruction->addressing_mode) == TRUE){
+					//Let the helper sum with the existing offset value
+					sum_constant_with_raw_int64_value(instruction->operands.x86.address_offset, i64, stack_offset);
+
+				} else {
+					//Let's get the offset from this memory address
+					three_addr_const_t* offset = emit_direct_integer_or_char_constant(stack_offset, u64);
+
+					//Store the offset in the operands
+					instruction->operands.x86.address_offset = offset;
+
+					switch(instruction->addressing_mode){
+						case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+							instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+							break;
+
+						case ADDRESSING_MODE_REGISTERS_ONLY:
+							instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+							break;
+
+						case ADDRESSING_MODE_RIP_RELATIVE:
+							instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+							break;
+
+						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+							instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE; 
+							break;
+
+						/**
+						 * Some invalid case here so we make the compiler panic
+						 */
+						default:
+							fprintf(stderr, "Fatal internal compiler error: invalid addressing mode %s hit\n",
+									addressing_mode_to_string(instruction->addressing_mode));
+							exit(1);
+					}
+				}
+			}
+
+			break;
+
+		/**
+		 * A parameter address is a different type entirely. This will never be a global var
+		 * and it will never be 0. We need to emit a special kind of constant here to represent
+		 * what this is
+		 */
+		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+			//No matter what this always becomes the stack pointer variable
+			instruction->operands.x86.address_register1 = stack_pointer_variable;
+
+			//We need a special stack passed parameter offset for this
+			three_addr_const_t* stack_passed_parameter_offset = emit_stack_passed_parameter_offset_constant(base_address->associated_memory_region.stack_region, u64);
+
+			/**
+			 * If we already use the addressing mode, we're going to need to sum
+			 * the offset value with what we've already got. Otherwise, we'll need
+			 * to create a fresh offset and update the addressing mode
+			 */
+			if(does_addressing_mode_use_offset_constant(instruction->addressing_mode) == TRUE){
+				//Add the two constants, store the result in the paraemeter constant
+				add_constants(stack_passed_parameter_offset, instruction->operands.x86.address_offset);
+
+				//Replace the old offset with this new one
+				instruction->operands.x86.address_offset = stack_passed_parameter_offset;
+
+			} else {
+				//Update the offset in here
+				instruction->operands.x86.address_offset = stack_passed_parameter_offset;
+
+				//Now update the addressing mode to reflect that we have an offset
+				switch(instruction->addressing_mode){
+					case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+						instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+						break;
+
+					case ADDRESSING_MODE_REGISTERS_ONLY:
+						instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+						break;
+
+					case ADDRESSING_MODE_RIP_RELATIVE:
+						instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+						break;
+
+					case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+						instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE; 
+						break;
+
+					/**
+					 * Some invalid case here so we make the compiler panic
+					 */
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid addressing mode %s hit\n",
+								addressing_mode_to_string(instruction->addressing_mode));
+						exit(1);
+				}
+			}
+
+			break;
+			
+		/**
+		 * Nothing to do here. We will keep whatever addressing mode we entered into this instruction with
+		 * and simply update the address register from there
+		 */
+		default:
+			break;
+	}
+}
+
+
+/**
  * Select the appropriate left shift instruction based on the size and signedness
  */
 static inline instruction_type_t select_left_shift_instruction(variable_size_t size, u_int8_t is_signed){
@@ -8727,7 +9218,7 @@ static void handle_left_shift_instruction(instruction_window_t* window){
 	 * Now if op1 and the assignee line up, we are good. Otherwise we will
 	 * need to make them align and insert some actual instructions
 	 */
-	if(variables_equal_no_ssa(left_shift_instruction->operands.oir.assignee, left_shift_instruction->operands.oir.operand1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(left_shift_instruction->operands.oir.assignee, left_shift_instruction->operands.oir.operand1) == TRUE){
 		//Destination is the assignee
 		left_shift_instruction->operands.x86.destination_register = left_shift_instruction->operands.oir.assignee;
 
@@ -8909,7 +9400,7 @@ static void handle_right_shift_instruction(instruction_window_t* window){
 	 * Now if op1 and the assignee line up, we are good. Otherwise we will
 	 * need to make them align and insert some actual instructions
 	 */
-	if(variables_equal_no_ssa(right_shift_instruction->operands.oir.assignee, right_shift_instruction->operands.oir.operand1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(right_shift_instruction->operands.oir.assignee, right_shift_instruction->operands.oir.operand1) == TRUE){
 		//Destination is the assignee
 		right_shift_instruction->operands.x86.destination_register = right_shift_instruction->operands.oir.assignee;
 
@@ -9036,7 +9527,7 @@ static void handle_bitwise_inclusive_or_instruction(instruction_window_t* window
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(bitwise_or->operands.oir.assignee, bitwise_or->operands.oir.operand1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(bitwise_or->operands.oir.assignee, bitwise_or->operands.oir.operand1) == TRUE){
 		//Destination is just the assignee
 		bitwise_or->operands.x86.destination_register = bitwise_or->operands.oir.assignee;
 
@@ -9164,7 +9655,7 @@ static void handle_bitwise_and_instruction(instruction_window_t* window){
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(bitwise_and->operands.oir.assignee, bitwise_and->operands.oir.operand1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(bitwise_and->operands.oir.assignee, bitwise_and->operands.oir.operand1) == TRUE){
 		//Destination is just the assignee
 		bitwise_and->operands.x86.destination_register = bitwise_and->operands.oir.assignee;
 
@@ -9293,7 +9784,7 @@ static void handle_bitwise_exclusive_or_instruction(instruction_window_t* window
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(bitwise_xor->operands.oir.assignee, bitwise_xor->operands.oir.operand1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(bitwise_xor->operands.oir.assignee, bitwise_xor->operands.oir.operand1) == TRUE){
 		//Destination is just the assignee
 		bitwise_xor->operands.x86.destination_register = bitwise_xor->operands.oir.assignee;
 
@@ -9652,6 +10143,9 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	//We'll need to know the variables size
 	variable_size_t size = get_type_size(destination_type);
 
+	//We can select our type now
+	multiplication_instruction->instruction_type = select_unsigned_mulitplication_instruction(size);
+
 	/**
 	 * Unsigned multiplication instructions have a primary rax destination, a spillover
 	 * rdx destination, and an implicit rax source
@@ -9667,27 +10161,84 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	three_addr_var_t* explicit_source;
 
 	/**
-	 * Step 1: Move the first operand into %rax. This is also known as the "implicit source". We will first check
-	 * if we need to do any conversions here
+	 * If we need to convert our first operand now is the time. This will never be NULL so we are safe
+	 * with this
 	 */
 	if(is_converting_move_required(destination_type, multiplication_instruction->operands.oir.operand1->type) == TRUE){
 		multiplication_instruction->operands.oir.operand1 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->operands.oir.operand1, destination_type);
 	}
 
 	/**
-	 * Step 2: Determine what our implicit source(rax) and explicit source(on the instruction)
-	 * should be.
-	 *
-	 * We should be intelligently reordering instructions here so that if we do have a constant
-	 * operand, we treat that as the implicit source. The only way that that works is because
-	 * we're doing multiplication here. Division and modulo it would never work. This will allow 
-	 * us to minimize the number of move instructions
+	 * Based on whether or not we have memory access here, we will handle the 
+	 * unsigned multiplication in several different ways
 	 */
-	if(multiplication_instruction->operands.oir.constant_operand == NULL){
+	if(multiplication_instruction->memory_access_type == NO_MEMORY_ACCESS){
 		/**
-		 * If we do *not* have a constant operand, then we will move op1 into rax, and use op2 as the
-		 * explicit source
+		 * Determine what our implicit source(rax) and explicit source(on the instruction)
+		 * should be.
+		 *
+		 * We should be intelligently reordering instructions here so that if we do have a constant
+		 * operand, we treat that as the implicit source. The only way that that works is because
+		 * we're doing multiplication here. Division and modulo it would never work. This will allow 
+		 * us to minimize the number of move instructions
 		 */
+		if(multiplication_instruction->operands.oir.constant_operand == NULL){
+			/**
+			 * If we do *not* have a constant operand, then we will move op1 into rax, and use op2 as the
+			 * explicit source
+			 */
+			instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(destination_type), multiplication_instruction->operands.oir.operand1);
+
+			//This goes in before the given
+			insert_instruction_before_given(move_to_rax, multiplication_instruction);
+
+			//The implicit source comes from the move
+			implicit_rax_source = move_to_rax->operands.x86.destination_register;
+
+			/**
+			 * If we are here then we know that we have a second operand. We'll check and see if conversions
+			 * are needed
+			 */
+			if(is_converting_move_required(destination_type, multiplication_instruction->operands.oir.operand2->type) == TRUE){
+				multiplication_instruction->operands.oir.operand2 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->operands.oir.operand2, destination_type);
+			}
+
+			//This is the explicit source
+			explicit_source = multiplication_instruction->operands.oir.operand2;
+
+		/**
+		 * This means we do have a constant. In this case, we will reorder the operands to put the constant into %rax, and
+		 * first operand as the explicit source
+		 */
+		} else {
+			//We first need to move the first operand into RAX
+			instruction_t* constant_move_to_rax = emit_constant_move_instruction(emit_temp_var(destination_type), multiplication_instruction->operands.oir.constant_operand);
+
+			//Insert the move to rax before the multiplication instruction
+			insert_instruction_before_given(constant_move_to_rax, multiplication_instruction);
+
+			//The implicit source comes from here
+			implicit_rax_source = constant_move_to_rax->operands.x86.destination_register;
+
+			//And the explicit source is operand1
+			explicit_source = multiplication_instruction->operands.oir.operand1;
+		}
+
+		/**
+		 * Now setup the multiplication instruction itself. This will include moving
+		 * over the implicit source into source_register1 and dealing with the two destinations
+		 */
+		multiplication_instruction->operands.x86.source_register1 = implicit_rax_source;
+		multiplication_instruction->operands.x86.source_register2 = explicit_source;
+		multiplication_instruction->operands.x86.destination_register = rax_destination;
+		multiplication_instruction->operands.x86.destination_register2 = rdx_destination;
+		
+	/**
+	 * If we get here then we do have a memory access, so we'll need to make the first operand the implicit
+	 * rax source regarldess
+	 */
+	} else {
+		//Get operand1 in %rax
 		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(destination_type), multiplication_instruction->operands.oir.operand1);
 
 		//This goes in before the given
@@ -9696,47 +10247,21 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 		//The implicit source comes from the move
 		implicit_rax_source = move_to_rax->operands.x86.destination_register;
 
+		//Let our special helper deal with the addressing operation
+		handle_base_address_and_addressing_mode_for_instruction(multiplication_instruction);
+
 		/**
-		 * If we are here then we know that we have a second operand. We'll check and see if conversions
-		 * are needed
+		 * Now setup the multiplication instruction itself. This will include moving
+		 * over the implicit source into source_register1 and dealing with the two destinations.
+		 * Note that in this instance the second source register is not populated
 		 */
-		if(is_converting_move_required(destination_type, multiplication_instruction->operands.oir.operand2->type) == TRUE){
-			multiplication_instruction->operands.oir.operand2 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->operands.oir.operand2, destination_type);
-		}
-
-		//This is the explicit source
-		explicit_source = multiplication_instruction->operands.oir.operand2;
-
-	/**
-	 * This means we do have a constant. In this case, we will reorder the operands to put the constant into %rax, and
-	 * first operand as the explicit source
-	 */
-	} else {
-		//We first need to move the first operand into RAX
-		instruction_t* constant_move_to_rax = emit_constant_move_instruction(emit_temp_var(destination_type), multiplication_instruction->operands.oir.constant_operand);
-
-		//Insert the move to rax before the multiplication instruction
-		insert_instruction_before_given(constant_move_to_rax, multiplication_instruction);
-
-		//The implicit source comes from here
-		implicit_rax_source = constant_move_to_rax->operands.x86.destination_register;
-
-		//And the explicit source is operand1
-		explicit_source = multiplication_instruction->operands.oir.operand1;
+		multiplication_instruction->operands.x86.source_register1 = implicit_rax_source;
+		multiplication_instruction->operands.x86.destination_register = rax_destination;
+		multiplication_instruction->operands.x86.destination_register2 = rdx_destination;
 	}
 
 	/**
-	 * Step 3: Setup the multiplication instruction itself. This will include moving
-	 * over the implicit source into source_register1 and dealing with the two destinations
-	 */
-	multiplication_instruction->instruction_type = select_unsigned_mulitplication_instruction(size);
-	multiplication_instruction->operands.x86.source_register1 = implicit_rax_source;
-	multiplication_instruction->operands.x86.source_register2 = explicit_source;
-	multiplication_instruction->operands.x86.destination_register = rax_destination;
-	multiplication_instruction->operands.x86.destination_register2 = rdx_destination;
-
-	/**
-	 * Step 4: once everything is done, we'll need to move the result out of %rax destination into what our actual assignee was
+	 * Once everything is done, we'll need to move the result out of %rax destination into what our actual assignee was
 	 */
 	instruction_t* result_movement = emit_move_instruction(multiplication_instruction->operands.oir.assignee, multiplication_instruction->operands.x86.destination_register);
 
@@ -9790,6 +10315,9 @@ static void handle_signed_multiplication_instruction(instruction_window_t* windo
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
 
+	//We are going to be using a signed imull instruction regardless so let's get it now
+	multiplication_instruction->instruction_type = select_signed_multiplication_instruction(size);
+
 	/**
 	 * Does op1 need an expanding/converting move? If so we will do that right now
 	 * and create it
@@ -9799,31 +10327,35 @@ static void handle_signed_multiplication_instruction(instruction_window_t* windo
 	}
 
 	/**
-	 * What about op2(if we even have op2)
+	 * If we have no memory access here, then we can either have a register or a constant occupying the second
+	 * area. Otherwise, we have an addressing operation as the second operand which we can handle using the helper
 	 */
-	if(multiplication_instruction->operands.oir.operand2 != NULL
-		&& is_converting_move_required(destination_type, multiplication_instruction->operands.oir.operand2->type) == TRUE){
-		multiplication_instruction->operands.oir.operand2 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->operands.oir.operand2, destination_type);
-	}
+	if(multiplication_instruction->memory_access_type == NO_MEMORY_ACCESS){
+		if(multiplication_instruction->operands.oir.operand2 != NULL){
+			//Emit a converting move if we need it
+			if(is_converting_move_required(destination_type, multiplication_instruction->operands.oir.operand2->type) == TRUE){
+				multiplication_instruction->operands.oir.operand2 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->operands.oir.operand2, destination_type);
+			}
 
-	//We are going to be using a signed imull instruction regardless so let's get it now
-	multiplication_instruction->instruction_type = select_signed_multiplication_instruction(size);
+			multiplication_instruction->operands.x86.source_register1 = multiplication_instruction->operands.oir.operand2;
+
+		} else {
+			multiplication_instruction->operands.x86.source_immediate = multiplication_instruction->operands.oir.constant_operand;
+		}
+
+	} else {
+		//Let the helper handle the memory addressing
+		handle_base_address_and_addressing_mode_for_instruction(multiplication_instruction);
+	}
 
 	/**
 	 * If we already have the setup we need where op1 and the assignee are the same variable,
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(multiplication_instruction->operands.oir.assignee, multiplication_instruction->operands.oir.operand1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(multiplication_instruction->operands.oir.assignee, multiplication_instruction->operands.oir.operand1) == TRUE){
 		//Destination is just the assignee
 		multiplication_instruction->operands.x86.destination_register = multiplication_instruction->operands.oir.assignee;
-
-		//Assign the source or the source immediate based on which we need
-		if(multiplication_instruction->operands.oir.operand2 != NULL){
-			multiplication_instruction->operands.x86.source_register1 = multiplication_instruction->operands.oir.operand2;
-		} else {
-			multiplication_instruction->operands.x86.source_immediate = multiplication_instruction->operands.oir.constant_operand;
-		}
 
 		//Rebuild around the instruction
 		reconstruct_window(window, multiplication_instruction);
@@ -9858,13 +10390,6 @@ static void handle_signed_multiplication_instruction(instruction_window_t* windo
 
 		//The destination register is op1
 		multiplication_instruction->operands.x86.destination_register = multiplication_instruction->operands.oir.operand1;
-
-		//Assign the source or the source immediate based on which we need
-		if(multiplication_instruction->operands.oir.operand2 != NULL){
-			multiplication_instruction->operands.x86.source_register1 = multiplication_instruction->operands.oir.operand2;
-		} else {
-			multiplication_instruction->operands.x86.source_immediate = multiplication_instruction->operands.oir.constant_operand;
-		}
 
 		//Move the destination register into the actual assignee now
 		instruction_t* assignment_instruction = emit_move_instruction(multiplication_instruction->operands.oir.assignee, multiplication_instruction->operands.x86.destination_register);
@@ -9913,6 +10438,9 @@ static void handle_sse_multiplication_instruction(instruction_window_t* window, 
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(destination_type);
 
+	//We are going to be using a mulsX instruction regardless so let's get it now
+	multiplication_instruction->instruction_type = select_sse_multiplication_instruction(size);
+
 	/**
 	 * Does op1 need an expanding/converting move? If so we will do that right now
 	 * and create it
@@ -9922,25 +10450,34 @@ static void handle_sse_multiplication_instruction(instruction_window_t* window, 
 	}
 
 	/**
-	 * Do the same for op2. Note that we are guaranteed an op2 here becuase this is a floating point multiplication
+	 * SSE multiplication instructions will either have a register source or a memory
+	 * movement source. We will need to handle both cases here
 	 */
-	if(is_converting_move_required(destination_type, multiplication_instruction->operands.oir.operand2->type) == TRUE){
-		multiplication_instruction->operands.oir.operand2 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->operands.oir.operand2, destination_type);
-	}
+	if(multiplication_instruction->memory_access_type == NO_MEMORY_ACCESS){
+		//We know that we are going to have an op2 here so now is the time to check
+		if(is_converting_move_required(destination_type, multiplication_instruction->operands.oir.operand2->type) == TRUE){
+			multiplication_instruction->operands.oir.operand2 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->operands.oir.operand2, destination_type);
+		}
 
-	//We are going to be using a mulsX instruction regardless so let's get it now
-	multiplication_instruction->instruction_type = select_sse_multiplication_instruction(size);
+		//This is always the source register
+		multiplication_instruction->operands.x86.source_register1 = multiplication_instruction->operands.oir.operand2;
+
+	/**
+	 * Otherwise, we have an addressing operation source so we will call out to the handler to let that take care of it
+	 */
+	} else {
+		//Let the helper take care of it
+		handle_base_address_and_addressing_mode_for_instruction(multiplication_instruction);
+	}
 
 	/**
 	 * If we already have the setup we need where op1 and the assignee are the same variable,
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(multiplication_instruction->operands.oir.assignee, multiplication_instruction->operands.oir.operand1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(multiplication_instruction->operands.oir.assignee, multiplication_instruction->operands.oir.operand1) == TRUE){
 		//Destination is just the assignee
 		multiplication_instruction->operands.x86.destination_register = multiplication_instruction->operands.oir.assignee;
-		//This is always op2
-		multiplication_instruction->operands.x86.source_register1 = multiplication_instruction->operands.oir.operand2;
 
 		//Rebuild around the instruction
 		reconstruct_window(window, multiplication_instruction);
@@ -9976,8 +10513,6 @@ static void handle_sse_multiplication_instruction(instruction_window_t* window, 
 		//The destination register is op1
 		multiplication_instruction->operands.x86.destination_register = multiplication_instruction->operands.oir.operand1;
 
-		//This is always the source register
-		multiplication_instruction->operands.x86.source_register1 = multiplication_instruction->operands.oir.operand2;
 
 		//Move the destination register into the actual assignee now
 		instruction_t* assignment_instruction = emit_move_instruction(multiplication_instruction->operands.oir.assignee, multiplication_instruction->operands.x86.destination_register);
@@ -10292,7 +10827,7 @@ static void handle_sse_division_instruction(instruction_window_t* window, generi
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(division_instruction->operands.oir.assignee, division_instruction->operands.oir.operand1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(division_instruction->operands.oir.assignee, division_instruction->operands.oir.operand1) == TRUE){
 		//Destination is just the assignee
 		division_instruction->operands.x86.destination_register = division_instruction->operands.oir.assignee;
 		//This is always op2
@@ -10676,11 +11211,30 @@ static void handle_subtraction_instruction(instruction_window_t* window){
 	}
 
 	/**
-	 * What about op2(if we even have op2)
+	 * Handling the second operand: operand2/constant_operand/addressing mode operation
+	 *
+	 * Subtraction instructions are one of the several instructions in x86 that allow for the source
+	 * to be a memory access operation. If we are configured to do that, then operand2 *and* the 
+	 * constant operand will be NULL, so we will need to have special handling to support it
 	 */
-	if(subtraction_instruction->operands.oir.operand2 != NULL
-		&& is_converting_move_required(destination_type, subtraction_instruction->operands.oir.operand2->type) == TRUE){
-		subtraction_instruction->operands.oir.operand2 = create_and_insert_converting_move_instruction(subtraction_instruction, subtraction_instruction->operands.oir.operand2, destination_type);
+	if(subtraction_instruction->memory_access_type == NO_MEMORY_ACCESS){
+		//Assign the source or the source immediate based on which we need
+		if(subtraction_instruction->operands.oir.operand2 != NULL){
+			if(is_converting_move_required(destination_type, subtraction_instruction->operands.oir.operand2->type) == TRUE){
+				subtraction_instruction->operands.oir.operand2 = create_and_insert_converting_move_instruction(subtraction_instruction, subtraction_instruction->operands.oir.operand2, destination_type);
+			}
+
+			subtraction_instruction->operands.x86.source_register1 = subtraction_instruction->operands.oir.operand2;
+		} else {
+			subtraction_instruction->operands.x86.source_immediate = subtraction_instruction->operands.oir.constant_operand;
+		}
+
+	/**
+	 * If we get here then we do have a from-memory movement. We will need to handle the addressing mode
+	 * and cut out somme of the validations that we had to do above
+	 */
+	} else {
+		handle_base_address_and_addressing_mode_for_instruction(subtraction_instruction);
 	}
 
 	//We are going to be using a subtraction instruction regardless so let's get it now
@@ -10691,16 +11245,9 @@ static void handle_subtraction_instruction(instruction_window_t* window){
 	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
 	 * to make all of this work
 	 */
-	if(variables_equal_no_ssa(subtraction_instruction->operands.oir.assignee, subtraction_instruction->operands.oir.operand1, TRUE) == TRUE){
+	if(variables_equal_no_ssa(subtraction_instruction->operands.oir.assignee, subtraction_instruction->operands.oir.operand1) == TRUE){
 		//Destination is just the assignee
 		subtraction_instruction->operands.x86.destination_register = subtraction_instruction->operands.oir.assignee;
-
-		//Assign the source or the source immediate based on which we need
-		if(subtraction_instruction->operands.oir.operand2 != NULL){
-			subtraction_instruction->operands.x86.source_register1 = subtraction_instruction->operands.oir.operand2;
-		} else {
-			subtraction_instruction->operands.x86.source_immediate = subtraction_instruction->operands.oir.constant_operand;
-		}
 
 		//Rebuild around the subtraction instruction
 		reconstruct_window(window, subtraction_instruction);
@@ -10735,13 +11282,6 @@ static void handle_subtraction_instruction(instruction_window_t* window){
 
 		//The destination register is op1
 		subtraction_instruction->operands.x86.destination_register = subtraction_instruction->operands.oir.operand1;
-
-		//Assign the source or the source immediate based on which we need
-		if(subtraction_instruction->operands.oir.operand2 != NULL){
-			subtraction_instruction->operands.x86.source_register1 = subtraction_instruction->operands.oir.operand2;
-		} else {
-			subtraction_instruction->operands.x86.source_immediate = subtraction_instruction->operands.oir.constant_operand;
-		}
 
 		//Move the destination register into the actual assignee now
 		instruction_t* assignment_instruction = emit_move_instruction(subtraction_instruction->operands.oir.assignee, subtraction_instruction->operands.x86.destination_register);
@@ -10822,141 +11362,217 @@ static void handle_addition_instruction(instruction_window_t* window){
 	}
 
 	/**
-	 * What about op2(if we even have op2)
+	 * Do the same thing for op2. Do remember that there is a good chance it is NULL though
 	 */
-	if(original_addition->operands.oir.operand2 != NULL
-		&& is_converting_move_required(destination_type, original_addition->operands.oir.operand2->type) == TRUE){
-		original_addition->operands.oir.operand2 = create_and_insert_converting_move_instruction(original_addition, original_addition->operands.oir.operand2, destination_type);
+	if(original_addition->operands.oir.operand2 != NULL){
+		if(is_converting_move_required(destination_type, original_addition->operands.oir.operand2->type) == TRUE){
+			original_addition->operands.oir.operand2 = create_and_insert_converting_move_instruction(original_addition, original_addition->operands.oir.operand2, destination_type);
+		}
 	}
 
 	/**
-	 * If these two are equal, then we have something like x1 <- x0 + 2. This can simply be
-	 * turned into addl $2, x_1
+	 * If we have a case where there is *no* memory access, we have a few
+	 * options:
+	 *  NO Memory access:
+	 * 		1.) Assignee and operand1 are equal, we can just turn it into an addX instruction directly
+	 * 		2.) They're not equal, the size is valid for lea, and it is advantageous for us to do so -> convert to lea
+	 * 		3.) Not valid for lea/we don't want do, make it work by creating a fake assignee so that they match
+	 * 	WITH Memory Access:
+	 * 		1.) Assignee and operand1 are equal, we can just turn it into an addX instruction directly
+	 * 		3.) Not valid for lea/we don't want do, make it work by creating a fake assignee so that they match
 	 */
-	if(variables_equal_no_ssa(original_addition->operands.oir.assignee, original_addition->operands.oir.operand1, TRUE) == TRUE){
-		//Get the appropriate add instuction
-		original_addition->instruction_type = select_add_instruction(size);
-
-		original_addition->operands.x86.destination_register = original_addition->operands.oir.assignee;
-
-		//Assign the source or the source immediate based on which we need
-		if(original_addition->operands.oir.operand2 != NULL){
-			original_addition->operands.x86.source_register1 = original_addition->operands.oir.operand2;
-		} else {
-			original_addition->operands.x86.source_immediate = original_addition->operands.oir.constant_operand;
-		}
-
-		//Rebuilt the entire window around this
-		reconstruct_window(window, original_addition);
-
-	/**
-	 * Otherwise they're not equal. For most other binary operations we'd
-	 * need to force it to work at this point. However since this is addition
-	 * we can use a lea instead *if* we have valid types *and* we have a non
-	 * temp variable here. If we have a temp destination, then there is
-	 * no benefit from an instruction count perspective to doing this
-	 */
-	} else if(is_type_valid_for_addition_to_lea_conversion(size) == TRUE
-				&& (original_addition->operands.oir.assignee->variable_type != VARIABLE_TYPE_TEMP
-					|| original_addition->operands.oir.operand1 == stack_pointer_variable)){
-		//Get the lea that we need
-		original_addition->instruction_type = select_lea_instruction(size);
-
-		//Address calc 1 is always op1
-		original_addition->operands.x86.address_register1 = original_addition->operands.oir.operand1;
-		
-		//Based on the constant status we do it one way or the other
-		if(original_addition->statement_type == THREE_ADDR_CODE_BIN_OP_STMT){
-			original_addition->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
-			original_addition->operands.x86.address_register2 = original_addition->operands.oir.operand2;
-
-		} else {
-			original_addition->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-			original_addition->operands.x86.address_offset = original_addition->operands.oir.constant_operand;
-		}
-
+	if(original_addition->memory_access_type == NO_MEMORY_ACCESS){
 		/**
-		 * If we require a converting move between the original assignee and this one, we will need
-		 * to use a temp var as the actual assignee and insert that here
+		 * Case 1: equal variables like x_1 <- x_0 + 2, we can just make this addq $2, x_1
 		 */
-		if(is_converting_move_required(original_addition->operands.oir.assignee->type, destination_type) == TRUE){
-			//We'll need a temp var for this
-			three_addr_var_t* temp_destination = emit_temp_var(destination_type);
+		if(variables_equal_no_ssa(original_addition->operands.oir.assignee, original_addition->operands.oir.operand1) == TRUE){
+			//Get the appropriate add instuction
+			original_addition->instruction_type = select_add_instruction(size);
 
-			//The fianl destination actually comes from the instruction
-			three_addr_var_t* final_destination = original_addition->operands.oir.assignee;
-
-			//This is what the lea will point to
-			original_addition->operands.x86.destination_register = temp_destination;
-
-			//Now we can emit the move
-			instruction_t* move_instruction = emit_move_instruction(final_destination, temp_destination);
-
-			//This goes right after the addition
-			insert_instruction_after_given(move_instruction, original_addition);
-
-			//Let the helper deal with the pxor clear
-			insert_pxor_clear_if_needed(move_instruction);
-
-			//Rebuild everything around is
-			reconstruct_window(window, move_instruction);
-
-		} else {
-			//We can just use the assignee directly
 			original_addition->operands.x86.destination_register = original_addition->operands.oir.assignee;
+
+			//Assign the source or the source immediate based on which we need
+			if(original_addition->operands.oir.operand2 != NULL){
+				original_addition->operands.x86.source_register1 = original_addition->operands.oir.operand2;
+			} else {
+				original_addition->operands.x86.source_immediate = original_addition->operands.oir.constant_operand;
+			}
 
 			//Rebuilt the entire window around this
 			reconstruct_window(window, original_addition);
+
+		/**
+		 * Case 2: we have unequal variables *and* we can make this into a lea like: x_1 <- y_1 + 2 ==> leaq 2(y_1), x_1
+		 */
+		} else if(is_type_valid_for_addition_to_lea_conversion(size) == TRUE
+				&& (original_addition->operands.oir.assignee->variable_type != VARIABLE_TYPE_TEMP
+					|| original_addition->operands.oir.operand1 == stack_pointer_variable)){
+			//Get the lea that we need
+			original_addition->instruction_type = select_lea_instruction(size);
+
+			//Address calc 1 is always op1
+			original_addition->operands.x86.address_register1 = original_addition->operands.oir.operand1;
+			
+			//Based on the constant status we do it one way or the other
+			if(original_addition->statement_type == THREE_ADDR_CODE_BIN_OP_STMT){
+				original_addition->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+				original_addition->operands.x86.address_register2 = original_addition->operands.oir.operand2;
+
+			} else {
+				original_addition->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+				original_addition->operands.x86.address_offset = original_addition->operands.oir.constant_operand;
+			}
+
+			/**
+			 * If we require a converting move between the original assignee and this one, we will need
+			 * to use a temp var as the actual assignee and insert that here
+			 */
+			if(is_converting_move_required(original_addition->operands.oir.assignee->type, destination_type) == TRUE){
+				//We'll need a temp var for this
+				three_addr_var_t* temp_destination = emit_temp_var(destination_type);
+
+				//The fianl destination actually comes from the instruction
+				three_addr_var_t* final_destination = original_addition->operands.oir.assignee;
+
+				//This is what the lea will point to
+				original_addition->operands.x86.destination_register = temp_destination;
+
+				//Now we can emit the move
+				instruction_t* move_instruction = emit_move_instruction(final_destination, temp_destination);
+
+				//This goes right after the addition
+				insert_instruction_after_given(move_instruction, original_addition);
+
+				//Let the helper deal with the pxor clear
+				insert_pxor_clear_if_needed(move_instruction);
+
+				//Rebuild everything around is
+				reconstruct_window(window, move_instruction);
+
+			} else {
+				//We can just use the assignee directly
+				original_addition->operands.x86.destination_register = original_addition->operands.oir.assignee;
+
+				//Rebuilt the entire window around this
+				reconstruct_window(window, original_addition);
+			}
+
+		/**
+		 * Case 3: Otherwise we've got something like:
+		 * 	t4 <- t3 + 2
+		 *
+		 * 	We'll need to make it so that the assignee and the op1 are the same. We'd do something
+		 * 	like
+		 * 	
+		 * 	t3 <- t3 + 2
+		 * 	t4 <- t3
+		 */
+		} else {
+			//Get the appropriate add instuction
+			original_addition->instruction_type = select_add_instruction(size);
+
+			/**
+			 * If this is a not a temp var *or* we have a higher use count, we'll emit
+			 * an extra assignment to ensure we aren't overwriting things here
+			 */
+			if(original_addition->operands.oir.operand1->variable_type != VARIABLE_TYPE_TEMP
+				|| original_addition->operands.oir.operand1->was_value_named == TRUE){
+
+				instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), original_addition->operands.oir.operand1);
+
+				//Put this before the instruction
+				insert_instruction_before_given(temp_assigment, original_addition);
+
+				//This now is op1
+				original_addition->operands.oir.operand1 = temp_assigment->operands.x86.destination_register;
+			}
+
+			//The destination register is op1
+			original_addition->operands.x86.destination_register = original_addition->operands.oir.operand1;
+
+			//Assign the source or the source immediate based on which we need
+			if(original_addition->operands.oir.operand2 != NULL){
+				original_addition->operands.x86.source_register1 = original_addition->operands.oir.operand2;
+			} else {
+				original_addition->operands.x86.source_immediate = original_addition->operands.oir.constant_operand;
+			}
+
+			//Move the destination register into the actual assignee now
+			instruction_t* assignment_instruction = emit_move_instruction(original_addition->operands.oir.assignee, original_addition->operands.x86.destination_register);
+
+			//This goes in *after* the subtraction
+			insert_instruction_after_given(assignment_instruction, original_addition);
+
+			//Rebuild the whole window around this
+			reconstruct_window(window, assignment_instruction);
 		}
 
 	/**
-	 * Otherwise we've got something like:
-	 * 	t4 <- t3 + 2
-	 *
-	 * 	We'll need to make it so that the assignee and the op1 are the same. We'd do something
-	 * 	like
-	 * 	
-	 * 	t3 <- t3 + 2
-	 * 	t4 <- t3
+	 * Otherwise we have a from memory movement. If this is the case then we always have to handle the 
+	 * addressing mode in the same way
 	 */
 	} else {
-		//Get the appropriate add instuction
-		original_addition->instruction_type = select_add_instruction(size);
+		/**
+		 * Case 1: equal variables like x_1 <- x_0 + LOAD(<address>), we can just make this addq LOAD(<address>), x_1
+		 */
+		if(variables_equal_no_ssa(original_addition->operands.oir.assignee, original_addition->operands.oir.operand1) == TRUE){
+			//Get the appropriate add instuction
+			original_addition->instruction_type = select_add_instruction(size);
+
+			//This is always our destination
+			original_addition->operands.x86.destination_register = original_addition->operands.oir.assignee;
+
+			//Let the helper take care of this
+			handle_base_address_and_addressing_mode_for_instruction(original_addition);
+
+			//Rebuilt the entire window around this
+			reconstruct_window(window, original_addition);
 
 		/**
-		 * If this is a not a temp var *or* we have a higher use count, we'll emit
-		 * an extra assignment to ensure we aren't overwriting things here
+		 * Case 3: Otherwise we've got something like:
+		 * 	t4 <- t3 + LOAD(<address>)
+		 *
+		 * 	We'll need to make it so that the assignee and the op1 are the same. We'd do something
+		 * 	like
+		 * 	
+		 * 	t3 <- t3 + LOAD(<address>)
+		 * 	t4 <- t3
 		 */
-		if(original_addition->operands.oir.operand1->variable_type != VARIABLE_TYPE_TEMP
-			|| original_addition->operands.oir.operand1->was_value_named == TRUE){
-
-			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), original_addition->operands.oir.operand1);
-
-			//Put this before the instruction
-			insert_instruction_before_given(temp_assigment, original_addition);
-
-			//This now is op1
-			original_addition->operands.oir.operand1 = temp_assigment->operands.x86.destination_register;
-		}
-
-		//The destination register is op1
-		original_addition->operands.x86.destination_register = original_addition->operands.oir.operand1;
-
-		//Assign the source or the source immediate based on which we need
-		if(original_addition->operands.oir.operand2 != NULL){
-			original_addition->operands.x86.source_register1 = original_addition->operands.oir.operand2;
 		} else {
-			original_addition->operands.x86.source_immediate = original_addition->operands.oir.constant_operand;
+			//Get the appropriate add instuction
+			original_addition->instruction_type = select_add_instruction(size);
+
+			/**
+			 * If this is a not a temp var *or* we have a higher use count, we'll emit
+			 * an extra assignment to ensure we aren't overwriting things here
+			 */
+			if(original_addition->operands.oir.operand1->variable_type != VARIABLE_TYPE_TEMP
+				|| original_addition->operands.oir.operand1->was_value_named == TRUE){
+
+				instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), original_addition->operands.oir.operand1);
+
+				//Put this before the instruction
+				insert_instruction_before_given(temp_assigment, original_addition);
+
+				//This now is op1
+				original_addition->operands.oir.operand1 = temp_assigment->operands.x86.destination_register;
+			}
+
+			//The destination register is op1
+			original_addition->operands.x86.destination_register = original_addition->operands.oir.operand1;
+
+			//Now we handle the addressing mode
+			handle_base_address_and_addressing_mode_for_instruction(original_addition);
+
+			//Move the destination register into the actual assignee now
+			instruction_t* assignment_instruction = emit_move_instruction(original_addition->operands.oir.assignee, original_addition->operands.x86.destination_register);
+
+			//This goes in *after* the subtraction
+			insert_instruction_after_given(assignment_instruction, original_addition);
+
+			//Rebuild the whole window around this
+			reconstruct_window(window, assignment_instruction);
 		}
-
-		//Move the destination register into the actual assignee now
-		instruction_t* assignment_instruction = emit_move_instruction(original_addition->operands.oir.assignee, original_addition->operands.x86.destination_register);
-
-		//This goes in *after* the subtraction
-		insert_instruction_after_given(assignment_instruction, original_addition);
-
-		//Rebuild the whole window around this
-		reconstruct_window(window, assignment_instruction);
 	}
 }
 
@@ -11402,13 +12018,13 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 			 * if the operation that made it generated a truthful byte value(0 or 1)
 			 * or not
 			 */
-			if(variables_equal(logical_and->operands.oir.operand1, cursor->operands.oir.assignee, FALSE)){
+			if(variables_equal(logical_and->operands.oir.operand1, cursor->operands.oir.assignee)){
 				if(does_operator_generate_truthful_byte_value(cursor->op) == TRUE){
 					op1_came_from_setX = TRUE;
 				}
 
 			//Give op2 the exact same treatment
-			} else if(variables_equal(logical_and->operands.oir.operand2, cursor->operands.oir.assignee, FALSE)){
+			} else if(variables_equal(logical_and->operands.oir.operand2, cursor->operands.oir.assignee)){
 				if(does_operator_generate_truthful_byte_value(cursor->op) == TRUE){
 					op2_came_from_setX = TRUE;
 				}
@@ -12849,342 +13465,6 @@ static inline void handle_indirect_jump(instruction_window_t* window){
 	//Reconstruct the window with the indirect jump as the start
 	reconstruct_window(window, indirect_jump_statement);
 	return;
-}
-
-
-/**
- * Handle the base address for a given memory movement instruction. This rule does not care
- * whether we are a load or a store, it is completely agnostic. This will handle the
- * base address appropriately and update any/all addressing mode values that it needs
- * to
- */
-static inline void handle_base_address_and_addressing_mode_for_instruction(instruction_t* instruction){
-	//Needed declarations for later
-	int64_t stack_offset = 0;
-	three_addr_var_t* base_address;
-	symtab_variable_record_t* linked_var;
-	instruction_t* rip_offset_lea;
-
-	/**
-	 * First standardize everyting by moving it all over into the x86 registers off
-	 * the bat. This avoids any confusion/cross lookups and x86 register sections
-	 *
-	 * We go through a standard Extract-Transform-Load(ETL) process to do this
-	 */
-
-	/**
-	 * Step 1: Extract all fields(E)
-	 */
-	three_addr_var_t* address_register1 = instruction->operands.oir.address_operand1;
-	three_addr_var_t* address_register2 = instruction->operands.oir.address_operand2;
-	three_addr_var_t* rip_offset_var = instruction->operands.oir.rip_offset_var;
-	three_addr_const_t* address_offset = instruction->operands.oir.address_offset;
-	u_int64_t address_multiplier = instruction->operands.oir.address_multiplier;
-
-	/**
-	 * Step 2: Transform the second address register if a type adjustment is needed(T)
-	 *
-	 * We are *always* using 64 bit registers for addressing operations in memory movements
-	 */
-	if(address_register1 != NULL
-		&& address_register2 != NULL
-		&& is_converting_move_required(u64, address_register2->type) == TRUE){
-
-		//Let the helper emit and insert the move
-		address_register2 = create_and_insert_converting_move_instruction(instruction, address_register2, u64);
-	}
-
-	/**
-	 * Step 3: Load the finalized values into their needed spots on the x86 version 
-	 */
-	instruction->operands.x86.address_register1 = address_register1;
-	instruction->operands.x86.address_register2 = address_register2;
-	instruction->operands.x86.rip_offset_var = rip_offset_var;
-	instruction->operands.x86.address_offset = address_offset;
-	instruction->operands.x86.address_multiplier = address_multiplier;
-
-	/**
-	 * Now that everything has been moved over into the x86 region, we need
-	 * to now handle the memory address variables that often end up inside
-	 * of the base address(address_register1) field. Let's first extract
-	 * the values that we have in there to process
-	 */
-	base_address = instruction->operands.x86.address_register1;
-	//Remember there is a chance that this is NULL, it's not a guaranteed field
-	linked_var = base_address->linked_var;
-
-	/**
-	 * Go based on the variable type of the base address itself to make determinations
-	 */
-	switch(base_address->variable_type){
-		/**
-		 * This is the most common case. When we have a memory address, we are going to need
-		 * to handle it differently based on whether or not it's a global variable, and based
-		 * on what the stack offset is
-		 */
-		case VARIABLE_TYPE_MEMORY_ADDRESS:
-			/**
-			 * Use the linked variable and it's membership if it does exist
-			 */
-			if(linked_var != NULL){
-				switch(linked_var->membership){
-					/**
-					 * Global or static variable, we will need to load these as rip-relative
-					 */
-					case GLOBAL_VARIABLE:
-					case STATIC_VARIABLE:
-						switch(instruction->addressing_mode){
-							/**
-							 * Going from
-							 * 	store (t4) <- 5
-							 *
-							 * To 
-							 * 	store <var>(%rip) <- 5
-							 */
-							case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
-								//Update the mode
-								instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
-
-								//Update the two operands
-								instruction->operands.x86.rip_offset_var = base_address;
-								instruction->operands.x86.address_register1 = instruction_pointer_variable;
-								
-								break;
-
-							/**
-							 * Going from
-							 * 	store 4(t4) <- 5
-							 *
-							 * To 
-							 * 	store 4+<var>(%rip) <- 5
-							 */
-							case ADDRESSING_MODE_OFFSET_ONLY:
-								//Update the mode
-								instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
-
-								//Update the two operands
-								instruction->operands.x86.rip_offset_var = base_address;
-								instruction->operands.x86.address_register1 = instruction_pointer_variable;
-
-								break;
-
-							/**
-							 * For every other kind of addressing mode with the rip offset variable, we are actually
-							 * unable to combine it into one singular addressing mode value. Instead, we will need to calculate
-							 * the rip offset variable beforehand in a lea and then substitute that variable in for the 
-							 * base address
-							 */
-							default:
-								//Emit the rip offset address calculation here
-								rip_offset_lea = emit_global_variable_address_calculation_x86(base_address, instruction_pointer_variable, u64);
-
-								//Insert this right before our instruction
-								insert_instruction_before_given(rip_offset_lea, instruction);
-
-								//The base address now becomes this value
-								instruction->operands.x86.address_register1 = rip_offset_lea->operands.x86.destination_register;
-
-								break;
-						}
-						
-						break;
-
-					/**
-					 * We have a non global memory address variable. Any/all changes here are going to 
-					 * hinge around whether or not there is a present stack offset for us to consider. 
-					 * This will only change the addressing mode if we were not using the offset before
-					 */
-					default:
-						//No matter what the address register is now the stack pointer
-						instruction->operands.x86.address_register1 = stack_pointer_variable;
-
-						//Get the stack offset
-						stack_offset = linked_var->stack_region->function_local_base_address;
-
-						/**
-						 * Early exit - if we don't have a stack offset to worry
-						 * about then bail out now
-						 */
-						if(stack_offset == 0){
-							break;
-						}
-
-						/**
-						 * If we already use the addressing mode, we're going to need to sum
-						 * the offset value with what we've already got. Otherwise, we'll need
-						 * to create a fresh offset and update the addressing mode
-						 */
-						if(does_addressing_mode_use_offset_constant(instruction->addressing_mode) == TRUE){
-							//Let the helper sum with the existing offset value
-							sum_constant_with_raw_int64_value(instruction->operands.x86.address_offset, i64, stack_offset);
-
-						} else {
-							//Let's get the offset from this memory address
-							three_addr_const_t* offset = emit_direct_integer_or_char_constant(stack_offset, u64);
-
-							//Store the offset in the operands
-							instruction->operands.x86.address_offset = offset;
-
-							switch(instruction->addressing_mode){
-								case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
-									instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-									break;
-
-								case ADDRESSING_MODE_REGISTERS_ONLY:
-									instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-									break;
-
-								case ADDRESSING_MODE_RIP_RELATIVE:
-									instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
-									break;
-
-								case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-									instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE; 
-									break;
-
-								/**
-								 * Some invalid case here so we make the compiler panic
-								 */
-								default:
-									fprintf(stderr, "Fatal internal compiler error: invalid addressing mode %s hit\n",
-				 							addressing_mode_to_string(instruction->addressing_mode));
-									exit(1);
-							}
-						}
-
-						break;
-				}
-
-			/**
-			 * Otherwise we have a temporary variable. If this is the case then we don't need to
-			 * worry about anything regarding global/static vars, we can just emit the region
-			 */
-			} else {
-				//No matter what the address register is now the stack pointer
-				instruction->operands.x86.address_register1 = stack_pointer_variable;
-
-				//Get the stack offset
-				stack_offset = base_address->associated_memory_region.stack_region->function_local_base_address;
-
-				/**
-				 * Early exit - if we don't have a stack offset to worry
-				 * about then bail out now
-				 */
-				if(stack_offset == 0){
-					break;
-				}
-
-				/**
-				 * If we already use the addressing mode, we're going to need to sum
-				 * the offset value with what we've already got. Otherwise, we'll need
-				 * to create a fresh offset and update the addressing mode
-				 */
-				if(does_addressing_mode_use_offset_constant(instruction->addressing_mode) == TRUE){
-					//Let the helper sum with the existing offset value
-					sum_constant_with_raw_int64_value(instruction->operands.x86.address_offset, i64, stack_offset);
-
-				} else {
-					//Let's get the offset from this memory address
-					three_addr_const_t* offset = emit_direct_integer_or_char_constant(stack_offset, u64);
-
-					//Store the offset in the operands
-					instruction->operands.x86.address_offset = offset;
-
-					switch(instruction->addressing_mode){
-						case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
-							instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-							break;
-
-						case ADDRESSING_MODE_REGISTERS_ONLY:
-							instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-							break;
-
-						case ADDRESSING_MODE_RIP_RELATIVE:
-							instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
-							break;
-
-						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-							instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE; 
-							break;
-
-						/**
-						 * Some invalid case here so we make the compiler panic
-						 */
-						default:
-							fprintf(stderr, "Fatal internal compiler error: invalid addressing mode %s hit\n",
-									addressing_mode_to_string(instruction->addressing_mode));
-							exit(1);
-					}
-				}
-			}
-
-			break;
-
-		/**
-		 * A parameter address is a different type entirely. This will never be a global var
-		 * and it will never be 0. We need to emit a special kind of constant here to represent
-		 * what this is
-		 */
-		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-			//No matter what this always becomes the stack pointer variable
-			instruction->operands.x86.address_register1 = stack_pointer_variable;
-
-			//We need a special stack passed parameter offset for this
-			three_addr_const_t* stack_passed_parameter_offset = emit_stack_passed_parameter_offset_constant(base_address->associated_memory_region.stack_region, u64);
-
-			/**
-			 * If we already use the addressing mode, we're going to need to sum
-			 * the offset value with what we've already got. Otherwise, we'll need
-			 * to create a fresh offset and update the addressing mode
-			 */
-			if(does_addressing_mode_use_offset_constant(instruction->addressing_mode) == TRUE){
-				//Add the two constants, store the result in the paraemeter constant
-				add_constants(stack_passed_parameter_offset, instruction->operands.x86.address_offset);
-
-				//Replace the old offset with this new one
-				instruction->operands.x86.address_offset = stack_passed_parameter_offset;
-
-			} else {
-				//Update the offset in here
-				instruction->operands.x86.address_offset = stack_passed_parameter_offset;
-
-				//Now update the addressing mode to reflect that we have an offset
-				switch(instruction->addressing_mode){
-					case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
-						instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-						break;
-
-					case ADDRESSING_MODE_REGISTERS_ONLY:
-						instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-						break;
-
-					case ADDRESSING_MODE_RIP_RELATIVE:
-						instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
-						break;
-
-					case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-						instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE; 
-						break;
-
-					/**
-					 * Some invalid case here so we make the compiler panic
-					 */
-					default:
-						fprintf(stderr, "Fatal internal compiler error: invalid addressing mode %s hit\n",
-								addressing_mode_to_string(instruction->addressing_mode));
-						exit(1);
-				}
-			}
-
-			break;
-			
-		/**
-		 * Nothing to do here. We will keep whatever addressing mode we entered into this instruction with
-		 * and simply update the address register from there
-		 */
-		default:
-			break;
-	}
 }
 
 
