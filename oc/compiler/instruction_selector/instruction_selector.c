@@ -10145,6 +10145,9 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	//We'll need to know the variables size
 	variable_size_t size = get_type_size(destination_type);
 
+	//We can select our type now
+	multiplication_instruction->instruction_type = select_unsigned_mulitplication_instruction(size);
+
 	/**
 	 * Unsigned multiplication instructions have a primary rax destination, a spillover
 	 * rdx destination, and an implicit rax source
@@ -10160,8 +10163,8 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	three_addr_var_t* explicit_source;
 
 	/**
-	 * Step 1: Move the first operand into %rax. This is also known as the "implicit source". We will first check
-	 * if we need to do any conversions here
+	 * If we need to convert our first operand now is the time. This will never be NULL so we are safe
+	 * with this
 	 */
 	if(is_converting_move_required(destination_type, multiplication_instruction->operands.oir.operand1->type) == TRUE){
 		multiplication_instruction->operands.oir.operand1 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->operands.oir.operand1, destination_type);
@@ -10173,7 +10176,7 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	 */
 	if(multiplication_instruction->memory_access_type == NO_MEMORY_ACCESS){
 		/**
-		 * Step 2: Determine what our implicit source(rax) and explicit source(on the instruction)
+		 * Determine what our implicit source(rax) and explicit source(on the instruction)
 		 * should be.
 		 *
 		 * We should be intelligently reordering instructions here so that if we do have a constant
@@ -10224,23 +10227,43 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 		}
 
 		/**
-		 * Step 3: Setup the multiplication instruction itself. This will include moving
+		 * Now setup the multiplication instruction itself. This will include moving
 		 * over the implicit source into source_register1 and dealing with the two destinations
 		 */
-		multiplication_instruction->instruction_type = select_unsigned_mulitplication_instruction(size);
 		multiplication_instruction->operands.x86.source_register1 = implicit_rax_source;
 		multiplication_instruction->operands.x86.source_register2 = explicit_source;
 		multiplication_instruction->operands.x86.destination_register = rax_destination;
 		multiplication_instruction->operands.x86.destination_register2 = rdx_destination;
 		
+	/**
+	 * If we get here then we do have a memory access, so we'll need to make the first operand the implicit
+	 * rax source regarldess
+	 */
 	} else {
-		printf("TODO NOT IMPLEMENTED\n");
+		//Get operand1 in %rax
+		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(destination_type), multiplication_instruction->operands.oir.operand1);
 
+		//This goes in before the given
+		insert_instruction_before_given(move_to_rax, multiplication_instruction);
+
+		//The implicit source comes from the move
+		implicit_rax_source = move_to_rax->operands.x86.destination_register;
+
+		//Let our special helper deal with the addressing operation
+		handle_base_address_and_addressing_mode_for_instruction(multiplication_instruction);
+
+		/**
+		 * Now setup the multiplication instruction itself. This will include moving
+		 * over the implicit source into source_register1 and dealing with the two destinations.
+		 * Note that in this instance the second source register is not populated
+		 */
+		multiplication_instruction->operands.x86.source_register1 = implicit_rax_source;
+		multiplication_instruction->operands.x86.destination_register = rax_destination;
+		multiplication_instruction->operands.x86.destination_register2 = rdx_destination;
 	}
 
-
 	/**
-	 * Step 4: once everything is done, we'll need to move the result out of %rax destination into what our actual assignee was
+	 * Once everything is done, we'll need to move the result out of %rax destination into what our actual assignee was
 	 */
 	instruction_t* result_movement = emit_move_instruction(multiplication_instruction->operands.oir.assignee, multiplication_instruction->operands.x86.destination_register);
 
