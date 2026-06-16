@@ -6466,11 +6466,6 @@ static inline u_int8_t anonymous_union_member(ollie_token_stream_t* token_stream
 		return FAILURE;
 	}
 
-	//Check for duplicated functions
-	if(do_duplicate_functions_exist(name.string) == TRUE){
-		return FAILURE;
-	}
-
 	//If we have duplicate types, that is also a failure
 	if(do_duplicate_types_exist(name.string) == TRUE){
 		return FAILURE;
@@ -6683,11 +6678,6 @@ static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_strea
 
 	//Are we defining a duplicated type?
 	if(do_duplicate_types_exist(name.string) == TRUE){
-		return NULL;
-	}
-
-	//Look for duplicated functions too
-	if(do_duplicate_functions_exist(name.string) == TRUE){
 		return NULL;
 	}
 
@@ -7467,11 +7457,6 @@ static u_int8_t union_member(ollie_token_stream_t* token_stream, generic_type_t*
 		return FAILURE;
 	}
 
-	//Check for duplicated functions
-	if(do_duplicate_functions_exist(name.string) == TRUE){
-		return FAILURE;
-	}
-
 	//If we have duplicate types, that is also a failure
 	if(do_duplicate_types_exist(name.string) == TRUE){
 		return FAILURE;
@@ -7515,6 +7500,9 @@ static u_int8_t union_member(ollie_token_stream_t* token_stream, generic_type_t*
 		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		return FAILURE;
 	}
+
+	//TODO TODO TODO TODO
+	//This does not seem very efficient because we are redoing all of our parsing
 
 	//Rewind our position
 	reset_stream_to_given_index(token_stream, type_start);
