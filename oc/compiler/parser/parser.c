@@ -6364,20 +6364,19 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
  *
  * As a reminder, type specifier will give us an error if the type is not defined
  *
- * BNF Rule: <construct-member> ::= <identifier> : <type-specifier> 
+ * BNF Rule: <construct-member> ::= <identifier> : <type-specifier> | <identifier> : define {mut}? struct {<struct_member>? {, <struct_member>}*}
  */
 static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t* mutable_struct_type, generic_type_t* immutable_struct_type){
 	//The lookahead token
 	lexitem_t lookahead;
+	generic_type_t* member_type = NULL;
 
-	//Get the first token
+	//First thing that we need to see is an identifier
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
-	//Let's make sure it actually worked
 	if(lookahead.tok != IDENT){
 		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid identifier given as struct member name", parser_line_num);
 		num_errors++;
-		//It's an error, so we'll propogate it up
 		return FAILURE;
 	}
 
@@ -6414,45 +6413,62 @@ static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t
 	if(lookahead.tok != COLON){
 		print_parse_message(MESSAGE_TYPE_ERROR, "Colon required between ident and type specifier in struct member declaration", parser_line_num);
 		num_errors++;
-		//Error out
 		return FAILURE;
 	}
 
-	//Now we are required to see a valid type specifier
-	generic_type_t* type_spec = type_specifier(token_stream);
+	/**
+	 * Once we get here, we are able to see *either* a valid type
+	 * specifier or an anonymous struct <TODO UNION TOO> declaration
+	 * We are able to determine the difference based on the define
+	 * keyword
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
 
-	//If this is an error, the whole thing fails
-	if(type_spec == NULL){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Attempt to use undefined type in struct member", parser_line_num);
-		num_errors++;
-		//It's already an error, so just send it up
-		return FAILURE;
+	if(lookahead.tok != DEFINE){
+		push_back_token(token_stream, &parser_line_num);
+
+		//Now we are required to see a valid type specifier
+		generic_type_t* member_type = type_specifier(token_stream);
+
+		//If this is an error, the whole thing fails
+		if(member_type == NULL){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Attempt to use undefined type in struct member", parser_line_num);
+			num_errors++;
+			return FAILURE;
+		}
+
+		//Error out if this happens
+		if(member_type == immut_void){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Struct members may not be typed as void", parser_line_num);
+			num_errors++;
+			return FAILURE;;
+		}
+
+		/**
+		 * Add extra validation to ensure that the size of said type is known at comptime. This will stop
+		 * the user from adding a field the mut a:char[] that is unknown at compile time
+		 */
+		if(member_type->type_complete == FALSE){
+			sprintf(info, "Attempt to use incomplete type %s as a struct member. Struct members must have a size known at compile time", member_type->type_name.string);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			return FAILURE;
+		}
+
+	/**
+	 * Otherwise we've seen the define keyword so no we'll handle the anonymous struct or union
+	 * declaration here
+	 */
+	} else {
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(1);
 	}
-
-	//Error out if this happens
-	if(type_spec == immut_void){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Struct members may not be typed as void", parser_line_num);
-		num_errors++;
-		return FAILURE;;
-	}
-
-	//Add extra validation to ensure that the size of said type is known at comptime. This will stop
-	//the user from adding a field the mut a:char[] that is unknown at compile time
-	if(type_spec->type_complete == FALSE){
-		sprintf(info, "Attempt to use incomplete type %s as a struct member. Struct members must have a size known at compile time", type_spec->type_name.string);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		return FAILURE;
-	}
-
-	//Now if we finally make it all of the way down here, we are actually set. We'll construct the
-	//node that we have and also add it into our symbol table
 	
 	//We'll first create the symtab record. NULL for no specific function
 	symtab_variable_record_t* member_record = create_variable_record(name, NULL);
 	//Store the line number for error printing
 	member_record->line_number = parser_line_num;
 	//Store what the type is
-	member_record->type_defined_as = type_spec;
+	member_record->type_defined_as = member_type;
 
 	//Add it to both versions
 	add_struct_member(mutable_struct_type, member_record);

@@ -13,8 +13,8 @@ define struct a {
 	* does not need a name for the type as it's only
 	* ever used here
 	*/
-	b: mut struct {
-		x: muti32[5];
+	b: define mut struct {
+		x:mut i32[5];
 		y:mut f32;
 	   };
 };
