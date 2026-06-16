@@ -112,6 +112,7 @@ static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_
 static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream, visibilty_type_t visibility);
 static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream);
+static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_stream, generic_type_t* struct_type);
 static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* function_type, u_int8_t defining_predeclared_function);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_global_scope);
@@ -6382,14 +6383,53 @@ static inline generic_type_t* anonymous_struct_declaration(ollie_token_stream_t*
 	/**
 	 * We need to see at least one valid struct member here which is the reason for the do-while
 	 */
+	do {
+		//Let the rule try to parse this
+		symtab_variable_record_t* member = struct_member(token_stream, anonymous_struct);
+
+		//Fail out if we don't have it
+		if(member == NULL){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid struct member given in anonymous struct declaration", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//Now we need to see a semicolon next
+		lookahead = get_next_token(token_stream, &parser_line_num);
+
+		if(lookahead.tok != SEMICOLON){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon expected after member declaration", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//Now let's see if we can find the end R_CURLY. If we do then we leave
+		lookahead = get_next_token(token_stream, &parser_line_num);
+
+		//R_CURLY is our exit condition, otherwise we push this back
+		if(lookahead.tok == R_CURLY){
+			break;
+		} else {
+			push_back_token(token_stream, &parser_line_num);
+		}
+
+	} while(TRUE);
 	
+	//We know that we have an R_CURLY by the time we get here, let's make sure that it's balance
+	if(pop_token(&grouping_stack).tok != L_CURLY){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched curly braces detected", parser_line_num);
+		num_errors++;
+		return NULL;
+	}
+
+	//Now that we've parsed the list we can finalize the alignment
+	finalize_struct_alignment(anonymous_struct);
 
 	//Flag that this is complete
 	anonymous_struct->type_complete = TRUE;
 	
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
-
+	//Finally give this back
+	return anonymous_struct;
 }
 
 
