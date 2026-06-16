@@ -6359,40 +6359,12 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 /**
  * Handle an anonymous struct declaration. Unlike regular structs, anonymous declarations have *no* name. They are never
  * stored in the symtab either, these are exclusively structs that belong inside of the type system
+ *
+ * <anonymous-struct-declaration> ::= struct {<struct-member-list}
  */
 static inline generic_type_t* anonymous_struct_declaration(ollie_token_stream_t* token_stream, mutability_type_t mutability){
-	//Lookahead token for our uses
-	lexitem_t lookahead;
-
-	//Allocate it
-	dynamic_string_t type_name = dynamic_string_alloc();
-
-	//Set it
-	dynamic_string_set(&type_name, "struct ");
-
-	//Get the next token
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//Fail case
-	if(lookahead.tok != IDENT){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Valid identifier required after struct keyword", parser_line_num);
-		num_errors++;
-		//Fail out
-		return FAILURE;
-	}
-
-	//Add the name on the end
-	dynamic_string_concatenate(&type_name, lookahead.lexeme.string);
-
-	//Check that there are no duplicated types
-	if(do_duplicate_types_exist(type_name.string) == TRUE){
-		return FAILURE;
-	}
-
-	//If we make it here, we've made it far enough to know what we need to build our type for this construct
-	//We start with the immutable type
-	generic_type_t* immutable_struct_type = create_struct_type(type_name, current_line, NOT_MUTABLE);
-	generic_type_t* mutable_struct_type = create_struct_type(clone_dynamic_string(&type_name), current_line, MUTABLE);
+	//First create the overall struct in memory
+	generic_type_t* anonymous_struct = create_anonymous_struct_type(parser_line_num, mutability);
 	
 	//We are now required to see a valid construct member list
 	u_int8_t success = struct_member_list(token_stream, mutable_struct_type, immutable_struct_type);
@@ -6408,83 +6380,6 @@ static inline generic_type_t* anonymous_struct_declaration(ollie_token_stream_t*
 	immutable_struct_type->type_complete = TRUE;
 	mutable_struct_type->type_complete = TRUE;
 	
-	//Now we have one final thing to account for. The syntax allows for us to alias the type right here. This may
-	//be preferable to doing it later, and is certainly more convenient. If we see a semicol right off the bat, we'll
-	//know that we're not aliasing however
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//We're out of here, just return the node that we made
-	if(lookahead.tok == SEMICOLON){
-		//No aliasing here so we're done
-		return SUCCESS;
-	}
-	
-	//Otherwise, if this is correct, we should've seen the as keyword
-	if(lookahead.tok != AS){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon expected after construct definition", parser_line_num);
-		num_errors++;
-		//Make an error and get out of here
-		return FAILURE;
-	}
-
-	//Now if we get here, we know that we are aliasing. We won't have a separate node for this, as all
-	//we need to see now is a valid identifier. We'll add the identifier as a child of the overall node
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//If it was invalid leave
-	if(lookahead.tok != IDENT){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid identifier given as alias", parser_line_num);
-		num_errors++;
-		//Deallocate and fail
-		return FAILURE;
-	}
-
-	//Let's grab the actual name out
-	dynamic_string_t alias_name = lookahead.lexeme;
-
-	//Once we have this, the alias ident is of no use to us
-
-	//Real quick, let's check to see if we have the semicol that we need now
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//Last chance for us to fail syntactically 
-	if(lookahead.tok != SEMICOLON){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon expected after construct definition",  parser_line_num);
-		num_errors++;
-		//Fail out
-		return FAILURE;
-	}
-
-	//Fail out if they exist
-	if(do_duplicate_variables_exist(alias_name.string) == TRUE){
-		return FAILURE;
-	}
-
-	//If we find duplicates then leave
-	if(do_duplicate_variables_exist(alias_name.string) == TRUE){
-		return FAILURE;
-	}
-
-	//Use the helper to look for duplicates
-	if(do_duplicate_types_exist(alias_name.string) == TRUE){
-		return FAILURE;
-	}
-
-	//Now we'll make the actual record for the aliased type that is immutable
-	generic_type_t* immutable_aliased_type = create_aliased_type(alias_name.string, immutable_struct_type, parser_line_num, NOT_MUTABLE);
-
-	//Once we've made the aliased type, we can record it in the symbol table
-	insert_type(type_symtab, create_type_record(immutable_aliased_type));
-
-	//Now that we've made the immutable alias, we must also make the mutable alias
-	generic_type_t* mutable_aliased_type = create_aliased_type(alias_name.string, mutable_struct_type, parser_line_num, MUTABLE);
-
-	//Add this into the symtab too
-	insert_type(type_symtab, create_type_record(mutable_aliased_type));
-
-	//Succeeded so
-	return SUCCESS;
-
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
 

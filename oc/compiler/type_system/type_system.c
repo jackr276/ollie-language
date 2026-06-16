@@ -2312,6 +2312,35 @@ generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t lin
 
 
 /**
+ * Dynamically allocate and create an anonymous struct type
+ */
+generic_type_t* create_anonymous_struct_type(u_int32_t line_number, mutability_type_t mutability){
+	generic_type_t* type = calloc(1, sizeof(generic_type_t));
+
+	//Assign the class
+	type->type_class = TYPE_CLASS_STRUCT;
+	
+	//Assign the mutability
+	type->mutability = mutability;
+
+	//Where is the declaration?
+	type->line_number = line_number;
+
+	//Reserve dynamic array space for the struct table
+	type->internal_types.struct_table = dynamic_array_alloc();
+
+	//This is contiguous as well
+	type->memory_layout_type = MEMORY_LAYOUT_TYPE_CONTIGUOUS;
+
+	//This struct is anonymous
+	type->is_anonymous = TRUE;
+
+	//Give back the pointer
+	return type;
+}
+
+
+/**
  * Dynamically allocate and create a constructed type
  */
 generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_number, mutability_type_t mutability){
