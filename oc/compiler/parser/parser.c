@@ -6362,6 +6362,8 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
  * stored in the symtab either, these are exclusively structs that belong inside of the type system
  *
  * <anonymous-struct-declaration> ::= struct {{<struct-member>;}+}
+ *
+ * NOTE: By the time that we get here, we have already seen and consumed the struct keyword
  */
 static inline generic_type_t* anonymous_struct_declaration(ollie_token_stream_t* token_stream, mutability_type_t mutability){
 	//First we need to see an opening curly brace
@@ -6436,7 +6438,43 @@ static inline generic_type_t* anonymous_struct_declaration(ollie_token_stream_t*
 }
 
 
+/**
+ * Handle an anonymous union declaration. Unlike regular unions, anonymous declarations have *no* name. They are never
+ * stored in the symtab either, these are exclusively unions that belong inside of the type system
+ *
+ * <anonymous-union-declaration> ::= union {{<union-member>;}+}
+ *
+ * NOTE: by the time that we get here, we have already seen and consumed the union keyword
+ */
 static inline generic_type_t* anonymous_union_declaration(ollie_token_stream_t* token_stream, mutability_type_t mutability){
+	//We'll first need to see an L_CURLY
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+
+	if(lookahead.tok != L_CURLY){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Opening curly brace expected after union keyword", parser_line_num);
+		num_errors++;
+		return NULL;
+	}
+
+	/**
+	 * We need to see at least one valid union member here which is the reason for the do-while
+	 */
+	do {
+
+
+		//Let's see if we can find the R_CURLY
+		lookahead = get_next_token(token_stream, &parser_line_num);
+
+		if(lookahead.tok == R_CURLY){
+			break;
+		} else {
+			push_back_token(token_stream, &parser_line_num);
+		}
+
+	} while(TRUE);
+
+
+
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
 
