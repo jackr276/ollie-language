@@ -113,6 +113,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream);
 static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_stream, generic_type_t* struct_type);
+static generic_type_t* union_type_specifier(ollie_token_stream_t* token_stream, mutability_type_t mutability);
 static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* function_type, u_int8_t defining_predeclared_function);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_global_scope);
@@ -6435,6 +6436,95 @@ static inline generic_type_t* anonymous_struct_declaration(ollie_token_stream_t*
 	
 	//Finally give this back
 	return anonymous_struct;
+}
+
+
+/**
+ * A special handler for anonymous union types. We need this handler because we actually can't see mutability
+ * types for unions themselves. The members are either all immutable or all mutable based on the type of the 
+ * union
+ */
+static inline u_int8_t anonymous_union_member(ollie_token_stream_t* token_stream, generic_type_t* union_type){
+	//Extract whether this is or is not mutable
+	mutability_type_t mutability = union_type->mutability;
+
+	//We need to first see an identifier
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Once we're here, we need to see an identifier token. If we don't, we'll fail out
+	if(lookahead.tok != IDENT){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Identifier expected in union member declaration", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Otherwise we did find it, so let's grab the name out
+	dynamic_string_t name = lookahead.lexeme;
+
+	//Check for duplicate member variables
+	if(do_duplicate_member_variables_exist(name.string, union_type) == TRUE){
+		return FAILURE;
+	}
+
+	//Check for duplicated functions
+	if(do_duplicate_functions_exist(name.string) == TRUE){
+		return FAILURE;
+	}
+
+	//If we have duplicate types, that is also a failure
+	if(do_duplicate_types_exist(name.string) == TRUE){
+		return FAILURE;
+	}
+
+	//Now that we know it's all good, we can keep parsing. We next need to see a colon
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Fail out if we don't have it
+	if(lookahead.tok != COLON){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Colon required after identifier in union member definition", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Now we need to see a valid type-specifier
+	generic_type_t* type = union_type_specifier(token_stream, mutability);
+
+	//If this is NULL we've failed
+	if(type == NULL){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid type given to union type", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	/**
+	 * Add extra validation to ensure that the size of said type is known at comptime. This will stop
+	 * the user from adding a field the mut a:char[] that is unknown at compile time
+	 */
+	if(type->type_complete == FALSE){
+		sprintf(info, "Attempt to use incomplete type %s as a union member. Union members must have a size known at compile time", type->type_name.string);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		return FAILURE;
+	}
+
+	//Now that we have the type as well, we can finally see the semicolon to close it off
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Fail out here if we don't have it
+	if(lookahead.tok != SEMICOLON){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon required after union member declaration", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Create and add the member
+	symtab_variable_record_t* union_member = create_variable_record(&name, NULL);
+	union_member->type_defined_as = type;
+
+	//Add this into the union
+	add_union_member(union_type, union_member);
+
+	//If we make it here then we succeeded
+	return SUCCESS;
 }
 
 
