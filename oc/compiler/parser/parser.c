@@ -6357,6 +6357,21 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 
 
 /**
+ * An anonymous type allows us to define a one-time one-use struct or union type inside of
+ * another struct/union declaration itself. This has the same rules as a regular struct,
+ * except that it will not be available for general use like a normal struct is
+ *
+ * TODO MANGLE THE NAME??
+ *
+ * NOTE: By the time we get here, we have already seen the "define" keyword
+ */
+static inline generic_type_t* anonymous_type_declaration(ollie_token_stream_t* token_stream){
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
+}
+
+
+/**
  * A construct member declares a variable within a struct. Structs have their own tables
  * that store variables within. Because these variables are unique to structs, we don't need to
  * do any validation on duplicates. All references to these variables will be by default
@@ -6380,18 +6395,18 @@ static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t
 		return FAILURE;
 	}
 
-	//Grab this for convenience
-	dynamic_string_t* name = &(lookahead.lexeme);
+	//Make a copy of this before we blow it away
+	dynamic_string_t name = lookahead.lexeme;
 
 	/**
 	 * The field, if we can find it. We only need to check it from one of the versions, they
 	 * are the same internally
 	 */
-	symtab_variable_record_t* duplicate = get_struct_member(mutable_struct_type, name->string);
+	symtab_variable_record_t* duplicate = get_struct_member(mutable_struct_type, name.string);
 
 	//Is this a duplicate? If so, we fail out
 	if(duplicate != NULL){
-		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name->string, mutable_struct_type->type_name.string);
+		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name.string, mutable_struct_type->type_name.string);
 		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		print_variable_name(duplicate);
 		num_errors++;
@@ -6399,12 +6414,12 @@ static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t
 	}
 
 	//Are we defining a duplicated type?
-	if(do_duplicate_types_exist(name->string) == TRUE){
+	if(do_duplicate_types_exist(name.string) == TRUE){
 		return FAILURE;
 	}
 
 	//Look for duplicated functions too
-	if(do_duplicate_functions_exist(name->string) == TRUE){
+	if(do_duplicate_functions_exist(name.string) == TRUE){
 		return FAILURE;
 	}
 
@@ -6461,12 +6476,19 @@ static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t
 	 * declaration here
 	 */
 	} else {
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(1);
+		//Let the helper get the anonymous type declaration for us
+		member_type = anonymous_type_declaration(token_stream);
+
+		//If this is an error, the whole thing fails
+		if(member_type == NULL){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Attempt to use invalid anonymous type as a struct member", parser_line_num);
+			num_errors++;
+			return FAILURE;
+		}
 	}
 	
 	//We'll first create the symtab record. NULL for no specific function
-	symtab_variable_record_t* member_record = create_variable_record(name, NULL);
+	symtab_variable_record_t* member_record = create_variable_record(&name, NULL);
 	//Store the line number for error printing
 	member_record->line_number = parser_line_num;
 	//Store what the type is
