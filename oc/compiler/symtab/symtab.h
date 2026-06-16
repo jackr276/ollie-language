@@ -437,17 +437,17 @@ void finalize_type_scope(type_symtab_t* symtab);
 /**
  * Create a record for the symbol table
  */
-symtab_variable_record_t* create_variable_record(dynamic_string_t name, symtab_function_record_t* function_declared_in);
+symtab_variable_record_t* create_variable_record(dynamic_string_t* name, symtab_function_record_t* function_declared_in);
 
 /**
  * Create a global variable record
  */
-symtab_variable_record_t* create_global_variable_record(dynamic_string_t name, visibilty_type_t visibility);
+symtab_variable_record_t* create_global_variable_record(dynamic_string_t* name, visibilty_type_t visibility);
 
 /**
  * Create a static variable record. These variables are really global vars
  */
-symtab_variable_record_t* create_static_variable_record(dynamic_string_t name);
+symtab_variable_record_t* create_static_variable_record(dynamic_string_t* name);
 
 /**
  * Create a ternary variable record
@@ -482,7 +482,7 @@ void remediate_return_by_copy_gp_parameter_order(symtab_function_record_t* recor
 /**
  * Make a function record
  */
-symtab_function_record_t* create_function_record(dynamic_string_t name, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number);
+symtab_function_record_t* create_function_record(dynamic_string_t* name, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number);
 
 /**
  * Create a namespace record and add it into the symtab. This will create the new namespace as a
@@ -522,7 +522,7 @@ symtab_macro_record_t* create_macro_record(dynamic_string_t name, u_int32_t line
  *
  * NOTE: The label symtab assumes ownership of the name dynamic string
  */
-symtab_label_record_t* create_label_record(dynamic_string_t name, u_int32_t line_number);
+symtab_label_record_t* create_label_record(dynamic_string_t* name, u_int32_t line_number);
 
 /**
  * Insert a function into the symbol table

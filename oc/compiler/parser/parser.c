@@ -6381,15 +6381,15 @@ static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t
 	}
 
 	//Grab this for convenience
-	dynamic_string_t name = lookahead.lexeme;
+	dynamic_string_t* name = &(lookahead.lexeme);
 
 	//The field, if we can find it. We only need to check it from one of the versions, they
 	//are the same internally
-	symtab_variable_record_t* duplicate = get_struct_member(mutable_struct_type, name.string);
+	symtab_variable_record_t* duplicate = get_struct_member(mutable_struct_type, name->string);
 
 	//Is this a duplicate? If so, we fail out
 	if(duplicate != NULL){
-		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name.string, mutable_struct_type->type_name.string);
+		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name->string, mutable_struct_type->type_name.string);
 		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		print_variable_name(duplicate);
 		num_errors++;
@@ -6397,12 +6397,12 @@ static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t
 	}
 
 	//Are we defining a duplicated type?
-	if(do_duplicate_types_exist(name.string) == TRUE){
+	if(do_duplicate_types_exist(name->string) == TRUE){
 		return FAILURE;
 	}
 
 	//Look for duplicated functions too
-	if(do_duplicate_functions_exist(name.string) == TRUE){
+	if(do_duplicate_functions_exist(name->string) == TRUE){
 		return FAILURE;
 	}
 
@@ -7242,14 +7242,17 @@ static u_int8_t union_member(ollie_token_stream_t* token_stream, generic_type_t*
 
 	//Finally we can create our members
 	//First goes the mutable one
-	symtab_variable_record_t* mutable_union_member = create_variable_record(name, NULL);
+	symtab_variable_record_t* mutable_union_member = create_variable_record(&name, NULL);
 	//Give it its type
 	mutable_union_member->type_defined_as = mutable_type;
 	//And we'll let the helper add it into the union type
 	add_union_member(mutable_union_type, mutable_union_member);
 
+	//We'll need to clone the name for the immutable version
+	dynamic_string_t clone = clone_dynamic_string(&name);
+
 	//Now the immutable version
-	symtab_variable_record_t* immutable_union_member = create_variable_record(clone_dynamic_string(&name), NULL);
+	symtab_variable_record_t* immutable_union_member = create_variable_record(&clone, NULL);
 	//Give it its type
 	immutable_union_member->type_defined_as = immutable_type;
 	//And we'll let the helper add it into the union type
@@ -7566,7 +7569,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 
 		//If we make it here, then all of our checks passed and we don't have a duplicate name. We're now good
 		//to create the record and assign it a type
-		symtab_variable_record_t* member_record = create_variable_record(lookahead.lexeme, NULL);
+		symtab_variable_record_t* member_record = create_variable_record(&(lookahead.lexeme), NULL);
 
 		//Store the line number
 		member_record->line_number = parser_line_num;
@@ -8961,7 +8964,7 @@ static generic_ast_node_t* labeled_statement(ollie_token_stream_t* token_stream)
 	}
 
 	//Now let's build up the label record
-	symtab_label_record_t* new_record = create_label_record(label_name, parser_line_num);
+	symtab_label_record_t* new_record = create_label_record(&label_name, parser_line_num);
 
 	//Add it into the label symtab
 	insert_label(current_function->user_defined_labels, new_record);
@@ -11391,12 +11394,12 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 	if(is_static == FALSE){
 		//Go based on it's global status
 		if(is_global == FALSE){
-			declared_var = create_variable_record(name, current_function);
+			declared_var = create_variable_record(&name, current_function);
 		} else {
-			declared_var = create_global_variable_record(name, visibility);
+			declared_var = create_global_variable_record(&name, visibility);
 		}
 	} else {
-		declared_var = create_static_variable_record(name);
+		declared_var = create_static_variable_record(&name);
 	}
 
 	//Store the type--make sure that we strip any aliasing off of it first
@@ -12025,12 +12028,12 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	if(is_static == FALSE){
 		//Go based on it's global status
 		if(is_global == FALSE){
-			declared_var = create_variable_record(name, current_function);
+			declared_var = create_variable_record(&name, current_function);
 		} else {
-			declared_var = create_global_variable_record(name, visibility);
+			declared_var = create_global_variable_record(&name, visibility);
 		}
 	} else {
-		declared_var = create_static_variable_record(name);
+		declared_var = create_static_variable_record(&name);
 	}
 
 	//Store the type
@@ -12496,7 +12499,7 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 	 * declaration. It is now incumbent on us to store it in the variable 
 	 * symbol table
 	 */
-	symtab_variable_record_t* param_record = create_variable_record(name, current_function);
+	symtab_variable_record_t* param_record = create_variable_record(&name, current_function);
 
 	/**
 	 * If we've seen the params keyword now is the time
@@ -13098,7 +13101,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	}
 
 	//Now that we've survived up to here, we can make the actual record
-	symtab_function_record_t* function_record = create_function_record(function_name, visibility, is_inlined, raises_errors, parser_line_num);
+	symtab_function_record_t* function_record = create_function_record(&function_name, visibility, is_inlined, raises_errors, parser_line_num);
 
 	//Now we need to see an lparen to begin the parameters
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -13427,7 +13430,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-		function_record = create_function_record(function_name, visibility, is_inlined, raises_errors, parser_line_num);
+		function_record = create_function_record(&function_name, visibility, is_inlined, raises_errors, parser_line_num);
 
 		//We'll put the function into the symbol table
 		//since we now know that everything worked
