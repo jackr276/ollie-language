@@ -6403,6 +6403,9 @@ static inline generic_type_t* anonymous_struct_declaration(ollie_token_stream_t*
 			return NULL;
 		}
 
+		//Add the member into our struct now
+		add_struct_member(anonymous_struct, member);
+
 		//Now let's see if we can find the end R_CURLY. If we do then we leave
 		lookahead = get_next_token(token_stream, &parser_line_num);
 

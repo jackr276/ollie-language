@@ -21,7 +21,7 @@ define struct a {
 
 
 pub fn main() -> i32 {
-	let tester:struct a = {1, 2, {[1, 2, 3, 4, 5, 5.55]}};
+	let tester:struct a = {1, 2, {[1, 2, 3, 4, 5], 5.5}};
 
 	//Verify that we can distinguish the two x's
 	OUNIT: [console = 3]
