@@ -6356,7 +6356,135 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 }
 
 
+/**
+ * Handle an anonymous struct declaration. Unlike regular structs, anonymous declarations have *no* name. They are never
+ * stored in the symtab either, these are exclusively structs that belong inside of the type system
+ */
 static inline generic_type_t* anonymous_struct_declaration(ollie_token_stream_t* token_stream, mutability_type_t mutability){
+	//Lookahead token for our uses
+	lexitem_t lookahead;
+
+	//Allocate it
+	dynamic_string_t type_name = dynamic_string_alloc();
+
+	//Set it
+	dynamic_string_set(&type_name, "struct ");
+
+	//Get the next token
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Fail case
+	if(lookahead.tok != IDENT){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Valid identifier required after struct keyword", parser_line_num);
+		num_errors++;
+		//Fail out
+		return FAILURE;
+	}
+
+	//Add the name on the end
+	dynamic_string_concatenate(&type_name, lookahead.lexeme.string);
+
+	//Check that there are no duplicated types
+	if(do_duplicate_types_exist(type_name.string) == TRUE){
+		return FAILURE;
+	}
+
+	//If we make it here, we've made it far enough to know what we need to build our type for this construct
+	//We start with the immutable type
+	generic_type_t* immutable_struct_type = create_struct_type(type_name, current_line, NOT_MUTABLE);
+	generic_type_t* mutable_struct_type = create_struct_type(clone_dynamic_string(&type_name), current_line, MUTABLE);
+	
+	//We are now required to see a valid construct member list
+	u_int8_t success = struct_member_list(token_stream, mutable_struct_type, immutable_struct_type);
+
+	//Automatic fail case here
+	if(success == FAILURE){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid struct member list given in construct definition", parser_line_num);
+		//Fail out
+		return FAILURE;
+	}
+
+	//Once we get here, the struct type's size is known and as such it is complete
+	immutable_struct_type->type_complete = TRUE;
+	mutable_struct_type->type_complete = TRUE;
+	
+	//Now we have one final thing to account for. The syntax allows for us to alias the type right here. This may
+	//be preferable to doing it later, and is certainly more convenient. If we see a semicol right off the bat, we'll
+	//know that we're not aliasing however
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//We're out of here, just return the node that we made
+	if(lookahead.tok == SEMICOLON){
+		//No aliasing here so we're done
+		return SUCCESS;
+	}
+	
+	//Otherwise, if this is correct, we should've seen the as keyword
+	if(lookahead.tok != AS){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon expected after construct definition", parser_line_num);
+		num_errors++;
+		//Make an error and get out of here
+		return FAILURE;
+	}
+
+	//Now if we get here, we know that we are aliasing. We won't have a separate node for this, as all
+	//we need to see now is a valid identifier. We'll add the identifier as a child of the overall node
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//If it was invalid leave
+	if(lookahead.tok != IDENT){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid identifier given as alias", parser_line_num);
+		num_errors++;
+		//Deallocate and fail
+		return FAILURE;
+	}
+
+	//Let's grab the actual name out
+	dynamic_string_t alias_name = lookahead.lexeme;
+
+	//Once we have this, the alias ident is of no use to us
+
+	//Real quick, let's check to see if we have the semicol that we need now
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Last chance for us to fail syntactically 
+	if(lookahead.tok != SEMICOLON){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon expected after construct definition",  parser_line_num);
+		num_errors++;
+		//Fail out
+		return FAILURE;
+	}
+
+	//Fail out if they exist
+	if(do_duplicate_variables_exist(alias_name.string) == TRUE){
+		return FAILURE;
+	}
+
+	//If we find duplicates then leave
+	if(do_duplicate_variables_exist(alias_name.string) == TRUE){
+		return FAILURE;
+	}
+
+	//Use the helper to look for duplicates
+	if(do_duplicate_types_exist(alias_name.string) == TRUE){
+		return FAILURE;
+	}
+
+	//Now we'll make the actual record for the aliased type that is immutable
+	generic_type_t* immutable_aliased_type = create_aliased_type(alias_name.string, immutable_struct_type, parser_line_num, NOT_MUTABLE);
+
+	//Once we've made the aliased type, we can record it in the symbol table
+	insert_type(type_symtab, create_type_record(immutable_aliased_type));
+
+	//Now that we've made the immutable alias, we must also make the mutable alias
+	generic_type_t* mutable_aliased_type = create_aliased_type(alias_name.string, mutable_struct_type, parser_line_num, MUTABLE);
+
+	//Add this into the symtab too
+	insert_type(type_symtab, create_type_record(mutable_aliased_type));
+
+	//Succeeded so
+	return SUCCESS;
+
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
 
@@ -6379,8 +6507,7 @@ static inline generic_type_t* anonymous_union_declaration(ollie_token_stream_t* 
  * symtab for types. Once we create this generic type, that is it so we'll
  * need to hold onto it
  *
- * BNF Rule: <anonymous-type-definer> ::= {mut}? {<struct-definer> | <union-definer>}
- * 
+ * BNF Rule: <anonymous-type-definer> ::= {mut}? {<anonymous-struct-definer> | <anonymous-union-definer>}
  *
  * NOTE: By the time we get here, we have already seen the "define" keyword
  */
@@ -6940,8 +7067,6 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
  * BNF Rule: <struct-definer> ::= define struct <identifier> { <construct-member-list> } {as <identifer>}?;
  */
 static u_int8_t struct_definer(ollie_token_stream_t* token_stream){
-	//Freeze the line num
-	u_int32_t current_line = parser_line_num;
 	//Lookahead token for our uses
 	lexitem_t lookahead;
 
@@ -6972,8 +7097,8 @@ static u_int8_t struct_definer(ollie_token_stream_t* token_stream){
 
 	//If we make it here, we've made it far enough to know what we need to build our type for this construct
 	//We start with the immutable type
-	generic_type_t* immutable_struct_type = create_struct_type(type_name, current_line, NOT_MUTABLE);
-	generic_type_t* mutable_struct_type = create_struct_type(clone_dynamic_string(&type_name), current_line, MUTABLE);
+	generic_type_t* immutable_struct_type = create_struct_type(type_name, parser_line_num, NOT_MUTABLE);
+	generic_type_t* mutable_struct_type = create_struct_type(clone_dynamic_string(&type_name), parser_line_num, MUTABLE);
 	
 	//Now we'll insert the struct type into the symtab
 	insert_type(type_symtab, create_type_record(immutable_struct_type));
@@ -10861,9 +10986,6 @@ static generic_ast_node_t* assembly_inline_statement(ollie_token_stream_t* token
  * <defer-statement> ::= defer <compound statement>
  */
 static generic_ast_node_t* defer_statement(ollie_token_stream_t* token_stream){
-	//Freeze the line number
-	u_int32_t current_line = parser_line_num;
-
 	//If we see any kind of invalid nesting here, we'll need to fail out. Defer
 	//statements can only be nested inside of a function, and nothing else. So, if
 	//the very first token that we see here is not a function, we're immediately
@@ -10885,7 +11007,7 @@ static generic_ast_node_t* defer_statement(ollie_token_stream_t* token_stream){
 
 	//If this fails, we bail
 	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		return print_and_return_error("Invalid compound statement given to defer statement", current_line);
+		return print_and_return_error("Invalid compound statement given to defer statement", parser_line_num);
 	}
 
 	//Otherwise it was valid, so we have another child for this overall deferred statement
@@ -11163,8 +11285,6 @@ static generic_ast_node_t* default_statement(ollie_token_stream_t* token_stream)
  * NOTE: We assume that we have already seen and consumed the first case token here
  */
 static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, generic_ast_node_t* switch_stmt_node, int32_t* values, int32_t* values_max_index){
-	//Freeze the current line number
-	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 	//Switch compound statement node for later on
@@ -11188,11 +11308,11 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 			break;
 
 		case AST_NODE_TYPE_ERR_NODE:
-			return print_and_return_error("Invalid constant found in switch statment", current_line);
+			return print_and_return_error("Invalid constant found in switch statment", parser_line_num);
 
 		default:
 			printf("NODE TYPE IS %d\n", constant_node->ast_node_type);
-			return print_and_return_error("Case statements must be values that expand to constants", current_line);
+			return print_and_return_error("Case statements must be values that expand to constants", parser_line_num);
 	}
 
 	//Once we're done we can remove this
