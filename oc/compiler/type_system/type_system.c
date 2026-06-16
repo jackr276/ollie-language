@@ -2399,6 +2399,36 @@ generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_num
 
 
 /**
+ * Dynamically allocate and create an anonymous union type
+ */
+generic_type_t* create_anonymous_union_type(u_int32_t line_number, mutability_type_t mutability){
+	//Dynamically allocate the union type
+	generic_type_t* type = calloc(1, sizeof(generic_type_t));
+
+	//Store that this is a union
+	type->type_class = TYPE_CLASS_UNION;
+
+	//Save the mutability
+	type->mutability = mutability;
+
+	//The line number where this was created
+	type->line_number = line_number;
+
+	//Reserve the dynamic array as well
+	type->internal_types.union_table = dynamic_array_alloc();
+
+	//This is contiguous as well
+	type->memory_layout_type = MEMORY_LAYOUT_TYPE_CONTIGUOUS;
+
+	//Flag that this is anonymous
+	type->is_anonymous = TRUE;
+
+	//And give the type pointer back
+	return type;
+}
+
+
+/**
  * Does this struct contain said member? Return the variable if yes, NULL if not
  */
 void* get_struct_member(generic_type_t* structure, char* name){

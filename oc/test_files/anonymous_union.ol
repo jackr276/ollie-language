@@ -14,21 +14,21 @@ define struct a {
 	* ever used here
 	*/
 	b: define mut union {
-		x:mut i32;
-		y:mut f32;
+		x:i32;
+		y:f32;
 	   };
 };
 
 
 pub fn main() -> i32 {
-	let tester:mut struct a;
+	declare tester:mut struct a;
 
 	//Populate the tester
 	tester:x = 5;
 	tester:y = 4;
-	tester:b:x = 11
+	tester:b.x = 11;
 
 	//Verify that we can distinguish the two x's
 	OUNIT: [console = 16]
-	ret tester:x + tester:b:x;
+	ret tester:x + tester:b.x;
 }

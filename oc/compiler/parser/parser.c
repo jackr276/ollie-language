@@ -6546,13 +6546,26 @@ static inline generic_type_t* anonymous_union_declaration(ollie_token_stream_t* 
 		return NULL;
 	}
 
+	//Push this on for later matching
+	push_token(&grouping_stack, lookahead);
+
+	//We can now create the union type
+	generic_type_t* union_type = create_anonymous_union_type(parser_line_num, mutability);
+
 	/**
 	 * We need to see at least one valid union member here which is the reason for the do-while
 	 */
 	do {
+		u_int8_t success = anonymous_union_member(token_stream, union_type);
 
+		//Fail our if this didn't work
+		if(success == FAILURE){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid union member in anonymous union declaration", parser_line_num);
+			num_errors++;
+			return FAILURE;
+		}
 
-		//Let's see if we can find the R_CURLY
+		//Let's see if we can find the R_CURLY and escape out
 		lookahead = get_next_token(token_stream, &parser_line_num);
 
 		if(lookahead.tok == R_CURLY){
@@ -6563,11 +6576,21 @@ static inline generic_type_t* anonymous_union_declaration(ollie_token_stream_t* 
 
 	} while(TRUE);
 
+	//Make sure that our curlies matched up
+	if(pop_token(&grouping_stack).tok != L_CURLY){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched curly braces detected", parser_line_num);
+		num_errors++;
+		return NULL;
+	}
 
+	//Finalize the type now that we're all done
+	finalize_union_alignment(union_type);
 
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
+	//Flag that this is complete
+	union_type->type_complete = TRUE;
 
+	//And give the type back
+	return union_type;
 }
 
 

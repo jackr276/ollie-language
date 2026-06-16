@@ -330,6 +330,11 @@ generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_nu
 generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_number, mutability_type_t mutability);
 
 /**
+ * Dynamically allocate and create an anonymous union type
+ */
+generic_type_t* create_anonymous_union_type(u_int32_t line_number, mutability_type_t mutability);
+
+/**
  * Is the given binary operation valid for the type that was specificed?
  */
 u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t binary_op, side_type_t side);
