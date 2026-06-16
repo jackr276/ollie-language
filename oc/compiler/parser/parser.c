@@ -6356,18 +6356,63 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 }
 
 
+static inline generic_type_t* anonymous_struct_declaration(ollie_token_stream_t* token_stream, mutability_type_t mutability){
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
+
+}
+
+
+static inline generic_type_t* anonymous_union_declaration(ollie_token_stream_t* token_stream, mutability_type_t mutability){
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
+
+}
+
+
 /**
  * An anonymous type allows us to define a one-time one-use struct or union type inside of
  * another struct/union declaration itself. This has the same rules as a regular struct,
  * except that it will not be available for general use like a normal struct is
  *
- * TODO MANGLE THE NAME??
+ * Anonymous types themselves have no name at all. They are not stored inside of the
+ * symtab for types. Once we create this generic type, that is it so we'll
+ * need to hold onto it
+ *
+ * BNF Rule: <anonymous-type-definer> ::= {mut}? {<struct-definer> | <union-definer>}
+ * 
  *
  * NOTE: By the time we get here, we have already seen the "define" keyword
  */
-static inline generic_type_t* anonymous_type_declaration(ollie_token_stream_t* token_stream){
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
+static generic_type_t* anonymous_type_declaration(ollie_token_stream_t* token_stream){
+	//Assume we are not mutable by default
+	mutability_type_t mutability = NOT_MUTABLE;
+
+	//Get the next token
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+
+	/**
+	 * If we see the mut keyword, then this is mutable. We'll need to
+	 * refresh the token after this too
+	 */
+	if(lookahead.tok == MUT){
+		mutability = MUTABLE;
+		lookahead = get_next_token(token_stream, &parser_line_num);
+	}
+
+	switch(lookahead.tok){
+		case STRUCT:
+			return anonymous_struct_declaration(token_stream, mutability);
+
+		case UNION:
+			return anonymous_union_declaration(token_stream, mutability);
+
+		default:
+			sprintf(info, "Expected \"struct\" or \"union\" keywords but got \"%s\" instead", lexitem_to_string(&lookahead));
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			num_errors++;
+			return NULL;
+	}
 }
 
 
@@ -6379,7 +6424,7 @@ static inline generic_type_t* anonymous_type_declaration(ollie_token_stream_t* t
  *
  * As a reminder, type specifier will give us an error if the type is not defined
  *
- * BNF Rule: <construct-member> ::= <identifier> : <type-specifier> | <identifier> : define {mut}? struct {<struct_member>? {, <struct_member>}*}
+ * BNF Rule: <construct-member> ::= <identifier> : <type-specifier> | <identifier> : define <anonymous-type-definer>
  */
 static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t* mutable_struct_type, generic_type_t* immutable_struct_type){
 	//The lookahead token
