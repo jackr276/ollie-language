@@ -6383,8 +6383,10 @@ static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t
 	//Grab this for convenience
 	dynamic_string_t* name = &(lookahead.lexeme);
 
-	//The field, if we can find it. We only need to check it from one of the versions, they
-	//are the same internally
+	/**
+	 * The field, if we can find it. We only need to check it from one of the versions, they
+	 * are the same internally
+	 */
 	symtab_variable_record_t* duplicate = get_struct_member(mutable_struct_type, name->string);
 
 	//Is this a duplicate? If so, we fail out
@@ -6428,7 +6430,7 @@ static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t
 		push_back_token(token_stream, &parser_line_num);
 
 		//Now we are required to see a valid type specifier
-		generic_type_t* member_type = type_specifier(token_stream);
+		member_type = type_specifier(token_stream);
 
 		//If this is an error, the whole thing fails
 		if(member_type == NULL){
