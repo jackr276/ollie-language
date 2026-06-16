@@ -6360,25 +6360,32 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
  * Handle an anonymous struct declaration. Unlike regular structs, anonymous declarations have *no* name. They are never
  * stored in the symtab either, these are exclusively structs that belong inside of the type system
  *
- * <anonymous-struct-declaration> ::= struct {<struct-member-list}
+ * <anonymous-struct-declaration> ::= struct {{<struct-member>;}+}
  */
 static inline generic_type_t* anonymous_struct_declaration(ollie_token_stream_t* token_stream, mutability_type_t mutability){
-	//First create the overall struct in memory
-	generic_type_t* anonymous_struct = create_anonymous_struct_type(parser_line_num, mutability);
-	
-	//We are now required to see a valid construct member list
-	u_int8_t success = struct_member_list(token_stream, mutable_struct_type, immutable_struct_type);
+	//First we need to see an opening curly brace
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
-	//Automatic fail case here
-	if(success == FAILURE){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid struct member list given in construct definition", parser_line_num);
-		//Fail out
-		return FAILURE;
+	//Fail out if we don't have it
+	if(lookahead.tok != L_CURLY){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Opening curly brace expected in anonymous struct declaration", parser_line_num);
+		num_errors++;
+		return NULL;
 	}
 
-	//Once we get here, the struct type's size is known and as such it is complete
-	immutable_struct_type->type_complete = TRUE;
-	mutable_struct_type->type_complete = TRUE;
+	//Push this onto the grouping stack for matching
+	push_token(&grouping_stack, lookahead);
+
+	//Create the memory for this struct
+	generic_type_t* anonymous_struct = create_anonymous_struct_type(parser_line_num, mutability);
+
+	/**
+	 * We need to see at least one valid struct member here which is the reason for the do-while
+	 */
+	
+
+	//Flag that this is complete
+	anonymous_struct->type_complete = TRUE;
 	
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
@@ -6448,7 +6455,7 @@ static generic_type_t* anonymous_type_declaration(ollie_token_stream_t* token_st
  *
  * BNF Rule: <construct-member> ::= <identifier> : <type-specifier> | <identifier> : define <anonymous-type-definer>
  */
-static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t* mutable_struct_type, generic_type_t* immutable_struct_type){
+static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_stream, generic_type_t* struct_type){
 	//The lookahead token
 	lexitem_t lookahead;
 	generic_type_t* member_type = NULL;
@@ -6459,7 +6466,7 @@ static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t
 	if(lookahead.tok != IDENT){
 		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid identifier given as struct member name", parser_line_num);
 		num_errors++;
-		return FAILURE;
+		return NULL;
 	}
 
 	//Make a copy of this before we blow it away
@@ -6469,25 +6476,25 @@ static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t
 	 * The field, if we can find it. We only need to check it from one of the versions, they
 	 * are the same internally
 	 */
-	symtab_variable_record_t* duplicate = get_struct_member(mutable_struct_type, name.string);
+	symtab_variable_record_t* duplicate = get_struct_member(struct_type, name.string);
 
 	//Is this a duplicate? If so, we fail out
 	if(duplicate != NULL){
-		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name.string, mutable_struct_type->type_name.string);
+		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name.string, struct_type->type_name.string);
 		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		print_variable_name(duplicate);
 		num_errors++;
-		return FAILURE;
+		return NULL;
 	}
 
 	//Are we defining a duplicated type?
 	if(do_duplicate_types_exist(name.string) == TRUE){
-		return FAILURE;
+		return NULL;
 	}
 
 	//Look for duplicated functions too
 	if(do_duplicate_functions_exist(name.string) == TRUE){
-		return FAILURE;
+		return NULL;
 	}
 
 	//After the ident, we need to see a colon
@@ -6497,7 +6504,7 @@ static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t
 	if(lookahead.tok != COLON){
 		print_parse_message(MESSAGE_TYPE_ERROR, "Colon required between ident and type specifier in struct member declaration", parser_line_num);
 		num_errors++;
-		return FAILURE;
+		return NULL;
 	}
 
 	/**
@@ -6518,14 +6525,14 @@ static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t
 		if(member_type == NULL){
 			print_parse_message(MESSAGE_TYPE_ERROR, "Attempt to use undefined type in struct member", parser_line_num);
 			num_errors++;
-			return FAILURE;
+			return NULL;
 		}
 
 		//Error out if this happens
 		if(member_type == immut_void){
 			print_parse_message(MESSAGE_TYPE_ERROR, "Struct members may not be typed as void", parser_line_num);
 			num_errors++;
-			return FAILURE;;
+			return NULL;
 		}
 
 		/**
@@ -6535,7 +6542,7 @@ static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t
 		if(member_type->type_complete == FALSE){
 			sprintf(info, "Attempt to use incomplete type %s as a struct member. Struct members must have a size known at compile time", member_type->type_name.string);
 			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			return FAILURE;
+			return NULL;
 		}
 
 	/**
@@ -6550,7 +6557,7 @@ static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t
 		if(member_type == NULL){
 			print_parse_message(MESSAGE_TYPE_ERROR, "Attempt to use invalid anonymous type as a struct member", parser_line_num);
 			num_errors++;
-			return FAILURE;
+			return NULL;
 		}
 	}
 	
@@ -6561,12 +6568,8 @@ static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t
 	//Store what the type is
 	member_record->type_defined_as = member_type;
 
-	//Add it to both versions
-	add_struct_member(mutable_struct_type, member_record);
-	add_struct_member(immutable_struct_type, member_record);
-
 	//All went well so we can send this up the chain
-	return SUCCESS;
+	return member_record;
 }
 
 
@@ -6600,10 +6603,10 @@ static u_int8_t struct_member_list(ollie_token_stream_t* token_stream, generic_t
 		push_back_token(token_stream, &parser_line_num);
 
 		//We must first see a valid construct member
-		u_int8_t status = struct_member(token_stream, mutable_struct_type, immutable_struct_type);
+		symtab_variable_record_t* member = struct_member(token_stream, mutable_struct_type);
 
 		//If it's an error, we'll fail right out
-		if(status == FAILURE){
+		if(member == NULL){
 			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid struct member declaration", parser_line_num);
 			num_errors++;
 			//It's already an error node so just let it propogate
@@ -6619,6 +6622,13 @@ static u_int8_t struct_member_list(ollie_token_stream_t* token_stream, generic_t
 			num_errors++;
 			return FAILURE;
 		}
+
+		/**
+		 * Now that we know this all works, we can add this struct member to the immutable and mutable
+		 * struct types that we've created
+		 */
+		add_struct_member(mutable_struct_type, member);
+		add_struct_member(immutable_struct_type, member);
 
 		//Refresh it once more
 		lookahead = get_next_token(token_stream, &parser_line_num);
@@ -11256,7 +11266,7 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 	//we hit this, there's no point in going on
 	if(switch_stmt_node->upper_bound - switch_stmt_node->lower_bound >= MAX_SWITCH_RANGE){
 		sprintf(info, "Range from %d to %d exceeds %d, too large for a switch statement. Use a compound if statement instead", switch_stmt_node->lower_bound, switch_stmt_node->upper_bound, MAX_SWITCH_RANGE);
-		return print_and_return_error(info, current_line);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Let the helper deal with this. If we get a false here, then we bail out. This ensures that we have a nice sorted list
