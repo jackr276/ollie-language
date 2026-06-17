@@ -6612,7 +6612,7 @@ static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_strea
 
 	/**
 	 * Once we get here, we are able to see *either* a valid type
-	 * specifier or an anonymous struct <TODO UNION TOO> declaration
+	 * specifier or an anonymous struct/union declaration
 	 * We are able to determine the difference based on the define
 	 * keyword
 	 */
@@ -7208,7 +7208,7 @@ static u_int8_t struct_definer(ollie_token_stream_t* token_stream){
 /**
  * Parse and add a union member into our union type
  *
- * BNF Rule: <union-member> ::= {mut}? <identifier>:<union-type-specifier>;
+ * BNF Rule: <union-member> ::= <identifier>:<type-specifier> | define <anonymous-type-declaration>;
  */
 static symtab_variable_record_t* union_member(ollie_token_stream_t* token_stream, generic_type_t* union_type){
 	//Our lookahead token
@@ -7247,37 +7247,50 @@ static symtab_variable_record_t* union_member(ollie_token_stream_t* token_stream
 		return NULL;
 	}
 
-	//Parse the type specifier here for our union member
-	generic_type_t* type = type_specifier(token_stream);
+	//Let's see if we have an anonymous declaration or just a regular declaration
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	generic_type_t* type;
 
-	//If this is NULL we've failed
-	if(type == NULL){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid type given to union type", parser_line_num);
-		num_errors++;
-		return NULL;
-	}
+	if(lookahead.tok != DEFINE){
+		//Push it back to be reconsumed by the type helper
+		push_back_token(token_stream, &parser_line_num);
 
-	/**
-	 * Add extra validation to ensure that the size of said type is known at comptime. This will stop
-	 * the user from adding a field the mut a:char[] that is unknown at compile time
-	 */
-	if(type->type_complete == FALSE){
-		sprintf(info, "Attempt to use incomplete type %s as a union member. Union members must have a size known at compile time", type->type_name.string);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		return NULL;
-	}
+		//Parse the type specifier here for our union member
+		type = type_specifier(token_stream);
 
-	/**
-	 * This is a very unique case. Internally, the system needs to have
-	 * a "mutable" void type in order to support things like mut void*, etc.. However,
-	 * if the user attempts to do something like fn my_fn() -> mut void, we should
-	 * throw an error here and disallow that. For all the user knows, there is no
-	 * mut void
-	 */
-	if(IS_VOID_TYPE(type) == TRUE){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Unions may not have members that are void", parser_line_num);
-		num_errors++;
-		return NULL;
+		//If this is NULL we've failed
+		if(type == NULL){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid type given to union type", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		/**
+		 * Add extra validation to ensure that the size of said type is known at comptime. This will stop
+		 * the user from adding a field the mut a:char[] that is unknown at compile time
+		 */
+		if(type->type_complete == FALSE){
+			sprintf(info, "Attempt to use incomplete type %s as a union member. Union members must have a size known at compile time", type->type_name.string);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			return NULL;
+		}
+
+		/**
+		 * This is a very unique case. Internally, the system needs to have
+		 * a "mutable" void type in order to support things like mut void*, etc.. However,
+		 * if the user attempts to do something like fn my_fn() -> mut void, we should
+		 * throw an error here and disallow that. For all the user knows, there is no
+		 * mut void
+		 */
+		if(IS_VOID_TYPE(type) == TRUE){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Unions may not have members that are void", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+	} else {
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(1);
 	}
 
 	//Now that we have the type as well, we can finally see the semicolon to close it off
