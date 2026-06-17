@@ -6467,14 +6467,17 @@ static inline generic_type_t* anonymous_union_declaration(ollie_token_stream_t* 
 	 * We need to see at least one valid union member here which is the reason for the do-while
 	 */
 	do {
-		u_int8_t success = anonymous_union_member(token_stream, union_type);
+		symtab_variable_record_t* member = union_member(token_stream, union_type);
 
 		//Fail our if this didn't work
-		if(success == FAILURE){
+		if(member == NULL){
 			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid union member in anonymous union declaration", parser_line_num);
 			num_errors++;
 			return FAILURE;
 		}
+
+		//Add this into the union member
+		add_union_member(union_type, member);
 
 		//Let's see if we can find the R_CURLY and escape out
 		lookahead = get_next_token(token_stream, &parser_line_num);

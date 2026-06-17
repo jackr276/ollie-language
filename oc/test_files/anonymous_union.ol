@@ -14,8 +14,8 @@ define struct a {
 	* ever used here
 	*/
 	b: define mut union {
-		x:i32;
-		y:f32;
+		x:mut i32;
+		y:mut f32;
 	   };
 };
 
