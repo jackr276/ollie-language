@@ -7117,7 +7117,7 @@ static u_int8_t struct_definer(ollie_token_stream_t* token_stream){
 
 	//Automatic fail case here
 	if(success == FAILURE){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid struct member list given in construct definition", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid struct member list given in struct definition", parser_line_num);
 		//Fail out
 		return FAILURE;
 	}
@@ -7139,7 +7139,7 @@ static u_int8_t struct_definer(ollie_token_stream_t* token_stream){
 	
 	//Otherwise, if this is correct, we should've seen the as keyword
 	if(lookahead.tok != AS){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon expected after construct definition", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon expected after struct definition", parser_line_num);
 		num_errors++;
 		//Make an error and get out of here
 		return FAILURE;
@@ -7167,7 +7167,7 @@ static u_int8_t struct_definer(ollie_token_stream_t* token_stream){
 
 	//Last chance for us to fail syntactically 
 	if(lookahead.tok != SEMICOLON){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon expected after construct definition",  parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon expected after struct definition",  parser_line_num);
 		num_errors++;
 		//Fail out
 		return FAILURE;
