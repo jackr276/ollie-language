@@ -6713,7 +6713,7 @@ static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_strea
 		}
 
 		//Error out if this happens
-		if(member_type == immut_void){
+		if(IS_VOID_TYPE(member_type)){
 			print_parse_message(MESSAGE_TYPE_ERROR, "Struct members may not be typed as void", parser_line_num);
 			num_errors++;
 			return NULL;
@@ -7481,6 +7481,19 @@ static symtab_variable_record_t* union_member(ollie_token_stream_t* token_stream
 	if(type->type_complete == FALSE){
 		sprintf(info, "Attempt to use incomplete type %s as a union member. Union members must have a size known at compile time", type->type_name.string);
 		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		return NULL;
+	}
+
+	/**
+	 * This is a very unique case. Internally, the system needs to have
+	 * a "mutable" void type in order to support things like mut void*, etc.. However,
+	 * if the user attempts to do something like fn my_fn() -> mut void, we should
+	 * throw an error here and disallow that. For all the user knows, there is no
+	 * mut void
+	 */
+	if(IS_VOID_TYPE(type) == TRUE){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Unions may not have members that are void", parser_line_num);
+		num_errors++;
 		return NULL;
 	}
 
