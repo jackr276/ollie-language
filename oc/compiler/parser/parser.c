@@ -7427,32 +7427,31 @@ loop_end:
  *
  * BNF Rule: <union-member> ::= {mut}? <identifier>:<union-type-specifier>;
  */
-static symtab_variable_record_t* union_member(ollie_token_stream_t* token_stream, generic_type_t* mutable_union_type, generic_type_t* immutable_union_type){
+static symtab_variable_record_t* union_member(ollie_token_stream_t* token_stream, generic_type_t* union_type){
 	//Our lookahead token
-	lexitem_t lookahead;
-
-	//Let's fetch the first token
-	lookahead = get_next_token(token_stream, &parser_line_num);
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
 	//Once we're here, we need to see an identifier token. If we don't, we'll fail out
 	if(lookahead.tok != IDENT){
 		print_parse_message(MESSAGE_TYPE_ERROR, "Identifier expected in union member declaration", parser_line_num);
 		num_errors++;
-		return FAILURE;
+		return NULL;
 	}
 
 	//Otherwise we did find it, so let's grab the name out
 	dynamic_string_t name = lookahead.lexeme;
 
-	//Check for duplicate member vars. We only need to check one of the lists,
-	//both lists have the same physical variables
-	if(do_duplicate_member_variables_exist(name.string, mutable_union_type) == TRUE){
-		return FAILURE;
+	/**
+	 * Check for duplicate member vars. We only need to check one of the lists,
+	 * both lists have the same physical variables
+	 */
+	if(do_duplicate_member_variables_exist(name.string, union_type) == TRUE){
+		return NULL;
 	}
 
 	//If we have duplicate types, that is also a failure
 	if(do_duplicate_types_exist(name.string) == TRUE){
-		return FAILURE;
+		return NULL;
 	}
 
 	//Now that we know it's all good, we can keep parsing. We next need to see a colon
@@ -7462,47 +7461,28 @@ static symtab_variable_record_t* union_member(ollie_token_stream_t* token_stream
 	if(lookahead.tok != COLON){
 		print_parse_message(MESSAGE_TYPE_ERROR, "Colon required after identifier in union member definition", parser_line_num);
 		num_errors++;
-		return FAILURE;
+		return NULL;
+	}
+
+	//Parse the type specifier here for our union member
+	generic_type_t* type = type_specifier(token_stream);
+
+	//If this is NULL we've failed
+	if(type == NULL){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid type given to union type", parser_line_num);
+		num_errors++;
+		return NULL;
 	}
 
 	/**
-	 * Unique strategy here - we need to get a mutable and immutable version of this
-	 * type for our mutable and immutable union type. To do this, we'll simply
-	 * consume the data twice, once as mutable and once as not mutable
-	 *
-	 * We will do this by hanging onto where we started consuming from
+	 * Add extra validation to ensure that the size of said type is known at comptime. This will stop
+	 * the user from adding a field the mut a:char[] that is unknown at compile time
 	 */
-
-	//Where did we start consuming from
-	u_int32_t type_start = GET_CURRENT_TOKEN_INDEX(token_stream);
-
-	//Now we need to see a valid type-specifier
-	generic_type_t* mutable_type = union_type_specifier(token_stream, MUTABLE);
-
-	//If this is NULL we've failed
-	if(mutable_type == NULL){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid type given to union type", parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
-
-	//Add extra validation to ensure that the size of said type is known at comptime. This will stop
-	//the user from adding a field the mut a:char[] that is unknown at compile time
-	if(mutable_type->type_complete == FALSE){
-		sprintf(info, "Attempt to use incomplete type %s as a union member. Union members must have a size known at compile time", mutable_type->type_name.string);
+	if(type->type_complete == FALSE){
+		sprintf(info, "Attempt to use incomplete type %s as a union member. Union members must have a size known at compile time", type->type_name.string);
 		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		return FAILURE;
+		return NULL;
 	}
-
-	//TODO TODO TODO TODO
-	//This does not seem very efficient because we are redoing all of our parsing
-
-	//Rewind our position
-	reset_stream_to_given_index(token_stream, type_start);
-
-	//Now we do the exact same consumption for the immutable version. We don't need
-	//to do any of the checking, as it's the exact same type
-	generic_type_t* immutable_type = union_type_specifier(token_stream, NOT_MUTABLE);
 
 	//Now that we have the type as well, we can finally see the semicolon to close it off
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -7511,29 +7491,15 @@ static symtab_variable_record_t* union_member(ollie_token_stream_t* token_stream
 	if(lookahead.tok != SEMICOLON){
 		print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon required after union member declaration", parser_line_num);
 		num_errors++;
-		return FAILURE;
+		return NULL;
 	}
 
-	//Finally we can create our members
-	//First goes the mutable one
-	symtab_variable_record_t* mutable_union_member = create_variable_record(&name, NULL);
-	//Give it its type
-	mutable_union_member->type_defined_as = mutable_type;
-	//And we'll let the helper add it into the union type
-	add_union_member(mutable_union_type, mutable_union_member);
+	//Store the name and type
+	symtab_variable_record_t* union_member = create_variable_record(&name, NULL);
+	union_member->type_defined_as = type;
 
-	//We'll need to clone the name for the immutable version
-	dynamic_string_t clone = clone_dynamic_string(&name);
-
-	//Now the immutable version
-	symtab_variable_record_t* immutable_union_member = create_variable_record(&clone, NULL);
-	//Give it its type
-	immutable_union_member->type_defined_as = immutable_type;
-	//And we'll let the helper add it into the union type
-	add_union_member(immutable_union_type, immutable_union_member);
-
-	//If we make it here then we succeeded
-	return SUCCESS;
+	//Give back our created member
+	return union_member;
 }
 
 
@@ -7565,7 +7531,7 @@ static u_int8_t union_member_list(ollie_token_stream_t* token_stream, generic_ty
 		push_back_token(token_stream, &parser_line_num);
 
 		//Call the helper union member function
-		symtab_variable_record_t* member = union_member(token_stream, mutable_union_type, immutable_union_type);
+		symtab_variable_record_t* member = union_member(token_stream, mutable_union_type);
 
 		//If one of them fails, then we're out
 		if(member == NULL){
@@ -7641,8 +7607,10 @@ static u_int8_t union_definer(ollie_token_stream_t* token_stream){
 	//Add the immutable one in
 	insert_type(type_symtab, create_type_record(immutable_union_type));
 
-	//Once we've created it, we can begin parsing the internals. We'll call the union member list 
-	//and let it handle everything else
+	/**
+	 * Once we've created it, we can begin parsing the internals. We'll call the union member list 
+	 * and let it handle everything else
+	 */
 	u_int8_t status = union_member_list(token_stream, mutable_union_type, immutable_union_type);
 
 	//If this fails then we're done
