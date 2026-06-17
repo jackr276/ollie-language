@@ -7288,9 +7288,19 @@ static symtab_variable_record_t* union_member(ollie_token_stream_t* token_stream
 			return NULL;
 		}
 
+	/**
+	 * If we get here then we did see the define keyword, which means that we have an anonymous type
+	 * declaration(struct/union)
+	 */
 	} else {
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(1);
+		//Let the helper do it
+		type = anonymous_type_declaration(token_stream);
+
+		if(type == NULL){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid anonymous type definition in union", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
 	}
 
 	//Now that we have the type as well, we can finally see the semicolon to close it off

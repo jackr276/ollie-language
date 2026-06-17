@@ -7,26 +7,26 @@
 
 define union a {
 	x:define mut struct {
-		a:i32;
-		b:i32
+		a:mut i32;
+		b:mut i32;
 		c:i64;
-	}
+	};
 
 	y:define mut struct {
-		a:f32;
-		b:f32
+		a:mut f32;
+		b:mut f32;
 		c:f64;
-	}
+	};
 };
 
 
 pub fn main() -> i32 {
 	declare tester:mut union a;
 
-	a.x:a = 5;
-	a.x:b = 7.0;
+	tester.x:a = 5;
+	tester.x:b = 7.0;
 
 	//Should give us back 7
 	OUNIT: [console = 7]
-	ret a.x:b
+	ret tester.x:b;
 }
