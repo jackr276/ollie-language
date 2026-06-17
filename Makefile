@@ -549,23 +549,41 @@ lexer_test-CI.o: $(TEST_SUITE_PATH)/lexer_test.c
 lexer-CI.o: $(LEX_PATH)/lexer.c
 	$(CC) $(CFLAGS) $(LEX_PATH)/lexer.c -o $(OUT_CI)/lexer.o
 
+lexer-CId.o: $(LEX_PATH)/lexer.c
+	$(CC) $(CFLAGS) -g $(LEX_PATH)/lexer.c -o $(OUT_CI)/lexerd.o
+
 graph_analyzer-CI.o: $(GRAPH_ANALYZER_PATH)/graph_analyzer.c
 	$(CC) $(CFLAGS) $(GRAPH_ANALYZER_PATH)/graph_analyzer.c -o $(OUT_CI)/graph_analyzer.o
+
+graph_analyzer-CId.o: $(GRAPH_ANALYZER_PATH)/graph_analyzer.c
+	$(CC) $(CFLAGS) -g $(GRAPH_ANALYZER_PATH)/graph_analyzer.c -o $(OUT_CI)/graph_analyzerd.o
 
 heapstack-CI.o: $(STACK_PATH)/heapstack.c
 	$(CC) $(CFLAGS) $(STACK_PATH)/heapstack.c -o $(OUT_CI)/heapstack.o
 
+heapstack-CId.o: $(STACK_PATH)/heapstack.c
+	$(CC) $(CFLAGS) -g $(STACK_PATH)/heapstack.c -o $(OUT_CI)/heapstackd.o
+
 heap_queue-CI.o: $(QUEUE_PATH)/heap_queue.c
 	$(CC) $(CFLAGS) $(QUEUE_PATH)/heap_queue.c -o $(OUT_CI)/heap_queue.o
 
-min_priority_queue-CI.o: $(QUEUE_PATH)/min_priority_queue.c
-	$(CC) $(CFLAGS) $(QUEUE_PATH)/min_priority_queue.c -o $(OUT_CI)/min_priority_queue.o
+heap_queue-CId.o: $(QUEUE_PATH)/heap_queue.c
+	$(CC) $(CFLAGS) -g $(QUEUE_PATH)/heap_queue.c -o $(OUT_CI)/heap_queued.o
+
+min_priority_queue-CId.o: $(QUEUE_PATH)/min_priority_queue.c
+	$(CC) $(CFLAGS) -g $(QUEUE_PATH)/min_priority_queue.c -o $(OUT_CI)/min_priority_queued.o
 
 max_priority_queue-CI.o: $(QUEUE_PATH)/max_priority_queue.c
 	$(CC) $(CFLAGS) $(QUEUE_PATH)/max_priority_queue.c -o $(OUT_CI)/max_priority_queue.o
 
+max_priority_queue-CId.o: $(QUEUE_PATH)/max_priority_queue.c
+	$(CC) $(CFLAGS) -g $(QUEUE_PATH)/max_priority_queue.c -o $(OUT_CI)/max_priority_queued.o
+
 dynamic_array-CI.o: $(DYNAMIC_ARRAY_PATH)/dynamic_array.c
 	$(CC) $(CFLAGS) $(DYNAMIC_ARRAY_PATH)/dynamic_array.c -o $(OUT_CI)/dynamic_array.o
+
+dynamic_array-CId.o: $(DYNAMIC_ARRAY_PATH)/dynamic_array.c
+	$(CC) $(CFLAGS) -g $(DYNAMIC_ARRAY_PATH)/dynamic_array.c -o $(OUT_CI)/dynamic_arrayd.o
 
 parameter_result_array-CI.o: $(PARAMETER_RESULT_ARRAY_PATH)/parameter_result_array.c
 	$(CC) $(CFLAGS) $(PARAMETER_RESULT_ARRAY_PATH)/parameter_result_array.c -o $(OUT_CI)/parameter_result_array.o
@@ -734,6 +752,9 @@ ollie_run_validator-CI: ollie_run_validator-CI.o dynamic_array-CI.o lexer-CI.o d
 
 oc-CI: compiler-CI.o parser-CI.o lexer-CI.o symtab-CI.o heapstack-CI.o type_system-CI.o ast-CI.o cfg-CI.o lexstack-CI.o instruction-CI.o heap_queue-CI.o preprocessor-CI.o dependency_tree-CI.o dynamic_array-CI.o lightstack-CI.o optimizer-CI.o instruction_selector-CI.o jump_table-CI.o stack_data_area-CI.o register_allocator-CI.o instruction_scheduler-CI.o interference_graph-CI.o assembler-CI.o dynamic_string-CI.o nesting_stack-CI.o postprocessor-CI.o data_dependency_graph-CI.o max_priority_queue-CI.o min_priority_queue-CI.o dynamic_set-CI.o ollie_token_array-CI.o local_constant-CI.o parameter_result_array-CI.o value_numbering_table-CI.o graph_analyzer-CI.o
 	$(CC) -o $(OUT_CI)/oc $(OUT_CI)/compiler.o $(OUT_CI)/parser.o $(OUT_CI)/lexer.o $(OUT_CI)/heapstack.o $(OUT_CI)/lexstack.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/ast.o $(OUT_CI)/cfg.o $(OUT_CI)/instruction.o $(OUT_CI)/heap_queue.o $(OUT_CI)/preprocessor.o $(OUT_CI)/dependency_tree.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/lightstack.o $(OUT_CI)/optimizer.o $(OUT_CI)/instruction_selector.o $(OUT_CI)/jump_table.o $(OUT_CI)/stack_data_area.o $(OUT_CI)/register_allocator.o $(OUT_CI)/instruction_scheduler.o $(OUT_CI)/interference_graph.o $(OUT_CI)/assembler-CI.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/nesting_stack.o $(OUT_CI)/postprocessor.o $(OUT_CI)/data_dependency_graph.o $(OUT_CI)/max_priority_queue.o $(OUT_CI)/min_priority_queue.o $(OUT_CI)/dynamic_set.o $(OUT_CI)/ollie_token_array.o $(OUT_CI)/local_constant.o $(OUT_CI)/parameter_result_array.o $(OUT_CI)/value_numbering_table.o $(OUT_CI)/graph_analyzer.o
+
+oc_debug-CI: compiler-CId.o parser-CId.o lexer-CId.o symtab-CId.o heapstack-CId.o type_system-CId.o ast-CId.o cfg-CId.o lexstack-CId.o instruction-CId.o heap_queue-CId.o preprocessor-CId.o dependency_tree-CId.o dynamic_array-CId.o lightstack-CId.o optimizer-CId.o instruction_selector-CId.o jump_table-CId.o stack_data_area-CId.o register_allocator-CId.o instruction_scheduler-CId.o interference_graph-CId.o assembler-CId.o dynamic_string-CId.o nesting_stack-CId.o postprocessor-CId.o data_dependency_graph-CId.o max_priority_queue-CId.o min_priority_queue-CId.o dynamic_set-CId.o ollie_token_array-CId.o local_constant-CId.o parameter_result_array-CId.o value_numbering_table-CId.o graph_analyzer-CId.o
+	$(CC) -o $(OUT_CI)/oc $(OUT_CI)/compilerd.o $(OUT_CI)/parserd.o $(OUT_CI)/lexerd.o $(OUT_CI)/heapstackd.o $(OUT_CI)/lexstackd.o $(OUT_CI)/symtabd.o $(OUT_CI)/type_systemd.o $(OUT_CI)/astd.o $(OUT_CI)/cfgd.o $(OUT_CI)/instructiond.o $(OUT_CI)/heap_queued.o $(OUT_CI)/preprocessord.o $(OUT_CI)/dependency_treed.o $(OUT_CI)/dynamic_arrayd.o $(OUT_CI)/lightstackd.o $(OUT_CI)/optimizerd.o $(OUT_CI)/instruction_selectord.o $(OUT_CI)/jump_tabled.o $(OUT_CI)/stack_data_aread.o $(OUT_CI)/register_allocatord.o $(OUT_CI)/instruction_schedulerd.o $(OUT_CI)/interference_graphd.o $(OUT_CI)/assembler-CId.o $(OUT_CI)/dynamic_stringd.o $(OUT_CI)/nesting_stackd.o $(OUT_CI)/postprocessord.o $(OUT_CI)/data_dependency_graphd.o $(OUT_CI)/max_priority_queued.o $(OUT_CI)/min_priority_queued.o $(OUT_CI)/dynamic_setd.o $(OUT_CI)/ollie_token_arrayd.o $(OUT_CI)/local_constantd.o $(OUT_CI)/parameter_result_arrayd.o $(OUT_CI)/value_numbering_tabled.o $(OUT_CI)/graph_analyzerd.o
 
 stest-CI: symtab_test-CI
 	$(OUT_CI)/symtab_test
