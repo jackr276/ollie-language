@@ -172,6 +172,8 @@ struct generic_type_t{
 	ollie_token_t basic_type_token;
 	//What class of type is it
 	type_class_t type_class;
+	//Is this an anonymous type? Anonymous types have *no* name
+	u_int8_t is_anonymous;
 };
 
 
@@ -310,6 +312,11 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
 generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t line_number, mutability_type_t mutability);
 
 /**
+ * Dynamically allocate and create an anonymous struct type
+ */
+generic_type_t* create_anonymous_struct_type(u_int32_t line_number, mutability_type_t mutability);
+
+/**
  * Dynamically allocate and create a struct type
  *
  * Note: This only generates the immutable version of the struct. The mutable version
@@ -321,6 +328,11 @@ generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_nu
  * Dynamically allocate and create a union type
  */
 generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_number, mutability_type_t mutability);
+
+/**
+ * Dynamically allocate and create an anonymous union type
+ */
+generic_type_t* create_anonymous_union_type(u_int32_t line_number, mutability_type_t mutability);
 
 /**
  * Is the given binary operation valid for the type that was specificed?

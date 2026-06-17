@@ -586,14 +586,14 @@ static inline u_int64_t hash_type(generic_type_t* type){
 /**
  * Dynamically allocate a variable record
 */
-symtab_variable_record_t* create_variable_record(dynamic_string_t name, symtab_function_record_t* function_declared_in){
+symtab_variable_record_t* create_variable_record(dynamic_string_t* name, symtab_function_record_t* function_declared_in){
 	//Allocate it
 	symtab_variable_record_t* record = calloc(1, sizeof(symtab_variable_record_t));
 
 	//Store the name
-	record->var_name = name;
+	record->var_name = *name;
 	//Hash it and store it to avoid to repeated hashing
-	record->hash = hash_variable(name.string);
+	record->hash = hash_variable(name->string);
 	//The current generation is always 1 at first
 	record->current_generation = 1;
 
@@ -618,14 +618,14 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t name, symtab_f
 /**
  * Create a global variable record
  */
-symtab_variable_record_t* create_global_variable_record(dynamic_string_t name, visibilty_type_t visibility){
+symtab_variable_record_t* create_global_variable_record(dynamic_string_t* name, visibilty_type_t visibility){
 	//Allocate it
 	symtab_variable_record_t* record = calloc(1, sizeof(symtab_variable_record_t));
 
 	//Store the name
-	record->var_name = name;
+	record->var_name = *name;
 	//Hash it and store it to avoid to repeated hashing
-	record->hash = hash_variable(name.string);
+	record->hash = hash_variable(name->string);
 	//The current generation is always 1 at first
 	record->current_generation = 1;
 
@@ -647,14 +647,14 @@ symtab_variable_record_t* create_global_variable_record(dynamic_string_t name, v
 /**
  * Create a static variable record. These variables are really global vars
  */
-symtab_variable_record_t* create_static_variable_record(dynamic_string_t name){
+symtab_variable_record_t* create_static_variable_record(dynamic_string_t* name){
 	//Allocate it
 	symtab_variable_record_t* record = calloc(1, sizeof(symtab_variable_record_t));
 
 	//Store the name
-	record->var_name = name;
+	record->var_name = *name;
 	//Hash it and store it to avoid to repeated hashing
-	record->hash = hash_variable(name.string);
+	record->hash = hash_variable(name->string);
 	//The current generation is always 1 at first
 	record->current_generation = 1;
 
@@ -696,7 +696,7 @@ symtab_variable_record_t* create_temp_memory_address_variable(symtab_function_re
 	dynamic_string_set(&string, variable_name);
 
 	//Now create and add the symtab record for this variable
-	symtab_variable_record_t* record = create_variable_record(string, function);
+	symtab_variable_record_t* record = create_variable_record(&string, function);
 	//Store the type here
 	record->type_defined_as = type;
 
@@ -740,7 +740,7 @@ symtab_variable_record_t* create_ssa_compatible_temp_var(symtab_function_record_
 	dynamic_string_set(&string, variable_name);
 
 	//Now create and add the symtab record for this variable
-	symtab_variable_record_t* record = create_variable_record(string, function);
+	symtab_variable_record_t* record = create_variable_record(&string, function);
 	//Store the type here
 	record->type_defined_as = type;
 
@@ -780,7 +780,7 @@ symtab_variable_record_t* create_parameter_alias_variable(symtab_function_record
 	dynamic_string_set(&string, variable_name);
 
 	//Now create and add the symtab record for this variable
-	symtab_variable_record_t* record = create_variable_record(string, function);
+	symtab_variable_record_t* record = create_variable_record(&string, function);
 	//Store the type here
 	record->type_defined_as = aliases->type_defined_as;
 
@@ -991,7 +991,7 @@ void remediate_return_by_copy_gp_parameter_order(symtab_function_record_t* recor
 /**
  * Dynamically allocate a function record
 */
-symtab_function_record_t* create_function_record(dynamic_string_t name, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number){
+symtab_function_record_t* create_function_record(dynamic_string_t* name, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number){
 	//Allocate it
 	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
 
@@ -1005,9 +1005,9 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, visibilt
 	record->function_parameters = dynamic_array_alloc();
 
 	//Copy the name over
-	record->func_name = name;
+	record->func_name = *name;
 	//Hash it and store it to avoid to repeated hashing
-	record->hash = hash_function(name.string);
+	record->hash = hash_function(name->string);
 
 	//Throw in whether or not it's public or private
 	record->visibility = visibility;
@@ -1152,17 +1152,17 @@ symtab_macro_record_t* create_macro_record(dynamic_string_t name, u_int32_t line
  *
  * NOTE: The label symtab assumes ownership of the name dynamic string
  */
-symtab_label_record_t* create_label_record(dynamic_string_t name, u_int32_t line_number){
+symtab_label_record_t* create_label_record(dynamic_string_t* name, u_int32_t line_number){
 	//Allocate the needed space
 	symtab_label_record_t* label_record = calloc(1, sizeof(symtab_label_record_t));
 
 	//Hash the label name - it is assumed that the creation always does this
-	label_record->hash = hash_label_name(name.string);
+	label_record->hash = hash_label_name(name->string);
 
 	/**
 	 * IMPORTANT: we assume complete ownership of the name here
 	 */
-	label_record->name = name;
+	label_record->name = *name;
 
 	//Line number for any/all error reporting
 	label_record->line_number = line_number;
@@ -1554,7 +1554,7 @@ symtab_variable_record_t* initialize_stack_pointer(type_symtab_t* types){
 	dynamic_string_set(&variable_name, "stack_pointer");
 
 	//Stack pointer has no current function
-	symtab_variable_record_t* stack_pointer = create_variable_record(variable_name, NULL);
+	symtab_variable_record_t* stack_pointer = create_variable_record(&variable_name, NULL);
 	//Set this type as a label(address)
 	stack_pointer->type_defined_as = lookup_type_name_only(types, "u64", NOT_MUTABLE)->type;
 
@@ -1574,7 +1574,7 @@ symtab_variable_record_t* initialize_instruction_pointer(type_symtab_t* types){
 	dynamic_string_set(&variable_name, "rip");
 
 	//Instruction pointer has no given function
-	symtab_variable_record_t* instruction_pointer = create_variable_record(variable_name, NULL);
+	symtab_variable_record_t* instruction_pointer = create_variable_record(&variable_name, NULL);
 	//Set this type as a label(address)
 	instruction_pointer->type_defined_as = lookup_type_name_only(types, "u64", NOT_MUTABLE)->type;
 

@@ -112,6 +112,8 @@ static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_
 static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream, visibilty_type_t visibility);
 static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream);
+static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_stream, generic_type_t* struct_type);
+static symtab_variable_record_t* union_member(ollie_token_stream_t* token_stream, generic_type_t* union_type);
 static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* function_type, u_int8_t defining_predeclared_function);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_global_scope);
@@ -6357,6 +6359,201 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 
 
 /**
+ * Handle an anonymous struct declaration. Unlike regular structs, anonymous declarations have *no* name. They are never
+ * stored in the symtab either, these are exclusively structs that belong inside of the type system
+ *
+ * <anonymous-struct-declaration> ::= struct {{<struct-member>;}+}
+ *
+ * NOTE: By the time that we get here, we have already seen and consumed the struct keyword
+ */
+static inline generic_type_t* anonymous_struct_declaration(ollie_token_stream_t* token_stream, mutability_type_t mutability){
+	//First we need to see an opening curly brace
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Fail out if we don't have it
+	if(lookahead.tok != L_CURLY){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Opening curly brace expected in anonymous struct declaration", parser_line_num);
+		num_errors++;
+		return NULL;
+	}
+
+	//Push this onto the grouping stack for matching
+	push_token(&grouping_stack, lookahead);
+
+	//Create the memory for this struct
+	generic_type_t* anonymous_struct = create_anonymous_struct_type(parser_line_num, mutability);
+
+	/**
+	 * We need to see at least one valid struct member here which is the reason for the do-while
+	 */
+	do {
+		//Let the rule try to parse this
+		symtab_variable_record_t* member = struct_member(token_stream, anonymous_struct);
+
+		//Fail out if we don't have it
+		if(member == NULL){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid struct member given in anonymous struct declaration", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//Now we need to see a semicolon next
+		lookahead = get_next_token(token_stream, &parser_line_num);
+
+		if(lookahead.tok != SEMICOLON){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon expected after member declaration", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//Add the member into our struct now
+		add_struct_member(anonymous_struct, member);
+
+		//Now let's see if we can find the end R_CURLY. If we do then we leave
+		lookahead = get_next_token(token_stream, &parser_line_num);
+
+		//R_CURLY is our exit condition, otherwise we push this back
+		if(lookahead.tok == R_CURLY){
+			break;
+		} else {
+			push_back_token(token_stream, &parser_line_num);
+		}
+
+	} while(TRUE);
+	
+	//We know that we have an R_CURLY by the time we get here, let's make sure that it's balance
+	if(pop_token(&grouping_stack).tok != L_CURLY){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched curly braces detected", parser_line_num);
+		num_errors++;
+		return NULL;
+	}
+
+	//Now that we've parsed the list we can finalize the alignment
+	finalize_struct_alignment(anonymous_struct);
+
+	//Flag that this is complete
+	anonymous_struct->type_complete = TRUE;
+	
+	//Finally give this back
+	return anonymous_struct;
+}
+
+
+/**
+ * Handle an anonymous union declaration. Unlike regular unions, anonymous declarations have *no* name. They are never
+ * stored in the symtab either, these are exclusively unions that belong inside of the type system
+ *
+ * <anonymous-union-declaration> ::= union {{<union-member>;}+}
+ *
+ * NOTE: by the time that we get here, we have already seen and consumed the union keyword
+ */
+static inline generic_type_t* anonymous_union_declaration(ollie_token_stream_t* token_stream, mutability_type_t mutability){
+	//We'll first need to see an L_CURLY
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+
+	if(lookahead.tok != L_CURLY){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Opening curly brace expected after union keyword", parser_line_num);
+		num_errors++;
+		return NULL;
+	}
+
+	//Push this on for later matching
+	push_token(&grouping_stack, lookahead);
+
+	//We can now create the union type
+	generic_type_t* union_type = create_anonymous_union_type(parser_line_num, mutability);
+
+	/**
+	 * We need to see at least one valid union member here which is the reason for the do-while
+	 */
+	do {
+		symtab_variable_record_t* member = union_member(token_stream, union_type);
+
+		//Fail our if this didn't work
+		if(member == NULL){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid union member in anonymous union declaration", parser_line_num);
+			num_errors++;
+			return FAILURE;
+		}
+
+		//Add this into the union member
+		add_union_member(union_type, member);
+
+		//Let's see if we can find the R_CURLY and escape out
+		lookahead = get_next_token(token_stream, &parser_line_num);
+
+		if(lookahead.tok == R_CURLY){
+			break;
+		} else {
+			push_back_token(token_stream, &parser_line_num);
+		}
+
+	} while(TRUE);
+
+	//Make sure that our curlies matched up
+	if(pop_token(&grouping_stack).tok != L_CURLY){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched curly braces detected", parser_line_num);
+		num_errors++;
+		return NULL;
+	}
+
+	//Finalize the type now that we're all done
+	finalize_union_alignment(union_type);
+
+	//Flag that this is complete
+	union_type->type_complete = TRUE;
+
+	//And give the type back
+	return union_type;
+}
+
+
+/**
+ * An anonymous type allows us to define a one-time one-use struct or union type inside of
+ * another struct/union declaration itself. This has the same rules as a regular struct,
+ * except that it will not be available for general use like a normal struct is
+ *
+ * Anonymous types themselves have no name at all. They are not stored inside of the
+ * symtab for types. Once we create this generic type, that is it so we'll
+ * need to hold onto it
+ *
+ * BNF Rule: <anonymous-type-definer> ::= {mut}? {<anonymous-struct-definer> | <anonymous-union-definer>}
+ *
+ * NOTE: By the time we get here, we have already seen the "define" keyword
+ */
+static generic_type_t* anonymous_type_declaration(ollie_token_stream_t* token_stream){
+	//Assume we are not mutable by default
+	mutability_type_t mutability = NOT_MUTABLE;
+
+	//Get the next token
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+
+	/**
+	 * If we see the mut keyword, then this is mutable. We'll need to
+	 * refresh the token after this too
+	 */
+	if(lookahead.tok == MUT){
+		mutability = MUTABLE;
+		lookahead = get_next_token(token_stream, &parser_line_num);
+	}
+
+	switch(lookahead.tok){
+		case STRUCT:
+			return anonymous_struct_declaration(token_stream, mutability);
+
+		case UNION:
+			return anonymous_union_declaration(token_stream, mutability);
+
+		default:
+			sprintf(info, "Expected \"struct\" or \"union\" keywords but got \"%s\" instead", lexitem_to_string(&lookahead));
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			num_errors++;
+			return NULL;
+	}
+}
+
+
+/**
  * A construct member declares a variable within a struct. Structs have their own tables
  * that store variables within. Because these variables are unique to structs, we don't need to
  * do any validation on duplicates. All references to these variables will be by default
@@ -6364,47 +6561,43 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
  *
  * As a reminder, type specifier will give us an error if the type is not defined
  *
- * BNF Rule: <construct-member> ::= <identifier> : <type-specifier> 
+ * BNF Rule: <construct-member> ::= <identifier> : <type-specifier> | <identifier> : define <anonymous-type-definer>
  */
-static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t* mutable_struct_type, generic_type_t* immutable_struct_type){
+static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_stream, generic_type_t* struct_type){
 	//The lookahead token
 	lexitem_t lookahead;
+	generic_type_t* member_type = NULL;
 
-	//Get the first token
+	//First thing that we need to see is an identifier
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
-	//Let's make sure it actually worked
 	if(lookahead.tok != IDENT){
 		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid identifier given as struct member name", parser_line_num);
 		num_errors++;
-		//It's an error, so we'll propogate it up
-		return FAILURE;
+		return NULL;
 	}
 
-	//Grab this for convenience
+	//Make a copy of this before we blow it away
 	dynamic_string_t name = lookahead.lexeme;
 
-	//The field, if we can find it. We only need to check it from one of the versions, they
-	//are the same internally
-	symtab_variable_record_t* duplicate = get_struct_member(mutable_struct_type, name.string);
+	/**
+	 * The field, if we can find it. We only need to check it from one of the versions, they
+	 * are the same internally
+	 */
+	symtab_variable_record_t* duplicate = get_struct_member(struct_type, name.string);
 
 	//Is this a duplicate? If so, we fail out
 	if(duplicate != NULL){
-		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name.string, mutable_struct_type->type_name.string);
+		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name.string, struct_type->type_name.string);
 		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		print_variable_name(duplicate);
 		num_errors++;
-		return FAILURE;
+		return NULL;
 	}
 
 	//Are we defining a duplicated type?
 	if(do_duplicate_types_exist(name.string) == TRUE){
-		return FAILURE;
-	}
-
-	//Look for duplicated functions too
-	if(do_duplicate_functions_exist(name.string) == TRUE){
-		return FAILURE;
+		return NULL;
 	}
 
 	//After the ident, we need to see a colon
@@ -6414,52 +6607,72 @@ static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t
 	if(lookahead.tok != COLON){
 		print_parse_message(MESSAGE_TYPE_ERROR, "Colon required between ident and type specifier in struct member declaration", parser_line_num);
 		num_errors++;
-		//Error out
-		return FAILURE;
+		return NULL;
 	}
 
-	//Now we are required to see a valid type specifier
-	generic_type_t* type_spec = type_specifier(token_stream);
+	/**
+	 * Once we get here, we are able to see *either* a valid type
+	 * specifier or an anonymous struct/union declaration
+	 * We are able to determine the difference based on the define
+	 * keyword
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
 
-	//If this is an error, the whole thing fails
-	if(type_spec == NULL){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Attempt to use undefined type in struct member", parser_line_num);
-		num_errors++;
-		//It's already an error, so just send it up
-		return FAILURE;
+	if(lookahead.tok != DEFINE){
+		push_back_token(token_stream, &parser_line_num);
+
+		//Now we are required to see a valid type specifier
+		member_type = type_specifier(token_stream);
+
+		//If this is an error, the whole thing fails
+		if(member_type == NULL){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Attempt to use undefined type in struct member", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//Error out if this happens
+		if(IS_VOID_TYPE(member_type)){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Struct members may not be typed as void", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		/**
+		 * Add extra validation to ensure that the size of said type is known at comptime. This will stop
+		 * the user from adding a field the mut a:char[] that is unknown at compile time
+		 */
+		if(member_type->type_complete == FALSE){
+			sprintf(info, "Attempt to use incomplete type %s as a struct member. Struct members must have a size known at compile time", member_type->type_name.string);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			return NULL;
+		}
+
+	/**
+	 * Otherwise we've seen the define keyword so no we'll handle the anonymous struct or union
+	 * declaration here
+	 */
+	} else {
+		//Let the helper get the anonymous type declaration for us
+		member_type = anonymous_type_declaration(token_stream);
+
+		//If this is an error, the whole thing fails
+		if(member_type == NULL){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Attempt to use invalid anonymous type as a struct member", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
 	}
-
-	//Error out if this happens
-	if(type_spec == immut_void){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Struct members may not be typed as void", parser_line_num);
-		num_errors++;
-		return FAILURE;;
-	}
-
-	//Add extra validation to ensure that the size of said type is known at comptime. This will stop
-	//the user from adding a field the mut a:char[] that is unknown at compile time
-	if(type_spec->type_complete == FALSE){
-		sprintf(info, "Attempt to use incomplete type %s as a struct member. Struct members must have a size known at compile time", type_spec->type_name.string);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		return FAILURE;
-	}
-
-	//Now if we finally make it all of the way down here, we are actually set. We'll construct the
-	//node that we have and also add it into our symbol table
 	
 	//We'll first create the symtab record. NULL for no specific function
-	symtab_variable_record_t* member_record = create_variable_record(name, NULL);
+	symtab_variable_record_t* member_record = create_variable_record(&name, NULL);
 	//Store the line number for error printing
 	member_record->line_number = parser_line_num;
 	//Store what the type is
-	member_record->type_defined_as = type_spec;
-
-	//Add it to both versions
-	add_struct_member(mutable_struct_type, member_record);
-	add_struct_member(immutable_struct_type, member_record);
+	member_record->type_defined_as = member_type;
 
 	//All went well so we can send this up the chain
-	return SUCCESS;
+	return member_record;
 }
 
 
@@ -6493,10 +6706,10 @@ static u_int8_t struct_member_list(ollie_token_stream_t* token_stream, generic_t
 		push_back_token(token_stream, &parser_line_num);
 
 		//We must first see a valid construct member
-		u_int8_t status = struct_member(token_stream, mutable_struct_type, immutable_struct_type);
+		symtab_variable_record_t* member = struct_member(token_stream, mutable_struct_type);
 
 		//If it's an error, we'll fail right out
-		if(status == FAILURE){
+		if(member == NULL){
 			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid struct member declaration", parser_line_num);
 			num_errors++;
 			//It's already an error node so just let it propogate
@@ -6512,6 +6725,13 @@ static u_int8_t struct_member_list(ollie_token_stream_t* token_stream, generic_t
 			num_errors++;
 			return FAILURE;
 		}
+
+		/**
+		 * Now that we know this all works, we can add this struct member to the immutable and mutable
+		 * struct types that we've created
+		 */
+		add_struct_member(mutable_struct_type, member);
+		add_struct_member(immutable_struct_type, member);
 
 		//Refresh it once more
 		lookahead = get_next_token(token_stream, &parser_line_num);
@@ -6855,8 +7075,6 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
  * BNF Rule: <struct-definer> ::= define struct <identifier> { <construct-member-list> } {as <identifer>}?;
  */
 static u_int8_t struct_definer(ollie_token_stream_t* token_stream){
-	//Freeze the line num
-	u_int32_t current_line = parser_line_num;
 	//Lookahead token for our uses
 	lexitem_t lookahead;
 
@@ -6887,8 +7105,8 @@ static u_int8_t struct_definer(ollie_token_stream_t* token_stream){
 
 	//If we make it here, we've made it far enough to know what we need to build our type for this construct
 	//We start with the immutable type
-	generic_type_t* immutable_struct_type = create_struct_type(type_name, current_line, NOT_MUTABLE);
-	generic_type_t* mutable_struct_type = create_struct_type(clone_dynamic_string(&type_name), current_line, MUTABLE);
+	generic_type_t* immutable_struct_type = create_struct_type(type_name, parser_line_num, NOT_MUTABLE);
+	generic_type_t* mutable_struct_type = create_struct_type(clone_dynamic_string(&type_name), parser_line_num, MUTABLE);
 	
 	//Now we'll insert the struct type into the symtab
 	insert_type(type_symtab, create_type_record(immutable_struct_type));
@@ -6899,7 +7117,7 @@ static u_int8_t struct_definer(ollie_token_stream_t* token_stream){
 
 	//Automatic fail case here
 	if(success == FAILURE){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid struct member list given in construct definition", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid struct member list given in struct definition", parser_line_num);
 		//Fail out
 		return FAILURE;
 	}
@@ -6921,7 +7139,7 @@ static u_int8_t struct_definer(ollie_token_stream_t* token_stream){
 	
 	//Otherwise, if this is correct, we should've seen the as keyword
 	if(lookahead.tok != AS){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon expected after construct definition", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon expected after struct definition", parser_line_num);
 		num_errors++;
 		//Make an error and get out of here
 		return FAILURE;
@@ -6949,7 +7167,7 @@ static u_int8_t struct_definer(ollie_token_stream_t* token_stream){
 
 	//Last chance for us to fail syntactically 
 	if(lookahead.tok != SEMICOLON){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon expected after construct definition",  parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon expected after struct definition",  parser_line_num);
 		num_errors++;
 		//Fail out
 		return FAILURE;
@@ -6988,184 +7206,35 @@ static u_int8_t struct_definer(ollie_token_stream_t* token_stream){
 
 
 /**
- * The union type specifier is a distinct version of the type specifier
- * rule that is designed just for union members. It is designed this way
- * because union members *may not be declared as mutable*. Their mutability
- * is added later on. The mutability is given to this rule
- *
- * BNF Rule: <union-type-specifier> ::= <type-name>{<type-address-specifier>}*
- */
-static generic_type_t* union_type_specifier(ollie_token_stream_t* token_stream, mutability_type_t mutability){
-	//Lookahead token
-	lexitem_t lookahead;
-
-	/**
-	 * Now we'll hand off the rule to the <type-name> function. The type name function will
-	 * return a record of the node that the type name has. If the type name function could not
-	 * find the name, then it will send back an error that we can handle here
-	 */
-	symtab_type_record_t* type = type_name(token_stream, mutability);
-
-	//We'll just fail here, no need for any error printing
-	if(type == NULL){
-		return NULL;
-	}
-
-	//Maintain a reference to the current type
-	symtab_type_record_t* current_type_record = type;
-	
-	/**
-	 * The lighstack is used for array processing. Whenever we get
-	 * an array type, we need to push the number of bounds onto the lightstack
-	 * This is because dimensional array types are declared backwards. For example,
-	 * an i32[3][4] is an array of 3 i32[4]. We don't know that until we get to the
-	 * very end. To support this, we have a lightstack that we push the bound count onto
-	 * when processing an array and then unwind once done to get the full picture
-	 */
-	lightstack_t bounds_stack = lightstack_initialize();
-
-	/**
-	 * Using a lightstack here because of the way that the type specifiers work
-	 * For example:
-	 * 		i32[5]*
-	 * 	This is really a pointer to an i32[5]
-	 *
-	 * 	i32[5][5]
-	 */
-	lookahead = get_next_token(token_stream, &parser_line_num);
-	while(TRUE){
-		//Only two things that would tell us about an address here, L_BRACKET or STAR
-		switch(lookahead.tok){
-			/**
-			 * To parse an array type, we will utilize our stack based approach where bounds
-			 * are pushed onto the stack and only processed once we stop seeing array types. 
-			 * Unlike the other two cases, since this is also an array type, we will not
-			 * be unwinding the bounds stack before processing here
-			 */
-			case L_BRACKET:
-				//Push this onto the grouping stack
-				push_token(&grouping_stack, lookahead);
-
-				//Let the helper do the work
-				current_type_record = parse_array_type(token_stream, current_type_record, &bounds_stack);
-
-				//If it failed it'll be NULL, and we'll pass it up the chain
-				if(current_type_record == NULL){
-					return NULL;
-				}
-
-				break;
-
-			/**
-			 * Handle a pointer. Unlike stuff with an array, for a pointer all that we
-			 * need to do is create(or find) a pointer type to whatever the type is
-			 * that we've currently constructed
-			 */
-			case STAR:
-				//Process any/all array bounds
-				current_type_record = create_array_type_from_bounds(current_type_record, &bounds_stack, mutability);
-
-				//If this returns NULL then it failed, just kick it back
-				if(current_type_record == NULL){
-					return NULL;
-				}
-
-				//Let the helper deal with the rest
-				current_type_record = parse_pointer_type(current_type_record, mutability);
-
-				//If this returns NULL then it failed, just kick it back
-				if(current_type_record == NULL){
-					return NULL;
-				}
-
-				break;
-
-			/**
-			 * Anything else means that we have seen the end of what we're supposed to be processing.
-			 * We leave the loop and stop doing anything else
-			 */
-			default:
-				//Process any/all array bounds
-				current_type_record = create_array_type_from_bounds(current_type_record, &bounds_stack, mutability);
-
-				//If this returns NULL then it failed, just kick it back
-				if(current_type_record == NULL){
-					return NULL;
-				}
-
-				//Now that we've gotten here we need to push back the residual token
-				push_back_token(token_stream, &parser_line_num);
-
-				//Get out of the loop by jumping out
-				goto loop_end;
-		}
-
-		//Refresh the lookahead
-		lookahead = get_next_token(token_stream, &parser_line_num);
-	}
-
-loop_end:
-	/**
-	 * This is a very unique case. Internally, the system needs to have
-	 * a "mutable" void type in order to support things like mut void*, etc.. However,
-	 * if the user attempts to do something like fn my_fn() -> mut void, we should
-	 * throw an error here and disallow that. For all the user knows, there is no
-	 * mut void
-	 */
-	if(current_type_record->type == mut_void){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Unions may not have members that are void", parser_line_num);
-		num_errors++;
-		return NULL;
-	}
-
-	//Give back whatever the current type may be
-	return current_type_record->type;
-}
-
-
-/**
  * Parse and add a union member into our union type
  *
- * It is important to remember that union types do not allow for 
- * their variables to individually be mutable/immutable. This is because
- * a union type shares all memory, so it makes no sense to have a mutable 
- * member and a non-mutable member. It is for this reason that each union member is given a
- * mutable and immutable version
- *
- *
- * BNF Rule: <union-member> ::= <identifier>:<union-type-specifier>;
+ * BNF Rule: <union-member> ::= <identifier>:<type-specifier> | define <anonymous-type-declaration>;
  */
-static u_int8_t union_member(ollie_token_stream_t* token_stream, generic_type_t* mutable_union_type, generic_type_t* immutable_union_type){
+static symtab_variable_record_t* union_member(ollie_token_stream_t* token_stream, generic_type_t* union_type){
 	//Our lookahead token
-	lexitem_t lookahead;
-
-	//Let's fetch the first token
-	lookahead = get_next_token(token_stream, &parser_line_num);
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
 	//Once we're here, we need to see an identifier token. If we don't, we'll fail out
 	if(lookahead.tok != IDENT){
 		print_parse_message(MESSAGE_TYPE_ERROR, "Identifier expected in union member declaration", parser_line_num);
 		num_errors++;
-		return FAILURE;
+		return NULL;
 	}
 
 	//Otherwise we did find it, so let's grab the name out
 	dynamic_string_t name = lookahead.lexeme;
 
-	//Check for duplicate member vars. We only need to check one of the lists,
-	//both lists have the same physical variables
-	if(do_duplicate_member_variables_exist(name.string, mutable_union_type) == TRUE){
-		return FAILURE;
-	}
-
-	//Check for duplicated functions
-	if(do_duplicate_functions_exist(name.string) == TRUE){
-		return FAILURE;
+	/**
+	 * Check for duplicate member vars. We only need to check one of the lists,
+	 * both lists have the same physical variables
+	 */
+	if(do_duplicate_member_variables_exist(name.string, union_type) == TRUE){
+		return NULL;
 	}
 
 	//If we have duplicate types, that is also a failure
 	if(do_duplicate_types_exist(name.string) == TRUE){
-		return FAILURE;
+		return NULL;
 	}
 
 	//Now that we know it's all good, we can keep parsing. We next need to see a colon
@@ -7175,44 +7244,64 @@ static u_int8_t union_member(ollie_token_stream_t* token_stream, generic_type_t*
 	if(lookahead.tok != COLON){
 		print_parse_message(MESSAGE_TYPE_ERROR, "Colon required after identifier in union member definition", parser_line_num);
 		num_errors++;
-		return FAILURE;
+		return NULL;
 	}
+
+	//Let's see if we have an anonymous declaration or just a regular declaration
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	generic_type_t* type;
+
+	if(lookahead.tok != DEFINE){
+		//Push it back to be reconsumed by the type helper
+		push_back_token(token_stream, &parser_line_num);
+
+		//Parse the type specifier here for our union member
+		type = type_specifier(token_stream);
+
+		//If this is NULL we've failed
+		if(type == NULL){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid type given to union type", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		/**
+		 * Add extra validation to ensure that the size of said type is known at comptime. This will stop
+		 * the user from adding a field the mut a:char[] that is unknown at compile time
+		 */
+		if(type->type_complete == FALSE){
+			sprintf(info, "Attempt to use incomplete type %s as a union member. Union members must have a size known at compile time", type->type_name.string);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			return NULL;
+		}
+
+		/**
+		 * This is a very unique case. Internally, the system needs to have
+		 * a "mutable" void type in order to support things like mut void*, etc.. However,
+		 * if the user attempts to do something like fn my_fn() -> mut void, we should
+		 * throw an error here and disallow that. For all the user knows, there is no
+		 * mut void
+		 */
+		if(IS_VOID_TYPE(type) == TRUE){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Unions may not have members that are void", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
 
 	/**
-	 * Unique strategy here - we need to get a mutable and immutable version of this
-	 * type for our mutable and immutable union type. To do this, we'll simply
-	 * consume the data twice, once as mutable and once as not mutable
-	 *
-	 * We will do this by hanging onto where we started consuming from
+	 * If we get here then we did see the define keyword, which means that we have an anonymous type
+	 * declaration(struct/union)
 	 */
+	} else {
+		//Let the helper do it
+		type = anonymous_type_declaration(token_stream);
 
-	//Where did we start consuming from
-	u_int32_t type_start = GET_CURRENT_TOKEN_INDEX(token_stream);
-
-	//Now we need to see a valid type-specifier
-	generic_type_t* mutable_type = union_type_specifier(token_stream, MUTABLE);
-
-	//If this is NULL we've failed
-	if(mutable_type == NULL){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid type given to union type", parser_line_num);
-		num_errors++;
-		return FAILURE;
+		if(type == NULL){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid anonymous type definition in union", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
 	}
-
-	//Add extra validation to ensure that the size of said type is known at comptime. This will stop
-	//the user from adding a field the mut a:char[] that is unknown at compile time
-	if(mutable_type->type_complete == FALSE){
-		sprintf(info, "Attempt to use incomplete type %s as a union member. Union members must have a size known at compile time", mutable_type->type_name.string);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		return FAILURE;
-	}
-
-	//Rewind our position
-	reset_stream_to_given_index(token_stream, type_start);
-
-	//Now we do the exact same consumption for the immutable version. We don't need
-	//to do any of the checking, as it's the exact same type
-	generic_type_t* immutable_type = union_type_specifier(token_stream, NOT_MUTABLE);
 
 	//Now that we have the type as well, we can finally see the semicolon to close it off
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -7221,35 +7310,20 @@ static u_int8_t union_member(ollie_token_stream_t* token_stream, generic_type_t*
 	if(lookahead.tok != SEMICOLON){
 		print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon required after union member declaration", parser_line_num);
 		num_errors++;
-		return FAILURE;
+		return NULL;
 	}
 
-	//Finally we can create our members
-	//First goes the mutable one
-	symtab_variable_record_t* mutable_union_member = create_variable_record(name, NULL);
-	//Give it its type
-	mutable_union_member->type_defined_as = mutable_type;
-	//And we'll let the helper add it into the union type
-	add_union_member(mutable_union_type, mutable_union_member);
+	//Store the name and type
+	symtab_variable_record_t* union_member = create_variable_record(&name, NULL);
+	union_member->type_defined_as = type;
 
-	//Now the immutable version
-	symtab_variable_record_t* immutable_union_member = create_variable_record(clone_dynamic_string(&name), NULL);
-	//Give it its type
-	immutable_union_member->type_defined_as = immutable_type;
-	//And we'll let the helper add it into the union type
-	add_union_member(immutable_union_type, immutable_union_member);
-
-	//If we make it here then we succeeded
-	return SUCCESS;
+	//Give back our created member
+	return union_member;
 }
 
 
 /**
  * Parse the union member list for a given union type
- *
- * This will handle creating both the mutable and immutable union member lists. Remember that
- * each union definition creates 2 types, one that is entirely immutable and one that is entirely
- * mutable. There is no in-between due to how a union shares memory
  *
  * BNF RULE: <union-member-list> ::= { {<union-member>}+ }
  */
@@ -7276,14 +7350,18 @@ static u_int8_t union_member_list(ollie_token_stream_t* token_stream, generic_ty
 		push_back_token(token_stream, &parser_line_num);
 
 		//Call the helper union member function
-		u_int8_t status = union_member(token_stream, mutable_union_type, immutable_union_type);
+		symtab_variable_record_t* member = union_member(token_stream, mutable_union_type);
 
 		//If one of them fails, then we're out
-		if(status == FAILURE){
+		if(member == NULL){
 			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid union member defition", parser_line_num);
 			num_errors++;
 			return FAILURE;
 		}
+
+		//Add the new member to both
+		add_union_member(mutable_union_type, member);
+		add_union_member(immutable_union_type, member);
 
 		//Refresh the lookahead token
 		lookahead = get_next_token(token_stream, &parser_line_num);
@@ -7291,8 +7369,7 @@ static u_int8_t union_member_list(ollie_token_stream_t* token_stream, generic_ty
 		//So long as we don't hit the closing curly
 	} while(lookahead.tok != R_CURLY);
 
-	//Once we get down here then we know that we've got an R_CURLY. Let's ensure that we have a grouping
-	//stack match
+	//Verify that these match
 	if(pop_token(&grouping_stack).tok != L_CURLY){
 		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched curly braces detected", parser_line_num);
 		num_errors++;
@@ -7349,8 +7426,10 @@ static u_int8_t union_definer(ollie_token_stream_t* token_stream){
 	//Add the immutable one in
 	insert_type(type_symtab, create_type_record(immutable_union_type));
 
-	//Once we've created it, we can begin parsing the internals. We'll call the union member list 
-	//and let it handle everything else
+	/**
+	 * Once we've created it, we can begin parsing the internals. We'll call the union member list 
+	 * and let it handle everything else
+	 */
 	u_int8_t status = union_member_list(token_stream, mutable_union_type, immutable_union_type);
 
 	//If this fails then we're done
@@ -7550,7 +7629,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 
 		//If we make it here, then all of our checks passed and we don't have a duplicate name. We're now good
 		//to create the record and assign it a type
-		symtab_variable_record_t* member_record = create_variable_record(lookahead.lexeme, NULL);
+		symtab_variable_record_t* member_record = create_variable_record(&(lookahead.lexeme), NULL);
 
 		//Store the line number
 		member_record->line_number = parser_line_num;
@@ -8945,7 +9024,7 @@ static generic_ast_node_t* labeled_statement(ollie_token_stream_t* token_stream)
 	}
 
 	//Now let's build up the label record
-	symtab_label_record_t* new_record = create_label_record(label_name, parser_line_num);
+	symtab_label_record_t* new_record = create_label_record(&label_name, parser_line_num);
 
 	//Add it into the label symtab
 	insert_label(current_function->user_defined_labels, new_record);
@@ -10773,9 +10852,6 @@ static generic_ast_node_t* assembly_inline_statement(ollie_token_stream_t* token
  * <defer-statement> ::= defer <compound statement>
  */
 static generic_ast_node_t* defer_statement(ollie_token_stream_t* token_stream){
-	//Freeze the line number
-	u_int32_t current_line = parser_line_num;
-
 	//If we see any kind of invalid nesting here, we'll need to fail out. Defer
 	//statements can only be nested inside of a function, and nothing else. So, if
 	//the very first token that we see here is not a function, we're immediately
@@ -10797,7 +10873,7 @@ static generic_ast_node_t* defer_statement(ollie_token_stream_t* token_stream){
 
 	//If this fails, we bail
 	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		return print_and_return_error("Invalid compound statement given to defer statement", current_line);
+		return print_and_return_error("Invalid compound statement given to defer statement", parser_line_num);
 	}
 
 	//Otherwise it was valid, so we have another child for this overall deferred statement
@@ -11075,8 +11151,6 @@ static generic_ast_node_t* default_statement(ollie_token_stream_t* token_stream)
  * NOTE: We assume that we have already seen and consumed the first case token here
  */
 static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, generic_ast_node_t* switch_stmt_node, int32_t* values, int32_t* values_max_index){
-	//Freeze the current line number
-	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 	//Switch compound statement node for later on
@@ -11100,11 +11174,11 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 			break;
 
 		case AST_NODE_TYPE_ERR_NODE:
-			return print_and_return_error("Invalid constant found in switch statment", current_line);
+			return print_and_return_error("Invalid constant found in switch statment", parser_line_num);
 
 		default:
 			printf("NODE TYPE IS %d\n", constant_node->ast_node_type);
-			return print_and_return_error("Case statements must be values that expand to constants", current_line);
+			return print_and_return_error("Case statements must be values that expand to constants", parser_line_num);
 	}
 
 	//Once we're done we can remove this
@@ -11153,7 +11227,7 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 	//we hit this, there's no point in going on
 	if(switch_stmt_node->upper_bound - switch_stmt_node->lower_bound >= MAX_SWITCH_RANGE){
 		sprintf(info, "Range from %d to %d exceeds %d, too large for a switch statement. Use a compound if statement instead", switch_stmt_node->lower_bound, switch_stmt_node->upper_bound, MAX_SWITCH_RANGE);
-		return print_and_return_error(info, current_line);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Let the helper deal with this. If we get a false here, then we bail out. This ensures that we have a nice sorted list
@@ -11375,12 +11449,12 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 	if(is_static == FALSE){
 		//Go based on it's global status
 		if(is_global == FALSE){
-			declared_var = create_variable_record(name, current_function);
+			declared_var = create_variable_record(&name, current_function);
 		} else {
-			declared_var = create_global_variable_record(name, visibility);
+			declared_var = create_global_variable_record(&name, visibility);
 		}
 	} else {
-		declared_var = create_static_variable_record(name);
+		declared_var = create_static_variable_record(&name);
 	}
 
 	//Store the type--make sure that we strip any aliasing off of it first
@@ -12009,12 +12083,12 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	if(is_static == FALSE){
 		//Go based on it's global status
 		if(is_global == FALSE){
-			declared_var = create_variable_record(name, current_function);
+			declared_var = create_variable_record(&name, current_function);
 		} else {
-			declared_var = create_global_variable_record(name, visibility);
+			declared_var = create_global_variable_record(&name, visibility);
 		}
 	} else {
-		declared_var = create_static_variable_record(name);
+		declared_var = create_static_variable_record(&name);
 	}
 
 	//Store the type
@@ -12480,7 +12554,7 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 	 * declaration. It is now incumbent on us to store it in the variable 
 	 * symbol table
 	 */
-	symtab_variable_record_t* param_record = create_variable_record(name, current_function);
+	symtab_variable_record_t* param_record = create_variable_record(&name, current_function);
 
 	/**
 	 * If we've seen the params keyword now is the time
@@ -13082,7 +13156,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	}
 
 	//Now that we've survived up to here, we can make the actual record
-	symtab_function_record_t* function_record = create_function_record(function_name, visibility, is_inlined, raises_errors, parser_line_num);
+	symtab_function_record_t* function_record = create_function_record(&function_name, visibility, is_inlined, raises_errors, parser_line_num);
 
 	//Now we need to see an lparen to begin the parameters
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -13411,7 +13485,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-		function_record = create_function_record(function_name, visibility, is_inlined, raises_errors, parser_line_num);
+		function_record = create_function_record(&function_name, visibility, is_inlined, raises_errors, parser_line_num);
 
 		//We'll put the function into the symbol table
 		//since we now know that everything worked

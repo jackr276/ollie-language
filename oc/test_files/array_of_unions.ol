@@ -4,9 +4,9 @@
 
 pub fn main(arg:i32, argv:char**) -> i32{
 	define union my_union{
-		ch:char;
-		lch:char;
-		y:i32;
+		ch:mut char;
+		lch:mut char;
+		y:mut i32;
 	} as my_union;
 
 	//Declare an array of such items
