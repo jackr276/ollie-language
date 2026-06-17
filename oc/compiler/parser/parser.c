@@ -7425,16 +7425,9 @@ loop_end:
 /**
  * Parse and add a union member into our union type
  *
- * It is important to remember that union types do not allow for 
- * their variables to individually be mutable/immutable. This is because
- * a union type shares all memory, so it makes no sense to have a mutable 
- * member and a non-mutable member. It is for this reason that each union member is given a
- * mutable and immutable version
- *
- *
- * BNF Rule: <union-member> ::= <identifier>:<union-type-specifier>;
+ * BNF Rule: <union-member> ::= {mut}? <identifier>:<union-type-specifier>;
  */
-static u_int8_t union_member(ollie_token_stream_t* token_stream, generic_type_t* mutable_union_type, generic_type_t* immutable_union_type){
+static symtab_variable_record_t* union_member(ollie_token_stream_t* token_stream, generic_type_t* mutable_union_type, generic_type_t* immutable_union_type){
 	//Our lookahead token
 	lexitem_t lookahead;
 
@@ -7547,10 +7540,6 @@ static u_int8_t union_member(ollie_token_stream_t* token_stream, generic_type_t*
 /**
  * Parse the union member list for a given union type
  *
- * This will handle creating both the mutable and immutable union member lists. Remember that
- * each union definition creates 2 types, one that is entirely immutable and one that is entirely
- * mutable. There is no in-between due to how a union shares memory
- *
  * BNF RULE: <union-member-list> ::= { {<union-member>}+ }
  */
 static u_int8_t union_member_list(ollie_token_stream_t* token_stream, generic_type_t* mutable_union_type, generic_type_t* immutable_union_type){
@@ -7576,14 +7565,18 @@ static u_int8_t union_member_list(ollie_token_stream_t* token_stream, generic_ty
 		push_back_token(token_stream, &parser_line_num);
 
 		//Call the helper union member function
-		u_int8_t status = union_member(token_stream, mutable_union_type, immutable_union_type);
+		symtab_variable_record_t* member = union_member(token_stream, mutable_union_type, immutable_union_type);
 
 		//If one of them fails, then we're out
-		if(status == FAILURE){
+		if(member == NULL){
 			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid union member defition", parser_line_num);
 			num_errors++;
 			return FAILURE;
 		}
+
+		//Add the new member to both
+		add_union_member(mutable_union_type, member);
+		add_union_member(immutable_union_type, member);
 
 		//Refresh the lookahead token
 		lookahead = get_next_token(token_stream, &parser_line_num);
@@ -7591,8 +7584,7 @@ static u_int8_t union_member_list(ollie_token_stream_t* token_stream, generic_ty
 		//So long as we don't hit the closing curly
 	} while(lookahead.tok != R_CURLY);
 
-	//Once we get down here then we know that we've got an R_CURLY. Let's ensure that we have a grouping
-	//stack match
+	//Verify that these match
 	if(pop_token(&grouping_stack).tok != L_CURLY){
 		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched curly braces detected", parser_line_num);
 		num_errors++;

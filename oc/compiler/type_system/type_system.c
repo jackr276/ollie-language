@@ -2439,9 +2439,9 @@ void* get_struct_member(generic_type_t* structure, char* name){
 	dynamic_array_t struct_table = structure->internal_types.struct_table;
 
 	//Run through everything here
-	for(u_int16_t _ = 0; _ < struct_table.current_index; _++){
+	for(u_int32_t i = 0; i < struct_table.current_index; i++){
 		//Grab the variable out
-		var = dynamic_array_get_at(&struct_table, _);
+		var = dynamic_array_get_at(&struct_table, i);
 
 		//Now we'll do a simple comparison. If they match, we're set
 		if(strcmp(var->var_name.string, name) == 0){
@@ -2466,9 +2466,9 @@ void* get_union_member(generic_type_t* union_type, char* name){
 	dynamic_array_t union_table = union_type->internal_types.union_table;
 
 	//Run through everything here
-	for(u_int16_t _ = 0; _ < union_table.current_index; _++){
+	for(u_int32_t i = 0; i < union_table.current_index; i++){
 		//Grab the variable out
-		var = dynamic_array_get_at(&union_table, _);
+		var = dynamic_array_get_at(&union_table, i);
 
 		//Now we'll do a simple comparison. If they match, we're set
 		if(strcmp(var->var_name.string, name) == 0){
