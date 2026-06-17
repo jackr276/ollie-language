@@ -30,6 +30,13 @@ pthread_mutex_t result_mutex = PTHREAD_MUTEX_INITIALIZER;
 //Hold onto the test directory path
 static char* test_directory_path;
 
+//Maintain different paths for our run
+const char* local_output_path = "./oc/out";
+const char* ci_output_path = "$RUNNER_TEMP";
+
+//Is this a CI run or not?
+u_int8_t is_ci_run = 0;
+
 //Total number of errors we have
 u_int32_t total_errors = 0;
 //Number of files in error
@@ -108,7 +115,10 @@ void* worker(void* thread_parameters){
 		char* file_name = dynamic_array_get_at(&test_files, i);
 
 		//Our command. We use 2>&1 to write all errors to stdout so that we can grep it
-		sprintf(command, "exit $(valgrind ./oc/out/ocd -ditsa@ -f %s%s 2>&1 | grep \"SUMMARY\" | sed -n 's/.*ERROR SUMMARY: \\([0-9]\\+\\).*/\\1/p')", test_directory_path, file_name);
+		sprintf(command, "exit $(valgrind %s/ocd -ditsa@ -f %s%s 2>&1 | grep \"SUMMARY\" | sed -n 's/.*ERROR SUMMARY: \\([0-9]\\+\\).*/\\1/p')",
+		  				is_ci_run == 0 ? local_output_path : ci_output_path,
+		  				test_directory_path,
+		  				file_name);
 
 		//Run the command in the system
 		int32_t command_return_code = system(command);
@@ -186,16 +196,19 @@ int main(int argc, char** argv){
 
 	//Find the test file directory. It will have been passed in as a command line argument. If 
 	//it wasn't fail out
-	if(argc < 3){
+	if(argc < 4){
 		printf("Fatal error: please pass in an executable and a test directory as a command line argument\n");
 		exit(1);
 	}
 
+	//Is this a CI run or not? 0 for no, one for yes
+	is_ci_run = atoi(argv[1]);
+
 	//Get the thread count - very rough - I'm not really concerned about user-friendliness with this
-	int32_t thread_count = atoi(argv[1]);
+	int32_t thread_count = atoi(argv[2]);
 
 	//Extract it and open it
-	test_directory_path = argv[2];
+	test_directory_path = argv[3];
 	DIR* directory = opendir(test_directory_path);
 
 	//Check that we got it
