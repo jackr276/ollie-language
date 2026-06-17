@@ -14,6 +14,7 @@
 [![Interference Graph Test](https://github.com/jackr276/ollie-language/actions/workflows/interference_graph_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/interference_graph_test.yml)
 [![Priority Queue Test](https://github.com/jackr276/ollie-language/actions/workflows/priority_queue_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/priority_queue_test.yml)
 [![Ollie Run Validation](https://github.com/jackr276/ollie-language/actions/workflows/ollie_run_validation.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/ollie_run_validation.yml)
+[![Ollie Memory Validation](https://github.com/jackr276/ollie-language/actions/workflows/ollie_memory_validation.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/ollie_memory_validation.yml)
 
 ## Ollie Compiler(OC) Overall Flow
 
