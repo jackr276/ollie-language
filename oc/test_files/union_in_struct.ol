@@ -5,9 +5,9 @@
 
 //Declare the union type
 define union my_union {
-	x:i32[5];
-	y:i16;
-	ch:char;
+	x:mut i32[5];
+	y:mut i16;
+	ch:mut char;
 } as custom_union;
 
 //Define a struct that has this union in it

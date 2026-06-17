@@ -5,8 +5,8 @@
 
 //Declare the union type
 define union my_union {
-	x:i32;
-	y:i16;
+	x:mut i32;
+	y:mut i16;
 	ch:char;
 } as custom_union;
 

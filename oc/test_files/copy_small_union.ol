@@ -4,9 +4,9 @@
 */
 
 define union custom {
-	x:char;
-	y:i8;
-	z:u8;
+	x:mut char;
+	y:mut i8;
+	z:mut u8;
 } as super_small_union;
 
 

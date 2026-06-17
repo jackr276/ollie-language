@@ -4,8 +4,8 @@
 */
 
 define union my_union {
-	x:i32;
-	y:i64;
+	x:mut i32;
+	y:mut i64;
 }; 
 
 pub fn mut_union(u:mut union my_union*) -> void {

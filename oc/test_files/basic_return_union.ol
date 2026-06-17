@@ -14,8 +14,8 @@ define struct my_struct {
 
 //Basic union with struct & int that we are returning
 define union my_union {
-	struct_value:custom_struct;
-	int_value:i32;
+	struct_value:mut custom_struct;
+	int_value:mut i32;
 } as custom_union;
 
 

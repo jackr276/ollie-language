@@ -4,8 +4,8 @@
 */
 
 define union my_union {
-	x:i32;
-	y:i64;
+	x:mut i32;
+	y:mut i64;
 };
 
 pub fn get_to_union1(arr:mut union my_union*) -> i32 {
