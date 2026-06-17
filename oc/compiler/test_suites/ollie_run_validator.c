@@ -49,6 +49,7 @@
  *  4.) Error file queue
  */
 pthread_mutex_t stdout_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t file_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t lexer_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t compiler_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t error_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -74,18 +75,11 @@ static char* test_file_dir;
 static char* output_directory;
 
 /**
- * Each thread has a unique start and end index that 
- * they need to iterate over. This struct contains
- * that and will be passed along to each worker
- * thread as a parameter
+ * Our current thread parameter structure only contains
+ * the thread's unique ID
  */
 typedef struct thread_parameters_t thread_parameters_t;
 struct thread_parameters_t {
-	//Start is inclusive
-	u_int32_t start_index;
-	//End is exclusive
-	u_int32_t end_index;
-	//Thread number
 	u_int8_t thread_number;
 };
 
@@ -319,27 +313,20 @@ static ounit_compatibility_status_t is_test_OUNIT_compatible(ollie_token_stream_
 }
 
 /**
- * A worker thread operates over a given range of files before it completes. The thread
- * parameters(passed in via reference through the void pointer) include the inclusive
- * start index in the test file array and the exclusive end index in the test file array
+ * Our worker thread operates by polling the file list(trying to delete from the back), 
+ * and attempting to validate it if it is OUNIT compatible. Once validated it will update
+ * the appropriate metrics and loop back around. Once it finds that it cannot grab anything off
+ * of the queue it will exit
  */
 void* worker(void* thread_parameters) {
-	//The output file name that we will be using
+	//Needed strings
 	char output_file_name[1000];
-	//A path for the fully qualified file
 	char fully_qualified_file_name[1000];
-	//Command buffer for our uses
 	char command_buffer[3000];
-	//Buffer for our actual run commands
 	char run_command_buffer[2000];
 
-	//Implicit case it over
-	thread_parameters_t* parameters = thread_parameters;
-
-	//Extract the two indices that we'll be using
-	u_int32_t start_index = parameters->start_index;
-	u_int32_t end_index = parameters->end_index;
-	u_int32_t thread_id = parameters->thread_number;
+	//Extract our thread ID
+	u_int32_t thread_id = ((thread_parameters_t*)(thread_parameters))->thread_number;
 
 	//Keep track of how many errors this exact thread has seen
 	u_int32_t errors_per_thread = 0;
@@ -347,17 +334,32 @@ void* worker(void* thread_parameters) {
 
 	//Display for debug info
 	pthread_mutex_lock(&stdout_mutex);
-	fprintf(stdout, "[Thread %d]: Thread has been assigned to validate files with indices in range [%d, %d) and will now start working\n\n", thread_id, start_index, end_index);
+	fprintf(stdout, "[Thread %d]: Thread has been created and will now start working\n\n", thread_id);
 	pthread_mutex_unlock(&stdout_mutex);
 
-	/**
-	 * Now run through every file that is within this threads assignment.
-	 * All of the work for each file within this given range will be handled
-	 * by this thread
-	 */
-	for(u_int32_t i = start_index; i < end_index; i++){
-		//Get the file that we're after
-		char* file_name = dynamic_array_get_at(&test_files, i);
+	//Loop forever until we hit our exit condition
+	while(TRUE){
+		char* file_name = NULL;
+
+		/**
+		 * Lock the file queue mutex and see if we have anything to validate. Remember that
+		 * the delete_from_back returns NULL if the array is empty
+		 */
+		pthread_mutex_lock(&file_queue_mutex);
+		file_name = dynamic_array_delete_from_back(&test_files);
+		pthread_mutex_unlock(&file_queue_mutex);
+
+		/**
+		 * Exit condition - we no longer have files to validate so we are done. Display for logging
+		 * and then get out
+		 */
+		if(file_name == NULL){
+			pthread_mutex_lock(&stdout_mutex);
+			fprintf(stdout, "[Thread %d]: Thread has no files left to validate. Thread will now exit\n\n", thread_id);
+			pthread_mutex_unlock(&stdout_mutex);
+
+			break;
+		}
 
 		//Generate the *.test file name for the compiled file
 		sprintf(output_file_name, "%s.test", file_name);
@@ -502,14 +504,14 @@ void* worker(void* thread_parameters) {
 			pthread_mutex_lock(&stdout_mutex);
 			fprintf(stdout, "Compilation command ran: %s\n", command_buffer);
 			fprintf(stdout, "Execution command ran: %s\n", run_command_buffer);
-			fprintf(stdout, "Execution execution result of %d matched the expected result of %d. Test was a success.\n", runtime_result, expected_result);
+			fprintf(stdout, "Expected execution result [%d] matched the expected result [%d]. Test was a success.\n", runtime_result, expected_result);
 			pthread_mutex_unlock(&stdout_mutex);
 
 		} else {
 			pthread_mutex_lock(&stdout_mutex);
 			fprintf(stdout, "Compilation command ran: %s\n", command_buffer);
 			fprintf(stdout, "Execution command ran: %s\n", run_command_buffer);
-			fprintf(stdout, "Expected execution result was %d, but got %d instead\n", expected_result, runtime_result);
+			fprintf(stdout, "Expected execution result was [%d], but got [%d] instead\n", expected_result, runtime_result);
 			pthread_mutex_unlock(&stdout_mutex);
 
 			//This is an error file now
@@ -536,12 +538,10 @@ void* worker(void* thread_parameters) {
 		}
 	}
 
-
 	//Print our final debug info and then get out
 	pthread_mutex_lock(&stdout_mutex);
 	fprintf(stdout, "\n-----------------------------------------------\n");
 	fprintf(stdout, "[Thread %d]: Work Finished\n", thread_id);
-	fprintf(stdout, "Files Processed: %d\n", end_index - start_index);
 	fprintf(stdout, "Failed to compile: %d\n", failed_to_compile_per_thread);
 	fprintf(stdout, "Ran but errored: %d\n", errors_per_thread);
 	fprintf(stdout, "-----------------------------------------------\n");
@@ -560,6 +560,7 @@ void* worker(void* thread_parameters) {
  */
 int main(int argc, char** argv) {
 	u_int32_t return_value = 0;
+	u_int32_t test_file_count = 0;
 
 	/**
 	 * Find the test file directory. It will have been passed in as a command line argument. If 
@@ -618,20 +619,8 @@ int main(int argc, char** argv) {
 		dynamic_array_add(&test_files, test_file);
 	}
 
-	/**
-	 * Now that we have gathered everything that we are needing to validate, we will divide
-	 * up the dynamic array into equal(mostly) sized chunks of things to validate. The last
-	 * thread may have slightly less or slightly more work to do depending on how the division
-	 * works out but that is not a big deal
-	 */
-	u_int32_t files_per_thread = test_files.current_index / thread_count;
-
-	fprintf(stdout, "\n\n================================= Run Setup =================================\n");
-	fprintf(stdout, "%d threads requested to validate %d test files. Each thread will validate %d files\n", thread_count, test_files.current_index, files_per_thread);
-	fprintf(stdout, "================================= Run Setup =================================\n");
-
-	//Inclusive start index for our current thread
-	u_int32_t current_thread_file_index = 0;
+	//Extract this for result printing
+	test_file_count = test_files.current_index;
 
 	//==================== Thread Setup =========================
 	/**
@@ -641,29 +630,9 @@ int main(int argc, char** argv) {
 	thread_parameters_t* parameters = calloc(thread_count, sizeof(thread_parameters_t));
 
 	/**
-	 * Spawn every thread with the appropriate start(inclusive)
-	 * index and end(exclusive) index for the array
+	 * Create our thread ID's and spawn the pthread workers
 	 */
 	for(int32_t i = 0; i < thread_count; i++){
-		//This is the start index that we maintain
-		parameters[i].start_index = current_thread_file_index;
-
-		/**
-		 * If we are not the very last thread, we will increment
-		 * normally. If this is the very last thread, we'll
-		 * need to handle a bit more or a bit less because
-		 * odds are the division of files by threadcount is not
-		 * even
-		 */
-		if(i != thread_count - 1){
-			current_thread_file_index += files_per_thread;
-		} else {
-			current_thread_file_index = test_files.current_index;
-		}
-
-		//Whatever it ended up being give it to the parameter array
-		parameters[i].end_index = current_thread_file_index;
-
 		//Thread number is just for debugging but we do store it
 		parameters[i].thread_number = i;
 
@@ -689,7 +658,7 @@ int main(int argc, char** argv) {
 	double time_taken = (double)(stop_time - start_time) / CLOCKS_PER_SEC;
 
 	printf("\n\n\n\n\n\n================================ Ollie Run Validation Summary =================================== \n");
-	printf("FILES CONSIDERED: %d\n", test_files.current_index);
+	printf("FILES CONSIDERED: %d\n", test_file_count);
 	printf("FILES ELIGIBLE FOR RUN VALIDATION: %d\n", number_of_files_eligible_for_run_validation);
 	printf("CPU TIME ELAPSED: %.4f seconds\n", time_taken);
 	printf("FILES FAILING RUNTIME VALIDATION: %d\n", number_of_error_files);
@@ -735,7 +704,8 @@ int main(int argc, char** argv) {
 
 	printf("\n================================ Ollie Run Validation Summary =================================== \n");
 
-	//Destroy the three mutices
+	//Destroy all of our mutices
+	pthread_mutex_destroy(&file_queue_mutex);
 	pthread_mutex_destroy(&stdout_mutex);
 	pthread_mutex_destroy(&lexer_mutex);
 	pthread_mutex_destroy(&compiler_mutex);

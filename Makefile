@@ -519,12 +519,12 @@ performance_test: oc
 # A memory check run will use valgrind and run a C test that checks each file individually for memory errors
 # This can be slow but it runs as part of CI
 memory_check: oc_debug memory_checker
-	$(OUT_LOCAL)/memory_checker 0 16 $(TEST_FILE_DIR)
+	$(OUT_LOCAL)/memory_checker 0 24 $(TEST_FILE_DIR)
 
 # Ollie run validator checks the output of programs that expect a specific output. For more details
 # please see the top comment in the source code itself
 ollie_run_validation: oc ollie_run_validator
-	$(OUT_LOCAL)/ollie_run_validator 16 $(TEST_FILE_DIR) $(OUT_LOCAL)
+	$(OUT_LOCAL)/ollie_run_validator 24 $(TEST_FILE_DIR) $(OUT_LOCAL)
 
 array_test: dynamic_array_test
 	$(OUT_LOCAL)/dynamic_array_test
