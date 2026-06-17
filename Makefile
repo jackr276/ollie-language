@@ -570,6 +570,9 @@ heap_queue-CI.o: $(QUEUE_PATH)/heap_queue.c
 heap_queue-CId.o: $(QUEUE_PATH)/heap_queue.c
 	$(CC) $(CFLAGS) -g $(QUEUE_PATH)/heap_queue.c -o $(OUT_CI)/heap_queued.o
 
+min_priority_queue-CI.o: $(QUEUE_PATH)/min_priority_queue.c
+	$(CC) $(CFLAGS) $(QUEUE_PATH)/min_priority_queue.c -o $(OUT_CI)/min_priority_queue.o
+
 min_priority_queue-CId.o: $(QUEUE_PATH)/min_priority_queue.c
 	$(CC) $(CFLAGS) -g $(QUEUE_PATH)/min_priority_queue.c -o $(OUT_CI)/min_priority_queued.o
 
@@ -588,41 +591,80 @@ dynamic_array-CId.o: $(DYNAMIC_ARRAY_PATH)/dynamic_array.c
 parameter_result_array-CI.o: $(PARAMETER_RESULT_ARRAY_PATH)/parameter_result_array.c
 	$(CC) $(CFLAGS) $(PARAMETER_RESULT_ARRAY_PATH)/parameter_result_array.c -o $(OUT_CI)/parameter_result_array.o
 
+parameter_result_array-CId.o: $(PARAMETER_RESULT_ARRAY_PATH)/parameter_result_array.c
+	$(CC) $(CFLAGS) -g $(PARAMETER_RESULT_ARRAY_PATH)/parameter_result_array.c -o $(OUT_CI)/parameter_result_arrayd.o
+
 ollie_token_array-CI.o: $(OLLIE_TOKEN_ARRAY_PATH)/ollie_token_array.c
 	$(CC) $(CFLAGS) $(OLLIE_TOKEN_ARRAY_PATH)/ollie_token_array.c -o $(OUT_CI)/ollie_token_array.o
 
+ollie_token_array-CId.o: $(OLLIE_TOKEN_ARRAY_PATH)/ollie_token_array.c
+	$(CC) $(CFLAGS) -g $(OLLIE_TOKEN_ARRAY_PATH)/ollie_token_array.c -o $(OUT_CI)/ollie_token_arrayd.o
+
 dynamic_set-CI.o: $(DYNAMIC_SET_PATH)/dynamic_set.c
 	$(CC) $(CFLAGS) $(DYNAMIC_SET_PATH)/dynamic_set.c -o $(OUT_CI)/dynamic_set.o
+
+dynamic_set-CId.o: $(DYNAMIC_SET_PATH)/dynamic_set.c
+	$(CC) $(CFLAGS) -g $(DYNAMIC_SET_PATH)/dynamic_set.c -o $(OUT_CI)/dynamic_setd.o
 	
 value_numbering_table-CI.o: $(VALUE_NUMBERING_TABLE_PATH)/value_numbering_table.c
 	$(CC) $(CFLAGS) $(VALUE_NUMBERING_TABLE_PATH)/value_numbering_table.c -o $(OUT_CI)/value_numbering_table.o
 
+value_numbering_table-CId.o: $(VALUE_NUMBERING_TABLE_PATH)/value_numbering_table.c
+	$(CC) $(CFLAGS) -g $(VALUE_NUMBERING_TABLE_PATH)/value_numbering_table.c -o $(OUT_CI)/value_numbering_tabled.o
+
 dynamic_string-CI.o: $(DYNAMIC_STRING_PATH)/dynamic_string.c
 	$(CC) $(CFLAGS) $(DYNAMIC_STRING_PATH)/dynamic_string.c -o $(OUT_CI)/dynamic_string.o
+
+dynamic_string-CId.o: $(DYNAMIC_STRING_PATH)/dynamic_string.c
+	$(CC) $(CFLAGS) -g $(DYNAMIC_STRING_PATH)/dynamic_string.c -o $(OUT_CI)/dynamic_stringd.o
 
 lexstack-CI.o: $(STACK_PATH)/lexstack.c
 	$(CC) $(CFLAGS) $(STACK_PATH)/lexstack.c -o $(OUT_CI)/lexstack.o
 
+lexstack-CId.o: $(STACK_PATH)/lexstack.c
+	$(CC) $(CFLAGS) -g $(STACK_PATH)/lexstack.c -o $(OUT_CI)/lexstackd.o
+
 lightstack-CI.o: $(STACK_PATH)/lightstack.c
 	$(CC) $(CFLAGS) $(STACK_PATH)/lightstack.c -o $(OUT_CI)/lightstack.o
+
+lightstack-CId.o: $(STACK_PATH)/lightstack.c
+	$(CC) $(CFLAGS) -g $(STACK_PATH)/lightstack.c -o $(OUT_CI)/lightstackd.o
 
 nesting_stack-CI.o: $(STACK_PATH)/nesting_stack.c
 	$(CC) $(CFLAGS) $(STACK_PATH)/nesting_stack.c -o $(OUT_CI)/nesting_stack.o
 
+nesting_stack-CId.o: $(STACK_PATH)/nesting_stack.c
+	$(CC) $(CFLAGS) -g $(STACK_PATH)/nesting_stack.c -o $(OUT_CI)/nesting_stackd.o
+
 ast-CI.o: $(AST_PATH)/ast.c
 	$(CC) $(CFLAGS) $(AST_PATH)/ast.c -o $(OUT_CI)/ast.o
+
+ast-CId.o: $(AST_PATH)/ast.c
+	$(CC) $(CFLAGS) -g $(AST_PATH)/ast.c -o $(OUT_CI)/astd.o
 
 local_constant-CI.o: $(LOCAL_CONSTANT_PATH)/local_constant.c
 	$(CC) $(CFLAGS) $(LOCAL_CONSTANT_PATH)/local_constant.c -o $(OUT_CI)/local_constant.o
 
+local_constant-CId.o: $(LOCAL_CONSTANT_PATH)/local_constant.c
+	$(CC) $(CFLAGS) -g $(LOCAL_CONSTANT_PATH)/local_constant.c -o $(OUT_CI)/local_constantd.o
+
 preprocessor-CI.o: $(PREPROC_PATH)/preprocessor.c
 	$(CC) $(CFLAGS) $(PREPROC_PATH)/preprocessor.c -o $(OUT_CI)/preprocessor.o
+
+preprocessor-CId.o: $(PREPROC_PATH)/preprocessor.c
+	$(CC) $(CFLAGS) -g $(PREPROC_PATH)/preprocessor.c -o $(OUT_CI)/preprocessord.o
 
 dependency_tree-CI.o: $(DEPENDENCY_TREE_PATH)/dependency_tree.c
 	$(CC) $(CFLAGS) $(DEPENDENCY_TREE_PATH)/dependency_tree.c -o $(OUT_CI)/dependency_tree.o
 
+dependency_tree-CId.o: $(DEPENDENCY_TREE_PATH)/dependency_tree.c
+	$(CC) $(CFLAGS) -g $(DEPENDENCY_TREE_PATH)/dependency_tree.c -o $(OUT_CI)/dependency_treed.o
+
 stack_data_area-CI.o: $(STACK_DATA_AREA_PATH)/stack_data_area.c
 	$(CC) $(CFLAGS) $(STACK_DATA_AREA_PATH)/stack_data_area.c -o $(OUT_CI)/stack_data_area.o
+
+stack_data_area-CId.o: $(STACK_DATA_AREA_PATH)/stack_data_area.c
+	$(CC) $(CFLAGS) -g $(STACK_DATA_AREA_PATH)/stack_data_area.c -o $(OUT_CI)/stack_data_aread.o
 
 stack_data_area_test-CI.o: $(TEST_SUITE_PATH)/stack_data_area_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/stack_data_area_test.c -o $(OUT_CI)/stack_data_area_test.o
@@ -633,38 +675,74 @@ interference_graph_test-CI.o: $(TEST_SUITE_PATH)/interference_graph_test.c
 symtab-CI.o: $(SYMTAB_PATH)/symtab.c
 	$(CC) $(CFLAGS) $(SYMTAB_PATH)/symtab.c -o $(OUT_CI)/symtab.o
 
+symtab-CId.o: $(SYMTAB_PATH)/symtab.c
+	$(CC) $(CFLAGS) -g $(SYMTAB_PATH)/symtab.c -o $(OUT_CI)/symtabd.o
+
 jump_table-CI.o: $(JUMP_TABLE_PATH)/jump_table.c
 	$(CC) $(CFLAGS) $(JUMP_TABLE_PATH)/jump_table.c -o $(OUT_CI)/jump_table.o
+
+jump_table-CId.o: $(JUMP_TABLE_PATH)/jump_table.c
+	$(CC) $(CFLAGS) -g $(JUMP_TABLE_PATH)/jump_table.c -o $(OUT_CI)/jump_tabled.o
 
 cfg-CI.o: $(CFG_PATH)/cfg.c
 	$(CC) $(CFLAGS) $(CFG_PATH)/cfg.c -o $(OUT_CI)/cfg.o
 
+cfg-CId.o: $(CFG_PATH)/cfg.c
+	$(CC) $(CFLAGS) -g $(CFG_PATH)/cfg.c -o $(OUT_CI)/cfgd.o
+
 optimizer-CI.o: $(OPTIMIZER_PATH)/optimizer.c
 	$(CC) $(CFLAGS) $(OPTIMIZER_PATH)/optimizer.c -o $(OUT_CI)/optimizer.o
+
+optimizer-CId.o: $(OPTIMIZER_PATH)/optimizer.c
+	$(CC) $(CFLAGS) -g $(OPTIMIZER_PATH)/optimizer.c -o $(OUT_CI)/optimizerd.o
 
 instruction_selector-CI.o: $(INSTRUCTION_SELECTOR_PATH)/instruction_selector.c
 	$(CC) $(CFLAGS) $(INSTRUCTION_SELECTOR_PATH)/instruction_selector.c -o $(OUT_CI)/instruction_selector.o
 
+instruction_selector-CId.o: $(INSTRUCTION_SELECTOR_PATH)/instruction_selector.c
+	$(CC) $(CFLAGS) -g $(INSTRUCTION_SELECTOR_PATH)/instruction_selector.c -o $(OUT_CI)/instruction_selectord.o
+
 instruction_scheduler-CI.o: $(INSTRUCTION_SCHEDULER_PATH)/instruction_scheduler.c
 	$(CC) $(CFLAGS) $(INSTRUCTION_SCHEDULER_PATH)/instruction_scheduler.c -o $(OUT_CI)/instruction_scheduler.o
+
+instruction_scheduler-CId.o: $(INSTRUCTION_SCHEDULER_PATH)/instruction_scheduler.c
+	$(CC) $(CFLAGS) -g $(INSTRUCTION_SCHEDULER_PATH)/instruction_scheduler.c -o $(OUT_CI)/instruction_schedulerd.o
 
 register_allocator-CI.o: $(REGISTER_ALLOCATOR_PATH)/register_allocator.c
 	$(CC) $(CFLAGS) $(REGISTER_ALLOCATOR_PATH)/register_allocator.c -o $(OUT_CI)/register_allocator.o
 
+register_allocator-CId.o: $(REGISTER_ALLOCATOR_PATH)/register_allocator.c
+	$(CC) $(CFLAGS) -g $(REGISTER_ALLOCATOR_PATH)/register_allocator.c -o $(OUT_CI)/register_allocatord.o
+
 assembler-CI.o: $(ASSEMBLER_PATH)/assembler.c
 	$(CC) $(CFLAGS) $(ASSEMBLER_PATH)/assembler.c -o $(OUT_CI)/assembler-CI.o
+
+assembler-CId.o: $(ASSEMBLER_PATH)/assembler.c
+	$(CC) $(CFLAGS) -g $(ASSEMBLER_PATH)/assembler.c -o $(OUT_CI)/assembler-CId.o
 
 interference_graph-CI.o: $(INTERFERENCE_GRAPH_PATH)/interference_graph.c
 	$(CC) $(CFLAGS) $(INTERFERENCE_GRAPH_PATH)/interference_graph.c -o $(OUT_CI)/interference_graph.o
 
+interference_graph-CId.o: $(INTERFERENCE_GRAPH_PATH)/interference_graph.c
+	$(CC) $(CFLAGS) -g $(INTERFERENCE_GRAPH_PATH)/interference_graph.c -o $(OUT_CI)/interference_graphd.o
+
 type_system-CI.o: $(TYPE_SYSTEM_PATH)/type_system.c
 	$(CC) $(CFLAGS) $(TYPE_SYSTEM_PATH)/type_system.c -o $(OUT_CI)/type_system.o
+
+type_system-CId.o: $(TYPE_SYSTEM_PATH)/type_system.c
+	$(CC) $(CFLAGS) -g $(TYPE_SYSTEM_PATH)/type_system.c -o $(OUT_CI)/type_systemd.o
 
 postprocessor-CI.o: $(POSTPROCESSOR_PATH)/postprocessor.c
 	$(CC) $(CFLAGS) $(POSTPROCESSOR_PATH)/postprocessor.c -o $(OUT_CI)/postprocessor.o
 
+postprocessor-CId.o: $(POSTPROCESSOR_PATH)/postprocessor.c
+	$(CC) $(CFLAGS) -g $(POSTPROCESSOR_PATH)/postprocessor.c -o $(OUT_CI)/postprocessord.o
+
 parser-CI.o: $(PARSER_PATH)/parser.c
 	$(CC) $(CFLAGS) $(PARSER_PATH)/parser.c -o $(OUT_CI)/parser.o
+
+parser-CId.o: $(PARSER_PATH)/parser.c
+	$(CC) $(CFLAGS) -g $(PARSER_PATH)/parser.c -o $(OUT_CI)/parserd.o
 
 symtab_test-CI.o: $(TEST_SUITE_PATH)/symtab_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/symtab_test.c -o $(OUT_CI)/symtab_test.o
