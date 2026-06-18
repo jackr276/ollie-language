@@ -5,11 +5,12 @@
 
 
 define struct my_struct {
-	x:mut i32;
+	c:mut char;
+	//Needed padding
 	y:mut i32[5];
 	a:define mut struct {
 		x:mut i32;
-		y:mut i32;
+		y:mut char;
 	  };
 	z:mut f32;
 };
@@ -20,7 +21,7 @@ pub fn static_struct(i:bool) -> i32 {
 	let static tester:struct my_struct = {1, [1, 2, 3, 4, 5], {7, 8}, 5.5};
 
 	if(i){
-		ret tester:x + tester:a:x;
+		ret tester:c + tester:a:x;
 	} else {
 		ret tester:y[2] + tester:a:y; 
 	}

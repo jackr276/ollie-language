@@ -10788,6 +10788,7 @@ static three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* con
 	switch(constant->const_type){
 		case CHAR_CONST:
 			constant->constant_value.char_constant = const_node->constant_value.char_value;
+			printf("HERE\n\n\n");
 			break;
 		case BYTE_CONST:
 			constant->constant_value.signed_byte_constant = const_node->constant_value.signed_byte_value;

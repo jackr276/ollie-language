@@ -2023,7 +2023,7 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 	}
 
 	//If it's needed later on
-	dynamic_array_t array_initializer_values;
+	dynamic_array_t initializer_values;
 
 	//Run through all of them
 	for(u_int16_t i = 0; i < global_variables->current_index; i++){
@@ -2082,12 +2082,28 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 			//For an array, we loop through and print them all as constants in order
 			case GLOBAL_VAR_INITIALIZER_ARRAY:
 				//Extract this
-				array_initializer_values = variable->initializer_value.array_initializer_values;
+				initializer_values = variable->initializer_value.array_initializer_values;
 
 				//Run through all the values
-				for(u_int16_t i = 0; i < array_initializer_values.current_index; i++){
+				for(u_int32_t i = 0; i < initializer_values.current_index; i++){
 					//These will always be constant values
-					three_addr_const_t* constant_value = dynamic_array_get_at(&array_initializer_values, i);
+					three_addr_const_t* constant_value = dynamic_array_get_at(&initializer_values, i);
+
+					//Emit the constant value here
+					print_global_variable_constant(fl, constant_value);
+				}
+
+				break;
+
+			//For a struct, we loop through and print them all as constants in order
+			case GLOBAL_VAR_INITIALIZER_STRUCT:
+				//Extract this
+				 initializer_values = variable->initializer_value.struct_initializer_values;
+
+				//Run through all the values
+				for(u_int32_t i = 0; i < initializer_values.current_index; i++){
+					//These will always be constant values
+					three_addr_const_t* constant_value = dynamic_array_get_at(&initializer_values, i);
 
 					//Emit the constant value here
 					print_global_variable_constant(fl, constant_value);
