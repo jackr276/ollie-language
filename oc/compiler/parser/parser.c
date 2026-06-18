@@ -257,18 +257,29 @@ static void propogate_no_dereference_required_flag(generic_ast_node_t* node){
  * the given source node is or is not a constant, which is why we have this special rule instead of exclusively
  * relying on types_assignable in the type system
  */
-static inline generic_type_t* is_ast_node_assignable_to_destination(generic_type_t* destination_type, generic_ast_node_t* source_node){
+static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic_type_t* destination_type, generic_ast_node_t* source_node){
 	/**
 	 * If this is not a constant type, we use the regular types assignable path
 	 */
 	if(source_node->ast_node_type != AST_NODE_TYPE_CONSTANT){
 		return types_assignable(destination_type, source_node->inferred_type);
+
 	} else {
+		/**
+		 * If we have a constant to pointer assignment, for coercion reasons
+		 * treat the pointer as an unsigned 64 bit integer
+		 */
+		if(destination_type->type_class == TYPE_CLASS_POINTER){
+			destination_type = immut_u64;
+		}
+
 		//Invoke the special helper to determine this
 		generic_type_t* result_type = types_assignable_constant(destination_type, source_node->inferred_type);
 
-		//While we're here we will coerce the constant itself
+		//Reassign the constant's type at this point
 		source_node->inferred_type = result_type;
+
+		//While we're here we will coerce the constant itself
 		coerce_constant(source_node);
 
 		//Give this back
@@ -2107,7 +2118,8 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 				}
 
 				//Let's see if we're even able to assign this here
-				generic_type_t* final_type = types_assignable(param_type, current_param->inferred_type);
+				//generic_type_t* final_type = types_assignable(param_type, current_param->inferred_type);
+				generic_type_t* final_type = is_ast_node_assignable_to_destination_type(param_type, current_param);
 
 				//If this is null, it means that our check failed
 				if(final_type == NULL){
@@ -2129,12 +2141,14 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 				}
 
 				//If this is a constant node, we'll force it to be whatever we expect from the type assignability
+				/*
 				if(current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
 					current_param->inferred_type = final_type;
 
 					//Do coercion
 					perform_constant_assignment_coercion(current_param, final_type);
 				}
+				*/
 
 				/**
 				 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
