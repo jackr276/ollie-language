@@ -3,7 +3,7 @@ pub fn main() -> i32{
 	let y:mut i32 = x - 1;
 
 	let z:mut i32 = y / x;
-	let k:mut i32 = y * sizeof(x);
+	let k:mut i32 = y * <i32>sizeof(x);
 
-	ret z + k * typesize(f64);
+	ret z + k * <i32>typesize(f64);
 }

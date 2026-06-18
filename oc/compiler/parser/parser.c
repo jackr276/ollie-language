@@ -2381,11 +2381,11 @@ static generic_ast_node_t* sizeof_statement(ollie_token_stream_t* token_stream, 
 	generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
 
 	//This will be an int const
-	const_node->constant_type = INT_CONST_FORCE_U;
+	const_node->constant_type = INT_CONST;
 	//Store the actual value of the type size
-	const_node->constant_value.unsigned_int_value = return_type->type_size;
+	const_node->constant_value.signed_int_value = return_type->type_size;
 	//This will always end up as a generic signed int
-	const_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(return_type->type_size, 32);
+	const_node->inferred_type = determine_required_minimum_signed_integer_type_size(return_type->type_size, 32);
 
 	//Coerce it now that we have the minimum size
 	coerce_constant(const_node);
@@ -2454,11 +2454,11 @@ static generic_ast_node_t* typesize_statement(ollie_token_stream_t* token_stream
 	//Add the line number
 	const_node->line_number = parser_line_num;
 	//Add the constant
-	const_node->constant_type = INT_CONST_FORCE_U;
+	const_node->constant_type = INT_CONST;
 	//Store the actual value
-	const_node->constant_value.unsigned_int_value = type_size;
-	//These will be generic unsigned ints
-	const_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(type_size, 32);
+	const_node->constant_value.signed_int_value = type_size;
+	//These will be generic signed ints
+	const_node->inferred_type = determine_required_minimum_signed_integer_type_size(type_size, 32);
 
 	//Coerce it now that we have the minimum size
 	coerce_constant(const_node);
@@ -5004,11 +5004,13 @@ static generic_ast_node_t* shift_expression(ollie_token_stream_t* token_stream, 
 
 			//If the temp holder is a constant, perform any needed coercions here
 			if(temp_holder_is_constant == TRUE){
+				printf("INFERRED TYPE IS %s\n", temp_holder->inferred_type->type_name.string);
 				coerce_constant(temp_holder);
 			}
 
 			//Same for the right child
 			if(right_child_is_constant == TRUE){
+				printf("INFERRED TYPE IS %s\n", right_child->inferred_type->type_name.string);
 				coerce_constant(right_child);
 			}
 
