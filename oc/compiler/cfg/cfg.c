@@ -10792,6 +10792,7 @@ static three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* con
 			break;
 		case BYTE_CONST:
 			constant->constant_value.signed_byte_constant = const_node->constant_value.signed_byte_value;
+			printf("HERE\n\n\n");
 			break;
 		case BYTE_CONST_FORCE_U:
 			constant->constant_value.unsigned_byte_constant = const_node->constant_value.unsigned_byte_value;

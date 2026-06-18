@@ -361,6 +361,8 @@ static inline void perform_constant_assignment_coercion(generic_ast_node_t* cons
 		constant_node->inferred_type = final_type;
 	}
 
+	printf("FINAL TYPE IS %s\n", final_type->type_name.string);
+
 	//If we have a basic constant type like this, we need to perform coercion
 	switch(constant_node->constant_type){
 		case CHAR_CONST:
