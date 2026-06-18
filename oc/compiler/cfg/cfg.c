@@ -10783,16 +10783,16 @@ static three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* con
 	constant->const_type = const_node->constant_type; 
 	constant->type = const_node->inferred_type;
 
-	//Based on the type we'll make assignments. It'll be said again here - this is the only
-	//time that double/float constants can be emitted directly without the use of the .LC system
-	switch(constant->const_type){
+	/**
+	 * Based on the type we'll make assignments. It'll be said again here - this is the only
+	 * time that double/float constants can be emitted directly without the use of the .LC system
+	 */
+	switch(const_node->constant_type){
 		case CHAR_CONST:
 			constant->constant_value.char_constant = const_node->constant_value.char_value;
-			printf("HERE\n\n\n");
 			break;
 		case BYTE_CONST:
 			constant->constant_value.signed_byte_constant = const_node->constant_value.signed_byte_value;
-			printf("HERE\n\n\n");
 			break;
 		case BYTE_CONST_FORCE_U:
 			constant->constant_value.unsigned_byte_constant = const_node->constant_value.unsigned_byte_value;

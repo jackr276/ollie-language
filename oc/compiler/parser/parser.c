@@ -361,8 +361,6 @@ static inline void perform_constant_assignment_coercion(generic_ast_node_t* cons
 		constant_node->inferred_type = final_type;
 	}
 
-	printf("FINAL TYPE IS %s\n", final_type->type_name.string);
-
 	//If we have a basic constant type like this, we need to perform coercion
 	switch(constant_node->constant_type){
 		case CHAR_CONST:
@@ -11570,8 +11568,7 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 		//We'll use the same top level initialization check for this rule as well
 		generic_type_t* final_type = validate_initializer_types(member_type, cursor, membership);
 
-		//If these fail, then we're done here. No need for an error message, they'll have already been
-		//printed
+		//If these fail, then we're done here. No need for an error message, they'll have already been printed
 		if(final_type == NULL){
 			return FALSE;
 		}
@@ -11583,9 +11580,11 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 		cursor = cursor->next_sibling;
 	}
 
-	//The final check down here has 2 options:
-	// 1.) The node's length was 0, in which case, we set the length based on the number of members we saw
-	// 2.) The length was set, in which case, we validate the length here
+	/**
+	 * The final check down here has 2 options:
+	 * 1.) The node's length was 0, in which case, we set the length based on the number of members we saw
+	 * 2.) The length was set, in which case, we validate the length here
+	 */
 	if(num_members != 0){
 		//Validate that they match here
 		if(num_members != initializer_list_members){

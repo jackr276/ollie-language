@@ -343,8 +343,18 @@ void coerce_constant(generic_ast_node_t* constant_node){
 
 			break;
 
+		//TODO THIS IS DUE TO THE WAY THAT THE LEXER WORKS WITH CONSTANTS
 		case INT_CONST:
 			switch(inferred_type->basic_type_token){
+				case CHAR:
+					printf("HERE CHAR\n\n\n");
+					break;
+
+				case I8:
+					printf("HERE I8\n\n\n");
+					break;
+
+
 				case U32:
 					constant_node->constant_type = INT_CONST_FORCE_U;
 					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.signed_int_value;
