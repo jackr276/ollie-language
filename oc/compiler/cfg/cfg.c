@@ -160,6 +160,7 @@ static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, ge
 static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node);
 static cfg_result_package_t emit_string_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* string_initializer);
 static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* struct_initializer);
+static void emit_global_struct_initializer(generic_ast_node_t* struct_initializer, dynamic_array_t* intializer_values);
 
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_const_t* constant);
 static void visit_declaration_statement(generic_ast_node_t* node);
@@ -10858,7 +10859,6 @@ static void emit_global_array_initializer(generic_ast_node_t* array_initializer,
 
 	//We can either see array initializers or constants here
 	while(cursor != NULL){
-		//Go based on what kind of node we have
 		switch(cursor->ast_node_type){
 			//If we have an array initializer - simply pass this along
 			case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
@@ -10867,14 +10867,17 @@ static void emit_global_array_initializer(generic_ast_node_t* array_initializer,
 
 			//Another base case of sorts - this is for char[] variables
 			case AST_NODE_TYPE_STRING_INITIALIZER:
-				//Emit it and add it into the array
 				dynamic_array_add(initializer_values, emit_global_variable_string_constant(cursor));
 				break;
 
 			//This is really our base case
 			case AST_NODE_TYPE_CONSTANT:
-				//Emit the constant and get it into the array
 				dynamic_array_add(initializer_values, emit_global_variable_constant(cursor));
+				break;
+
+			//If we have a struct initializer list we will emit this inside of the array list
+			case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
+				emit_global_struct_initializer(cursor, initializer_values);
 				break;
 
 			default:
@@ -10894,9 +10897,24 @@ static void emit_global_array_initializer(generic_ast_node_t* array_initializer,
  * is very important and a key different from how everything else works when it comes to these kinds of global variable
  * initializers
  */
-static void emit_global_struct_initializer(generic_ast_node_t* struct_initializer, dynamic_array_t* intializer_values){
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
+static void emit_global_struct_initializer(generic_ast_node_t* struct_initializer, dynamic_array_t* initializer_values){
+	//Grab out the first child for the struct initializer
+	generic_ast_node_t* cursor = struct_initializer->first_child;
+
+	//Handle every other type of nested initializer
+	while(cursor != NULL){
+		switch(cursor->ast_node_type){
+			case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+				emit_global_array_initializer(cursor, initializer_values);
+				break;
+
+			case AST_NODE_TYPE_STRING_INITIALIZER:
+		}
+
+
+		//Bump it up
+		cursor = cursor->next_sibling;
+	}
 }
 
 
