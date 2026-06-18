@@ -20,8 +20,8 @@ pub fn expanding_constant_size() -> i64{
 
 //Subtracting with typesize, should be just one number
 pub fn sub_type_size() -> i32 {
-	//Should be a negative
-	ret 2 - typesize(custom_struct);
+	//Should be a negative if we force it to an integer
+	ret 2 - <i32>typesize(custom_struct);
 }
 
 pub fn main() -> i32 {

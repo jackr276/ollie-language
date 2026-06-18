@@ -47,9 +47,11 @@ void coerce_constant(generic_ast_node_t* constant_node){
 
 	//Go based on the original type
 	switch(constant_node->constant_type){
-		//Now in here, we'll go based on the basic type of what our inferred
-		//type is and perform a move operation(just reassignment) to have the appropriate
-		//expansion
+		/**
+		 * Now in here, we'll go based on the basic type of what our inferred
+		 * type is and perform a move operation(just reassignment) to have the appropriate
+		 * expansion
+		 */
 		case CHAR_CONST:
 			switch(inferred_type->basic_type_token){
 				case U8:
@@ -131,7 +133,7 @@ void coerce_constant(generic_ast_node_t* constant_node){
 					break;
 
 				case U32:
-					constant_node->constant_type = INT_CONST;
+					constant_node->constant_type = INT_CONST_FORCE_U;
 					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.signed_byte_value;
 					break;
 
@@ -189,7 +191,7 @@ void coerce_constant(generic_ast_node_t* constant_node){
 					break;
 
 				case U32:
-					constant_node->constant_type = INT_CONST;
+					constant_node->constant_type = INT_CONST_FORCE_U;
 					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.unsigned_byte_value;
 					break;
 
@@ -247,7 +249,7 @@ void coerce_constant(generic_ast_node_t* constant_node){
 					break;
 
 				case U32:
-					constant_node->constant_type = INT_CONST;
+					constant_node->constant_type = INT_CONST_FORCE_U;
 					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.signed_short_value;
 					break;
 
@@ -305,7 +307,7 @@ void coerce_constant(generic_ast_node_t* constant_node){
 					break;
 
 				case U32:
-					constant_node->constant_type = INT_CONST;
+					constant_node->constant_type = INT_CONST_FORCE_U;
 					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.unsigned_short_value;
 					break;
 
