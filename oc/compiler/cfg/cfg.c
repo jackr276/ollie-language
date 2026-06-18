@@ -10882,7 +10882,7 @@ static void emit_global_array_initializer(generic_ast_node_t* array_initializer,
 
 			default:
 				printf("%d\n\n\n", cursor->ast_node_type);
-				printf("Fatal internal compiler: Invalid or unimplemented global initializer node encountered\n");
+				printf("Fatal internal compiler error: Invalid or unimplemented global initializer node encountered\n");
 				exit(1);
 		}
 
@@ -10909,8 +10909,22 @@ static void emit_global_struct_initializer(generic_ast_node_t* struct_initialize
 				break;
 
 			case AST_NODE_TYPE_STRING_INITIALIZER:
-		}
+				dynamic_array_add(initializer_values, emit_global_variable_string_constant(cursor));
+				break;
 
+			case AST_NODE_TYPE_CONSTANT:
+				dynamic_array_add(initializer_values, emit_global_variable_constant(cursor));
+				break;
+
+			case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
+				emit_global_struct_initializer(cursor, initializer_values);
+				break;
+					
+			default:
+				printf("%d\n\n\n", cursor->ast_node_type);
+				printf("Fatal internal compiler error: Invalid or unimplemented global initializer node encountered\n");
+				exit(1);
+		}
 
 		//Bump it up
 		cursor = cursor->next_sibling;
