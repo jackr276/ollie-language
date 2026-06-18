@@ -10889,7 +10889,12 @@ static void emit_global_array_initializer(generic_ast_node_t* array_initializer,
 }
 
 
-static void emit_global_struct_initializer(generic_ast_node_t* array_initializer, dynamic_array_t* intializer_values){
+/**
+ * Emit a global struct initializer. We do this by creating one giant array of values *in addition to padding*. This 
+ * is very important and a key different from how everything else works when it comes to these kinds of global variable
+ * initializers
+ */
+static void emit_global_struct_initializer(generic_ast_node_t* struct_initializer, dynamic_array_t* intializer_values){
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
 }
@@ -10900,7 +10905,7 @@ static void emit_global_struct_initializer(generic_ast_node_t* array_initializer
  * in the ".rel.local" section. This is only done for char* variables *or* anything
  * that decays into a char*
  */
-static u_int8_t does_type_decay_to_char_pointer(generic_type_t* type){
+static inline u_int8_t does_type_decay_to_char_pointer(generic_type_t* type){
 	switch(type->type_class){
 		case TYPE_CLASS_ARRAY:
 			return does_type_decay_to_char_pointer(type->internal_types.member_type);
@@ -10912,9 +10917,6 @@ static u_int8_t does_type_decay_to_char_pointer(generic_type_t* type){
 			}
 			
 			return does_type_decay_to_char_pointer(type->internal_types.points_to);
-
-		case TYPE_CLASS_BASIC:
-			return FALSE;
 
 		default:
 			return FALSE;
@@ -10929,8 +10931,10 @@ static u_int8_t does_type_decay_to_char_pointer(generic_type_t* type){
  * here
  */
 static void visit_global_let_statement(generic_ast_node_t* node){
-	//We'll store it inside of the global variable struct. Leave it as NULL
-	//here so that it's automatically initialized to 0
+	/**
+	 * We'll store it inside of the global variable struct. Leave it as NULL
+	 * here so that it's automatically initialized to 0
+	 */
 	global_variable_t* global_variable = create_global_variable(node->variable, NULL);
 
 	//This has been initialized already
@@ -10981,8 +10985,14 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 			break;
 
 		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(1);
+			//Initialized to a struct
+			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_STRUCT;
+
+			//Give it an array of our struct values and padding
+			global_variable->initializer_value.struct_initializer_values = dynamic_array_alloc();
+
+			//Let the helper deal with it
+			emit_global_struct_initializer(initializer, &(global_variable->initializer_value.struct_initializer_values));
 			break;
 
 		//This shouldn't be reachable
@@ -11054,8 +11064,14 @@ static void visit_static_let_statement(generic_ast_node_t* node){
 			break;
 
 		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(1);
+			//Initialized to a struct
+			static_variable->initializer_type = GLOBAL_VAR_INITIALIZER_ARRAY;
+
+			//Initialize the struct value list
+			static_variable->initializer_value.struct_initializer_values = dynamic_array_alloc();
+
+			//Let the helper take care of it
+			emit_global_struct_initializer(initializer, &(static_variable->initializer_value.struct_initializer_values));
 			break;
 
 		//This shouldn't be reachable
