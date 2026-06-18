@@ -253,6 +253,31 @@ static void propogate_no_dereference_required_flag(generic_ast_node_t* node){
 
 
 /**
+ * Can a given source node be assigned to a destination type? This logic changes based on whether or not
+ * the given source node is or is not a constant, which is why we have this special rule instead of exclusively
+ * relying on types_assignable in the type system
+ */
+static inline generic_type_t* is_ast_node_assignable_to_destination(generic_type_t* destination_type, generic_ast_node_t* source_node){
+	/**
+	 * If this is not a constant type, we use the regular types assignable path
+	 */
+	if(source_node->ast_node_type != AST_NODE_TYPE_CONSTANT){
+		return types_assignable(destination_type, source_node->inferred_type);
+	} else {
+		//Invoke the special helper to determine this
+		generic_type_t* result_type = types_assignable_constant(destination_type, source_node->inferred_type);
+
+		//While we're here we will coerce the constant itself
+		source_node->inferred_type = result_type;
+		coerce_constant(source_node);
+
+		//Give this back
+		return result_type;
+	}
+}
+
+
+/**
  * Is a given variable a data segment variable? These variables are not actually
  * stored in registers or in memory so we need to treat them a bit differently. In
  * ollie only static and global variables fit the bill for this

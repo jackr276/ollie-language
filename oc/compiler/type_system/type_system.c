@@ -776,6 +776,16 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 
 /**
+ * Are we able to assign a constant of "source_type" to something on "destination_type"? Returns
+ * NULL if we can't. Constants have unique rules around truncation which is why we do this
+ */
+generic_type_t* types_assignable_constant(generic_type_t* destination_type, generic_type_t* constant_source_type){
+	//TODO NOT DONE
+	return NULL;
+}
+
+
+/**
  * Are two pointer types compatible? We use the same logic as types assignable does except we completely ignore the mutability
  */
 static inline generic_type_t* pointer_types_compatible_ignore_mutability(generic_type_t* pointer_a, generic_type_t* pointer_b){
