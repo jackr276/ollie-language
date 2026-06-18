@@ -768,8 +768,8 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 			//Copy over
 			constant_node->constant_value.signed_short_value = lookahead.constant_values.signed_short_value;
 
-			//Use the helper rule to determine what size int we should initially have
-			constant_node->inferred_type = determine_required_minimum_signed_integer_type_size(constant_node->constant_value.signed_short_value, 16);
+			//This is always initially and immut_i16
+			constant_node->inferred_type = immut_i16;
 
 			break;
 
@@ -781,11 +781,10 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 			//Copy over
 			constant_node->constant_value.unsigned_short_value = lookahead.constant_values.unsigned_short_value;
 
-			//Use the helper rule to determine what size int we should initially have
-			constant_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(constant_node->constant_value.unsigned_short_value, 16);
+			//This is always initially and immut_u16
+			constant_node->inferred_type = immut_u16;
 
 			break;
-
 
 		//Regular signed int
 		case INT_CONST:
@@ -795,8 +794,8 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 			//Copy over
 			constant_node->constant_value.signed_int_value = lookahead.constant_values.signed_int_value;
 
-			//Use the helper rule to determine what size int we should initially have
-			constant_node->inferred_type = determine_required_minimum_signed_integer_type_size(constant_node->constant_value.signed_int_value, 32);
+			//This is always initially and immut_i32
+			constant_node->inferred_type = immut_i32;
 
 			break;
 
@@ -808,8 +807,8 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 			//Copy over
 			constant_node->constant_value.unsigned_int_value = lookahead.constant_values.unsigned_int_value;
 
-			//Use the helper rule to determine what size int we should initially have
-			constant_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(constant_node->constant_value.unsigned_int_value, 32);
+			//This is always initially and immut_u32
+			constant_node->inferred_type = immut_u32;
 			
 			break;
 
@@ -821,8 +820,8 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 			//Copy over
 			constant_node->constant_value.signed_long_value = lookahead.constant_values.signed_long_value;
 
-			//Get the size up to 64 bits
-			constant_node->inferred_type = determine_required_minimum_signed_integer_type_size(constant_node->constant_value.signed_long_value, 64);
+			//This is always initally an immut_i64
+			constant_node->inferred_type = immut_i64;
 
 			break;
 
@@ -834,8 +833,8 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 			//Copy over
 			constant_node->constant_value.signed_long_value = lookahead.constant_values.signed_long_value;
 
-			//Get the size up to 64 bits
-			constant_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(constant_node->constant_value.unsigned_long_value, 64);
+			//This is always initially an immut_u64
+			constant_node->inferred_type = immut_u64;
 
 			break;
 
@@ -5004,13 +5003,11 @@ static generic_ast_node_t* shift_expression(ollie_token_stream_t* token_stream, 
 
 			//If the temp holder is a constant, perform any needed coercions here
 			if(temp_holder_is_constant == TRUE){
-				printf("INFERRED TYPE IS %s\n", temp_holder->inferred_type->type_name.string);
 				coerce_constant(temp_holder);
 			}
 
 			//Same for the right child
 			if(right_child_is_constant == TRUE){
-				printf("INFERRED TYPE IS %s\n", right_child->inferred_type->type_name.string);
 				coerce_constant(right_child);
 			}
 
