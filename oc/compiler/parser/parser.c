@@ -266,6 +266,20 @@ static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic
 
 	} else {
 		/**
+		 * Certain types we won't want to mess with in this way. We're really
+		 * only looking for basic constants to do this with
+		 */
+		switch(source_node->constant_type){
+			case STR_CONST:
+			case FUNC_CONST:
+			case REL_ADDRESS_CONST:
+				return types_assignable(destination_type, source_node->inferred_type);
+
+			default:
+				break;
+		}
+
+		/**
 		 * If we have a constant to pointer assignment, for coercion reasons
 		 * treat the pointer as an unsigned 64 bit integer
 		 */
@@ -276,11 +290,16 @@ static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic
 		//Invoke the special helper to determine this
 		generic_type_t* result_type = types_assignable_constant(destination_type, source_node->inferred_type);
 
-		//Reassign the constant's type at this point
-		source_node->inferred_type = result_type;
+		/**
+		 * If it worked then we'll do our reassignment now
+		 */
+		if(result_type != NULL){
+			//Reassign the constant's type at this point
+			source_node->inferred_type = result_type;
 
-		//While we're here we will coerce the constant itself
-		coerce_constant(source_node);
+			//While we're here we will coerce the constant itself
+			coerce_constant(source_node);
+		}
 
 		//Give this back
 		return result_type;

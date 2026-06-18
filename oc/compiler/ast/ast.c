@@ -609,7 +609,7 @@ void coerce_constant(generic_ast_node_t* constant_node){
 
 		//This should never happen
 		default:
-			printf("Fatal internal compiler error: Unsupported constant type found in coercer.\n");
+			printf("Fatal internal compiler error: Unsupported constant type found in coercer %d.\n", constant_node->constant_type);
 			exit(1);
 	}
 }
