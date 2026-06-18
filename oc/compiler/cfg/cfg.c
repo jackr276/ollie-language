@@ -10889,6 +10889,12 @@ static void emit_global_array_initializer(generic_ast_node_t* array_initializer,
 }
 
 
+static void emit_global_struct_initializer(generic_ast_node_t* array_initializer, dynamic_array_t* intializer_values){
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
+}
+
+
 /**
  * This helper function is used to determine if we need to place a global variable
  * in the ".rel.local" section. This is only done for char* variables *or* anything
@@ -10974,6 +10980,11 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 
 			break;
 
+		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(1);
+			break;
+
 		//This shouldn't be reachable
 		default:
 			printf("Fatal internal compiler error: Unrecognized/unimplemented global initializer node type encountered\n");
@@ -11040,6 +11051,11 @@ static void visit_static_let_statement(generic_ast_node_t* node){
 			//This will handle a variety of cases for us
 			static_variable->initializer_value.constant_value = emit_global_variable_string_constant(initializer);
 
+			break;
+
+		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(1);
 			break;
 
 		//This shouldn't be reachable
