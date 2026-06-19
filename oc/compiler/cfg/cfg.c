@@ -10893,91 +10893,6 @@ static void emit_global_array_initializer(generic_ast_node_t* array_initializer,
 	}
 }
 
-/**
- * Add a value to a struct type. The void* here is a 
- * symtab variable record
- *
- * For alignment, it is important to note that we only ever align by primitive data type
- * sizes. The largest an internal alignment can be is by 8
- */
-static void add_struct_member_DUMMMY(generic_type_t* type, void* member_var){
-	//Grab this reference out, for convenience
-	symtab_variable_record_t* var = member_var;
-
-	//Mark that this is a struct member
-	var->membership = STRUCT_MEMBER;
-
-	//If this is the very first one, then we'll 
-	if(type->internal_types.struct_table.current_index == 0){
-		//This one's offset is 0
-		var->struct_offset = 0;
-
-		//Increment the size by the amount of the type
-		type->type_size += var->type_defined_as->type_size;
-
-		//Add the variable into the struct table
-		dynamic_array_add(&(type->internal_types.struct_table), var);
-
-		//The largest member size here is the alignment of the biggest type
-		type->internal_values.largest_member_type = get_base_alignment_type(var->type_defined_as);
-
-		//Hop out here
-		return;
-	}
-
-	/**
-	 * Let's now see where the ending address of the struct is. We can find
-	 * this ending dress by calculating the offset of the latest field plus
-	 * the size of the latest variable
-	 */
-	
-	//The prior variable
-	symtab_variable_record_t* prior_variable = dynamic_array_get_at(&(type->internal_types.struct_table), type->internal_types.struct_table.current_index - 1);
-
-	//And the offset of this entry
-	u_int32_t offset = prior_variable->struct_offset;
-	
-	//The current ending address is the offset of the last variable plus its size
-	u_int32_t current_end = offset + prior_variable->type_defined_as->type_size;
-
-	//Get the primitive type that we will need to align by here
-	generic_type_t* aligning_by_type = get_base_alignment_type(var->type_defined_as);
-
-	//If we have a larger contender for alignment here, then this will become our largest
-	//member type
-	if(aligning_by_type->type_size > type->internal_values.largest_member_type->type_size){
-		type->internal_values.largest_member_type = aligning_by_type;
-	}
-
-	/**
-	 * We will satisfy this by adding the remainder of the division of the new variable with the current
-	 * end in as padding to the previous entry
-	 */
-	
-	//What padding is needed?
-	u_int32_t needed_padding = 0;
-	
-	if(current_end < aligning_by_type->type_size){
-		needed_padding = aligning_by_type->type_size - current_end;
-	} else {
-		needed_padding = current_end % aligning_by_type->type_size;
-	}
-
-	//Now we can update the current end
-	current_end = current_end + needed_padding;
-
-	//And now we can add in the new variable's offset
-	var->struct_offset = current_end;
-
-	//Increment the size by the amount of the type and the padding we're adding in
-	type->type_size += var->type_defined_as->type_size + needed_padding;
-
-	//Add the variable into the table
-	dynamic_array_add(&(type->internal_types.struct_table), var);
-
-	//Done
-	return; 
-}
 
 /**
  * Emit a global struct initializer. We do this by creating one giant array of values *in addition to padding*. This 
@@ -11009,7 +10924,27 @@ static void emit_global_struct_initializer(generic_ast_node_t* struct_initialize
 		 * member
 		 */
 		if(current_struct_member_index != 0){
+			u_int32_t needed_padding = 0;
 
+			//Get the type that we're going to be aligning by
+			generic_type_t* aligning_by_type = get_base_alignment_type(member_type);
+
+			/**
+			 * If we're smaller than the current struct size pad out to the end
+			 * by however much we need to make up the difference. Otherwise, the padding
+			 * that we need is just the modulo of the current struct size and the
+			 * alignable type size
+			 */
+			if(current_struct_size < aligning_by_type->type_size){
+				needed_padding = aligning_by_type->type_size - current_struct_size;
+			} else {
+				needed_padding = current_struct_size % aligning_by_type->type_size;
+			}
+
+			//TODO EMIT THE NEEDED CONSTANT HERE
+
+			//Bump up by our padding
+			current_struct_size += needed_padding;
 		}
 
 		switch(cursor->ast_node_type){
@@ -11047,6 +10982,9 @@ static void emit_global_struct_initializer(generic_ast_node_t* struct_initialize
 	}
 
 	//TODO BUMP UP TO OUR FINAL SIZE
+	if(struct_type->type_size != current_struct_size){
+		printf("TODO FINAL PADDING OF %d NEEDED\n", struct_type->type_size - current_struct_size);
+	}
 }
 
 
