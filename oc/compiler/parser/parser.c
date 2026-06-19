@@ -253,32 +253,36 @@ static void propogate_no_dereference_required_flag(generic_ast_node_t* node){
 
 
 /**
+ * If a constant is a string constant, function constant, or any other kind of relative
+ * address constant, then we may not convert it and we must process it using the normal
+ * rules as if it were a variable. This helper sifts through a constant type and determines
+ * if it is one of these exceptions
+ */
+static inline u_int8_t is_constant_type_exempt_from_constant_assignment_rules(ollie_token_t constant_type){
+	switch(constant_type){
+		case STR_CONST:
+		case FUNC_CONST:
+		case REL_ADDRESS_CONST:
+				return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Can a given source node be assigned to a destination type? This logic changes based on whether or not
  * the given source node is or is not a constant, which is why we have this special rule instead of exclusively
  * relying on types_assignable in the type system
  */
 static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic_type_t* destination_type, generic_ast_node_t* source_node){
 	/**
-	 * If this is not a constant type, we use the regular types assignable path
+	 * If this is not a constant type or it is exempt, we use the regular types assignable path
 	 */
-	if(source_node->ast_node_type != AST_NODE_TYPE_CONSTANT){
+	if(source_node->ast_node_type != AST_NODE_TYPE_CONSTANT || is_constant_type_exempt_from_constant_assignment_rules(source_node->constant_type) == TRUE){
 		return types_assignable(destination_type, source_node->inferred_type);
 
 	} else {
-		/**
-		 * Certain types we won't want to mess with in this way. We're really
-		 * only looking for basic constants to do this with
-		 */
-		switch(source_node->constant_type){
-			case STR_CONST:
-			case FUNC_CONST:
-			case REL_ADDRESS_CONST:
-				return types_assignable(destination_type, source_node->inferred_type);
-
-			default:
-				break;
-		}
-
 		/**
 		 * If we have a constant to pointer assignment, for coercion reasons
 		 * treat the pointer as an unsigned 64 bit integer
@@ -398,42 +402,6 @@ static inline u_int8_t is_type_commutative_for_operation(generic_type_t* type, o
 		//By defualt - we're assuming this operator is not commutative
 		default:
 			return FALSE;
-	}
-}
-
-
-/**
- * Perform any needed constant coercion that is being done for an assignment. This includes converting pointers to 64-bit
- * integers for constant coercion
- */
-static inline void perform_constant_assignment_coercion(generic_ast_node_t* constant_node, generic_type_t* final_type){
-	//If we have a pointer, we'll just make this into an i64
-	if(final_type->type_class == TYPE_CLASS_POINTER){
-		//Set the final type here
-		constant_node->inferred_type = immut_i64;
-	} else {
-		//Set the final type here
-		constant_node->inferred_type = final_type;
-	}
-
-	//If we have a basic constant type like this, we need to perform coercion
-	switch(constant_node->constant_type){
-		case CHAR_CONST:
-		case BYTE_CONST:
-		case BYTE_CONST_FORCE_U:
-		case SHORT_CONST:
-		case SHORT_CONST_FORCE_U:
-		case INT_CONST:
-		case INT_CONST_FORCE_U:
-		case LONG_CONST:
-		case LONG_CONST_FORCE_U:
-		case FLOAT_CONST:
-		case DOUBLE_CONST:
-			coerce_constant(constant_node);
-			break;
-		//Otherwise do nothing
-		default:
-			break;
 	}
 }
 
@@ -11844,15 +11812,6 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 				generate_types_assignable_failure_message(info, initializer_node->inferred_type, return_type);
 				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				return NULL;
-			}
-
-			//If we have a constant node, we need to perform any needed type coercion here
-			if(initializer_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
-				//Set the final type
-				initializer_node->inferred_type = final_type;
-
-				//Let the helper do whatever we need
-				perform_constant_assignment_coercion(initializer_node, final_type);
 			}
 
 			//Special checking here - if we have an enum type that is being assigned to, we need
