@@ -725,7 +725,7 @@ static inline generic_type_t* determine_required_minimum_unsigned_integer_type_s
  * If we can sign extend back to the original value after casting to an i32, use i32
  *
  */
-static generic_type_t* determine_required_minimum_signed_integer_type_size(int64_t value){
+static inline generic_type_t* determine_required_minimum_signed_integer_type_size(int64_t value){
 	//The case where we can use an i8
 	if((int64_t)(int8_t)value == value){
 		return immut_i8;
