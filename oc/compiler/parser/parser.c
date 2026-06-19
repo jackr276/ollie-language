@@ -291,7 +291,7 @@ static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic
 		generic_type_t* result_type = types_assignable_constant(destination_type, source_node->inferred_type);
 
 		/**
-		 * If it worked then we'll do our reassignment now
+		 * If it worked then we'll do our reassignment now/constant coercion now
 		 */
 		if(result_type != NULL){
 			//Reassign the constant's type at this point
@@ -1076,8 +1076,8 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 		return print_and_return_error("Fatal internal compiler error. Saw a return statement while current function is null", parser_line_num);
 	}
 
-	//Figure out what the final type is here
-	generic_type_t* final_type = types_assignable(current_function_signature->return_type, expr_node->inferred_type);
+	//Figure out what the final type is here. This function also handles any constant coercion that we need to do
+	generic_type_t* final_type = is_ast_node_assignable_to_destination_type(current_function_signature->return_type, expr_node);
 
 	//If the current function's return type is not compatible with the return type here, we'll bail out
 	if(final_type == NULL){
@@ -1090,17 +1090,9 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
-	//If this is a constant, we'll force it to be whatever the new type is
-	if(expr_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
-		//Set the type
-		expr_node->inferred_type = final_type;
-
-		//Coerce the constant
-		perform_constant_assignment_coercion(expr_node, final_type);
-	}
-
 	//Special checking here - if we have an enum type that is being assigned to, we need
 	//to make sure that it's being assigned to a valid value in it's range
+	//TODO MOVE ME
 	if(is_enum_type(current_function_signature->return_type) == TRUE && expr_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
 		if(does_enum_contain_integer_member(current_function_signature->return_type, expr_node->constant_value.signed_int_value) == FALSE){
 			sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
@@ -1368,24 +1360,16 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 			 * assignable with the return type of the function. If it isn't then this isn't going
 			 * to work
 			 */
-			generic_type_t* final_type = types_assignable(called_function_signature->return_type, result_node->inferred_type);
+			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(called_function_signature->return_type, result_node);
 
 			//Fail out here
+			//TODO MOVE ME
 			if(final_type == NULL){
 				sprintf(info, "Function signature \"%s\" has a return type of %s, but error handling returned an incompatible type %s",
 							function_signature->type_name.string,
 							called_function_signature->return_type->type_name.string,
 							result_node->inferred_type->type_name.string); 
 				return print_and_return_error(info, parser_line_num);
-			}
-
-			//Did we get a constant? If so we'll need to coerce our types properly before going further
-			if(result_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
-				//Move the final type to be this
-				result_node->inferred_type = final_type;
-
-				//Coerce the constant internally to be this type
-				coerce_constant(result_node);
 			}
 
 			break;
@@ -1645,8 +1629,8 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 				return print_and_return_error("Invalid parameter expression in elaborative param handler", parser_line_num);
 			}
 
-			//Let's see if we're even able to assign this here
-			generic_type_t* final_type = types_assignable(type_being_elaborated, elaborated_param->inferred_type);
+			//Let's see if we're even able to assign this here. This rule hanldes all coercion if need be
+			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(type_being_elaborated, elaborated_param);
 
 			//If this is null, it means that our check failed
 			if(final_type == NULL){
@@ -1662,14 +1646,6 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 						elaborated_param->inferred_type->type_name.string);
 
 				return print_and_return_error(info, parser_line_num);
-			}
-
-			//If this is a constant node, we'll force it to be whatever we expect from the type assignability
-			if(elaborated_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
-				elaborated_param->inferred_type = final_type;
-
-				//Do coercion
-				perform_constant_assignment_coercion(elaborated_param, final_type);
 			}
 
 			/**
@@ -1690,6 +1666,8 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 			/**
 			 * Special checking here - if we have an enum type that is being assigned to, we need
 			 * to make sure that it's being assigned to a valid value in it's range
+			 *
+			 * TODO MOVE ME
 			 */
 			if(is_enum_type(type_being_elaborated) == TRUE && elaborated_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
 				if(does_enum_contain_integer_member(type_being_elaborated, elaborated_param->constant_value.signed_int_value) == FALSE){
@@ -11189,9 +11167,8 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 	//Once we're done we can remove this
 	pop_nesting_level(&nesting_stack);
 
-	//Otherwise we know that it is good, but is it the right type
-	//Are the types here compatible?
-	case_stmt->inferred_type = types_assignable(switch_stmt_node->inferred_type, constant_node->inferred_type);
+	//Determine if the types are compatible. If they are, we will do the constant coercion in here
+	case_stmt->inferred_type = is_ast_node_assignable_to_destination_type(switch_stmt_node->inferred_type, constant_node);
 
 	//If this fails, they're incompatible
 	if(case_stmt->inferred_type == NULL){
@@ -11201,6 +11178,7 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 	}
 
 	//If this is an enum type, we'll do some extra checking
+	//TODO MVOE ME
 	if(is_enum_type(switch_stmt_node->inferred_type) == TRUE){
 		//We will throw a hard error here. Users will be banking on their enums being strict. This kind of loose
 		//assignment would break that illusion
@@ -11858,8 +11836,8 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 				return NULL;
 			}
 
-			//Use the helper to determine if the types are assignable
-			generic_type_t* final_type = types_assignable(return_type, initializer_node->inferred_type);
+			//Use the helper to determine if the types are assignable. This handles any/all constant coercion
+			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(return_type, initializer_node);
 
 			//Will be null if we have a failure
 			if(final_type == NULL){
@@ -11879,6 +11857,7 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 
 			//Special checking here - if we have an enum type that is being assigned to, we need
 			//to make sure that it's being assigned to a valid value in it's range
+			//TODO MOVE ME
 			if(is_enum_type(return_type) == TRUE && initializer_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
 				if(does_enum_contain_integer_member(return_type, initializer_node->constant_value.signed_int_value) == FALSE){
 					sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
