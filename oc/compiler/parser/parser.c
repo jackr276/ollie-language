@@ -11,6 +11,7 @@
  *
  * NEXT IN LINE: Control Flow Graph, OIR constructor, SSA form implementation
 */
+#include <stdint.h>
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -693,19 +694,19 @@ static inline u_int8_t is_postfix_expression_tree_address_eligible(generic_ast_n
  *
  * All of these will have types that are immutable because we don't expect to be changing them
  */
-static inline generic_type_t* determine_required_minimum_unsigned_integer_type_size(u_int64_t value, u_int32_t max_size){
+static inline generic_type_t* determine_required_minimum_unsigned_integer_type_size(u_int64_t value){
 	//The case where we can use a u8
-	if(max_size <= 8 || value >> 8 == 0){
+	if(value >> 8 == 0){
 		return immut_u8;
 	}
 
 	//We'll use u16
-	if(max_size <= 16 || value >> 16 == 0){
+	if(value >> 16 == 0){
 		return immut_u16;
 	}
 
 	//We'll use u32
-	if(max_size <= 32 || value >> 32 == 0){
+	if(value >> 32 == 0){
 		return immut_u32;
 	}
 
@@ -719,25 +720,24 @@ static inline generic_type_t* determine_required_minimum_unsigned_integer_type_s
  * in
  *
  * Rules:
- * 	If we bit shift left by 8 and have 0 OR -1, then our value can fit in 8 bits
- * 	If we shift left by 16 and have 0 OR -1, then we can fit in 16 bits
- * 	If we shift left by 32 and have 0 OR -1, then we can fit in 32 bits
- * 	Anything else -> 64 bits
+ * If we can sign extend back to the original value after casting to an i8, use i8
+ * If we can sign extend back to the original value after casting to an i16, use i16
+ * If we can sign extend back to the original value after casting to an i32, use i32
  *
  */
-static generic_type_t* determine_required_minimum_signed_integer_type_size(int64_t value, u_int32_t max_size){
+static generic_type_t* determine_required_minimum_signed_integer_type_size(int64_t value){
 	//The case where we can use an i8
-	if(max_size <= 8 || value >> 8 == 0 || value >> 8 == -1){
+	if((int64_t)(int8_t)value == value){
 		return immut_i8;
 	}
 
 	//We'll use an i16
-	if(max_size <= 16 || value >> 16 == 0 || value >> 16 == -1){
+	if((int64_t)(int16_t)value == value){
 		return immut_i16;
 	}
 
 	//We'll use an i32
-	if(max_size <= 32 || value >> 32 == 0 || value >> 32 == -1){
+	if((int64_t)(int32_t)value == value){
 		return immut_i32;
 	}
 
@@ -778,178 +778,141 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 
 	//Create our constant node
 	generic_ast_node_t* constant_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
-	//Add the line number
 	constant_node->line_number = parser_line_num;
 
-	//We'll go based on what kind of constant that we have
 	switch(lookahead.tok){
-		//Regular signed short value 
-		case SHORT_CONST:
-			//Mark what it is
-			constant_node->constant_type = SHORT_CONST;
+		case BYTE_CONST:
+			constant_node->constant_type = BYTE_CONST;
+			constant_node->constant_value.signed_byte_value = lookahead.constant_values.signed_byte_value;
 
-			//Copy over
+			/**
+			 * Determine the size needed for this byte constant and coerce if need be
+			 */
+			constant_node->inferred_type = determine_required_minimum_signed_integer_type_size(constant_node->constant_value.signed_byte_value);
+			coerce_constant(constant_node);
+			break;
+
+		case BYTE_CONST_FORCE_U:
+			constant_node->constant_type = BYTE_CONST_FORCE_U;
+			constant_node->constant_value.unsigned_byte_value = lookahead.constant_values.unsigned_byte_value;
+
+			/**
+			 * Determine the size needed for this byte constant and coerce if need be
+			 */
+			constant_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(constant_node->constant_value.unsigned_byte_value);
+			coerce_constant(constant_node);
+			break;
+
+		case SHORT_CONST:
+			constant_node->constant_type = SHORT_CONST;
 			constant_node->constant_value.signed_short_value = lookahead.constant_values.signed_short_value;
 
-			//This is always initially and immut_i16
-			constant_node->inferred_type = immut_i16;
-
+			/**
+			 * Determine the size needed for this short constant and coerce if need be
+			 */
+			constant_node->inferred_type = determine_required_minimum_signed_integer_type_size(constant_node->constant_value.signed_short_value);
+			coerce_constant(constant_node);
 			break;
 
-		//Regular unsigned short value 
 		case SHORT_CONST_FORCE_U:
-			//Mark what it is
 			constant_node->constant_type = SHORT_CONST_FORCE_U;
-
-			//Copy over
 			constant_node->constant_value.unsigned_short_value = lookahead.constant_values.unsigned_short_value;
 
-			//This is always initially and immut_u16
-			constant_node->inferred_type = immut_u16;
-
+			/**
+			 * Determine the size needed for this short constant and coerce if need be
+			 */
+			constant_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(constant_node->constant_value.unsigned_short_value);
+			coerce_constant(constant_node);
 			break;
 
-		//Regular signed int
 		case INT_CONST:
-			//Mark what it is
 			constant_node->constant_type = INT_CONST;
-
-			//Copy over
 			constant_node->constant_value.signed_int_value = lookahead.constant_values.signed_int_value;
 
-			//This is always initially and immut_i32
-			constant_node->inferred_type = immut_i32;
-
+			/**
+			 * Determine the size needed for this int constant and coerce if need be
+			 */
+			constant_node->inferred_type = determine_required_minimum_signed_integer_type_size(constant_node->constant_value.signed_int_value);
+			coerce_constant(constant_node);
 			break;
 
-		//Forced unsigned
 		case INT_CONST_FORCE_U:
-			//Mark what it is
 			constant_node->constant_type = INT_CONST_FORCE_U;
-
-			//Copy over
 			constant_node->constant_value.unsigned_int_value = lookahead.constant_values.unsigned_int_value;
 
-			//This is always initially and immut_u32
-			constant_node->inferred_type = immut_u32;
-			
+			/**
+			 * Determine the size needed for this int constant and coerce if need be
+			 */
+			constant_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(constant_node->constant_value.unsigned_int_value);
+			coerce_constant(constant_node);
 			break;
 
-		//Regular signed long constant
 		case LONG_CONST:
-			//Store the type
 			constant_node->constant_type = LONG_CONST;
-
-			//Copy over
 			constant_node->constant_value.signed_long_value = lookahead.constant_values.signed_long_value;
 
-			//This is always initally an immut_i64
-			constant_node->inferred_type = immut_i64;
-
+			/**
+			 * Determine the size needed for this long constant and coerce if need be
+			 */
+			constant_node->inferred_type = determine_required_minimum_signed_integer_type_size(constant_node->constant_value.signed_long_value);
+			coerce_constant(constant_node);
 			break;
 
-		//Unsigned long constant
 		case LONG_CONST_FORCE_U:
-			//Store the type
 			constant_node->constant_type = LONG_CONST;
-
-			//Copy over
 			constant_node->constant_value.signed_long_value = lookahead.constant_values.signed_long_value;
 
-			//This is always initially an immut_u64
-			constant_node->inferred_type = immut_u64;
-
+			/**
+			 * Determine the size needed for this long constant and coerce if need be
+			 */
+			constant_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(constant_node->constant_value.unsigned_long_value);
+			coerce_constant(constant_node);
 			break;
 
 		case FLOAT_CONST:
 			constant_node->constant_type = FLOAT_CONST;
-
-			//Copy the value
 			constant_node->constant_value.float_value = lookahead.constant_values.float_value;
 
-			//By default, float constants are of type float32
+			//Floats are always immut_f32, no chance for coercion like with ints
 			constant_node->inferred_type = immut_f32;
 			break;
 
 		case DOUBLE_CONST:
 			constant_node->constant_type = DOUBLE_CONST;
-
-			//Copy the value
 			constant_node->constant_value.double_value = lookahead.constant_values.double_value;
 
-			//Double constants are always an f64
+			//Double are always immut_f64, again no chance for coercion
 			constant_node->inferred_type = immut_f64;
-
 			break;
 
 		case CHAR_CONST:
 			constant_node->constant_type = CHAR_CONST;
-
-			//Store the char value that we were given
 			constant_node->constant_value.char_value = lookahead.constant_values.char_value;
 
-			//Char consts are of type char(obviously)
+			//Char consts have no chance to be coerced
 			constant_node->inferred_type = immut_char;
 			break;
 
 		//For True & False, they are internally treated the exact same as 
 		//unsigned 8 bit integers
 		case TRUE_CONST:
-			//Unsigned byte
 			constant_node->constant_type = BYTE_CONST_FORCE_U;
-				
-			//Use the true value here
 			constant_node->constant_value.unsigned_byte_value = TRUE;
-
-			//Inferred type is u8
 			constant_node->inferred_type = immut_u8;
-
 			break;
 			
 		case FALSE_CONST:
-			//Unsigned byte
 			constant_node->constant_type = BYTE_CONST_FORCE_U;
-			
-			//Use the true value here
 			constant_node->constant_value.unsigned_byte_value = FALSE;
-
-			//Inferred type is u8
 			constant_node->inferred_type = immut_u8;
-
-			break;
-
-		case BYTE_CONST:
-			//Signed byte
-			constant_node->constant_type = BYTE_CONST;
-
-			//Copy over
-			constant_node->constant_value.signed_byte_value = lookahead.constant_values.signed_byte_value;
-
-			//Inferred type is i8
-			constant_node->inferred_type = immut_i8;
-
-			break;
-
-		case BYTE_CONST_FORCE_U:
-			//Unsigned byte
-			constant_node->constant_type = BYTE_CONST_FORCE_U;
-
-			//Copy over
-			constant_node->constant_value.unsigned_byte_value = lookahead.constant_values.unsigned_byte_value;
-
-			//Inferred type is u8
-			constant_node->inferred_type = immut_u8;
-
 			break;
 
 		case STR_CONST:
 			constant_node->constant_type = STR_CONST;
-			//The type is an immutable char*
 			constant_node->inferred_type = immut_char_ptr;
 			
 			//The dynamic string is our value
 			constant_node->string_value = lookahead.lexeme;
-
 			break;
 
 		default:
@@ -957,7 +920,6 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 			return print_and_return_error("Invalid constant given", parser_line_num);
 	}
 
-	//All went well so give the constant node back
 	return constant_node;
 }
 
@@ -2378,7 +2340,7 @@ static generic_ast_node_t* sizeof_statement(ollie_token_stream_t* token_stream, 
 	//Store the actual value of the type size
 	const_node->constant_value.signed_int_value = return_type->type_size;
 	//This will always end up as a generic signed int
-	const_node->inferred_type = determine_required_minimum_signed_integer_type_size(return_type->type_size, 32);
+	const_node->inferred_type = determine_required_minimum_signed_integer_type_size(return_type->type_size);
 
 	//Coerce it now that we have the minimum size
 	coerce_constant(const_node);
@@ -2451,7 +2413,7 @@ static generic_ast_node_t* typesize_statement(ollie_token_stream_t* token_stream
 	//Store the actual value
 	const_node->constant_value.signed_int_value = type_size;
 	//These will be generic signed ints
-	const_node->inferred_type = determine_required_minimum_signed_integer_type_size(type_size, 32);
+	const_node->inferred_type = determine_required_minimum_signed_integer_type_size(type_size);
 
 	//Coerce it now that we have the minimum size
 	coerce_constant(const_node);
@@ -7764,7 +7726,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 	//Now, based on our largest value, we need to determine the bit-width needed for this
 	//field. Does it need to be stored internally as a u8, u16, u32, or u64?
 	//This will *always* be the immutable version of the type
-	generic_type_t* type_needed = determine_required_minimum_unsigned_integer_type_size(largest_value, 64);
+	generic_type_t* type_needed = determine_required_minimum_unsigned_integer_type_size(largest_value);
 
 	//Store this in the enum
 	mutable_enum_type->internal_values.enum_integer_type = type_needed;
