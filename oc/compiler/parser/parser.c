@@ -784,112 +784,66 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 		case BYTE_CONST:
 			constant_node->constant_type = BYTE_CONST;
 			constant_node->constant_value.signed_byte_value = lookahead.constant_values.signed_byte_value;
-
-			/**
-			 * Determine the size needed for this byte constant and coerce if need be
-			 */
-			constant_node->inferred_type = determine_required_minimum_signed_integer_type_size(constant_node->constant_value.signed_byte_value);
-			coerce_constant(constant_node);
+			constant_node->inferred_type = immut_i8;
 			break;
 
 		case BYTE_CONST_FORCE_U:
 			constant_node->constant_type = BYTE_CONST_FORCE_U;
 			constant_node->constant_value.unsigned_byte_value = lookahead.constant_values.unsigned_byte_value;
-
-			/**
-			 * Determine the size needed for this byte constant and coerce if need be
-			 */
-			constant_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(constant_node->constant_value.unsigned_byte_value);
-			coerce_constant(constant_node);
+			constant_node->inferred_type = immut_u8;
 			break;
 
 		case SHORT_CONST:
 			constant_node->constant_type = SHORT_CONST;
 			constant_node->constant_value.signed_short_value = lookahead.constant_values.signed_short_value;
-
-			/**
-			 * Determine the size needed for this short constant and coerce if need be
-			 */
-			constant_node->inferred_type = determine_required_minimum_signed_integer_type_size(constant_node->constant_value.signed_short_value);
-			coerce_constant(constant_node);
+			constant_node->inferred_type = immut_i16;
 			break;
 
 		case SHORT_CONST_FORCE_U:
 			constant_node->constant_type = SHORT_CONST_FORCE_U;
 			constant_node->constant_value.unsigned_short_value = lookahead.constant_values.unsigned_short_value;
-
-			/**
-			 * Determine the size needed for this short constant and coerce if need be
-			 */
-			constant_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(constant_node->constant_value.unsigned_short_value);
-			coerce_constant(constant_node);
+			constant_node->inferred_type = immut_u16;
 			break;
 
 		case INT_CONST:
 			constant_node->constant_type = INT_CONST;
 			constant_node->constant_value.signed_int_value = lookahead.constant_values.signed_int_value;
-
-			/**
-			 * Determine the size needed for this int constant and coerce if need be
-			 */
-			constant_node->inferred_type = determine_required_minimum_signed_integer_type_size(constant_node->constant_value.signed_int_value);
-			coerce_constant(constant_node);
+			constant_node->inferred_type = immut_i32;
 			break;
 
 		case INT_CONST_FORCE_U:
 			constant_node->constant_type = INT_CONST_FORCE_U;
 			constant_node->constant_value.unsigned_int_value = lookahead.constant_values.unsigned_int_value;
-
-			/**
-			 * Determine the size needed for this int constant and coerce if need be
-			 */
-			constant_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(constant_node->constant_value.unsigned_int_value);
-			coerce_constant(constant_node);
+			constant_node->inferred_type = immut_u32;
 			break;
 
 		case LONG_CONST:
 			constant_node->constant_type = LONG_CONST;
 			constant_node->constant_value.signed_long_value = lookahead.constant_values.signed_long_value;
-
-			/**
-			 * Determine the size needed for this long constant and coerce if need be
-			 */
-			constant_node->inferred_type = determine_required_minimum_signed_integer_type_size(constant_node->constant_value.signed_long_value);
-			coerce_constant(constant_node);
+			constant_node->inferred_type = immut_i64;
 			break;
 
 		case LONG_CONST_FORCE_U:
 			constant_node->constant_type = LONG_CONST;
 			constant_node->constant_value.signed_long_value = lookahead.constant_values.signed_long_value;
-
-			/**
-			 * Determine the size needed for this long constant and coerce if need be
-			 */
-			constant_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(constant_node->constant_value.unsigned_long_value);
-			coerce_constant(constant_node);
+			constant_node->inferred_type = immut_u64;
 			break;
 
 		case FLOAT_CONST:
 			constant_node->constant_type = FLOAT_CONST;
 			constant_node->constant_value.float_value = lookahead.constant_values.float_value;
-
-			//Floats are always immut_f32, no chance for coercion like with ints
 			constant_node->inferred_type = immut_f32;
 			break;
 
 		case DOUBLE_CONST:
 			constant_node->constant_type = DOUBLE_CONST;
 			constant_node->constant_value.double_value = lookahead.constant_values.double_value;
-
-			//Double are always immut_f64, again no chance for coercion
 			constant_node->inferred_type = immut_f64;
 			break;
 
 		case CHAR_CONST:
 			constant_node->constant_type = CHAR_CONST;
 			constant_node->constant_value.char_value = lookahead.constant_values.char_value;
-
-			//Char consts have no chance to be coerced
 			constant_node->inferred_type = immut_char;
 			break;
 

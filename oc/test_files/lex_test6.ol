@@ -6,7 +6,7 @@
 fn tester() -> u32 {
 	let i:u16 = 0;
 	
-	ret 3 * i;
+	ret 3s * i;
 }
 
 
