@@ -10893,6 +10893,91 @@ static void emit_global_array_initializer(generic_ast_node_t* array_initializer,
 	}
 }
 
+/**
+ * Add a value to a struct type. The void* here is a 
+ * symtab variable record
+ *
+ * For alignment, it is important to note that we only ever align by primitive data type
+ * sizes. The largest an internal alignment can be is by 8
+ */
+static void add_struct_member_DUMMMY(generic_type_t* type, void* member_var){
+	//Grab this reference out, for convenience
+	symtab_variable_record_t* var = member_var;
+
+	//Mark that this is a struct member
+	var->membership = STRUCT_MEMBER;
+
+	//If this is the very first one, then we'll 
+	if(type->internal_types.struct_table.current_index == 0){
+		//This one's offset is 0
+		var->struct_offset = 0;
+
+		//Increment the size by the amount of the type
+		type->type_size += var->type_defined_as->type_size;
+
+		//Add the variable into the struct table
+		dynamic_array_add(&(type->internal_types.struct_table), var);
+
+		//The largest member size here is the alignment of the biggest type
+		type->internal_values.largest_member_type = get_base_alignment_type(var->type_defined_as);
+
+		//Hop out here
+		return;
+	}
+
+	/**
+	 * Let's now see where the ending address of the struct is. We can find
+	 * this ending dress by calculating the offset of the latest field plus
+	 * the size of the latest variable
+	 */
+	
+	//The prior variable
+	symtab_variable_record_t* prior_variable = dynamic_array_get_at(&(type->internal_types.struct_table), type->internal_types.struct_table.current_index - 1);
+
+	//And the offset of this entry
+	u_int32_t offset = prior_variable->struct_offset;
+	
+	//The current ending address is the offset of the last variable plus its size
+	u_int32_t current_end = offset + prior_variable->type_defined_as->type_size;
+
+	//Get the primitive type that we will need to align by here
+	generic_type_t* aligning_by_type = get_base_alignment_type(var->type_defined_as);
+
+	//If we have a larger contender for alignment here, then this will become our largest
+	//member type
+	if(aligning_by_type->type_size > type->internal_values.largest_member_type->type_size){
+		type->internal_values.largest_member_type = aligning_by_type;
+	}
+
+	/**
+	 * We will satisfy this by adding the remainder of the division of the new variable with the current
+	 * end in as padding to the previous entry
+	 */
+	
+	//What padding is needed?
+	u_int32_t needed_padding = 0;
+	
+	if(current_end < aligning_by_type->type_size){
+		needed_padding = aligning_by_type->type_size - current_end;
+	} else {
+		needed_padding = current_end % aligning_by_type->type_size;
+	}
+
+	//Now we can update the current end
+	current_end = current_end + needed_padding;
+
+	//And now we can add in the new variable's offset
+	var->struct_offset = current_end;
+
+	//Increment the size by the amount of the type and the padding we're adding in
+	type->type_size += var->type_defined_as->type_size + needed_padding;
+
+	//Add the variable into the table
+	dynamic_array_add(&(type->internal_types.struct_table), var);
+
+	//Done
+	return; 
+}
 
 /**
  * Emit a global struct initializer. We do this by creating one giant array of values *in addition to padding*. This 
@@ -10907,6 +10992,10 @@ static void emit_global_struct_initializer(generic_ast_node_t* struct_initialize
 	generic_type_t* struct_type = struct_initializer->inferred_type;
 	//The current index of the struct member, we will need this for our padding determination
 	u_int32_t current_struct_member_index = 0;
+	u_int32_t current_struct_size = 0;
+
+	//Maintain a pointer to the prior member type as well
+	generic_type_t* prior_member_type;
 
 	//Handle every other type of nested initializer
 	while(cursor != NULL){
@@ -10946,10 +11035,18 @@ static void emit_global_struct_initializer(generic_ast_node_t* struct_initialize
 				exit(1);
 		}
 
+		//Increase the overall struct size by the member size
+		current_struct_size += member_type->type_size;
+
+		//Store this as our previous member type
+		prior_member_type = member_type;
+
 		//Bump it up
 		current_struct_member_index++;
 		cursor = cursor->next_sibling;
 	}
+
+	//TODO BUMP UP TO OUR FINAL SIZE
 }
 
 
