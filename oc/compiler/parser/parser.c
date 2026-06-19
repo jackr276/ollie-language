@@ -2340,7 +2340,7 @@ static generic_ast_node_t* sizeof_statement(ollie_token_stream_t* token_stream, 
 	//Store the actual value of the type size
 	const_node->constant_value.signed_int_value = return_type->type_size;
 	//This will always end up as a generic signed int
-	const_node->inferred_type = determine_required_minimum_signed_integer_type_size(return_type->type_size);
+	const_node->inferred_type = immut_i32;
 
 	//Coerce it now that we have the minimum size
 	coerce_constant(const_node);
@@ -2413,7 +2413,7 @@ static generic_ast_node_t* typesize_statement(ollie_token_stream_t* token_stream
 	//Store the actual value
 	const_node->constant_value.signed_int_value = type_size;
 	//These will be generic signed ints
-	const_node->inferred_type = determine_required_minimum_signed_integer_type_size(type_size);
+	const_node->inferred_type = immut_i32;
 
 	//Coerce it now that we have the minimum size
 	coerce_constant(const_node);
