@@ -11684,9 +11684,6 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 	//Dealias this just to be safe
 	target_type = dealias_type(target_type);
 
-	//What's the return type of our node?
-	generic_type_t* return_type = target_type;
-
 	//By default, we assume we will fail. The validation step will need to prove us wrong
 	u_int8_t validation_succeeded = FALSE;
 
@@ -11721,7 +11718,7 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 			}
 
 			//Give back the return type
-			return return_type;
+			return target_type;
 			
 		//A struct initializer list also has it's own special checking function that we must use
 		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
@@ -11743,7 +11740,7 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 			}
 
 			//Give back the return type
-			return return_type;
+			return target_type;
 			
 		//Otherwise we'll just take the standard path
 		default:
@@ -11769,7 +11766,7 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 				 * Otherwise we'll just break out. The initializer node will have been properly
 				 * set by the function above
 				 */
-				return return_type;
+				return target_type;
 			}
 
 			/**
@@ -11805,11 +11802,11 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 			}
 
 			//Use the helper to determine if the types are assignable. This handles any/all constant coercion
-			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(return_type, initializer_node);
+			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(target_type, initializer_node);
 
 			//Will be null if we have a failure
 			if(final_type == NULL){
-				generate_types_assignable_failure_message(info, initializer_node->inferred_type, return_type);
+				generate_types_assignable_failure_message(info, initializer_node->inferred_type, target_type);
 				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				return NULL;
 			}
@@ -11817,10 +11814,10 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 			//Special checking here - if we have an enum type that is being assigned to, we need
 			//to make sure that it's being assigned to a valid value in it's range
 			//TODO MOVE ME
-			if(is_enum_type(return_type) == TRUE && initializer_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
-				if(does_enum_contain_integer_member(return_type, initializer_node->constant_value.signed_int_value) == FALSE){
+			if(is_enum_type(target_type) == TRUE && initializer_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
+				if(does_enum_contain_integer_member(target_type, initializer_node->constant_value.signed_int_value) == FALSE){
 					sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-								return_type->type_name.string, initializer_node->constant_value.signed_int_value);
+								target_type->type_name.string, initializer_node->constant_value.signed_int_value);
 					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 
 					//Fail out here

@@ -780,15 +780,10 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
  * NULL if we can't. Constants have unique rules around truncation which is why we do this
  */
 generic_type_t* types_assignable_constant(generic_type_t* destination_type, generic_type_t* constant_source_type){
-	//TODO BASED ON THE CONSTANT TYPE DEFER TO THE OTHER METHOD
-
-
 	switch(destination_type->type_class){
 		/**
 		 * Enums are able to be assigned integer values just fine, so
 		 * long as those integer values are compatible 
-		 *
-		 * TODO I WANT MORE ON THIS
 		 */
 		case TYPE_CLASS_ENUMERATED:
 			switch(constant_source_type->basic_type_token){
