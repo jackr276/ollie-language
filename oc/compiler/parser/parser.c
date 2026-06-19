@@ -2432,8 +2432,6 @@ static generic_ast_node_t* sizeof_statement(ollie_token_stream_t* token_stream, 
 	//Store the actual value of the type size
 	const_node->constant_value.signed_int_value = return_type->type_size;
 	//This will always end up as a generic signed int
-	//
-	//FIX THIS
 	const_node->inferred_type = determine_required_minimum_signed_integer_type_size(return_type->type_size, 32);
 
 	//Coerce it now that we have the minimum size
@@ -2507,8 +2505,6 @@ static generic_ast_node_t* typesize_statement(ollie_token_stream_t* token_stream
 	//Store the actual value
 	const_node->constant_value.signed_int_value = type_size;
 	//These will be generic signed ints
-	//
-	//FIX THIS
 	const_node->inferred_type = determine_required_minimum_signed_integer_type_size(type_size, 32);
 
 	//Coerce it now that we have the minimum size
@@ -3225,14 +3221,10 @@ loop_end:
 	//What is our final type?
 	generic_type_t* final_type = NULL;
 
-	//If we have a generic assignment(=), we can just do the assignability
-	//check
+	//If we have a generic assignment(=), we can just do the assignability check
 	if(assignment_operator == EQUALS){
-		/**
-		 * We will make use of the types assignable module here, as the rules are slightly 
-		 * different than the types compatible rule
-		 */
-		final_type = types_assignable(left_hand_type, right_hand_type);
+		//Handle the assignability and any/all coercing
+		final_type = is_ast_node_assignable_to_destination_type(left_hand_type, expr);
 
 		//If they're not, we fail here
 		if(final_type == NULL){
@@ -3241,17 +3233,9 @@ loop_end:
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//If we have a constant, we will perform coercion
-		if(expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
-			//Force the constant value to be the final type
-			expr->inferred_type = final_type;
-
-			//Now do the coercion
-			perform_constant_assignment_coercion(expr, final_type);
-		}
-
 		//Special checking here - if we have an enum type that is being assigned to, we need
 		//to make sure that it's being assigned to a valid value in it's range
+		//TODO MOVE ME
 		if(is_enum_type(left_hand_type) == TRUE && expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
 			if(does_enum_contain_integer_member(left_hand_type, expr->constant_value.signed_int_value) == FALSE){
 				sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
@@ -3337,9 +3321,10 @@ loop_end:
 		 * If we have something like this:
 		 * 				y(i32) += x(i64)
 		 * 	This needs to fail because we cannot coerce y to be bigger than it already is, it's not assignable.
-		 * 	As such, we need to check if the types are assignable first
+		 * 	As such, we need to check if the types are assignable first. This rule also handles any/all constant
+		 * 	coercion
 		 */
-		final_type = types_assignable(left_hand_type, right_hand_type);
+		final_type = is_ast_node_assignable_to_destination_type(left_hand_type, expr);
 
 		//If this fails, that means that we have an invalid operation
 		if(final_type == NULL){
@@ -3347,26 +3332,11 @@ loop_end:
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//If the expression is a constant, we force it to be the final type
-		if(expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
-			/**
-			 * For constant coercion, there is a chance that we could be doing
-			 * pointer arithmetic here. If we are doing that, we don't want to
-			 * force this constant to be a pointer type. Instead, we'll transform
-			 * it into an i64
-			 */
-			if(final_type->type_class == TYPE_CLASS_BASIC){
-				expr->inferred_type = final_type;
-			} else {
-				expr->inferred_type = immut_i64;
-			}
-
-			coerce_constant(expr);
-		}
-
 		/**
 		 * Special checking here - if we have an enum type that is being assigned to, we need
 		 * to make sure that it's being assigned to a valid value in it's range
+		 *
+		 * TODO MOVE ME
 		 */
 		if(is_enum_type(left_hand_type) == TRUE && expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
 			if(does_enum_contain_integer_member(left_hand_type, expr->constant_value.signed_int_value) == FALSE){
@@ -3748,11 +3718,8 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 		return print_and_return_error(info, parser_line_num);
 	}
 
-	//We use a u_int64 as our reference
-	generic_type_t* reference_type = immut_u64;
-
 	//Find the final type here. If it's not currently a U64, we'll need to coerce it
-	generic_type_t* final_type = types_assignable(reference_type, expr->inferred_type);
+	generic_type_t* final_type = is_ast_node_assignable_to_destination_type(immut_u64, expr);
 
 	//Let's make sure that this is an int
 	if(final_type == NULL){
@@ -3760,11 +3727,6 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 		  (expr->inferred_type->mutability == MUTABLE ? "mut ": ""),
 		  expr->inferred_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
-	}
-
-	//If this is a constant, we'll force it to be the final type
-	if(expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
-		expr->inferred_type = final_type;
 	}
 
 	//Otherwise, once we get here we need to check for matching brackets
@@ -4488,9 +4450,10 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 	}
 
 	/**
-	 * We will use the types_assignable function to check this
+	 * We will use the types_assignable function to check this. This will also perform any constant
+	 * coercion if need be
 	 */
-	generic_type_t* return_type = types_assignable(casting_to_type, being_casted_type);
+	generic_type_t* return_type = is_ast_node_assignable_to_destination_type(casting_to_type, right_hand_unary);
 
 	//This is our fail case
 	if(return_type == NULL){
@@ -4500,12 +4463,6 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 
 	//These types are now inferenced
 	right_hand_unary->inferred_type = type_spec;
-
-	//If we are casting a constant node, we should perform all needed
-	//type coercion now
-	if(right_hand_unary->ast_node_type == AST_NODE_TYPE_CONSTANT){
-		perform_constant_assignment_coercion(right_hand_unary, type_spec);
-	}
 
 	//Finally, we're all set to go here, so we can return the root reference
 	return right_hand_unary;
