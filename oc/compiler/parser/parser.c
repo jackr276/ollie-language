@@ -295,16 +295,31 @@ static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic
 		//Invoke the special helper to determine this
 		generic_type_t* result_type = types_assignable_constant(destination_type, source_node->inferred_type);
 
-		/**
-		 * If it worked then we'll do our reassignment now/constant coercion now
-		 */
-		if(result_type != NULL){
-			//Reassign the constant's type at this point
-			source_node->inferred_type = result_type;
-
-			//While we're here we will coerce the constant itself
-			coerce_constant(source_node);
+		//If it failed then just leave now
+		if(result_type == NULL){
+			return NULL;
 		}
+
+		/**
+		 * Enum type checking - if we have an enum type we need to make sure that whatever we're doing
+		 * correlates to it properly. If we are trying to assign a constant value that is not in
+		 * the enum's range of valid values, that would cause issues down the line and we will
+		 * not allow it
+		 */
+		if(is_enum_type(destination_type) == TRUE){
+			if(does_enum_contain_integer_member(destination_type, source_node->constant_value.signed_int_value) == FALSE){
+				sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
+							destination_type->type_name.string, source_node->constant_value.signed_int_value);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				return NULL;
+			}
+		} 
+
+		//Reassign the constant's type at this point
+		source_node->inferred_type = result_type;
+
+		//While we're here we will coerce the constant itself
+		coerce_constant(source_node);
 
 		//Give this back
 		return result_type;
@@ -974,18 +989,6 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
-	//Special checking here - if we have an enum type that is being assigned to, we need
-	//to make sure that it's being assigned to a valid value in it's range
-	//TODO MOVE ME
-	if(is_enum_type(current_function_signature->return_type) == TRUE && expr_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
-		if(does_enum_contain_integer_member(current_function_signature->return_type, expr_node->constant_value.signed_int_value) == FALSE){
-			sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-						current_function_signature->return_type->type_name.string, expr_node->constant_value.signed_int_value);
-			//Hard fail here
-			return print_and_return_error(info, parser_line_num);
-		}
-	} 
-
 	//Otherwise it worked, so we'll add it as a child of the other node
 	add_child_node(return_stmt, expr_node);
 
@@ -1247,7 +1250,6 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(called_function_signature->return_type, result_node);
 
 			//Fail out here
-			//TODO MOVE ME
 			if(final_type == NULL){
 				sprintf(info, "Function signature \"%s\" has a return type of %s, but error handling returned an incompatible type %s",
 							function_signature->type_name.string,
@@ -1546,21 +1548,6 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 				 */
 				propogate_no_dereference_required_flag(elaborated_param);
 			}
-
-			/**
-			 * Special checking here - if we have an enum type that is being assigned to, we need
-			 * to make sure that it's being assigned to a valid value in it's range
-			 *
-			 * TODO MOVE ME
-			 */
-			if(is_enum_type(type_being_elaborated) == TRUE && elaborated_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
-				if(does_enum_contain_integer_member(type_being_elaborated, elaborated_param->constant_value.signed_int_value) == FALSE){
-					sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-								type_being_elaborated->type_name.string, elaborated_param->constant_value.signed_int_value);
-
-					return print_and_return_error(info, parser_line_num);
-				}
-			} 
 
 			//This counts as one more elaborated param
 			elaborated_param_count++;
@@ -2034,19 +2021,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 					 */
 					propogate_no_dereference_required_flag(current_param);
 				}
-
-				//Special checking here - if we have an enum type that is being assigned to, we need
-				//to make sure that it's being assigned to a valid value in it's range
-				//TODO MOVE ME OVER
-				if(is_enum_type(param_type) == TRUE && current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
-					if(does_enum_contain_integer_member(param_type, current_param->constant_value.signed_int_value) == FALSE){
-						sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-									param_type->type_name.string, current_param->constant_value.signed_int_value);
-
-						//Hard fail here
-						return print_and_return_error(info, parser_line_num);
-					}
-				} 
 
 				//We can now safely add this into the function call node as a child. In the function call node, 
 				//the parameters will appear in order from left to right
@@ -3095,17 +3069,6 @@ loop_end:
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//Special checking here - if we have an enum type that is being assigned to, we need
-		//to make sure that it's being assigned to a valid value in it's range
-		//TODO MOVE ME
-		if(is_enum_type(left_hand_type) == TRUE && expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
-			if(does_enum_contain_integer_member(left_hand_type, expr->constant_value.signed_int_value) == FALSE){
-				sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-							left_hand_type->type_name.string, expr->constant_value.signed_int_value);
-				return print_and_return_error(info, parser_line_num);
-			}
-		} 
-
 		/**
 		 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
 		 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
@@ -3193,20 +3156,6 @@ loop_end:
 			generate_types_assignable_failure_message(info, right_hand_type, left_hand_type);
 			return print_and_return_error(info, parser_line_num);
 		}
-
-		/**
-		 * Special checking here - if we have an enum type that is being assigned to, we need
-		 * to make sure that it's being assigned to a valid value in it's range
-		 *
-		 * TODO MOVE ME
-		 */
-		if(is_enum_type(left_hand_type) == TRUE && expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
-			if(does_enum_contain_integer_member(left_hand_type, expr->constant_value.signed_int_value) == FALSE){
-				sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-							left_hand_type->type_name.string, expr->constant_value.signed_int_value);
-				return print_and_return_error(info, parser_line_num);
-			}
-		} 
 
 		//We'll also want to create a complete, distinct copy of the subtree here
 		generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary, SIDE_TYPE_RIGHT);
@@ -9522,18 +9471,6 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 		propogate_no_dereference_required_flag(expr_node);
 	}
 
-	//Special checking here - if we have an enum type that is being assigned to, we need
-	//to make sure that it's being assigned to a valid value in it's range
-	//TODO MOVE ME OVER
-	if(is_enum_type(current_function_signature->return_type) == TRUE && expr_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
-		if(does_enum_contain_integer_member(current_function_signature->return_type, expr_node->constant_value.signed_int_value) == FALSE){
-			sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-						current_function_signature->return_type->type_name.string, expr_node->constant_value.signed_int_value);
-			//Hard fail here
-			return print_and_return_error(info, parser_line_num);
-		}
-	} 
-
 	//Otherwise it worked, so we'll add it as a child of the other node
 	add_child_node(return_stmt, expr_node);
 
@@ -11061,18 +10998,6 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 		return print_and_return_error(info, parser_line_num);
 	}
 
-	//If this is an enum type, we'll do some extra checking
-	//TODO MVOE ME
-	if(is_enum_type(switch_stmt_node->inferred_type) == TRUE){
-		//We will throw a hard error here. Users will be banking on their enums being strict. This kind of loose
-		//assignment would break that illusion
-		if(does_enum_contain_integer_member(switch_stmt_node->inferred_type, constant_node->constant_value.signed_int_value) == FALSE){
-			sprintf(info, "Switch statement switch type \"%s\" does not contain a member whose value is equivalent to %d",
-		   				switch_stmt_node->inferred_type->type_name.string, constant_node->constant_value.signed_int_value);
-			return print_and_return_error(info, parser_line_num);
-		}
-	}
-
 	//Ultimately the constant type here is assigned over
 	constant_node->inferred_type = case_stmt->inferred_type;
 
@@ -11726,20 +11651,6 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				return NULL;
 			}
-
-			//Special checking here - if we have an enum type that is being assigned to, we need
-			//to make sure that it's being assigned to a valid value in it's range
-			//TODO MOVE ME
-			if(is_enum_type(target_type) == TRUE && initializer_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
-				if(does_enum_contain_integer_member(target_type, initializer_node->constant_value.signed_int_value) == FALSE){
-					sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-								target_type->type_name.string, initializer_node->constant_value.signed_int_value);
-					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-
-					//Fail out here
-					return NULL;
-				}
-			} 
 			
 			//Give back the return type
 			return final_type;
