@@ -10903,8 +10903,26 @@ static void emit_global_struct_initializer(generic_ast_node_t* struct_initialize
 	//Grab out the first child for the struct initializer
 	generic_ast_node_t* cursor = struct_initializer->first_child;
 
+	//Extract the struct type - we'll need this for padding decisions
+	generic_type_t* struct_type = struct_initializer->inferred_type;
+	//The current index of the struct member, we will need this for our padding determination
+	u_int32_t current_struct_member_index = 0;
+
 	//Handle every other type of nested initializer
 	while(cursor != NULL){
+		//Extract the type of the member itself
+		generic_type_t* member_type = cursor->inferred_type;
+
+		/**
+		 * If the current struct member index is not zero,
+		 * then we are going to need to check and see if
+		 * padding is needed between the prior member and our
+		 * member
+		 */
+		if(current_struct_member_index != 0){
+
+		}
+
 		switch(cursor->ast_node_type){
 			case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
 				emit_global_array_initializer(cursor, initializer_values);
@@ -10929,6 +10947,7 @@ static void emit_global_struct_initializer(generic_ast_node_t* struct_initialize
 		}
 
 		//Bump it up
+		current_struct_member_index++;
 		cursor = cursor->next_sibling;
 	}
 }
