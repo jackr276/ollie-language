@@ -2137,7 +2137,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 				}
 
 				//Let's see if we're even able to assign this here
-				//generic_type_t* final_type = types_assignable(param_type, current_param->inferred_type);
 				generic_type_t* final_type = is_ast_node_assignable_to_destination_type(param_type, current_param);
 
 				//If this is null, it means that our check failed
@@ -2159,16 +2158,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 					return print_and_return_error(info, parser_line_num);
 				}
 
-				//If this is a constant node, we'll force it to be whatever we expect from the type assignability
-				/*
-				if(current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
-					current_param->inferred_type = final_type;
-
-					//Do coercion
-					perform_constant_assignment_coercion(current_param, final_type);
-				}
-				*/
-
 				/**
 				 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
 				 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
@@ -2186,6 +2175,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 
 				//Special checking here - if we have an enum type that is being assigned to, we need
 				//to make sure that it's being assigned to a valid value in it's range
+				//TODO MOVE ME OVER
 				if(is_enum_type(param_type) == TRUE && current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
 					if(does_enum_contain_integer_member(param_type, current_param->constant_value.signed_int_value) == FALSE){
 						sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
@@ -2442,6 +2432,8 @@ static generic_ast_node_t* sizeof_statement(ollie_token_stream_t* token_stream, 
 	//Store the actual value of the type size
 	const_node->constant_value.signed_int_value = return_type->type_size;
 	//This will always end up as a generic signed int
+	//
+	//FIX THIS
 	const_node->inferred_type = determine_required_minimum_signed_integer_type_size(return_type->type_size, 32);
 
 	//Coerce it now that we have the minimum size
@@ -2515,6 +2507,8 @@ static generic_ast_node_t* typesize_statement(ollie_token_stream_t* token_stream
 	//Store the actual value
 	const_node->constant_value.signed_int_value = type_size;
 	//These will be generic signed ints
+	//
+	//FIX THIS
 	const_node->inferred_type = determine_required_minimum_signed_integer_type_size(type_size, 32);
 
 	//Coerce it now that we have the minimum size
@@ -9681,7 +9675,7 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 	}
 
 	//Figure out what the final type is here
-	generic_type_t* final_type = types_assignable(current_function_signature->return_type, expr_node->inferred_type);
+	generic_type_t* final_type = is_ast_node_assignable_to_destination_type(current_function_signature->return_type, expr_node);
 
 	//If the current function's return type is not compatible with the return type here, we'll bail out
 	if(final_type == NULL){
@@ -9700,15 +9694,6 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
-	//If this is a constant, we'll force it to be whatever the new type is
-	if(expr_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
-		//Set the type
-		expr_node->inferred_type = final_type;
-
-		//Coerce the constant
-		perform_constant_assignment_coercion(expr_node, final_type);
-	}
-
 	/**
 	 * If we are having a copy assignment, we need to propogate down the chain in the expression
 	 * node that we should not be doing any dereferencing. We do this to ensure that when we return
@@ -9720,6 +9705,7 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 
 	//Special checking here - if we have an enum type that is being assigned to, we need
 	//to make sure that it's being assigned to a valid value in it's range
+	//TODO MOVE ME OVER
 	if(is_enum_type(current_function_signature->return_type) == TRUE && expr_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
 		if(does_enum_contain_integer_member(current_function_signature->return_type, expr_node->constant_value.signed_int_value) == FALSE){
 			sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
