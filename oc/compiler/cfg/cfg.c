@@ -10998,9 +10998,13 @@ static void emit_global_struct_initializer(generic_ast_node_t* struct_initialize
 		cursor = cursor->next_sibling;
 	}
 
-	//TODO BUMP UP TO OUR FINAL SIZE
+	/**
+	 * If we get to the end and we still need padding, add the required amount of paddind
+	 * at the very end of the struct's intialization
+	 */
 	if(struct_type->type_size != current_struct_size){
-		printf("TODO FINAL PADDING OF %d NEEDED\n", struct_type->type_size - current_struct_size);
+		three_addr_const_t* final_padding = emit_global_variable_padding_constant(struct_type->type_size - current_struct_size);
+		dynamic_array_add(initializer_values, final_padding);
 	}
 }
 

@@ -2005,6 +2005,15 @@ static void print_global_variable_constant(FILE* fl, three_addr_const_t* global_
 		case REL_ADDRESS_CONST:
 			fprintf(fl, "\t.quad .LC%d\n", global_variable_constant->constant_value.local_constant_address->associated_memory_region.local_constant->local_constant_id); 
 			break;
+
+		/**
+		 * For padding constants, the field that we are after is stored inside of the constant
+		 * adjustment field
+		 */
+		case PADDING_CONST:
+			fprintf(fl, "\t.zero %ld\n", global_variable_constant->constant_adjustment);
+			break;
+
 		//Catch-all should anything go wrong
 		default:
 			printf("Fatal internal compiler error: unrecognized global variable type encountered\n");
