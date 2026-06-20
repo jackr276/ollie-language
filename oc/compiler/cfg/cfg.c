@@ -160,6 +160,7 @@ static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, ge
 static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node);
 static cfg_result_package_t emit_string_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* string_initializer);
 static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* struct_initializer);
+static void emit_global_struct_initializer(generic_ast_node_t* struct_initializer, dynamic_array_t* intializer_values);
 
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_const_t* constant);
 static void visit_declaration_statement(generic_ast_node_t* node);
@@ -10782,9 +10783,11 @@ static three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* con
 	constant->const_type = const_node->constant_type; 
 	constant->type = const_node->inferred_type;
 
-	//Based on the type we'll make assignments. It'll be said again here - this is the only
-	//time that double/float constants can be emitted directly without the use of the .LC system
-	switch(constant->const_type){
+	/**
+	 * Based on the type we'll make assignments. It'll be said again here - this is the only
+	 * time that double/float constants can be emitted directly without the use of the .LC system
+	 */
+	switch(const_node->constant_type){
 		case CHAR_CONST:
 			constant->constant_value.char_constant = const_node->constant_value.char_value;
 			break;
@@ -10847,6 +10850,23 @@ static three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* con
 
 
 /**
+ * Emit a .zero padding amount for num_bytes number of bytes. This is used when we need padding in between
+ * members of a struct when we have global/static struct initializers
+ */
+static three_addr_const_t* emit_global_variable_padding_constant(int32_t num_bytes){
+	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
+
+	//This is a special "padding const"
+	constant->const_type = PADDING_CONST;
+
+	//We hijack the constant adjustment field to hold this
+	constant->constant_adjustment = num_bytes;
+
+	return constant;
+}
+
+
+/**
  * Emit a global variable array initializer. Unlike a normal array initializer - we do not put values in blocks. Instead, we store
  * the constant values in a result array that is then passed along back to the caller for later use
  *
@@ -10858,7 +10878,6 @@ static void emit_global_array_initializer(generic_ast_node_t* array_initializer,
 
 	//We can either see array initializers or constants here
 	while(cursor != NULL){
-		//Go based on what kind of node we have
 		switch(cursor->ast_node_type){
 			//If we have an array initializer - simply pass this along
 			case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
@@ -10867,19 +10886,22 @@ static void emit_global_array_initializer(generic_ast_node_t* array_initializer,
 
 			//Another base case of sorts - this is for char[] variables
 			case AST_NODE_TYPE_STRING_INITIALIZER:
-				//Emit it and add it into the array
 				dynamic_array_add(initializer_values, emit_global_variable_string_constant(cursor));
 				break;
 
 			//This is really our base case
 			case AST_NODE_TYPE_CONSTANT:
-				//Emit the constant and get it into the array
 				dynamic_array_add(initializer_values, emit_global_variable_constant(cursor));
+				break;
+
+			//If we have a struct initializer list we will emit this inside of the array list
+			case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
+				emit_global_struct_initializer(cursor, initializer_values);
 				break;
 
 			default:
 				printf("%d\n\n\n", cursor->ast_node_type);
-				printf("Fatal internal compiler: Invalid or unimplemented global initializer node encountered\n");
+				printf("Fatal internal compiler error: Invalid or unimplemented global initializer node encountered\n");
 				exit(1);
 		}
 
@@ -10890,11 +10912,111 @@ static void emit_global_array_initializer(generic_ast_node_t* array_initializer,
 
 
 /**
+ * Emit a global struct initializer. We do this by creating one giant array of values *in addition to padding*. This 
+ * is very important and a key different from how everything else works when it comes to these kinds of global variable
+ * initializers
+ */
+static void emit_global_struct_initializer(generic_ast_node_t* struct_initializer, dynamic_array_t* initializer_values){
+	//The current index of the struct member, we will need this for our padding determination
+	u_int32_t current_struct_member_index = 0;
+	u_int32_t current_struct_size = 0;
+
+	//Extract the struct type - we'll need this for padding decisions
+	generic_type_t* struct_type = struct_initializer->inferred_type;
+
+	//Grab out the first child for the struct initializer
+	generic_ast_node_t* cursor = struct_initializer->first_child;
+
+	//Handle every other type of nested initializer
+	while(cursor != NULL){
+		//Extract the type of the member itself
+		generic_type_t* member_type = cursor->inferred_type;
+
+		/**
+		 * If the current struct member index is not zero,
+		 * then we are going to need to check and see if
+		 * padding is needed between the prior member and our
+		 * member
+		 */
+		if(current_struct_member_index != 0){
+			u_int32_t needed_padding = 0;
+
+			//Get the type that we're going to be aligning by
+			generic_type_t* aligning_by_type = get_base_alignment_type(member_type);
+
+			/**
+			 * If we're smaller than the current struct size pad out to the end
+			 * by however much we need to make up the difference. Otherwise, the padding
+			 * that we need is just the modulo of the current struct size and the
+			 * alignable type size
+			 */
+			if(current_struct_size < aligning_by_type->type_size){
+				needed_padding = aligning_by_type->type_size - current_struct_size;
+			} else {
+				needed_padding = current_struct_size % aligning_by_type->type_size;
+			}
+
+			/**
+			 * If we do need padding, then we'll emit and add that here right before we
+			 * emit and add anything else
+			 */
+			if(needed_padding != 0){
+				three_addr_const_t* padding_constant = emit_global_variable_padding_constant(needed_padding);
+				dynamic_array_add(initializer_values, padding_constant);
+			}
+
+			//Bump up by our padding
+			current_struct_size += needed_padding;
+		}
+
+		switch(cursor->ast_node_type){
+			case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+				emit_global_array_initializer(cursor, initializer_values);
+				break;
+
+			case AST_NODE_TYPE_STRING_INITIALIZER:
+				dynamic_array_add(initializer_values, emit_global_variable_string_constant(cursor));
+				break;
+
+			case AST_NODE_TYPE_CONSTANT:
+				dynamic_array_add(initializer_values, emit_global_variable_constant(cursor));
+				break;
+
+			case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
+				emit_global_struct_initializer(cursor, initializer_values);
+				break;
+					
+			default:
+				printf("%d\n\n\n", cursor->ast_node_type);
+				printf("Fatal internal compiler error: Invalid or unimplemented global initializer node encountered\n");
+				exit(1);
+		}
+
+		//Increase the overall struct size by the member size
+		current_struct_size += member_type->type_size;
+
+		//Bump it up
+		current_struct_member_index++;
+		cursor = cursor->next_sibling;
+	}
+
+	/**
+	 * If we get to the end and we still need padding, add the required amount of paddind
+	 * at the very end of the struct's intialization
+	 */
+	if(struct_type->type_size != current_struct_size){
+		three_addr_const_t* final_padding = emit_global_variable_padding_constant(struct_type->type_size - current_struct_size);
+		dynamic_array_add(initializer_values, final_padding);
+	}
+}
+
+
+/**
  * This helper function is used to determine if we need to place a global variable
  * in the ".rel.local" section. This is only done for char* variables *or* anything
  * that decays into a char*
  */
-static u_int8_t does_type_decay_to_char_pointer(generic_type_t* type){
+static inline u_int8_t does_type_decay_to_char_pointer(generic_type_t* type){
 	switch(type->type_class){
 		case TYPE_CLASS_ARRAY:
 			return does_type_decay_to_char_pointer(type->internal_types.member_type);
@@ -10906,9 +11028,6 @@ static u_int8_t does_type_decay_to_char_pointer(generic_type_t* type){
 			}
 			
 			return does_type_decay_to_char_pointer(type->internal_types.points_to);
-
-		case TYPE_CLASS_BASIC:
-			return FALSE;
 
 		default:
 			return FALSE;
@@ -10923,8 +11042,10 @@ static u_int8_t does_type_decay_to_char_pointer(generic_type_t* type){
  * here
  */
 static void visit_global_let_statement(generic_ast_node_t* node){
-	//We'll store it inside of the global variable struct. Leave it as NULL
-	//here so that it's automatically initialized to 0
+	/**
+	 * We'll store it inside of the global variable struct. Leave it as NULL
+	 * here so that it's automatically initialized to 0
+	 */
 	global_variable_t* global_variable = create_global_variable(node->variable, NULL);
 
 	//This has been initialized already
@@ -10972,6 +11093,17 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 			//This will handle a variety of cases for us
 			global_variable->initializer_value.constant_value = emit_global_variable_string_constant(initializer);
 
+			break;
+
+		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
+			//Initialized to a struct
+			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_STRUCT;
+
+			//Give it an array of our struct values and padding
+			global_variable->initializer_value.struct_initializer_values = dynamic_array_alloc();
+
+			//Let the helper deal with it
+			emit_global_struct_initializer(initializer, &(global_variable->initializer_value.struct_initializer_values));
 			break;
 
 		//This shouldn't be reachable
@@ -11040,6 +11172,17 @@ static void visit_static_let_statement(generic_ast_node_t* node){
 			//This will handle a variety of cases for us
 			static_variable->initializer_value.constant_value = emit_global_variable_string_constant(initializer);
 
+			break;
+
+		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
+			//Initialized to a struct
+			static_variable->initializer_type = GLOBAL_VAR_INITIALIZER_ARRAY;
+
+			//Initialize the struct value list
+			static_variable->initializer_value.struct_initializer_values = dynamic_array_alloc();
+
+			//Let the helper take care of it
+			emit_global_struct_initializer(initializer, &(static_variable->initializer_value.struct_initializer_values));
 			break;
 
 		//This shouldn't be reachable

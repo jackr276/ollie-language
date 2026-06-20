@@ -47,9 +47,11 @@ void coerce_constant(generic_ast_node_t* constant_node){
 
 	//Go based on the original type
 	switch(constant_node->constant_type){
-		//Now in here, we'll go based on the basic type of what our inferred
-		//type is and perform a move operation(just reassignment) to have the appropriate
-		//expansion
+		/**
+		 * Now in here, we'll go based on the basic type of what our inferred
+		 * type is and perform a move operation(just reassignment) to have the appropriate
+		 * expansion
+		 */
 		case CHAR_CONST:
 			switch(inferred_type->basic_type_token){
 				case U8:
@@ -131,7 +133,7 @@ void coerce_constant(generic_ast_node_t* constant_node){
 					break;
 
 				case U32:
-					constant_node->constant_type = INT_CONST;
+					constant_node->constant_type = INT_CONST_FORCE_U;
 					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.signed_byte_value;
 					break;
 
@@ -189,7 +191,7 @@ void coerce_constant(generic_ast_node_t* constant_node){
 					break;
 
 				case U32:
-					constant_node->constant_type = INT_CONST;
+					constant_node->constant_type = INT_CONST_FORCE_U;
 					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.unsigned_byte_value;
 					break;
 
@@ -226,13 +228,28 @@ void coerce_constant(generic_ast_node_t* constant_node){
 
 		case SHORT_CONST:
 			switch(inferred_type->basic_type_token){
+				case CHAR:
+					constant_node->constant_type = CHAR_CONST;
+					constant_node->constant_value.char_value = constant_node->constant_value.signed_short_value;
+					break;
+
+				case I8:
+					constant_node->constant_type = BYTE_CONST;
+					constant_node->constant_value.signed_byte_value = constant_node->constant_value.signed_short_value;
+					break;
+
+				case U8:
+					constant_node->constant_type = BYTE_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_byte_value = constant_node->constant_value.signed_short_value;
+					break;
+
 				case U16:
 					constant_node->constant_type = SHORT_CONST_FORCE_U;
 					constant_node->constant_value.unsigned_short_value = constant_node->constant_value.signed_short_value;
 					break;
 
 				case U32:
-					constant_node->constant_type = INT_CONST;
+					constant_node->constant_type = INT_CONST_FORCE_U;
 					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.signed_short_value;
 					break;
 
@@ -269,13 +286,28 @@ void coerce_constant(generic_ast_node_t* constant_node){
 
 		case SHORT_CONST_FORCE_U:
 			switch(inferred_type->basic_type_token){
+				case CHAR:
+					constant_node->constant_type = CHAR_CONST;
+					constant_node->constant_value.char_value = constant_node->constant_value.unsigned_short_value;
+					break;
+
+				case I8:
+					constant_node->constant_type = BYTE_CONST;
+					constant_node->constant_value.signed_byte_value = constant_node->constant_value.unsigned_short_value;
+					break;
+
+				case U8:
+					constant_node->constant_type = BYTE_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_byte_value = constant_node->constant_value.unsigned_short_value;
+					break;
+
 				case I16:
 					constant_node->constant_type = SHORT_CONST;
 					constant_node->constant_value.signed_short_value = constant_node->constant_value.unsigned_short_value;
 					break;
 
 				case U32:
-					constant_node->constant_type = INT_CONST;
+					constant_node->constant_type = INT_CONST_FORCE_U;
 					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.unsigned_short_value;
 					break;
 
@@ -312,6 +344,31 @@ void coerce_constant(generic_ast_node_t* constant_node){
 
 		case INT_CONST_FORCE_U:
 			switch(inferred_type->basic_type_token){
+				case CHAR:
+					constant_node->constant_type = CHAR_CONST;
+					constant_node->constant_value.char_value = constant_node->constant_value.unsigned_int_value;
+					break;
+
+				case I8:
+					constant_node->constant_type = BYTE_CONST;
+					constant_node->constant_value.signed_byte_value = constant_node->constant_value.unsigned_int_value;
+					break;
+
+				case U8:
+					constant_node->constant_type = BYTE_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_byte_value = constant_node->constant_value.unsigned_int_value;
+					break;
+
+				case I16:
+					constant_node->constant_type = SHORT_CONST;
+					constant_node->constant_value.signed_short_value = constant_node->constant_value.unsigned_int_value;
+					break;
+
+				case U16:
+					constant_node->constant_type = SHORT_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_short_value = constant_node->constant_value.unsigned_int_value;
+					break;
+
 				case I32:
 					constant_node->constant_type = INT_CONST;
 					constant_node->constant_value.signed_int_value = constant_node->constant_value.unsigned_int_value;
@@ -345,6 +402,31 @@ void coerce_constant(generic_ast_node_t* constant_node){
 
 		case INT_CONST:
 			switch(inferred_type->basic_type_token){
+				case CHAR:
+					constant_node->constant_type = CHAR_CONST;
+					constant_node->constant_value.char_value = constant_node->constant_value.signed_int_value;
+					break;
+
+				case I8:
+					constant_node->constant_type = BYTE_CONST;
+					constant_node->constant_value.signed_byte_value = constant_node->constant_value.signed_int_value;
+					break;
+
+				case U8:
+					constant_node->constant_type = BYTE_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_byte_value = constant_node->constant_value.signed_int_value;
+					break;
+
+				case I16:
+					constant_node->constant_type = SHORT_CONST;
+					constant_node->constant_value.signed_short_value = constant_node->constant_value.signed_int_value;
+					break;
+
+				case U16:
+					constant_node->constant_type = SHORT_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_short_value = constant_node->constant_value.signed_int_value;
+					break;
+
 				case U32:
 					constant_node->constant_type = INT_CONST_FORCE_U;
 					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.signed_int_value;
@@ -411,6 +493,36 @@ void coerce_constant(generic_ast_node_t* constant_node){
 
 		case LONG_CONST_FORCE_U:
 			switch(inferred_type->basic_type_token){
+				case U8:
+					constant_node->constant_type = BYTE_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_byte_value = constant_node->constant_value.unsigned_long_value;
+					break;
+
+				case I8:
+					constant_node->constant_type = BYTE_CONST;
+					constant_node->constant_value.signed_byte_value = constant_node->constant_value.unsigned_long_value;
+					break;
+
+				case U16:
+					constant_node->constant_type = SHORT_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_short_value = constant_node->constant_value.unsigned_long_value;
+					break;
+					
+				case I16:
+					constant_node->constant_type = SHORT_CONST;
+					constant_node->constant_value.signed_short_value = constant_node->constant_value.unsigned_long_value;
+					break;
+
+				case U32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.unsigned_long_value;
+					break;
+
+				case I32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.signed_int_value = constant_node->constant_value.unsigned_long_value;
+					break;
+
 				case I64:
 					constant_node->constant_type = LONG_CONST;
 					constant_node->constant_value.signed_long_value = constant_node->constant_value.unsigned_long_value;
@@ -429,6 +541,36 @@ void coerce_constant(generic_ast_node_t* constant_node){
 
 		case LONG_CONST:
 			switch(inferred_type->basic_type_token){
+				case U8:
+					constant_node->constant_type = BYTE_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_byte_value = constant_node->constant_value.signed_long_value;
+					break;
+
+				case I8:
+					constant_node->constant_type = BYTE_CONST;
+					constant_node->constant_value.signed_byte_value = constant_node->constant_value.signed_long_value;
+					break;
+
+				case U16:
+					constant_node->constant_type = SHORT_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_short_value = constant_node->constant_value.signed_long_value;
+					break;
+					
+				case I16:
+					constant_node->constant_type = SHORT_CONST;
+					constant_node->constant_value.signed_short_value = constant_node->constant_value.signed_long_value;
+					break;
+
+				case U32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.signed_long_value;
+					break;
+
+				case I32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.signed_int_value = constant_node->constant_value.signed_long_value;
+					break;
+
 				case U64:
 					constant_node->constant_type = LONG_CONST_FORCE_U;
 					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.signed_long_value;
@@ -467,7 +609,7 @@ void coerce_constant(generic_ast_node_t* constant_node){
 
 		//This should never happen
 		default:
-			printf("Fatal internal compiler error: Unsupported constant type found in coercer.\n");
+			printf("Fatal internal compiler error: Unsupported constant type found in coercer %d.\n", constant_node->constant_type);
 			exit(1);
 	}
 }

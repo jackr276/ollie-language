@@ -11,6 +11,7 @@
  *
  * NEXT IN LINE: Control Flow Graph, OIR constructor, SSA form implementation
 */
+#include <stdint.h>
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -253,6 +254,80 @@ static void propogate_no_dereference_required_flag(generic_ast_node_t* node){
 
 
 /**
+ * If a constant is a string constant, function constant, or any other kind of relative
+ * address constant, then we may not convert it and we must process it using the normal
+ * rules as if it were a variable. This helper sifts through a constant type and determines
+ * if it is one of these exceptions
+ */
+static inline u_int8_t is_constant_type_exempt_from_constant_assignment_rules(ollie_token_t constant_type){
+	switch(constant_type){
+		case STR_CONST:
+		case FUNC_CONST:
+		case REL_ADDRESS_CONST:
+				return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Can a given source node be assigned to a destination type? This logic changes based on whether or not
+ * the given source node is or is not a constant, which is why we have this special rule instead of exclusively
+ * relying on types_assignable in the type system
+ */
+static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic_type_t* destination_type, generic_ast_node_t* source_node){
+	/**
+	 * If this is not a constant type or it is exempt, we use the regular types assignable path
+	 */
+	if(source_node->ast_node_type != AST_NODE_TYPE_CONSTANT || is_constant_type_exempt_from_constant_assignment_rules(source_node->constant_type) == TRUE){
+		return types_assignable(destination_type, source_node->inferred_type);
+
+	} else {
+		/**
+		 * If we have a constant to pointer assignment, for coercion reasons
+		 * treat the pointer as an unsigned 64 bit integer
+		 */
+		if(destination_type->type_class == TYPE_CLASS_POINTER){
+			destination_type = immut_u64;
+		}
+
+		//Invoke the special helper to determine this
+		generic_type_t* result_type = types_assignable_constant(destination_type, source_node->inferred_type);
+
+		//If it failed then just leave now
+		if(result_type == NULL){
+			return NULL;
+		}
+
+		/**
+		 * Enum type checking - if we have an enum type we need to make sure that whatever we're doing
+		 * correlates to it properly. If we are trying to assign a constant value that is not in
+		 * the enum's range of valid values, that would cause issues down the line and we will
+		 * not allow it
+		 */
+		if(is_enum_type(destination_type) == TRUE){
+			if(does_enum_contain_integer_member(destination_type, source_node->constant_value.signed_int_value) == FALSE){
+				sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
+							destination_type->type_name.string, source_node->constant_value.signed_int_value);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				return NULL;
+			}
+		} 
+
+		//Reassign the constant's type at this point
+		source_node->inferred_type = result_type;
+
+		//While we're here we will coerce the constant itself
+		coerce_constant(source_node);
+
+		//Give this back
+		return result_type;
+	}
+}
+
+
+/**
  * Is a given variable a data segment variable? These variables are not actually
  * stored in registers or in memory so we need to treat them a bit differently. In
  * ollie only static and global variables fit the bill for this
@@ -343,42 +418,6 @@ static inline u_int8_t is_type_commutative_for_operation(generic_type_t* type, o
 		//By defualt - we're assuming this operator is not commutative
 		default:
 			return FALSE;
-	}
-}
-
-
-/**
- * Perform any needed constant coercion that is being done for an assignment. This includes converting pointers to 64-bit
- * integers for constant coercion
- */
-static inline void perform_constant_assignment_coercion(generic_ast_node_t* constant_node, generic_type_t* final_type){
-	//If we have a pointer, we'll just make this into an i64
-	if(final_type->type_class == TYPE_CLASS_POINTER){
-		//Set the final type here
-		constant_node->inferred_type = immut_i64;
-	} else {
-		//Set the final type here
-		constant_node->inferred_type = final_type;
-	}
-
-	//If we have a basic constant type like this, we need to perform coercion
-	switch(constant_node->constant_type){
-		case CHAR_CONST:
-		case BYTE_CONST:
-		case BYTE_CONST_FORCE_U:
-		case SHORT_CONST:
-		case SHORT_CONST_FORCE_U:
-		case INT_CONST:
-		case INT_CONST_FORCE_U:
-		case LONG_CONST:
-		case LONG_CONST_FORCE_U:
-		case FLOAT_CONST:
-		case DOUBLE_CONST:
-			coerce_constant(constant_node);
-			break;
-		//Otherwise do nothing
-		default:
-			break;
 	}
 }
 
@@ -670,19 +709,19 @@ static inline u_int8_t is_postfix_expression_tree_address_eligible(generic_ast_n
  *
  * All of these will have types that are immutable because we don't expect to be changing them
  */
-static inline generic_type_t* determine_required_minimum_unsigned_integer_type_size(u_int64_t value, u_int32_t max_size){
+static inline generic_type_t* determine_required_minimum_unsigned_integer_type_size(u_int64_t value){
 	//The case where we can use a u8
-	if(max_size <= 8 || value >> 8 == 0){
+	if(value >> 8 == 0){
 		return immut_u8;
 	}
 
 	//We'll use u16
-	if(max_size <= 16 || value >> 16 == 0){
+	if(value >> 16 == 0){
 		return immut_u16;
 	}
 
 	//We'll use u32
-	if(max_size <= 32 || value >> 32 == 0){
+	if(value >> 32 == 0){
 		return immut_u32;
 	}
 
@@ -696,25 +735,24 @@ static inline generic_type_t* determine_required_minimum_unsigned_integer_type_s
  * in
  *
  * Rules:
- * 	If we bit shift left by 8 and have 0 OR -1, then our value can fit in 8 bits
- * 	If we shift left by 16 and have 0 OR -1, then we can fit in 16 bits
- * 	If we shift left by 32 and have 0 OR -1, then we can fit in 32 bits
- * 	Anything else -> 64 bits
+ * If we can sign extend back to the original value after casting to an i8, use i8
+ * If we can sign extend back to the original value after casting to an i16, use i16
+ * If we can sign extend back to the original value after casting to an i32, use i32
  *
  */
-static generic_type_t* determine_required_minimum_signed_integer_type_size(int64_t value, u_int32_t max_size){
+static inline generic_type_t* determine_required_minimum_signed_integer_type_size(int64_t value){
 	//The case where we can use an i8
-	if(max_size <= 8 || value >> 8 == 0 || value >> 8 == -1){
+	if((int64_t)(int8_t)value == value){
 		return immut_i8;
 	}
 
 	//We'll use an i16
-	if(max_size <= 16 || value >> 16 == 0 || value >> 16 == -1){
+	if((int64_t)(int16_t)value == value){
 		return immut_i16;
 	}
 
 	//We'll use an i32
-	if(max_size <= 32 || value >> 32 == 0 || value >> 32 == -1){
+	if((int64_t)(int32_t)value == value){
 		return immut_i32;
 	}
 
@@ -755,179 +793,95 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 
 	//Create our constant node
 	generic_ast_node_t* constant_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
-	//Add the line number
 	constant_node->line_number = parser_line_num;
 
-	//We'll go based on what kind of constant that we have
 	switch(lookahead.tok){
-		//Regular signed short value 
+		case BYTE_CONST:
+			constant_node->constant_type = BYTE_CONST;
+			constant_node->constant_value.signed_byte_value = lookahead.constant_values.signed_byte_value;
+			constant_node->inferred_type = immut_i8;
+			break;
+
+		case BYTE_CONST_FORCE_U:
+			constant_node->constant_type = BYTE_CONST_FORCE_U;
+			constant_node->constant_value.unsigned_byte_value = lookahead.constant_values.unsigned_byte_value;
+			constant_node->inferred_type = immut_u8;
+			break;
+
 		case SHORT_CONST:
-			//Mark what it is
 			constant_node->constant_type = SHORT_CONST;
-
-			//Copy over
 			constant_node->constant_value.signed_short_value = lookahead.constant_values.signed_short_value;
-
-			//Use the helper rule to determine what size int we should initially have
-			constant_node->inferred_type = determine_required_minimum_signed_integer_type_size(constant_node->constant_value.signed_short_value, 16);
-
+			constant_node->inferred_type = immut_i16;
 			break;
 
-		//Regular unsigned short value 
 		case SHORT_CONST_FORCE_U:
-			//Mark what it is
 			constant_node->constant_type = SHORT_CONST_FORCE_U;
-
-			//Copy over
 			constant_node->constant_value.unsigned_short_value = lookahead.constant_values.unsigned_short_value;
-
-			//Use the helper rule to determine what size int we should initially have
-			constant_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(constant_node->constant_value.unsigned_short_value, 16);
-
+			constant_node->inferred_type = immut_u16;
 			break;
 
-
-		//Regular signed int
 		case INT_CONST:
-			//Mark what it is
 			constant_node->constant_type = INT_CONST;
-
-			//Copy over
 			constant_node->constant_value.signed_int_value = lookahead.constant_values.signed_int_value;
-
-			//Use the helper rule to determine what size int we should initially have
-			constant_node->inferred_type = determine_required_minimum_signed_integer_type_size(constant_node->constant_value.signed_int_value, 32);
-
+			constant_node->inferred_type = immut_i32;
 			break;
 
-		//Forced unsigned
 		case INT_CONST_FORCE_U:
-			//Mark what it is
 			constant_node->constant_type = INT_CONST_FORCE_U;
-
-			//Copy over
 			constant_node->constant_value.unsigned_int_value = lookahead.constant_values.unsigned_int_value;
-
-			//Use the helper rule to determine what size int we should initially have
-			constant_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(constant_node->constant_value.unsigned_int_value, 32);
-			
+			constant_node->inferred_type = immut_u32;
 			break;
 
-		//Regular signed long constant
 		case LONG_CONST:
-			//Store the type
 			constant_node->constant_type = LONG_CONST;
-
-			//Copy over
 			constant_node->constant_value.signed_long_value = lookahead.constant_values.signed_long_value;
-
-			//Get the size up to 64 bits
-			constant_node->inferred_type = determine_required_minimum_signed_integer_type_size(constant_node->constant_value.signed_long_value, 64);
-
+			constant_node->inferred_type = immut_i64;
 			break;
 
-		//Unsigned long constant
 		case LONG_CONST_FORCE_U:
-			//Store the type
 			constant_node->constant_type = LONG_CONST;
-
-			//Copy over
 			constant_node->constant_value.signed_long_value = lookahead.constant_values.signed_long_value;
-
-			//Get the size up to 64 bits
-			constant_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(constant_node->constant_value.unsigned_long_value, 64);
-
+			constant_node->inferred_type = immut_u64;
 			break;
 
 		case FLOAT_CONST:
 			constant_node->constant_type = FLOAT_CONST;
-
-			//Copy the value
 			constant_node->constant_value.float_value = lookahead.constant_values.float_value;
-
-			//By default, float constants are of type float32
 			constant_node->inferred_type = immut_f32;
 			break;
 
 		case DOUBLE_CONST:
 			constant_node->constant_type = DOUBLE_CONST;
-
-			//Copy the value
 			constant_node->constant_value.double_value = lookahead.constant_values.double_value;
-
-			//Double constants are always an f64
 			constant_node->inferred_type = immut_f64;
-
 			break;
 
 		case CHAR_CONST:
 			constant_node->constant_type = CHAR_CONST;
-
-			//Store the char value that we were given
 			constant_node->constant_value.char_value = lookahead.constant_values.char_value;
-
-			//Char consts are of type char(obviously)
 			constant_node->inferred_type = immut_char;
 			break;
 
 		//For True & False, they are internally treated the exact same as 
 		//unsigned 8 bit integers
 		case TRUE_CONST:
-			//Unsigned byte
 			constant_node->constant_type = BYTE_CONST_FORCE_U;
-				
-			//Use the true value here
 			constant_node->constant_value.unsigned_byte_value = TRUE;
-
-			//Inferred type is u8
 			constant_node->inferred_type = immut_u8;
-
 			break;
 			
 		case FALSE_CONST:
-			//Unsigned byte
 			constant_node->constant_type = BYTE_CONST_FORCE_U;
-			
-			//Use the true value here
 			constant_node->constant_value.unsigned_byte_value = FALSE;
-
-			//Inferred type is u8
 			constant_node->inferred_type = immut_u8;
-
-			break;
-
-		case BYTE_CONST:
-			//Signed byte
-			constant_node->constant_type = BYTE_CONST;
-
-			//Copy over
-			constant_node->constant_value.signed_byte_value = lookahead.constant_values.signed_byte_value;
-
-			//Inferred type is i8
-			constant_node->inferred_type = immut_i8;
-
-			break;
-
-		case BYTE_CONST_FORCE_U:
-			//Unsigned byte
-			constant_node->constant_type = BYTE_CONST_FORCE_U;
-
-			//Copy over
-			constant_node->constant_value.unsigned_byte_value = lookahead.constant_values.unsigned_byte_value;
-
-			//Inferred type is u8
-			constant_node->inferred_type = immut_u8;
-
 			break;
 
 		case STR_CONST:
 			constant_node->constant_type = STR_CONST;
-			//The type is an immutable char*
 			constant_node->inferred_type = immut_char_ptr;
 			
 			//The dynamic string is our value
 			constant_node->string_value = lookahead.lexeme;
-
 			break;
 
 		default:
@@ -935,7 +889,6 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 			return print_and_return_error("Invalid constant given", parser_line_num);
 	}
 
-	//All went well so give the constant node back
 	return constant_node;
 }
 
@@ -1022,8 +975,8 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 		return print_and_return_error("Fatal internal compiler error. Saw a return statement while current function is null", parser_line_num);
 	}
 
-	//Figure out what the final type is here
-	generic_type_t* final_type = types_assignable(current_function_signature->return_type, expr_node->inferred_type);
+	//Figure out what the final type is here. This function also handles any constant coercion that we need to do
+	generic_type_t* final_type = is_ast_node_assignable_to_destination_type(current_function_signature->return_type, expr_node);
 
 	//If the current function's return type is not compatible with the return type here, we'll bail out
 	if(final_type == NULL){
@@ -1035,26 +988,6 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 		num_errors++;
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
-
-	//If this is a constant, we'll force it to be whatever the new type is
-	if(expr_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
-		//Set the type
-		expr_node->inferred_type = final_type;
-
-		//Coerce the constant
-		perform_constant_assignment_coercion(expr_node, final_type);
-	}
-
-	//Special checking here - if we have an enum type that is being assigned to, we need
-	//to make sure that it's being assigned to a valid value in it's range
-	if(is_enum_type(current_function_signature->return_type) == TRUE && expr_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
-		if(does_enum_contain_integer_member(current_function_signature->return_type, expr_node->constant_value.signed_int_value) == FALSE){
-			sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-						current_function_signature->return_type->type_name.string, expr_node->constant_value.signed_int_value);
-			//Hard fail here
-			return print_and_return_error(info, parser_line_num);
-		}
-	} 
 
 	//Otherwise it worked, so we'll add it as a child of the other node
 	add_child_node(return_stmt, expr_node);
@@ -1314,7 +1247,7 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 			 * assignable with the return type of the function. If it isn't then this isn't going
 			 * to work
 			 */
-			generic_type_t* final_type = types_assignable(called_function_signature->return_type, result_node->inferred_type);
+			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(called_function_signature->return_type, result_node);
 
 			//Fail out here
 			if(final_type == NULL){
@@ -1323,15 +1256,6 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 							called_function_signature->return_type->type_name.string,
 							result_node->inferred_type->type_name.string); 
 				return print_and_return_error(info, parser_line_num);
-			}
-
-			//Did we get a constant? If so we'll need to coerce our types properly before going further
-			if(result_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
-				//Move the final type to be this
-				result_node->inferred_type = final_type;
-
-				//Coerce the constant internally to be this type
-				coerce_constant(result_node);
 			}
 
 			break;
@@ -1591,8 +1515,8 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 				return print_and_return_error("Invalid parameter expression in elaborative param handler", parser_line_num);
 			}
 
-			//Let's see if we're even able to assign this here
-			generic_type_t* final_type = types_assignable(type_being_elaborated, elaborated_param->inferred_type);
+			//Let's see if we're even able to assign this here. This rule hanldes all coercion if need be
+			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(type_being_elaborated, elaborated_param);
 
 			//If this is null, it means that our check failed
 			if(final_type == NULL){
@@ -1610,14 +1534,6 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 				return print_and_return_error(info, parser_line_num);
 			}
 
-			//If this is a constant node, we'll force it to be whatever we expect from the type assignability
-			if(elaborated_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
-				elaborated_param->inferred_type = final_type;
-
-				//Do coercion
-				perform_constant_assignment_coercion(elaborated_param, final_type);
-			}
-
 			/**
 			 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
 			 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
@@ -1632,19 +1548,6 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 				 */
 				propogate_no_dereference_required_flag(elaborated_param);
 			}
-
-			/**
-			 * Special checking here - if we have an enum type that is being assigned to, we need
-			 * to make sure that it's being assigned to a valid value in it's range
-			 */
-			if(is_enum_type(type_being_elaborated) == TRUE && elaborated_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
-				if(does_enum_contain_integer_member(type_being_elaborated, elaborated_param->constant_value.signed_int_value) == FALSE){
-					sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-								type_being_elaborated->type_name.string, elaborated_param->constant_value.signed_int_value);
-
-					return print_and_return_error(info, parser_line_num);
-				}
-			} 
 
 			//This counts as one more elaborated param
 			elaborated_param_count++;
@@ -2083,7 +1986,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 				}
 
 				//Let's see if we're even able to assign this here
-				generic_type_t* final_type = types_assignable(param_type, current_param->inferred_type);
+				generic_type_t* final_type = is_ast_node_assignable_to_destination_type(param_type, current_param);
 
 				//If this is null, it means that our check failed
 				if(final_type == NULL){
@@ -2104,14 +2007,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 					return print_and_return_error(info, parser_line_num);
 				}
 
-				//If this is a constant node, we'll force it to be whatever we expect from the type assignability
-				if(current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
-					current_param->inferred_type = final_type;
-
-					//Do coercion
-					perform_constant_assignment_coercion(current_param, final_type);
-				}
-
 				/**
 				 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
 				 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
@@ -2126,18 +2021,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 					 */
 					propogate_no_dereference_required_flag(current_param);
 				}
-
-				//Special checking here - if we have an enum type that is being assigned to, we need
-				//to make sure that it's being assigned to a valid value in it's range
-				if(is_enum_type(param_type) == TRUE && current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
-					if(does_enum_contain_integer_member(param_type, current_param->constant_value.signed_int_value) == FALSE){
-						sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-									param_type->type_name.string, current_param->constant_value.signed_int_value);
-
-						//Hard fail here
-						return print_and_return_error(info, parser_line_num);
-					}
-				} 
 
 				//We can now safely add this into the function call node as a child. In the function call node, 
 				//the parameters will appear in order from left to right
@@ -2384,9 +2267,12 @@ static generic_ast_node_t* sizeof_statement(ollie_token_stream_t* token_stream, 
 	const_node->constant_type = INT_CONST;
 	//Store the actual value of the type size
 	const_node->constant_value.signed_int_value = return_type->type_size;
-	//Grab and store type info
 	//This will always end up as a generic signed int
-	const_node->inferred_type = determine_required_minimum_signed_integer_type_size(return_type->type_size, 32);
+	const_node->inferred_type = immut_i32;
+
+	//Coerce it now that we have the minimum size
+	coerce_constant(const_node);
+
 	//We cannot assign to this
 	const_node->is_assignable = FALSE;
 	//Store this too
@@ -2451,12 +2337,14 @@ static generic_ast_node_t* typesize_statement(ollie_token_stream_t* token_stream
 	//Add the line number
 	const_node->line_number = parser_line_num;
 	//Add the constant
-	const_node->constant_type = INT_CONST_FORCE_U;
+	const_node->constant_type = INT_CONST;
 	//Store the actual value
-	const_node->constant_value.unsigned_int_value = type_size;
-	//Grab and store type info
+	const_node->constant_value.signed_int_value = type_size;
 	//These will be generic signed ints
-	const_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(type_size, 32);
+	const_node->inferred_type = immut_i32;
+
+	//Coerce it now that we have the minimum size
+	coerce_constant(const_node);
 
 	//Finally we'll return this constant node
 	return const_node;
@@ -3169,14 +3057,10 @@ loop_end:
 	//What is our final type?
 	generic_type_t* final_type = NULL;
 
-	//If we have a generic assignment(=), we can just do the assignability
-	//check
+	//If we have a generic assignment(=), we can just do the assignability check
 	if(assignment_operator == EQUALS){
-		/**
-		 * We will make use of the types assignable module here, as the rules are slightly 
-		 * different than the types compatible rule
-		 */
-		final_type = types_assignable(left_hand_type, right_hand_type);
+		//Handle the assignability and any/all coercing
+		final_type = is_ast_node_assignable_to_destination_type(left_hand_type, expr);
 
 		//If they're not, we fail here
 		if(final_type == NULL){
@@ -3184,25 +3068,6 @@ loop_end:
 			generate_types_assignable_failure_message(info, right_hand_type, left_hand_type);
 			return print_and_return_error(info, parser_line_num);
 		}
-
-		//If we have a constant, we will perform coercion
-		if(expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
-			//Force the constant value to be the final type
-			expr->inferred_type = final_type;
-
-			//Now do the coercion
-			perform_constant_assignment_coercion(expr, final_type);
-		}
-
-		//Special checking here - if we have an enum type that is being assigned to, we need
-		//to make sure that it's being assigned to a valid value in it's range
-		if(is_enum_type(left_hand_type) == TRUE && expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
-			if(does_enum_contain_integer_member(left_hand_type, expr->constant_value.signed_int_value) == FALSE){
-				sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-							left_hand_type->type_name.string, expr->constant_value.signed_int_value);
-				return print_and_return_error(info, parser_line_num);
-			}
-		} 
 
 		/**
 		 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
@@ -3281,44 +3146,16 @@ loop_end:
 		 * If we have something like this:
 		 * 				y(i32) += x(i64)
 		 * 	This needs to fail because we cannot coerce y to be bigger than it already is, it's not assignable.
-		 * 	As such, we need to check if the types are assignable first
+		 * 	As such, we need to check if the types are assignable first. This rule also handles any/all constant
+		 * 	coercion
 		 */
-		final_type = types_assignable(left_hand_type, right_hand_type);
+		final_type = is_ast_node_assignable_to_destination_type(left_hand_type, expr);
 
 		//If this fails, that means that we have an invalid operation
 		if(final_type == NULL){
 			generate_types_assignable_failure_message(info, right_hand_type, left_hand_type);
 			return print_and_return_error(info, parser_line_num);
 		}
-
-		//If the expression is a constant, we force it to be the final type
-		if(expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
-			/**
-			 * For constant coercion, there is a chance that we could be doing
-			 * pointer arithmetic here. If we are doing that, we don't want to
-			 * force this constant to be a pointer type. Instead, we'll transform
-			 * it into an i64
-			 */
-			if(final_type->type_class == TYPE_CLASS_BASIC){
-				expr->inferred_type = final_type;
-			} else {
-				expr->inferred_type = immut_i64;
-			}
-
-			coerce_constant(expr);
-		}
-
-		/**
-		 * Special checking here - if we have an enum type that is being assigned to, we need
-		 * to make sure that it's being assigned to a valid value in it's range
-		 */
-		if(is_enum_type(left_hand_type) == TRUE && expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
-			if(does_enum_contain_integer_member(left_hand_type, expr->constant_value.signed_int_value) == FALSE){
-				sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-							left_hand_type->type_name.string, expr->constant_value.signed_int_value);
-				return print_and_return_error(info, parser_line_num);
-			}
-		} 
 
 		//We'll also want to create a complete, distinct copy of the subtree here
 		generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary, SIDE_TYPE_RIGHT);
@@ -3692,11 +3529,8 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 		return print_and_return_error(info, parser_line_num);
 	}
 
-	//We use a u_int64 as our reference
-	generic_type_t* reference_type = immut_u64;
-
 	//Find the final type here. If it's not currently a U64, we'll need to coerce it
-	generic_type_t* final_type = types_assignable(reference_type, expr->inferred_type);
+	generic_type_t* final_type = is_ast_node_assignable_to_destination_type(immut_u64, expr);
 
 	//Let's make sure that this is an int
 	if(final_type == NULL){
@@ -3704,11 +3538,6 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 		  (expr->inferred_type->mutability == MUTABLE ? "mut ": ""),
 		  expr->inferred_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
-	}
-
-	//If this is a constant, we'll force it to be the final type
-	if(expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
-		expr->inferred_type = final_type;
 	}
 
 	//Otherwise, once we get here we need to check for matching brackets
@@ -4432,9 +4261,10 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 	}
 
 	/**
-	 * We will use the types_assignable function to check this
+	 * We will use the types_assignable function to check this. This will also perform any constant
+	 * coercion if need be
 	 */
-	generic_type_t* return_type = types_assignable(casting_to_type, being_casted_type);
+	generic_type_t* return_type = is_ast_node_assignable_to_destination_type(casting_to_type, right_hand_unary);
 
 	//This is our fail case
 	if(return_type == NULL){
@@ -4444,12 +4274,6 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 
 	//These types are now inferenced
 	right_hand_unary->inferred_type = type_spec;
-
-	//If we are casting a constant node, we should perform all needed
-	//type coercion now
-	if(right_hand_unary->ast_node_type == AST_NODE_TYPE_CONSTANT){
-		perform_constant_assignment_coercion(right_hand_unary, type_spec);
-	}
 
 	//Finally, we're all set to go here, so we can return the root reference
 	return right_hand_unary;
@@ -7805,7 +7629,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 	//Now, based on our largest value, we need to determine the bit-width needed for this
 	//field. Does it need to be stored internally as a u8, u16, u32, or u64?
 	//This will *always* be the immutable version of the type
-	generic_type_t* type_needed = determine_required_minimum_unsigned_integer_type_size(largest_value, 64);
+	generic_type_t* type_needed = determine_required_minimum_unsigned_integer_type_size(largest_value);
 
 	//Store this in the enum
 	mutable_enum_type->internal_values.enum_integer_type = type_needed;
@@ -9619,7 +9443,7 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 	}
 
 	//Figure out what the final type is here
-	generic_type_t* final_type = types_assignable(current_function_signature->return_type, expr_node->inferred_type);
+	generic_type_t* final_type = is_ast_node_assignable_to_destination_type(current_function_signature->return_type, expr_node);
 
 	//If the current function's return type is not compatible with the return type here, we'll bail out
 	if(final_type == NULL){
@@ -9638,15 +9462,6 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
-	//If this is a constant, we'll force it to be whatever the new type is
-	if(expr_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
-		//Set the type
-		expr_node->inferred_type = final_type;
-
-		//Coerce the constant
-		perform_constant_assignment_coercion(expr_node, final_type);
-	}
-
 	/**
 	 * If we are having a copy assignment, we need to propogate down the chain in the expression
 	 * node that we should not be doing any dereferencing. We do this to ensure that when we return
@@ -9655,17 +9470,6 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 	if(is_copy_assignment_required(current_function_signature->return_type, expr_node->inferred_type) == TRUE){
 		propogate_no_dereference_required_flag(expr_node);
 	}
-
-	//Special checking here - if we have an enum type that is being assigned to, we need
-	//to make sure that it's being assigned to a valid value in it's range
-	if(is_enum_type(current_function_signature->return_type) == TRUE && expr_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
-		if(does_enum_contain_integer_member(current_function_signature->return_type, expr_node->constant_value.signed_int_value) == FALSE){
-			sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-						current_function_signature->return_type->type_name.string, expr_node->constant_value.signed_int_value);
-			//Hard fail here
-			return print_and_return_error(info, parser_line_num);
-		}
-	} 
 
 	//Otherwise it worked, so we'll add it as a child of the other node
 	add_child_node(return_stmt, expr_node);
@@ -11184,26 +10988,14 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 	//Once we're done we can remove this
 	pop_nesting_level(&nesting_stack);
 
-	//Otherwise we know that it is good, but is it the right type
-	//Are the types here compatible?
-	case_stmt->inferred_type = types_assignable(switch_stmt_node->inferred_type, constant_node->inferred_type);
+	//Determine if the types are compatible. If they are, we will do the constant coercion in here
+	case_stmt->inferred_type = is_ast_node_assignable_to_destination_type(switch_stmt_node->inferred_type, constant_node);
 
 	//If this fails, they're incompatible
 	if(case_stmt->inferred_type == NULL){
 		sprintf(info, "Switch statement switches on type \"%s\", but case statement has incompatible type \"%s\"", 
 					  switch_stmt_node->inferred_type->type_name.string, constant_node->inferred_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
-	}
-
-	//If this is an enum type, we'll do some extra checking
-	if(is_enum_type(switch_stmt_node->inferred_type) == TRUE){
-		//We will throw a hard error here. Users will be banking on their enums being strict. This kind of loose
-		//assignment would break that illusion
-		if(does_enum_contain_integer_member(switch_stmt_node->inferred_type, constant_node->constant_value.signed_int_value) == FALSE){
-			sprintf(info, "Switch statement switch type \"%s\" does not contain a member whose value is equivalent to %d",
-		   				switch_stmt_node->inferred_type->type_name.string, constant_node->constant_value.signed_int_value);
-			return print_and_return_error(info, parser_line_num);
-		}
 	}
 
 	//Ultimately the constant type here is assigned over
@@ -11568,8 +11360,7 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 		//We'll use the same top level initialization check for this rule as well
 		generic_type_t* final_type = validate_initializer_types(member_type, cursor, membership);
 
-		//If these fail, then we're done here. No need for an error message, they'll have already been
-		//printed
+		//If these fail, then we're done here. No need for an error message, they'll have already been printed
 		if(final_type == NULL){
 			return FALSE;
 		}
@@ -11581,9 +11372,11 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 		cursor = cursor->next_sibling;
 	}
 
-	//The final check down here has 2 options:
-	// 1.) The node's length was 0, in which case, we set the length based on the number of members we saw
-	// 2.) The length was set, in which case, we validate the length here
+	/**
+	 * The final check down here has 2 options:
+	 * 1.) The node's length was 0, in which case, we set the length based on the number of members we saw
+	 * 2.) The length was set, in which case, we validate the length here
+	 */
 	if(num_members != 0){
 		//Validate that they match here
 		if(num_members != initializer_list_members){
@@ -11732,9 +11525,6 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 	//Dealias this just to be safe
 	target_type = dealias_type(target_type);
 
-	//What's the return type of our node?
-	generic_type_t* return_type = target_type;
-
 	//By default, we assume we will fail. The validation step will need to prove us wrong
 	u_int8_t validation_succeeded = FALSE;
 
@@ -11769,7 +11559,7 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 			}
 
 			//Give back the return type
-			return return_type;
+			return target_type;
 			
 		//A struct initializer list also has it's own special checking function that we must use
 		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
@@ -11791,7 +11581,7 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 			}
 
 			//Give back the return type
-			return return_type;
+			return target_type;
 			
 		//Otherwise we'll just take the standard path
 		default:
@@ -11817,7 +11607,7 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 				 * Otherwise we'll just break out. The initializer node will have been properly
 				 * set by the function above
 				 */
-				return return_type;
+				return target_type;
 			}
 
 			/**
@@ -11852,37 +11642,15 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 				return NULL;
 			}
 
-			//Use the helper to determine if the types are assignable
-			generic_type_t* final_type = types_assignable(return_type, initializer_node->inferred_type);
+			//Use the helper to determine if the types are assignable. This handles any/all constant coercion
+			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(target_type, initializer_node);
 
 			//Will be null if we have a failure
 			if(final_type == NULL){
-				generate_types_assignable_failure_message(info, initializer_node->inferred_type, return_type);
+				generate_types_assignable_failure_message(info, initializer_node->inferred_type, target_type);
 				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				return NULL;
 			}
-
-			//If we have a constant node, we need to perform any needed type coercion here
-			if(initializer_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
-				//Set the final type
-				initializer_node->inferred_type = final_type;
-
-				//Let the helper do whatever we need
-				perform_constant_assignment_coercion(initializer_node, final_type);
-			}
-
-			//Special checking here - if we have an enum type that is being assigned to, we need
-			//to make sure that it's being assigned to a valid value in it's range
-			if(is_enum_type(return_type) == TRUE && initializer_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
-				if(does_enum_contain_integer_member(return_type, initializer_node->constant_value.signed_int_value) == FALSE){
-					sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-								return_type->type_name.string, initializer_node->constant_value.signed_int_value);
-					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-
-					//Fail out here
-					return NULL;
-				}
-			} 
 			
 			//Give back the return type
 			return final_type;

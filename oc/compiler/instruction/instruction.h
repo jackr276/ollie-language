@@ -45,7 +45,8 @@ typedef enum {
 	GLOBAL_VAR_INITIALIZER_NONE = 0, //Most common case, we have nothing
 	GLOBAL_VAR_INITIALIZER_CONSTANT, //Just a singular constant
 	GLOBAL_VAR_INITIALIZER_ARRAY, //An array of constants
-	GLOBAL_VAR_INITIALIZER_STRING //A string constant
+	GLOBAL_VAR_INITIALIZER_STRING, //A string constant
+	GLOBAL_VAR_INITIALIZER_STRUCT, //A struct constant
 } global_variable_initializer_type_t;
 
 /**
@@ -104,6 +105,8 @@ struct global_variable_t{
 		three_addr_const_t* constant_value;
 		//A dynamic array of constants, if we have that
 		dynamic_array_t array_initializer_values;
+		//A dynamic array of constants for our struct
+		dynamic_array_t struct_initializer_values;
 	} initializer_value;
 
 	//Store the type as well

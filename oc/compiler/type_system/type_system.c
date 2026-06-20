@@ -776,6 +776,88 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 
 /**
+ * Are we able to assign a constant of "source_type" to something on "destination_type"? Returns
+ * NULL if we can't. Constants have unique rules around truncation which is why we do this
+ */
+generic_type_t* types_assignable_constant(generic_type_t* destination_type, generic_type_t* constant_source_type){
+	switch(destination_type->type_class){
+		/**
+		 * Enums are able to be assigned integer values just fine, so
+		 * long as those integer values are compatible 
+		 */
+		case TYPE_CLASS_ENUMERATED:
+			switch(constant_source_type->basic_type_token){
+				//These are all bad
+				case F32:
+				case F64:
+				case VOID:
+					return NULL;
+				default:
+					return types_assignable_constant(destination_type->internal_values.enum_integer_type, constant_source_type);
+			}
+
+		/**
+		 * Pointers can have constants assigned to them so long as they
+		 * are integer constants
+		 */
+		case TYPE_CLASS_POINTER:
+			switch(constant_source_type->basic_type_token){
+				case F32:
+				case F64:
+				case VOID:
+					return NULL;
+				default:
+					return destination_type;
+			}
+	
+		/**
+		 * For basic constant types, we are very loose with how our assignments
+		 * work. In essence, constants may be assigned to other constants so
+		 * long as we can reasonably coerce them
+		 */
+		case TYPE_CLASS_BASIC:
+			//You can never assign to a void
+			if(destination_type->basic_type_token == VOID){
+				return NULL;
+			}
+
+			/**
+			 * Case 1: if the destination is larger than we can *always* coerce
+			 */
+			if(destination_type->type_size >= constant_source_type->type_size){
+				return destination_type;
+
+			/**
+			 * Case 2: if the destination is smaller, then if we have int-to-int
+			 * we can coerce. If however we have a floating point number then
+			 * we cannot
+			 */
+			} else {
+				//Cannot coerce from a larger thing into a float
+				if(destination_type->basic_type_token == F32 || destination_type->basic_type_token == F64){
+					return NULL;
+				}
+
+				//Cannot coerce from a float into a smaller thing
+				if(constant_source_type->basic_type_token == F32 || constant_source_type->basic_type_token == F64){
+					return NULL;
+				}
+
+				//Otherwise we're fine
+				return destination_type;
+			}
+
+		/**
+		 * Every other kind of destination type(arrays, structs, etc), may never have a constant assigned
+		 * to it
+		 */
+		default:
+			return NULL;
+	}
+}
+
+
+/**
  * Are two pointer types compatible? We use the same logic as types assignable does except we completely ignore the mutability
  */
 static inline generic_type_t* pointer_types_compatible_ignore_mutability(generic_type_t* pointer_a, generic_type_t* pointer_b){

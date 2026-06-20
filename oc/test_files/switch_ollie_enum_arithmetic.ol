@@ -19,7 +19,7 @@ fn tester(param:my_enum_type) -> i32{
 	let x:mut i32 = 32;
 
 	//Test the type system's ability to deal with this
-	switch(param - 3){
+	switch(param - 3y){
 		case TYPE_ONE -> {
 			x = 32;
 		}

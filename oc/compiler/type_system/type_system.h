@@ -277,6 +277,12 @@ generic_type_t* determine_compatibility_and_coerce(void* type_symtab, generic_ty
 generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_t* source_type);
 
 /**
+ * Are we able to assign a constant of "source_type" to something on "destination_type"? Returns
+ * NULL if we can't. Constants have unique rules around truncation which is why we do this
+ */
+generic_type_t* types_assignable_constant(generic_type_t* destination_type, generic_type_t* constant_source_type);
+
+/**
  * Are two types *exactly* equal or not? This will account for type aliasing as well
  */
 u_int8_t types_identical(generic_type_t* a, generic_type_t* b);
