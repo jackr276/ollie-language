@@ -10850,6 +10850,23 @@ static three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* con
 
 
 /**
+ * Emit a .zero padding amount for num_bytes number of bytes. This is used when we need padding in between
+ * members of a struct when we have global/static struct initializers
+ */
+static three_addr_const_t* emit_global_variable_padding_constant(int32_t num_bytes){
+	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
+
+	//This is a special "padding const"
+	constant->const_type = PADDING_CONST;
+
+	//We hijack the constant adjustment field to hold this
+	constant->constant_adjustment = num_bytes;
+
+	return constant;
+}
+
+
+/**
  * Emit a global variable array initializer. Unlike a normal array initializer - we do not put values in blocks. Instead, we store
  * the constant values in a result array that is then passed along back to the caller for later use
  *
