@@ -10917,17 +10917,15 @@ static void emit_global_array_initializer(generic_ast_node_t* array_initializer,
  * initializers
  */
 static void emit_global_struct_initializer(generic_ast_node_t* struct_initializer, dynamic_array_t* initializer_values){
-	//Grab out the first child for the struct initializer
-	generic_ast_node_t* cursor = struct_initializer->first_child;
-
-	//Extract the struct type - we'll need this for padding decisions
-	generic_type_t* struct_type = struct_initializer->inferred_type;
 	//The current index of the struct member, we will need this for our padding determination
 	u_int32_t current_struct_member_index = 0;
 	u_int32_t current_struct_size = 0;
 
-	//Maintain a pointer to the prior member type as well
-	generic_type_t* prior_member_type;
+	//Extract the struct type - we'll need this for padding decisions
+	generic_type_t* struct_type = struct_initializer->inferred_type;
+
+	//Grab out the first child for the struct initializer
+	generic_ast_node_t* cursor = struct_initializer->first_child;
 
 	//Handle every other type of nested initializer
 	while(cursor != NULL){
@@ -10958,7 +10956,14 @@ static void emit_global_struct_initializer(generic_ast_node_t* struct_initialize
 				needed_padding = current_struct_size % aligning_by_type->type_size;
 			}
 
-			//TODO EMIT THE NEEDED CONSTANT HERE
+			/**
+			 * If we do need padding, then we'll emit and add that here right before we
+			 * emit and add anything else
+			 */
+			if(needed_padding != 0){
+				three_addr_const_t* padding_constant = emit_global_variable_padding_constant(needed_padding);
+				dynamic_array_add(initializer_values, padding_constant);
+			}
 
 			//Bump up by our padding
 			current_struct_size += needed_padding;
@@ -10989,9 +10994,6 @@ static void emit_global_struct_initializer(generic_ast_node_t* struct_initialize
 
 		//Increase the overall struct size by the member size
 		current_struct_size += member_type->type_size;
-
-		//Store this as our previous member type
-		prior_member_type = member_type;
 
 		//Bump it up
 		current_struct_member_index++;
