@@ -2803,7 +2803,8 @@ u_int8_t add_union_member(generic_type_t* union_type, void* member_var){
  */
 void finalize_union_alignment(generic_type_t* type){
 	//Get the size of the union
-	int32_t alignable_type_size = type->type_size;
+	u_int32_t type_size = type->type_size;
+	u_int32_t alignable_type_size = get_base_alignment_type(type->internal_values.largest_member_type)->type_size;
 
 	/**
 	 * If the alignable type size is less than 2 somehow, we will
@@ -2815,25 +2816,15 @@ void finalize_union_alignment(generic_type_t* type){
 	}
 
 	/**
-	 * If the size is already a multiple of the alignable type size,
-	 * then we can stop here and leave
+	 * For our rounding - first round down to the smaller multiple
+	 * of the alignable type size - then add the alignable type size
+	 * onto the struct itself
 	 */
-	if(type->type_size % alignable_type_size == 0){
-		return;
-	}
+	u_int64_t round_down = type_size - (type_size % alignable_type_size);
+	u_int64_t round_up = round_down + alignable_type_size;
 
-	//TODO UPDATE ME HERE
-
-	/**
-	 * The alignable type size is either: 2, 4 or 8
-	 *
-	 * We will add this alignable type size on so that we are guaranteed to be over
-	 * the next highest multiple of said type size
-	 *
-	 * Then we will and by the 2's complement of this value to 0 out the lowest bits
-	 * that need to be 0'd out. At most, we will 0 out the bottom 3 bits for 8-byte aligned
-	 */
-	type->type_size = (type->type_size + alignable_type_size) & (-alignable_type_size);
+	//Update the type size with the next larger multiple of the alignable type size
+	type->type_size = round_up;
 }
 
 
