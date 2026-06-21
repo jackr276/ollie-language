@@ -2614,8 +2614,11 @@ void add_struct_member(generic_type_t* type, void* member_var){
 	//Get the primitive type that we will need to align by here
 	generic_type_t* aligning_by_type = get_base_alignment_type(var->type_defined_as);
 
-	//If we have a larger contender for alignment here, then this will become our largest
-	//member type
+	/**
+	 * If this is larger than the largest type, then it becomes our largest member type. Remember
+	 * that all structs need to have their start and end addresses aligned to a multiple of the largest
+	 * member type
+	 */
 	if(aligning_by_type->type_size > type->internal_values.largest_member_type->type_size){
 		type->internal_values.largest_member_type = aligning_by_type;
 	}
@@ -2662,8 +2665,9 @@ void add_struct_member(generic_type_t* type, void* member_var){
  * We mandate that the struct's end address must at least be even
  */
 void finalize_struct_alignment(generic_type_t* type){
-	//Grab the alignable type size
-	int32_t alignable_type_size = type->internal_values.largest_member_type->type_size;
+	//Grab the type size and the alignable type size
+	u_int32_t type_size = type->type_size;
+	u_int32_t alignable_type_size = type->internal_values.largest_member_type->type_size;
 
 	/**
 	 * If the alignable type size is less than 2 somehow, we will
@@ -2678,20 +2682,20 @@ void finalize_struct_alignment(generic_type_t* type){
 	 * If the size is already a multiple of the alignable type size,
 	 * then we can stop here and leave
 	 */
-	if(type->type_size % alignable_type_size == 0){
+	if(type_size % alignable_type_size == 0){
 		return;
 	}
 
 	/**
-	 * The alignable type size is either: 2, 4, 8 or 16
-	 *
-	 * We will add this alignable type size on so that we are guaranteed to be over
-	 * the next highest multiple of said type size
-	 *
-	 * Then we will and by the 2's complement of this value to 0 out the lowest bits
-	 * that need to be 0'd out. At most, we will 0 out the bottom 3 bits for 8-byte aligned
+	 * For our rounding - first round down to the smaller multiple
+	 * of the alignable type size - then add the alignable type size
+	 * onto the struct itself
 	 */
-	type->type_size = (type->type_size + (alignable_type_size - 1)) & (-alignable_type_size);
+	u_int64_t round_down = type_size - (type_size % alignable_type_size);
+	u_int64_t round_up = round_down + alignable_type_size;
+
+	//Update the type size with the next larger multiple of the alignable type size
+	type->type_size = round_up;
 }
 
 
@@ -2708,11 +2712,13 @@ u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member, u_int8_t 
 	//Flag what this is
 	enum_variable->membership = ENUM_MEMBER;
 
-	//Are we using user-defined enum values? If so, we need to check for duplicates
-	//that already exist in the list
+	/**
+	 * Are we using user-defined enum values? If so, we need to check for duplicates
+	 * that already exist in the list
+	 */
 	if(user_defined_values == TRUE){
 		//Extract the enum member's actual value
-		for(u_int16_t i = 0; i < enum_type->internal_types.enumeration_table.current_index; i++){
+		for(u_int32_t i = 0; i < enum_type->internal_types.enumeration_table.current_index; i++){
 			//Grab the variable out
 			symtab_variable_record_t* variable = dynamic_array_get_at(&(enum_type->internal_types.enumeration_table), i);
 
@@ -2721,7 +2727,6 @@ u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member, u_int8_t 
 				return FAILURE;
 			}
 		}
-		//If we survive to here, then we're good
 	}
 
 	//Update the values for the min and max enum values

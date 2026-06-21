@@ -11021,6 +11021,12 @@ static void emit_global_struct_initializer(generic_ast_node_t* struct_initialize
 	u_int32_t current_struct_member_index = 0;
 	u_int32_t current_struct_size = 0;
 
+	//TODO
+	//
+	//
+	// FIX POST ALIGNMENT
+	//
+
 	//Extract the struct type - we'll need this for padding decisions
 	generic_type_t* struct_type = struct_initializer->inferred_type;
 
