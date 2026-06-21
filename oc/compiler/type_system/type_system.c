@@ -96,8 +96,8 @@ generic_type_t* get_base_alignment_type(generic_type_t* type){
 			return get_base_alignment_type(type->internal_values.largest_member_type);
 
 		//For a union, we need to figure out the alignment type for the largest member type in the union
-		//case TYPE_CLASS_UNION:
-			
+		case TYPE_CLASS_UNION:
+			return get_base_alignment_type(type->internal_values.largest_member_type);
 
 		//Goes based on the elaborated type
 		case TYPE_CLASS_ELABORATIVE:
@@ -2766,19 +2766,22 @@ u_int8_t add_union_member(generic_type_t* union_type, void* member_var){
 	//Add this in
 	dynamic_array_add(&(union_type->internal_types.union_table), member_var);
 
+	//Get the type that we're aligning by here
+	generic_type_t* aligning_by_type = get_base_alignment_type(record->type_defined_as);
+
 	/**
 	 * If we are adding the very first thing here, record it as our largest member
 	 * type
 	 */
 	if(union_type->internal_values.largest_member_type == NULL){
-		union_type->internal_values.largest_member_type = record->type_defined_as;
+		union_type->internal_values.largest_member_type = aligning_by_type;
 
 	/**
 	 * Otherwise if the largest member type is already defined but it's smaller
 	 * than what we're adding down here, we need to update it
 	 */
-	} else if(union_type->internal_values.largest_member_type->type_size < record->type_defined_as->type_size){
-		union_type->internal_values.largest_member_type = record->type_defined_as;
+	} else if(union_type->internal_values.largest_member_type->type_size < aligning_by_type->type_size){
+		union_type->internal_values.largest_member_type = aligning_by_type;
 	}
 
 	/**
