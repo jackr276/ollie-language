@@ -6096,16 +6096,6 @@ static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_
 
 
 /**
- * An ollie in expression is a syntactic convenience expression type that allows us to check
- * if the result of a given logical or expression exists within a range of compatible values
- */
-static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, side_type_t side){
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
-}
-
-
-/**
  * A ternary expression is a kind of syntactic sugar that allows if/else chains to be
  * inlined. They can be nested, though this is not recommended
  *
@@ -6189,6 +6179,40 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 
 	//Give back the parent level node
 	return ternary_expression_node;
+}
+
+
+/**
+ * An ollie in expression is a syntactic convenience expression type that allows us to check
+ * if the result of a given logical or expression exists within a range of compatible values
+ *
+ * BNF Rule: <in_expression> ::= <ternary-expression> in (<in_expression_value_list>)
+ */
+static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, side_type_t side){
+	//Our lookahead token
+	lexitem_t lookahead;
+
+	//The first thing that we need to see is some kind of valid expression
+	generic_ast_node_t* starting_expression = ternary_expression(token_stream, side);
+
+	//Fail out at the top level here if we see this
+	if(starting_expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return starting_expression;
+	}
+
+	//Now that we have the expression, we need to search for the "in" keyword
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	/**
+	 * If we don't have anything then push it back and be done with this
+	 */
+	if(lookahead.tok != IN){
+		push_back_token(token_stream, &parser_line_num);
+		return starting_expression;
+	}
+
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
 }
 
 
