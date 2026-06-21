@@ -8457,18 +8457,51 @@ static inline u_int8_t is_if_path_likely_to_execute(cfg_result_package_t* result
 	//Final block is where we need to look
 	basic_block_t* end_block = results->final_block;
 
+	//Most of our profiling is going to happen in the exit statement
+	instruction_t* exit_statement = end_block->exit_statement;
+
 	/**
 	 * We have an empty if block, so we shouldn't be
 	 * falling through to this
 	 */
-	if(end_block->exit_statement == NULL){
+	if(exit_statement == NULL){
 		return FALSE;
 	}
 
+	switch(exit_statement->statement_type){
+		/**
+		 * Raising an error: most of the time this is a rare path to take so
+		 * we do not consider it likely
+		 */
+		case THREE_ADDR_CODE_RAISE_STMT:
+			return FALSE;
 
+		/**
+		 * We also do not consider early if returns to be likley in most cases
+		 */
+		case THREE_ADDR_CODE_RET_STMT:
+			return FALSE;
 
-	//By default assume that the user is making the if-path likely to execute(this is what usually happens)
-	return TRUE;
+		/**
+		 * If we have a jump statement, we could be breaking or continuing. If
+		 * that is the case, then we are *not* going to consider this as a likely
+		 * option
+		 */
+		case THREE_ADDR_CODE_JUMP_STMT:
+			if(exit_statement->if_block == peek(&break_stack)){
+				return FALSE;
+			} else if(exit_statement->if_block == peek(&continue_stack)){
+				return FALSE;
+			} else {
+				return TRUE;
+			}
+			
+		/**
+		 * By default assume that the user is making the if-path likely to execute(this is what usually happens)
+		 */
+		default:
+			return TRUE;
+	}
 }
 
 
