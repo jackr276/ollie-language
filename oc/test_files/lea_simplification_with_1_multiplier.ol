@@ -15,5 +15,6 @@ pub fn lea_with_1_multiplier(str:char*, x:i32) -> i32 {
 
 
 pub fn main() -> i32 {
+	OUNIT: [console = 0]
 	ret @lea_with_1_multiplier("Hello", 3);
 }

@@ -18,7 +18,7 @@ pub fn helper(x:i32) -> i32 {
 } 
 
 
-//Dummy
 pub fn main() -> i32 {
-	ret 0;
+	OUNIT: [console = 0]
+	ret @helper(5);
 }
