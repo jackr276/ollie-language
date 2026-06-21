@@ -2575,8 +2575,12 @@ void* get_union_member(generic_type_t* union_type, char* name){
  * sizes. The largest an internal alignment can be is by 8
  */
 void add_struct_member(generic_type_t* type, void* member_var){
-	//Grab this reference out, for convenience
+	//Grab references for convenience
 	symtab_variable_record_t* var = member_var;
+	generic_type_t* member_type = var->type_defined_as;
+
+	//Get the type that we are aligning by
+	generic_type_t* aligning_by_type = get_base_alignment_type(member_type);
 
 	//Mark that this is a struct member
 	var->membership = STRUCT_MEMBER;
@@ -2586,36 +2590,18 @@ void add_struct_member(generic_type_t* type, void* member_var){
 		//This one's offset is 0
 		var->struct_offset = 0;
 
-		//Increment the size by the amount of the type
-		type->type_size += var->type_defined_as->type_size;
-
-		//Add the variable into the struct table
+		//Add the variable into the table
 		dynamic_array_add(&(type->internal_types.struct_table), var);
 
+		//Increment the size by the amount of the type
+		type->type_size += member_type->type_size;
+
 		//The largest member size here is the alignment of the biggest type
-		type->internal_values.largest_member_type = get_base_alignment_type(var->type_defined_as);
+		type->internal_values.largest_member_type = aligning_by_type;
 
 		//Hop out here
 		return;
 	}
-
-	/**
-	 * Let's now see where the ending address of the struct is. We can find
-	 * this ending dress by calculating the offset of the latest field plus
-	 * the size of the latest variable
-	 */
-	
-	//The prior variable
-	symtab_variable_record_t* prior_variable = dynamic_array_get_at(&(type->internal_types.struct_table), type->internal_types.struct_table.current_index - 1);
-
-	//And the offset of this entry
-	u_int32_t offset = prior_variable->struct_offset;
-	
-	//The current ending address is the offset of the last variable plus its size
-	u_int32_t current_end = offset + prior_variable->type_defined_as->type_size;
-
-	//Get the primitive type that we will need to align by here
-	generic_type_t* aligning_by_type = get_base_alignment_type(var->type_defined_as);
 
 	/**
 	 * If this is larger than the largest type, then it becomes our largest member type. Remember
@@ -2627,33 +2613,48 @@ void add_struct_member(generic_type_t* type, void* member_var){
 	}
 
 	/**
-	 * We will satisfy this by adding the remainder of the division of the new variable with the current
-	 * end in as padding to the previous entry
+	 * Let's now see where the ending address of the struct is. We can find
+	 * this ending dress by calculating the offset of the latest field plus
+	 * the size of the latest variable
 	 */
+	symtab_variable_record_t* prior_variable = dynamic_array_get_at(&(type->internal_types.struct_table), type->internal_types.struct_table.current_index - 1);
+
+	//And the offset of this entry
+	u_int32_t offset = prior_variable->struct_offset;
 	
-	//What padding is needed?
+	//The current ending address is the offset of the last variable plus its size
+	u_int32_t current_end = offset + prior_variable->type_defined_as->type_size;
+
+	//By default assume we need no padding and that our offset is the current end
 	u_int32_t needed_padding = 0;
-	
-	if(current_end < aligning_by_type->type_size){
-		needed_padding = aligning_by_type->type_size - current_end;
-	} else {
-		needed_padding = current_end % aligning_by_type->type_size;
+	u_int32_t new_offset = current_end;
+
+	/**
+	 * Only go through this if we need to align. If we don't then
+	 * we leave this be
+	 */
+	if(current_end % aligning_by_type->type_size != 0){
+		/**
+		 * For struct alignment, we need to ensure that the starting address of the
+		 * new member is a multiple of the alignable type size of that member. We
+		 * will achieve this by first rounding down to the next smallest multiple
+		 * of that member, and then adding the member size to round back up
+		 */
+		u_int32_t round_down = current_end - (current_end % aligning_by_type->type_size);
+		new_offset = round_down + aligning_by_type->type_size;
+
+		//However many bytes of padding that we needed
+		needed_padding = new_offset - current_end;
 	}
 
-	//Now we can update the current end
-	current_end = current_end + needed_padding;
-
-	//And now we can add in the new variable's offset
-	var->struct_offset = current_end;
+	//The offset for this guy is whatever we rounded up to
+	var->struct_offset = new_offset;
 
 	//Increment the size by the amount of the type and the padding we're adding in
-	type->type_size += var->type_defined_as->type_size + needed_padding;
+	type->type_size += member_type->type_size + needed_padding;
 
 	//Add the variable into the table
 	dynamic_array_add(&(type->internal_types.struct_table), var);
-
-	//Done
-	return; 
 }
 
 
@@ -2813,6 +2814,13 @@ void finalize_union_alignment(generic_type_t* type){
 	 */
 	if(alignable_type_size < 2){
 		alignable_type_size = 2;
+	}
+
+	/**
+	 * If there's no need to align then we will leave
+	 */
+	if(type_size % alignable_type_size == 0){
+		return;
 	}
 
 	/**
