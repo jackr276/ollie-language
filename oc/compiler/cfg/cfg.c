@@ -8439,6 +8439,40 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 
 
 /**
+ * For our given results, give a true/false answer on whether or not this is likely
+ * to execute. We are just using basic heuristics right now for ollie, but we will 
+ * expand upon these as time goes on
+ *
+ * Things we consider "unlikely" for a raw if path, something like
+ * 	if(<conditional>){
+ * 		do-something
+ * 	}
+ *
+ * 	1.) raising errors
+ * 	2.) returning early from a function
+ * 	3.) breaking out of a loop
+ * 	4.) continuing through a loop
+ */
+static inline u_int8_t is_if_path_likely_to_execute(cfg_result_package_t* results){
+	//Final block is where we need to look
+	basic_block_t* end_block = results->final_block;
+
+	/**
+	 * We have an empty if block, so we shouldn't be
+	 * falling through to this
+	 */
+	if(end_block->exit_statement == NULL){
+		return FALSE;
+	}
+
+
+
+	//By default assume that the user is making the if-path likely to execute(this is what usually happens)
+	return TRUE;
+}
+
+
+/**
  * Translate an if-else-if-else statement into CFG form, handling all possible contingencies
  * and control flow situations
  *
