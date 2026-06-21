@@ -17,7 +17,8 @@ pub fn return_through_every_path(x:i32) -> i32 {
 	ret result;
 }
 
-//Dummy
+
 pub fn main() -> i32 {
-	ret 0;
+	OUNIT: [console = 2]
+	ret @return_through_every_path(2);
 }

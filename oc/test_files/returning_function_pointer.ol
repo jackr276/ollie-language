@@ -44,6 +44,7 @@ fn choose_function(x:i32) -> arithmetic_function{
 pub fn main() -> i32{
 	let x:arithmetic_function = @choose_function(2);
 
+	OUNIT: [console = 4]
 	ret @x(1, 3);
 }
 
