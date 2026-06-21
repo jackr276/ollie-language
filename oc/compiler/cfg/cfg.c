@@ -8739,9 +8739,18 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		 * case, we can actually take the opposite approach
 		 */
 		} else {
-			emit_branch(current_entry_block, conditional_node, overall_exit_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE);
-			if_results_package.final_block = overall_exit_block;
+			/**
+			 * If our if-path is likely to execute, then we fall through to the hot path which in that case is the if. If we determine through
+			 * our heuristics that the if path is unlikely to execute, then we fall through to the exit block and make a conditional jump to
+			 * the if
+			 */
+			if(is_if_path_likely_to_execute(&compound_statement_results) == TRUE){
+				emit_branch(current_entry_block, conditional_node, overall_exit_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE);
+			} else {
+				emit_branch(current_entry_block, conditional_node, compound_statement_results.starting_block, overall_exit_block, BRANCH_CATEGORY_NORMAL);
+			}
 
+			if_results_package.final_block = overall_exit_block;
 			return if_results_package;
 		}
 	}
