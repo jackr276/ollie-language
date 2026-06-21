@@ -8470,6 +8470,11 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
  * 	This is what we'll need to parse through and translate. This structure is chosen so that we have a minimal
  * 	memory footprint. We rely on this context being completely understood by the CFG converter here to work
  *
+ * 	For our branching decisions, Ollie will assume that the "if" is the hot path, and the "else" is the cold path,
+ * 	and therefore opt to "jump-to-else" with the conditional jump. The if will be the unconditional jump part
+ * 	of the branch. This is done because when we eventually go on to optimize branches, the direct jump to the if
+ * 	part will be optimized away and we'll be left with a direct fall-through
+ *
  * 	If we're clever about this, we can write the whole thing as one big do-while
  */
 static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
