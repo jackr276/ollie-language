@@ -6302,6 +6302,11 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		/**
 		 * Let's now determine if the types in here are assignable or not. If they're not then we're out. This
 		 * rule also handles the needed constant coercion for us
+		 *
+		 *
+		 * TODO THIS IS BAD - WE NEED DIFFERENT RULES FOR IN STATEMENT
+		 *
+		 * LOOK AT IS_IN_ENUM INVALID FOR AN EXAMPLE OF SOMETHING INVALID
 		 */
 		generic_type_t* result_type = is_ast_node_assignable_to_destination_type(comparing_to_type, expression);
 		
