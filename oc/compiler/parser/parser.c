@@ -6292,14 +6292,18 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		}
 
 		/**
-		 * Let's now determine if the types in here are assignable or not. If they're not then we're out
+		 * Let's now determine if the types in here are assignable or not. If they're not then we're out. This
+		 * rule also handles the needed constant coercion for us
 		 */
-		//TODO
-		//
-		//
-		//
-		//
-///	generic_type_t* result_type = is_ast_node_assignable_to_destination_type(jk, generic_ast_node_t *source_node);
+		generic_type_t* result_type = is_ast_node_assignable_to_destination_type(comparing_to_type, expression);
+		
+		//Fail out if we don't have it
+		if(result_type == NULL){
+			sprintf(info, "Incompatible expression of type \"%s\" found in in-statement with comparing to type of \"%s\"",
+		   					expression->inferred_type->type_name.string,
+		   					comparing_to_type->type_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
 		
 		//Now that we know this is valid we can add it as a child to the in statement
 		add_child_node(root_node, expression);
