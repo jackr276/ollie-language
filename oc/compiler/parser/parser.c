@@ -6228,6 +6228,9 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		return print_and_return_error(info, parser_line_num);
 	}
 
+	//Push this up for later
+	push_token(&grouping_stack, lookahead);
+
 	/**
 	 * We need to see at least one value inside of the in list. If we see
 	 * none then this is invalid
@@ -6235,16 +6238,49 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 	do {
 		//First we need to see an expression
 		generic_ast_node_t* expression = logical_or_expression(token_stream, parser_line_num);
-		
-		//Throw if we're bad
-		if(expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return print_and_return_error("Invalid expression given in in statement value list", parser_line_num);
+
+		/**
+		 * The only valid kind of expression is one that reduces to a constant. If whatever we have does not reduce
+		 * to a constant then this is all wrong
+		 */
+		switch(expression->ast_node_type){
+			case AST_NODE_TYPE_ERR_NODE:
+				return print_and_return_error("Invalid expression given in in statement value list", parser_line_num);
+
+			//Constant is valid
+			case AST_NODE_TYPE_CONSTANT:
+				break;
+
+			default:
+				return print_and_return_error("In statement members must be constant expressions", parser_line_num);
 		}
 
-		if()
+		//TODO ASSIGNABILITY
+		
+		//Now we can either see a comma or a closing parenthesis
+		lookahead = get_next_token(token_stream, &parser_line_num);
 
+		/**
+		 * If we have a comma keep going. If we see the closing paren then leave. Anything else this is wrong
+		 */
+		if(lookahead.tok == COMMA){
+			continue;
+		} else if(lookahead.tok == R_PAREN){
+			break;
+		} else {
+			sprintf(info, "Expected comma or closing parenthesis after in expression member but saw %s instead", lexitem_to_string(&lookahead));
+			return print_and_return_error(info, parser_line_num);
+		}
 
 	} while(TRUE);
+
+	/**
+	 * Once we exit we should have seen an R_PAREN token. Let's make sure that we can
+	 * match this with the opening paren from before
+	 */
+	if(pop_token(&grouping_stack).tok != L_PAREN){
+		return print_and_return_error("Mismatched parenthesis detected in in statement list", parser_line_num);
+	}
 
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
