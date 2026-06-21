@@ -86,8 +86,7 @@ static inline u_int32_t convert_type_size_to_bytes(variable_size_t size){
  */
 generic_type_t* get_base_alignment_type(generic_type_t* type){
 	switch(type->type_class){
-		//However for an array, we need to find the
-		//size of the member type
+		//However for an array, we need to find the size of the member type
 		case TYPE_CLASS_ARRAY:
 			//Recursively get the size of the member type
 			return get_base_alignment_type(type->internal_types.member_type);
@@ -95,6 +94,10 @@ generic_type_t* get_base_alignment_type(generic_type_t* type){
 		//A struct it's the largest member size
 		case TYPE_CLASS_STRUCT:
 			return get_base_alignment_type(type->internal_values.largest_member_type);
+
+		//For a union, we need to figure out the alignment type for the largest member type in the union
+		//case TYPE_CLASS_UNION:
+			
 
 		//Goes based on the elaborated type
 		case TYPE_CLASS_ELABORATIVE:
@@ -2763,8 +2766,25 @@ u_int8_t add_union_member(generic_type_t* union_type, void* member_var){
 	//Add this in
 	dynamic_array_add(&(union_type->internal_types.union_table), member_var);
 
-	//If the size of this value is larger than the total size, we need to reassign
-	//the total size to this. Union types are always as large as their largest memeber
+	/**
+	 * If we are adding the very first thing here, record it as our largest member
+	 * type
+	 */
+	if(union_type->internal_values.largest_member_type == NULL){
+		union_type->internal_values.largest_member_type = record->type_defined_as;
+
+	/**
+	 * Otherwise if the largest member type is already defined but it's smaller
+	 * than what we're adding down here, we need to update it
+	 */
+	} else if(union_type->internal_values.largest_member_type->type_size < record->type_defined_as->type_size){
+		union_type->internal_values.largest_member_type = record->type_defined_as;
+	}
+
+	/**
+	 * If the size of this value is larger than the total size, we need to reassign
+	 * the total size to this. Union types are always as large as their largest memeber
+	 */
 	if(record->type_defined_as->type_size > union_type->type_size){
 		union_type->type_size = record->type_defined_as->type_size;
 	}
@@ -2798,6 +2818,8 @@ void finalize_union_alignment(generic_type_t* type){
 	if(type->type_size % alignable_type_size == 0){
 		return;
 	}
+
+	//TODO UPDATE ME HERE
 
 	/**
 	 * The alignable type size is either: 2, 4 or 8
