@@ -6096,6 +6096,16 @@ static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_
 
 
 /**
+ * An ollie in expression is a syntactic convenience expression type that allows us to check
+ * if the result of a given logical or expression exists within a range of compatible values
+ */
+static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, side_type_t side){
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
+}
+
+
+/**
  * A ternary expression is a kind of syntactic sugar that allows if/else chains to be
  * inlined. They can be nested, though this is not recommended
  *

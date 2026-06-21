@@ -41,14 +41,14 @@ static char* file_name;
 static char info[2000];
 
 //Token array, we will index using their enum values
-static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, LOOP, FN, ERROR, RAISE, RAISES, RETURN, JUMP, 
+static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, LOOP, IN, FN, ERROR, RAISE, RAISES, RETURN, JUMP, 
 					U8, I8, U16, I16, U32, I32, U64, I64, F32, F64, CHAR, DEFINE, ENUM, STATIC,
 					REGISTER, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
 					STRUCT, HANDLE, IGNORE, AS, ALIAS, SIZEOF, DEFER, MUT, ASM, IDLE, PUB, UNION, BOOL,
 				    PARAMS, PARAMCOUNT, TRUE_CONST, FALSE_CONST, INLINE, MACRO, ENDMACRO, NAMESPACE, OUNIT};
 
 //Direct one to one mapping
-static const char* keyword_array[] = {"if", "else", "do", "while", "for", "loop", "fn", "error", "raise", "raises", "ret", "jump",
+static const char* keyword_array[] = {"if", "else", "do", "while", "for", "loop", "in", "fn", "error", "raise", "raises", "ret", "jump",
 						  "u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "f32", "f64", "char", "define", "enum",
 						  "static", "register", "void", "typesize", "let", "declare", "when", "case", "default", "switch",
 						  "break", "continue", "struct", "handle", "ignore", "as", "alias", "sizeof", "defer", "mut", "asm",
