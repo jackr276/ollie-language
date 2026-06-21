@@ -8660,12 +8660,18 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		 * This is a terminal case - we're done so we can set the final block and get out. We'd get here if 
 		 * we had something like if(){} and then nothing else. Note that we don't need to check the overall
 		 * exit block here because we know that it's going to have at least one predecessor(this block)
+		 *
+		 * For our branch, we will have the conditional target as the exit block and the unconditional target(fall through hot path) as the
+		 * actual if starting block *in most cases*, however for some statements like:
+		 *
+		 * if(condition){
+		 * 	 raise error
+		 * }
+		 *
+		 * We can reasonably infer that these are just checks that the user is doing, and that they are not incredibly likely. In this
+		 * case, we can actually take the opposite approach
 		 */
 		} else {
-			/**
-			 * For our branch, we will have the conditional target as the exit block and the unconditional target(fall through hot path) as the
-			 * actual if starting block
-			 */
 			emit_branch(current_entry_block, conditional_node, overall_exit_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE);
 			if_results_package.final_block = overall_exit_block;
 
