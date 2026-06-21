@@ -109,6 +109,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 static generic_ast_node_t* defer_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* idle_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream, side_type_t side);
+static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream, visibilty_type_t visibility);
 static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream);
@@ -963,7 +964,7 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 	}
 
 	//Otherwise if we get here, we need to see a valid conditional expression
-	generic_ast_node_t* expr_node = ternary_expression(token_stream, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* expr_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//If this is bad, we fail out
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -1235,7 +1236,7 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 			push_back_token(token_stream, &parser_line_num);
 
 			//Now we can invoke the helper
-			result_node = ternary_expression(token_stream, SIDE_TYPE_RIGHT);
+			result_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 			//If this fails then we're done
 			if(result_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -1508,7 +1509,7 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 		//Forever loop until we hit the R_PAREN
 		do {
 			//Handle the actual parameter
-			generic_ast_node_t* elaborated_param = ternary_expression(token_stream, side);
+			generic_ast_node_t* elaborated_param = in_expression(token_stream, side);
 
 			//It failed so we just get out here
 			if(elaborated_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -1718,7 +1719,7 @@ static inline u_int8_t validate_function_access(symtab_function_record_t* functi
  * 
  * By the time we get here, we will have already consumed the "@" token
  *
- * BNF Rule: <function-call> ::= @{<identifier>|<qualified-function-name>}({<ternary_expression>}?{, <ternary_expression>}*){<handle-statement>}?
+ * BNF Rule: <function-call> ::= @{<identifier>|<qualified-function-name>}({<in_expression>}?{, <in_expression>}*){<handle-statement>}?
  */
 static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, side_type_t side){
 	//The lookahead token
@@ -1978,7 +1979,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 			 */
 			if(param_type->type_class != TYPE_CLASS_ELABORATIVE){
 				//Parameters are in the form of a ternary expression
-				current_param = ternary_expression(token_stream, side);
+				current_param = in_expression(token_stream, side);
 
 				//We now have an error of some kind
 				if(current_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -2991,7 +2992,7 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 loop_end:
 	//If whatever our operator here is is not an assignment operator, we can just use the ternary rule
 	if(is_assignment_operator(assignment_operator) == FALSE){
-		return ternary_expression(token_stream, SIDE_TYPE_RIGHT);
+		return in_expression(token_stream, SIDE_TYPE_RIGHT);
 	}
 
 	//If we make it here however, that means that we did see the assign keyword. Since
@@ -3037,7 +3038,7 @@ loop_end:
 	}
 
 	//Holder for our expression
-	generic_ast_node_t* expr = ternary_expression(token_stream, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* expr = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//Fail case here
 	if(expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -3515,7 +3516,7 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 
 	//Now we are required to see a valid constant expression representing what
 	//the actual index is.
-	generic_ast_node_t* expr = ternary_expression(token_stream, side);
+	generic_ast_node_t* expr = in_expression(token_stream, side);
 
 	//If we fail, automatic exit here
 	if(expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -6063,7 +6064,7 @@ static generic_ast_node_t* struct_initializer(ollie_token_stream_t* token_stream
  * An initializer can either decay into an expression chain or it can turn into an initializer of
  * some kind(string or list)
  *
- * BNF Rule: <initializer> ::= <ternary_expression> | <initializer_list>
+ * BNF Rule: <initializer> ::= <in_expression> | <initializer_list>
  */
 static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_type_t side){
 	//Grab the next token
@@ -6090,7 +6091,7 @@ static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_
 		//As such, we'll push the token back and call the ternary expression rule
 		default:
 			push_back_token(token_stream, &parser_line_num);
-			return ternary_expression(token_stream, side);
+			return in_expression(token_stream, side);
 	}
 }
 
@@ -6099,7 +6100,7 @@ static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_
  * A ternary expression is a kind of syntactic sugar that allows if/else chains to be
  * inlined. They can be nested, though this is not recommended
  *
- * BNF Rule: <logical_or_expression> ? <ternary_expression> else <ternary_expression>
+ * BNF Rule: <logical_or_expression> ? <in_expression> else <in_expression>
  */
 static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream, side_type_t side){
 	//Declare the lookahead token
@@ -6136,10 +6137,10 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 	}
 
 	//Allocate the ternary expression node
-	generic_ast_node_t* ternary_expression_node = ast_node_alloc(AST_NODE_TYPE_TERNARY_EXPRESSION, side);
+	generic_ast_node_t* in_expression_node = ast_node_alloc(AST_NODE_TYPE_TERNARY_EXPRESSION, side);
 
 	//The first child is the conditional
-	add_child_node(ternary_expression_node, conditional);
+	add_child_node(in_expression_node, conditional);
 
 	//We must now see a valid top level expression
 	generic_ast_node_t* if_branch = ternary_expression(token_stream, side);
@@ -6150,7 +6151,7 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 	}
 
 	//Otherwise it's fine so we add it and move on
-	add_child_node(ternary_expression_node, if_branch);
+	add_child_node(in_expression_node, if_branch);
 
 	//Once we've seen the if branch, we need to see the colon to separate the else branch
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -6169,16 +6170,16 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 	}
 
 	//Otherwise it's fine so we add it and move on
-	add_child_node(ternary_expression_node, else_branch);
+	add_child_node(in_expression_node, else_branch);
 
 	//Determine the compatibility of these ternary nodes, and coerce it
-	ternary_expression_node->inferred_type = determine_ternary_compatibility(type_symtab, &(if_branch->inferred_type), &(else_branch->inferred_type));
+	in_expression_node->inferred_type = determine_ternary_compatibility(type_symtab, &(if_branch->inferred_type), &(else_branch->inferred_type));
 
 	//A ternary is not assignable
-	ternary_expression_node->is_assignable = FALSE;
+	in_expression_node->is_assignable = FALSE;
 
 	//Give back the parent level node
-	return ternary_expression_node;
+	return in_expression_node;
 }
 
 
@@ -6192,7 +6193,7 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 	//Our lookahead token
 	lexitem_t lookahead;
 
-	//The first thing that we need to see is some kind of valid expression
+	//The first thing that we need to see is some kind of valid ternary expression
 	generic_ast_node_t* starting_expression = ternary_expression(token_stream, side);
 
 	//Fail out at the top level here if we see this
@@ -8956,8 +8957,8 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 	//Push onto the stack for matching later
 	push_token(&grouping_stack, lookahead);
 	
-	//We now need to see a valid conditional expression
-	generic_ast_node_t* expression_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
+	//We now need to see a valid expression
+	generic_ast_node_t* expression_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//If we see an invalid one
 	if(expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -9018,7 +9019,7 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 		push_token(&grouping_stack, lookahead);
 	
 		//We now need to see a valid conditional expression
-		generic_ast_node_t* else_if_expression_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
+		generic_ast_node_t* else_if_expression_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 		//If we see an invalid one
 		if(else_if_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -9171,7 +9172,7 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 		push_token(&grouping_stack, lookahead);
 
 		//Now we need to see a valid conditional expression
-		generic_ast_node_t* conditional = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
+		generic_ast_node_t* conditional = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 		//If this is invalid, we fail out
 		if(conditional->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -9283,7 +9284,7 @@ static generic_ast_node_t* continue_statement(ollie_token_stream_t* token_stream
 	push_token(&grouping_stack, lookahead);
 
 	//Now we need to see a valid conditional expression
-	generic_ast_node_t* expr_node = ternary_expression(token_stream, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* expr_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//If it failed, we also fail
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -9374,7 +9375,7 @@ static generic_ast_node_t* break_statement(ollie_token_stream_t* token_stream){
 	push_token(&grouping_stack, lookahead);
 
 	//Now we need to see a valid expression
-	generic_ast_node_t* expr_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* expr_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//If it failed, we also fail
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -9464,7 +9465,7 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 	}
 
 	//Otherwise if we get here, we need to see a valid conditional expression
-	generic_ast_node_t* expr_node = ternary_expression(token_stream, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* expr_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//If this is bad, we fail out
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -9679,7 +9680,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	push_token(&grouping_stack, lookahead);
 
 	//Now we must see a valid ternary-level expression
-	generic_ast_node_t* expr_node = ternary_expression(token_stream, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* expr_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//If we see an invalid one we fail right out
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -10114,7 +10115,7 @@ static generic_ast_node_t* while_statement(ollie_token_stream_t* token_stream){
 	push_token(&grouping_stack, lookahead);
 
 	//Now we need to see a valid conditional block in here
-	generic_ast_node_t* conditional_expr = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* conditional_expr = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//Fail out if this happens
 	if(conditional_expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -10246,7 +10247,7 @@ static generic_ast_node_t* do_while_statement(ollie_token_stream_t* token_stream
 	push_token(&grouping_stack, lookahead);
 
 	//Now we need to see a valid conditional block in here
-	generic_ast_node_t* expr_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* expr_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//Fail out if this happens
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -10356,7 +10357,7 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 		push_back_token(token_stream, &parser_line_num);
 
 		//Following that, we must see a logical or expression here
-		generic_ast_node_t* expression_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
+		generic_ast_node_t* expression_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 		//If it fails, we fail too
 		if(expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -11003,7 +11004,7 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 
 	//Let the binary expression helper deal with this. We know that ultimately, the only
 	//valid solution here is one where we end up with a constant in the end
-	generic_ast_node_t* constant_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* constant_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//There is only one valid result here - and that is a constant node
 	switch(constant_node->ast_node_type){
@@ -11015,7 +11016,6 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 			return print_and_return_error("Invalid constant found in switch statment", parser_line_num);
 
 		default:
-			printf("NODE TYPE IS %d\n", constant_node->ast_node_type);
 			return print_and_return_error("Case statements must be values that expand to constants", parser_line_num);
 	}
 
@@ -11714,7 +11714,7 @@ static inline u_int8_t is_initializer_node(generic_ast_node_t* initializer_node)
  *
  * NOTE: By the time we get here, we've already consumed the let keyword
  *
- * BNF Rule: <let-statement> ::= let {static}? <identifier> : <type-specifier> := <ternary_expression>
+ * BNF Rule: <let-statement> ::= let {static}? <identifier> : <type-specifier> := <in_expression>
  */
 static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global, visibilty_type_t visibility){
 	//The line number
