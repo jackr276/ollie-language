@@ -4,7 +4,7 @@
 */
 
 
-pub fn in_in_use(x:i32) -> i32 {
+pub fn in_in_use(x:mut i32) -> i32 {
 	if(x in (1, 3, 4, 7, 11)) {
 		ret ++x;
 	} else {
