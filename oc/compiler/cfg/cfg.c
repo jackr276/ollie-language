@@ -8593,7 +8593,6 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 					 * Branch out using the "jump-to-else" methodology. The conditional jump target here is the
 					 * else block(current entry block), and the direct block here if's inner results
 					 */
-					//emit_branch(old_entry_block, conditional_node, compound_statement_results.starting_block, current_entry_block, BRANCH_CATEGORY_NORMAL);
 					emit_branch(old_entry_block, conditional_node, current_entry_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE);
 
 					//Next iteration of the loop, break out of switch
@@ -8628,7 +8627,6 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 					 * as our conditional jump target and the compund statement result's starting block as our direct
 					 * target
 					 */
-					//emit_branch(current_entry_block, conditional_node, compound_statement_results.starting_block, else_compound_statement_values.starting_block, BRANCH_CATEGORY_NORMAL);
 					emit_branch(current_entry_block, conditional_node, else_compound_statement_values.starting_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE);
 
 					/**
@@ -8664,7 +8662,6 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		 * exit block here because we know that it's going to have at least one predecessor(this block)
 		 */
 		} else {
-			//emit_branch(current_entry_block, conditional_node, compound_statement_results.starting_block, overall_exit_block, BRANCH_CATEGORY_NORMAL);
 			/**
 			 * For our branch, we will have the conditional target as the exit block and the unconditional target(fall through hot path) as the
 			 * actual if starting block
