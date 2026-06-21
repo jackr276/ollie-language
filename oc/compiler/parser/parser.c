@@ -6252,6 +6252,9 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 	//Now that we're here we can allocate the node
 	generic_ast_node_t* root_node = ast_node_alloc(AST_NODE_TYPE_IN_EXPRESSION, side); 
 
+	//Store our inferred type here
+	root_node->inferred_type = comparing_to_type;
+
 	//The starting expression is always our very first child
 	add_child_node(root_node, starting_expression);
 
@@ -6345,9 +6348,6 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		print_parse_message(MESSAGE_TYPE_WARNING, "Consider rewrite of in statment with 1 member into a regular comparison expression", parser_line_num);
 		num_warnings++;
 	}
-
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
 
 	//Give back the root of this node
 	return root_node;

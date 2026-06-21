@@ -155,6 +155,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 static cfg_result_package_t emit_expression_chain(basic_block_t* basic_block, generic_ast_node_t* expression_chain_node);
 static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr);
 static cfg_result_package_t emit_ternary_expression(basic_block_t* basic_block, generic_ast_node_t* ternary_operation);
+static cfg_result_package_t emit_in_expression(basic_block_t* basic_block, generic_ast_node_t* in_operation);
 static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node);
 static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression);
 static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node);
@@ -2666,10 +2667,13 @@ static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, t
  * Emit the conditional for a branch. This can be a ternary or binary expression
  */
 static inline cfg_result_package_t emit_branch_conditional_expression(basic_block_t* starting_block, generic_ast_node_t* branch_node){
-	if(branch_node->ast_node_type == AST_NODE_TYPE_TERNARY_EXPRESSION){
-		return emit_ternary_expression(starting_block, branch_node);
-	} else {
-		return emit_binary_expression(starting_block, branch_node);
+	switch(branch_node->ast_node_type){
+		case AST_NODE_TYPE_IN_EXPRESSION:
+			return emit_in_expression(starting_block, branch_node);
+		case AST_NODE_TYPE_TERNARY_EXPRESSION:
+			return emit_ternary_expression(starting_block, branch_node);
+		default:
+			return emit_binary_expression(starting_block, branch_node);
 	}
 }
 
@@ -5510,6 +5514,13 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 }
 
 
+//TODO
+static cfg_result_package_t emit_in_expression(basic_block_t* starting_block, generic_ast_node_t* in_expression){
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
+}
+
+
 /**
  * Does a given binary expression use pointer arithmetic? We can determine this by looking at the type
  * of the first operand and the binary operator
@@ -6253,6 +6264,9 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 		case AST_NODE_TYPE_FUNCTION_CALL:
 		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
 			return emit_function_call(basic_block, expr_node);
+
+		case AST_NODE_TYPE_IN_EXPRESSION:
+			return emit_in_expression(basic_block, expr_node);
 
 		case AST_NODE_TYPE_TERNARY_EXPRESSION:
 			return emit_ternary_expression(basic_block, expr_node);
