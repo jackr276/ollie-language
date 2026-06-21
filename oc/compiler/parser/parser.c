@@ -6216,6 +6216,8 @@ static inline u_int8_t is_type_valid_for_in_statement(generic_type_t* type){
 static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, side_type_t side){
 	//Our lookahead token
 	lexitem_t lookahead;
+	//Keep track of how many members we have
+	u_int32_t in_statement_members = 0;
 
 	//The first thing that we need to see is some kind of valid ternary expression
 	generic_ast_node_t* starting_expression = ternary_expression(token_stream, side);
@@ -6308,6 +6310,9 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		//Now that we know this is valid we can add it as a child to the in statement
 		add_child_node(root_node, expression);
 
+		//Bump the member count up by one more
+		in_statement_members++;
+
 		//Now we can either see a comma or a closing parenthesis
 		lookahead = get_next_token(token_stream, &parser_line_num);
 
@@ -6331,6 +6336,14 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 	 */
 	if(pop_token(&grouping_stack).tok != L_PAREN){
 		return print_and_return_error("Mismatched parenthesis detected in in statement list", parser_line_num);
+	}
+
+	/**
+	 * If the user has done something silly like an in-statement with only one member, we will rewrite this for them
+	 */
+	if(in_statement_members == 1){
+		print_parse_message(MESSAGE_TYPE_WARNING, "Consider rewrite of in statment with 1 member into a regular comparison expression", parser_line_num);
+		num_warnings++;
 	}
 
 	printf("TODO NOT IMPLEMENTED\n");
