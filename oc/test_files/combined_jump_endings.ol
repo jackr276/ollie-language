@@ -9,9 +9,7 @@ pub fn string_length_for(str:char*) -> i32 {
 	let x:mut i32 = 0;
 
 	for(let i:mut i32 = 0;; i++, x++){
-		if(str[i] == '\0'){
-			break;
-		}
+		break when(str[i] == '\0');
 	}
 
 	ret x;
@@ -22,9 +20,7 @@ pub fn string_length_while(str:char*) -> i32 {
 	let i:mut i32 = 0;
 
 	while(true){
-		if(str[i] == '\0'){
-			break;
-		}
+		break when(str[i] == '\0');
 
 		x++, i++;
 	}
@@ -38,9 +34,7 @@ pub fn string_length_do_while(str:char*) -> i32 {
 	let i:mut i32 = 0;
 
 	do {
-		if(str[i] == '\0'){
-			break;
-		}
+		break when(str[i] == '\0');
 
 		x++, i++;
 

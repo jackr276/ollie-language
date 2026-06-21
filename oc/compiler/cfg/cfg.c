@@ -5432,7 +5432,9 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	generic_ast_node_t* cursor = ternary_operation->first_child;
 
 	/**
-	 * Let the helper emit the normal if branch/conditional expression here
+	 * For ternary branching, unlike with if's, we use a jump-to-if strategy. Ternaries
+	 * are not as impactful as regular if's and as such we don't bother with the inverse
+	 * branch
 	 */
 	emit_branch(current_block, cursor, if_block, else_block, BRANCH_CATEGORY_NORMAL);
 	
@@ -8439,6 +8441,73 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 
 
 /**
+ * For our given results, give a true/false answer on whether or not this is likely
+ * to execute. We are just using basic heuristics right now for ollie, but we will 
+ * expand upon these as time goes on
+ *
+ * Things we consider "unlikely" for a raw if path, something like
+ * 	if(<conditional>){
+ * 		do-something
+ * 	}
+ *
+ * 	1.) raising errors
+ * 	2.) returning early from a function
+ * 	3.) breaking out of a loop
+ * 	4.) continuing through a loop
+ */
+static inline u_int8_t is_if_path_likely_to_execute(cfg_result_package_t* results){
+	//Final block is where we need to look
+	basic_block_t* end_block = results->final_block;
+
+	//Most of our profiling is going to happen in the exit statement
+	instruction_t* exit_statement = end_block->exit_statement;
+
+	/**
+	 * We have an empty if block, so we shouldn't be
+	 * falling through to this
+	 */
+	if(exit_statement == NULL){
+		return FALSE;
+	}
+
+	switch(exit_statement->statement_type){
+		/**
+		 * Raising an error: most of the time this is a rare path to take so
+		 * we do not consider it likely
+		 */
+		case THREE_ADDR_CODE_RAISE_STMT:
+			return FALSE;
+
+		/**
+		 * We also do not consider early if returns to be likley in most cases
+		 */
+		case THREE_ADDR_CODE_RET_STMT:
+			return FALSE;
+
+		/**
+		 * If we have a jump statement, we could be breaking or continuing. If
+		 * that is the case, then we are *not* going to consider this as a likely
+		 * option
+		 */
+		case THREE_ADDR_CODE_JUMP_STMT:
+			if(exit_statement->if_block == peek(&break_stack)){
+				return FALSE;
+			} else if(exit_statement->if_block == peek(&continue_stack)){
+				return FALSE;
+			} else {
+				return TRUE;
+			}
+			
+		/**
+		 * By default assume that the user is making the if-path likely to execute(this is what usually happens)
+		 */
+		default:
+			return TRUE;
+	}
+}
+
+
+/**
  * Translate an if-else-if-else statement into CFG form, handling all possible contingencies
  * and control flow situations
  *
@@ -8469,6 +8538,11 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
  *
  * 	This is what we'll need to parse through and translate. This structure is chosen so that we have a minimal
  * 	memory footprint. We rely on this context being completely understood by the CFG converter here to work
+ *
+ * 	For our branching decisions, Ollie will assume that the "if" is the hot path, and the "else" is the cold path,
+ * 	and therefore opt to "jump-to-else" with the conditional jump. The if will be the unconditional jump part
+ * 	of the branch. This is done because when we eventually go on to optimize branches, the direct jump to the if
+ * 	part will be optimized away and we'll be left with a direct fall-through
  *
  * 	If we're clever about this, we can write the whole thing as one big do-while
  */
@@ -8584,8 +8658,11 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 					//We'll make a fresh new entry block for our else-if/else
 					current_entry_block = basic_block_alloc_and_estimate();
 
-					//Now branch out to the new current entry block
-					emit_branch(old_entry_block, conditional_node, compound_statement_results.starting_block, current_entry_block, BRANCH_CATEGORY_NORMAL);
+					/**
+					 * Branch out using the "jump-to-else" methodology. The conditional jump target here is the
+					 * else block(current entry block), and the direct block here if's inner results
+					 */
+					emit_branch(old_entry_block, conditional_node, current_entry_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE);
 
 					//Next iteration of the loop, break out of switch
 					break;
@@ -8614,8 +8691,12 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 						else_compound_statement_values.final_block = else_compound_statement_values.starting_block;
 					}
 
-					//Emit the final branch out
-					emit_branch(current_entry_block, conditional_node, compound_statement_results.starting_block, else_compound_statement_values.starting_block, BRANCH_CATEGORY_NORMAL);
+					/**
+					 * For our branch, we are using "jump-to-else" methodology. In this case, we will have the else values
+					 * as our conditional jump target and the compund statement result's starting block as our direct
+					 * target
+					 */
+					emit_branch(current_entry_block, conditional_node, else_compound_statement_values.starting_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE);
 
 					/**
 					 * If the else if compound statement final block does not end in a return, we'll need to make
@@ -8648,11 +8729,30 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		 * This is a terminal case - we're done so we can set the final block and get out. We'd get here if 
 		 * we had something like if(){} and then nothing else. Note that we don't need to check the overall
 		 * exit block here because we know that it's going to have at least one predecessor(this block)
+		 *
+		 * For our branch, we will have the conditional target as the exit block and the unconditional target(fall through hot path) as the
+		 * actual if starting block *in most cases*, however for some statements like:
+		 *
+		 * if(condition){
+		 * 	 raise error
+		 * }
+		 *
+		 * We can reasonably infer that these are just checks that the user is doing, and that they are not incredibly likely. In this
+		 * case, we can actually take the opposite approach
 		 */
 		} else {
-			emit_branch(current_entry_block, conditional_node, compound_statement_results.starting_block, overall_exit_block, BRANCH_CATEGORY_NORMAL);
-			if_results_package.final_block = overall_exit_block;
+			/**
+			 * If our if-path is likely to execute, then we fall through to the hot path which in that case is the if. If we determine through
+			 * our heuristics that the if path is unlikely to execute, then we fall through to the exit block and make a conditional jump to
+			 * the if
+			 */
+			if(is_if_path_likely_to_execute(&compound_statement_results) == TRUE){
+				emit_branch(current_entry_block, conditional_node, overall_exit_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE);
+			} else {
+				emit_branch(current_entry_block, conditional_node, compound_statement_results.starting_block, overall_exit_block, BRANCH_CATEGORY_NORMAL);
+			}
 
+			if_results_package.final_block = overall_exit_block;
 			return if_results_package;
 		}
 	}

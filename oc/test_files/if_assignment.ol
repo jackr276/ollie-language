@@ -12,5 +12,6 @@ pub fn main(argc:i32, argv:char**) -> i32{
 		x = 3;
 	}
 
+	OUNIT: [console = 3]
 	ret x;
 }
