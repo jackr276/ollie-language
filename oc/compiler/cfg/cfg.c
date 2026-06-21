@@ -11021,12 +11021,6 @@ static void emit_global_struct_initializer(generic_ast_node_t* struct_initialize
 	u_int32_t current_struct_member_index = 0;
 	u_int32_t current_struct_size = 0;
 
-	//TODO
-	//
-	//
-	// FIX POST ALIGNMENT
-	//
-
 	//Extract the struct type - we'll need this for padding decisions
 	generic_type_t* struct_type = struct_initializer->inferred_type;
 
@@ -11051,15 +11045,17 @@ static void emit_global_struct_initializer(generic_ast_node_t* struct_initialize
 			generic_type_t* aligning_by_type = get_base_alignment_type(member_type);
 
 			/**
-			 * If we're smaller than the current struct size pad out to the end
-			 * by however much we need to make up the difference. Otherwise, the padding
-			 * that we need is just the modulo of the current struct size and the
-			 * alignable type size
+			 * If we are not a perfect multiple, then we are going to need padding
+			 *
+			 * First round down to the nearest lesser multiple of the alignable size, then 
+			 * add the alignable size to round up to the next highest alignable type size
 			 */
-			if(current_struct_size < aligning_by_type->type_size){
-				needed_padding = aligning_by_type->type_size - current_struct_size;
-			} else {
-				needed_padding = current_struct_size % aligning_by_type->type_size;
+			if(current_struct_size % aligning_by_type->type_size != 0){
+				u_int32_t round_down = current_struct_size - (current_struct_size % aligning_by_type->type_size);
+				u_int32_t round_up = round_down + aligning_by_type->type_size;
+
+				//Figure out how far off we are
+				needed_padding = round_up - current_struct_size;
 			}
 
 			/**
