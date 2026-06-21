@@ -5432,9 +5432,11 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	generic_ast_node_t* cursor = ternary_operation->first_child;
 
 	/**
-	 * Let the helper emit the normal if branch/conditional expression here
+	 * For our branching, we assume that the if block is the most likely outcome, and as
+	 * such we use a conditional-jump-to-else type of strategy. This allows us to have
+	 * the hot-path(if-path) be our fall through path 
 	 */
-	emit_branch(current_block, cursor, if_block, else_block, BRANCH_CATEGORY_NORMAL);
+	emit_branch(current_block, cursor, else_block, if_block, BRANCH_CATEGORY_INVERSE);
 	
 	//Now we'll go through and process the two children
 	cursor = cursor->next_sibling;
