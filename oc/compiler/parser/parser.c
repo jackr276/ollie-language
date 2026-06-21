@@ -6184,6 +6184,28 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 
 
 /**
+ * Determine if the given type is valid for an in statement. The only valid
+ * types are enumerated types or basic types, everything else does not count
+ */
+static inline u_int8_t is_type_valid_for_in_statement(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_BASIC:
+			//We can't have a void type here
+			if(type->basic_type_token == VOID){
+				return FALSE;
+			}
+
+			return TRUE;
+
+		case TYPE_CLASS_ENUMERATED:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * An ollie in expression is a syntactic convenience expression type that allows us to check
  * if the result of a given logical or expression exists within a range of compatible values
  *
@@ -6214,8 +6236,22 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		return starting_expression;
 	}
 
+	//Extract the type that we're comparing to 
+	generic_type_t* comparing_to_type = starting_expression->inferred_type;
+
+	/**
+	 * If the type is not valid for an in statement then we have an issue here
+	 */
+	if(is_type_valid_for_in_statement(comparing_to_type) == FALSE){
+		sprintf(info, "The type \"%s\" may not be used with an in statement", comparing_to_type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+
 	//Now that we're here we can allocate the node
 	generic_ast_node_t* root_node = ast_node_alloc(AST_NODE_TYPE_IN_EXPRESSION, side); 
+
+	//The starting expression is always our very first child
+	add_child_node(root_node, starting_expression);
 
 	/**
 	 * Otherwise we've gotten here by seeing the specified in keyword, so we are
@@ -6255,8 +6291,19 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 				return print_and_return_error("In statement members must be constant expressions", parser_line_num);
 		}
 
-		//TODO ASSIGNABILITY
+		/**
+		 * Let's now determine if the types in here are assignable or not. If they're not then we're out
+		 */
+		//TODO
+		//
+		//
+		//
+		//
+///	generic_type_t* result_type = is_ast_node_assignable_to_destination_type(jk, generic_ast_node_t *source_node);
 		
+		//Now that we know this is valid we can add it as a child to the in statement
+		add_child_node(root_node, expression);
+
 		//Now we can either see a comma or a closing parenthesis
 		lookahead = get_next_token(token_stream, &parser_line_num);
 
