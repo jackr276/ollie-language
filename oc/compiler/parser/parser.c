@@ -6187,7 +6187,9 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
  * An ollie in expression is a syntactic convenience expression type that allows us to check
  * if the result of a given logical or expression exists within a range of compatible values
  *
- * BNF Rule: <in_expression> ::= <ternary-expression> in (<in_expression_value_list>)
+ * BNF Rule: <in_expression> ::= <ternary-expression> in (<logical_or_expression>{, <logical_or_expression}*);
+ *
+ * The logical or expressions must be either constants or enumerated values to make this work
  */
 static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, side_type_t side){
 	//Our lookahead token
@@ -6212,8 +6214,43 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		return starting_expression;
 	}
 
+	//Now that we're here we can allocate the node
+	generic_ast_node_t* root_node = ast_node_alloc(AST_NODE_TYPE_IN_EXPRESSION, side); 
+
+	/**
+	 * Otherwise we've gotten here by seeing the specified in keyword, so we are
+	 * dealing with an in expression. Our first order of business is parsing the parenthesis
+	 * that are required
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != L_PAREN){
+		sprintf(info, "Expected opening parenthesis after in keyword but saw %s instead", lexitem_to_string(&lookahead));
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	/**
+	 * We need to see at least one value inside of the in list. If we see
+	 * none then this is invalid
+	 */
+	do {
+		//First we need to see an expression
+		generic_ast_node_t* expression = logical_or_expression(token_stream, parser_line_num);
+		
+		//Throw if we're bad
+		if(expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			return print_and_return_error("Invalid expression given in in statement value list", parser_line_num);
+		}
+
+		if()
+
+
+	} while(TRUE);
+
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
+
+	//Give back the root of this node
+	return root_node;
 }
 
 
