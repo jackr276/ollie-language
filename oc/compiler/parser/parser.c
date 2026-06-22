@@ -6213,7 +6213,7 @@ static inline u_int8_t is_type_valid_for_in_statement(generic_type_t* type){
  */
 static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* in_comparator_type, generic_ast_node_t* constant_node){
 	//Needed local variables
-	generic_type_t* internal_enum_type;
+	generic_type_t* result_type;
 	generic_type_t* constant_node_type = constant_node->inferred_type;
 
 
@@ -6225,9 +6225,6 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 		 * 	2.) If we have raw constants, then we need to make sure that they are potential values
 		 */
 		case TYPE_CLASS_ENUMERATED:
-			//Extract what the integer type is
-			internal_enum_type = in_comparator_type->internal_values.enum_integer_type;
-
 			/**
 			 * Option 1: Our constant came from an enum.
 			 * If they have the literal exact same enum type, then we're good.
@@ -6259,7 +6256,7 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 			/**
 			 * If we survive to here then we can run the types_assignable on this and see if we get a non-null answer
 			 */
-			generic_type_t* result_type = types_assignable_constant(in_comparator_type, constant_node_type);
+			result_type = types_assignable_constant(in_comparator_type, constant_node_type);
 			
 			//Fail out if we get a bad result
 			if(result_type == NULL){
@@ -6274,10 +6271,46 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 			//Once we're done we can assign and coerce our constant here
 			constant_node->inferred_type = result_type;
 			coerce_constant(constant_node);
-			return FAILURE;
 
+			/**
+			 * One last thing to check - if we have a constant value that literally does not exist in the enum
+			 * type, then we will fail out because we have an impossible in statement in that case
+			 */
+			if(does_enum_contain_integer_member(in_comparator_type, constant_node->constant_value.signed_int_value) == FALSE){
+				sprintf(info, "Enum type %s contains no member that maps to integer value %d", in_comparator_type->type_name.string, constant_node->constant_value.signed_int_value);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				num_errors++;
+				return FALSE;
+			}
+
+			//If we survived to here then this worked
+			return TRUE;
+
+		/**
+		 * For basic types we really just rely on the types_assignable_constant rule
+		 */
 		case TYPE_CLASS_BASIC:
-			break;
+			/**
+			 * If we survive to here then we can run the types_assignable on this and see if we get a non-null answer
+			 */
+			result_type = types_assignable_constant(in_comparator_type, constant_node_type);
+			
+			//Fail out if we get a bad result
+			if(result_type == NULL){
+				sprintf(info, "Attempt to use incompatible type %s in in statement with comparator of type %s",
+								constant_node_type->type_name.string,
+								in_comparator_type->type_name.string);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				num_errors++;
+				return FALSE;
+			}
+
+			//Once we're done we can assign and coerce our constant here
+			constant_node->inferred_type = result_type;
+			coerce_constant(constant_node);
+
+			//If we survived to here then this worked
+			return TRUE;
 
 		//This should be impossible
 		default:
@@ -6387,15 +6420,14 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		/**
 		 * Let's now determine if the types in here are assignable or not. If they're not then we're out. This
 		 * rule also handles the needed constant coercion for us
+		 *
+		 * This rule prints out any/all errors so we don't need to worry about that
 		 */
 		u_int8_t compatible = is_constant_valid_for_in_statement_type(comparing_to_type, expression);
 		
 		//Fail out if we don't have it
 		if(compatible == FALSE){
-			sprintf(info, "Incompatible expression of type \"%s\" found in in-statement with comparing to type of \"%s\"",
-		   					expression->inferred_type->type_name.string,
-		   					comparing_to_type->type_name.string);
-			return print_and_return_error(info, parser_line_num);
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
 		}
 		
 		//Now that we know this is valid we can add it as a child to the in statement
