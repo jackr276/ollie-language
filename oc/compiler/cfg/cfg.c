@@ -5514,16 +5514,32 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 }
 
 
-//TODO
+static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block_t* starting_block, generic_ast_node_t* in_expression){
+
+	printf("TODO SWITCH LOWERER NOT IMPLEMENTED\n");
+	exit(1);
+}
+
+
+static inline cfg_result_package_t lower_in_expression_to_oir_if_else_chain(basic_block_t* starting_block, generic_ast_node_t* in_expression){
+
+	printf("TODO IF LOWERER NOT IMPLEMENTED\n");
+	exit(1);
+}
+
+
+/**
+ * For an in expression, we have to options for lowering this language construct into OIR. For most cases,
+ * we are able to translate this directly into a switch statement. However, for other cases where floats
+ * are involved, we will need to lower this into an if-else chain. This top level rule acts as a multiplexer between
+ * the two lowering rules
+ */
 static cfg_result_package_t emit_in_expression(basic_block_t* starting_block, generic_ast_node_t* in_expression){
 	if(in_expression->optional_storage.in_statement_switch_eligible == TRUE){
-		printf("SWITCH ELIGIBLE\n");
+		return lower_in_expression_to_oir_switch(starting_block, in_expression);
 	} else {
-		printf("NOT ELIGIBLE\n");
+		return lower_in_expression_to_oir_if_else_chain(starting_block, in_expression);
 	}
-
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
 }
 
 
