@@ -6212,9 +6212,69 @@ static inline u_int8_t is_type_valid_for_in_statement(generic_type_t* type){
  * here like us not being able to mix floats and enums 
  */
 static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* in_comparator_type, generic_ast_node_t* constant_node){
+	//Needed local variables
+	generic_type_t* internal_enum_type;
+	generic_type_t* constant_node_type = constant_node->inferred_type;
+
+
 	switch(in_comparator_type->type_class){
+		/**
+		 * If we have an enum type then we've got strict
+		 * rules for what we can compare to.
+		 * 	1.) No floats - enum types must be compatible enums or integers
+		 * 	2.) If we have raw constants, then we need to make sure that they are potential values
+		 */
 		case TYPE_CLASS_ENUMERATED:
-			break;
+			//Extract what the integer type is
+			internal_enum_type = in_comparator_type->internal_values.enum_integer_type;
+
+			/**
+			 * Option 1: Our constant came from an enum.
+			 * If they have the literal exact same enum type, then we're good.
+			 * If not, we don't allow mixing of enums
+			 */
+			if(constant_node->optional_storage.enum_type != NULL){
+				if(in_comparator_type == constant_node->optional_storage.enum_type){
+					return TRUE;
+				} else {
+					sprintf(info, "Attempt to use separate enum type %s in comparison with enum %s",
+			 						constant_node_type->type_name.string,
+			 						in_comparator_type->type_name.string);
+					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+					num_errors++;
+					return FALSE;
+				}
+			}
+
+			/**
+			 * Option 2: we're just a regular constant. This is fine so long
+			 * as we don't have a floating point number
+			 */
+			if(constant_node_type->basic_type_token == FLOAT_CONST || constant_node_type->basic_type_token == DOUBLE_CONST){
+				print_parse_message(MESSAGE_TYPE_ERROR, "Floating point values may not be used in in statement with enum comparator", parser_line_num);
+				num_errors++;
+				return FALSE;
+			}
+
+			/**
+			 * If we survive to here then we can run the types_assignable on this and see if we get a non-null answer
+			 */
+			generic_type_t* result_type = types_assignable_constant(in_comparator_type, constant_node_type);
+			
+			//Fail out if we get a bad result
+			if(result_type == NULL){
+				sprintf(info, "Attempt to use incompatible type %s in in statement with comparator of type %s",
+								constant_node_type->type_name.string,
+								in_comparator_type->type_name.string);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				num_errors++;
+				return FALSE;
+			}
+
+			//Once we're done we can assign and coerce our constant here
+			constant_node->inferred_type = result_type;
+			coerce_constant(constant_node);
+			return FAILURE;
 
 		case TYPE_CLASS_BASIC:
 			break;
@@ -6327,16 +6387,11 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		/**
 		 * Let's now determine if the types in here are assignable or not. If they're not then we're out. This
 		 * rule also handles the needed constant coercion for us
-		 *
-		 *
-		 * TODO THIS IS BAD - WE NEED DIFFERENT RULES FOR IN STATEMENT
-		 *
-		 * LOOK AT IS_IN_ENUM INVALID FOR AN EXAMPLE OF SOMETHING INVALID
 		 */
-		generic_type_t* result_type = is_ast_node_assignable_to_destination_type(comparing_to_type, expression);
+		u_int8_t compatible = is_constant_valid_for_in_statement_type(comparing_to_type, expression);
 		
 		//Fail out if we don't have it
-		if(result_type == NULL){
+		if(compatible == FALSE){
 			sprintf(info, "Incompatible expression of type \"%s\" found in in-statement with comparing to type of \"%s\"",
 		   					expression->inferred_type->type_name.string,
 		   					comparing_to_type->type_name.string);
