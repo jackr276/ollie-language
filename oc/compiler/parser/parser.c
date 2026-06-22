@@ -55,6 +55,7 @@ static lex_stack_t assignment_grouping_stack;
 
 //Generic types here for us to repeatedly reference
 static generic_type_t* immut_char = NULL;
+static generic_type_t* immut_bool = NULL;
 static generic_type_t* immut_u8 = NULL;
 static generic_type_t* immut_i8 = NULL;
 static generic_type_t* immut_u16 = NULL;
@@ -6382,19 +6383,28 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 	 * in statement here and just give back a final constant
 	 */
 	if(root_node->first_child->ast_node_type == AST_NODE_TYPE_CONSTANT){
-		//Extract what we're trying to find
-		generic_ast_node_t* constant_comparator = root_node->first_child;
+		//Extract the constant that we're comparing to
+		generic_ast_node_t* comparing_to_constant = root_node->first_child;
 
-		//Get a cursor to the very first actual in member
-		generic_ast_node_t* in_member_cursor = root_node->first_child->next_sibling;
-
-		//Let's see if we can find the constant comparator
+		//By default assume we found nothing
 		u_int8_t found = FALSE;
-		while(in_member_cursor != NULL){
-			//TODO COMPARE CONSTS
 
-			in_member_cursor = in_member_cursor->next_sibling;
+		//Run through all of our members to see if we have this one
+		for(u_int32_t i = 0; i < current_members.current_index; i++){
+			generic_ast_node_t* member = dynamic_array_get_at(&current_members, i);
+
+			//Break out if we do have a match
+			if(constant_nodes_equal(member, comparing_to_constant) == TRUE){
+				found = TRUE;
+				break;
+			}
 		}
+
+		//Match or no match, we will now rework the root node into being just a plain constant
+		root_node->ast_node_type = AST_NODE_TYPE_CONSTANT;
+		root_node->constant_type = BYTE_CONST;
+		root_node->constant_value.signed_byte_value = found;
+		root_node->inferred_type = immut_i8;
 	}
 
 	//Destroy our member list
@@ -14476,6 +14486,7 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	//Keep these at hand because we use them so frequently, that repeatedly 
 	//searching is needlessly expensive
 	immut_char = lookup_type_name_only(type_symtab, "char", NOT_MUTABLE)->type;
+	immut_bool = lookup_type_name_only(type_symtab, "bool", NOT_MUTABLE)->type;
 	immut_u8 = lookup_type_name_only(type_symtab, "u8", NOT_MUTABLE)->type;
 	immut_i8 = lookup_type_name_only(type_symtab, "i8", NOT_MUTABLE)->type;
 	immut_u16 = lookup_type_name_only(type_symtab, "u16", NOT_MUTABLE)->type;
