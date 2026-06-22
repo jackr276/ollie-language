@@ -6207,6 +6207,27 @@ static inline u_int8_t is_type_valid_for_in_statement(generic_type_t* type){
 
 
 /**
+ * Is the given constant node eligible for the in statement comparator type? This is slightly different than
+ * the other rules because we know that we will always have a constant, and there are some unique restrictions
+ * here like us not being able to mix floats and enums 
+ */
+static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* in_comparator_type, generic_ast_node_t* constant_node){
+	switch(in_comparator_type->type_class){
+		case TYPE_CLASS_ENUMERATED:
+			break;
+
+		case TYPE_CLASS_BASIC:
+			break;
+
+		//This should be impossible
+		default:
+			printf("Fatal internal compiler error. Invalid in comparator type detected\n");
+			exit(1);
+	}
+}
+
+
+/**
  * An ollie in expression is a syntactic convenience expression type that allows us to check
  * if the result of a given logical or expression exists within a range of compatible values
  *
