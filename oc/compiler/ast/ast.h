@@ -359,6 +359,12 @@ void less_than_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_no
  * The result will be: constant1 = constant1 <= constant2
  */
 void less_than_or_equal_to_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
+
+/**
+ * Return whether or not two constant nodes are considered equal. This rule will *not* modify
+ * any of the existing constant nodes themselves in comparison to other rules
+ */
+u_int8_t constant_nodes_equal(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
 // ================================= End in-flight constant simplification subystem ========================================
 
 /**

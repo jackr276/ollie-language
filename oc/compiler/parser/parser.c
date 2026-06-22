@@ -6275,6 +6275,9 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 	//Push this up for later
 	push_token(&grouping_stack, lookahead);
 
+	//Keep a list of all the current members inside of the list for duplicate detection
+	dynamic_array_t current_members = dynamic_array_alloc();
+
 	/**
 	 * We need to see at least one value inside of the in list. If we see
 	 * none then this is invalid
@@ -6320,6 +6323,23 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		
 		//Now that we know this is valid we can add it as a child to the in statement
 		add_child_node(root_node, expression);
+
+		/**
+		 * Duplicate detection - we do not allow for more than one of the same
+		 * constant inside of the member list. If we detect that this is a duplicate 
+		 * then we fail out
+		 */
+		for(u_int32_t i = 0; i < current_members.current_index; i++){
+			generic_ast_node_t* member = dynamic_array_get_at(&current_members, i);
+
+			//Fail out if they are equal
+			if(constant_nodes_equal(member, expression) == TRUE){
+				return print_and_return_error("Duplicate member values detected in in statement", parser_line_num);
+			}
+		}
+
+		//Add this into the member list
+		dynamic_array_add(&current_members, expression);
 
 		//Bump the member count up by one more
 		in_statement_members++;
@@ -6376,6 +6396,9 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 			in_member_cursor = in_member_cursor->next_sibling;
 		}
 	}
+
+	//Destroy our member list
+	dynamic_array_dealloc(&current_members);
 
 	//Give back the root of this node
 	return root_node;
