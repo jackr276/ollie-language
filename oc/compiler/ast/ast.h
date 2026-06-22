@@ -99,14 +99,17 @@ typedef enum address_specifier_type_t{
  * to what the actual node is
 */
 struct generic_ast_node_t{
-	//The string value could hold an identifier, string constant, or it could hold
-	//an assembly inline statement. It all depends based on context
-	dynamic_string_t string_value;
-	//What is the inferred type of the node
-	generic_type_t* inferred_type;
+	//What kind of node is it?
+	ast_node_type_t ast_node_type;
 	//These are the two pointers that make up the whole of the tree
 	generic_ast_node_t* first_child;
 	generic_ast_node_t* next_sibling;
+	//What side is this node on
+	side_type_t side;
+	//The type address specifier - for types
+	address_specifier_type_t address_type;
+	//What is the inferred type of the node
+	generic_type_t* inferred_type;
 	//Variable/jump label holder
 	symtab_variable_record_t* variable;
 	//The symtab function record
@@ -128,16 +131,17 @@ struct generic_ast_node_t{
 		u_int64_t bytes_to_copy;
 		//The label record that we're storing
 		symtab_label_record_t* label_record;
+		//Is the given in statement switch eligible?
+		u_int8_t is_in_statement_switch_eligible;
 		//Hold the upper and lower bounds for switch statement values
 		struct {
 			//The upper and lower bound for switch statements
 			int32_t lower_bound;
 			int32_t upper_bound;
 		} switch_bounds;
-
-		//Is this switch eligible?
-		u_int8_t in_statement_switch_eligible;
 	} optional_storage;
+	//Holds the token for what kind of constant it is
+	ollie_token_t constant_type;
 	//Storing the constant values
 	union {
 		int64_t signed_long_value;
@@ -152,8 +156,9 @@ struct generic_ast_node_t{
 		u_int8_t unsigned_byte_value;
 		char char_value;
 	} constant_value;
-	//Holds the token for what kind of constant it is
-	ollie_token_t constant_type;
+	//The string value could hold an identifier, string constant, or it could hold
+	//an assembly inline statement. It all depends based on context
+	dynamic_string_t string_value;
 	//What line number is this from
 	u_int32_t line_number;
 	//Store a binary operator(if one exists)
@@ -164,12 +169,6 @@ struct generic_ast_node_t{
 	u_int8_t is_assignable;
 	//Is a dereference needed at the end of this value?
 	u_int8_t dereference_needed;
-	//What side is this node on
-	side_type_t side;
-	//What kind of node is it?
-	ast_node_type_t ast_node_type;
-	//The type address specifier - for types
-	address_specifier_type_t address_type;
 };
 
 /**

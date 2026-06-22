@@ -5535,7 +5535,7 @@ static inline cfg_result_package_t lower_in_expression_to_oir_if_else_chain(basi
  * the two lowering rules
  */
 static cfg_result_package_t emit_in_expression(basic_block_t* starting_block, generic_ast_node_t* in_expression){
-	if(in_expression->optional_storage.in_statement_switch_eligible == TRUE){
+	if(in_expression->optional_storage.is_in_statement_switch_eligible == TRUE){
 		return lower_in_expression_to_oir_switch(starting_block, in_expression);
 	} else {
 		return lower_in_expression_to_oir_if_else_chain(starting_block, in_expression);

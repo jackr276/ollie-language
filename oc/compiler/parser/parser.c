@@ -6407,9 +6407,6 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 	//Push this up for later
 	push_token(&grouping_stack, lookahead);
 
-	//Keep a list of all the current members inside of the list for duplicate detection
-	dynamic_array_t current_members = dynamic_array_alloc();
-
 	/**
 	 * We need to see at least one value inside of the in list. If we see
 	 * none then this is invalid
@@ -6454,26 +6451,25 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		if(compatible == FALSE){
 			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
 		}
-		
-		//Now that we know this is valid we can add it as a child to the in statement
-		add_child_node(root_node, expression);
 
 		/**
 		 * Duplicate detection - we do not allow for more than one of the same
 		 * constant inside of the member list. If we detect that this is a duplicate 
 		 * then we fail out
 		 */
-		for(u_int32_t i = 0; i < current_members.current_index; i++){
-			generic_ast_node_t* member = dynamic_array_get_at(&current_members, i);
-
+		generic_ast_node_t* member_cursor = root_node->first_child->next_sibling;
+		while(member_cursor != NULL){
 			//Fail out if they are equal
-			if(constant_nodes_equal(member, expression) == TRUE){
+			if(constant_nodes_equal(member_cursor, expression) == TRUE){
 				return print_and_return_error("Duplicate member values detected in in statement", parser_line_num);
 			}
+
+			//Bump it up to the next member
+			member_cursor = member_cursor->next_sibling;
 		}
 
-		//Add this into the member list
-		dynamic_array_add(&current_members, expression);
+		//Now that we know this is valid we can add it as a child to the in statement
+		add_child_node(root_node, expression);
 
 		//Bump the member count up by one more
 		in_statement_members++;
@@ -6522,15 +6518,19 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		//By default assume we found nothing
 		u_int8_t found = FALSE;
 
-		//Run through all of our members to see if we have this one
-		for(u_int32_t i = 0; i < current_members.current_index; i++){
-			generic_ast_node_t* member = dynamic_array_get_at(&current_members, i);
+		//The first member comes right after the expression
+		generic_ast_node_t* member_cursor = comparing_to_constant->next_sibling; 
 
+		//Crawl through the entire list of members
+		while(member_cursor != NULL){
 			//Break out if we do have a match
-			if(constant_nodes_equal(member, comparing_to_constant) == TRUE){
+			if(constant_nodes_equal(member_cursor, comparing_to_constant) == TRUE){
 				found = TRUE;
 				break;
 			}
+
+			//Bump it up to the next one
+			member_cursor = member_cursor->next_sibling;
 		}
 
 		//Match or no match, we will now rework the root node into being just a plain constant
@@ -6540,11 +6540,8 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		root_node->inferred_type = immut_i8;
 	}
 
-	//Destroy our member list
-	dynamic_array_dealloc(&current_members);
-
 	//Store whether or not we are switch eligible
-	root_node->optional_storage.in_statement_switch_eligible = is_switch_eligible;
+	root_node->optional_storage.is_in_statement_switch_eligible = is_switch_eligible;
 
 	//Give back the root of this node
 	return root_node;
