@@ -5516,6 +5516,12 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 
 //TODO
 static cfg_result_package_t emit_in_expression(basic_block_t* starting_block, generic_ast_node_t* in_expression){
+	if(in_expression->optional_storage.in_statement_switch_eligible == TRUE){
+		printf("SWITCH ELIGIBLE\n");
+	} else {
+		printf("NOT ELIGIBLE\n");
+	}
+
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
 }

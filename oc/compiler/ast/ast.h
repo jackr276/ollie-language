@@ -130,6 +130,8 @@ struct generic_ast_node_t{
 		u_int64_t bytes_to_copy;
 		//The label record that we're storing
 		symtab_label_record_t* label_record;
+		//Is this switch eligible?
+		u_int8_t in_statement_switch_eligible;
 	} optional_storage;
 	//Storing the constant values
 	union {

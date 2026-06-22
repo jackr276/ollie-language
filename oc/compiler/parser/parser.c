@@ -6338,6 +6338,9 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
  *
  * BNF Rule: <in_expression> ::= <ternary-expression> in (<logical_or_expression>{, <logical_or_expression}*);
  *
+ * For in expressions, if we do not see any floating point values, then we will attempt to turn this into
+ * a switch statement. We maintain a flag here that we will invalidate if we get a floating point value
+ *
  * The logical or expressions must be either constants or enumerated values to make this work
  */
 static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, side_type_t side){
@@ -6345,6 +6348,8 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 	lexitem_t lookahead;
 	//Keep track of how many members we have
 	u_int32_t in_statement_members = 0;
+	//Is this in expression eligible to become a switch statement? Assume true by default
+	u_int8_t is_switch_eligible = TRUE;
 
 	//The first thing that we need to see is some kind of valid ternary expression
 	generic_ast_node_t* starting_expression = ternary_expression(token_stream, side);
@@ -6427,6 +6432,14 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 
 			default:
 				return print_and_return_error("In statement members must be constant expressions", parser_line_num);
+		}
+
+		/**
+		 * If we see *at least one* floating point number before we coerce, then this
+		 * whole thing is going to be forced to use the if chain
+		 */
+		if(IS_FLOATING_POINT(expression->inferred_type) == TRUE){
+			is_switch_eligible = FALSE;
 		}
 
 		/**
@@ -6529,6 +6542,9 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 
 	//Destroy our member list
 	dynamic_array_dealloc(&current_members);
+
+	//Store whether or not we are switch eligible
+	root_node->optional_storage.in_statement_switch_eligible = is_switch_eligible;
 
 	//Give back the root of this node
 	return root_node;
