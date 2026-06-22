@@ -6357,6 +6357,26 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		num_warnings++;
 	}
 
+	/**
+	 * If we have an in statement where the first expression is a constant, then we are able to evaluate this 
+	 * in statement here and just give back a final constant
+	 */
+	if(root_node->first_child->ast_node_type == AST_NODE_TYPE_CONSTANT){
+		//Extract what we're trying to find
+		generic_ast_node_t* constant_comparator = root_node->first_child;
+
+		//Get a cursor to the very first actual in member
+		generic_ast_node_t* in_member_cursor = root_node->first_child->next_sibling;
+
+		//Let's see if we can find the constant comparator
+		u_int8_t found = FALSE;
+		while(in_member_cursor != NULL){
+			//TODO COMPARE CONSTS
+
+			in_member_cursor = in_member_cursor->next_sibling;
+		}
+	}
+
 	//Give back the root of this node
 	return root_node;
 }
