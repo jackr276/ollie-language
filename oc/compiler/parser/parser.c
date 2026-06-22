@@ -6339,7 +6339,8 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
  * BNF Rule: <in_expression> ::= <ternary-expression> in (<logical_or_expression>{, <logical_or_expression}*);
  *
  * For in expressions, if we do not see any floating point values, then we will attempt to turn this into
- * a switch statement. We maintain a flag here that we will invalidate if we get a floating point value
+ * a switch statement. We maintain a flag here that we will invalidate if we get a floating point value, as
+ * that is the one type that we cannot make into a switch
  *
  * The logical or expressions must be either constants or enumerated values to make this work
  */

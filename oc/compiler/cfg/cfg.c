@@ -5521,7 +5521,15 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 }
 
 
-static inline cfg_result_package_t lower_in_expression_to_oir_if_else_chain(basic_block_t* starting_block, generic_ast_node_t* in_expression){
+/**
+ * Lower the entire in expression into an OIR if-else-if chain using regular branching. This if-else-if chain is done so that we 
+ * automatically have a short circuit by the time this is implemented. 
+ *
+ * This will really only happen for floats, but sometimes for other types ss well. The general structure of the translation is:
+ * 	
+ * TODO HOW CAN WE DO THIS????? I DONT LIKE THE IDEA OF SO MANY BLOCKS
+ */
+static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain(basic_block_t* starting_block, generic_ast_node_t* in_expression){
 
 	printf("TODO IF LOWERER NOT IMPLEMENTED\n");
 	exit(1);
@@ -5531,14 +5539,14 @@ static inline cfg_result_package_t lower_in_expression_to_oir_if_else_chain(basi
 /**
  * For an in expression, we have to options for lowering this language construct into OIR. For most cases,
  * we are able to translate this directly into a switch statement. However, for other cases where floats
- * are involved, we will need to lower this into an if-else chain. This top level rule acts as a multiplexer between
+ * are involved, we will need to lower this into a conditional move chain. This top level rule acts as a multiplexer between
  * the two lowering rules
  */
 static cfg_result_package_t emit_in_expression(basic_block_t* starting_block, generic_ast_node_t* in_expression){
 	if(in_expression->optional_storage.is_in_statement_switch_eligible == TRUE){
 		return lower_in_expression_to_oir_switch(starting_block, in_expression);
 	} else {
-		return lower_in_expression_to_oir_if_else_chain(starting_block, in_expression);
+		return lower_in_expression_to_conditional_move_chain(starting_block, in_expression);
 	}
 }
 
