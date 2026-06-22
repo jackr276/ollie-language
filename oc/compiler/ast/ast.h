@@ -116,13 +116,11 @@ struct generic_ast_node_t{
 		symtab_type_record_t* type_record;
 		//Field in a struct or union
 		symtab_variable_record_t* field_variable;
-		//For enum constants - we'll hold onto the 
-		//enum type here too
+		//For enum constants - we'll hold onto the enum type here too
 		generic_type_t* enum_type;
 		//For error types in a hanldes statement
 		generic_type_t* error_type;
-		//For any/all error types, we'll hold onto the actual
-		//value of the error here
+		//For any/all error types, we'll hold onto the actual value of the error here
 		u_int32_t error_id;
 		//Storage for the elaborative param count
 		u_int32_t elaborative_param_count;
@@ -130,6 +128,13 @@ struct generic_ast_node_t{
 		u_int64_t bytes_to_copy;
 		//The label record that we're storing
 		symtab_label_record_t* label_record;
+		//Hold the upper and lower bounds for switch statement values
+		struct {
+			//The upper and lower bound for switch statements
+			int32_t lower_bound;
+			int32_t upper_bound;
+		} switch_bounds;
+
 		//Is this switch eligible?
 		u_int8_t in_statement_switch_eligible;
 	} optional_storage;
@@ -149,9 +154,6 @@ struct generic_ast_node_t{
 	} constant_value;
 	//Holds the token for what kind of constant it is
 	ollie_token_t constant_type;
-	//The upper and lower bound for switch statements
-	int32_t lower_bound;
-	int32_t upper_bound;
 	//What line number is this from
 	u_int32_t line_number;
 	//Store a binary operator(if one exists)

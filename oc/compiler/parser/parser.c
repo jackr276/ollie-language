@@ -1438,8 +1438,8 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 	 * statement that this is going to generate. The lower bound is always zero(NO_ERROR) and the
 	 * upper bound is whatever we found it to be
 	 */
-	parent_handle_clause->lower_bound = 0;
-	parent_handle_clause->upper_bound = upper_bound;
+	parent_handle_clause->optional_storage.switch_bounds.lower_bound = 0;
+	parent_handle_clause->optional_storage.switch_bounds.upper_bound = upper_bound;
 
 	//We're done here, deallocate
 	dynamic_array_dealloc(&errors_seen);
@@ -9998,9 +9998,9 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 
 	//We will find these throughout our search
 	//Set the upper bound to be int_min
-	switch_stmt_node->upper_bound = INT_MIN;
+	switch_stmt_node->optional_storage.switch_bounds.upper_bound = INT_MIN;
 	//Set the lower bound to be int_max 
-	switch_stmt_node->lower_bound = INT_MAX;
+	switch_stmt_node->optional_storage.switch_bounds.lower_bound = INT_MAX;
 
 	//Now we must see an lparen
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -10265,8 +10265,8 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 					case CHAR:
 						//If we want to check for exhaustive, we'll need 
 						//the low and high to be the lower and upper bounds
-						if(switch_stmt_node->lower_bound != 0 
-							|| switch_stmt_node->upper_bound != UINT8_MAX){
+						if(switch_stmt_node->optional_storage.switch_bounds.lower_bound != 0 
+							|| switch_stmt_node->optional_storage.switch_bounds.upper_bound != UINT8_MAX){
 
 							//Don't bother checking
 							check_for_exhaustive = FALSE;
@@ -10277,8 +10277,8 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 					case I8:
 						//If we want to check for exhaustive, we'll need 
 						//the low and high to be the lower and upper bounds
-						if(switch_stmt_node->lower_bound != INT8_MIN 
-							|| switch_stmt_node->upper_bound != INT8_MAX){
+						if(switch_stmt_node->optional_storage.switch_bounds.lower_bound != INT8_MIN 
+							|| switch_stmt_node->optional_storage.switch_bounds.upper_bound != INT8_MAX){
 
 							//Don't bother checking
 							check_for_exhaustive = FALSE;
@@ -10335,8 +10335,8 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 			//Go through our enum type here
 			case TYPE_CLASS_ENUMERATED:
 				//If we don't have these, then we already know we can't go further
-				if(switch_stmt_node->lower_bound != type->min_enum_value
-					|| switch_stmt_node->upper_bound != type->max_enum_value){
+				if(switch_stmt_node->optional_storage.switch_bounds.lower_bound != type->min_enum_value
+					|| switch_stmt_node->optional_storage.switch_bounds.upper_bound != type->max_enum_value){
 					check_for_exhaustive = FALSE;
 				}
 
@@ -11374,19 +11374,22 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 	case_stmt->constant_value.signed_int_value = constant_node->constant_value.signed_int_value;
 	
 	//If it's higher than the upper bound, it now is the upper bound
-	if(case_stmt->constant_value.signed_int_value > switch_stmt_node->upper_bound){
-		switch_stmt_node->upper_bound = case_stmt->constant_value.signed_int_value;
+	if(case_stmt->constant_value.signed_int_value > switch_stmt_node->optional_storage.switch_bounds.upper_bound){
+		switch_stmt_node->optional_storage.switch_bounds.upper_bound = case_stmt->constant_value.signed_int_value;
 	}
 
 	//If it's lower than the lower bound, it is now the lower bound
-	if(case_stmt->constant_value.signed_int_value < switch_stmt_node->lower_bound){
-		switch_stmt_node->lower_bound = case_stmt->constant_value.signed_int_value;
+	if(case_stmt->constant_value.signed_int_value < switch_stmt_node->optional_storage.switch_bounds.lower_bound){
+		switch_stmt_node->optional_storage.switch_bounds.lower_bound = case_stmt->constant_value.signed_int_value;
 	}
 
 	//If these are too far apart, we won't go for it. We'll check here, because once
 	//we hit this, there's no point in going on
-	if(switch_stmt_node->upper_bound - switch_stmt_node->lower_bound >= MAX_SWITCH_RANGE){
-		sprintf(info, "Range from %d to %d exceeds %d, too large for a switch statement. Use a compound if statement instead", switch_stmt_node->lower_bound, switch_stmt_node->upper_bound, MAX_SWITCH_RANGE);
+	if(switch_stmt_node->optional_storage.switch_bounds.upper_bound - switch_stmt_node->optional_storage.switch_bounds.lower_bound >= MAX_SWITCH_RANGE){
+		sprintf(info, "Range from %d to %d exceeds %d, too large for a switch statement. Use a compound if statement instead",
+		  				switch_stmt_node->optional_storage.switch_bounds.lower_bound, 
+		  				switch_stmt_node->optional_storage.switch_bounds.upper_bound,
+		  				MAX_SWITCH_RANGE);
 		return print_and_return_error(info, parser_line_num);
 	}
 

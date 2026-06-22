@@ -6562,8 +6562,8 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 	basic_block_t* default_block = NULL;
 
 	//The lower bound is always 0, and the upper bound is determined by the parser
-	u_int32_t lower_bound = handle_node->lower_bound;
-	u_int32_t upper_bound = handle_node->upper_bound;
+	u_int32_t lower_bound = handle_node->optional_storage.switch_bounds.lower_bound;
+	u_int32_t upper_bound = handle_node->optional_storage.switch_bounds.upper_bound;
 
 	/**
 	 * Let's mark this block as a switch block and at the same time create our jump table. We'll
@@ -9017,12 +9017,12 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	jump_calculation_block->block_type = BLOCK_TYPE_SWITCH;
 
 	//We'll now allocate this one's jump table
-	jump_calculation_block->jump_table = jump_table_alloc(root_node->upper_bound - root_node->lower_bound + 1);
+	jump_calculation_block->jump_table = jump_table_alloc(root_node->optional_storage.switch_bounds.upper_bound - root_node->optional_storage.switch_bounds.lower_bound + 1);
 
 	//The offset(amount that we'll need to knock down any case values by) is always the 
 	//case statement's value subtracted by the lower bound. We'll call it offset here
 	//for consistency
-	int32_t offset = root_node->lower_bound;
+	int32_t offset = root_node->optional_storage.switch_bounds.lower_bound;
 
 	//A generic result package for all of our case/default statements
 	cfg_result_package_t case_default_results = INITIALIZE_BLANK_CFG_RESULT;
@@ -9191,8 +9191,8 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	//Now that everything has been situated, we can start emitting the values in the initial node
 
 	//We'll need both of these as constants for our computation
-	three_addr_const_t* lower_bound = emit_direct_integer_or_char_constant(root_node->lower_bound, i32);
-	three_addr_const_t* upper_bound = emit_direct_integer_or_char_constant(root_node->upper_bound, i32);
+	three_addr_const_t* lower_bound = emit_direct_integer_or_char_constant(root_node->optional_storage.switch_bounds.lower_bound, i32);
+	three_addr_const_t* upper_bound = emit_direct_integer_or_char_constant(root_node->optional_storage.switch_bounds.upper_bound, i32);
 
 	//Now that we have our expression, we'll want to speed things up by seeing if our value is either below the lower
 	//range or above the upper range. If it is, we jump to the very end
@@ -9318,11 +9318,11 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	
 	//Let's also allocate our jump table. We know how large the jump table needs to be from
 	//data passed in by the parser
-	jump_calculation_block->jump_table = jump_table_alloc(root_node->upper_bound - root_node->lower_bound + 1);
+	jump_calculation_block->jump_table = jump_table_alloc(root_node->optional_storage.switch_bounds.upper_bound - root_node->optional_storage.switch_bounds.lower_bound + 1);
 
 	//We'll also have some adjustment amount, since we always want the lowest value in the jump table to be 0. This
 	//adjustment will be subtracted from every value at the top to "knock it down" to be within the jump table
-	int32_t offset = root_node->lower_bound;
+	int32_t offset = root_node->optional_storage.switch_bounds.lower_bound;
 
 	//Wipe this out here just in case
 	cfg_result_package_t case_default_results = INITIALIZE_BLANK_CFG_RESULT;
@@ -9407,8 +9407,8 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	//Now that everything has been situated, we can start emitting the values in the initial node
 
 	//We'll need both of these as constants for our computation
-	three_addr_const_t* lower_bound = emit_direct_integer_or_char_constant(root_node->lower_bound, i32);
-	three_addr_const_t* upper_bound = emit_direct_integer_or_char_constant(root_node->upper_bound, i32);
+	three_addr_const_t* lower_bound = emit_direct_integer_or_char_constant(root_node->optional_storage.switch_bounds.lower_bound, i32);
+	three_addr_const_t* upper_bound = emit_direct_integer_or_char_constant(root_node->optional_storage.switch_bounds.upper_bound, i32);
 
 	//Now that we have our expression, we'll want to speed things up by seeing if our value is either below the lower
 	//range or above the upper range. If it is, we jump to the very end
