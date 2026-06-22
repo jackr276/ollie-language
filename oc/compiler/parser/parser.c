@@ -6247,7 +6247,7 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 			 * Option 2: we're just a regular constant. This is fine so long
 			 * as we don't have a floating point number
 			 */
-			if(constant_node_type->basic_type_token == FLOAT_CONST || constant_node_type->basic_type_token == DOUBLE_CONST){
+			if(IS_FLOATING_POINT(constant_node_type) == TRUE){
 				print_parse_message(MESSAGE_TYPE_ERROR, "Floating point values may not be used in in statement with enum comparator", parser_line_num);
 				num_errors++;
 				return FALSE;
@@ -6290,6 +6290,18 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 		 * For basic types we really just rely on the types_assignable_constant rule
 		 */
 		case TYPE_CLASS_BASIC:
+			/**
+			 * If our constant node was an enum, we bar it from being compared with floating point
+			 * values
+			 */
+			if(constant_node->optional_storage.enum_type != NULL){
+				if(IS_FLOATING_POINT(in_comparator_type) == TRUE){
+					print_parse_message(MESSAGE_TYPE_ERROR, "Enums may not be used in in statement with floating point comparator", parser_line_num);
+					num_errors++;
+					return FALSE;
+				}
+			}
+
 			/**
 			 * If we survive to here then we can run the types_assignable on this and see if we get a non-null answer
 			 */
