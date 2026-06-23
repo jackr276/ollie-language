@@ -2126,11 +2126,47 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
  * 	We would be able to convert this into
  * t5 <- x_0 > y_0
  * z_2 <- cmove_le y_0 else x_0
+ *
+ * TODO MAKE A WHILE CHANGED??
  */
 static void optimize_branching_assignments_where_possible(dynamic_array_t* current_function_blocks){
 	//Run through all of the function blocks that we have
 	for(u_int32_t i = 0; i < current_function_blocks->current_index; i++){
+		//By default assume it's eligible, and then get proven wrong as we go through
+		u_int8_t block_is_eligible = TRUE;
+
+		//Extract the function block to work with
 		basic_block_t* function_block = dynamic_array_get_at(current_function_blocks, i);
+
+		/**
+		 * Less than 2 predecessors then this can't possibly be what we're after
+		 */
+		if(function_block->predecessors.current_index < 2){
+			continue;
+		}
+
+
+
+		//TODO IS IT A PHI???
+
+		/**
+		 * Is each predecessor a simple assignment plus a jump only? We're not going
+		 * to be doing this unless it is, because we'd end up doing too much.
+		 * We also need to have readily availabe values. For example, if we're
+		 * assigning over function calls, this optimization will not occur because
+		 * we could not guarantee execution order/exclusion as required
+		 *
+		 * We will also be checking if each one of these predecessors has *one*
+		 * unified branching predecessor itself. If it does not then we're also disqualified
+		 */
+		for(u_int32_t i = 0; i < function_block->predecessors.current_index; i++){
+
+		}
+
+		//This is a very common thing - most blocks are ineligible
+		if(block_is_eligible == FALSE){
+			continue;
+		}
 
 
 
