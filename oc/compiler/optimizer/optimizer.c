@@ -2151,6 +2151,43 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 
 
 /**
+ * Does the given statement have block external side effects?
+ *
+ * What counts as a block external side effect:
+ * 	1.) Assigning to a non-temporary variable
+ * 	2.) Calling a function
+ * 	3.) Storing to memory
+ * 	4.) Copying memory
+ */
+static inline u_int8_t does_statement_have_block_external_side_effects(instruction_t* statement){
+	switch(statement->statement_type){
+		//These all do by default
+		case THREE_ADDR_CODE_FUNC_CALL:
+		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+			return TRUE;
+
+		/**
+		 * Our other options are not so simple. If we have an instance where we are
+		 * assigning to a non-temporary variable, then that counts as an external
+		 * side effect because non-temporary variables live for longer than the block
+		 */
+		default:
+			//Screen for non-temp assignees
+			if(statement->operands.oir.assignee != NULL && statement->operands.oir.assignee->variable_type != VARIABLE_TYPE_TEMP){
+				return TRUE;
+			}
+
+			//Otherwise we are fine
+			return FALSE;
+	}
+}
+
+
+//TODO MAKE HELPER FOR PREDECESSOR SCREENING
+
+
+/**
  * If we have examples like below, we can optimize into converting moves where we avoid the jumping
  * altogether in favor of this kind of conditional assignment. This is a common pattern that we'll
  * have people do so it is worth it to optimize into a conditional assignment
@@ -2292,10 +2329,7 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 			 * TODO THIS SHOULD BE EXPANDED UPON
 			 */
 			cursor = cursor->previous_statement;
-			if(cursor != NULL){
-				block_is_eligible = FALSE;
-				break;
-			}
+			//TODO FIX
 		}
 
 		//This is a very common thing - most blocks are ineligible
