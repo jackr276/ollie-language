@@ -2188,7 +2188,7 @@ static inline u_int8_t does_statement_have_block_external_side_effects(instructi
  * Is the given predecessor block valid for branch assignment folding into conditional moves? 
  *
  * Our criteria for this is as follows:
- * 	1.) The predecessor must have one successor and one predecessor only - TODO MORE WORK ON THIS
+ * 	1.) The predecessor must have one successor and one predecessor only
  * 	2.) It must assign one of the variables in the join block's phi function of interest
  * 	3.) There may be no other instructions inside of the block that have block external side effects(see the rule above for what those are)
  */
@@ -2388,9 +2388,23 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		 */
 		basic_block_t* top_level_if_block = candidate_block->dominator_info.immediate_postdominator;
 
+		/**
+		 * If this is a switch block, we cannot perform the desired optimization
+		 * here. Due to the way that switches in ollie always work, a switch
+		 * would actually result in inferior performance, so we'll never 
+		 * take this road
+		 *
+		 * Due to the way that switches have start and exit jumps to gate against
+		 * targets out of the given range, it's unlikely that this will ever
+		 * be hit. However we need to be absolutely sure so we have this in
+		 * there
+		 */
+		if(top_level_if_block->block_type == BLOCK_TYPE_SWITCH){
+			continue;
+		}
+
 		//TRYING THIS
 		printf("TOP LEVEL BLOCK .L%d\n", candidate_block->dominator_info.immediate_postdominator->block_id);
-
 	}
 
 	//TODO FIX
