@@ -2184,6 +2184,101 @@ static inline u_int8_t does_statement_have_block_external_side_effects(instructi
 }
 
 
+/**
+ * Is the given predecessor block valid for branch assignment folding into conditional moves? 
+ *
+ * Our criteria for this is as follows:
+ * 	1.) The predecessor must have one successor and one predecessor only - TODO MORE WORK ON THIS
+ * 	2.) It must assign one of the variables in the join block's phi function of interest
+ * 	3.) 
+ */
+static inline u_int8_t is_predecessor_block_valid_for_branch_assignment_folding(basic_block_t* join_block, basic_block_t* predecessor){
+
+
+	/**
+	 * If this predecessor has more than one predecessor itself, this isn't
+	 * going to work because we don't have the kind of if-else-if funnel that we're
+	 * looking for
+	 */
+	if(predecessor->predecessors.current_index != 1){
+		block_is_eligible = FALSE;
+		break;
+	}
+
+	/**
+	 * If we have more than one successor, then this also
+	 * isn't eligible because again we don't have the funnel
+	 * shape that we are looking for
+	 */
+	if(predecessor->successors.current_index != 1){
+		block_is_eligible = FALSE;
+		break;
+	}
+
+	/**
+	 * Following this we need to determine if the contents of the block
+	 * itself are eligible for this kind of optimization. These 
+	 * go as follows:
+	 *
+	 * 1.) The very last instruction is a direct jump to our candidate block
+	 * 2.) The block has a final non-temporary variable assignment with a viable type for this
+	 * 3.) The block takes no other actions besides these
+	 *
+	 * The last line is specifically important to avoid side effects of doing this
+	 */
+	instruction_t* cursor = predecessor->exit_statement;
+
+	/**
+	 * Check 1: exit statement must be an unconditional jump to 
+	 * our candidate block
+	 */
+	if(cursor->statement_type != THREE_ADDR_CODE_JUMP_STMT || cursor->if_block != candidate_block){
+		block_is_eligible = FALSE;
+		break;
+	}
+
+	/**
+	 * Check 2: the second to last instruction is a non-temporary variable assignment
+	 * with a type that we specifically support for conditional movement
+	 *
+	 * TODO MAKE THIS MATCH PHI
+	 *
+	 * TODO WHAT ABOUT LOAD SUPPORT???
+	 *
+	 * TODO WHAT ABOUT SUPPORT FOR OTHER VALUES???
+	 */
+	cursor = cursor->previous_statement;
+
+	//Sanity check - if it's NULL then we just had a jump so this isn't going to work anyway
+	if(cursor == NULL){
+		block_is_eligible = FALSE;
+		break;
+	}
+
+	//Invalidate the statement type first
+	if(cursor->statement_type != THREE_ADDR_CODE_ASSN_STMT && cursor->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
+		block_is_eligible = FALSE;
+		break;
+	}
+
+	//Now let's see if we're able to invalidate the assignee's variable type or the actual type of the variable itself
+	if(is_variable_ssa_eligible(cursor->operands.oir.assignee) == FALSE || is_type_conditional_move_compatible(cursor->operands.oir.assignee->type) == FALSE){
+		block_is_eligible = FALSE;
+		break;
+	}
+
+	/**
+	 * Check 3: verify that this is the only action that the block is taking. We can verify this by seeing
+	 * if the cursor's prior value is NULL, meaning it's the header
+	 *
+	 * TODO THIS SHOULD BE EXPANDED UPON
+	 */
+	cursor = cursor->previous_statement;
+	//TODO FIX
+
+}
+
+
 //TODO MAKE HELPER FOR PREDECESSOR SCREENING
 
 
@@ -2212,6 +2307,8 @@ static inline u_int8_t does_statement_have_block_external_side_effects(instructi
  * t5 <- x_0 > y_0
  * z_2 <- cmove_le y_0 else x_0
  *
+ * TODO PROBABLY SHOULD BE USING IMMEDIATE DOMINATOR FOR THIS
+ *
  * TODO MAKE A WHILE CHANGED??
  */
 static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* current_function_blocks){
@@ -2223,10 +2320,6 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		//Grab our candidate for the optimization
 		basic_block_t* candidate_block = dynamic_array_get_at(current_function_blocks, i);
 
-		//What is the parent if block for the candidate?
-		//TODO COME BACK TO THIS
-		basic_block_t* parent_if_block = NULL;
-
 		/**
 		 * Less than 2 predecessors then this can't possibly be what we're after
 		 */
@@ -2234,7 +2327,17 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 			continue;
 		}
 
-		//TODO IS IT A PHI???
+		/**
+		 * Now we need to search this candidate block for a phi variable. This variable
+		 * will be what we're using to look for inside of our branching structure
+		 */
+		
+
+
+		//TODO CHECK CANDIDATE BLOCK FOR PHI
+
+		//What is the parent if block for the candidate?
+		basic_block_t* parent_if_block = NULL;
 
 		/**
 		 * Is each predecessor a simple assignment plus a jump only? We're not going
@@ -2251,85 +2354,13 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 			basic_block_t* predecessor = dynamic_array_get_at(&(candidate_block->predecessors), i);
 
 			/**
-			 * If this predecessor has more than one predecessor itself, this isn't
-			 * going to work because we don't have the kind of if-else-if funnel that we're
-			 * looking for
+			 * Let the helper perform all validations. If at least one of these blocks fails then we are done with
+			 * the entire check
 			 */
-			if(predecessor->predecessors.current_index != 1){
+			if(is_predecessor_block_valid_for_branch_assignment_folding(candidate_block, predecessor) == FALSE){
 				block_is_eligible = FALSE;
 				break;
 			}
-
-			/**
-			 * If we have more than one successor, then this also
-			 * isn't eligible because again we don't have the funnel
-			 * shape that we are looking for
-			 */
-			if(predecessor->successors.current_index != 1){
-				block_is_eligible = FALSE;
-				break;
-			}
-
-			/**
-			 * Following this we need to determine if the contents of the block
-			 * itself are eligible for this kind of optimization. These 
-			 * go as follows:
-			 *
-			 * 1.) The very last instruction is a direct jump to our candidate block
-			 * 2.) The block has a final non-temporary variable assignment with a viable type for this
-			 * 3.) The block takes no other actions besides these
-			 *
-			 * The last line is specifically important to avoid side effects of doing this
-			 */
-			instruction_t* cursor = predecessor->exit_statement;
-
-			/**
-			 * Check 1: exit statement must be an unconditional jump to 
-			 * our candidate block
-			 */
-			if(cursor->statement_type != THREE_ADDR_CODE_JUMP_STMT || cursor->if_block != candidate_block){
-				block_is_eligible = FALSE;
-				break;
-			}
-
-			/**
-			 * Check 2: the second to last instruction is a non-temporary variable assignment
-			 * with a type that we specifically support for conditional movement
-			 *
-			 * TODO MAKE THIS MATCH PHI
-			 *
-			 * TODO WHAT ABOUT LOAD SUPPORT???
-			 *
-			 * TODO WHAT ABOUT SUPPORT FOR OTHER VALUES???
-			 */
-			cursor = cursor->previous_statement;
-
-			//Sanity check - if it's NULL then we just had a jump so this isn't going to work anyway
-			if(cursor == NULL){
-				block_is_eligible = FALSE;
-				break;
-			}
-
-			//Invalidate the statement type first
-			if(cursor->statement_type != THREE_ADDR_CODE_ASSN_STMT && cursor->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
-				block_is_eligible = FALSE;
-				break;
-			}
-
-			//Now let's see if we're able to invalidate the assignee's variable type or the actual type of the variable itself
-			if(is_variable_ssa_eligible(cursor->operands.oir.assignee) == FALSE || is_type_conditional_move_compatible(cursor->operands.oir.assignee->type) == FALSE){
-				block_is_eligible = FALSE;
-				break;
-			}
-
-			/**
-			 * Check 3: verify that this is the only action that the block is taking. We can verify this by seeing
-			 * if the cursor's prior value is NULL, meaning it's the header
-			 *
-			 * TODO THIS SHOULD BE EXPANDED UPON
-			 */
-			cursor = cursor->previous_statement;
-			//TODO FIX
 		}
 
 		//This is a very common thing - most blocks are ineligible
@@ -2342,10 +2373,7 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		 */
 		printf("BLOCK .L%d is ELIGIBLE\n\n\n", candidate_block->block_id);
 
-
-
 	}
-
 
 	//TODO FIX
 	return FALSE;
