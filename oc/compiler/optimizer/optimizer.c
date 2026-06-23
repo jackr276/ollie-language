@@ -2129,23 +2129,21 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
  *
  * TODO MAKE A WHILE CHANGED??
  */
-static void optimize_branching_assignments_where_possible(dynamic_array_t* current_function_blocks){
+static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* current_function_blocks){
 	//Run through all of the function blocks that we have
 	for(u_int32_t i = 0; i < current_function_blocks->current_index; i++){
 		//By default assume it's eligible, and then get proven wrong as we go through
 		u_int8_t block_is_eligible = TRUE;
 
-		//Extract the function block to work with
-		basic_block_t* function_block = dynamic_array_get_at(current_function_blocks, i);
+		//Grab our candidate for the optimization
+		basic_block_t* candidate_block = dynamic_array_get_at(current_function_blocks, i);
 
 		/**
 		 * Less than 2 predecessors then this can't possibly be what we're after
 		 */
-		if(function_block->predecessors.current_index < 2){
+		if(candidate_block->predecessors.current_index < 2){
 			continue;
 		}
-
-
 
 		//TODO IS IT A PHI???
 
@@ -2159,7 +2157,41 @@ static void optimize_branching_assignments_where_possible(dynamic_array_t* curre
 		 * We will also be checking if each one of these predecessors has *one*
 		 * unified branching predecessor itself. If it does not then we're also disqualified
 		 */
-		for(u_int32_t i = 0; i < function_block->predecessors.current_index; i++){
+		for(u_int32_t i = 0; i < candidate_block->predecessors.current_index; i++){
+			//Extract the predecessor
+			basic_block_t* predecessor = dynamic_array_get_at(&(candidate_block->predecessors), i);
+
+			/**
+			 * If this predecessor has more than one predecessor itself, this isn't
+			 * going to work because we don't have the kind of if-else-if funnel that we're
+			 * looking for
+			 */
+			if(predecessor->predecessors.current_index != 1){
+				block_is_eligible = FALSE;
+				break;
+			}
+
+			/**
+			 * If we have more than one successor, then this also
+			 * isn't eligible because again we don't have the funnel
+			 * shape that we are looking for
+			 */
+			if(predecessor->successors.current_index != 1){
+				block_is_eligible = FALSE;
+				break;
+			}
+
+			/**
+			 * Following this we need to determine if the contents of the block
+			 * itself are eligible for this kind of optimization. These 
+			 * go as follows:
+			 *
+			 * 1.) The very last instruction is a direct jump to our candidate block
+			 * 2.) The block ends in a final non-temporary variable assignment
+			 * 3.) The block makes no function calls, store statements, or assignments to any other non-temporary variables
+			 *
+			 * The last line is specifically important to avoid side effects of doing this
+			 */
 
 		}
 
@@ -2172,6 +2204,9 @@ static void optimize_branching_assignments_where_possible(dynamic_array_t* curre
 
 	}
 
+
+	//TODO FIX
+	return FALSE;
 }
 
 
