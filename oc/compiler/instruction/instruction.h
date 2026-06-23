@@ -707,6 +707,11 @@ instruction_t* emit_conditional_assignment_instruction(three_addr_var_t* assigne
 instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1);
 
 /**
+ * Emit a conditional movement statement. Unlike regular moves, we will also need to provide the conditional and branch type for this
+ */
+instruction_t* emit_conditional_movement_statement(three_addr_var_t* assignee, three_addr_var_t* if_assignee, three_addr_var_t* else_assignee, three_addr_var_t* conditional, branch_type_t branch_type);
+
+/**
  * Emit a memory copy statement from one memory region to another. This exists
  * purely as an OIR statement and is converted to moves later on down the road
  *
