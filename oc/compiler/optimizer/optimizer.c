@@ -2192,17 +2192,14 @@ static inline u_int8_t does_statement_have_block_external_side_effects(instructi
  * 	2.) It must assign one of the variables in the join block's phi function of interest
  * 	3.) 
  */
-static inline u_int8_t is_predecessor_block_valid_for_branch_assignment_folding(basic_block_t* join_block, basic_block_t* predecessor){
-
-
+static inline u_int8_t is_predecessor_block_valid_for_branch_assignment_folding(basic_block_t* join_block, basic_block_t* predecessor, three_addr_var_t* target_variable){
 	/**
 	 * If this predecessor has more than one predecessor itself, this isn't
 	 * going to work because we don't have the kind of if-else-if funnel that we're
 	 * looking for
 	 */
 	if(predecessor->predecessors.current_index != 1){
-		block_is_eligible = FALSE;
-		break;
+		return FALSE;
 	}
 
 	/**
@@ -2211,8 +2208,7 @@ static inline u_int8_t is_predecessor_block_valid_for_branch_assignment_folding(
 	 * shape that we are looking for
 	 */
 	if(predecessor->successors.current_index != 1){
-		block_is_eligible = FALSE;
-		break;
+		return FALSE;
 	}
 
 	/**
@@ -2232,54 +2228,58 @@ static inline u_int8_t is_predecessor_block_valid_for_branch_assignment_folding(
 	 * Check 1: exit statement must be an unconditional jump to 
 	 * our candidate block
 	 */
-	if(cursor->statement_type != THREE_ADDR_CODE_JUMP_STMT || cursor->if_block != candidate_block){
-		block_is_eligible = FALSE;
-		break;
+	if(cursor->statement_type != THREE_ADDR_CODE_JUMP_STMT || cursor->if_block != join_block){
+		return FALSE;
 	}
 
 	/**
 	 * Check 2: the second to last instruction is a non-temporary variable assignment
 	 * with a type that we specifically support for conditional movement
 	 *
-	 * TODO MAKE THIS MATCH PHI
-	 *
 	 * TODO WHAT ABOUT LOAD SUPPORT???
-	 *
-	 * TODO WHAT ABOUT SUPPORT FOR OTHER VALUES???
 	 */
 	cursor = cursor->previous_statement;
 
 	//Sanity check - if it's NULL then we just had a jump so this isn't going to work anyway
 	if(cursor == NULL){
-		block_is_eligible = FALSE;
-		break;
+		return FALSE;
 	}
 
 	//Invalidate the statement type first
 	if(cursor->statement_type != THREE_ADDR_CODE_ASSN_STMT && cursor->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
-		block_is_eligible = FALSE;
-		break;
+		return FALSE;
 	}
 
 	//Now let's see if we're able to invalidate the assignee's variable type or the actual type of the variable itself
-	if(is_variable_ssa_eligible(cursor->operands.oir.assignee) == FALSE || is_type_conditional_move_compatible(cursor->operands.oir.assignee->type) == FALSE){
-		block_is_eligible = FALSE;
-		break;
+	if(is_type_conditional_move_compatible(cursor->operands.oir.assignee->type) == FALSE){
+		return FALSE;
+	}
+
+	/**
+	 * Let's now make sure that the variable that is being assigned to has the same underlying symtab
+	 * variable as the given target variable(albeit a different SSA generation)
+	 */
+	if(variables_equal_no_ssa(target_variable, cursor->operands.oir.assignee) == FALSE){
+		return FALSE;
 	}
 
 	/**
 	 * Check 3: verify that this is the only action that the block is taking. We can verify this by seeing
 	 * if the cursor's prior value is NULL, meaning it's the header
-	 *
-	 * TODO THIS SHOULD BE EXPANDED UPON
 	 */
 	cursor = cursor->previous_statement;
-	//TODO FIX
+	while(cursor != NULL){
+		if(does_statement_have_block_external_side_effects(cursor) == TRUE){
+			return FALSE;
+		}
 
+		//We're crawling up backwards
+		cursor = cursor->previous_statement;
+	}
+
+	//If we've survived all the way to down here, then we are good
+	return TRUE;
 }
-
-
-//TODO MAKE HELPER FOR PREDECESSOR SCREENING
 
 
 /**
@@ -2314,6 +2314,9 @@ static inline u_int8_t is_predecessor_block_valid_for_branch_assignment_folding(
 static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* current_function_blocks){
 	//Run through all of the function blocks that we have
 	for(u_int32_t i = 0; i < current_function_blocks->current_index; i++){
+		//The variable that we're going to optimize assignment for
+		three_addr_var_t* optimizing_assignment_variable = NULL;
+
 		//By default assume it's eligible, and then get proven wrong as we go through
 		u_int8_t block_is_eligible = TRUE;
 
@@ -2331,13 +2334,23 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		 * Now we need to search this candidate block for a phi variable. This variable
 		 * will be what we're using to look for inside of our branching structure
 		 */
-		
+		instruction_t* candidate_cursor = candidate_block->leader_statement;
 
+		/**
+		 * If we do not immediately see a phi function then this is not going to work
+		 */
+		if(candidate_cursor == NULL || candidate_cursor->statement_type != THREE_ADDR_CODE_PHI_FUNC){
+			continue;
+		}
 
-		//TODO CHECK CANDIDATE BLOCK FOR PHI
+		/**
+		 * Otherwise we have a phi function so we are able to proceed. This very first phi function
+		 * is going to be our variable of interest
+		 */
+		optimizing_assignment_variable = candidate_cursor->operands.oir.assignee;
 
 		//What is the parent if block for the candidate?
-		basic_block_t* parent_if_block = NULL;
+		basic_block_t* parent_if_block = candidate_block->dominator_info.immediate_postdominator;
 
 		/**
 		 * Is each predecessor a simple assignment plus a jump only? We're not going
@@ -2357,7 +2370,7 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 			 * Let the helper perform all validations. If at least one of these blocks fails then we are done with
 			 * the entire check
 			 */
-			if(is_predecessor_block_valid_for_branch_assignment_folding(candidate_block, predecessor) == FALSE){
+			if(is_predecessor_block_valid_for_branch_assignment_folding(candidate_block, predecessor, optimizing_assignment_variable) == FALSE){
 				block_is_eligible = FALSE;
 				break;
 			}
