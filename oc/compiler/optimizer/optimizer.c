@@ -2186,6 +2186,10 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		//Grab our candidate for the optimization
 		basic_block_t* candidate_block = dynamic_array_get_at(current_function_blocks, i);
 
+		//What is the parent if block for the candidate?
+		//TODO COME BACK TO THIS
+		basic_block_t* parent_if_block = NULL;
+
 		/**
 		 * Less than 2 predecessors then this can't possibly be what we're after
 		 */
@@ -2260,6 +2264,12 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 			 * TODO WHAT ABOUT LOAD SUPPORT???
 			 */
 			cursor = cursor->next_statement;
+
+			//Sanity check - if it's NULL then we just had a jump so this isn't going to work anyway
+			if(cursor == NULL){
+				block_is_eligible = FALSE;
+				break;
+			}
 
 			//Invalidate the statement type first
 			if(cursor->statement_type != THREE_ADDR_CODE_ASSN_STMT && cursor->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
