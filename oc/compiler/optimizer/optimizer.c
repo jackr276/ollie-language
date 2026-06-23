@@ -2190,7 +2190,7 @@ static inline u_int8_t does_statement_have_block_external_side_effects(instructi
  * Our criteria for this is as follows:
  * 	1.) The predecessor must have one successor and one predecessor only - TODO MORE WORK ON THIS
  * 	2.) It must assign one of the variables in the join block's phi function of interest
- * 	3.) 
+ * 	3.) There may be no other instructions inside of the block that have block external side effects(see the rule above for what those are)
  */
 static inline u_int8_t is_predecessor_block_valid_for_branch_assignment_folding(basic_block_t* join_block, basic_block_t* predecessor, three_addr_var_t* target_variable){
 	/**
