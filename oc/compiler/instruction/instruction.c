@@ -2657,6 +2657,51 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			//Now at the very end, close the whole thing out
 			fprintf(fl, ")\n");
 			break;
+
+		case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT:
+			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
+
+			switch(stmt->movement_type){
+				case MOVE_E:
+					fprintf(fl, " <- if equal ");
+					break;
+
+				case MOVE_NE:
+					fprintf(fl, " <- if not equal ");
+					break;
+
+				case MOVE_Z:
+					fprintf(fl, " <- if zero ");
+					break;
+
+				case MOVE_NZ:
+					fprintf(fl, " <- if not zero ");
+					break;
+
+				case MOVE_A:
+					fprintf(fl, " <- if above ");
+					break;
+
+				case MOVE_AE:
+					fprintf(fl, " <- if above or equal ");
+					break;
+
+				case MOVE_B:
+					fprintf(fl, " <- if below ");
+					break;
+
+				case MOVE_BE:
+					fprintf(fl, " <- if below or equal ");
+					break;
+
+					//TODO FINISH
+
+				default:
+					fprintf(stderr, "Fatal internal compiler error. Unrecognized conditional movement type detected\n");
+					exit(1);
+			}
+			
+			break;
 		
 		case THREE_ADDR_CODE_INC_STMT:
 			fprintf(fl, "inc ");
@@ -5506,6 +5551,7 @@ instruction_t* emit_conditional_movement_statement(three_addr_var_t* assignee, t
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	stmt->statement_type = THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT;
+	stmt->operands.oir.assignee = assignee;
 	stmt->operands.oir.operand1 = if_assignee;
 	stmt->operands.oir.operand2 = else_assignee;
 	
