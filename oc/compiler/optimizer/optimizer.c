@@ -2103,6 +2103,43 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 
 
 /**
+ * If we have examples like below, we can optimize into converting moves where we avoid the jumping
+ * altogether in favor of this kind of conditional assignment. This is a common pattern that we'll
+ * have people do so it is worth it to optimize into a conditional assignment
+ *
+ * t5 <- x_0 > y_0
+ * branch_le .L4 else .L5
+ *
+ * .L5:
+ * 	z_0 <- x_0 
+ * 	jmp .L6
+ *
+ * .L4:
+ * 	z_1 <- y_0 
+ * 	jmp .L6
+ *
+ * .L6:
+ * 	 z_2 <- phi(x_0, y_0)
+ * 	 ...
+ * 	 ...
+ *
+ * 	We would be able to convert this into
+ * t5 <- x_0 > y_0
+ * z_2 <- cmove_le y_0 else x_0
+ */
+static void optimize_branching_assignments_where_possible(dynamic_array_t* current_function_blocks){
+	//Run through all of the function blocks that we have
+	for(u_int32_t i = 0; i < current_function_blocks->current_index; i++){
+		basic_block_t* function_block = dynamic_array_get_at(current_function_blocks, i);
+
+
+
+	}
+
+}
+
+
+/**
  * The clean algorithm will remove all useless control flow structures, ideally
  * resulting in a simplified CFG. This should be done after we use mark and sweep to get rid of useless code,
  * because that may lead to empty blocks that we can clean up here
@@ -2347,10 +2384,10 @@ cfg_t* optimize(cfg_t* cfg){
 
 		/**
 		 * PASS 3: always true/false optimization
-		 * Now that we've broken up and logical and/or logic, we can go through and see if there are any
-		 * branches that we can eliminate due to their conditions being always true/false. An example
-		 * of this would be while(true) always being true, so there being no need for a comparison
-		 * on each step
+		 * Now that we've swept everything, let's figure out if there are
+		 * any branches that are always true or always false. We'll need to 
+		 * elminate these before we go through and do anything with conditional
+		 * movement
 		 */
 		u_int8_t found_branches_to_optimize = optimize_always_true_false_paths(current_function_blocks);
 
@@ -2384,6 +2421,10 @@ cfg_t* optimize(cfg_t* cfg){
 			//Invoke the sweeper
 			sweep(current_function_blocks, function_entry_block);
 		}
+
+		//TODO DOC
+		optimize_branching_assignments_where_possible(current_function_blocks);
+
 
 		/**
 		 * PASS 4: Clean algorithm
