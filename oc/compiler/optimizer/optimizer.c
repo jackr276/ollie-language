@@ -90,6 +90,32 @@ static inline int32_t increment_and_get(){
 
 
 /**
+ * Is a given variable SSA eligible? We do this by looking at the type of the
+ * variable and whether or not the linked var is NULL. If the linked var is NULL
+ * we would get segfaults
+ */
+static inline u_int8_t is_variable_ssa_eligible(three_addr_var_t* variable){
+	//Sanity check
+	if(variable == NULL){
+		return FALSE;
+	}
+
+	switch(variable->variable_type){
+		case VARIABLE_TYPE_MEMORY_ADDRESS:
+		case VARIABLE_TYPE_NON_TEMP:
+			if(variable->linked_var != NULL){
+				return TRUE;
+			} else {
+				return FALSE;
+			}
+
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Reset all of the marked instructions for a given block
  */
 static inline void reset_marks_for_block(basic_block_t* block){
@@ -2192,6 +2218,29 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 			 *
 			 * The last line is specifically important to avoid side effects of doing this
 			 */
+			instruction_t* cursor = predecessor->exit_statement;
+
+			/**
+			 * Check 1: exit statement must be an unconditional jump to 
+			 * our candidate block
+			 */
+			if(cursor->statement_type != THREE_ADDR_CODE_JUMP_STMT || cursor->if_block != candidate_block){
+				block_is_eligible = FALSE;
+				break;
+			}
+
+			/**
+			 * Check 2: the second to last instruction is a non-temporary variable assignment
+			 *
+			 * TODO MAKE THIS MATCH PHI
+			 *
+			 * TODO WHAT ABOUT LOAD SUPPORT???
+			 */
+			cursor = cursor->next_statement;
+			if((cursor->statement_type == THREE_ADDR_CODE_ASSN_STMT || cursor->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT)
+				&& cursor->operands.oir.assignee->variable_type != VARIABLE_TYPE_TEMP){
+
+			}
 
 		}
 
