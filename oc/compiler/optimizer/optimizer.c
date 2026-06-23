@@ -2306,10 +2306,6 @@ static inline u_int8_t is_predecessor_block_valid_for_branch_assignment_folding(
  * 	We would be able to convert this into
  * t5 <- x_0 > y_0
  * z_2 <- cmove_le y_0 else x_0
- *
- * TODO PROBABLY SHOULD BE USING IMMEDIATE DOMINATOR FOR THIS
- *
- * TODO MAKE A WHILE CHANGED??
  */
 static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* current_function_blocks){
 	//Run through all of the function blocks that we have
@@ -2349,9 +2345,6 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		 */
 		optimizing_assignment_variable = candidate_cursor->operands.oir.assignee;
 
-		//What is the parent if block for the candidate?
-		basic_block_t* parent_if_block = candidate_block->dominator_info.immediate_postdominator;
-
 		/**
 		 * Is each predecessor a simple assignment plus a jump only? We're not going
 		 * to be doing this unless it is, because we'd end up doing too much.
@@ -2382,9 +2375,21 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		}
 
 		/**
-		 * If we make it here, then we know that this block is eligible 
+		 * If we make it here, then we know that this block is eligible. Now that we know
+		 * it is, we are able to perform the actual converting move optimization
 		 */
 		printf("BLOCK .L%d is ELIGIBLE\n\n\n", candidate_block->block_id);
+
+		/**
+		 * Due to the way that an if-else-if structure works, we guarantee that the immediate
+		 * postdominator of the end block is the starting if block. We know this because 
+		 * in order to get from the start block to our candidate block, we must flow through the
+		 * very first if, which is why this if "postdominates" our given candidate
+		 */
+		basic_block_t* top_level_if_block = candidate_block->dominator_info.immediate_postdominator;
+
+		//TRYING THIS
+		printf("TOP LEVEL BLOCK .L%d\n", candidate_block->dominator_info.immediate_postdominator->block_id);
 
 	}
 
