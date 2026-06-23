@@ -2694,13 +2694,31 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 					fprintf(fl, " <- if below or equal ");
 					break;
 
-					//TODO FINISH
+				case MOVE_L:
+					fprintf(fl, " <- if less ");
+					break;
+
+				case MOVE_LE:
+					fprintf(fl, " <- if less or equal ");
+					break;
+
+				case MOVE_G:
+					fprintf(fl, " <- if greater ");
+					break;
+
+				case MOVE_GE:
+					fprintf(fl, " <- if greater or equal ");
+					break;
 
 				default:
 					fprintf(stderr, "Fatal internal compiler error. Unrecognized conditional movement type detected\n");
 					exit(1);
 			}
-			
+
+			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
+			fprintf(fl, " else ");
+			print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
 			break;
 		
 		case THREE_ADDR_CODE_INC_STMT:
