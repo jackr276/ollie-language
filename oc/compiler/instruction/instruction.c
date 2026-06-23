@@ -5502,15 +5502,15 @@ instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee
 /**
  * Emit a conditional movement statement. Unlike regular moves, we will also need to provide the conditional and branch type for this
  */
-instruction_t* emit_conditional_movement_statement(three_addr_var_t* assignee, three_addr_var_t* if_assignee, three_addr_var_t* else_assignee, three_addr_var_t* conditional, branch_type_t branch_type){
+instruction_t* emit_conditional_movement_statement(three_addr_var_t* assignee, three_addr_var_t* if_assignee, three_addr_var_t* else_assignee, three_addr_var_t* conditional, conditional_movement_type_t movement_type){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	stmt->statement_type = THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT;
 	stmt->operands.oir.operand1 = if_assignee;
 	stmt->operands.oir.operand2 = else_assignee;
-
-	//The branch type informs how we assign over
-	stmt->branch_type = branch_type;
+	
+	//The movement type informs how we assign over
+	stmt->movement_type = movement_type;
 
 	//This relies on the conditional to set codes
 	stmt->relies_on = conditional;

@@ -53,6 +53,25 @@ typedef enum {
 	BRANCH_BE, //Branch LE(UNSIGNED)
 } branch_type_t;
 
+/**
+ * The kind of conditional movement that we are doing
+ */
+typedef enum {
+	NO_CONDITIONAL_MOVEMENT, //This is the default, and what we get when we have 0
+	MOVE_NE,
+	MOVE_E,
+	MOVE_NZ,
+	MOVE_Z,
+	MOVE_L, //Move LT(SIGNED)
+	MOVE_G, //Move GT(SIGNED)
+	MOVE_GE, //Move GE(SIGNED)
+	MOVE_LE, //Move LE(SIGNED)
+	MOVE_A, //Move GT(UNSIGNED)
+	MOVE_AE, //Move GE(UNSIGNED)
+	MOVE_B, //Move LT(UNSIGNED)
+	MOVE_BE, //Move LE(UNSIGNED)
+} conditional_movement_type_t;
+
 
 /**
  * All OIR statement types
