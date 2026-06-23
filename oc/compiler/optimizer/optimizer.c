@@ -116,6 +116,28 @@ static inline u_int8_t is_variable_ssa_eligible(three_addr_var_t* variable){
 
 
 /**
+ * Is the given type conditional move compatible? Remember that we only
+ * can do conditional moves for basic non-float types or pointer types
+ */
+static inline u_int8_t is_type_conditional_move_compatible(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_BASIC:
+			if(type->basic_type_token == VOID || type->basic_type_token == F32 || type->basic_type_token == F64){
+				return FALSE;
+			}
+
+			return TRUE;
+
+		case TYPE_CLASS_POINTER:
+			return TRUE;
+
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Reset all of the marked instructions for a given block
  */
 static inline void reset_marks_for_block(basic_block_t* block){
@@ -2213,7 +2235,7 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 			 * go as follows:
 			 *
 			 * 1.) The very last instruction is a direct jump to our candidate block
-			 * 2.) The block ends in a final non-temporary variable assignment
+			 * 2.) The block ends in a final non-temporary variable assignment with a viable type for this
 			 * 3.) The block makes no function calls, store statements, or assignments to any other non-temporary variables
 			 *
 			 * The last line is specifically important to avoid side effects of doing this
@@ -2231,15 +2253,24 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 
 			/**
 			 * Check 2: the second to last instruction is a non-temporary variable assignment
+			 * with a type that we specifically support for conditional movement
 			 *
 			 * TODO MAKE THIS MATCH PHI
 			 *
 			 * TODO WHAT ABOUT LOAD SUPPORT???
 			 */
 			cursor = cursor->next_statement;
-			if((cursor->statement_type == THREE_ADDR_CODE_ASSN_STMT || cursor->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT)
-				&& cursor->operands.oir.assignee->variable_type != VARIABLE_TYPE_TEMP){
 
+			//Invalidate the statement type first
+			if(cursor->statement_type != THREE_ADDR_CODE_ASSN_STMT && cursor->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
+				block_is_eligible = FALSE;
+				break;
+			}
+
+			//Now let's see if we're able to invalidate the assignee's variable type or the actual type of the variable itself
+			if(is_variable_ssa_eligible(cursor->operands.oir.assignee) == FALSE || is_type_conditional_move_compatible(cursor->operands.oir.assignee->type) == FALSE){
+				block_is_eligible = FALSE;
+				break;
 			}
 
 		}
