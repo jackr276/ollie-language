@@ -2239,8 +2239,8 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 			 * go as follows:
 			 *
 			 * 1.) The very last instruction is a direct jump to our candidate block
-			 * 2.) The block ends in a final non-temporary variable assignment with a viable type for this
-			 * 3.) The block makes no function calls, store statements, or assignments to any other non-temporary variables
+			 * 2.) The block has a final non-temporary variable assignment with a viable type for this
+			 * 3.) The block takes no other actions besides these
 			 *
 			 * The last line is specifically important to avoid side effects of doing this
 			 */
@@ -2262,8 +2262,10 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 			 * TODO MAKE THIS MATCH PHI
 			 *
 			 * TODO WHAT ABOUT LOAD SUPPORT???
+			 *
+			 * TODO WHAT ABOUT SUPPORT FOR OTHER VALUES???
 			 */
-			cursor = cursor->next_statement;
+			cursor = cursor->previous_statement;
 
 			//Sanity check - if it's NULL then we just had a jump so this isn't going to work anyway
 			if(cursor == NULL){
@@ -2283,12 +2285,28 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 				break;
 			}
 
+			/**
+			 * Check 3: verify that this is the only action that the block is taking. We can verify this by seeing
+			 * if the cursor's prior value is NULL, meaning it's the header
+			 *
+			 * TODO THIS SHOULD BE EXPANDED UPON
+			 */
+			cursor = cursor->previous_statement;
+			if(cursor != NULL){
+				block_is_eligible = FALSE;
+				break;
+			}
 		}
 
 		//This is a very common thing - most blocks are ineligible
 		if(block_is_eligible == FALSE){
 			continue;
 		}
+
+		/**
+		 * If we make it here, then we know that this block is eligible 
+		 */
+		printf("BLOCK .L%d is ELIGIBLE\n\n\n", candidate_block->block_id);
 
 
 
