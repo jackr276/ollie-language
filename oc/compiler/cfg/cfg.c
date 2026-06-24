@@ -9319,6 +9319,10 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 				//We'll now need to add this into the jump table. We always subtract the adjustment to ensure
 				//that we start down at 0 as the lowest value
 				add_jump_table_entry(jump_calculation_block->jump_table, case_stmt_cursor->constant_value.signed_int_value - offset, case_default_results.starting_block);
+
+				//The starting block is a successor to the root block
+				add_successor(jump_calculation_block, case_default_results.starting_block);
+
 				break;
 
 			//Handle a default statement
@@ -9335,9 +9339,6 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 			default:
 				exit(0);
 		}
-
-		//The starting block is a successor to the root block
-		add_successor(jump_calculation_block, case_default_results.starting_block);
 
 		//Now we'll drill down to the bottom to prime the next pass
 		current_block = case_default_results.final_block;
@@ -9365,13 +9366,28 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 		emit_jump(default_block, ending_block);
 	}
 
+	//If a switch is exhaustive, there are no gaps between any of the case members
+	u_int8_t switch_is_exhaustive = TRUE;
+
 	//Now at the ever end, we'll need to fill the remaining jump table blocks that are empty
 	//with the default value
-	for(u_int16_t _ = 0; _ < jump_calculation_block->jump_table->num_nodes; _++){
+	for(u_int32_t _ = 0; _ < jump_calculation_block->jump_table->num_nodes; _++){
 		//If it's null, we'll make it the default
 		if(dynamic_array_get_at(&(jump_calculation_block->jump_table->nodes), _) == NULL){
 			dynamic_array_set_at(&(jump_calculation_block->jump_table->nodes), default_block, _);
+
+			//Once we get here we know it's not exhaustive
+			switch_is_exhaustive = FALSE;
 		}
+	}
+
+	/**
+	 * If the switch is not exhaustive, then we will have the default block as a successor
+	 * to the jump calculation block. This however only happens if it is not exhaustive, 
+	 * which is why we've waited until now to add this
+	 */
+	if(switch_is_exhaustive == FALSE){
+		add_successor(jump_calculation_block, default_block);
 	}
 
 	//If we have no predecessors, that means that every case statement ended in a return statement.
