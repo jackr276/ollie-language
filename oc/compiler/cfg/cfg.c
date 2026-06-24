@@ -9014,6 +9014,8 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 				//Add this in as an entry to the jump table
 				add_jump_table_entry(jump_calculation_block->jump_table, cursor->constant_value.signed_int_value - offset, case_default_results.starting_block);
 
+				//A case statement is always a successor to the jump calculation block
+				add_successor(jump_calculation_block, case_default_results.starting_block);
 				break;
 
 			//C-style default, also let the appropriate rule handle
@@ -9031,9 +9033,6 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 			default:
 				exit(0);
 		}
-
-		//This block counts as a successor to the root level block
-		add_successor(jump_calculation_block, case_default_results.starting_block);
 
 		//Reassign current block
 		current_block = case_default_results.final_block;
@@ -9137,11 +9136,14 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 		emit_jump(default_block, result_package.final_block);
 	}
 
+	//If a switch is exhaustive, there are no gaps between any of the case members
+	u_int8_t switch_is_exhaustive = TRUE;
+
 	/**
 	 * Run through the entire jump table. Any nodes that are not occupied(meaning there's no case statement with that value)
 	 * will be set to point to the default block. 
 	 */
-	for(u_int16_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
+	for(u_int32_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
 		/**
 		 * If it's null, we'll make it the default. This should only happen in switches
 		 * that are non-exhaustive. For exhaustive switches, the parser has already ensured that we
@@ -9149,10 +9151,20 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 		 */
 		if(dynamic_array_get_at(&(jump_calculation_block->jump_table->nodes), i) == NULL){
 			dynamic_array_set_at(&(jump_calculation_block->jump_table->nodes), default_block, i);
+			
+			//If we have to add one of these then the switch is not exhaustive
+			switch_is_exhaustive = FALSE;
 		}
 	}
 
-	//Now that everything has been situated, we can start emitting the values in the initial node
+	/**
+	 * If the switch is not exhaustive, we *will* need to add the default statement as
+	 * a successor to the jump calculation block. We only do this once we get down here to
+	 * avoid any issues with unneeded successors if it is exhaustive
+	 */
+	if(switch_is_exhaustive == FALSE){
+		add_successor(jump_calculation_block, default_block);
+	}
 
 	//We'll need both of these as constants for our computation
 	three_addr_const_t* lower_bound = emit_direct_integer_or_char_constant(root_node->lower_bound, i32);
