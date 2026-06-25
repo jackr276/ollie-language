@@ -8951,6 +8951,11 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	//Declare and initialize off the bat
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
+	if(root_node->num_case_members == 1){
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(1);
+	}
+
 	//Th starting and ending blocks for the switch statements
 	basic_block_t* root_level_block = basic_block_alloc_and_estimate();
 	//The upper bound check block
@@ -9260,10 +9265,17 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 static inline generic_ast_node_t* construct_binary_expression_with_const_ast_subtree(generic_ast_node_t* expression, int32_t constant, generic_type_t* constant_type, ollie_token_t binary_operator){
 	//We always have a double equals node here
 	generic_ast_node_t* equals_node = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, SIDE_TYPE_RIGHT);
+	//Copy the inferred type up
+	equals_node->inferred_type = expression->inferred_type;
 	equals_node->binary_operator = binary_operator;
 
 	//First child is always the expression
 	add_child_node(equals_node, expression);
+
+	/**
+	 * IMPORTANT - break any/all associations here with prior next siblings
+	 */
+	expression->next_sibling = NULL;
 
 	//Now we'll need a constant node
 	generic_ast_node_t* constant_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, SIDE_TYPE_RIGHT);
@@ -9344,7 +9356,7 @@ static cfg_result_package_t ollie_switch_with_one_case_to_if_conversion(generic_
 			 * The one case statement is always the if block.
 			 */
 			case AST_NODE_TYPE_CASE_STMT:
-				case_results = visit_case_statement(root_node);
+				case_results = visit_case_statement(case_statement_cursor);
 
 				//The if block is always the first thing here
 				if_block = case_results.starting_block;
@@ -9363,10 +9375,10 @@ static cfg_result_package_t ollie_switch_with_one_case_to_if_conversion(generic_
 
 				break;
 			/**
-			 * The default *always* goes into the else block. If
+			 * The default *always* goes into the else block
 			 */
 			case AST_NODE_TYPE_DEFAULT_STMT:
-				default_results = visit_default_statement(root_node);
+				default_results = visit_default_statement(case_statement_cursor);
 
 				//This becomes our else block
 				else_block = default_results.starting_block;
