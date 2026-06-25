@@ -2231,8 +2231,8 @@ static void rename_block(basic_block_t* entry){
 	 * Now that we're done with the renaming, we'll go through each dominator child in this node
 	 * and perform the same operation
 	 */
-	for(u_int32_t _ = 0; _ < entry->dominator_children.current_index; _++){
-		rename_block(dynamic_array_get_at(&(entry->dominator_children), _));
+	for(u_int32_t i = 0; i < entry->dominator_children.current_index; i++){
+		rename_block(dynamic_array_get_at(&(entry->dominator_children), i));
 	}
 
 	/**
@@ -9259,13 +9259,42 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
  *
  * Since this is an ollie style switch statement, we do not need to worry about any fall-through
  * cases. We'll just need to emit the if-else-if chain as given
+ *
+ * switch(x) {
+ * 	 case 1 -> {
+ * 	 	//stuff 1
+ *
+ * 	 }
+ *
+ * 	 default -> {
+ * 	 	//stuff 2
+ * 	 }
+ *
+ * Will turn into
+ * 	
+ * 	if(x == 1){
+ * 		//stuff 1
+ * 	} else {
+ * 		//stuff 2
+ * 	}
+ * }
  */
 static cfg_result_package_t ollie_switch_with_one_case_to_if_conversion(generic_ast_node_t* root_node){
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
+
+	//We'll need one block for our start
+	basic_block_t* entry_block = basic_block_alloc_and_estimate();
+
+	//Grab a cursor that we will use to traverse
+	generic_ast_node_t* case_statement_cursor = root_node->first_child;
+
+	//Emit the result that we'll be switching on
+	cfg_result_package_t input_results = emit_expression(entry_block, case_statement_cursor);
+
 	
+
 	printf("TODO");
 	exit(1);
-
 }
 
 
@@ -9276,6 +9305,14 @@ static cfg_result_package_t ollie_switch_with_one_case_to_if_conversion(generic_
  */
 static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node){
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
+
+	/**
+	 * If we just have one case member, we will need to handle this differently. 
+	 * The invoked rule will convert this into an equivalent if-else-if statement
+	 */
+	if(root_node->num_case_members == 1){
+		return ollie_switch_with_one_case_to_if_conversion(root_node);
+	}
 
 	//The starting block for the switch statement - we'll want this in a new block
 	basic_block_t* root_level_block = basic_block_alloc_and_estimate();
