@@ -9257,10 +9257,10 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
  * subsequently be parsed by the expression converter. This is done because it's easier to do this
  * than deal with the expression converter directly
  */
-static inline generic_ast_node_t* construct_expression_equals_constant_ast_subtree(generic_ast_node_t* expression, int32_t constant, generic_type_t* constant_type){
+static inline generic_ast_node_t* construct_binary_expression_with_const_ast_subtree(generic_ast_node_t* expression, int32_t constant, generic_type_t* constant_type, ollie_token_t binary_operator){
 	//We always have a double equals node here
 	generic_ast_node_t* equals_node = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, SIDE_TYPE_RIGHT);
-	equals_node->binary_operator = DOUBLE_EQUALS;
+	equals_node->binary_operator = binary_operator;
 
 	//First child is always the expression
 	add_child_node(equals_node, expression);
@@ -9391,8 +9391,8 @@ static cfg_result_package_t ollie_switch_with_one_case_to_if_conversion(generic_
 		case_statement_cursor = case_statement_cursor->next_sibling;
 	}
 
-	//Now we need to emit the logic for a branch inside of here. This is slightly
-
+	//Let the helper construct a branch new AST sub tree for us to work off of
+	generic_ast_node_t* equals_expression = construct_binary_expression_with_const_ast_subtree(conditional_node, case_statement_constant, conditional_node->inferred_type, DOUBLE_EQUALS); 
 
 	/**
 	 * Two options here - either we've seen/have a default block and we're able to direct
@@ -9400,14 +9400,12 @@ static cfg_result_package_t ollie_switch_with_one_case_to_if_conversion(generic_
 	 * if. Either one is fine they're just handled differently
 	 */
 	if(else_block != NULL){
-		emit_branch(top_level_block, conditional_node, basic_block_t *if_block, basic_block_t *else_block, branch_category_t branch_category)
-
+		emit_branch(top_level_block, equals_expression, else_block, if_block, BRANCH_CATEGORY_INVERSE);
 	} else {
-
+		emit_branch(top_level_block, equals_expression, exit_block, if_block, BRANCH_CATEGORY_INVERSE);
 	}
 
-	printf("TODO");
-	exit(1);
+	return result_package;
 }
 
 
