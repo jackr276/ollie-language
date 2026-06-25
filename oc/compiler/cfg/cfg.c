@@ -8943,8 +8943,45 @@ static cfg_result_package_t visit_c_style_default_statement(generic_ast_node_t* 
 
 
 /**
+ * Take a c-style switch-case statement with only one case member and convert it into an if-else statement. This
+ * has some different logic when compared to the ollie style switch statement because we can have breaks and we
+ * are able to fall through these case values
+ *
+ * Take our most complex example:
+ *
+ * switch(x){
+ * 		default:
+ * 			//Some stuff
+ *			//fall through
+ * 		case 5:
+ * 			x--;
+ * 			break;
+ * }
+ *
+ * This should become:
+ *
+ * .L4(conditional)
+ * 	x == 5
+ * 	branch_ne .L5 else .L6
+ *
+ * .L5(default):
+ * 	//Default stuff
+ *	jmp .L6 //Simulate the fall through behavior
+ *
+ * .L6(case):
+ * 	x--;
+ * 	jmp .L7
+ *
+ * .L7(Overall end):
+ * 	//Phi function and other stuff
+ *
  */
 static inline cfg_result_package_t c_style_switch_with_one_member_to_if_conversion(generic_ast_node_t* root_node){
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
+
+
+
+
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
 
