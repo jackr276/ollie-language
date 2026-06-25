@@ -9295,8 +9295,8 @@ static cfg_result_package_t ollie_switch_with_one_case_to_if_conversion(generic_
 	basic_block_t* top_level_block = basic_block_alloc_and_estimate();
 	basic_block_t* exit_block = basic_block_alloc_and_estimate();
 	//These two remain uninitialized for now
-	basic_block_t* if_block;
-	basic_block_t* else_block;
+	basic_block_t* if_block = NULL;
+	basic_block_t* else_block = NULL;
 
 	top_level_block->block_type = BLOCK_TYPE_IF_ENTRY;
 	exit_block->block_type = BLOCK_TYPE_IF_EXIT;
@@ -9317,12 +9317,40 @@ static cfg_result_package_t ollie_switch_with_one_case_to_if_conversion(generic_
 			case AST_NODE_TYPE_CASE_STMT:
 				case_results = visit_case_statement(root_node);
 
+				//The if block is always the first thing here
+				if_block = case_results.starting_block;
+
+				/**
+				 * Do any/all needed bookkeeping with the final block where we
+				 * jump to the end block if appropriate
+				 */
+				basic_block_t* final_case_block = case_results.final_block;
+				if(does_block_end_in_terminal_statement(final_case_block) == FALSE){
+					emit_jump(final_case_block, exit_block);
+				}
+
+				//Emit the actual constant that we'll need to switch on
+				case_statement_const = emit_direct_integer_or_char_constant(if_block->case_stmt_val, input_results.result_value.result_var->type);
+
 				break;
 			/**
 			 * The default *always* goes into the else block. If
 			 */
 			case AST_NODE_TYPE_DEFAULT_STMT:
 				default_results = visit_default_statement(root_node);
+
+				//This becomes our else block
+				else_block = default_results.starting_block;
+				
+				/**
+				 * Do any/all needed bookkeeping with the final block where we
+				 * jump to the end block if appropriate
+				 */
+				basic_block_t* final_default_block = case_results.final_block;
+				if(does_block_end_in_terminal_statement(final_default_block) == FALSE){
+					emit_jump(final_default_block, exit_block);
+				}
+
 				break;
 
 			default:
