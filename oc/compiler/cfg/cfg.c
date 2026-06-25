@@ -9278,20 +9278,61 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
  * 		//stuff 2
  * 	}
  * }
+ *
+ * Ollie style statements also don't support switch level breaks, so we don't need to worry about
+ * that either in this case
  */
 static cfg_result_package_t ollie_switch_with_one_case_to_if_conversion(generic_ast_node_t* root_node){
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
+	cfg_result_package_t case_results;
+	cfg_result_package_t default_results;
+	//This is the one constant for our case statement
+	three_addr_const_t* case_statement_const = NULL;
 
-	//We'll need one block for our start
-	basic_block_t* entry_block = basic_block_alloc_and_estimate();
+	/**
+	 * We'll need all the same blocks that we would need if this was an if statement
+	 */
+	basic_block_t* top_level_block = basic_block_alloc_and_estimate();
+	basic_block_t* exit_block = basic_block_alloc_and_estimate();
+	//These two remain uninitialized for now
+	basic_block_t* if_block;
+	basic_block_t* else_block;
+
+	top_level_block->block_type = BLOCK_TYPE_IF_ENTRY;
+	exit_block->block_type = BLOCK_TYPE_IF_EXIT;
 
 	//Grab a cursor that we will use to traverse
 	generic_ast_node_t* case_statement_cursor = root_node->first_child;
 
 	//Emit the result that we'll be switching on
-	cfg_result_package_t input_results = emit_expression(entry_block, case_statement_cursor);
+	cfg_result_package_t input_results = emit_expression(top_level_block, case_statement_cursor);
 
-	
+	//Bump it up and process through the case statements and default if one exists
+	case_statement_cursor = case_statement_cursor->next_sibling;
+	while(case_statement_cursor != NULL){
+		switch(case_statement_cursor->ast_node_type){
+			/**
+			 * The one case statement is always the if block.
+			 */
+			case AST_NODE_TYPE_CASE_STMT:
+				case_results = visit_case_statement(root_node);
+
+				break;
+			/**
+			 * The default *always* goes into the else block. If
+			 */
+			case AST_NODE_TYPE_DEFAULT_STMT:
+				default_results = visit_default_statement(root_node);
+				break;
+
+			default:
+				fprintf(stderr, "Fatal internal compiler error. Expected case or default node but saw neither\n");
+				exit(1);
+		}
+
+		//Bump it up to the next one come the end
+		case_statement_cursor = case_statement_cursor->next_sibling;
+	}
 
 	printf("TODO");
 	exit(1);
