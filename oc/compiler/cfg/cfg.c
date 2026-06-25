@@ -9253,6 +9253,33 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 
 
 /**
+ * Simple helper that will take an expression and a constant and construct an ast subtree that can
+ * subsequently be parsed by the expression converter. This is done because it's easier to do this
+ * than deal with the expression converter directly
+ */
+static inline generic_ast_node_t* construct_expression_equals_constant_ast_subtree(generic_ast_node_t* expression, int32_t constant, generic_type_t* constant_type){
+	//We always have a double equals node here
+	generic_ast_node_t* equals_node = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, SIDE_TYPE_RIGHT);
+	equals_node->binary_operator = DOUBLE_EQUALS;
+
+	//First child is always the expression
+	add_child_node(equals_node, expression);
+
+	//Now we'll need a constant node
+	generic_ast_node_t* constant_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, SIDE_TYPE_RIGHT);
+	constant_node->constant_value.signed_int_value = constant;
+	constant_node->constant_type = INT_CONST;
+
+	//Give it the actual type and coerce it
+	constant_node->inferred_type = constant_type;
+	coerce_constant(constant_node);
+
+	add_child_node(equals_node, constant_node);
+	return equals_node;
+}
+
+
+/**
  * If we have a switch statement that only has one non-default member(one case), then we will
  * internally convert this into an if-else-if statement to reduce complexity and avoid any
  * issues with the dominator analysis that have happened in the past
@@ -9286,8 +9313,7 @@ static cfg_result_package_t ollie_switch_with_one_case_to_if_conversion(generic_
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 	cfg_result_package_t case_results;
 	cfg_result_package_t default_results;
-	//This is the one constant for our case statement
-	three_addr_const_t* case_statement_const = NULL;
+	int64_t case_statement_constant;
 
 	/**
 	 * We'll need all the same blocks that we would need if this was an if statement
@@ -9301,11 +9327,14 @@ static cfg_result_package_t ollie_switch_with_one_case_to_if_conversion(generic_
 	top_level_block->block_type = BLOCK_TYPE_IF_ENTRY;
 	exit_block->block_type = BLOCK_TYPE_IF_EXIT;
 
+	//We can already do the bookkeeping for this now
+	result_package.starting_block = top_level_block;
+	result_package.final_block = exit_block;
+
 	//Grab a cursor that we will use to traverse
 	generic_ast_node_t* case_statement_cursor = root_node->first_child;
-
-	//Emit the result that we'll be switching on
-	cfg_result_package_t input_results = emit_expression(top_level_block, case_statement_cursor);
+	//Save for later
+	generic_ast_node_t* conditional_node = case_statement_cursor;
 
 	//Bump it up and process through the case statements and default if one exists
 	case_statement_cursor = case_statement_cursor->next_sibling;
@@ -9329,8 +9358,8 @@ static cfg_result_package_t ollie_switch_with_one_case_to_if_conversion(generic_
 					emit_jump(final_case_block, exit_block);
 				}
 
-				//Emit the actual constant that we'll need to switch on
-				case_statement_const = emit_direct_integer_or_char_constant(if_block->case_stmt_val, input_results.result_value.result_var->type);
+				//Extract the value for our given constant
+				case_statement_constant = if_block->case_stmt_val;
 
 				break;
 			/**
@@ -9360,6 +9389,21 @@ static cfg_result_package_t ollie_switch_with_one_case_to_if_conversion(generic_
 
 		//Bump it up to the next one come the end
 		case_statement_cursor = case_statement_cursor->next_sibling;
+	}
+
+	//Now we need to emit the logic for a branch inside of here. This is slightly
+
+
+	/**
+	 * Two options here - either we've seen/have a default block and we're able to direct
+	 * the else to that, or we have no default block so we'll just have a one-branch
+	 * if. Either one is fine they're just handled differently
+	 */
+	if(else_block != NULL){
+		emit_branch(top_level_block, conditional_node, basic_block_t *if_block, basic_block_t *else_block, branch_category_t branch_category)
+
+	} else {
+
 	}
 
 	printf("TODO");
