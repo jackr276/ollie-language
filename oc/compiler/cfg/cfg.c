@@ -8975,12 +8975,37 @@ static cfg_result_package_t visit_c_style_default_statement(generic_ast_node_t* 
  * .L7(Overall end):
  * 	//Phi function and other stuff
  *
+ *
+ * TODO TEST AN INTERNAL CONDITIONAL BREAK IN THIS
  */
 static inline cfg_result_package_t c_style_switch_with_one_member_to_if_conversion(generic_ast_node_t* root_node){
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
+	//We know we need entry/exit blocks, if and else come from the case/default themselves
+	basic_block_t* entry_block = basic_block_alloc_and_estimate();
+	basic_block_t* exit_block = basic_block_alloc_and_estimate();
+	basic_block_t* if_block = NULL;
+	basic_block_t* else_block = NULL;
+
+	result_package.starting_block = entry_block;
+	result_package.final_block = exit_block;
+
+	//Assign types for later optimization
+	entry_block->block_type = BLOCK_TYPE_IF_ENTRY;
+	exit_block->block_type = BLOCK_TYPE_IF_EXIT;
+
+	/**
+	 * If we have any internal breaks, those will go to the exit block. As such,
+	 * we need to push the exit block to the break stack so that they are redirected
+	 * properly when emitted
+	 */
+	push(&break_stack, exit_block);
 
 
+
+
+	//Now that we're done this should not be on the break stack
+	pop(&break_stack);
 
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
