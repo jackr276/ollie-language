@@ -9253,16 +9253,31 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 
 
 /**
+ * If we have a switch statement that only has one non-default member(one case), then we will
+ * internally convert this into an if-else-if statement to reduce complexity and avoid any
+ * issues with the dominator analysis that have happened in the past
+ *
+ * Since this is an ollie style switch statement, we do not need to worry about any fall-through
+ * cases. We'll just need to emit the if-else-if chain as given
+ */
+static cfg_result_package_t ollie_switch_with_one_case_to_if_conversion(generic_ast_node_t* root_node){
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
+	
+	printf("TODO");
+	exit(1);
+
+}
+
+
+/**
  * Visit a switch statement. In Ollie's current implementation, 
  * the values here will not be reordered at all. Instead, they
  * will be put in the exact orientation that the user wants
  */
 static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node){
-	//Declare the result package off the bat
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
-	//The starting block for the switch statement - we'll want this in a new
-	//block
+	//The starting block for the switch statement - we'll want this in a new block
 	basic_block_t* root_level_block = basic_block_alloc_and_estimate();
 	//We will need to new blocks to check the bounds
 	basic_block_t* upper_bound_check_block = basic_block_alloc_and_estimate();
@@ -9402,10 +9417,10 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	three_addr_const_t* lower_bound = emit_direct_integer_or_char_constant(root_node->lower_bound, i32);
 	three_addr_const_t* upper_bound = emit_direct_integer_or_char_constant(root_node->upper_bound, i32);
 
-	//Now that we have our expression, we'll want to speed things up by seeing if our value is either below the lower
-	//range or above the upper range. If it is, we jump to the very end
-
 	/**
+	 * Now that we have our expression, we'll want to speed things up by seeing if our value is either below the lower
+	 * range or above the upper range. If it is, we jump to the very end
+	 *
 	 * Jumping(conditional or indirect), does not affect condition codes. As such, we can rely 
 	 * on the condition codes being set from the operation to take us through all three
 	 * jumps. We will emit a jump if we are: lower, higher or an indirect jump if we

@@ -9630,6 +9630,8 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	u_int8_t found_default_clause = FALSE;
 	//We are initially undecided on the type
 	ollie_switch_type_t ollie_switch_type = OLLIE_SWITCH_TYPE_UNDECIDED;
+	//How many case statements do we have for the switch?
+	u_int32_t num_case_statements = 0;
 
 	/**
 	 * Once we get here, we can allocate the root level node
@@ -9795,8 +9797,10 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 						return print_and_return_error("Switch statements may only be occupied by \"case\" or default statements", parser_line_num);
 				}
 
+
 				//No longer empty
 				is_empty = FALSE;
+				num_case_statements++;
 
 				break;
 
@@ -10029,6 +10033,9 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	if(pop_token(&grouping_stack).tok != L_CURLY){
 		return print_and_return_error("Unmatched curly braces detected", parser_line_num);
 	}
+
+	//Store this for later on processing in the CFG
+	switch_stmt_node->num_case_members = num_case_statements;
 
 	//Return the line number
 	switch_stmt_node->line_number = parser_line_num;
