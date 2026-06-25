@@ -8943,6 +8943,43 @@ static cfg_result_package_t visit_c_style_default_statement(generic_ast_node_t* 
 
 
 /**
+ * Simple helper that will take an expression and a constant and construct an ast subtree that can
+ * subsequently be parsed by the expression converter. This is done because it's easier to do this
+ * than deal with the expression converter directly
+ *
+ * NOTE: this rule is designed specifically for switch statements. Because of this, we're just going
+ * to force the type of the constant that we emit to be the same as the expression itself
+ */
+static inline generic_ast_node_t* construct_binary_expression_with_const_ast_subtree(generic_ast_node_t* expression, int32_t constant, ollie_token_t binary_operator){
+	//We always have a double equals node here
+	generic_ast_node_t* equals_node = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, SIDE_TYPE_RIGHT);
+	//Copy the inferred type up
+	equals_node->inferred_type = expression->inferred_type;
+	equals_node->binary_operator = binary_operator;
+
+	//First child is always the expression
+	add_child_node(equals_node, expression);
+
+	/**
+	 * IMPORTANT - break any/all associations here with prior next siblings
+	 */
+	expression->next_sibling = NULL;
+
+	//Now we'll need a constant node
+	generic_ast_node_t* constant_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, SIDE_TYPE_RIGHT);
+	constant_node->constant_value.signed_int_value = constant;
+	constant_node->constant_type = INT_CONST;
+
+	//Give it the actual type and coerce it
+	constant_node->inferred_type = expression->inferred_type;
+	coerce_constant(constant_node);
+
+	add_child_node(equals_node, constant_node);
+	return equals_node;
+}
+
+
+/**
  * Take a c-style switch-case statement with only one case member and convert it into an if-else statement. This
  * has some different logic when compared to the ollie style switch statement because we can have breaks and we
  * are able to fall through these case values
@@ -8974,9 +9011,6 @@ static cfg_result_package_t visit_c_style_default_statement(generic_ast_node_t* 
  *
  * .L7(Overall end):
  * 	//Phi function and other stuff
- *
- *
- * TODO TEST AN INTERNAL CONDITIONAL BREAK IN THIS
  */
 static inline cfg_result_package_t c_style_switch_with_one_member_to_if_conversion(generic_ast_node_t* root_node){
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
@@ -9000,6 +9034,15 @@ static inline cfg_result_package_t c_style_switch_with_one_member_to_if_conversi
 	 * properly when emitted
 	 */
 	push(&break_stack, exit_block);
+
+	/**
+	 * The first child node is also the expression, which we'll need to stash
+	 * away for later when we emit the if's actual conditional
+	 */
+	generic_ast_node_t* switch_cursor = root_node->first_child;
+	generic_ast_node_t* expression = switch_cursor;
+
+
 
 
 
@@ -9332,40 +9375,6 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 
 
 /**
- * Simple helper that will take an expression and a constant and construct an ast subtree that can
- * subsequently be parsed by the expression converter. This is done because it's easier to do this
- * than deal with the expression converter directly
- */
-static inline generic_ast_node_t* construct_binary_expression_with_const_ast_subtree(generic_ast_node_t* expression, int32_t constant, generic_type_t* constant_type, ollie_token_t binary_operator){
-	//We always have a double equals node here
-	generic_ast_node_t* equals_node = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, SIDE_TYPE_RIGHT);
-	//Copy the inferred type up
-	equals_node->inferred_type = expression->inferred_type;
-	equals_node->binary_operator = binary_operator;
-
-	//First child is always the expression
-	add_child_node(equals_node, expression);
-
-	/**
-	 * IMPORTANT - break any/all associations here with prior next siblings
-	 */
-	expression->next_sibling = NULL;
-
-	//Now we'll need a constant node
-	generic_ast_node_t* constant_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, SIDE_TYPE_RIGHT);
-	constant_node->constant_value.signed_int_value = constant;
-	constant_node->constant_type = INT_CONST;
-
-	//Give it the actual type and coerce it
-	constant_node->inferred_type = constant_type;
-	coerce_constant(constant_node);
-
-	add_child_node(equals_node, constant_node);
-	return equals_node;
-}
-
-
-/**
  * If we have a switch statement that only has one non-default member(one case), then we will
  * internally convert this into an if-else-if statement to reduce complexity and avoid any
  * issues with the dominator analysis that have happened in the past
@@ -9478,7 +9487,7 @@ static cfg_result_package_t ollie_switch_with_one_case_to_if_conversion(generic_
 	}
 
 	//Let the helper construct a branch new AST sub tree for us to work off of
-	generic_ast_node_t* equals_expression = construct_binary_expression_with_const_ast_subtree(conditional_node, case_statement_constant, conditional_node->inferred_type, DOUBLE_EQUALS); 
+	generic_ast_node_t* equals_expression = construct_binary_expression_with_const_ast_subtree(conditional_node, case_statement_constant, DOUBLE_EQUALS); 
 
 	/**
 	 * Two options here - either we've seen/have a default block and we're able to direct
