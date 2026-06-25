@@ -8943,6 +8943,15 @@ static cfg_result_package_t visit_c_style_default_statement(generic_ast_node_t* 
 
 
 /**
+ */
+static inline cfg_result_package_t c_style_switch_with_one_member_to_if_conversion(generic_ast_node_t* root_node){
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
+
+}
+
+
+/**
  * Visit a C-style switch statement. Ollie supports a new version of switch statements(with no fallthrough),
  * and the older C-version as well that allows break through. To keep the order true, ollie 
  * This rule is specifically for the c-style switch statements
@@ -8951,9 +8960,12 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	//Declare and initialize off the bat
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
+	/**
+	 * If we have a c style switch statement that exclusively has one member, we will 
+	 * optimize this into an if-else statement
+	 */
 	if(root_node->num_case_members == 1){
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(1);
+		return c_style_switch_with_one_member_to_if_conversion(root_node);
 	}
 
 	//Th starting and ending blocks for the switch statements
