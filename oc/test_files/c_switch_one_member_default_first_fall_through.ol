@@ -6,13 +6,14 @@
 
 
 pub fn main() -> i32 {
+	//This should hit the default
 	let x:mut i32 = 5;
 
 	switch(x){
 		default:
 			x--;
 
-		case 5:
+		case 4:
 			x++;
 			break;
 	}

@@ -13,7 +13,6 @@
 */
 
 #include "cfg.h"
-#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9117,7 +9116,7 @@ static inline cfg_result_package_t c_style_switch_with_one_member_to_if_conversi
 
 		//We know what these two are off the bat
 		if_block = case_results.starting_block;
-		else_block = default_results.final_block;
+		else_block = default_results.starting_block;
 
 		/**
 		 * If the default block does not end in a terminal statement, then we have
