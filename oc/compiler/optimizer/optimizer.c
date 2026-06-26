@@ -2311,7 +2311,7 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 	//Run through all of the function blocks that we have
 	for(u_int32_t i = 0; i < current_function_blocks->current_index; i++){
 		//The variable that we're going to optimize assignment for
-		three_addr_var_t* optimizing_assignment_variable = NULL;
+		three_addr_var_t* branching_assignment_variable = NULL;
 
 		//By default assume it's eligible, and then get proven wrong as we go through
 		u_int8_t block_is_eligible = TRUE;
@@ -2343,7 +2343,7 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		 * Otherwise we have a phi function so we are able to proceed. This very first phi function
 		 * is going to be our variable of interest
 		 */
-		optimizing_assignment_variable = candidate_cursor->operands.oir.assignee;
+		branching_assignment_variable = candidate_cursor->operands.oir.assignee;
 
 		/**
 		 * Is each predecessor a simple assignment plus a jump only? We're not going
@@ -2363,7 +2363,7 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 			 * Let the helper perform all validations. If at least one of these blocks fails then we are done with
 			 * the entire check
 			 */
-			if(is_predecessor_block_valid_for_branch_assignment_folding(candidate_block, predecessor, optimizing_assignment_variable) == FALSE){
+			if(is_predecessor_block_valid_for_branch_assignment_folding(candidate_block, predecessor, branching_assignment_variable) == FALSE){
 				block_is_eligible = FALSE;
 				break;
 			}
@@ -2375,12 +2375,6 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		}
 
 		/**
-		 * If we make it here, then we know that this block is eligible. Now that we know
-		 * it is, we are able to perform the actual converting move optimization
-		 */
-		printf("BLOCK .L%d is ELIGIBLE\n\n\n", candidate_block->block_id);
-
-		/**
 		 * Due to the way that an if-else-if structure works, we guarantee that the immediate
 		 * postdominator of the end block is the starting if block. We know this because 
 		 * in order to get from the start block to our candidate block, we must flow through the
@@ -2390,7 +2384,7 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 
 		/**
 		 * If this is a switch block, we cannot perform the desired optimization
-		 * here. Due to the way that switches in ollie always work, a switch
+		 * here. Due to the way that switches in ollie always work, a conversion 
 		 * would actually result in inferior performance, so we'll never 
 		 * take this road
 		 *
@@ -2404,7 +2398,21 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		}
 
 		//TRYING THIS
+		printf("BLOCK .L%d is ELIGIBLE\n\n\n", candidate_block->block_id);
 		printf("TOP LEVEL BLOCK .L%d\n", candidate_block->dominator_info.immediate_postdominator->block_id);
+
+		/**
+		 * We now know that this is eligible fully, so let's go ahead and perform the branching
+		 * assignment to converting move operation now. We are going to hoist everything up and
+		 * into the original conditional block
+		 *
+		 *
+		 * The last value "else" value is always our very first non-conditional move
+		 * TODO FULL WORKED EXAMPLE IN OIR
+		 *
+		 * cmpl 5, x
+		 * branch_ne .L5 else .L6
+		 */
 	}
 
 	//TODO FIX
