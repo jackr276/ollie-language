@@ -9905,7 +9905,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				}
 
 				//Package up the results package
-				generic_results.starting_block = current_block;
+				generic_results.starting_block = starting_block;
 				generic_results.final_block = current_block;
 
 				//We're done here - get out
@@ -10045,7 +10045,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					emit_jump(current_block, continuing_to);
 
 					//Package and return
-					generic_results = (cfg_result_package_t){current_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+					generic_results = (cfg_result_package_t){starting_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 					/**
 					 * We're done here, so return the starting block. There is no 
@@ -10099,7 +10099,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					emit_jump(current_block, breaking_to);
 
 					//Package and return
-					generic_results = (cfg_result_package_t){current_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+					generic_results = (cfg_result_package_t){starting_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 					/**
 					 * For a regular break statement, this is it, so we just get out
@@ -10549,7 +10549,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					emit_jump(current_block, continuing_to);
 
 					//Package and return
-					results = (cfg_result_package_t){current_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+					results = (cfg_result_package_t){starting_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 					/**
 					 * We're done here, so return the starting block. There is no 
@@ -10603,7 +10603,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					emit_jump(current_block, breaking_to);
 
 					//Package and return
-					results = (cfg_result_package_t){current_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+					results = (cfg_result_package_t){starting_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 					//For a regular break statement, this is it, so we just get out
 					return results;
