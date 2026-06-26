@@ -9014,6 +9014,8 @@ static inline generic_ast_node_t* construct_binary_expression_with_const_ast_sub
  */
 static inline cfg_result_package_t c_style_switch_with_one_member_to_if_conversion(generic_ast_node_t* root_node){
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
+	cfg_result_package_t case_results;
+	cfg_result_package_t default_results;
 
 	//We know we need entry/exit blocks, if and else come from the case/default themselves
 	basic_block_t* entry_block = basic_block_alloc_and_estimate();
@@ -9039,20 +9041,31 @@ static inline cfg_result_package_t c_style_switch_with_one_member_to_if_conversi
 	 * The first child node is also the expression, which we'll need to stash
 	 * away for later when we emit the if's actual conditional
 	 */
-	generic_ast_node_t* switch_cursor = root_node->first_child;
-	generic_ast_node_t* expression = switch_cursor;
+	generic_ast_node_t* expression = root_node->first_child;
 
+	/**
+	 * The first child can either be a case statement or the default. This
+	 * goes for the second child. Once we know what the first child is, we
+	 * know what the second one has to be
+	 */
+	generic_ast_node_t* first_child = expression->next_sibling;
+	generic_ast_node_t* second_child = first_child->next_sibling;
 
+	/**
+	 * Option 1: the case statement comes first, and then the default
+	 * statement
+	 *
+	 */
+	if(first_child->ast_node_type == AST_NODE_TYPE_C_STYLE_CASE_STMT){
 
+	} else {
 
-
+	}
 
 	//Now that we're done this should not be on the break stack
 	pop(&break_stack);
 
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
-
+	return result_package;
 }
 
 
