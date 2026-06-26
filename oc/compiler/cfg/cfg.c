@@ -9016,6 +9016,7 @@ static inline cfg_result_package_t c_style_switch_with_one_member_to_if_conversi
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 	cfg_result_package_t case_results;
 	cfg_result_package_t default_results;
+	int64_t case_statement_value = 0;
 
 	//We know we need entry/exit blocks, if and else come from the case/default themselves
 	basic_block_t* entry_block = basic_block_alloc_and_estimate();
@@ -9088,6 +9089,7 @@ static inline cfg_result_package_t c_style_switch_with_one_member_to_if_conversi
 		if(does_block_end_in_terminal_statement(default_results.final_block) == FALSE){
 			emit_jump(default_results.final_block, exit_block);
 		}
+	
 
 	/**
 	 * Option 2: the default statement comes first, and then the case statement. In code
@@ -9126,6 +9128,16 @@ static inline cfg_result_package_t c_style_switch_with_one_member_to_if_conversi
 			emit_jump(case_results.final_block, exit_block);
 		}
 	}
+
+	/**
+	 * Now that we have all of the blocks emitted, we can emit the branch
+	 * using the case statement value and saved expression from before
+	 */
+	case_statement_value = if_block->case_stmt_val;
+	generic_ast_node_t* comparison_expression = construct_binary_expression_with_const_ast_subtree(expression, case_statement_value, DOUBLE_EQUALS);
+
+	//Emit the branch using the same inverse jump strategy as regular if statements
+	emit_branch(entry_block, comparison_expression, else_block, if_block, BRANCH_CATEGORY_INVERSE);
 
 	//Now that we're done this should not be on the break stack
 	pop(&break_stack);
