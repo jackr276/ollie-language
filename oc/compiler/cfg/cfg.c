@@ -9090,6 +9090,22 @@ static inline cfg_result_package_t c_style_switch_with_one_member_to_if_conversi
 			emit_jump(default_results.final_block, exit_block);
 		}
 
+	/**
+	 * Option 2: the default statement comes first, and then the case statement. In code
+	 * this would look something like this:
+	 *
+	 * switch(x){
+	 * 		default:
+	 * 			//stuff
+	 *			break; //may or may not be here
+	 *		case 5:
+	 *			//stuff
+	 *			break;
+	 * }
+	 *
+	 * We need to account for cases where the break is missing from the default and
+	 * we fall through
+	 */
 	} else {
 
 	}
