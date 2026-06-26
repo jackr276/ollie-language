@@ -13,6 +13,7 @@
 */
 
 #include "cfg.h"
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8890,6 +8891,9 @@ static cfg_result_package_t visit_c_style_case_statement(generic_ast_node_t* roo
 		result_package.starting_block = case_block;
 		result_package.final_block = case_block;
 	}
+
+	//Extract the case statement value while we're here
+	result_package.starting_block->case_stmt_val = root_node->constant_value.signed_int_value;
 
 	//Remove the nesting now
 	pop_nesting_level(&nesting_stack);
