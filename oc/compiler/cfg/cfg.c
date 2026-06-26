@@ -9068,7 +9068,6 @@ static inline cfg_result_package_t c_style_switch_with_one_member_to_if_conversi
 	 * case and we fall through
 	 */
 	if(first_child->ast_node_type == AST_NODE_TYPE_C_STYLE_CASE_STMT){
-		//Let the rule emit them both
 		case_results = visit_c_style_case_statement(first_child);
 		default_results = visit_c_style_default_statement(second_child);
 
@@ -9107,7 +9106,25 @@ static inline cfg_result_package_t c_style_switch_with_one_member_to_if_conversi
 	 * we fall through
 	 */
 	} else {
+		default_results = visit_c_style_default_statement(first_child);
+		case_results = visit_c_style_case_statement(second_child);
 
+		//We know what these two are off the bat
+		if_block = case_results.starting_block;
+		else_block = default_results.final_block;
+
+		/**
+		 * If the default block does not end in a terminal statement, then we have
+		 * a fall-through scneario to the case block
+		 */
+		if(does_block_end_in_terminal_statement(default_results.final_block) == FALSE){
+			emit_jump(default_results.final_block, if_block);
+		}
+
+		//For the case block, we'll just need to worry about going to the exit
+		if(does_block_end_in_terminal_statement(case_results.final_block) == FALSE){
+			emit_jump(case_results.final_block, exit_block);
+		}
 	}
 
 	//Now that we're done this should not be on the break stack
