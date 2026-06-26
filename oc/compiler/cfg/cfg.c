@@ -9053,10 +9053,42 @@ static inline cfg_result_package_t c_style_switch_with_one_member_to_if_conversi
 
 	/**
 	 * Option 1: the case statement comes first, and then the default
-	 * statement
+	 * statement. In code this would look something like:
+	 * 	
+	 * 	switch(x){
+	 * 		case 5:
+	 * 			//stuff
+	 * 			break; //may or may not be here
+	 * 		default:
+	 * 			//stuff
+	 * 			break;
+	 * 	}
 	 *
+	 * We need to account for cases when the break is missing from the
+	 * case and we fall through
 	 */
 	if(first_child->ast_node_type == AST_NODE_TYPE_C_STYLE_CASE_STMT){
+		//Let the rule emit them both
+		case_results = visit_c_style_case_statement(first_child);
+		default_results = visit_c_style_default_statement(second_child);
+
+		//We know what these two are off the bat
+		if_block = case_results.starting_block;
+		else_block = default_results.starting_block;
+
+		/**
+		 * If the case block does not end in a termination statement, that means
+		 * that we have a fall-through scenario where the case statement falls
+		 * through to the default block
+		 */
+		if(does_block_end_in_terminal_statement(case_results.final_block) == FALSE){
+			emit_jump(case_results.final_block, else_block);
+		}
+
+		//For the default block, we'll just need to mkae sure that it goes to the exit block
+		if(does_block_end_in_terminal_statement(default_results.final_block) == FALSE){
+			emit_jump(default_results.final_block, exit_block);
+		}
 
 	} else {
 
