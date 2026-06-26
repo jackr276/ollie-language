@@ -24,6 +24,16 @@
 #include "../utils/stack/lightstack.h"
 #include "../utils/constants.h"
 
+/**
+ * This enumeration will be used when we are determining what kind
+ * of ollie switch we have inside of the parser exclusively
+ */
+typedef enum {
+	OLLIE_SWITCH_TYPE_UNDECIDED,
+	OLLIE_SWITCH_TYPE_OLLIE_STYLE,
+	OLLIE_SWITCH_TYPE_C_STYLE
+} ollie_switch_type_t;
+
 //Define a generic error array global variable
 char info[ERROR_SIZE * 2];
 
@@ -9618,19 +9628,21 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	lexitem_t lookahead;
 	//By default we have not found one of these
 	u_int8_t found_default_clause = FALSE;
-	//Is this a c-style switch statement? By default, we have a -1 here for "no value"
-	int8_t is_c_style = -1;
+	//We are initially undecided on the type
+	ollie_switch_type_t ollie_switch_type = OLLIE_SWITCH_TYPE_UNDECIDED;
+	//How many case statements do we have for the switch?
+	u_int32_t num_case_statements = 0;
 
-	//Once we get here, we can allocate the root level node
-	//NOTE: we may actually switch the class to a c-style switch statement here if we
-	//find a c-style node. All of our processing depends on what the first thing that we see
-	//looks like
+	/**
+	 * Once we get here, we can allocate the root level node
+	 * NOTE: we may actually switch the class to a c-style switch statement here if we
+	 * find a c-style node. All of our processing depends on what the first thing that we see
+	 * looks like
+	 */
 	generic_ast_node_t* switch_stmt_node = ast_node_alloc(AST_NODE_TYPE_SWITCH_STMT, SIDE_TYPE_LEFT);
 
 	//We will find these throughout our search
-	//Set the upper bound to be int_min
 	switch_stmt_node->upper_bound = INT_MIN;
-	//Set the lower bound to be int_max 
 	switch_stmt_node->lower_bound = INT_MAX;
 
 	//Now we must see an lparen
@@ -9711,10 +9723,12 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	//Push to stack for later matching
 	push_token(&grouping_stack, lookahead);
 
-	//We'll need to keep track of whether or not we have any duplicated values. As such, we'll keep an array
-	//of all the values that we do have. Since we can only have 1024 values, this array need only be 1024
-	//long. Every time we see a value in a case statement, we'll need to cross reference it with the
-	//values in here
+	/**
+	 * We'll need to keep track of whether or not we have any duplicated values. As such, we'll keep an array
+	 * of all the values that we do have. Since we can only have 1024 values, this array need only be 1024
+	 * long. Every time we see a value in a case statement, we'll need to cross reference it with the
+	 * values in here
+	 */
 	int32_t values[MAX_SWITCH_RANGE];
 
 	//Wipe the entire thing so they're all 0's(FALSE)
@@ -9747,53 +9761,46 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 
 				//Go based on what our class here
 				switch(stmt->ast_node_type){
-					//C-style case statement
 					case AST_NODE_TYPE_C_STYLE_CASE_STMT:
-						//The -1 would mean that it's not been declared yet.
-						//As such, since this is the first thing that we're seeing,
-						//we'll set this to be TRUE
-						if(is_c_style == -1){
-							is_c_style = TRUE;
-
-						//Otherwise, if this has already been declared as
-						//not being a c-style switch statement, we have an error
-						//here
-						} else if(is_c_style == FALSE){
+						if(ollie_switch_type == OLLIE_SWITCH_TYPE_UNDECIDED){
+							ollie_switch_type = OLLIE_SWITCH_TYPE_C_STYLE;
+						/**
+						 * Otherwise, if this has already been declared as
+						 * not being a c-style switch statement, we have an error
+						 * here
+						 */
+						} else if(ollie_switch_type != OLLIE_SWITCH_TYPE_C_STYLE){
 							return print_and_return_error("C-style and Ollie-style case/default statements cannot be combined in the same switch statement", parser_line_num);
 						}
 
-						//Otherwise we should be set here, so break out
 						break;
 
-					//Regular ollie style case statement
 					case AST_NODE_TYPE_CASE_STMT:
-						//The -1 would mean that it's not been declared yet.
-						//As such, since this is the first thing that we're seeing,
-						//we'll set this to be FALSE 
-						if(is_c_style == -1){
-							is_c_style = FALSE;
-						}
+						if(ollie_switch_type == OLLIE_SWITCH_TYPE_UNDECIDED){
+							ollie_switch_type = OLLIE_SWITCH_TYPE_OLLIE_STYLE;
 
-						//Otherwise, if this has already been declared to be a c-style switch statement, then we're
-						//attempting to mix and match here. This is also an error
-						else if(is_c_style == TRUE){
+						/**
+						 * Otherwise, if this has already been declared to be a c-style switch statement, then we're
+						 * attempting to mix and match here. This is also an error
+						 */
+						} else if(ollie_switch_type != OLLIE_SWITCH_TYPE_OLLIE_STYLE){
 							return print_and_return_error("C-style and Ollie-style case/default statements cannot be combined in the same switch statement", parser_line_num);
 						}
 
-						//Otherwise we should be set here, so break out
 						break;
 
-
-					//It's already an error, just send it up
 					case AST_NODE_TYPE_ERR_NODE:
 						return stmt;
+
 					//We've hit some weird error here, so we'll bail out
 					default:
 						return print_and_return_error("Switch statements may only be occupied by \"case\" or default statements", parser_line_num);
 				}
 
+
 				//No longer empty
 				is_empty = FALSE;
+				num_case_statements++;
 
 				break;
 
@@ -9809,54 +9816,42 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 
 				//Go based on what our class here
 				switch(stmt->ast_node_type){
-					//C-style default statement
 					case AST_NODE_TYPE_C_STYLE_DEFAULT_STMT:
-						//The -1 would mean that it's not been declared yet.
-						//As such, since this is the first thing that we're seeing,
-						//we'll set this to be TRUE
-						if(is_c_style == -1){
-							is_c_style = TRUE;
+						if(ollie_switch_type == OLLIE_SWITCH_TYPE_UNDECIDED){
+							ollie_switch_type = OLLIE_SWITCH_TYPE_C_STYLE;
 
-						//Otherwise, if this has already been declared as
-						//not being a c-style switch statement, we have an error
-						//here
-						} else if(is_c_style == FALSE){
+						/**
+						 * Otherwise, if this has already been declared as
+						 * not being a c-style switch statement, we have an error
+						 * here
+						 */
+						} else if(ollie_switch_type != OLLIE_SWITCH_TYPE_C_STYLE){
 							return print_and_return_error("C-style and Ollie-style case/default statements cannot be combined in the same switch statement", parser_line_num);
 						}
 
-						//We've found it
 						found_default_clause = TRUE;
-
-						//Otherwise we should be set here, so break out
 						break;
 
-					//Regular ollie style default statement
 					case AST_NODE_TYPE_DEFAULT_STMT:
-						//The -1 would mean that it's not been declared yet.
-						//As such, since this is the first thing that we're seeing,
-						//we'll set this to be FALSE 
-						if(is_c_style == -1){
-							is_c_style = FALSE;
-						}
+						if(ollie_switch_type == OLLIE_SWITCH_TYPE_UNDECIDED){
+							ollie_switch_type = OLLIE_SWITCH_TYPE_OLLIE_STYLE;
 
-						//Otherwise, if this has already been declared to be a c-style switch statement, then we're
-						//attempting to mix and match here. This is also an error
-						else if(is_c_style == TRUE){
+						/**
+						 * Otherwise, if this has already been declared to be a c-style switch statement, then we're
+						 * attempting to mix and match here. This is also an error
+						 */
+						} else if(ollie_switch_type != OLLIE_SWITCH_TYPE_OLLIE_STYLE){
 							return print_and_return_error("C-style and Ollie-style case/default statements cannot be combined in the same switch statement", parser_line_num);
 						}
 
-						//No longer empty
 						is_empty = FALSE;
-
-						//We've found it
 						found_default_clause = TRUE;
-
-						//Otherwise we should be set here, so break out
 						break;
 
 					//It's already an error, just send it up
 					case AST_NODE_TYPE_ERR_NODE:
 						return stmt;
+
 					//We've hit some weird error here, so we'll bail out
 					default:
 						return print_and_return_error("Switch statements may only be occupied by \"case\" or default statements", parser_line_num);
@@ -10025,9 +10020,11 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 		}	
 	}
 
-	//If we do have a c-style switch statement here, we'll need to redefine the type
-	//that the origin switch node is
-	if(is_c_style == TRUE){
+	/**
+	 * If we do have a c-style switch statement here, we'll need to redefine the type
+	 * that the origin switch node is
+	 */
+	if(ollie_switch_type == OLLIE_SWITCH_TYPE_C_STYLE){
 		switch_stmt_node->ast_node_type = AST_NODE_TYPE_C_STYLE_SWITCH_STMT; 
 	}
 	
@@ -10036,6 +10033,9 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	if(pop_token(&grouping_stack).tok != L_CURLY){
 		return print_and_return_error("Unmatched curly braces detected", parser_line_num);
 	}
+
+	//Store this for later on processing in the CFG
+	switch_stmt_node->num_case_members = num_case_statements;
 
 	//Return the line number
 	switch_stmt_node->line_number = parser_line_num;
