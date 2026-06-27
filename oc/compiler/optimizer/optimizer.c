@@ -2385,6 +2385,16 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		 */
 		basic_block_t* top_level_if_block = candidate_block->dominator_info.immediate_dominator;
 
+
+		//TODO
+		//
+		// WE NEED TO GUARD AGAINST FLOATING POINT COMPARISONS IN OUR BRANCHING
+		// This would be something that we cannot do in one statement due to
+		// parity flag requirements. It will need to be accounted for
+		//
+		//
+		//
+
 		/**
 		 * If this is a switch block, we cannot perform the desired optimization
 		 * here. Due to the way that switches in ollie always work, a conversion 
