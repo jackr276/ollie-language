@@ -2663,51 +2663,51 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 			switch(stmt->movement_type){
 				case MOVE_E:
-					fprintf(fl, " <- if equal ");
+					fprintf(fl, " <- move_E ");
 					break;
 
 				case MOVE_NE:
-					fprintf(fl, " <- if not equal ");
+					fprintf(fl, " <- move_NE ");
 					break;
 
 				case MOVE_Z:
-					fprintf(fl, " <- if zero ");
+					fprintf(fl, " <- move_Z ");
 					break;
 
 				case MOVE_NZ:
-					fprintf(fl, " <- if not zero ");
+					fprintf(fl, " <- move_NZ ");
 					break;
 
 				case MOVE_A:
-					fprintf(fl, " <- if above ");
+					fprintf(fl, " <- move_A ");
 					break;
 
 				case MOVE_AE:
-					fprintf(fl, " <- if above or equal ");
+					fprintf(fl, " <- move_AE ");
 					break;
 
 				case MOVE_B:
-					fprintf(fl, " <- if below ");
+					fprintf(fl, " <- move_B ");
 					break;
 
 				case MOVE_BE:
-					fprintf(fl, " <- if below or equal ");
+					fprintf(fl, " <- move_BE ");
 					break;
 
 				case MOVE_L:
-					fprintf(fl, " <- if less ");
+					fprintf(fl, " <- move_L ");
 					break;
 
 				case MOVE_LE:
-					fprintf(fl, " <- if less or equal ");
+					fprintf(fl, " <- move_LE ");
 					break;
 
 				case MOVE_G:
-					fprintf(fl, " <- if greater ");
+					fprintf(fl, " <- move_G ");
 					break;
 
 				case MOVE_GE:
-					fprintf(fl, " <- if greater or equal ");
+					fprintf(fl, " <- move_GE ");
 					break;
 
 				default:

@@ -2157,7 +2157,8 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
  * 	1.) Assigning to a non-temporary variable
  * 	2.) Calling a function
  * 	3.) Storing to memory
- * 	4.) Copying memory
+ * 	4.) Loading from memory
+ * 	5.) Copying memory
  */
 static inline u_int8_t does_statement_have_block_external_side_effects(instruction_t* statement){
 	switch(statement->statement_type){
@@ -2165,6 +2166,7 @@ static inline u_int8_t does_statement_have_block_external_side_effects(instructi
 		case THREE_ADDR_CODE_FUNC_CALL:
 		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
 		case THREE_ADDR_CODE_STORE_STATEMENT:
+		case THREE_ADDR_CODE_LOAD_STATEMENT:
 			return TRUE;
 
 		/**
