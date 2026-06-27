@@ -2704,8 +2704,20 @@ cfg_t* optimize(cfg_t* cfg){
 		}
 
 		//TODO DOC
-		optimize_branching_assignments_where_possible(current_function_blocks);
+		/**
+		 * PASS 4: 
+		 */
+		u_int8_t branching_assignments_optimized = optimize_branching_assignments_where_possible(current_function_blocks);
 
+		/**
+		 * If these ended up being optimized, we will have unreachable blocks
+		 * that need to be cleaned up. We will also go through and
+		 * do a mark-and-sweep run to make sure that no straggler variables
+		 * are still around
+		 */
+		if(branching_assignments_optimized == TRUE){
+
+		}
 
 		/**
 		 * PASS 4: Clean algorithm
