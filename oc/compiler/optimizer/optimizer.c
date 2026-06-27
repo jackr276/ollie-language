@@ -2235,8 +2235,6 @@ static inline u_int8_t is_predecessor_block_valid_for_branch_assignment_folding(
 	/**
 	 * Check 2: the second to last instruction is a non-temporary variable assignment
 	 * with a type that we specifically support for conditional movement
-	 *
-	 * TODO WHAT ABOUT LOAD SUPPORT???
 	 */
 	cursor = cursor->previous_statement;
 
@@ -2408,7 +2406,43 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		 * We now know that this is eligible fully, so let's go ahead and perform the branching
 		 * assignment to converting move operation now. We are going to hoist everything up and
 		 * into the original conditional block
+		 *
+		 * Here is an example to show how this works
+		 *
+		 * .L5:
+		 * 	x_0 > 5
+		 * 	branch_le .L7 else .L6
+		 *
+		 * .L6:
+		 * 	result_0 < - 5
+		 * 	jmp .L8
+		 *
+		 * .L7:
+		 * 	result_1 <- 4
+		 * 	jmp .L8
+		 *
+		 * .L8:
+		 * 	result_2 <- phi(result_0, result1)
+		 * 	...
+		 *
+		 * This is a valid if-else assignment pattern that would have been picked up by us. This will
+		 * be turned into:
+		 * 	
+		 * .L5:
+		 * 	t11 <- x_0 > 5
+		 * 	result_2 <- cmov_le(t11, 4, 5)
+		 * 	jmp .L8
+		 *
+		 * .L8:
+		 * 	....
+		 * 
+		 * Notice how the phi function has been eliminated from here, as we no longer need it. What remains
+		 * will be the result_2 variable as well as the conditional. The other two blocks that are not needed
+		 * will be eliminated as well
 		 */
+		instruction_t* branch_statement = top_level_if_block->exit_statement;
+		basic_block_t* if_destination = branch_statement->if_block;
+		basic_block_t* else_destination = branch_statement->else_block;
 	}
 
 	//TODO FIX
