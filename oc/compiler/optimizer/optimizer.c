@@ -2407,11 +2407,39 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		 * into the original conditional block
 		 *
 		 *
-		 * The last value "else" value is always our very first non-conditional move
-		 * TODO FULL WORKED EXAMPLE IN OIR
+		 * The last value "else" value is always our very first non-conditional move. Here is our
+		 * fully worked example in OIR, starting from an if-else-if chain and going forward
 		 *
-		 * cmpl 5, x
-		 * branch_ne .L5 else .L6
+		 *  ^t1_0 <- x_0
+		 *	result_0 <- 5
+		 *	t2 <- ^t1_0 > 5
+		 *	cbranch_le .L7 else .L6
+		 *
+		 *	.L6:
+		 *	result_3 <- 2
+		 *	jmp .L5
+		 *
+		 *	.L7:
+		 *	t3 <- ^t1_0 > 3
+		 *	cbranch_le .L9 else .L8
+		 *
+		 * .L8:
+		 * result_2 <- 3
+		 * jmp .L5
+		 *
+		 * .L9:
+		 * t4 <- ^t1_0 > 1
+		 * cbranch_le .L5 else .L10
+		 *
+		 * .L10:
+		 * result_1 <- 4
+		 * *jmp .L5
+		 *
+		 * .L5:
+		 *	result_4 <- PHI(result_0, result_1, result_2, result_3)
+		 *	t5 <- result_4
+		 *	ret t5
+		 *
 		 */
 	}
 
