@@ -2285,7 +2285,9 @@ static inline u_int8_t is_predecessor_block_valid_for_branch_assignment_folding(
 /**
  * If we have examples like below, we can optimize into converting moves where we avoid the jumping
  * altogether in favor of this kind of conditional assignment. This is a common pattern that we'll
- * have people do so it is worth it to optimize into a conditional assignment
+ * have people do so it is worth it to optimize into a conditional assignment. This will exclusively
+ * work for if-else. For if-else-if-else-if-else patterns, this becomes too expensive to track
+ * and do so we will not
  *
  * t5 <- x_0 > y_0
  * branch_le .L4 else .L5
@@ -2320,9 +2322,10 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		basic_block_t* candidate_block = dynamic_array_get_at(current_function_blocks, i);
 
 		/**
-		 * Less than 2 predecessors then this can't possibly be what we're after
+		 * The block needs to have *exactly* 2 predecessors if it is a valid if-else
+		 * pattern for us to optimize
 		 */
-		if(candidate_block->predecessors.current_index < 2){
+		if(candidate_block->predecessors.current_index != 2){
 			continue;
 		}
 
@@ -2405,41 +2408,6 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		 * We now know that this is eligible fully, so let's go ahead and perform the branching
 		 * assignment to converting move operation now. We are going to hoist everything up and
 		 * into the original conditional block
-		 *
-		 *
-		 * The last value "else" value is always our very first non-conditional move. Here is our
-		 * fully worked example in OIR, starting from an if-else-if chain and going forward
-		 *
-		 *  ^t1_0 <- x_0
-		 *	result_0 <- 5
-		 *	t2 <- ^t1_0 > 5
-		 *	cbranch_le .L7 else .L6
-		 *
-		 *	.L6:
-		 *	result_3 <- 2
-		 *	jmp .L5
-		 *
-		 *	.L7:
-		 *	t3 <- ^t1_0 > 3
-		 *	cbranch_le .L9 else .L8
-		 *
-		 * .L8:
-		 * result_2 <- 3
-		 * jmp .L5
-		 *
-		 * .L9:
-		 * t4 <- ^t1_0 > 1
-		 * cbranch_le .L5 else .L10
-		 *
-		 * .L10:
-		 * result_1 <- 4
-		 * *jmp .L5
-		 *
-		 * .L5:
-		 *	result_4 <- PHI(result_0, result_1, result_2, result_3)
-		 *	t5 <- result_4
-		 *	ret t5
-		 *
 		 */
 	}
 
@@ -2744,7 +2712,28 @@ cfg_t* optimize(cfg_t* cfg){
 		 * are still around
 		 */
 		if(branching_assignments_optimized == TRUE){
+			//Reset all of the marks in the function
+			reset_all_marks(current_function_blocks);
 
+			/**
+			 * Optimizing branches and and then trying to run mark & sweep will not work because
+			 * we have fundamentally changed the structure & dominance in the CFG by doing
+			 * that. 
+			 *
+			 * We are going to need to delete all unreachable blocks *at this stage* and
+			 * then we are going to have to recompute all of the dominance relations. Mark
+			 * specifically relies on the "RDF"(reverse dominance frontier).
+			 */
+			delete_all_unreachable_blocks(function_entry_block, current_function_blocks);
+
+			//Recalculate all dominance relations
+			recompute_all_control_flow_relations_for_function(current_function_blocks, function_entry_block, function_exit_block);
+
+			//Invoke the marker
+			mark(current_function_blocks);
+
+			//Invoke the sweeper
+			sweep(current_function_blocks, function_entry_block);
 		}
 
 		/**
