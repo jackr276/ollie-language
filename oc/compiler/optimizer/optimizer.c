@@ -159,6 +159,42 @@ static inline void reset_marks_for_block(basic_block_t* block){
 
 
 /**
+ * Does the given statement have block external side effects?
+ *
+ * What counts as a block external side effect:
+ * 	1.) Assigning to a non-temporary variable
+ * 	2.) Calling a function
+ * 	3.) Loading from memory
+ * 	4.) Storing to memory
+ * 	5.) Copying memory
+ */
+static inline u_int8_t does_statement_have_block_external_side_effects(instruction_t* statement){
+	switch(statement->statement_type){
+		//These all do by default
+		case THREE_ADDR_CODE_FUNC_CALL:
+		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+		case THREE_ADDR_CODE_LOAD_STATEMENT:
+			return TRUE;
+
+		/**
+		 * Our other options are not so simple. If we have an instance where we are
+		 * assigning to a non-temporary variable, then that counts as an external
+		 * side effect because non-temporary variables live for longer than the block
+		 */
+		default:
+			//Screen for non-temp assignees
+			if(statement->operands.oir.assignee != NULL && statement->operands.oir.assignee->variable_type != VARIABLE_TYPE_TEMP){
+				return TRUE;
+			}
+
+			//Otherwise we are fine
+			return FALSE;
+	}
+}
+
+
+/**
  * Run through and reset all of the marks on every instruction in a given
  * function. This is done in anticipation of us using the mark/sweep algorithm
  * again after branch optimizations
@@ -2151,48 +2187,12 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 
 
 /**
- * Does the given statement have block external side effects?
- *
- * What counts as a block external side effect:
- * 	1.) Assigning to a non-temporary variable
- * 	2.) Calling a function
- * 	3.) Storing to memory
- * 	4.) Loading from memory
- * 	5.) Copying memory
- */
-static inline u_int8_t does_statement_have_block_external_side_effects(instruction_t* statement){
-	switch(statement->statement_type){
-		//These all do by default
-		case THREE_ADDR_CODE_FUNC_CALL:
-		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
-		case THREE_ADDR_CODE_STORE_STATEMENT:
-		case THREE_ADDR_CODE_LOAD_STATEMENT:
-			return TRUE;
-
-		/**
-		 * Our other options are not so simple. If we have an instance where we are
-		 * assigning to a non-temporary variable, then that counts as an external
-		 * side effect because non-temporary variables live for longer than the block
-		 */
-		default:
-			//Screen for non-temp assignees
-			if(statement->operands.oir.assignee != NULL && statement->operands.oir.assignee->variable_type != VARIABLE_TYPE_TEMP){
-				return TRUE;
-			}
-
-			//Otherwise we are fine
-			return FALSE;
-	}
-}
-
-
-/**
  * Is the given predecessor block valid for branch assignment folding into conditional moves? 
  *
  * Our criteria for this is as follows:
  * 	1.) The predecessor must have one successor and one predecessor only
  * 	2.) It must assign one of the variables in the join block's phi function of interest
- * 	3.) There may be no other instructions inside of the block that have block external side effects(see the rule above for what those are)
+ * 	3.) There may be no other instructions inside of the block
  */
 static inline u_int8_t is_predecessor_block_valid_for_branch_assignment_folding(basic_block_t* join_block, basic_block_t* predecessor, three_addr_var_t* target_variable){
 	/**
@@ -2264,16 +2264,16 @@ static inline u_int8_t is_predecessor_block_valid_for_branch_assignment_folding(
 	}
 
 	/**
-	 * Check 3: verify that this is the only action that the block is taking. We can verify this by seeing
-	 * if the cursor's prior value is NULL, meaning it's the header
+	 * Check 3: verify that all other actions have no block external side effects. This
+	 * means that they do not reach out to memory. Basically we restrict this to
+	 * simple arithmetic with temp assignees
 	 */
 	cursor = cursor->previous_statement;
 	while(cursor != NULL){
 		if(does_statement_have_block_external_side_effects(cursor) == TRUE){
 			return FALSE;
 		}
-
-		//We're crawling up backwards
+	
 		cursor = cursor->previous_statement;
 	}
 
@@ -2379,11 +2379,11 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 
 		/**
 		 * Due to the way that an if-else-if structure works, we guarantee that the immediate
-		 * postdominator of the end block is the starting if block. We know this because 
+		 * dominator of the end block is the starting if block. We know this because 
 		 * in order to get from the start block to our candidate block, we must flow through the
 		 * very first if, which is why this if "postdominates" our given candidate
 		 */
-		basic_block_t* top_level_if_block = candidate_block->dominator_info.immediate_postdominator;
+		basic_block_t* top_level_if_block = candidate_block->dominator_info.immediate_dominator;
 
 		/**
 		 * If this is a switch block, we cannot perform the desired optimization
@@ -2402,7 +2402,7 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 
 		//TRYING THIS
 		printf("BLOCK .L%d is ELIGIBLE\n\n\n", candidate_block->block_id);
-		printf("TOP LEVEL BLOCK .L%d\n", candidate_block->dominator_info.immediate_postdominator->block_id);
+		printf("TOP LEVEL BLOCK .L%d\n", top_level_if_block->block_id);
 
 		/**
 		 * We now know that this is eligible fully, so let's go ahead and perform the branching
@@ -2445,6 +2445,11 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		instruction_t* branch_statement = top_level_if_block->exit_statement;
 		basic_block_t* if_destination = branch_statement->if_block;
 		basic_block_t* else_destination = branch_statement->else_block;
+
+		/**
+		 * First we will copy everything that is not a jump from the if 
+		 */
+
 	}
 
 	//TODO FIX
