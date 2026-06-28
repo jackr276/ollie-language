@@ -2525,12 +2525,38 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		delete_statement(branch_statement);
 
 		/**
-		 * Step 1: Copy everything that is not a jump from the if block over
-		 * to the top level branch statement
+		 * Step 1: grab the if assignee out from the if block and
+		 * gut the rest of the stuff from the block
 		 */
+		instruction_t* if_assignment_statement = if_destination->leader_statement;
 
+		switch(if_assignment_statement->statement_type){
+			/**
+			 * If we have a constant assignment we'll need to first get a constant
+			 * load out from over here to make this work
+			 */
+			case THREE_ADDR_CODE_ASSN_CONST_STMT:
+				//Emit the constant assignment and add it into the top level if block
+				if_assignee = emit_temp_var(if_assignment_statement->operands.oir.assignee->type);
+				instruction_t* const_assignment = emit_assignment_with_const_instruction(if_assignee, if_assignment_statement->operands.oir.constant_operand);
 
-		//Unlink these two as successors
+				add_statement(top_level_if_block, const_assignment);
+				break;
+				
+			/**
+			 * Regular assignment we just grab whatever it currently has and use that
+			 */
+			case THREE_ADDR_CODE_ASSN_STMT:
+				if_assignee = if_assignment_statement->operands.oir.operand1;
+				break;
+
+			//Sanity check with this one
+			default:
+				fprintf(stderr, "Fatal internal compiler error - invalid if assignment statement detected\n");
+				exit(1);
+		}
+
+		//Unlink these two as successors - the block is now unreachable
 		delete_successor(if_destination, candidate_block);
 
 	}
