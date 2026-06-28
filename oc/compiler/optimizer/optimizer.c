@@ -2517,11 +2517,31 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		basic_block_t* else_destination = branch_statement->else_block;
 
 		/**
-		 * Step 1: Copy everything that is not a jump from the if block over
-		 * to the top level branch statement. We'll then break the association which
-		 * will leave the if block dangling and unreachable, eventually to be cleaned
-		 * up in a later pass
+		 * Step 0: The branch no longer exists, and same goes for the successors
+		 * that we have in the if and else destination. We will now break all of
+		 * the associations
 		 */
+		delete_successor(top_level_if_block, if_destination);
+		delete_successor(top_level_if_block, else_destination);
+		delete_statement(branch_statement);
+
+		/**
+		 * Step 1: Copy everything that is not a jump from the if block over
+		 * to the top level branch statement
+		 */
+		instruction_t* if_block_cursor = if_destination->leader_statement;
+
+		while(if_block_cursor != NULL){
+			//Hang onto this for now
+			instruction_t* temp = if_block_cursor;
+
+			if(if_block_cursor->statement_type != THREE_ADDR_CODE_JUMP_STMT){
+				move_statement(if_block_cursor, );
+
+			} else {
+			}
+
+		}
 
 	}
 
