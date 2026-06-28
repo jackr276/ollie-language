@@ -8175,6 +8175,32 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 
 
 /**
+ * Convert a conditional movement OIR statement into x86 assembly
+ *
+ *
+ * x_4 <- MOVE_E t1 else t4
+ * 
+ * Becomes:
+ * x_4 <- t4
+ * cmove x_4, t1
+ *
+ * We always unconditionally assign the else, and then overwrite it with our actual value if
+ * the conditional move works
+ *
+ * NOTE: It is assumed that the first instruction in the window is the target statement
+ */
+static void handle_conditional_movement_statement(instruction_window_t* window){
+	instruction_t* conditional_move = window->instruction1;
+
+	//We know that the if assignee will always be a variable so we can extract it now
+	three_addr_var_t* if_assignee = conditional_move->operands.oir.operand1;
+
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
+}
+
+
+/**
  * Emit a movX instruction with a constant
  *
  * This is used for when we need extra moves(after a division/modulus)
@@ -14034,8 +14060,8 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 			handle_register_movement_instruction(instruction);
 			break;
 		case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT:
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(1);
+			handle_conditional_movement_statement(window);
+			break;
 		case THREE_ADDR_CODE_LOGICAL_NOT_STMT:
 			handle_logical_not_instruction(window);
 			break;
