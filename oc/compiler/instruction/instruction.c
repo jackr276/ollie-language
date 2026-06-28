@@ -3184,47 +3184,131 @@ static inline void print_move_instruction(FILE* fl, instruction_type_t instructi
 		case MOVZWQ:
 			fprintf(fl, "movzwq ");
 			break;
-		case CMOVE:
-			fprintf(fl, "cmove ");
+		case CMOVEW:
+			fprintf(fl, "cmoveq ");
 			break;
-		case CMOVNE:
-			fprintf(fl, "cmovne ");
+		case CMOVEL:
+			fprintf(fl, "cmovew ");
 			break;
-		case CMOVG:
-			fprintf(fl, "cmovg ");
+		case CMOVEQ:
+			fprintf(fl, "cmoveq ");
 			break;
-		case CMOVL:
-			fprintf(fl, "cmovl ");
+		case CMOVNEW:
+			fprintf(fl, "cmovnew ");
 			break;
-		case CMOVGE:
-			fprintf(fl, "cmovge ");
+		case CMOVNEL:
+			fprintf(fl, "cmovnel ");
 			break;
-		case CMOVLE:
-			fprintf(fl, "cmovle ");
+		case CMOVNEQ:
+			fprintf(fl, "cmovneq ");
 			break;
-		case CMOVZ:
-			fprintf(fl, "cmovz ");
+		case CMOVGW:
+			fprintf(fl, "cmovgw ");
 			break;
-		case CMOVNZ:
-			fprintf(fl, "cmovnz ");
+		case CMOVGL:
+			fprintf(fl, "cmovgl ");
 			break;
-		case CMOVA:
-			fprintf(fl, "cmova ");
+		case CMOVGQ:
+			fprintf(fl, "cmovgq ");
 			break;
-		case CMOVAE:
-			fprintf(fl, "cmovae ");
+		case CMOVLW:
+			fprintf(fl, "cmovlw ");
 			break;
-		case CMOVB:
-			fprintf(fl, "cmovb ");
+		case CMOVLL:
+			fprintf(fl, "cmovll ");
 			break;
-		case CMOVBE:
-			fprintf(fl, "cmovbe ");
+		case CMOVLQ:
+			fprintf(fl, "cmovlq ");
 			break;
-		case CMOVNP:
-			fprintf(fl, "cmovnp ");
+		case CMOVGEW:
+			fprintf(fl, "cmovgew ");
 			break;
-		case CMOVP:
-			fprintf(fl, "cmovp ");
+		case CMOVGEL:
+			fprintf(fl, "cmovgel ");
+			break;
+		case CMOVGEQ:
+			fprintf(fl, "cmovgeq ");
+			break;
+		case CMOVLEW:
+			fprintf(fl, "cmovlew ");
+			break;
+		case CMOVLEL:
+			fprintf(fl, "cmovlel ");
+			break;
+		case CMOVLEQ:
+			fprintf(fl, "cmovleq ");
+			break;
+		case CMOVZW:
+			fprintf(fl, "cmovzw ");
+			break;
+		case CMOVZL:
+			fprintf(fl, "cmovzl ");
+			break;
+		case CMOVZQ:
+			fprintf(fl, "cmovzq ");
+			break;
+		case CMOVNZW:
+			fprintf(fl, "cmovnzw ");
+			break;
+		case CMOVNZL:
+			fprintf(fl, "cmovnzl ");
+			break;
+		case CMOVNZQ:
+			fprintf(fl, "cmovnzq ");
+			break;
+		case CMOVAW:
+			fprintf(fl, "cmovaw ");
+			break;
+		case CMOVAL:
+			fprintf(fl, "cmoval ");
+			break;
+		case CMOVAQ:
+			fprintf(fl, "cmovaq ");
+			break;
+		case CMOVAEW:
+			fprintf(fl, "cmovaew ");
+			break;
+		case CMOVAEL:
+			fprintf(fl, "cmovael ");
+			break;
+		case CMOVAEQ:
+			fprintf(fl, "cmovaeq ");
+			break;
+		case CMOVBW:
+			fprintf(fl, "cmovbw ");
+			break;
+		case CMOVBL:
+			fprintf(fl, "cmovbl ");
+			break;
+		case CMOVBQ:
+			fprintf(fl, "cmovbq ");
+			break;
+		case CMOVBEW:
+			fprintf(fl, "cmovbew ");
+			break;
+		case CMOVBEL:
+			fprintf(fl, "cmovbel ");
+			break;
+		case CMOVBEQ:
+			fprintf(fl, "cmovbeq ");
+			break;
+		case CMOVNPW:
+			fprintf(fl, "cmovnpw ");
+			break;
+		case CMOVNPL:
+			fprintf(fl, "cmovnpl ");
+			break;
+		case CMOVNPQ:
+			fprintf(fl, "cmovnpq ");
+			break;
+		case CMOVPW:
+			fprintf(fl, "cmovpw ");
+			break;
+		case CMOVPL:
+			fprintf(fl, "cmovpl ");
+			break;
+		case CMOVPQ:
+			fprintf(fl, "cmovpq ");
 			break;
 		case MOVDQU:
 			fprintf(fl, "movdqu ");
@@ -4828,20 +4912,48 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case MOVZBQ:
 		case MOVZWL:
 		case MOVZWQ:
-		case CMOVE:
-		case CMOVNE:
-		case CMOVG:
-		case CMOVL:
-		case CMOVGE:
-		case CMOVLE:
-		case CMOVZ:
-		case CMOVNZ:
-		case CMOVA:
-		case CMOVAE:
-		case CMOVB:
-		case CMOVBE:
-		case CMOVNP:
-		case CMOVP:
+		case CMOVEW:
+		case CMOVEL:
+		case CMOVEQ:
+		case CMOVNEW:
+		case CMOVNEL:
+		case CMOVNEQ:
+		case CMOVGW:
+		case CMOVGL:
+		case CMOVGQ:
+		case CMOVLW:
+		case CMOVLL:
+		case CMOVLQ:
+		case CMOVGEW:
+		case CMOVGEL:
+		case CMOVGEQ:
+		case CMOVLEW:
+		case CMOVLEL:
+		case CMOVLEQ:
+		case CMOVZW:
+		case CMOVZL:
+		case CMOVZQ:
+		case CMOVNZW:
+		case CMOVNZL:
+		case CMOVNZQ:
+		case CMOVAW:
+		case CMOVAL:
+		case CMOVAQ:
+		case CMOVAEW:
+		case CMOVAEL:
+		case CMOVAEQ:
+		case CMOVBW:
+		case CMOVBL:
+		case CMOVBQ:
+		case CMOVBEW:
+		case CMOVBEL:
+		case CMOVBEQ:
+		case CMOVNPW:
+		case CMOVNPL:
+		case CMOVNPQ:
+		case CMOVPW:
+		case CMOVPL:
+		case CMOVPQ:
 			/**
 			 * Now we go based on what kind of memory
 			 * access we're doing here. This will determine
