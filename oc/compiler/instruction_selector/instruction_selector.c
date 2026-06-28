@@ -8175,32 +8175,6 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 
 
 /**
- * Convert a conditional movement OIR statement into x86 assembly
- *
- *
- * x_4 <- MOVE_E t1 else t4
- * 
- * Becomes:
- * x_4 <- t4
- * cmove x_4, t1
- *
- * We always unconditionally assign the else, and then overwrite it with our actual value if
- * the conditional move works
- *
- * NOTE: It is assumed that the first instruction in the window is the target statement
- */
-static void handle_conditional_movement_statement(instruction_window_t* window){
-	instruction_t* conditional_move = window->instruction1;
-
-	//We know that the if assignee will always be a variable so we can extract it now
-	three_addr_var_t* if_assignee = conditional_move->operands.oir.operand1;
-
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
-}
-
-
-/**
  * Emit a movX instruction with a constant
  *
  * This is used for when we need extra moves(after a division/modulus)
@@ -8241,9 +8215,60 @@ instruction_t* emit_constant_move_instruction(three_addr_var_t* destination, thr
 
 
 /**
- * Create and insert a regular move instruction before the given after instruction. It is assumed
- * that we will not be needing any kind of converting moves here for this to work
+ * Convert a conditional movement OIR statement into x86 assembly
+ *
+ * x_4 <- MOVE_E t1 else t4
+ * 
+ * Becomes:
+ * x_4 <- t4
+ * cmove x_4, t1
+ *
+ * We always unconditionally assign the else, and then overwrite it with our actual value if
+ * the conditional move works
+ *
+ * NOTE: It is assumed that the first instruction in the window is the target statement
  */
+static void handle_conditional_movement_statement(instruction_window_t* window){
+	instruction_t* conditional_move = window->instruction1;
+	//Cache the destination type & assignee for needed comparisons
+	three_addr_var_t* assignee = conditional_move->operands.oir.assignee;
+	generic_type_t* destination_type = assignee->type;
+
+	//We know that the if assignee will always be a variable so we can extract it now
+	three_addr_var_t* if_assignee = conditional_move->operands.oir.operand1;
+
+	/**
+	 * If the if-assignee requires a converting move, now is the time for us to insert
+	 * it. These do not set condition codes so we should be good here
+	 */
+	if(is_converting_move_required(destination_type, if_assignee->type) == TRUE){
+		if_assignee = create_and_insert_converting_move_instruction(conditional_move, if_assignee, destination_type);
+	}
+
+	/**
+	 * The second operand has the option of being either a constant or a regular
+	 * value. If it is a regular value, then we will emit an unconditional move
+	 * into the destitination. If it is a constant then we just do a constant move
+	 */
+	three_addr_var_t* else_destination = emit_var_copy(assignee);
+	if(conditional_move->operands.oir.operand2 != NULL){
+		//Any required converting moves happen here
+		if(is_converting_move_required(destination_type, conditional_move->operands.oir.operand2->type) == TRUE){
+
+		}
+
+	} else {
+		instruction_t* constant_assignment = emit_constant_move_instruction(else_destination, conditional_move->operands.oir.constant_operand);
+		insert_instruction_before_given(constant_assignment, conditional_move);
+	}
+
+
+
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
+}
+
+
 
 
 /**
