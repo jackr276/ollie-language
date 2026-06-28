@@ -739,13 +739,22 @@ static void mark(dynamic_array_t* function_blocks){
 				break;
 
 			/**
-			 * Branch, set and conditional movement statements maintain a special "relies on" field to hold what they rely on,
+			 * Branch and set statements maintain a special "relies on" field to hold what they rely on,
 			 * so we'll need to mark that as well
 			 */
 			case THREE_ADDR_CODE_BRANCH_STMT:
 			case THREE_ADDR_CODE_SETNE_STMT:
+				mark_and_add_definition(function_blocks, stmt->relies_on, &worklist);
+				break;
+
+			/**
+			 * Conditional movement statements need their "relies on" tag included
+			 * as well as the two actual operands
+			 */
 			case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT:
 				mark_and_add_definition(function_blocks, stmt->relies_on, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
 				break;
 
 			/**
@@ -2280,65 +2289,6 @@ static inline u_int8_t is_predecessor_block_valid_for_branch_assignment_folding(
 
 
 /**
- * Take a statement and move it from its current blcok over to the provided
- * destination block. This will not update the use/assignment counts like
- * a regular remove still but it will still operate in much the same way.
- * The statement will always be added directly at the end of the block
- */
-static void move_statement(instruction_t* target, basic_block_t* destination){
-	//Grab the block out
-	basic_block_t* source_block = target->block_contained_in;
-
-	//No matter what, we are reducing the number of statements in this block
-	source_block->number_of_instructions--;
-
-	/**
-	 * Case 1: target is the leader statemenet
-	 */
-	if(source_block->leader_statement == target){
-		//Special case - it's the only statement. We'll just delete it here
-		if(source_block->leader_statement->next_statement == NULL){
-			source_block->leader_statement = NULL;
-			source_block->exit_statement = NULL;
-
-		//Otherwise it is the leader, but we have more
-		} else {
-			//Update the reference
-			source_block->leader_statement = target->next_statement;
-			source_block->leader_statement->previous_statement = NULL;
-		}
-
-	/**
-	 * Case 2: target is the exit statement
-	 */
-	} else if(source_block->exit_statement == target){
-		instruction_t* previous = target->previous_statement;
-		//Nothing at the end
-		previous->next_statement = NULL;
-
-		//This now is the exit statement
-		source_block->exit_statement = previous;
-		
-	/**
-	 * Case 3: target is a regualr middle of the road statement
-	 */
-	} else {
-		//Regular middle deletion here
-		instruction_t* previous = target->previous_statement;
-		instruction_t* next = target->next_statement;
-		previous->next_statement = next;
-		next->previous_statement = previous;
-	}
-
-	/**
-	 * Once we've removed this statement from the source block, we will add it
-	 * into the target block with a regular add_statement call
-	 */
-	add_statement(destination, target);
-}
-
-
-/**
  * A simple helper that converts our branch type into the equivalent conditional
  * movement type
  */
@@ -2560,6 +2510,7 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		//These are initially NULL - we will scrape for them
 		three_addr_var_t* if_assignee = NULL;
 		three_addr_var_t* else_assignee = NULL;
+		three_addr_const_t* else_assignee_const = NULL;
 
 		/**
 		 * Step 0: The branch no longer exists, and same goes for the successors
@@ -2644,6 +2595,14 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		 * to be ignored
 		 */
 		conditional_movement_type_t movement_type = convert_branch_type_to_conditional_movement_type(branch_statement->branch_type);
+
+		//TODO
+		//
+		//
+		//THIS SHOULD BE ABLE TO HAVE CONSTANTS AS THE ELSE ASSIGNEE
+		//
+		//
+		//
 		instruction_t* conditional_assignment = emit_conditional_movement_statement(branching_assignment_variable, if_assignee, else_assignee, branch_statement->relies_on, movement_type);
 		add_statement(top_level_if_block, conditional_assignment);
 
