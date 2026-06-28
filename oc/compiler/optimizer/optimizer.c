@@ -90,6 +90,54 @@ static inline int32_t increment_and_get(){
 
 
 /**
+ * Is a given variable SSA eligible? We do this by looking at the type of the
+ * variable and whether or not the linked var is NULL. If the linked var is NULL
+ * we would get segfaults
+ */
+static inline u_int8_t is_variable_ssa_eligible(three_addr_var_t* variable){
+	//Sanity check
+	if(variable == NULL){
+		return FALSE;
+	}
+
+	switch(variable->variable_type){
+		case VARIABLE_TYPE_MEMORY_ADDRESS:
+		case VARIABLE_TYPE_NON_TEMP:
+			if(variable->linked_var != NULL){
+				return TRUE;
+			} else {
+				return FALSE;
+			}
+
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Is the given type conditional move compatible? Remember that we only
+ * can do conditional moves for basic non-float types or pointer types
+ */
+static inline u_int8_t is_type_conditional_move_compatible(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_BASIC:
+			if(type->basic_type_token == VOID || type->basic_type_token == F32 || type->basic_type_token == F64){
+				return FALSE;
+			}
+
+			return TRUE;
+
+		case TYPE_CLASS_POINTER:
+			return TRUE;
+
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Reset all of the marked instructions for a given block
  */
 static inline void reset_marks_for_block(basic_block_t* block){
@@ -107,6 +155,42 @@ static inline void reset_marks_for_block(basic_block_t* block){
 
 	//Remove that this has a mark
 	block->contains_mark = FALSE;
+}
+
+
+/**
+ * Does the given statement have block external side effects?
+ *
+ * What counts as a block external side effect:
+ * 	1.) Assigning to a non-temporary variable
+ * 	2.) Calling a function
+ * 	3.) Loading from memory
+ * 	4.) Storing to memory
+ * 	5.) Copying memory
+ */
+static inline u_int8_t does_statement_have_block_external_side_effects(instruction_t* statement){
+	switch(statement->statement_type){
+		//These all do by default
+		case THREE_ADDR_CODE_FUNC_CALL:
+		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+		case THREE_ADDR_CODE_LOAD_STATEMENT:
+			return TRUE;
+
+		/**
+		 * Our other options are not so simple. If we have an instance where we are
+		 * assigning to a non-temporary variable, then that counts as an external
+		 * side effect because non-temporary variables live for longer than the block
+		 */
+		default:
+			//Screen for non-temp assignees
+			if(statement->operands.oir.assignee != NULL && statement->operands.oir.assignee->variable_type != VARIABLE_TYPE_TEMP){
+				return TRUE;
+			}
+
+			//Otherwise we are fine
+			return FALSE;
+	}
 }
 
 
@@ -661,6 +745,16 @@ static void mark(dynamic_array_t* function_blocks){
 			case THREE_ADDR_CODE_BRANCH_STMT:
 			case THREE_ADDR_CODE_SETNE_STMT:
 				mark_and_add_definition(function_blocks, stmt->relies_on, &worklist);
+				break;
+
+			/**
+			 * Conditional movement statements need their "relies on" tag included
+			 * as well as the two actual operands
+			 */
+			case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT:
+				mark_and_add_definition(function_blocks, stmt->relies_on, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
 				break;
 
 			/**
@@ -2103,6 +2197,415 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 
 
 /**
+ * Is the given predecessor block valid for branch assignment folding into conditional moves? 
+ *
+ * Our criteria for this is as follows:
+ * 	1.) The predecessor must have one successor and one predecessor only
+ * 	2.) It must assign one of the variables in the join block's phi function of interest
+ * 	3.) There may be no other instructions inside of the block
+ */
+static inline u_int8_t is_predecessor_block_valid_for_branch_assignment_folding(basic_block_t* join_block, basic_block_t* predecessor, three_addr_var_t* target_variable){
+	/**
+	 * If this predecessor has more than one predecessor itself, this isn't
+	 * going to work because we don't have the kind of if-else-if funnel that we're
+	 * looking for
+	 */
+	if(predecessor->predecessors.current_index != 1){
+		return FALSE;
+	}
+
+	/**
+	 * If we have more than one successor, then this also
+	 * isn't eligible because again we don't have the funnel
+	 * shape that we are looking for
+	 */
+	if(predecessor->successors.current_index != 1){
+		return FALSE;
+	}
+
+	/**
+	 * Following this we need to determine if the contents of the block
+	 * itself are eligible for this kind of optimization. These 
+	 * go as follows:
+	 *
+	 * 1.) The very last instruction is a direct jump to our candidate block
+	 * 2.) The block has a final non-temporary variable assignment with a viable type for this
+	 * 3.) The block takes no other actions besides these
+	 *
+	 * The last line is specifically important to avoid side effects of doing this
+	 */
+	instruction_t* cursor = predecessor->exit_statement;
+
+	/**
+	 * Check 1: exit statement must be an unconditional jump to 
+	 * our candidate block
+	 */
+	if(cursor->statement_type != THREE_ADDR_CODE_JUMP_STMT || cursor->if_block != join_block){
+		return FALSE;
+	}
+
+	/**
+	 * Check 2: the second to last instruction is a non-temporary variable assignment
+	 * with a type that we specifically support for conditional movement
+	 */
+	cursor = cursor->previous_statement;
+
+	//Sanity check - if it's NULL then we just had a jump so this isn't going to work anyway
+	if(cursor == NULL){
+		return FALSE;
+	}
+
+	//Invalidate the statement type first
+	if(cursor->statement_type != THREE_ADDR_CODE_ASSN_STMT && cursor->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
+		return FALSE;
+	}
+
+	//Now let's see if we're able to invalidate the assignee's variable type or the actual type of the variable itself
+	if(is_type_conditional_move_compatible(cursor->operands.oir.assignee->type) == FALSE){
+		return FALSE;
+	}
+
+	/**
+	 * Let's now make sure that the variable that is being assigned to has the same underlying symtab
+	 * variable as the given target variable(albeit a different SSA generation)
+	 */
+	if(variables_equal_no_ssa(target_variable, cursor->operands.oir.assignee) == FALSE){
+		return FALSE;
+	}
+
+	/**
+	 * Check 3: verify that there is nothing else in this block besides the
+	 * assignment to our variable. That means that at this point, we should
+	 * see nothing here
+	 */
+	cursor = cursor->previous_statement;
+	if(cursor != NULL){
+		return FALSE;
+	}
+
+	//If we've survived all the way to down here, then we are good
+	return TRUE;
+}
+
+
+/**
+ * A simple helper that converts our branch type into the equivalent conditional
+ * movement type
+ */
+static inline conditional_movement_type_t convert_branch_type_to_conditional_movement_type(branch_type_t branch_type){
+	switch(branch_type){
+		case NO_BRANCH:
+			return NO_CONDITIONAL_MOVEMENT;
+		case BRANCH_NE:
+			return MOVE_NE;
+		case BRANCH_E:
+			return MOVE_E;
+		case BRANCH_Z:
+			return MOVE_Z;
+		case BRANCH_NZ:
+			return MOVE_NZ;
+		case BRANCH_L:
+			return MOVE_L;
+		case BRANCH_LE:
+			return MOVE_LE;
+		case BRANCH_G:
+			return MOVE_G;
+		case BRANCH_GE:
+			return MOVE_GE;
+		case BRANCH_A:
+			return MOVE_A;
+		case BRANCH_AE:
+			return MOVE_AE;
+		case BRANCH_B:
+			return MOVE_B;
+		case MOVE_BE:
+			return MOVE_BE;
+		default:
+			fprintf(stderr, "Fatal internal compiler error: unknown branch type detected in branch to movement translator\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * If we have examples like below, we can optimize into converting moves where we avoid the jumping
+ * altogether in favor of this kind of conditional assignment. This is a common pattern that we'll
+ * have people do so it is worth it to optimize into a conditional assignment. This will exclusively
+ * work for if-else. For if-else-if-else-if-else patterns, this becomes too expensive to track
+ * and do so we will not
+ *
+ * t5 <- x_0 > y_0
+ * branch_le .L4 else .L5
+ *
+ * .L5:
+ * 	z_0 <- x_0 
+ * 	jmp .L6
+ *
+ * .L4:
+ * 	z_1 <- y_0 
+ * 	jmp .L6
+ *
+ * .L6:
+ * 	 z_2 <- phi(x_0, y_0)
+ * 	 ...
+ * 	 ...
+ *
+ * 	We would be able to convert this into
+ * t5 <- x_0 > y_0
+ * z_2 <- cmove_le y_0 else x_0
+ */
+static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* current_function_blocks){
+	//Did we optimize a branching assignment? By default we did not
+	u_int8_t optimized_branching_assigment = FALSE;
+
+	//Run through all of the function blocks that we have
+	for(u_int32_t i = 0; i < current_function_blocks->current_index; i++){
+		//The variable that we're going to optimize assignment for
+		three_addr_var_t* branching_assignment_variable = NULL;
+
+		//By default assume it's eligible, and then get proven wrong as we go through
+		u_int8_t block_is_eligible = TRUE;
+
+		//Grab our candidate for the optimization
+		basic_block_t* candidate_block = dynamic_array_get_at(current_function_blocks, i);
+
+		/**
+		 * The block needs to have *exactly* 2 predecessors if it is a valid if-else
+		 * pattern for us to optimize
+		 */
+		if(candidate_block->predecessors.current_index != 2){
+			continue;
+		}
+
+		/**
+		 * Now we need to search this candidate block for a phi variable. This variable
+		 * will be what we're using to look for inside of our branching structure
+		 */
+		instruction_t* candidate_cursor = candidate_block->leader_statement;
+
+		/**
+		 * If we do not immediately see a phi function then this is not going to work
+		 */
+		if(candidate_cursor == NULL || candidate_cursor->statement_type != THREE_ADDR_CODE_PHI_FUNC){
+			continue;
+		}
+
+		//This is the phi statement that is the focus of our efforts
+		instruction_t* branching_assignment_phi = candidate_cursor;
+
+		/**
+		 * Otherwise we have a phi function so we are able to proceed. This very first phi function
+		 * is going to be our variable of interest
+		 */
+		branching_assignment_variable = branching_assignment_phi->operands.oir.assignee;
+
+		/**
+		 * Is each predecessor a simple assignment plus a jump only? We're not going
+		 * to be doing this unless it is, because we'd end up doing too much.
+		 * We also need to have readily availabe values. For example, if we're
+		 * assigning over function calls, this optimization will not occur because
+		 * we could not guarantee execution order/exclusion as required
+		 *
+		 * We will also be checking if each one of these predecessors has *one*
+		 * unified branching predecessor itself. If it does not then we're also disqualified
+		 */
+		for(u_int32_t i = 0; i < candidate_block->predecessors.current_index; i++){
+			//Extract the predecessor
+			basic_block_t* predecessor = dynamic_array_get_at(&(candidate_block->predecessors), i);
+
+			/**
+			 * Let the helper perform all validations. If at least one of these blocks fails then we are done with
+			 * the entire check
+			 */
+			if(is_predecessor_block_valid_for_branch_assignment_folding(candidate_block, predecessor, branching_assignment_variable) == FALSE){
+				block_is_eligible = FALSE;
+				break;
+			}
+		}
+
+		//This is a very common thing - most blocks are ineligible
+		if(block_is_eligible == FALSE){
+			continue;
+		}
+
+		/**
+		 * Due to the way that an if-else-if structure works, we guarantee that the immediate
+		 * dominator of the end block is the starting if block. We know this because 
+		 * in order to get from the start block to our candidate block, we must flow through the
+		 * very first if, which is why this if "postdominates" our given candidate
+		 */
+		basic_block_t* top_level_if_block = candidate_block->dominator_info.immediate_dominator;
+		instruction_t* branch_statement = top_level_if_block->exit_statement;
+
+		/**
+		 * If this is a switch block, we cannot perform the desired optimization
+		 * here. Due to the way that switches in ollie always work, a conversion 
+		 * would actually result in inferior performance, so we'll never 
+		 * take this road
+		 *
+		 * Due to the way that switches have start and exit jumps to gate against
+		 * targets out of the given range, it's unlikely that this will ever
+		 * be hit. However we need to be absolutely sure so we have this in
+		 * there
+		 */
+		if(top_level_if_block->block_type == BLOCK_TYPE_SWITCH){
+			continue;
+		}
+
+		/**
+		 * We now know that this is eligible fully, so let's go ahead and perform the branching
+		 * assignment to converting move operation now. We are going to hoist everything up and
+		 * into the original conditional block
+		 *
+		 * Here is an example to show how this works
+		 *
+		 * .L5:
+		 * 	x_0 > 5
+		 * 	branch_le .L7 else .L6
+		 *
+		 * .L6:
+		 * 	result_0 < - 5
+		 * 	jmp .L8
+		 *
+		 * .L7:
+		 * 	result_1 <- 4
+		 * 	jmp .L8
+		 *
+		 * .L8:
+		 * 	result_2 <- phi(result_0, result1)
+		 * 	...
+		 *
+		 * This is a valid if-else assignment pattern that would have been picked up by us. This will
+		 * be turned into:
+		 * 	
+		 * .L5:
+		 * 	t11 <- x_0 > 5
+		 * 	t1 <- 4
+		 * 	t2 <- 5
+		 * 	result_2 <- cmov_le(t11, t1, t4)
+		 * 	jmp .L8
+		 *
+		 * .L8:
+		 * 	....
+		 * 
+		 * Notice how the phi function has been eliminated from here, as we no longer need it. What remains
+		 * will be the result_2 variable as well as the conditional. The other two blocks that are not needed
+		 * will be eliminated as well
+		 */
+		basic_block_t* if_destination = branch_statement->if_block;
+		basic_block_t* else_destination = branch_statement->else_block;
+		//These are initially NULL - we will scrape for them
+		three_addr_var_t* if_assignee = NULL;
+		three_addr_var_t* else_assignee = NULL;
+		three_addr_const_t* else_assignee_const = NULL;
+
+		/**
+		 * Step 0: The branch no longer exists, and same goes for the successors
+		 * that we have in the if and else destination. We will now break all of
+		 * the associations
+		 */
+		delete_successor(top_level_if_block, if_destination);
+		delete_successor(top_level_if_block, else_destination);
+		delete_statement(branch_statement);
+
+		/**
+		 * Step 1: grab the if assignee out from the if block and
+		 * gut the rest of the stuff from the block
+		 */
+		instruction_t* if_assignment_statement = if_destination->leader_statement;
+		switch(if_assignment_statement->statement_type){
+			/**
+			 * If we have a constant assignment we'll need to first get a constant
+			 * load out from over here to make this work
+			 */
+			case THREE_ADDR_CODE_ASSN_CONST_STMT:
+				//Emit the constant assignment and add it into the top level if block
+				if_assignee = emit_temp_var(if_assignment_statement->operands.oir.assignee->type);
+				instruction_t* const_assignment = emit_assignment_with_const_instruction(if_assignee, if_assignment_statement->operands.oir.constant_operand);
+
+				add_statement(top_level_if_block, const_assignment);
+				break;
+				
+			/**
+			 * Regular assignment we just grab whatever it currently has and use that
+			 */
+			case THREE_ADDR_CODE_ASSN_STMT:
+				if_assignee = if_assignment_statement->operands.oir.operand1;
+				break;
+
+			//Sanity check with this one
+			default:
+				fprintf(stderr, "Fatal internal compiler error - invalid if assignment statement detected\n");
+				exit(1);
+		}
+
+		//Unlink these two as successors - the block is now unreachable
+		delete_successor(if_destination, candidate_block);
+
+		/**
+		 * Step 2: grab the else assignee out from the if block and
+		 * gut the rest of the stuff from the block
+		 */
+		instruction_t* else_assignment_statement = else_destination->leader_statement;
+		switch(else_assignment_statement->statement_type){
+			/**
+			 * For else assignments, OIR supports having a constant in this area
+			 * so we will not need to do any temp assignments
+			 */
+			case THREE_ADDR_CODE_ASSN_CONST_STMT:
+				else_assignee_const = else_assignment_statement->operands.oir.constant_operand;
+				break;
+				
+			/**
+			 * Regular assignment we just grab whatever it currently has and use that
+			 */
+			case THREE_ADDR_CODE_ASSN_STMT:
+				else_assignee = else_assignment_statement->operands.oir.operand1;
+				break;
+
+			//Sanity check with this one
+			default:
+				fprintf(stderr, "Fatal internal compiler error - invalid if assignment statement detected\n");
+				exit(1);
+		}
+
+		//Unlink these two as successors - the block is now unreachable
+		delete_successor(else_destination, candidate_block);
+
+		/**
+		 * Step 3: emit the conditional move now by using the final phi variable
+		 * given to us in the candidate block. The other two non-temp vars are going
+		 * to be ignored. 
+		 *
+		 * Since OIR supports having a const in the else assignee, we can do that here
+		 * if we have one to save on emitted OIR instructions
+		 */
+		conditional_movement_type_t movement_type = convert_branch_type_to_conditional_movement_type(branch_statement->branch_type);
+		if(else_assignee != NULL){
+			instruction_t* conditional_assignment = emit_conditional_movement_statement(branching_assignment_variable, if_assignee, else_assignee, branch_statement->relies_on, movement_type);
+			add_statement(top_level_if_block, conditional_assignment);
+		} else {
+			instruction_t* conditional_assignment = emit_conditional_movement_with_const_statement(branching_assignment_variable, if_assignee, else_assignee_const, branch_statement->relies_on, movement_type);
+			add_statement(top_level_if_block, conditional_assignment);
+		}
+
+		/**
+		 * Step 4: emit a direct jump from the if block down to the candidate block. We will also
+		 * be removing the phi statement from the candidate block as it is no longer
+		 * useful for us there
+		 */
+		emit_jump(top_level_if_block, candidate_block);
+		delete_statement(branching_assignment_phi);
+
+		//Flag that we did at least one of these
+		optimized_branching_assigment = TRUE;
+	}
+
+	return optimized_branching_assigment;
+}
+
+
+/**
  * The clean algorithm will remove all useless control flow structures, ideally
  * resulting in a simplified CFG. This should be done after we use mark and sweep to get rid of useless code,
  * because that may lead to empty blocks that we can clean up here
@@ -2347,10 +2850,10 @@ cfg_t* optimize(cfg_t* cfg){
 
 		/**
 		 * PASS 3: always true/false optimization
-		 * Now that we've broken up and logical and/or logic, we can go through and see if there are any
-		 * branches that we can eliminate due to their conditions being always true/false. An example
-		 * of this would be while(true) always being true, so there being no need for a comparison
-		 * on each step
+		 * Now that we've swept everything, let's figure out if there are
+		 * any branches that are always true or always false. We'll need to 
+		 * elminate these before we go through and do anything with conditional
+		 * movement
 		 */
 		u_int8_t found_branches_to_optimize = optimize_always_true_false_paths(current_function_blocks);
 
@@ -2386,7 +2889,46 @@ cfg_t* optimize(cfg_t* cfg){
 		}
 
 		/**
-		 * PASS 4: Clean algorithm
+		 * PASS 4: certain common if-else assignments are good candidates for conditional moves in Ollie. We have
+		 * a dedicated pass that will crawl the function once and look for them. If it is able to find them, then
+		 * it will optimize them into a conditional move pattern. If this is to happen, it will require a full
+		 * redo of the mark, sweep, block deletion and control flow recalculation passes
+		 */
+		u_int8_t branching_assignments_optimized = optimize_branching_assignments_where_possible(current_function_blocks);
+
+		/**
+		 * If these ended up being optimized, we will have unreachable blocks
+		 * that need to be cleaned up. We will also go through and
+		 * do a mark-and-sweep run to make sure that no straggler variables
+		 * are still around
+		 */
+		if(branching_assignments_optimized == TRUE){
+			//Reset all of the marks in the function
+			reset_all_marks(current_function_blocks);
+
+			/**
+			 * Optimizing branches and and then trying to run mark & sweep will not work because
+			 * we have fundamentally changed the structure & dominance in the CFG by doing
+			 * that. 
+			 *
+			 * We are going to need to delete all unreachable blocks *at this stage* and
+			 * then we are going to have to recompute all of the dominance relations. Mark
+			 * specifically relies on the "RDF"(reverse dominance frontier).
+			 */
+			delete_all_unreachable_blocks(function_entry_block, current_function_blocks);
+
+			//Recalculate all dominance relations
+			recompute_all_control_flow_relations_for_function(current_function_blocks, function_entry_block, function_exit_block);
+
+			//Invoke the marker
+			mark(current_function_blocks);
+
+			//Invoke the sweeper
+			sweep(current_function_blocks, function_entry_block);
+		}
+
+		/**
+		 * PASS 5: Clean algorithm
 		 * Clean follows after sweep because during the sweep process, we will likely delete the contents of
 		 * entire blocks. Clean uses 4 different steps in a specific order to eliminate control flow
 		 * that has been made useless by sweep()
@@ -2394,7 +2936,7 @@ cfg_t* optimize(cfg_t* cfg){
 		clean(cfg, current_function_blocks, function_entry_block);
 
 		/**
-		 * PASS 5: Delete all unreachable blocks
+		 * PASS 6: Delete all unreachable blocks
 		 * There is a chance that we have some blocks who are now unreachable. We will
 		 * remove them now. This step is absolutely essential. If we do not do this,
 		 * then the dominance relation computation will not work
@@ -2402,14 +2944,14 @@ cfg_t* optimize(cfg_t* cfg){
 		delete_all_unreachable_blocks(function_entry_block, current_function_blocks);
 
 		/**
-		 * PASS 5.5: Now that all of our marking and sweeping is done, it is possible that we'll
+		 * PASS 6.5: Now that all of our marking and sweeping is done, it is possible that we'll
 		 * have some orphaned local constants. We will go through now and sweep them all up if 
 		 * any of them end up being completely unused
 		 */
 		sweep_local_constants(cfg);
 
 		/**
-		 * PASS 6: Recalculate everything
+		 * PASS 7: Recalculate everything
 		 * Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
 		 * etc. So, to remedy this, we will recalculate everything in the CFG. There is no advantage in splitting this section up by function, as 
 		 * all blocks are going to be traversed regardless. Due to this, we will be doing it over the entire CFG at the end

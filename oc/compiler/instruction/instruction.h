@@ -437,6 +437,8 @@ struct instruction_t{
 	u_int8_t is_callee_saving_instruction;
 	//If it's a branch statment, then we'll use this
 	branch_type_t branch_type;
+	//The conditional movement type that we have
+	conditional_movement_type_t movement_type;
 	//Do we have a read, write, or no attempt to access memory(default)
 	memory_access_type_t memory_access_type;
 	//The register that we're popping or pushing
@@ -707,14 +709,19 @@ instruction_t* emit_binary_operation_instruction(three_addr_var_t* assignee, thr
 instruction_t* emit_binary_operation_with_const_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_const_t* op2); 
 
 /**
- * Emit a conditional assignment statement
- */
-instruction_t* emit_conditional_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t prior_operator, u_int8_t is_signed, u_int8_t inverse_assignment);
-
-/**
  * Emit a statement that only uses two vars of the form var1 <- var2
  */
 instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1);
+
+/**
+ * Emit a conditional movement statement. Unlike regular moves, we will also need to provide the conditional and conditional movement type for this
+ */
+instruction_t* emit_conditional_movement_statement(three_addr_var_t* assignee, three_addr_var_t* if_assignee, three_addr_var_t* else_assignee, three_addr_var_t* conditional, conditional_movement_type_t movement_type);
+
+/**
+ * Emit a conditional movement statement with the else being a constant. Unlike regular moves, we will also need to provide the conditional and conditional movement type for this
+ */
+instruction_t* emit_conditional_movement_with_const_statement(three_addr_var_t* assignee, three_addr_var_t* if_assignee, three_addr_const_t* else_assignee, three_addr_var_t* conditional, conditional_movement_type_t movement_type);
 
 /**
  * Emit a memory copy statement from one memory region to another. This exists

@@ -2657,6 +2657,75 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			//Now at the very end, close the whole thing out
 			fprintf(fl, ")\n");
 			break;
+
+		case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT:
+			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
+
+			switch(stmt->movement_type){
+				case MOVE_E:
+					fprintf(fl, " <- move_E ");
+					break;
+
+				case MOVE_NE:
+					fprintf(fl, " <- move_NE ");
+					break;
+
+				case MOVE_Z:
+					fprintf(fl, " <- move_Z ");
+					break;
+
+				case MOVE_NZ:
+					fprintf(fl, " <- move_NZ ");
+					break;
+
+				case MOVE_A:
+					fprintf(fl, " <- move_A ");
+					break;
+
+				case MOVE_AE:
+					fprintf(fl, " <- move_AE ");
+					break;
+
+				case MOVE_B:
+					fprintf(fl, " <- move_B ");
+					break;
+
+				case MOVE_BE:
+					fprintf(fl, " <- move_BE ");
+					break;
+
+				case MOVE_L:
+					fprintf(fl, " <- move_L ");
+					break;
+
+				case MOVE_LE:
+					fprintf(fl, " <- move_LE ");
+					break;
+
+				case MOVE_G:
+					fprintf(fl, " <- move_G ");
+					break;
+
+				case MOVE_GE:
+					fprintf(fl, " <- move_GE ");
+					break;
+
+				default:
+					fprintf(stderr, "Fatal internal compiler error. Unrecognized conditional movement type detected\n");
+					exit(1);
+			}
+
+			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
+			fprintf(fl, " else ");
+
+			if(stmt->operands.oir.constant_operand == NULL){
+				print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
+			} else {
+				print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
+			}
+
+			fprintf(fl, "\n");
+			break;
 		
 		case THREE_ADDR_CODE_INC_STMT:
 			fprintf(fl, "inc ");
@@ -3115,47 +3184,131 @@ static inline void print_move_instruction(FILE* fl, instruction_type_t instructi
 		case MOVZWQ:
 			fprintf(fl, "movzwq ");
 			break;
-		case CMOVE:
-			fprintf(fl, "cmove ");
+		case CMOVEW:
+			fprintf(fl, "cmovew ");
 			break;
-		case CMOVNE:
-			fprintf(fl, "cmovne ");
+		case CMOVEL:
+			fprintf(fl, "cmovel ");
 			break;
-		case CMOVG:
-			fprintf(fl, "cmovg ");
+		case CMOVEQ:
+			fprintf(fl, "cmoveq ");
 			break;
-		case CMOVL:
-			fprintf(fl, "cmovl ");
+		case CMOVNEW:
+			fprintf(fl, "cmovnew ");
 			break;
-		case CMOVGE:
-			fprintf(fl, "cmovge ");
+		case CMOVNEL:
+			fprintf(fl, "cmovnel ");
 			break;
-		case CMOVLE:
-			fprintf(fl, "cmovle ");
+		case CMOVNEQ:
+			fprintf(fl, "cmovneq ");
 			break;
-		case CMOVZ:
-			fprintf(fl, "cmovz ");
+		case CMOVGW:
+			fprintf(fl, "cmovgw ");
 			break;
-		case CMOVNZ:
-			fprintf(fl, "cmovnz ");
+		case CMOVGL:
+			fprintf(fl, "cmovgl ");
 			break;
-		case CMOVA:
-			fprintf(fl, "cmova ");
+		case CMOVGQ:
+			fprintf(fl, "cmovgq ");
 			break;
-		case CMOVAE:
-			fprintf(fl, "cmovae ");
+		case CMOVLW:
+			fprintf(fl, "cmovlw ");
 			break;
-		case CMOVB:
-			fprintf(fl, "cmovb ");
+		case CMOVLL:
+			fprintf(fl, "cmovll ");
 			break;
-		case CMOVBE:
-			fprintf(fl, "cmovbe ");
+		case CMOVLQ:
+			fprintf(fl, "cmovlq ");
 			break;
-		case CMOVNP:
-			fprintf(fl, "cmovnp ");
+		case CMOVGEW:
+			fprintf(fl, "cmovgew ");
 			break;
-		case CMOVP:
-			fprintf(fl, "cmovp ");
+		case CMOVGEL:
+			fprintf(fl, "cmovgel ");
+			break;
+		case CMOVGEQ:
+			fprintf(fl, "cmovgeq ");
+			break;
+		case CMOVLEW:
+			fprintf(fl, "cmovlew ");
+			break;
+		case CMOVLEL:
+			fprintf(fl, "cmovlel ");
+			break;
+		case CMOVLEQ:
+			fprintf(fl, "cmovleq ");
+			break;
+		case CMOVZW:
+			fprintf(fl, "cmovzw ");
+			break;
+		case CMOVZL:
+			fprintf(fl, "cmovzl ");
+			break;
+		case CMOVZQ:
+			fprintf(fl, "cmovzq ");
+			break;
+		case CMOVNZW:
+			fprintf(fl, "cmovnzw ");
+			break;
+		case CMOVNZL:
+			fprintf(fl, "cmovnzl ");
+			break;
+		case CMOVNZQ:
+			fprintf(fl, "cmovnzq ");
+			break;
+		case CMOVAW:
+			fprintf(fl, "cmovaw ");
+			break;
+		case CMOVAL:
+			fprintf(fl, "cmoval ");
+			break;
+		case CMOVAQ:
+			fprintf(fl, "cmovaq ");
+			break;
+		case CMOVAEW:
+			fprintf(fl, "cmovaew ");
+			break;
+		case CMOVAEL:
+			fprintf(fl, "cmovael ");
+			break;
+		case CMOVAEQ:
+			fprintf(fl, "cmovaeq ");
+			break;
+		case CMOVBW:
+			fprintf(fl, "cmovbw ");
+			break;
+		case CMOVBL:
+			fprintf(fl, "cmovbl ");
+			break;
+		case CMOVBQ:
+			fprintf(fl, "cmovbq ");
+			break;
+		case CMOVBEW:
+			fprintf(fl, "cmovbew ");
+			break;
+		case CMOVBEL:
+			fprintf(fl, "cmovbel ");
+			break;
+		case CMOVBEQ:
+			fprintf(fl, "cmovbeq ");
+			break;
+		case CMOVNPW:
+			fprintf(fl, "cmovnpw ");
+			break;
+		case CMOVNPL:
+			fprintf(fl, "cmovnpl ");
+			break;
+		case CMOVNPQ:
+			fprintf(fl, "cmovnpq ");
+			break;
+		case CMOVPW:
+			fprintf(fl, "cmovpw ");
+			break;
+		case CMOVPL:
+			fprintf(fl, "cmovpl ");
+			break;
+		case CMOVPQ:
+			fprintf(fl, "cmovpq ");
 			break;
 		case MOVDQU:
 			fprintf(fl, "movdqu ");
@@ -4759,20 +4912,48 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case MOVZBQ:
 		case MOVZWL:
 		case MOVZWQ:
-		case CMOVE:
-		case CMOVNE:
-		case CMOVG:
-		case CMOVL:
-		case CMOVGE:
-		case CMOVLE:
-		case CMOVZ:
-		case CMOVNZ:
-		case CMOVA:
-		case CMOVAE:
-		case CMOVB:
-		case CMOVBE:
-		case CMOVNP:
-		case CMOVP:
+		case CMOVEW:
+		case CMOVEL:
+		case CMOVEQ:
+		case CMOVNEW:
+		case CMOVNEL:
+		case CMOVNEQ:
+		case CMOVGW:
+		case CMOVGL:
+		case CMOVGQ:
+		case CMOVLW:
+		case CMOVLL:
+		case CMOVLQ:
+		case CMOVGEW:
+		case CMOVGEL:
+		case CMOVGEQ:
+		case CMOVLEW:
+		case CMOVLEL:
+		case CMOVLEQ:
+		case CMOVZW:
+		case CMOVZL:
+		case CMOVZQ:
+		case CMOVNZW:
+		case CMOVNZL:
+		case CMOVNZQ:
+		case CMOVAW:
+		case CMOVAL:
+		case CMOVAQ:
+		case CMOVAEW:
+		case CMOVAEL:
+		case CMOVAEQ:
+		case CMOVBW:
+		case CMOVBL:
+		case CMOVBQ:
+		case CMOVBEW:
+		case CMOVBEL:
+		case CMOVBEQ:
+		case CMOVNPW:
+		case CMOVNPL:
+		case CMOVNPQ:
+		case CMOVPW:
+		case CMOVPL:
+		case CMOVPQ:
 			/**
 			 * Now we go based on what kind of memory
 			 * access we're doing here. This will determine
@@ -5495,6 +5676,50 @@ instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee
 	stmt->operands.oir.constant_operand = constant;
 
 	//And that's it, we'll now just give it back
+	return stmt;
+}
+
+
+/**
+ * Emit a conditional movement statement. Unlike regular moves, we will also need to provide the conditional and branch type for this
+ */
+instruction_t* emit_conditional_movement_statement(three_addr_var_t* assignee, three_addr_var_t* if_assignee, three_addr_var_t* else_assignee, three_addr_var_t* conditional, conditional_movement_type_t movement_type){
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	stmt->statement_type = THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT;
+	stmt->operands.oir.assignee = assignee;
+	stmt->operands.oir.operand1 = if_assignee;
+	stmt->operands.oir.operand2 = else_assignee;
+	
+	//The movement type informs how we assign over
+	stmt->movement_type = movement_type;
+
+	//This relies on the conditional to set codes
+	stmt->relies_on = conditional;
+
+	//Give back the statement
+	return stmt;
+}
+
+
+/**
+ * Emit a conditional movement statement with the else being a constant. Unlike regular moves, we will also need to provide the conditional and conditional movement type for this
+ */
+instruction_t* emit_conditional_movement_with_const_statement(three_addr_var_t* assignee, three_addr_var_t* if_assignee, three_addr_const_t* else_assignee, three_addr_var_t* conditional, conditional_movement_type_t movement_type){
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	stmt->statement_type = THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT;
+	stmt->operands.oir.assignee = assignee;
+	stmt->operands.oir.operand1 = if_assignee;
+	stmt->operands.oir.constant_operand = else_assignee;
+	
+	//The movement type informs how we assign over
+	stmt->movement_type = movement_type;
+
+	//This relies on the conditional to set codes
+	stmt->relies_on = conditional;
+
+	//Give back the statement
 	return stmt;
 }
 

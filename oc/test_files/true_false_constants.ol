@@ -9,5 +9,6 @@ fn a_over_b(a:i32, b:i32) -> bool {
 
 
 pub fn main() -> i32 {
-	ret 0;
+	OUNIT: [console = 1]
+	ret @a_over_b(5, 4);
 }

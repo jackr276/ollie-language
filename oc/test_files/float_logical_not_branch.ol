@@ -13,5 +13,6 @@ pub fn float_logical_not_branch(x:f32) -> i32 {
 
 
 pub fn main() -> i32 {
+	OUNIT: [console = 0]
 	ret @float_logical_not_branch(3.33);
 }
