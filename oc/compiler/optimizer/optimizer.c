@@ -2384,16 +2384,16 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		 * very first if, which is why this if "postdominates" our given candidate
 		 */
 		basic_block_t* top_level_if_block = candidate_block->dominator_info.immediate_dominator;
+		instruction_t* branch_statement = top_level_if_block->exit_statement;
 
-
-		//TODO
-		//
-		// WE NEED TO GUARD AGAINST FLOATING POINT COMPARISONS IN OUR BRANCHING
-		// This would be something that we cannot do in one statement due to
-		// parity flag requirements. It will need to be accounted for
-		//
-		//
-		//
+		/**
+		 * If the given branch statement comes from a floating point comparison,
+		 * then this optimiziation will not work because we may have two separate conditional
+		 * jumps instead of one
+		 */
+		if(branch_statement->relies_on->comes_from_fp_comparison == TRUE){
+			continue;
+		}
 
 		/**
 		 * If this is a switch block, we cannot perform the desired optimization
@@ -2452,7 +2452,6 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		 * will be the result_2 variable as well as the conditional. The other two blocks that are not needed
 		 * will be eliminated as well
 		 */
-		instruction_t* branch_statement = top_level_if_block->exit_statement;
 		basic_block_t* if_destination = branch_statement->if_block;
 		basic_block_t* else_destination = branch_statement->else_block;
 
