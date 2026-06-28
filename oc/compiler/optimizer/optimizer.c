@@ -2559,6 +2559,43 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		//Unlink these two as successors - the block is now unreachable
 		delete_successor(if_destination, candidate_block);
 
+		/**
+		 * Step 2: grab the else assignee out from the if block and
+		 * gut the rest of the stuff from the block
+		 */
+		instruction_t* else_assignment_statement = else_destination->leader_statement;
+
+		switch(else_assignment_statement->statement_type){
+			/**
+			 * If we have a constant assignment we'll need to first get a constant
+			 * load out from over here to make this work
+			 */
+			case THREE_ADDR_CODE_ASSN_CONST_STMT:
+				//Emit the constant assignment and add it into the top level if block
+				else_assignee = emit_temp_var(else_assignment_statement->operands.oir.assignee->type);
+				instruction_t* const_assignment = emit_assignment_with_const_instruction(else_assignee, else_assignment_statement->operands.oir.constant_operand);
+
+				add_statement(top_level_if_block, const_assignment);
+				break;
+				
+			/**
+			 * Regular assignment we just grab whatever it currently has and use that
+			 */
+			case THREE_ADDR_CODE_ASSN_STMT:
+				else_assignee = else_assignment_statement->operands.oir.operand1;
+				break;
+
+			//Sanity check with this one
+			default:
+				fprintf(stderr, "Fatal internal compiler error - invalid if assignment statement detected\n");
+				exit(1);
+		}
+
+		//Unlink these two as successors - the block is now unreachable
+		delete_successor(else_destination, candidate_block);
+
+		//TODO MOVE EMISSION NOW
+
 	}
 
 	//TODO FIX
