@@ -11832,44 +11832,165 @@ static void handle_addition_instruction(instruction_window_t* window){
  * helper function and reduce the need for extra code
  *
  * The op's are one-to-one mappings for relational ops only. We're kind of hijacking the token system here but it will work
+ *
+ * NOTE: cmovX instructions are only valid for word, double word, and quad word sized operands
  */
-static inline instruction_t* emit_cmovX_instruction(three_addr_var_t* destination_variable, three_addr_var_t* source, ollie_token_t op){
+static inline instruction_t* emit_cmovX_instruction(three_addr_var_t* destination_variable, three_addr_var_t* source, ollie_token_t op, u_int8_t is_type_signed){
 	//First we allocate
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+	//Extract the requested destination size
+	variable_size_t destination_size = get_type_size(destination_variable->type);
 
-	//Go based on what op we've got. This is not going to support everything and it
-	//really doesn't need to
-	//
-	//
-	//TODO FIX THIS - NEEDS SIGNEDNESS AND EVERYTHING ELSE
-	switch(op){
-		case NOT_EQUALS:
-			instruction->instruction_type = CMOVNE;
-			break;
 
-		case EQUALS:
-			instruction->instruction_type = CMOVE;
-			break;
-			
-		case G_THAN:
-			instruction->instruction_type = CMOVG;
-			break;
+	/**
+	 * Emit the conditional move instruction based on type signedness and
+	 * destination size
+	 */
+	if(is_type_signed == TRUE){
+		switch(op){
+			case NOT_EQUALS:
+				switch(destination_size){
+					case WORD:
+						instruction->instruction_type = CMOVNEW;
+						break;
+					case DOUBLE_WORD:
+						instruction->instruction_type = CMOVNEL;
+						break;
+					case QUAD_WORD:
+						instruction->instruction_type = CMOVNEQ;
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid variable size detected in cmovX emitter\n");
+						exit(1);
+				}
 
-		case G_THAN_OR_EQ:
-			instruction->instruction_type = CMOVGE;
-			break;
+				break;
 
-		case L_THAN:
-			instruction->instruction_type = CMOVL;
-			break;
+			case EQUALS:
+				switch(destination_size){
+					case WORD:
+						instruction->instruction_type = CMOVEW;
+						break;
+					case DOUBLE_WORD:
+						instruction->instruction_type = CMOVEL;
+						break;
+					case QUAD_WORD:
+						instruction->instruction_type = CMOVEQ;
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid variable size detected in cmovX emitter\n");
+						exit(1);
+				}
 
-		case L_THAN_OR_EQ:
-			instruction->instruction_type = CMOVLE;
-			break;
+				break;
 
-		default:
-			printf("Fatal internal compiler error: Unknown op passed in for CMOVX selector. Review source code to see tokens supported\n");
-			exit(1);
+			case G_THAN:
+				switch(destination_size){
+					case WORD:
+						instruction->instruction_type = CMOVGW;
+						break;
+					case DOUBLE_WORD:
+						instruction->instruction_type = CMOVGL;
+						break;
+					case QUAD_WORD:
+						instruction->instruction_type = CMOVGQ;
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid variable size detected in cmovX emitter\n");
+						exit(1);
+				}
+
+				break;
+
+			case G_THAN_OR_EQ:
+				switch(destination_size){
+					case WORD:
+						instruction->instruction_type = CMOVGEW;
+						break;
+					case DOUBLE_WORD:
+						instruction->instruction_type = CMOVGEL;
+						break;
+					case QUAD_WORD:
+						instruction->instruction_type = CMOVGEQ;
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid variable size detected in cmovX emitter\n");
+						exit(1);
+				}
+
+				break;
+
+			case L_THAN:
+				switch(destination_size){
+					case WORD:
+						instruction->instruction_type = CMOVLW;
+						break;
+					case DOUBLE_WORD:
+						instruction->instruction_type = CMOVLL;
+						break;
+					case QUAD_WORD:
+						instruction->instruction_type = CMOVLQ;
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid variable size detected in cmovX emitter\n");
+						exit(1);
+				}
+
+				break;
+
+			case L_THAN_OR_EQ:
+				switch(destination_size){
+					case WORD:
+						instruction->instruction_type = CMOVLEW;
+						break;
+					case DOUBLE_WORD:
+						instruction->instruction_type = CMOVLEL;
+						break;
+					case QUAD_WORD:
+						instruction->instruction_type = CMOVLEQ;
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid variable size detected in cmovX emitter\n");
+						exit(1);
+				}
+
+				break;
+
+			default:
+				printf("Fatal internal compiler error: Unknown op passed in for CMOVX selector. Review source code to see tokens supported\n");
+				exit(1);
+		}
+
+	} else {
+		switch(op){
+			case NOT_EQUALS:
+				instruction->instruction_type = CMOVNE;
+				break;
+
+			case EQUALS:
+				instruction->instruction_type = CMOVE;
+				break;
+				
+			case G_THAN:
+				instruction->instruction_type = CMOVG;
+				break;
+
+			case G_THAN_OR_EQ:
+				instruction->instruction_type = CMOVGE;
+				break;
+
+			case L_THAN:
+				instruction->instruction_type = CMOVL;
+				break;
+
+			case L_THAN_OR_EQ:
+				instruction->instruction_type = CMOVLE;
+				break;
+
+			default:
+				printf("Fatal internal compiler error: Unknown op passed in for CMOVX selector. Review source code to see tokens supported\n");
+				exit(1);
+		}
 	}
 
 	//Assign these two over
