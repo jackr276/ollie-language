@@ -8441,8 +8441,10 @@ static void handle_conditional_movement_statement(instruction_window_t* window){
 	 * into the destitination. If it is a constant then we just do a constant move
 	 */
 	three_addr_var_t* else_destination = emit_var_copy(assignee);
+	//We'll need this externally
+	three_addr_var_t* else_assignee;
 	if(conditional_move->operands.oir.operand2 != NULL){
-		three_addr_var_t* else_assignee = conditional_move->operands.oir.operand2;
+		else_assignee = conditional_move->operands.oir.operand2;
 
 		//Any required converting moves happen here
 		if(is_converting_move_required(destination_type, else_assignee->type) == TRUE){
@@ -8456,6 +8458,9 @@ static void handle_conditional_movement_statement(instruction_window_t* window){
 	} else {
 		instruction_t* constant_assignment = emit_constant_move_instruction(else_destination, conditional_move->operands.oir.constant_operand);
 		insert_instruction_before_given(constant_assignment, conditional_move);
+		
+		//Stash this in case we need it for floats
+		else_assignee = constant_assignment->operands.x86.destination_register;
 	}
 
 	/**
@@ -8504,7 +8509,7 @@ static void handle_conditional_movement_statement(instruction_window_t* window){
 		switch(conditional_move->movement_type){
 			/**
 			 * For NE and NZ, Ollie considers NaN to never be equal to anything. As such,
-			 * if we have a NaN flag set here, we will need to take the *false* path. This
+			 * if we have a NaN flag set here, we will need to take the *true* path. This
 			 * will involve moving the else destination into our register after the if has
 			 * been moved in if we see the parity flag has been set(pf = 1)
 			 *
@@ -8546,17 +8551,55 @@ static void handle_conditional_movement_statement(instruction_window_t* window){
 				final_instruction = additional_conditional_move;
 				break;
 
+			/**
+			 * For E and Z, Ollie considers NaN to never be equal to anything. As such,
+			 * if we have a NaN flag set here, we will need to take the *false* path. This
+			 * will involve moving the else destination into our register after the if has
+			 * been moved in if we see the parity flag has been set(pf = 1)
+			 *
+			 * 	if(x == 3.33){
+			 * 		result = 5;
+			 * 	} else {
+			 * 		result = 4;
+			 * 	}
+			 *
+			 * 	ucomiss .LC1, x
+			 * 	movl $4, result
+			 * 	cmovel $5, result <- if they're equal move the if value in
+			 * 	cmovpl $4, result <- if we have a NaN we consider it not equal and put the else back in
+			 */
 			case MOVE_E:
 			case MOVE_Z:
+				//Emit a clone for our uses
+				assignee = emit_var_copy(assignee);
+
+				switch(destination_size){
+					case WORD:
+						additional_conditional_move = emit_conditional_move_instruction(assignee, else_assignee, conditional_move->relies_on, CMOVPW);
+						break;
+					case DOUBLE_WORD:
+						additional_conditional_move = emit_conditional_move_instruction(assignee, else_assignee, conditional_move->relies_on, CMOVPL);
+						break;
+					case QUAD_WORD:
+						additional_conditional_move = emit_conditional_move_instruction(assignee, else_assignee, conditional_move->relies_on, CMOVPQ);
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid destination size in floating point conditional move selector\n");
+						exit(1);
+				}
+
+				//This goes in after the original converting move
+				insert_instruction_after_given(additional_conditional_move, conditional_move);
+
+				//For when we rebuild
+				final_instruction = additional_conditional_move;
+
 				break;
 				
 			//By default do nothing
 			default:
 				break;
 		}
-		
-		printf("TODO NOT IMPLEMENTED\n\n");
-		exit(1);
 	}
 
 	//Rebuild the window around the final instruction
