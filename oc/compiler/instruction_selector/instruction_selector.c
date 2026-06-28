@@ -8215,6 +8215,54 @@ instruction_t* emit_constant_move_instruction(three_addr_var_t* destination, thr
 
 
 /**
+ * Select the appropriate conditional move based on the destination size
+ * and conditional
+ */
+static inline instruction_type_t select_conditional_move_instruction(variable_size_t size, conditional_movement_type_t movement_type){
+	switch(movement_type){
+		case MOVE_NE:
+			switch(size){
+				case WORD:
+
+				case DOUBLE_WORD:
+
+				case QUAD_WORD:
+
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
+
+		case MOVE_E:
+		
+		case MOVE_Z:
+
+		case MOVE_NZ:
+
+		case MOVE_L:
+		
+		case MOVE_LE:
+
+		case MOVE_G:
+
+		case MOVE_GE:
+
+		case MOVE_A:
+
+		case MOVE_AE:
+
+		case MOVE_B:
+
+		case MOVE_BE:
+
+		default:
+			fprintf(stderr, "Fatal internal compiler error: Invalid conditional movement type detected\n");
+			exit(1);
+	}
+}
+
+
+/**
  * Convert a conditional movement OIR statement into x86 assembly
  *
  * x_4 <- MOVE_E t1 else t4
@@ -8227,6 +8275,14 @@ instruction_t* emit_constant_move_instruction(three_addr_var_t* destination, thr
  * the conditional move works
  *
  * NOTE: It is assumed that the first instruction in the window is the target statement
+ *
+ *
+ * TODO
+ * TODO NEED SPECIAL CASE WITH BYTES HANDLED
+ * TODO
+ *
+ *
+ *
  */
 static void handle_conditional_movement_statement(instruction_window_t* window){
 	instruction_t* conditional_move = window->instruction1;
@@ -8252,15 +8308,26 @@ static void handle_conditional_movement_statement(instruction_window_t* window){
 	 */
 	three_addr_var_t* else_destination = emit_var_copy(assignee);
 	if(conditional_move->operands.oir.operand2 != NULL){
-		//Any required converting moves happen here
-		if(is_converting_move_required(destination_type, conditional_move->operands.oir.operand2->type) == TRUE){
+		three_addr_var_t* else_assignee = conditional_move->operands.oir.operand2;
 
+		//Any required converting moves happen here
+		if(is_converting_move_required(destination_type, else_assignee->type) == TRUE){
+			else_assignee = create_and_insert_converting_move_instruction(conditional_move, else_assignee, destination_type);
 		}
+
+		//Now we can emit the assignment
+		instruction_t* else_assignment = emit_move_instruction(else_destination, else_assignee);
 
 	} else {
 		instruction_t* constant_assignment = emit_constant_move_instruction(else_destination, conditional_move->operands.oir.constant_operand);
 		insert_instruction_before_given(constant_assignment, conditional_move);
 	}
+
+	/**
+	 * Now that we have the destination pre-loaded with the else value, we can emit the conditional move 
+	 * for the if value now. We will hijack the old converting move OIR statement to do this
+	 */
+
 
 
 
