@@ -13,8 +13,6 @@ pub fn float_logical_or(x:f32, y:f32) -> i8 {
 	ret x || y;
 }
 
-
-
 //Dummy
 pub fn main() -> i32 {
 	ret 0;
