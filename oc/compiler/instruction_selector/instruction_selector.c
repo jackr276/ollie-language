@@ -11841,7 +11841,6 @@ static inline instruction_t* emit_cmovX_instruction(three_addr_var_t* destinatio
 	//Extract the requested destination size
 	variable_size_t destination_size = get_type_size(destination_variable->type);
 
-
 	/**
 	 * Emit the conditional move instruction based on type signedness and
 	 * destination size
@@ -11964,27 +11963,111 @@ static inline instruction_t* emit_cmovX_instruction(three_addr_var_t* destinatio
 	} else {
 		switch(op){
 			case NOT_EQUALS:
-				instruction->instruction_type = CMOVNE;
+				switch(destination_size){
+					case WORD:
+						instruction->instruction_type = CMOVNEW;
+						break;
+					case DOUBLE_WORD:
+						instruction->instruction_type = CMOVNEL;
+						break;
+					case QUAD_WORD:
+						instruction->instruction_type = CMOVNEQ;
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid variable size detected in cmovX emitter\n");
+						exit(1);
+				}
+
 				break;
 
 			case EQUALS:
-				instruction->instruction_type = CMOVE;
+				switch(destination_size){
+					case WORD:
+						instruction->instruction_type = CMOVEW;
+						break;
+					case DOUBLE_WORD:
+						instruction->instruction_type = CMOVEL;
+						break;
+					case QUAD_WORD:
+						instruction->instruction_type = CMOVEQ;
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid variable size detected in cmovX emitter\n");
+						exit(1);
+				}
+
 				break;
 				
 			case G_THAN:
-				instruction->instruction_type = CMOVG;
+				switch(destination_size){
+					case WORD:
+						instruction->instruction_type = CMOVAW;
+						break;
+					case DOUBLE_WORD:
+						instruction->instruction_type = CMOVAL;
+						break;
+					case QUAD_WORD:
+						instruction->instruction_type = CMOVAQ;
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid variable size detected in cmovX emitter\n");
+						exit(1);
+				}
+
 				break;
 
 			case G_THAN_OR_EQ:
-				instruction->instruction_type = CMOVGE;
+				switch(destination_size){
+					case WORD:
+						instruction->instruction_type = CMOVAEW;
+						break;
+					case DOUBLE_WORD:
+						instruction->instruction_type = CMOVAEL;
+						break;
+					case QUAD_WORD:
+						instruction->instruction_type = CMOVAEQ;
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid variable size detected in cmovX emitter\n");
+						exit(1);
+				}
+
 				break;
 
 			case L_THAN:
-				instruction->instruction_type = CMOVL;
+				switch(destination_size){
+					case WORD:
+						instruction->instruction_type = CMOVBW;
+						break;
+					case DOUBLE_WORD:
+						instruction->instruction_type = CMOVBL;
+						break;
+					case QUAD_WORD:
+						instruction->instruction_type = CMOVBQ;
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid variable size detected in cmovX emitter\n");
+						exit(1);
+				}
+
 				break;
 
 			case L_THAN_OR_EQ:
-				instruction->instruction_type = CMOVLE;
+				switch(destination_size){
+					case WORD:
+						instruction->instruction_type = CMOVBEW;
+						break;
+					case DOUBLE_WORD:
+						instruction->instruction_type = CMOVBEL;
+						break;
+					case QUAD_WORD:
+						instruction->instruction_type = CMOVBEQ;
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid variable size detected in cmovX emitter\n");
+						exit(1);
+				}
+
 				break;
 
 			default:
@@ -12260,7 +12343,7 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 		insert_instruction_after_given(op1_setp, op1_comparison);
 
 		//Following this, we'll need our conditional move to take place
-		instruction_t* op1_conditional_move = emit_cmovX_instruction(op1_cmovne_result, one_temporary_holder, NOT_EQUALS);
+		instruction_t* op1_conditional_move = emit_cmovX_instruction(op1_cmovne_result, one_temporary_holder, NOT_EQUALS, FALSE);
 
 		//This goes in after the setP
 		insert_instruction_after_given(op1_conditional_move, op1_setp);
@@ -12278,7 +12361,7 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 		insert_instruction_after_given(op2_setp, op2_comparison);
 
 		//Following this, we'll need our conditional move to take place
-		instruction_t* op2_conditional_move = emit_cmovX_instruction(op2_cmovne_result, one_temporary_holder, NOT_EQUALS);
+		instruction_t* op2_conditional_move = emit_cmovX_instruction(op2_cmovne_result, one_temporary_holder, NOT_EQUALS, FALSE);
 
 		//This goes in after the setP
 		insert_instruction_after_given(op2_conditional_move, op2_setp);
@@ -12535,7 +12618,7 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		insert_instruction_after_given(op1_setp, op1_comparison);
 
 		//Following this, we'll need our conditional move to take place
-		instruction_t* op1_conditional_move = emit_cmovX_instruction(op1_cmovne_result, one_temporary_holder, NOT_EQUALS);
+		instruction_t* op1_conditional_move = emit_cmovX_instruction(op1_cmovne_result, one_temporary_holder, NOT_EQUALS, FALSE);
 
 		//This goes in after the setP
 		insert_instruction_after_given(op1_conditional_move, op1_setp);
@@ -12553,7 +12636,7 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		insert_instruction_after_given(op2_setp, op2_comparison);
 
 		//Following this, we'll need our conditional move to take place
-		instruction_t* op2_conditional_move = emit_cmovX_instruction(op2_cmovne_result, one_temporary_holder, NOT_EQUALS);
+		instruction_t* op2_conditional_move = emit_cmovX_instruction(op2_cmovne_result, one_temporary_holder, NOT_EQUALS, FALSE);
 
 		//This goes in after the setP
 		insert_instruction_after_given(op2_conditional_move, op2_setp);
@@ -13324,7 +13407,7 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 
 
 			//Now we need the final conditional move
-			instruction_t* conditional_move_to_dest = emit_cmovX_instruction(cmovne_destination, zero_assignment->operands.x86.destination_register, NOT_EQUALS);
+			instruction_t* conditional_move_to_dest = emit_cmovX_instruction(cmovne_destination, zero_assignment->operands.x86.destination_register, NOT_EQUALS, FALSE);
 
 			//And finally add this in after the zero assignment
 			insert_instruction_after_given(conditional_move_to_dest, first_move_to_dest);
