@@ -8415,7 +8415,10 @@ static instruction_t* emit_conditional_move_instruction(three_addr_var_t* destin
  */
 static void handle_conditional_movement_statement(instruction_window_t* window){
 	instruction_t* conditional_move = window->instruction1;
-	instruction_t* additional_converting_move;
+	instruction_t* additional_conditional_move;
+	//Keep track of the final instruction for the eventual window rebuild
+	instruction_t* final_instruction = conditional_move;
+
 	//Cache the destination type & assignee for needed comparisons
 	three_addr_var_t* assignee = conditional_move->operands.oir.assignee;
 	generic_type_t* destination_type = assignee->type;
@@ -8503,15 +8506,50 @@ static void handle_conditional_movement_statement(instruction_window_t* window){
 			 * For NE and NZ, Ollie considers NaN to never be equal to anything. As such,
 			 * if we have a NaN flag set here, we will need to take the *false* path. This
 			 * will involve moving the else destination into our register after the if has
-			 * been moved in if we see the parity flag has been set
+			 * been moved in if we see the parity flag has been set(pf = 1)
+			 *
+			 * 	if(x != 3.33){
+			 * 		result = 5;
+			 * 	} else {
+			 * 		result = 4;
+			 * 	}
+			 *
+			 * 	ucomiss .LC1, x
+			 * 	movl $4, result
+			 * 	cmovnel $5, result <- if they're plain not equal
+			 * 	cmovpl $5, result <- if we have a NaN we consider it not equal and do this
 			 */
 			case MOVE_NE:
 			case MOVE_NZ:
+				//Emit a clone for our uses
+				assignee = emit_var_copy(assignee);
+
+				switch(destination_size){
+					case WORD:
+						additional_conditional_move = emit_conditional_move_instruction(assignee, if_assignee, conditional_move->relies_on, CMOVPW);
+						break;
+					case DOUBLE_WORD:
+						additional_conditional_move = emit_conditional_move_instruction(assignee, if_assignee, conditional_move->relies_on, CMOVPL);
+						break;
+					case QUAD_WORD:
+						additional_conditional_move = emit_conditional_move_instruction(assignee, if_assignee, conditional_move->relies_on, CMOVPQ);
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid destination size in floating point conditional move selector\n");
+						exit(1);
+				}
+
+				//This goes in after the original converting move
+				insert_instruction_after_given(additional_conditional_move, conditional_move);
+
+				//For when we rebuild
+				final_instruction = additional_conditional_move;
+				break;
+
+			case MOVE_E:
+			case MOVE_Z:
+				break;
 				
-
-
-
-			
 			//By default do nothing
 			default:
 				break;
@@ -8521,8 +8559,8 @@ static void handle_conditional_movement_statement(instruction_window_t* window){
 		exit(1);
 	}
 
-	//Rebuild the window around the conditional move
-	reconstruct_window(window, conditional_move);
+	//Rebuild the window around the final instruction
+	reconstruct_window(window, final_instruction);
 }
 
 
