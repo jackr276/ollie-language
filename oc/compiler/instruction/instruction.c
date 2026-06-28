@@ -5591,6 +5591,28 @@ instruction_t* emit_conditional_movement_statement(three_addr_var_t* assignee, t
 
 
 /**
+ * Emit a conditional movement statement with the else being a constant. Unlike regular moves, we will also need to provide the conditional and conditional movement type for this
+ */
+instruction_t* emit_conditional_movement_with_const_statement(three_addr_var_t* assignee, three_addr_var_t* if_assignee, three_addr_const_t* else_assignee, three_addr_var_t* conditional, conditional_movement_type_t movement_type){
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	stmt->statement_type = THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT;
+	stmt->operands.oir.assignee = assignee;
+	stmt->operands.oir.operand1 = if_assignee;
+	stmt->operands.oir.constant_operand = else_assignee;
+	
+	//The movement type informs how we assign over
+	stmt->movement_type = movement_type;
+
+	//This relies on the conditional to set codes
+	stmt->relies_on = conditional;
+
+	//Give back the statement
+	return stmt;
+}
+
+
+/**
  * Emit a store statement that only uses the base address
  */
 instruction_t* emit_store_base_address_only(three_addr_var_t* base_address, three_addr_var_t* storee, generic_type_t* memory_write_type){

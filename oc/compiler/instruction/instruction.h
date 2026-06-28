@@ -719,6 +719,11 @@ instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_add
 instruction_t* emit_conditional_movement_statement(three_addr_var_t* assignee, three_addr_var_t* if_assignee, three_addr_var_t* else_assignee, three_addr_var_t* conditional, conditional_movement_type_t movement_type);
 
 /**
+ * Emit a conditional movement statement with the else being a constant. Unlike regular moves, we will also need to provide the conditional and conditional movement type for this
+ */
+instruction_t* emit_conditional_movement_with_const_statement(three_addr_var_t* assignee, three_addr_var_t* if_assignee, three_addr_const_t* else_assignee, three_addr_var_t* conditional, conditional_movement_type_t movement_type);
+
+/**
  * Emit a memory copy statement from one memory region to another. This exists
  * purely as an OIR statement and is converted to moves later on down the road
  *
