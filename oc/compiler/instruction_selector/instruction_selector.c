@@ -8452,7 +8452,7 @@ static void handle_conditional_movement_statement(instruction_window_t* window){
 	 */
 	conditional_move->instruction_type = select_conditional_move_instruction(destination_size, conditional_move->movement_type);
 	conditional_move->operands.x86.destination_register = assignee;
-	conditional_move->operands.x86.source_register1 = conditional_move->operands.oir.operand1;
+	conditional_move->operands.x86.source_register1 = if_assignee;
 
 	//Rebuild the window around the conditional move
 	reconstruct_window(window, conditional_move);
