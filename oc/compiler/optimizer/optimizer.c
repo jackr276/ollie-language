@@ -2283,6 +2283,65 @@ static inline u_int8_t is_predecessor_block_valid_for_branch_assignment_folding(
 
 
 /**
+ * Take a statement and move it from its current blcok over to the provided
+ * destination block. This will not update the use/assignment counts like
+ * a regular remove still but it will still operate in much the same way.
+ * The statement will always be added directly at the end of the block
+ */
+static void move_statement(instruction_t* target, basic_block_t* destination){
+	//Grab the block out
+	basic_block_t* source_block = target->block_contained_in;
+
+	//No matter what, we are reducing the number of statements in this block
+	source_block->number_of_instructions--;
+
+	/**
+	 * Case 1: target is the leader statemenet
+	 */
+	if(source_block->leader_statement == target){
+		//Special case - it's the only statement. We'll just delete it here
+		if(source_block->leader_statement->next_statement == NULL){
+			source_block->leader_statement = NULL;
+			source_block->exit_statement = NULL;
+
+		//Otherwise it is the leader, but we have more
+		} else {
+			//Update the reference
+			source_block->leader_statement = target->next_statement;
+			source_block->leader_statement->previous_statement = NULL;
+		}
+
+	/**
+	 * Case 2: target is the exit statement
+	 */
+	} else if(source_block->exit_statement == target){
+		instruction_t* previous = target->previous_statement;
+		//Nothing at the end
+		previous->next_statement = NULL;
+
+		//This now is the exit statement
+		source_block->exit_statement = previous;
+		
+	/**
+	 * Case 3: target is a regualr middle of the road statement
+	 */
+	} else {
+		//Regular middle deletion here
+		instruction_t* previous = target->previous_statement;
+		instruction_t* next = target->next_statement;
+		previous->next_statement = next;
+		next->previous_statement = previous;
+	}
+
+	/**
+	 * Once we've removed this statement from the source block, we will add it
+	 * into the target block with a regular add_statement call
+	 */
+	add_statement(destination, target);
+}
+
+
+/**
  * If we have examples like below, we can optimize into converting moves where we avoid the jumping
  * altogether in favor of this kind of conditional assignment. This is a common pattern that we'll
  * have people do so it is worth it to optimize into a conditional assignment. This will exclusively
@@ -2442,7 +2501,9 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		 * 	
 		 * .L5:
 		 * 	t11 <- x_0 > 5
-		 * 	result_2 <- cmov_le(t11, 4, 5)
+		 * 	t1 <- 4
+		 * 	t2 <- 5
+		 * 	result_2 <- cmov_le(t11, t1, t4)
 		 * 	jmp .L8
 		 *
 		 * .L8:
@@ -2456,7 +2517,10 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		basic_block_t* else_destination = branch_statement->else_block;
 
 		/**
-		 * First we will copy everything that is not a jump from the if 
+		 * Step 1: Copy everything that is not a jump from the if block over
+		 * to the top level branch statement. We'll then break the association which
+		 * will leave the if block dangling and unreachable, eventually to be cleaned
+		 * up in a later pass
 		 */
 
 	}
