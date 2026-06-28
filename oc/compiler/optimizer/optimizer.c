@@ -2439,11 +2439,14 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 			continue;
 		}
 
+		//This is the phi statement that is the focus of our efforts
+		instruction_t* branching_assignment_phi = candidate_cursor;
+
 		/**
 		 * Otherwise we have a phi function so we are able to proceed. This very first phi function
 		 * is going to be our variable of interest
 		 */
-		branching_assignment_variable = candidate_cursor->operands.oir.assignee;
+		branching_assignment_variable = branching_assignment_phi->operands.oir.assignee;
 
 		/**
 		 * Is each predecessor a simple assignment plus a jump only? We're not going
@@ -2643,8 +2646,13 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		instruction_t* conditional_assignment = emit_conditional_movement_statement(branching_assignment_variable, if_assignee, else_assignee, branch_statement->relies_on, movement_type);
 		add_statement(top_level_if_block, conditional_assignment);
 
-		//TODO MOVE EMISSION NOW
-		//
+		/**
+		 * Step 4: emit a direct jump from the if block down to the candidate block. We will also
+		 * be removing the phi statement from the candidate block as it is no longer
+		 * useful for us there
+		 */
+		emit_jump(top_level_if_block, candidate_block);
+		delete_statement(branching_assignment_phi);
 
 
 		//Flag that we did at least one of these
