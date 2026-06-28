@@ -2562,15 +2562,11 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		instruction_t* else_assignment_statement = else_destination->leader_statement;
 		switch(else_assignment_statement->statement_type){
 			/**
-			 * If we have a constant assignment we'll need to first get a constant
-			 * load out from over here to make this work
+			 * For else assignments, OIR supports having a constant in this area
+			 * so we will not need to do any temp assignments
 			 */
 			case THREE_ADDR_CODE_ASSN_CONST_STMT:
-				//Emit the constant assignment and add it into the top level if block
-				else_assignee = emit_temp_var(else_assignment_statement->operands.oir.assignee->type);
-				instruction_t* const_assignment = emit_assignment_with_const_instruction(else_assignee, else_assignment_statement->operands.oir.constant_operand);
-
-				add_statement(top_level_if_block, const_assignment);
+				else_assignee_const = else_assignment_statement->operands.oir.constant_operand;
 				break;
 				
 			/**
@@ -2592,19 +2588,19 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		/**
 		 * Step 3: emit the conditional move now by using the final phi variable
 		 * given to us in the candidate block. The other two non-temp vars are going
-		 * to be ignored
+		 * to be ignored. 
+		 *
+		 * Since OIR supports having a const in the else assignee, we can do that here
+		 * if we have one to save on emitted OIR instructions
 		 */
 		conditional_movement_type_t movement_type = convert_branch_type_to_conditional_movement_type(branch_statement->branch_type);
-
-		//TODO
-		//
-		//
-		//THIS SHOULD BE ABLE TO HAVE CONSTANTS AS THE ELSE ASSIGNEE
-		//
-		//
-		//
-		instruction_t* conditional_assignment = emit_conditional_movement_statement(branching_assignment_variable, if_assignee, else_assignee, branch_statement->relies_on, movement_type);
-		add_statement(top_level_if_block, conditional_assignment);
+		if(else_assignee != NULL){
+			instruction_t* conditional_assignment = emit_conditional_movement_statement(branching_assignment_variable, if_assignee, else_assignee, branch_statement->relies_on, movement_type);
+			add_statement(top_level_if_block, conditional_assignment);
+		} else {
+			instruction_t* conditional_assignment = emit_conditional_movement_with_const_statement(branching_assignment_variable, if_assignee, else_assignee_const, branch_statement->relies_on, movement_type);
+			add_statement(top_level_if_block, conditional_assignment);
+		}
 
 		/**
 		 * Step 4: emit a direct jump from the if block down to the candidate block. We will also
