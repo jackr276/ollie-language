@@ -2264,17 +2264,13 @@ static inline u_int8_t is_predecessor_block_valid_for_branch_assignment_folding(
 	}
 
 	/**
-	 * Check 3: verify that all other actions have no block external side effects. This
-	 * means that they do not reach out to memory. Basically we restrict this to
-	 * simple arithmetic with temp assignees
+	 * Check 3: verify that there is nothing else in this block besides the
+	 * assignment to our variable. That means that at this point, we should
+	 * see nothing here
 	 */
 	cursor = cursor->previous_statement;
-	while(cursor != NULL){
-		if(does_statement_have_block_external_side_effects(cursor) == TRUE){
-			return FALSE;
-		}
-	
-		cursor = cursor->previous_statement;
+	if(cursor != NULL){
+		return FALSE;
 	}
 
 	//If we've survived all the way to down here, then we are good
@@ -2515,6 +2511,9 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		 */
 		basic_block_t* if_destination = branch_statement->if_block;
 		basic_block_t* else_destination = branch_statement->else_block;
+		//These are initially NULL - we will scrape for them
+		three_addr_var_t* if_assignee = NULL;
+		three_addr_var_t* else_assignee = NULL;
 
 		/**
 		 * Step 0: The branch no longer exists, and same goes for the successors
@@ -2529,19 +2528,10 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		 * Step 1: Copy everything that is not a jump from the if block over
 		 * to the top level branch statement
 		 */
-		instruction_t* if_block_cursor = if_destination->leader_statement;
 
-		while(if_block_cursor != NULL){
-			//Hang onto this for now
-			instruction_t* temp = if_block_cursor;
 
-			if(if_block_cursor->statement_type != THREE_ADDR_CODE_JUMP_STMT){
-				move_statement(if_block_cursor, );
-
-			} else {
-			}
-
-		}
+		//Unlink these two as successors
+		delete_successor(if_destination, candidate_block);
 
 	}
 
