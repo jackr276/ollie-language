@@ -2338,6 +2338,45 @@ static void move_statement(instruction_t* target, basic_block_t* destination){
 
 
 /**
+ * A simple helper that converts our branch type into the equivalent conditional
+ * movement type
+ */
+static inline conditional_movement_type_t convert_branch_type_to_conditional_movement_type(branch_type_t branch_type){
+	switch(branch_type){
+		case NO_BRANCH:
+			return NO_CONDITIONAL_MOVEMENT;
+		case BRANCH_NE:
+			return MOVE_NE;
+		case BRANCH_E:
+			return MOVE_E;
+		case BRANCH_Z:
+			return MOVE_Z;
+		case BRANCH_NZ:
+			return MOVE_NZ;
+		case BRANCH_L:
+			return MOVE_L;
+		case BRANCH_LE:
+			return MOVE_LE;
+		case BRANCH_G:
+			return MOVE_G;
+		case BRANCH_GE:
+			return MOVE_GE;
+		case BRANCH_A:
+			return MOVE_A;
+		case BRANCH_AE:
+			return MOVE_AE;
+		case BRANCH_B:
+			return MOVE_B;
+		case MOVE_BE:
+			return MOVE_BE;
+		default:
+			fprintf(stderr, "Fatal internal compiler error: unknown branch type detected in branch to movement translator\n");
+			exit(1);
+	}
+}
+
+
+/**
  * If we have examples like below, we can optimize into converting moves where we avoid the jumping
  * altogether in favor of this kind of conditional assignment. This is a common pattern that we'll
  * have people do so it is worth it to optimize into a conditional assignment. This will exclusively
@@ -2365,6 +2404,9 @@ static void move_statement(instruction_t* target, basic_block_t* destination){
  * z_2 <- cmove_le y_0 else x_0
  */
 static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* current_function_blocks){
+	//Did we optimize a branching assignment? By default we did not
+	u_int8_t optimized_branching_assigment = FALSE;
+
 	//Run through all of the function blocks that we have
 	for(u_int32_t i = 0; i < current_function_blocks->current_index; i++){
 		//The variable that we're going to optimize assignment for
@@ -2529,7 +2571,6 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		 * gut the rest of the stuff from the block
 		 */
 		instruction_t* if_assignment_statement = if_destination->leader_statement;
-
 		switch(if_assignment_statement->statement_type){
 			/**
 			 * If we have a constant assignment we'll need to first get a constant
@@ -2564,7 +2605,6 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		 * gut the rest of the stuff from the block
 		 */
 		instruction_t* else_assignment_statement = else_destination->leader_statement;
-
 		switch(else_assignment_statement->statement_type){
 			/**
 			 * If we have a constant assignment we'll need to first get a constant
@@ -2594,12 +2634,24 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		//Unlink these two as successors - the block is now unreachable
 		delete_successor(else_destination, candidate_block);
 
-		//TODO MOVE EMISSION NOW
+		/**
+		 * Step 3: emit the conditional move now by using the final phi variable
+		 * given to us in the candidate block. The other two non-temp vars are going
+		 * to be ignored
+		 */
+		conditional_movement_type_t movement_type = convert_branch_type_to_conditional_movement_type(branch_statement->branch_type);
+		instruction_t* conditional_assignment = emit_conditional_movement_statement(branching_assignment_variable, if_assignee, else_assignee, branch_statement->relies_on, movement_type);
+		add_statement(top_level_if_block, conditional_assignment);
 
+		//TODO MOVE EMISSION NOW
+		//
+
+
+		//Flag that we did at least one of these
+		optimized_branching_assigment = TRUE;
 	}
 
-	//TODO FIX
-	return FALSE;
+	return optimized_branching_assigment;
 }
 
 
