@@ -8223,37 +8223,158 @@ static inline instruction_type_t select_conditional_move_instruction(variable_si
 		case MOVE_NE:
 			switch(size){
 				case WORD:
-
+					return CMOVNEW;
 				case DOUBLE_WORD:
-
+					return CMOVNEL;
 				case QUAD_WORD:
-
+					return CMOVNEQ;
 				default:
 					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
 					exit(1);
 			}
 
 		case MOVE_E:
+			switch(size){
+				case WORD:
+					return CMOVEW;
+				case DOUBLE_WORD:
+					return CMOVEL;
+				case QUAD_WORD:
+					return CMOVEQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
 		
 		case MOVE_Z:
+			switch(size){
+				case WORD:
+					return CMOVZW;
+				case DOUBLE_WORD:
+					return CMOVZL;
+				case QUAD_WORD:
+					return CMOVZQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
 
 		case MOVE_NZ:
+			switch(size){
+				case WORD:
+					return CMOVNZW;
+				case DOUBLE_WORD:
+					return CMOVNZL;
+				case QUAD_WORD:
+					return CMOVNZQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
 
 		case MOVE_L:
-		
+				switch(size){
+				case WORD:
+					return CMOVLW;
+				case DOUBLE_WORD:
+					return CMOVLL;
+				case QUAD_WORD:
+					return CMOVLQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}	
+
 		case MOVE_LE:
+			switch(size){
+				case WORD:
+					return CMOVLEW;
+				case DOUBLE_WORD:
+					return CMOVLEL;
+				case QUAD_WORD:
+					return CMOVLEQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
 
 		case MOVE_G:
+			switch(size){
+				case WORD:
+					return CMOVGW;
+				case DOUBLE_WORD:
+					return CMOVGL;
+				case QUAD_WORD:
+					return CMOVGQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
 
 		case MOVE_GE:
+			switch(size){
+				case WORD:
+					return CMOVGEW;
+				case DOUBLE_WORD:
+					return CMOVGEL;
+				case QUAD_WORD:
+					return CMOVGEQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
 
 		case MOVE_A:
+			switch(size){
+				case WORD:
+					return CMOVAW;
+				case DOUBLE_WORD:
+					return CMOVAL;
+				case QUAD_WORD:
+					return CMOVAQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
 
 		case MOVE_AE:
+			switch(size){
+				case WORD:
+					return CMOVAEW;
+				case DOUBLE_WORD:
+					return CMOVAEL;
+				case QUAD_WORD:
+					return CMOVAEQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
 
 		case MOVE_B:
+			switch(size){
+				case WORD:
+					return CMOVBW;
+				case DOUBLE_WORD:
+					return CMOVBL;
+				case QUAD_WORD:
+					return CMOVBQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
 
 		case MOVE_BE:
+			switch(size){
+				case WORD:
+					return CMOVBEW;
+				case DOUBLE_WORD:
+					return CMOVBEL;
+				case QUAD_WORD:
+					return CMOVBEQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
 
 		default:
 			fprintf(stderr, "Fatal internal compiler error: Invalid conditional movement type detected\n");
@@ -11718,6 +11839,9 @@ static inline instruction_t* emit_cmovX_instruction(three_addr_var_t* destinatio
 
 	//Go based on what op we've got. This is not going to support everything and it
 	//really doesn't need to
+	//
+	//
+	//TODO FIX THIS - NEEDS SIGNEDNESS AND EVERYTHING ELSE
 	switch(op){
 		case NOT_EQUALS:
 			instruction->instruction_type = CMOVNE;
