@@ -8413,6 +8413,7 @@ static void handle_conditional_movement_statement(instruction_window_t* window){
 
 	//We know that the if assignee will always be a variable so we can extract it now
 	three_addr_var_t* if_assignee = conditional_move->operands.oir.operand1;
+	variable_size_t destination_size = get_type_size(destination_type);
 
 	/**
 	 * If the if-assignee requires a converting move, now is the time for us to insert
@@ -8436,8 +8437,9 @@ static void handle_conditional_movement_statement(instruction_window_t* window){
 			else_assignee = create_and_insert_converting_move_instruction(conditional_move, else_assignee, destination_type);
 		}
 
-		//Now we can emit the assignment
+		//Now we can emit and insert the assignment
 		instruction_t* else_assignment = emit_move_instruction(else_destination, else_assignee);
+		insert_instruction_before_given(else_assignment, conditional_move);
 
 	} else {
 		instruction_t* constant_assignment = emit_constant_move_instruction(else_destination, conditional_move->operands.oir.constant_operand);
@@ -8448,15 +8450,13 @@ static void handle_conditional_movement_statement(instruction_window_t* window){
 	 * Now that we have the destination pre-loaded with the else value, we can emit the conditional move 
 	 * for the if value now. We will hijack the old converting move OIR statement to do this
 	 */
+	conditional_move->instruction_type = select_conditional_move_instruction(destination_size, conditional_move->movement_type);
+	conditional_move->operands.x86.destination_register = assignee;
+	conditional_move->operands.x86.source_register1 = conditional_move->operands.oir.operand1;
 
-
-
-
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
+	//Rebuild the window around the conditional move
+	reconstruct_window(window, conditional_move);
 }
-
-
 
 
 /**
