@@ -2461,10 +2461,6 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 			continue;
 		}
 
-		//TRYING THIS
-		printf("BLOCK .L%d is ELIGIBLE\n\n\n", candidate_block->block_id);
-		printf("TOP LEVEL BLOCK .L%d\n", top_level_if_block->block_id);
-
 		/**
 		 * We now know that this is eligible fully, so let's go ahead and perform the branching
 		 * assignment to converting move operation now. We are going to hoist everything up and
