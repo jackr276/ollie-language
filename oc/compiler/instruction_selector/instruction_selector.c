@@ -7352,11 +7352,12 @@ static void mark(dynamic_array_t* function_blocks){
 				break;
 
 			/**
-			 * Branch and set statements maintain a special "relies on" field to hold what they rely on,
+			 * Branch, set and conditional movement statements maintain a special "relies on" field to hold what they rely on,
 			 * so we'll need to mark that as well
 			 */
 			case THREE_ADDR_CODE_BRANCH_STMT:
 			case THREE_ADDR_CODE_SETNE_STMT:
+			case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT:
 				mark_and_add_definition(function_blocks, stmt->relies_on, &worklist);
 				break;
 
