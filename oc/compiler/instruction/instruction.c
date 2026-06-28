@@ -2717,7 +2717,13 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, " else ");
-			print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
+
+			if(stmt->operands.oir.constant_operand == NULL){
+				print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
+			} else {
+				print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
+			}
+
 			fprintf(fl, "\n");
 			break;
 		

@@ -2655,7 +2655,6 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		emit_jump(top_level_if_block, candidate_block);
 		delete_statement(branching_assignment_phi);
 
-
 		//Flag that we did at least one of these
 		optimized_branching_assigment = TRUE;
 	}
@@ -2947,9 +2946,11 @@ cfg_t* optimize(cfg_t* cfg){
 			sweep(current_function_blocks, function_entry_block);
 		}
 
-		//TODO DOC
 		/**
-		 * PASS 4: 
+		 * PASS 4: certain common if-else assignments are good candidates for conditional moves in Ollie. We have
+		 * a dedicated pass that will crawl the function once and look for them. If it is able to find them, then
+		 * it will optimize them into a conditional move pattern. If this is to happen, it will require a full
+		 * redo of the mark, sweep, block deletion and control flow recalculation passes
 		 */
 		u_int8_t branching_assignments_optimized = optimize_branching_assignments_where_possible(current_function_blocks);
 
@@ -2985,7 +2986,7 @@ cfg_t* optimize(cfg_t* cfg){
 		}
 
 		/**
-		 * PASS 4: Clean algorithm
+		 * PASS 5: Clean algorithm
 		 * Clean follows after sweep because during the sweep process, we will likely delete the contents of
 		 * entire blocks. Clean uses 4 different steps in a specific order to eliminate control flow
 		 * that has been made useless by sweep()
@@ -2993,7 +2994,7 @@ cfg_t* optimize(cfg_t* cfg){
 		clean(cfg, current_function_blocks, function_entry_block);
 
 		/**
-		 * PASS 5: Delete all unreachable blocks
+		 * PASS 6: Delete all unreachable blocks
 		 * There is a chance that we have some blocks who are now unreachable. We will
 		 * remove them now. This step is absolutely essential. If we do not do this,
 		 * then the dominance relation computation will not work
@@ -3001,14 +3002,14 @@ cfg_t* optimize(cfg_t* cfg){
 		delete_all_unreachable_blocks(function_entry_block, current_function_blocks);
 
 		/**
-		 * PASS 5.5: Now that all of our marking and sweeping is done, it is possible that we'll
+		 * PASS 6.5: Now that all of our marking and sweeping is done, it is possible that we'll
 		 * have some orphaned local constants. We will go through now and sweep them all up if 
 		 * any of them end up being completely unused
 		 */
 		sweep_local_constants(cfg);
 
 		/**
-		 * PASS 6: Recalculate everything
+		 * PASS 7: Recalculate everything
 		 * Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
 		 * etc. So, to remedy this, we will recalculate everything in the CFG. There is no advantage in splitting this section up by function, as 
 		 * all blocks are going to be traversed regardless. Due to this, we will be doing it over the entire CFG at the end

@@ -14023,6 +14023,9 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		case THREE_ADDR_CODE_ASSN_STMT:
 			handle_register_movement_instruction(instruction);
 			break;
+		case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT:
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(1);
 		case THREE_ADDR_CODE_LOGICAL_NOT_STMT:
 			handle_logical_not_instruction(window);
 			break;
