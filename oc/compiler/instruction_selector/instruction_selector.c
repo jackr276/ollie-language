@@ -8447,6 +8447,27 @@ static void handle_conditional_movement_statement(instruction_window_t* window){
 	}
 
 	/**
+	 * If we have a destination that is a byte, that will actually not work for converting
+	 * moves because x86 does not support it. We will force these movements to be word
+	 * sized by forcing all of the operands to be word sized for now
+	 */
+	if(destination_size == BYTE){
+		//Copy both variables
+		assignee = emit_var_copy(assignee);
+		if_assignee = emit_var_copy(if_assignee);
+
+		//Bump both of the copied versions up to be word sized
+		assignee->type = i16;
+		assignee->variable_size = WORD;
+
+		if_assignee->type = i16;
+		if_assignee->variable_size = WORD;
+
+		//Revise this so that the selector is happy
+		destination_size = WORD;
+	}
+
+	/**
 	 * Now that we have the destination pre-loaded with the else value, we can emit the conditional move 
 	 * for the if value now. We will hijack the old converting move OIR statement to do this
 	 */
