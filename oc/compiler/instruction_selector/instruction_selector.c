@@ -8397,12 +8397,7 @@ static inline instruction_type_t select_conditional_move_instruction(variable_si
  *
  * NOTE: It is assumed that the first instruction in the window is the target statement
  *
- *
- * TODO
- * TODO NEED SPECIAL CASE WITH BYTES HANDLED
- * TODO
- *
- *
+ * TODO ENABLEMENT WITH FLOATING POINT CASES IS NEEDED
  *
  */
 static void handle_conditional_movement_statement(instruction_window_t* window){
@@ -8471,9 +8466,15 @@ static void handle_conditional_movement_statement(instruction_window_t* window){
 	 * Now that we have the destination pre-loaded with the else value, we can emit the conditional move 
 	 * for the if value now. We will hijack the old converting move OIR statement to do this
 	 */
-	conditional_move->instruction_type = select_conditional_move_instruction(destination_size, conditional_move->movement_type);
-	conditional_move->operands.x86.destination_register = assignee;
-	conditional_move->operands.x86.source_register1 = if_assignee;
+
+	if(conditional_move->relies_on->comes_from_fp_comparison == FALSE){
+		conditional_move->instruction_type = select_conditional_move_instruction(destination_size, conditional_move->movement_type);
+		conditional_move->operands.x86.destination_register = assignee;
+		conditional_move->operands.x86.source_register1 = if_assignee;
+	} else {
+		printf("TODO NOT IMPLEMENTED\n\n");
+		exit(1);
+	}
 
 	//Rebuild the window around the conditional move
 	reconstruct_window(window, conditional_move);

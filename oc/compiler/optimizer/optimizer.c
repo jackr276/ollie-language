@@ -2438,15 +2438,6 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		instruction_t* branch_statement = top_level_if_block->exit_statement;
 
 		/**
-		 * If the given branch statement comes from a floating point comparison,
-		 * then this optimiziation will not work because we may have two separate conditional
-		 * jumps instead of one
-		 */
-		if(branch_statement->relies_on->comes_from_fp_comparison == TRUE){
-			continue;
-		}
-
-		/**
 		 * If this is a switch block, we cannot perform the desired optimization
 		 * here. Due to the way that switches in ollie always work, a conversion 
 		 * would actually result in inferior performance, so we'll never 

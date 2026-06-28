@@ -1,8 +1,8 @@
 /**
  * Author: Jack Robbins
- * Test a case where we have an if-assignment that is using a float conditional. In this case, we will not
- * go through due to the extra requirements with branching(parity flag checking) that we would need
- * to do to make this a full 1-to-1 repalecement
+ * Test a case where we have an if-assignment that is using a float conditional. In this case, 
+ * there are additional requirements inside of the converting move instruction generator
+ * to make this thing work
  */
 
  pub fn float_if(x:f32) -> i32 {
