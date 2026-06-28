@@ -3185,10 +3185,10 @@ static inline void print_move_instruction(FILE* fl, instruction_type_t instructi
 			fprintf(fl, "movzwq ");
 			break;
 		case CMOVEW:
-			fprintf(fl, "cmoveq ");
+			fprintf(fl, "cmovew ");
 			break;
 		case CMOVEL:
-			fprintf(fl, "cmovew ");
+			fprintf(fl, "cmovel ");
 			break;
 		case CMOVEQ:
 			fprintf(fl, "cmoveq ");
