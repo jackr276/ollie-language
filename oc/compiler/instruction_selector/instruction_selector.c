@@ -8384,6 +8384,22 @@ static inline instruction_type_t select_conditional_move_instruction(variable_si
 
 
 /**
+ * Directly emit a conditional move instruction based on the instruction type directly given. This conditional
+ * move will already be in x86 form so no additional instruction selection will be needed
+ */
+static instruction_t* emit_conditional_move_instruction(three_addr_var_t* destination_register, three_addr_var_t* source_register, three_addr_var_t* relies_on, instruction_type_t instruction_type){
+	instruction_t* conditional_movement = calloc(1, sizeof(instruction_t));
+
+	conditional_movement->instruction_type = instruction_type;
+	conditional_movement->operands.x86.destination_register = destination_register;
+	conditional_movement->operands.x86.source_register1 = source_register;
+	conditional_movement->relies_on = relies_on;
+
+	return conditional_movement;
+}
+
+
+/**
  * Convert a conditional movement OIR statement into x86 assembly
  *
  * x_4 <- MOVE_E t1 else t4
@@ -8396,12 +8412,10 @@ static inline instruction_type_t select_conditional_move_instruction(variable_si
  * the conditional move works
  *
  * NOTE: It is assumed that the first instruction in the window is the target statement
- *
- * TODO ENABLEMENT WITH FLOATING POINT CASES IS NEEDED
- *
  */
 static void handle_conditional_movement_statement(instruction_window_t* window){
 	instruction_t* conditional_move = window->instruction1;
+	instruction_t* additional_converting_move;
 	//Cache the destination type & assignee for needed comparisons
 	three_addr_var_t* assignee = conditional_move->operands.oir.assignee;
 	generic_type_t* destination_type = assignee->type;
@@ -8472,6 +8486,37 @@ static void handle_conditional_movement_statement(instruction_window_t* window){
 		conditional_move->operands.x86.destination_register = assignee;
 		conditional_move->operands.x86.source_register1 = if_assignee;
 	} else {
+		/**
+		 * Step 1: select the regular converting move instruction and add our values in
+		 */
+		conditional_move->instruction_type = select_conditional_move_instruction(destination_size, conditional_move->movement_type);
+		conditional_move->operands.x86.destination_register = assignee;
+		conditional_move->operands.x86.source_register1 = if_assignee;
+
+		/**
+		 * Step 2: for certain floating point comparison types, we need check and see if the parity
+		 * flag has been set/unset. These are the NZ, Z, NE and E conditional move types because
+		 * the parity flag being set would be a part of these
+		 */
+		switch(conditional_move->movement_type){
+			/**
+			 * For NE and NZ, Ollie considers NaN to never be equal to anything. As such,
+			 * if we have a NaN flag set here, we will need to take the *false* path. This
+			 * will involve moving the else destination into our register after the if has
+			 * been moved in if we see the parity flag has been set
+			 */
+			case MOVE_NE:
+			case MOVE_NZ:
+				
+
+
+
+			
+			//By default do nothing
+			default:
+				break;
+		}
+		
 		printf("TODO NOT IMPLEMENTED\n\n");
 		exit(1);
 	}
