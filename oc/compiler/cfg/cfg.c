@@ -163,7 +163,6 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 static cfg_result_package_t emit_string_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* string_initializer);
 static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* struct_initializer);
 static void emit_global_struct_initializer(generic_ast_node_t* struct_initializer, dynamic_array_t* intializer_values);
-
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_const_t* constant);
 static void visit_declaration_statement(generic_ast_node_t* node);
 static void visit_static_let_statement(generic_ast_node_t* node);
@@ -5616,7 +5615,7 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	basic_block_t* exit_block = basic_block_alloc_and_estimate();
 
 	/**
-	 * Step 1: setup the true and false blocks
+	 * Step 2: setup the true and false blocks
 	 *
 	 * Because an in statement just assigns true or false, all
 	 * that needs to be in each of these blocks is a true or false
@@ -5625,6 +5624,18 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	 */
 	basic_block_t* true_block = basic_block_alloc_and_estimate();
 	basic_block_t* false_block = basic_block_alloc_and_estimate();
+
+	//The true block is just a true assignment followed by a jump to the exit
+	instruction_t* true_assignment = emit_assignment_with_const_instruction(true_variable, emit_direct_integer_or_char_constant(TRUE, in_expression->inferred_type));
+	add_statement(true_block, true_assignment);
+
+	emit_jump(true_block, exit_block);
+
+	//The false block is just a false assignment followed by a jump to the exit
+	instruction_t* false_assignment = emit_assignment_with_const_instruction(false_variable, emit_direct_integer_or_char_constant(FALSE, in_expression->inferred_type));
+	add_statement(false_block, false_assignment);
+
+	emit_jump(false_block, exit_block);
 
 
 	printf("TODO SWITCH LOWERER NOT IMPLEMENTED\n");
