@@ -5645,9 +5645,25 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	generic_ast_node_t* in_statement_cursor = in_expression->first_child;
 	cfg_result_package_t expression_results = emit_expression(entry_block, in_statement_cursor);
 
-	//Whatever the last block in here is will become our switch entry
-	basic_block_t* switch_entry = expression_results.final_block;
+	/**
+	 * Emit/assign all of the blocks that we're going to need:
+	 * 	first conditional block(jump if lower)
+	 * 	second conditional block(jump if higher)
+	 * 	switch entry block
+	 */
+	basic_block_t* first_switch_conditional = expression_results.final_block;
+	basic_block_t* second_switch_conditional = basic_block_alloc_and_estimate();
+	basic_block_t* switch_entry = basic_block_alloc_and_estimate();
 	switch_entry->block_type = BLOCK_TYPE_SWITCH;
+
+	//Unpack the results from the result package
+	three_addr_var_t* input_result = unpack_result_package(&expression_results, first_switch_conditional);
+
+	//Grab the type our for convenience
+	generic_type_t* input_result_type = input_result->type;
+
+	//Grab the signedness of the result
+	u_int8_t is_signed = is_type_signed(input_result_type);
 
 	/**
 	 * Step 3: emit our jump to default(in this case false). If a value is above the higher
@@ -5657,6 +5673,14 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	three_addr_var_t* conditional_variable = expression_results.result_value.result_var;
 	three_addr_const_t* lower_bound_constant = emit_direct_integer_or_char_constant(lower_bound, conditional_variable->type);
 	three_addr_const_t* upper_bound_constant = emit_direct_integer_or_char_constant(upper_bound, conditional_variable->type);
+	three_addr_var_t* lower_than_decider = emit_temp_var(u8);
+	three_addr_var_t* higher_than_decider = emit_temp_var(u8);
+
+	instruction_t* compare_below = emit_binary_operation_with_const_instruction(lower_than_decider, conditional_variable, L_THAN, lower_bound_constant);
+	add_statement(first_switch_conditional, compare_below);
+
+	branch_type_t branch_less_than = select_appropriate_branch_statement(L_THAN, BRANCH_CATEGORY_NORMAL, is_signed);
+	emit_branch_for_switch_statement(first_switch_conditional, false_block, second_switch_conditional, branch_less_than, compare_below->operands.oir.assignee);
 
 
 
