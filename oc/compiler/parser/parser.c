@@ -6362,6 +6362,10 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 	//Is this in expression eligible to become a switch statement? Assume true by default
 	u_int8_t is_switch_eligible = TRUE;
 
+	//We'll need to track these for min/max value tracking
+	int64_t max_value = INT_MIN;
+	int64_t min_value = INT_MAX;
+
 	//The first thing that we need to see is some kind of valid ternary expression
 	generic_ast_node_t* starting_expression = ternary_expression(token_stream, side);
 
@@ -6479,6 +6483,18 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 			member_cursor = member_cursor->next_sibling;
 		}
 
+		/**
+		 * Once we know that they're equal, if this is switch eligible, we will need to maintain
+		 * a list of switch values here for tracking
+		 */
+		if(is_switch_eligible == TRUE){
+			if(expression->constant_value.signed_long_value > max_value){
+				max_value = expression->constant_value.signed_long_value;
+			} else if(expression->constant_value.signed_long_value < min_value){
+				min_value = expression->constant_value.signed_long_value;
+			}
+		}
+
 		//Now that we know this is valid we can add it as a child to the in statement
 		add_child_node(root_node, expression);
 
@@ -6552,7 +6568,13 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 	}
 
 	//Store whether or not we are switch eligible
-	root_node->optional_storage.is_in_statement_switch_eligible = is_switch_eligible;
+	root_node->is_in_statement_switch_eligible = is_switch_eligible;
+
+	//If this is switch eligible, then store our bounds here
+	if(is_switch_eligible == TRUE){
+		root_node->optional_storage.switch_bounds.lower_bound = min_value;
+		root_node->optional_storage.switch_bounds.upper_bound = max_value;
+	}
 
 	//Give back the root of this node
 	return root_node;
