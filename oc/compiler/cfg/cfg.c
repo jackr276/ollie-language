@@ -5701,9 +5701,36 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	 * easy to write because every single value in it that is listed always goes to the
 	 * true block, while everything else goes to the false block
 	 */
+	//Allocate the jump table with the appropriate entry count
+	switch_entry->jump_table = jump_table_alloc(upper_bound - lower_bound + 1);
 
+	//Crawl the entire in statement and add jump table entries where appropriate
+	in_statement_cursor = in_statement_cursor->next_sibling;
+	while(in_statement_cursor != NULL){
+		//The value's index is the actual value with the lower bound adjustment subtracted to make the lowest index 0-based
+		int64_t value_index = in_statement_cursor->constant_value.signed_long_value - lower_bound;
+		add_jump_table_entry(switch_entry->jump_table, value_index, true_block);
 
+		in_statement_cursor = in_statement_cursor->next_sibling;
+	}
 
+	/**
+	 * Now that we have everything added in that is explicitly in the in statement, we
+	 * need to fill in all of the gaps with jumps to the default statement
+	 */
+	for(u_int32_t i = 0; i < switch_entry->jump_table->num_nodes; i++){
+		if(dynamic_array_get_at(&(switch_entry->jump_table->nodes), i) == NULL){
+			dynamic_array_set_at(&(switch_entry->jump_table->nodes), false_block, i);
+		}
+	}
+
+	//Assign this over to a temp to avoid any issues with SSA
+	instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(conditional_variable->type), conditional_variable);
+	add_statement(switch_entry, temp_assignment);
+
+	//Emit the adjustment subtraction and get it into the block
+	instruction_t* adjustment = emit_binary_operation_with_const_instruction(emit_temp_var(conditional_variable->type), temp_assignment->operands.oir.assignee, MINUS, emit_direct_integer_or_char_constant(lower_bound, input_result_type));
+	add_statement(switch_entry, temp_assignment);
 
 
 
