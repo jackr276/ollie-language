@@ -5596,6 +5596,8 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
  * be a constant node that we can use for our switch
  */
 static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block_t* starting_block, generic_ast_node_t* in_expression){
+	//TODO - IN STATEMENT WITH ONE MEMBER ONLY NEEDS TO BE TURNED INTO AN IF ASSIGNMENT
+	
 	//Initialize the blank results here
 	cfg_result_package_t in_results = INITIALIZE_BLANK_CFG_RESULT;
 
