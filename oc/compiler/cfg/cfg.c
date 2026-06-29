@@ -5603,6 +5603,12 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	int64_t lower_bound = INT_MAX;
 	int64_t upper_bound = INT_MIN;
 
+	//Emit and store our overall start and overall exit
+	basic_block_t* entry_block = basic_block_alloc_and_estimate(); 
+	basic_block_t* exit_block = basic_block_alloc_and_estimate();
+	in_results.starting_block = entry_block;
+	in_results.final_block = exit_block;
+
 	/**
 	 * We will need a "temporary" variable that also works for SSA, which is why
 	 * we use this unique helper
@@ -5611,11 +5617,8 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	three_addr_var_t* true_variable = emit_var(in_assignee);
 	three_addr_var_t* false_variable = emit_var(in_assignee);
 
-	basic_block_t* entry_block = basic_block_alloc_and_estimate(); 
-	basic_block_t* exit_block = basic_block_alloc_and_estimate();
-
 	/**
-	 * Step 2: setup the true and false blocks
+	 * Step 1: setup the true and false blocks
 	 *
 	 * Because an in statement just assigns true or false, all
 	 * that needs to be in each of these blocks is a true or false
@@ -5628,14 +5631,24 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	//The true block is just a true assignment followed by a jump to the exit
 	instruction_t* true_assignment = emit_assignment_with_const_instruction(true_variable, emit_direct_integer_or_char_constant(TRUE, in_expression->inferred_type));
 	add_statement(true_block, true_assignment);
-
 	emit_jump(true_block, exit_block);
 
 	//The false block is just a false assignment followed by a jump to the exit
 	instruction_t* false_assignment = emit_assignment_with_const_instruction(false_variable, emit_direct_integer_or_char_constant(FALSE, in_expression->inferred_type));
 	add_statement(false_block, false_assignment);
-
 	emit_jump(false_block, exit_block);
+
+	/**
+	 * Step 2: emit our 
+	 */
+	generic_ast_node_t* in_statement_cursor = in_expression->first_child;
+	//Stash this for later
+	generic_ast_node_t* conditional = in_statement_cursor;
+
+
+
+
+
 
 
 	printf("TODO SWITCH LOWERER NOT IMPLEMENTED\n");
@@ -5665,7 +5678,7 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
  * the two lowering rules
  */
 static cfg_result_package_t emit_in_expression(basic_block_t* starting_block, generic_ast_node_t* in_expression){
-	if(in_expression->optional_storage.is_in_statement_switch_eligible == TRUE){
+	if(in_expression->is_in_statement_switch_eligible == TRUE){
 		return lower_in_expression_to_oir_switch(starting_block, in_expression);
 	} else {
 		return lower_in_expression_to_conditional_move_chain(starting_block, in_expression);

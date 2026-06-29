@@ -131,8 +131,6 @@ struct generic_ast_node_t{
 		u_int64_t bytes_to_copy;
 		//The label record that we're storing
 		symtab_label_record_t* label_record;
-		//Is the given in statement switch eligible?
-		u_int8_t is_in_statement_switch_eligible;
 		//Hold the upper and lower bounds for switch statement values
 		struct {
 			//The upper and lower bound for switch statements
@@ -171,6 +169,8 @@ struct generic_ast_node_t{
 	u_int8_t dereference_needed;
 	//The number of case statement members in a switch
 	u_int8_t num_case_members;
+	//Is the given in statement switch eligible?
+	u_int8_t is_in_statement_switch_eligible;
 };
 
 /**
