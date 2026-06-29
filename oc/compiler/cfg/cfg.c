@@ -5676,11 +5676,31 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	three_addr_var_t* lower_than_decider = emit_temp_var(u8);
 	three_addr_var_t* higher_than_decider = emit_temp_var(u8);
 
+	/**
+	 * First emit the compare below branch. This will jump to the false block if we have a value
+	 * that is lower than the smallest value in the given in statement
+	 */
 	instruction_t* compare_below = emit_binary_operation_with_const_instruction(lower_than_decider, conditional_variable, L_THAN, lower_bound_constant);
 	add_statement(first_switch_conditional, compare_below);
 
 	branch_type_t branch_less_than = select_appropriate_branch_statement(L_THAN, BRANCH_CATEGORY_NORMAL, is_signed);
-	emit_branch_for_switch_statement(first_switch_conditional, false_block, second_switch_conditional, branch_less_than, compare_below->operands.oir.assignee);
+	emit_branch_for_switch_statement(first_switch_conditional, false_block, second_switch_conditional, branch_less_than, lower_than_decider);
+
+	/**
+	 * Then emit the compare above branch. This will jump to the false block if we have a value
+	 * that is larger than the largest value in the given in statement
+	 */
+	instruction_t* compare_above = emit_binary_operation_with_const_instruction(higher_than_decider, conditional_variable, G_THAN, upper_bound_constant);
+	add_statement(first_switch_conditional, compare_below);
+
+	branch_type_t branch_greater_than = select_appropriate_branch_statement(G_THAN, BRANCH_CATEGORY_NORMAL, is_signed);
+	emit_branch_for_switch_statement(second_switch_conditional, false_block, switch_entry, branch_greater_than, higher_than_decider);
+
+	/**
+	 * Step 4: emit the actual jump table itself. Luckily for us, this jump table is very
+	 * easy to write because every single value in it that is listed always goes to the
+	 * true block, while everything else goes to the false block
+	 */
 
 
 
@@ -5689,6 +5709,8 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 
 	printf("TODO SWITCH LOWERER NOT IMPLEMENTED\n");
 	exit(1);
+
+	return in_results;
 }
 
 
