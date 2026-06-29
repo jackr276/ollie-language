@@ -13,6 +13,7 @@
 */
 
 #include "cfg.h"
+#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -5596,9 +5597,35 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
  * be a constant node that we can use for our switch
  */
 static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block_t* starting_block, generic_ast_node_t* in_expression){
+	//Initialize the blank results here
+	cfg_result_package_t in_results = INITIALIZE_BLANK_CFG_RESULT;
 
+	//We're going to need to eventually crawl and store these bounds
+	int64_t lower_bound = INT_MAX;
+	int64_t upper_bound = INT_MIN;
+
+	/**
+	 * We will need a "temporary" variable that also works for SSA, which is why
+	 * we use this unique helper
+	 */
+	symtab_variable_record_t* in_assignee = create_ssa_compatible_temp_var(current_function, in_expression->inferred_type, variable_symtab, increment_and_get_temp_id());
+	three_addr_var_t* true_variable = emit_var(in_assignee);
+	three_addr_var_t* false_variable = emit_var(in_assignee);
+
+	basic_block_t* entry_block = basic_block_alloc_and_estimate(); 
+	basic_block_t* exit_block = basic_block_alloc_and_estimate();
+
+	/**
+	 * Step 1: setup the true and false blocks
+	 *
+	 * Because an in statement just assigns true or false, all
+	 * that needs to be in each of these blocks is a true or false
+	 * assignment. Recall that the false block really acts as our
+	 * default
+	 */
 	basic_block_t* true_block = basic_block_alloc_and_estimate();
-	basic_block_t* flase_block = basic_block_alloc_and_estimate();
+	basic_block_t* false_block = basic_block_alloc_and_estimate();
+
 
 	printf("TODO SWITCH LOWERER NOT IMPLEMENTED\n");
 	exit(1);
