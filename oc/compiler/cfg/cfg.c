@@ -5600,9 +5600,8 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	cfg_result_package_t in_results = INITIALIZE_BLANK_CFG_RESULT;
 
 	//Emit and store our overall start and overall exit
-	basic_block_t* entry_block = basic_block_alloc_and_estimate(); 
 	basic_block_t* exit_block = basic_block_alloc_and_estimate();
-	in_results.starting_block = entry_block;
+	in_results.starting_block = starting_block;
 	in_results.final_block = exit_block;
 
 	//Extract these two values for later
@@ -5611,11 +5610,13 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 
 	/**
 	 * We will need a "temporary" variable that also works for SSA, which is why
-	 * we use this unique helper
+	 * we use this unique helper. There will be a phi join node at the end of the
+	 * in statement
 	 */
 	symtab_variable_record_t* in_assignee = create_ssa_compatible_temp_var(current_function, in_expression->inferred_type, variable_symtab, increment_and_get_temp_id());
 	three_addr_var_t* true_variable = emit_var(in_assignee);
 	three_addr_var_t* false_variable = emit_var(in_assignee);
+	three_addr_var_t* final_result = emit_var(in_assignee);
 
 	/**
 	 * Step 1: setup the true and false blocks
@@ -5643,7 +5644,7 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	 * the very first child of the in statement cursor.
 	 */
 	generic_ast_node_t* in_statement_cursor = in_expression->first_child;
-	cfg_result_package_t expression_results = emit_expression(entry_block, in_statement_cursor);
+	cfg_result_package_t expression_results = emit_expression(starting_block, in_statement_cursor);
 
 	/**
 	 * Emit/assign all of the blocks that we're going to need:
@@ -5691,7 +5692,7 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	 * that is larger than the largest value in the given in statement
 	 */
 	instruction_t* compare_above = emit_binary_operation_with_const_instruction(higher_than_decider, conditional_variable, G_THAN, upper_bound_constant);
-	add_statement(first_switch_conditional, compare_below);
+	add_statement(first_switch_conditional, compare_above);
 
 	branch_type_t branch_greater_than = select_appropriate_branch_statement(G_THAN, BRANCH_CATEGORY_NORMAL, is_signed);
 	emit_branch_for_switch_statement(second_switch_conditional, false_block, switch_entry, branch_greater_than, higher_than_decider);
@@ -5701,7 +5702,6 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	 * easy to write because every single value in it that is listed always goes to the
 	 * true block, while everything else goes to the false block
 	 */
-	//Allocate the jump table with the appropriate entry count
 	switch_entry->jump_table = jump_table_alloc(upper_bound - lower_bound + 1);
 
 	//Crawl the entire in statement and add jump table entries where appropriate
@@ -5724,7 +5724,10 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 		}
 	}
 
-	//Assign this over to a temp to avoid any issues with SSA
+	/**
+	 * Step 5: emit the temp assignment, then emit the adjustment to get the index for the jump calculation down to 0 
+	 * and then emit the indirect jump itself
+	 */
 	instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(conditional_variable->type), conditional_variable);
 	add_statement(switch_entry, temp_assignment);
 
@@ -5732,10 +5735,21 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	instruction_t* adjustment = emit_binary_operation_with_const_instruction(emit_temp_var(conditional_variable->type), temp_assignment->operands.oir.assignee, MINUS, emit_direct_integer_or_char_constant(lower_bound, input_result_type));
 	add_statement(switch_entry, temp_assignment);
 
+	//Now we can emit the indirect jump statement itself
+	instruction_t* indirect_jump = emit_indirect_jump_statement(switch_entry->jump_table, adjustment->operands.oir.assignee, 8);
+	add_statement(switch_entry, indirect_jump);
 
+	/**
+	 * Step 6: Emit one final assignment in the exit block. This final assignment will trigger
+	 * a phi function to be inserted when the SSA helper runs and will also give us a variable
+	 * to report back with in the result package
+	 */
+	instruction_t* final_assignment = emit_assignment_instruction(emit_temp_var(in_expression->inferred_type), final_result);
+	add_statement(exit_block, final_assignment);
 
-	printf("TODO SWITCH LOWERER NOT IMPLEMENTED\n");
-	exit(1);
+	//Package up the result type with the the final assignee
+	in_results.result_value.result_var = final_assignment->operands.oir.assignee;
+	in_results.type = CFG_RESULT_TYPE_VAR;
 
 	return in_results;
 }
