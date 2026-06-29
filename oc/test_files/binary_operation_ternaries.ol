@@ -11,5 +11,7 @@ pub fn main() -> i32 {
 
 	let ret_val:i32 = (x == 2 ? x else y) + (y == 3 ? z else a);
 
+	//Should return 4 + 6 = 10
+	OUNIT: [console = 10]
 	ret ret_val;
 }

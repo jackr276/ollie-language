@@ -169,6 +169,8 @@ struct generic_ast_node_t{
 	u_int8_t is_assignable;
 	//Is a dereference needed at the end of this value?
 	u_int8_t dereference_needed;
+	//The number of case statement members in a switch
+	u_int8_t num_case_members;
 };
 
 /**

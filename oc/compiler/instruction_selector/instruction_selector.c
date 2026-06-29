@@ -7360,6 +7360,17 @@ static void mark(dynamic_array_t* function_blocks){
 				mark_and_add_definition(function_blocks, stmt->relies_on, &worklist);
 				break;
 
+			/**
+			 * Conditional movement statements need their "relies on" tag included
+			 * as well as the two actual operands
+			 */
+			case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT:
+				mark_and_add_definition(function_blocks, stmt->relies_on, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
+				break;
+
+
 			//In all other cases, we'll just mark and add every operand
 			default:
 				//We need to mark the place where each definition is set
@@ -8204,9 +8215,497 @@ instruction_t* emit_constant_move_instruction(three_addr_var_t* destination, thr
 
 
 /**
- * Create and insert a regular move instruction before the given after instruction. It is assumed
- * that we will not be needing any kind of converting moves here for this to work
+ * Select the appropriate conditional move based on the destination size
+ * and conditional
+ *
+ * NOTE: this assumes that the comparison result does not come from an FP comparison
  */
+static inline instruction_type_t select_conditional_move_instruction(variable_size_t size, conditional_movement_type_t movement_type){
+	switch(movement_type){
+		case MOVE_NE:
+			switch(size){
+				case WORD:
+					return CMOVNEW;
+				case DOUBLE_WORD:
+					return CMOVNEL;
+				case QUAD_WORD:
+					return CMOVNEQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
+
+		case MOVE_E:
+			switch(size){
+				case WORD:
+					return CMOVEW;
+				case DOUBLE_WORD:
+					return CMOVEL;
+				case QUAD_WORD:
+					return CMOVEQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
+		
+		case MOVE_Z:
+			switch(size){
+				case WORD:
+					return CMOVZW;
+				case DOUBLE_WORD:
+					return CMOVZL;
+				case QUAD_WORD:
+					return CMOVZQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
+
+		case MOVE_NZ:
+			switch(size){
+				case WORD:
+					return CMOVNZW;
+				case DOUBLE_WORD:
+					return CMOVNZL;
+				case QUAD_WORD:
+					return CMOVNZQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
+
+		case MOVE_L:
+				switch(size){
+				case WORD:
+					return CMOVLW;
+				case DOUBLE_WORD:
+					return CMOVLL;
+				case QUAD_WORD:
+					return CMOVLQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}	
+
+		case MOVE_LE:
+			switch(size){
+				case WORD:
+					return CMOVLEW;
+				case DOUBLE_WORD:
+					return CMOVLEL;
+				case QUAD_WORD:
+					return CMOVLEQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
+
+		case MOVE_G:
+			switch(size){
+				case WORD:
+					return CMOVGW;
+				case DOUBLE_WORD:
+					return CMOVGL;
+				case QUAD_WORD:
+					return CMOVGQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
+
+		case MOVE_GE:
+			switch(size){
+				case WORD:
+					return CMOVGEW;
+				case DOUBLE_WORD:
+					return CMOVGEL;
+				case QUAD_WORD:
+					return CMOVGEQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
+
+		case MOVE_A:
+			switch(size){
+				case WORD:
+					return CMOVAW;
+				case DOUBLE_WORD:
+					return CMOVAL;
+				case QUAD_WORD:
+					return CMOVAQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
+
+		case MOVE_AE:
+			switch(size){
+				case WORD:
+					return CMOVAEW;
+				case DOUBLE_WORD:
+					return CMOVAEL;
+				case QUAD_WORD:
+					return CMOVAEQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
+
+		case MOVE_B:
+			switch(size){
+				case WORD:
+					return CMOVBW;
+				case DOUBLE_WORD:
+					return CMOVBL;
+				case QUAD_WORD:
+					return CMOVBQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
+
+		case MOVE_BE:
+			switch(size){
+				case WORD:
+					return CMOVBEW;
+				case DOUBLE_WORD:
+					return CMOVBEL;
+				case QUAD_WORD:
+					return CMOVBEQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
+
+		default:
+			fprintf(stderr, "Fatal internal compiler error: Invalid conditional movement type detected\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Select the appropriate conditional move based on the destination size
+ * and conditional
+ *
+ * NOTE: this assumes that the comparison result does come from an FP comparison
+ */
+static inline instruction_type_t select_conditional_move_instruction_for_float_comparison(variable_size_t size, conditional_movement_type_t movement_type){
+	switch(movement_type){
+		case MOVE_NE:
+		case MOVE_NZ:
+			switch(size){
+				case WORD:
+					return CMOVNEW;
+				case DOUBLE_WORD:
+					return CMOVNEL;
+				case QUAD_WORD:
+					return CMOVNEQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
+
+		case MOVE_E:
+		case MOVE_Z:
+			switch(size){
+				case WORD:
+					return CMOVEW;
+				case DOUBLE_WORD:
+					return CMOVEL;
+				case QUAD_WORD:
+					return CMOVEQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
+		
+		case MOVE_L:
+		case MOVE_B:
+				switch(size){
+				case WORD:
+					return CMOVBW;
+				case DOUBLE_WORD:
+					return CMOVBL;
+				case QUAD_WORD:
+					return CMOVBQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}	
+
+		case MOVE_LE:
+		case MOVE_BE:
+			switch(size){
+				case WORD:
+					return CMOVBEW;
+				case DOUBLE_WORD:
+					return CMOVBEL;
+				case QUAD_WORD:
+					return CMOVBEQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
+
+		case MOVE_G:
+		case MOVE_A:
+			switch(size){
+				case WORD:
+					return CMOVAW;
+				case DOUBLE_WORD:
+					return CMOVAL;
+				case QUAD_WORD:
+					return CMOVAQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
+
+		case MOVE_GE:
+		case MOVE_AE:
+			switch(size){
+				case WORD:
+					return CMOVAEW;
+				case DOUBLE_WORD:
+					return CMOVAEL;
+				case QUAD_WORD:
+					return CMOVAEQ;
+				default:
+					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
+					exit(1);
+			}
+
+		default:
+			fprintf(stderr, "Fatal internal compiler error: Invalid conditional movement type detected\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Directly emit a conditional move instruction based on the instruction type directly given. This conditional
+ * move will already be in x86 form so no additional instruction selection will be needed
+ */
+static instruction_t* emit_conditional_move_instruction(three_addr_var_t* destination_register, three_addr_var_t* source_register, three_addr_var_t* relies_on, instruction_type_t instruction_type){
+	instruction_t* conditional_movement = calloc(1, sizeof(instruction_t));
+
+	conditional_movement->instruction_type = instruction_type;
+	conditional_movement->operands.x86.destination_register = destination_register;
+	conditional_movement->operands.x86.source_register1 = source_register;
+	conditional_movement->relies_on = relies_on;
+
+	return conditional_movement;
+}
+
+
+/**
+ * Convert a conditional movement OIR statement into x86 assembly
+ *
+ * x_4 <- MOVE_E t1 else t4
+ * 
+ * Becomes:
+ * x_4 <- t4
+ * cmove x_4, t1
+ *
+ * We always unconditionally assign the else, and then overwrite it with our actual value if
+ * the conditional move works
+ *
+ * NOTE: It is assumed that the first instruction in the window is the target statement
+ */
+static void handle_conditional_movement_statement(instruction_window_t* window){
+	instruction_t* conditional_move = window->instruction1;
+	instruction_t* additional_conditional_move;
+	//Keep track of the final instruction for the eventual window rebuild
+	instruction_t* final_instruction = conditional_move;
+
+	//Cache the destination type & assignee for needed comparisons
+	three_addr_var_t* assignee = conditional_move->operands.oir.assignee;
+	generic_type_t* destination_type = assignee->type;
+
+	//We know that the if assignee will always be a variable so we can extract it now
+	three_addr_var_t* if_assignee = conditional_move->operands.oir.operand1;
+	variable_size_t destination_size = get_type_size(destination_type);
+
+	/**
+	 * If the if-assignee requires a converting move, now is the time for us to insert
+	 * it. These do not set condition codes so we should be good here
+	 */
+	if(is_converting_move_required(destination_type, if_assignee->type) == TRUE){
+		if_assignee = create_and_insert_converting_move_instruction(conditional_move, if_assignee, destination_type);
+	}
+
+	/**
+	 * The second operand has the option of being either a constant or a regular
+	 * value. If it is a regular value, then we will emit an unconditional move
+	 * into the destitination. If it is a constant then we just do a constant move
+	 */
+	three_addr_var_t* else_destination = emit_var_copy(assignee);
+	//We'll need this externally
+	three_addr_var_t* else_assignee;
+	if(conditional_move->operands.oir.operand2 != NULL){
+		else_assignee = conditional_move->operands.oir.operand2;
+
+		//Any required converting moves happen here
+		if(is_converting_move_required(destination_type, else_assignee->type) == TRUE){
+			else_assignee = create_and_insert_converting_move_instruction(conditional_move, else_assignee, destination_type);
+		}
+
+		//Now we can emit and insert the assignment
+		instruction_t* else_assignment = emit_move_instruction(else_destination, else_assignee);
+		insert_instruction_before_given(else_assignment, conditional_move);
+
+	} else {
+		instruction_t* constant_assignment = emit_constant_move_instruction(else_destination, conditional_move->operands.oir.constant_operand);
+		insert_instruction_before_given(constant_assignment, conditional_move);
+		
+		//Stash this in case we need it for floats
+		else_assignee = constant_assignment->operands.x86.destination_register;
+	}
+
+	/**
+	 * If we have a destination that is a byte, that will actually not work for converting
+	 * moves because x86 does not support it. We will force these movements to be word
+	 * sized by forcing all of the operands to be word sized for now
+	 */
+	if(destination_size == BYTE){
+		//Copy both variables
+		assignee = emit_var_copy(assignee);
+		if_assignee = emit_var_copy(if_assignee);
+
+		//Bump both of the copied versions up to be word sized
+		assignee->type = i16;
+		assignee->variable_size = WORD;
+
+		if_assignee->type = i16;
+		if_assignee->variable_size = WORD;
+
+		//Revise this so that the selector is happy
+		destination_size = WORD;
+	}
+
+	/**
+	 * Now that we have the destination pre-loaded with the else value, we can emit the conditional move 
+	 * for the if value now. We will hijack the old converting move OIR statement to do this
+	 */
+
+	if(conditional_move->relies_on->comes_from_fp_comparison == FALSE){
+		conditional_move->instruction_type = select_conditional_move_instruction(destination_size, conditional_move->movement_type);
+		conditional_move->operands.x86.destination_register = assignee;
+		conditional_move->operands.x86.source_register1 = if_assignee;
+	} else {
+		/**
+		 * Step 1: select the regular converting move instruction and add our values in
+		 */
+		conditional_move->instruction_type = select_conditional_move_instruction_for_float_comparison(destination_size, conditional_move->movement_type);
+		conditional_move->operands.x86.destination_register = assignee;
+		conditional_move->operands.x86.source_register1 = if_assignee;
+
+		/**
+		 * Step 2: for certain floating point comparison types, we need check and see if the parity
+		 * flag has been set/unset. These are the NZ, Z, NE and E conditional move types because
+		 * the parity flag being set would be a part of these
+		 */
+		switch(conditional_move->movement_type){
+			/**
+			 * For NE and NZ, Ollie considers NaN to never be equal to anything. As such,
+			 * if we have a NaN flag set here, we will need to take the *true* path. This
+			 * will involve moving the else destination into our register after the if has
+			 * been moved in if we see the parity flag has been set(pf = 1)
+			 *
+			 * 	if(x != 3.33){
+			 * 		result = 5;
+			 * 	} else {
+			 * 		result = 4;
+			 * 	}
+			 *
+			 * 	ucomiss .LC1, x
+			 * 	movl $4, result
+			 * 	cmovnel $5, result <- if they're plain not equal
+			 * 	cmovpl $5, result <- if we have a NaN we consider it not equal and do this
+			 */
+			case MOVE_NE:
+			case MOVE_NZ:
+				//Emit a clone for our uses
+				assignee = emit_var_copy(assignee);
+
+				switch(destination_size){
+					case WORD:
+						additional_conditional_move = emit_conditional_move_instruction(assignee, if_assignee, conditional_move->relies_on, CMOVPW);
+						break;
+					case DOUBLE_WORD:
+						additional_conditional_move = emit_conditional_move_instruction(assignee, if_assignee, conditional_move->relies_on, CMOVPL);
+						break;
+					case QUAD_WORD:
+						additional_conditional_move = emit_conditional_move_instruction(assignee, if_assignee, conditional_move->relies_on, CMOVPQ);
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid destination size in floating point conditional move selector\n");
+						exit(1);
+				}
+
+				//This goes in after the original converting move
+				insert_instruction_after_given(additional_conditional_move, conditional_move);
+
+				//For when we rebuild
+				final_instruction = additional_conditional_move;
+				break;
+
+			/**
+			 * For E and Z, Ollie considers NaN to never be equal to anything. As such,
+			 * if we have a NaN flag set here, we will need to take the *false* path. This
+			 * will involve moving the else destination into our register after the if has
+			 * been moved in if we see the parity flag has been set(pf = 1)
+			 *
+			 * 	if(x == 3.33){
+			 * 		result = 5;
+			 * 	} else {
+			 * 		result = 4;
+			 * 	}
+			 *
+			 * 	ucomiss .LC1, x
+			 * 	movl $4, result
+			 * 	cmovel $5, result <- if they're equal move the if value in
+			 * 	cmovpl $4, result <- if we have a NaN we consider it not equal and put the else back in
+			 */
+			case MOVE_E:
+			case MOVE_Z:
+				//Emit a clone for our uses
+				assignee = emit_var_copy(assignee);
+
+				switch(destination_size){
+					case WORD:
+						additional_conditional_move = emit_conditional_move_instruction(assignee, else_assignee, conditional_move->relies_on, CMOVPW);
+						break;
+					case DOUBLE_WORD:
+						additional_conditional_move = emit_conditional_move_instruction(assignee, else_assignee, conditional_move->relies_on, CMOVPL);
+						break;
+					case QUAD_WORD:
+						additional_conditional_move = emit_conditional_move_instruction(assignee, else_assignee, conditional_move->relies_on, CMOVPQ);
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid destination size in floating point conditional move selector\n");
+						exit(1);
+				}
+
+				//This goes in after the original converting move
+				insert_instruction_after_given(additional_conditional_move, conditional_move);
+
+				//For when we rebuild
+				final_instruction = additional_conditional_move;
+
+				break;
+				
+			//By default do nothing
+			default:
+				break;
+		}
+	}
+
+	//Rebuild the window around the final instruction
+	reconstruct_window(window, final_instruction);
+}
 
 
 /**
@@ -11582,41 +12081,248 @@ static void handle_addition_instruction(instruction_window_t* window){
  * helper function and reduce the need for extra code
  *
  * The op's are one-to-one mappings for relational ops only. We're kind of hijacking the token system here but it will work
+ *
+ * NOTE: cmovX instructions are only valid for word, double word, and quad word sized operands
  */
-static inline instruction_t* emit_cmovX_instruction(three_addr_var_t* destination_variable, three_addr_var_t* source, ollie_token_t op){
+static inline instruction_t* emit_cmovX_instruction(three_addr_var_t* destination_variable, three_addr_var_t* source, ollie_token_t op, u_int8_t is_type_signed){
 	//First we allocate
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+	//Extract the requested destination size
+	variable_size_t destination_size = get_type_size(destination_variable->type);
 
-	//Go based on what op we've got. This is not going to support everything and it
-	//really doesn't need to
-	switch(op){
-		case NOT_EQUALS:
-			instruction->instruction_type = CMOVNE;
-			break;
+	/**
+	 * Emit the conditional move instruction based on type signedness and
+	 * destination size
+	 */
+	if(is_type_signed == TRUE){
+		switch(op){
+			case NOT_EQUALS:
+				switch(destination_size){
+					case WORD:
+						instruction->instruction_type = CMOVNEW;
+						break;
+					case DOUBLE_WORD:
+						instruction->instruction_type = CMOVNEL;
+						break;
+					case QUAD_WORD:
+						instruction->instruction_type = CMOVNEQ;
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid variable size detected in cmovX emitter\n");
+						exit(1);
+				}
 
-		case EQUALS:
-			instruction->instruction_type = CMOVE;
-			break;
-			
-		case G_THAN:
-			instruction->instruction_type = CMOVG;
-			break;
+				break;
 
-		case G_THAN_OR_EQ:
-			instruction->instruction_type = CMOVGE;
-			break;
+			case EQUALS:
+				switch(destination_size){
+					case WORD:
+						instruction->instruction_type = CMOVEW;
+						break;
+					case DOUBLE_WORD:
+						instruction->instruction_type = CMOVEL;
+						break;
+					case QUAD_WORD:
+						instruction->instruction_type = CMOVEQ;
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid variable size detected in cmovX emitter\n");
+						exit(1);
+				}
 
-		case L_THAN:
-			instruction->instruction_type = CMOVL;
-			break;
+				break;
 
-		case L_THAN_OR_EQ:
-			instruction->instruction_type = CMOVLE;
-			break;
+			case G_THAN:
+				switch(destination_size){
+					case WORD:
+						instruction->instruction_type = CMOVGW;
+						break;
+					case DOUBLE_WORD:
+						instruction->instruction_type = CMOVGL;
+						break;
+					case QUAD_WORD:
+						instruction->instruction_type = CMOVGQ;
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid variable size detected in cmovX emitter\n");
+						exit(1);
+				}
 
-		default:
-			printf("Fatal internal compiler error: Unknown op passed in for CMOVX selector. Review source code to see tokens supported\n");
-			exit(1);
+				break;
+
+			case G_THAN_OR_EQ:
+				switch(destination_size){
+					case WORD:
+						instruction->instruction_type = CMOVGEW;
+						break;
+					case DOUBLE_WORD:
+						instruction->instruction_type = CMOVGEL;
+						break;
+					case QUAD_WORD:
+						instruction->instruction_type = CMOVGEQ;
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid variable size detected in cmovX emitter\n");
+						exit(1);
+				}
+
+				break;
+
+			case L_THAN:
+				switch(destination_size){
+					case WORD:
+						instruction->instruction_type = CMOVLW;
+						break;
+					case DOUBLE_WORD:
+						instruction->instruction_type = CMOVLL;
+						break;
+					case QUAD_WORD:
+						instruction->instruction_type = CMOVLQ;
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid variable size detected in cmovX emitter\n");
+						exit(1);
+				}
+
+				break;
+
+			case L_THAN_OR_EQ:
+				switch(destination_size){
+					case WORD:
+						instruction->instruction_type = CMOVLEW;
+						break;
+					case DOUBLE_WORD:
+						instruction->instruction_type = CMOVLEL;
+						break;
+					case QUAD_WORD:
+						instruction->instruction_type = CMOVLEQ;
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid variable size detected in cmovX emitter\n");
+						exit(1);
+				}
+
+				break;
+
+			default:
+				printf("Fatal internal compiler error: Unknown op passed in for CMOVX selector. Review source code to see tokens supported\n");
+				exit(1);
+		}
+
+	} else {
+		switch(op){
+			case NOT_EQUALS:
+				switch(destination_size){
+					case WORD:
+						instruction->instruction_type = CMOVNEW;
+						break;
+					case DOUBLE_WORD:
+						instruction->instruction_type = CMOVNEL;
+						break;
+					case QUAD_WORD:
+						instruction->instruction_type = CMOVNEQ;
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid variable size detected in cmovX emitter\n");
+						exit(1);
+				}
+
+				break;
+
+			case EQUALS:
+				switch(destination_size){
+					case WORD:
+						instruction->instruction_type = CMOVEW;
+						break;
+					case DOUBLE_WORD:
+						instruction->instruction_type = CMOVEL;
+						break;
+					case QUAD_WORD:
+						instruction->instruction_type = CMOVEQ;
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid variable size detected in cmovX emitter\n");
+						exit(1);
+				}
+
+				break;
+				
+			case G_THAN:
+				switch(destination_size){
+					case WORD:
+						instruction->instruction_type = CMOVAW;
+						break;
+					case DOUBLE_WORD:
+						instruction->instruction_type = CMOVAL;
+						break;
+					case QUAD_WORD:
+						instruction->instruction_type = CMOVAQ;
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid variable size detected in cmovX emitter\n");
+						exit(1);
+				}
+
+				break;
+
+			case G_THAN_OR_EQ:
+				switch(destination_size){
+					case WORD:
+						instruction->instruction_type = CMOVAEW;
+						break;
+					case DOUBLE_WORD:
+						instruction->instruction_type = CMOVAEL;
+						break;
+					case QUAD_WORD:
+						instruction->instruction_type = CMOVAEQ;
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid variable size detected in cmovX emitter\n");
+						exit(1);
+				}
+
+				break;
+
+			case L_THAN:
+				switch(destination_size){
+					case WORD:
+						instruction->instruction_type = CMOVBW;
+						break;
+					case DOUBLE_WORD:
+						instruction->instruction_type = CMOVBL;
+						break;
+					case QUAD_WORD:
+						instruction->instruction_type = CMOVBQ;
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid variable size detected in cmovX emitter\n");
+						exit(1);
+				}
+
+				break;
+
+			case L_THAN_OR_EQ:
+				switch(destination_size){
+					case WORD:
+						instruction->instruction_type = CMOVBEW;
+						break;
+					case DOUBLE_WORD:
+						instruction->instruction_type = CMOVBEL;
+						break;
+					case QUAD_WORD:
+						instruction->instruction_type = CMOVBEQ;
+						break;
+					default:
+						fprintf(stderr, "Fatal internal compiler error: invalid variable size detected in cmovX emitter\n");
+						exit(1);
+				}
+
+				break;
+
+			default:
+				printf("Fatal internal compiler error: Unknown op passed in for CMOVX selector. Review source code to see tokens supported\n");
+				exit(1);
+		}
 	}
 
 	//Assign these two over
@@ -11886,7 +12592,7 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 		insert_instruction_after_given(op1_setp, op1_comparison);
 
 		//Following this, we'll need our conditional move to take place
-		instruction_t* op1_conditional_move = emit_cmovX_instruction(op1_cmovne_result, one_temporary_holder, NOT_EQUALS);
+		instruction_t* op1_conditional_move = emit_cmovX_instruction(op1_cmovne_result, one_temporary_holder, NOT_EQUALS, FALSE);
 
 		//This goes in after the setP
 		insert_instruction_after_given(op1_conditional_move, op1_setp);
@@ -11904,7 +12610,7 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 		insert_instruction_after_given(op2_setp, op2_comparison);
 
 		//Following this, we'll need our conditional move to take place
-		instruction_t* op2_conditional_move = emit_cmovX_instruction(op2_cmovne_result, one_temporary_holder, NOT_EQUALS);
+		instruction_t* op2_conditional_move = emit_cmovX_instruction(op2_cmovne_result, one_temporary_holder, NOT_EQUALS, FALSE);
 
 		//This goes in after the setP
 		insert_instruction_after_given(op2_conditional_move, op2_setp);
@@ -12161,7 +12867,7 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		insert_instruction_after_given(op1_setp, op1_comparison);
 
 		//Following this, we'll need our conditional move to take place
-		instruction_t* op1_conditional_move = emit_cmovX_instruction(op1_cmovne_result, one_temporary_holder, NOT_EQUALS);
+		instruction_t* op1_conditional_move = emit_cmovX_instruction(op1_cmovne_result, one_temporary_holder, NOT_EQUALS, FALSE);
 
 		//This goes in after the setP
 		insert_instruction_after_given(op1_conditional_move, op1_setp);
@@ -12179,7 +12885,7 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		insert_instruction_after_given(op2_setp, op2_comparison);
 
 		//Following this, we'll need our conditional move to take place
-		instruction_t* op2_conditional_move = emit_cmovX_instruction(op2_cmovne_result, one_temporary_holder, NOT_EQUALS);
+		instruction_t* op2_conditional_move = emit_cmovX_instruction(op2_cmovne_result, one_temporary_holder, NOT_EQUALS, FALSE);
 
 		//This goes in after the setP
 		insert_instruction_after_given(op2_conditional_move, op2_setp);
@@ -12950,7 +13656,7 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 
 
 			//Now we need the final conditional move
-			instruction_t* conditional_move_to_dest = emit_cmovX_instruction(cmovne_destination, zero_assignment->operands.x86.destination_register, NOT_EQUALS);
+			instruction_t* conditional_move_to_dest = emit_cmovX_instruction(cmovne_destination, zero_assignment->operands.x86.destination_register, NOT_EQUALS, FALSE);
 
 			//And finally add this in after the zero assignment
 			insert_instruction_after_given(conditional_move_to_dest, first_move_to_dest);
@@ -14021,6 +14727,9 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 	switch (instruction->statement_type) {
 		case THREE_ADDR_CODE_ASSN_STMT:
 			handle_register_movement_instruction(instruction);
+			break;
+		case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT:
+			handle_conditional_movement_statement(window);
 			break;
 		case THREE_ADDR_CODE_LOGICAL_NOT_STMT:
 			handle_logical_not_instruction(window);
