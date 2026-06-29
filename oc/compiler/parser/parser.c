@@ -6490,7 +6490,9 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		if(is_switch_eligible == TRUE){
 			if(expression->constant_value.signed_long_value > max_value){
 				max_value = expression->constant_value.signed_long_value;
-			} else if(expression->constant_value.signed_long_value < min_value){
+			}
+
+			if(expression->constant_value.signed_long_value < min_value){
 				min_value = expression->constant_value.signed_long_value;
 			}
 		}
