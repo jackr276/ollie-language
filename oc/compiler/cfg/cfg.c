@@ -5630,12 +5630,12 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	basic_block_t* false_block = basic_block_alloc_and_estimate();
 
 	//The true block is just a true assignment followed by a jump to the exit
-	instruction_t* true_assignment = emit_assignment_with_const_instruction(true_variable, emit_direct_integer_or_char_constant(TRUE, in_expression->inferred_type));
+	instruction_t* true_assignment = emit_assignment_with_const_instruction(true_variable, emit_direct_integer_or_char_constant(TRUE, i8));
 	add_statement(true_block, true_assignment);
 	emit_jump(true_block, exit_block);
 
 	//The false block is just a false assignment followed by a jump to the exit
-	instruction_t* false_assignment = emit_assignment_with_const_instruction(false_variable, emit_direct_integer_or_char_constant(FALSE, in_expression->inferred_type));
+	instruction_t* false_assignment = emit_assignment_with_const_instruction(false_variable, emit_direct_integer_or_char_constant(FALSE, i8));
 	add_statement(false_block, false_assignment);
 	emit_jump(false_block, exit_block);
 
@@ -5672,8 +5672,8 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	 * going into the switch table
 	 */
 	three_addr_var_t* conditional_variable = expression_results.result_value.result_var;
-	three_addr_const_t* lower_bound_constant = emit_direct_integer_or_char_constant(lower_bound, conditional_variable->type);
-	three_addr_const_t* upper_bound_constant = emit_direct_integer_or_char_constant(upper_bound, conditional_variable->type);
+	three_addr_const_t* lower_bound_constant = emit_direct_integer_or_char_constant(lower_bound, i32);
+	three_addr_const_t* upper_bound_constant = emit_direct_integer_or_char_constant(upper_bound, i32);
 	three_addr_var_t* lower_than_decider = emit_temp_var(u8);
 	three_addr_var_t* higher_than_decider = emit_temp_var(u8);
 
@@ -5692,7 +5692,7 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	 * that is larger than the largest value in the given in statement
 	 */
 	instruction_t* compare_above = emit_binary_operation_with_const_instruction(higher_than_decider, conditional_variable, G_THAN, upper_bound_constant);
-	add_statement(first_switch_conditional, compare_above);
+	add_statement(second_switch_conditional, compare_above);
 
 	branch_type_t branch_greater_than = select_appropriate_branch_statement(G_THAN, BRANCH_CATEGORY_NORMAL, is_signed);
 	emit_branch_for_switch_statement(second_switch_conditional, false_block, switch_entry, branch_greater_than, higher_than_decider);
@@ -5725,6 +5725,14 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	}
 
 	/**
+	 * Since we only have two places to go here, we don't need to worry about
+	 * adding successors above. We know that the only two successors of the
+	 * switch block are the true block and the false block
+	 */
+	add_successor(switch_entry, true_block);
+	add_successor(switch_entry, false_block);
+
+	/**
 	 * Step 5: emit the temp assignment, then emit the adjustment to get the index for the jump calculation down to 0 
 	 * and then emit the indirect jump itself
 	 */
@@ -5732,8 +5740,8 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	add_statement(switch_entry, temp_assignment);
 
 	//Emit the adjustment subtraction and get it into the block
-	instruction_t* adjustment = emit_binary_operation_with_const_instruction(emit_temp_var(conditional_variable->type), temp_assignment->operands.oir.assignee, MINUS, emit_direct_integer_or_char_constant(lower_bound, input_result_type));
-	add_statement(switch_entry, temp_assignment);
+	instruction_t* adjustment = emit_binary_operation_with_const_instruction(emit_temp_var(conditional_variable->type), temp_assignment->operands.oir.assignee, MINUS, emit_direct_integer_or_char_constant(lower_bound, i32));
+	add_statement(switch_entry, adjustment);
 
 	//Now we can emit the indirect jump statement itself
 	instruction_t* indirect_jump = emit_indirect_jump_statement(switch_entry->jump_table, adjustment->operands.oir.assignee, 8);
