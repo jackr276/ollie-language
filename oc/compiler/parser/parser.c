@@ -6327,8 +6327,6 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 				return FALSE;
 			}
 
-			printf("COERCING TO %s\n", result_type->type_name.string);
-
 			//Once we're done we can assign and coerce our constant here
 			constant_node->inferred_type = result_type;
 			coerce_constant(constant_node);
@@ -6365,8 +6363,8 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 	u_int8_t is_switch_eligible = TRUE;
 
 	//We'll need to track these for min/max value tracking
-	int64_t max_value = INT_MIN;
-	int64_t min_value = INT_MAX;
+	int32_t max_value = INT_MIN;
+	int32_t min_value = INT_MAX;
 
 	//The first thing that we need to see is some kind of valid ternary expression
 	generic_ast_node_t* starting_expression = ternary_expression(token_stream, side);
@@ -6490,14 +6488,10 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		 * a list of switch values here for tracking
 		 */
 		if(is_switch_eligible == TRUE){
-			//TODO NEED ABILITY TO GET INT CONSTANT VALUE PROPERLY COERCED TO I64
-			int64_t current_value = expression->constant_value.signed_int_value;
-			
-			printf("MEMBER VALUE IS %ld\n", current_value);
+			int32_t current_value = expression->constant_value.signed_int_value;
 
 			if(current_value > max_value){
 				max_value = current_value;
-				printf("MAX VALUE IS %ld\n", max_value);
 			}
 
 			if(current_value < min_value){
@@ -6584,9 +6578,6 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 	if(is_switch_eligible == TRUE){
 		root_node->optional_storage.switch_bounds.lower_bound = min_value;
 		root_node->optional_storage.switch_bounds.upper_bound = max_value;
-
-		printf("MIN IS %ld\n", min_value);
-		printf("MAX IS %ld\n", max_value);
 	}
 
 	//Give back the root of this node

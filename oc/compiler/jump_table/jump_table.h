@@ -27,22 +27,22 @@ struct jump_table_t {
 	//The default block
 	void* default_block;
 	//The number of nodes
-	u_int16_t num_nodes;
+	int32_t num_nodes;
 	//The ID of the jump table. Jump tables get IDs just like blocks, although
 	//these tables are distinct
-	u_int16_t jump_table_id;
+	int32_t jump_table_id;
 };
 
 /**
  * Allocate the jump table
  */
-jump_table_t* jump_table_alloc(u_int16_t size);
+jump_table_t* jump_table_alloc(int32_t size);
 
 /**
  * Insert an entry into the jump table. This will be used
  * for adding values from case statements in
  */
-void add_jump_table_entry(jump_table_t* table, u_int16_t index, void* entry);
+void add_jump_table_entry(jump_table_t* table, int32_t index, void* entry);
 
 /**
  * Print a jump table in a stylized fashion

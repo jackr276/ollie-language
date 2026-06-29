@@ -862,7 +862,7 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 		//we won't hit this because num_nodes will be 0. In the times that we do though, this is
 		//what will ensure that switch statements are not corrupted by the optimization process
 		if(predecessor->jump_table != NULL){
-			for(u_int32_t jump_table_index = 0; jump_table_index < predecessor->jump_table->num_nodes; jump_table_index++){
+			for(int32_t jump_table_index = 0; jump_table_index < predecessor->jump_table->num_nodes; jump_table_index++){
 				//If this equals the other node, we'll need to replace it
 				if(dynamic_array_get_at(&(predecessor->jump_table->nodes), jump_table_index) == empty_block){
 					//This now points to the replacement

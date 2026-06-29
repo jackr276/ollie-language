@@ -5605,8 +5605,8 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	in_results.final_block = exit_block;
 
 	//Extract these two values for later
-	int64_t lower_bound = in_expression->optional_storage.switch_bounds.lower_bound;
-	int64_t upper_bound = in_expression->optional_storage.switch_bounds.upper_bound;
+	int32_t lower_bound = in_expression->optional_storage.switch_bounds.lower_bound;
+	int32_t upper_bound = in_expression->optional_storage.switch_bounds.upper_bound;
 
 	/**
 	 * We will need a "temporary" variable that also works for SSA, which is why
@@ -5718,7 +5718,7 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	 * Now that we have everything added in that is explicitly in the in statement, we
 	 * need to fill in all of the gaps with jumps to the default statement
 	 */
-	for(u_int32_t i = 0; i < switch_entry->jump_table->num_nodes; i++){
+	for(int32_t i = 0; i < switch_entry->jump_table->num_nodes; i++){
 		if(dynamic_array_get_at(&(switch_entry->jump_table->nodes), i) == NULL){
 			dynamic_array_set_at(&(switch_entry->jump_table->nodes), false_block, i);
 		}
@@ -6927,7 +6927,7 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 	 * Run through the jump table here - anything that isn't handled goes to the default
 	 * generic error clause
 	 */
-	for(u_int32_t i = 0; i < jump_calculation_block->jump_table->nodes.current_index; i++){
+	for(int32_t i = 0; i < jump_calculation_block->jump_table->nodes.current_index; i++){
 		//If it's null, it's going to the default
 		if(dynamic_array_get_at(&(jump_calculation_block->jump_table->nodes), i) == NULL){
 			dynamic_array_set_at(&(jump_calculation_block->jump_table->nodes), default_block, i);
@@ -9644,7 +9644,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	 * Run through the entire jump table. Any nodes that are not occupied(meaning there's no case statement with that value)
 	 * will be set to point to the default block. 
 	 */
-	for(u_int32_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
+	for(int32_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
 		/**
 		 * If it's null, we'll make it the default. This should only happen in switches
 		 * that are non-exhaustive. For exhaustive switches, the parser has already ensured that we
@@ -10008,10 +10008,10 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 	//Now at the ever end, we'll need to fill the remaining jump table blocks that are empty
 	//with the default value
-	for(u_int32_t _ = 0; _ < jump_calculation_block->jump_table->num_nodes; _++){
+	for(int32_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
 		//If it's null, we'll make it the default
-		if(dynamic_array_get_at(&(jump_calculation_block->jump_table->nodes), _) == NULL){
-			dynamic_array_set_at(&(jump_calculation_block->jump_table->nodes), default_block, _);
+		if(dynamic_array_get_at(&(jump_calculation_block->jump_table->nodes), i) == NULL){
+			dynamic_array_set_at(&(jump_calculation_block->jump_table->nodes), default_block, i);
 
 			//Once we get here we know it's not exhaustive
 			switch_is_exhaustive = FALSE;
