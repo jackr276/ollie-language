@@ -5444,8 +5444,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * we will look to see if we are able to combine anything here. There are instances where we are able
 	 * to smash two instructions into one big addressing mode expression, which is a win for us in terms
 	 * of overall complexity and instruction count
+	 *
+	 * Special note: we will always skip indirect jump statements. It is never correct for us to try
+	 * and combine these due to the unqiue way they are handled, even though they do use addressing
+	 * modes
 	 */
 	if(does_operation_use_addressing_mode(window->instruction2) == TRUE
+		&& window->instruction2->statement_type != THREE_ADDR_CODE_INDIRECT_JUMP_STMT
 		&& window->instruction1->operands.oir.assignee != NULL
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction1->operands.oir.assignee->use_count <= 1){
