@@ -5573,7 +5573,32 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 }
 
 
+/**
+ * For an OIR in statement that is switch eligible, we will lower it into a switch-case statement with only two blocks, a true
+ * block and a false block
+ *
+ * x in (1, 2, 3, 4)
+ *
+ * switch(x){
+ * 	case 1:
+ * 	case 2:
+ * 	case 3:
+ * 	case 4:
+ * 		result = true;
+ * 	default:
+ * 		result = false;
+ * }
+ *
+ * This strategy allows us to maintain the fast processing of a switch without the overhead of spamming out so many
+ * basic blocks, which would be memory inefficient
+ *
+ * When the subtree is provided to us, the very first child is the starting expression. Every child after that should
+ * be a constant node that we can use for our switch
+ */
 static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block_t* starting_block, generic_ast_node_t* in_expression){
+
+	basic_block_t* true_block = basic_block_alloc_and_estimate();
+	basic_block_t* flase_block = basic_block_alloc_and_estimate();
 
 	printf("TODO SWITCH LOWERER NOT IMPLEMENTED\n");
 	exit(1);
