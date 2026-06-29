@@ -10009,8 +10009,8 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	generic_ast_node_t* switch_stmt_node = ast_node_alloc(AST_NODE_TYPE_SWITCH_STMT, SIDE_TYPE_LEFT);
 
 	//We will find these throughout our search
-	switch_stmt_node->upper_bound = INT_MIN;
-	switch_stmt_node->lower_bound = INT_MAX;
+	switch_stmt_node->optional_storage.switch_bounds.upper_bound = INT_MIN;
+	switch_stmt_node->optional_storage.switch_bounds.lower_bound = INT_MAX;
 
 	//Now we must see an lparen
 	lookahead = get_next_token(token_stream, &parser_line_num);
