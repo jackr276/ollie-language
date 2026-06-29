@@ -168,7 +168,7 @@ static void visit_declaration_statement(generic_ast_node_t* node);
 static void visit_static_let_statement(generic_ast_node_t* node);
 static inline void visit_static_declare_statement(generic_ast_node_t* node);
 static inline void handle_raise_statement(basic_block_t* basic_block, generic_ast_node_t* node);
-
+static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, branch_type_t branch_type, three_addr_var_t* conditional_result);
 
 /**
  * Unpack a result package. We assume that if this function is being called that the caller
@@ -5599,15 +5599,15 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	//Initialize the blank results here
 	cfg_result_package_t in_results = INITIALIZE_BLANK_CFG_RESULT;
 
-	//We're going to need to eventually crawl and store these bounds
-	int64_t lower_bound = INT_MAX;
-	int64_t upper_bound = INT_MIN;
-
 	//Emit and store our overall start and overall exit
 	basic_block_t* entry_block = basic_block_alloc_and_estimate(); 
 	basic_block_t* exit_block = basic_block_alloc_and_estimate();
 	in_results.starting_block = entry_block;
 	in_results.final_block = exit_block;
+
+	//Extract these two values for later
+	int64_t lower_bound = in_expression->optional_storage.switch_bounds.lower_bound;
+	int64_t upper_bound = in_expression->optional_storage.switch_bounds.upper_bound;
 
 	/**
 	 * We will need a "temporary" variable that also works for SSA, which is why
@@ -5639,12 +5639,24 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	emit_jump(false_block, exit_block);
 
 	/**
-	 * Step 2: emit our 
+	 * Step 2: emit our conditional statement. The conditional is always
+	 * the very first child of the in statement cursor.
 	 */
 	generic_ast_node_t* in_statement_cursor = in_expression->first_child;
-	//Stash this for later
-	generic_ast_node_t* conditional = in_statement_cursor;
+	cfg_result_package_t expression_results = emit_expression(entry_block, in_statement_cursor);
 
+	//Whatever the last block in here is will become our switch entry
+	basic_block_t* switch_entry = expression_results.final_block;
+	switch_entry->block_type = BLOCK_TYPE_SWITCH;
+
+	/**
+	 * Step 3: emit our jump to default(in this case false). If a value is above the higher
+	 * value or below the lowest value, we will jump out to the false block before even
+	 * going into the switch table
+	 */
+	three_addr_var_t* conditional_variable = expression_results.result_value.result_var;
+	three_addr_const_t* lower_bound_constant = emit_direct_integer_or_char_constant(lower_bound, conditional_variable->type);
+	three_addr_const_t* upper_bound_constant = emit_direct_integer_or_char_constant(upper_bound, conditional_variable->type);
 
 
 
