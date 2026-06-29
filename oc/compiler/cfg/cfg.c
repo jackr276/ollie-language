@@ -5574,6 +5574,15 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 
 
 /**
+ * TODO NOT IMPLEMENTED
+ */
+static inline cfg_result_package_t convert_in_expression_to_conditional_assignment(basic_block_t* starting_block, generic_ast_node_t* in_expression){
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
+}
+
+
+/**
  * For an OIR in statement that is switch eligible, we will lower it into a switch-case statement with only two blocks, a true
  * block and a false block
  *
@@ -5594,9 +5603,18 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
  *
  * When the subtree is provided to us, the very first child is the starting expression. Every child after that should
  * be a constant node that we can use for our switch
+ *
+ * NOTE: for in expressions that only have one member, we will automatically convert them to use conditional assignment
+ * instead of the regular switch strategy to save space
  */
 static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block_t* starting_block, generic_ast_node_t* in_expression){
-	//TODO - IN STATEMENT WITH ONE MEMBER ONLY NEEDS TO BE TURNED INTO AN IF ASSIGNMENT
+	/**
+	 * If an in statement only has one member, it would be overkill to do a whole switch-case OIR for it.
+	 * Instead, we will convert this into a regular conditional assignment using conditional moves
+	 */
+	if(in_expression->num_case_members == 1){
+		return convert_in_expression_to_conditional_assignment(starting_block, in_expression);
+	}
 	
 	//Initialize the blank results here
 	cfg_result_package_t in_results = INITIALIZE_BLANK_CFG_RESULT;
@@ -5669,7 +5687,7 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	u_int8_t is_signed = is_type_signed(input_result_type);
 
 	/**
-	 * Step 3: emit our jump to default(in this case false). If a value is above the higher
+	 * Step 3: emit our jump to default(in this case false). If a value is above the highest
 	 * value or below the lowest value, we will jump out to the false block before even
 	 * going into the switch table
 	 */
@@ -5710,7 +5728,7 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	in_statement_cursor = in_statement_cursor->next_sibling;
 	while(in_statement_cursor != NULL){
 		//The value's index is the actual value with the lower bound adjustment subtracted to make the lowest index 0-based
-		int64_t value_index = in_statement_cursor->constant_value.signed_long_value - lower_bound;
+		int32_t value_index = in_statement_cursor->constant_value.signed_int_value - lower_bound;
 		add_jump_table_entry(switch_entry->jump_table, value_index, true_block);
 
 		in_statement_cursor = in_statement_cursor->next_sibling;

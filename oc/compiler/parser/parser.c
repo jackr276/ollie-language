@@ -6523,6 +6523,16 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 	} while(TRUE);
 
 	/**
+	 * If we run into a case where we are larger than the max switch range, we will
+	 * converting to a conditional assignment chain instead
+	 */
+	if(max_value - min_value >= MAX_SWITCH_RANGE){
+		//TODO NEED TO BE TESTED
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(1);
+	}
+
+	/**
 	 * Once we exit we should have seen an R_PAREN token. Let's make sure that we can
 	 * match this with the opening paren from before
 	 */
