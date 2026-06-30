@@ -40,6 +40,7 @@ static three_addr_var_t* instruction_pointer_variable;
 //A reference to our CFG
 static cfg_t* cfg_reference;
 
+static instruction_t* emit_register_movement_instruction_directly(three_addr_var_t* destination_register, three_addr_var_t* source_register);
 static inline three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type);
 
 //The window for our "sliding window" optimizer
@@ -8668,21 +8669,32 @@ static void handle_conditional_movement_statement(instruction_window_t* window){
 			 * 	movl $4, result
 			 * 	cmovel $5, result <- if they're equal move the if value in
 			 * 	cmovpl $4, result <- if we have a NaN we consider it not equal and put the else back in
+			 *
+			 * 	Due to how this works, we will need a third variable to store the else assignee in the even of
+			 * 	a constant move. We will always emit an assignment instruction with the else assignee over to a 
+			 * 	temp var just to be safe
 			 */
 			case MOVE_E:
 			case MOVE_Z:
 				//Emit a clone for our uses
 				assignee = emit_var_copy(assignee);
 
+				//Emit a copy instruction for the else and add this in before the very first assignment
+				instruction_t* copy_else = emit_register_movement_instruction_directly(emit_temp_var(else_assignee->type), else_assignee);
+				insert_instruction_before_given(copy_else, conditional_move);
+
+				//We will use this cached version in our second parity move
+				three_addr_var_t* cached_else_result = copy_else->operands.x86.destination_register;
+
 				switch(destination_size){
 					case WORD:
-						additional_conditional_move = emit_conditional_move_instruction(assignee, else_assignee, conditional_move->relies_on, CMOVPW);
+						additional_conditional_move = emit_conditional_move_instruction(assignee, cached_else_result, conditional_move->relies_on, CMOVPW);
 						break;
 					case DOUBLE_WORD:
-						additional_conditional_move = emit_conditional_move_instruction(assignee, else_assignee, conditional_move->relies_on, CMOVPL);
+						additional_conditional_move = emit_conditional_move_instruction(assignee, cached_else_result, conditional_move->relies_on, CMOVPL);
 						break;
 					case QUAD_WORD:
-						additional_conditional_move = emit_conditional_move_instruction(assignee, else_assignee, conditional_move->relies_on, CMOVPQ);
+						additional_conditional_move = emit_conditional_move_instruction(assignee, cached_else_result, conditional_move->relies_on, CMOVPQ);
 						break;
 					default:
 						fprintf(stderr, "Fatal internal compiler error: invalid destination size in floating point conditional move selector\n");
