@@ -8684,17 +8684,17 @@ static void handle_conditional_movement_statement(instruction_window_t* window){
 				insert_instruction_before_given(copy_else, conditional_move);
 
 				//We will use this cached version in our second parity move
-				three_addr_var_t* else_result = copy_else->operands.x86.destination_register;
+				three_addr_var_t* cached_else_result = copy_else->operands.x86.destination_register;
 
 				switch(destination_size){
 					case WORD:
-						additional_conditional_move = emit_conditional_move_instruction(assignee, else_result, conditional_move->relies_on, CMOVPW);
+						additional_conditional_move = emit_conditional_move_instruction(assignee, cached_else_result, conditional_move->relies_on, CMOVPW);
 						break;
 					case DOUBLE_WORD:
-						additional_conditional_move = emit_conditional_move_instruction(assignee, else_result, conditional_move->relies_on, CMOVPL);
+						additional_conditional_move = emit_conditional_move_instruction(assignee, cached_else_result, conditional_move->relies_on, CMOVPL);
 						break;
 					case QUAD_WORD:
-						additional_conditional_move = emit_conditional_move_instruction(assignee, else_result, conditional_move->relies_on, CMOVPQ);
+						additional_conditional_move = emit_conditional_move_instruction(assignee, cached_else_result, conditional_move->relies_on, CMOVPQ);
 						break;
 					default:
 						fprintf(stderr, "Fatal internal compiler error: invalid destination size in floating point conditional move selector\n");
