@@ -5913,22 +5913,58 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 	 */
 	three_addr_var_t* first_result_var = emit_temp_var(in_expression->inferred_type);
 	in_cursor = in_cursor->next_sibling;
-	int32_t in_value = in_cursor->constant_value.signed_int_value;
-	three_addr_const_t* comparing_to_constant = emit_direct_integer_or_char_constant(in_value, conditional_expression_variable->type);
+	int32_t in_value = in_cursor->constant_value.signed_int_value; //TODO WRONG
+	three_addr_const_t* comparing_to_constant = emit_direct_integer_or_char_constant(in_value, conditional_expression_variable->type); //TODO WRONG
 
 	//First the comparison
-	instruction_t* comparison = emit_binary_operation_with_const_instruction(emit_temp_var(u8), conditional_expression_variable, DOUBLE_EQUALS, comparing_to_constant);
-	add_statement(current_block, comparison);
+	instruction_t* first_comparison = emit_binary_operation_with_const_instruction(emit_temp_var(u8), conditional_expression_variable, DOUBLE_EQUALS, comparing_to_constant);
+	add_statement(current_block, first_comparison);
 
 	//And then the conditional move statement itself
-	instruction_t* conditional_move = emit_conditional_movement_with_const_statement(first_result_var,
+	instruction_t* first_conditional_move = emit_conditional_movement_with_const_statement(first_result_var,
 																				  		true_variable,
 																				  		false_constant,
-																				  		comparison->operands.oir.assignee,
+																				  		first_comparison->operands.oir.assignee,
 																				  		MOVE_E);
-	add_statement(current_block, conditional_move);
+	add_statement(current_block, first_conditional_move);
+
+	/**
+	 * Step 4: now that we've emitted the very first conditional move, we will
+	 * emit every subsequent move by keeping track of the prior result variable 
+	 * and having that as our else base. We do this until we've emitted the
+	 * entire chain of moves
+	 */
+	three_addr_var_t* previous_result_var = first_conditional_move->operands.oir.assignee;
+	in_expression = in_expression->next_sibling;
+
+	//Crawl over the entire tree until we've emitted all values
+	while(in_expression != NULL){
+		three_addr_var_t* current_result_var = emit_temp_var(in_expression->inferred_type);
+		int32_t current_in_value = in_cursor->constant_value.signed_int_value; //TODO WRONG
+		three_addr_const_t* current_constant = emit_direct_integer_or_char_constant(current_in_value, conditional_expression_variable->type); //TODO WRONG
+
+		//First the comparison
+		instruction_t* current_comparison = emit_binary_operation_with_const_instruction(emit_temp_var(u8), conditional_expression_variable, DOUBLE_EQUALS, current_constant);
+		add_statement(current_block, current_comparison);
+
+		//And then the conditional move statement itself
+		instruction_t* current_conditional_move = emit_conditional_movement_statement(current_result_var,
+																						true_variable, 		 //True if it worked
+																						previous_result_var, //Default to the previous result if not
+																						current_comparison->operands.oir.assignee,
+																						MOVE_E);
+		add_statement(current_block, current_conditional_move);
+
+		//This is now the prior variable
+		previous_result_var = current_result_var;
+
+		//Bump up to the next sibling
+		in_expression = in_expression->next_sibling;
+	}
 
 
+
+	//TODO NEED TO FIX THE CONSTANT EMITTAL IF ITS A FLOAT
 
 
 	printf("TODO IF LOWERER NOT IMPLEMENTED\n");
