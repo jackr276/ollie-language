@@ -5704,6 +5704,11 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	 * we use this unique helper. There will be a phi join node at the end of the
 	 * in statement
 	 */
+	//TODO LOOK INTO THE TYPES HERE
+	//
+	//
+	//
+	//
 	symtab_variable_record_t* in_assignee = create_ssa_compatible_temp_var(current_function, in_expression->inferred_type, variable_symtab, increment_and_get_temp_id());
 	three_addr_var_t* true_variable = emit_var(in_assignee);
 	three_addr_var_t* false_variable = emit_var(in_assignee);
@@ -5881,12 +5886,18 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
  * The way that this works is pretty simple. The very first comparison gives us either a true or false value inside of result1. Following
  * that, our conditional moves put in true if it works *or* default to whatever the old value was if it doesn't. We're able to carry
  * a true value through even if it becomes true on one of the very first values
+ *
+ * Every intermediate variable in our emission will be an 8-bit integer(i8). At the end, there is a chance to expand to whatever
+ * the actual inferred type is in the final assignment. Using the 8-bit integer initially allows us to stay generic
  */
 static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain(basic_block_t* starting_block, generic_ast_node_t* in_expression){
-	instruction_t* comparison_instruction;
-	instruction_t* conditional_move;
 	cfg_result_package_t constant_results = INITIALIZE_BLANK_CFG_RESULT;
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
+
+	instruction_t* comparison_instruction;
+	instruction_t* conditional_move;
+	three_addr_var_t* current_result_var;
+	three_addr_var_t* previous_result_var;
 
 	//Keep track of where the current block is
 	basic_block_t* current_block = starting_block;
@@ -5912,7 +5923,7 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 	 */
 	three_addr_const_t* true_constant = emit_direct_integer_or_char_constant(TRUE, i8);
 	three_addr_const_t* false_constant = emit_direct_integer_or_char_constant(FALSE, i8);
-	three_addr_var_t* true_variable = emit_temp_var(in_expression->inferred_type);
+	three_addr_var_t* true_variable = emit_temp_var(i8);
 
 	instruction_t* true_assignment = emit_assignment_with_const_instruction(true_variable, true_constant);
 	add_statement(current_block, true_assignment);
@@ -5926,7 +5937,7 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 	 * Remember that our constants here could be floating point numbers, so we're going
 	 * to have to unpack them to see if we have either a variable or a constant 
 	 */
-	three_addr_var_t* first_result_var = emit_temp_var(in_expression->inferred_type);
+	current_result_var = emit_temp_var(in_expression->inferred_type);
 
 	//Get the constant out
 	in_cursor = in_cursor->next_sibling;
@@ -5934,20 +5945,20 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 
 	//Emit the comparison instruction with either a var or a constant based on the result type
 	if(constant_results.type == CFG_RESULT_TYPE_VAR){
-		comparison_instruction = emit_binary_operation_instruction(emit_temp_var(u8), conditional_expression_variable, DOUBLE_EQUALS, constant_results.result_value.result_var);
+		comparison_instruction = emit_binary_operation_instruction(emit_temp_var(i8), conditional_expression_variable, DOUBLE_EQUALS, constant_results.result_value.result_var);
 		add_statement(current_block, comparison_instruction);
 
 	} else {
-		comparison_instruction = emit_binary_operation_with_const_instruction(emit_temp_var(u8), conditional_expression_variable, DOUBLE_EQUALS, constant_results.result_value.result_const);
+		comparison_instruction = emit_binary_operation_with_const_instruction(emit_temp_var(i8), conditional_expression_variable, DOUBLE_EQUALS, constant_results.result_value.result_const);
 		add_statement(current_block, comparison_instruction);
 	}
 
 	//And then the conditional move statement itself - this is the only one with the false constant
-	conditional_move = emit_conditional_movement_with_const_statement(first_result_var,
-																				  		true_variable,
-																				  		false_constant,
-																				  		comparison_instruction->operands.oir.assignee,
-																				  		MOVE_E);
+	conditional_move = emit_conditional_movement_with_const_statement(current_result_var,
+																  		true_variable,
+																  		false_constant,
+																  		comparison_instruction->operands.oir.assignee,
+																  		MOVE_E);
 	add_statement(current_block, conditional_move);
 
 	/**
@@ -5956,24 +5967,24 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 	 * and having that as our else base. We do this until we've emitted the
 	 * entire chain of moves
 	 */
-	three_addr_var_t* previous_result_var = conditional_move->operands.oir.assignee;
+	previous_result_var = conditional_move->operands.oir.assignee;
 
 	//Crawl over the entire tree until we've emitted all values
 	in_cursor = in_cursor->next_sibling;
 	while(in_cursor != NULL){
 		//New current result var for us to use
-		three_addr_var_t* current_result_var = emit_temp_var(in_cursor->inferred_type);
+		current_result_var = emit_temp_var(i8);
 
 		//Emit the constant from the node - we'll need to use unpacking to make this work due to the potential for float constants
 		constant_results = emit_constant_from_node(current_block, in_cursor);
 
 		//Emit the comparison instruction with either a var or a constant based on the result type
 		if(constant_results.type == CFG_RESULT_TYPE_VAR){
-			comparison_instruction = emit_binary_operation_instruction(emit_temp_var(u8), conditional_expression_variable, DOUBLE_EQUALS, constant_results.result_value.result_var);
+			comparison_instruction = emit_binary_operation_instruction(emit_temp_var(i8), conditional_expression_variable, DOUBLE_EQUALS, constant_results.result_value.result_var);
 			add_statement(current_block, comparison_instruction);
 
 		} else {
-			comparison_instruction = emit_binary_operation_with_const_instruction(emit_temp_var(u8), conditional_expression_variable, DOUBLE_EQUALS, constant_results.result_value.result_const);
+			comparison_instruction = emit_binary_operation_with_const_instruction(emit_temp_var(i8), conditional_expression_variable, DOUBLE_EQUALS, constant_results.result_value.result_const);
 			add_statement(current_block, comparison_instruction);
 		}
 
@@ -5993,11 +6004,17 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 	}
 
 	/**
-	 * The final result is whatever the last "previous result var" is as it
-	 * is the last assignee in our conditional move chain
+	 * For the final assignment - we will emit an assignment into a variable of the
+	 * inferred type from the in statement. This will handle any/all conversions
+	 * for us if the need arises
 	 */
-	result_package.result_value.result_var = previous_result_var;
+	three_addr_var_t* final_result = emit_temp_var(in_expression->inferred_type);
+	instruction_t* final_assignment = emit_assignment_instruction(final_result, previous_result_var);
+	add_statement(current_block, final_assignment);
 
+	//Package up and return our results
+	result_package.type = CFG_RESULT_TYPE_VAR;
+	result_package.result_value.result_var = final_result;
 	result_package.starting_block = starting_block;
 	result_package.final_block = current_block;
 	return result_package;
