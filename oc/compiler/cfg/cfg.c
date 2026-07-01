@@ -5958,8 +5958,8 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 		comparison_instruction = emit_binary_operation_instruction(emit_temp_var(i8), conditional_expression_variable, DOUBLE_EQUALS, in_constant_variable);
 		add_statement(current_block, comparison_instruction);
 
-		//TODO OPERAND TYPE
-
+		//Get the operand type base don the two types provided
+		operand_type = get_operand_type_for_logical_operation(type_symtab, conditional_expression_variable->type, in_constant_variable->type);
 
 	} else {
 		//Unpack it first
@@ -5968,7 +5968,17 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 		comparison_instruction = emit_binary_operation_with_const_instruction(emit_temp_var(i8), conditional_expression_variable, DOUBLE_EQUALS, in_constant);
 		add_statement(current_block, comparison_instruction);
 
-		//TODO OPERAND TYPE
+		//Get the operand type base don the two types provided
+		operand_type = get_operand_type_for_logical_operation(type_symtab, conditional_expression_variable->type, in_constant->type);
+	}
+
+	/**
+	 * If this operand type is a floating point number,
+	 * we need to flag that this comparison is itself a floating point comparison
+	 * for the instruction selector
+	 */
+	if(IS_FLOATING_POINT(operand_type) == TRUE){
+		comparison_instruction->operands.oir.assignee->comes_from_fp_comparison = TRUE;
 	}
 
 	//And then the conditional move statement itself - this is the only one with the false constant
@@ -6004,7 +6014,8 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 			comparison_instruction = emit_binary_operation_instruction(emit_temp_var(i8), conditional_expression_variable, DOUBLE_EQUALS, in_constant_variable);
 			add_statement(current_block, comparison_instruction);
 
-		//TODO OPERAND TYPE
+			//Get the operand type base don the two types provided
+			operand_type = get_operand_type_for_logical_operation(type_symtab, conditional_expression_variable->type, in_constant_variable->type);
 
 		} else {
 			//Unpack it first
@@ -6013,8 +6024,17 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 			comparison_instruction = emit_binary_operation_with_const_instruction(emit_temp_var(i8), conditional_expression_variable, DOUBLE_EQUALS, in_constant);
 			add_statement(current_block, comparison_instruction);
 
-		//TODO OPERAND TYPE
-			
+			//Get the operand type base don the two types provided
+			operand_type = get_operand_type_for_logical_operation(type_symtab, conditional_expression_variable->type, in_constant->type);
+		}
+
+		/**
+		 * If this operand type is a floating point number,
+		 * we need to flag that this comparison is itself a floating point comparison
+		 * for the instruction selector
+		 */
+		if(IS_FLOATING_POINT(operand_type) == TRUE){
+			comparison_instruction->operands.oir.assignee->comes_from_fp_comparison = TRUE;
 		}
 
 		//And then the conditional move statement itself
