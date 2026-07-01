@@ -5884,6 +5884,7 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
  */
 static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain(basic_block_t* starting_block, generic_ast_node_t* in_expression){
 	instruction_t* comparison_instruction;
+	instruction_t* conditional_move;
 	cfg_result_package_t constant_results = INITIALIZE_BLANK_CFG_RESULT;
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
@@ -5941,13 +5942,13 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 		add_statement(current_block, comparison_instruction);
 	}
 
-	//And then the conditional move statement itself
-	instruction_t* first_conditional_move = emit_conditional_movement_with_const_statement(first_result_var,
+	//And then the conditional move statement itself - this is the only one with the false constant
+	conditional_move = emit_conditional_movement_with_const_statement(first_result_var,
 																				  		true_variable,
 																				  		false_constant,
 																				  		comparison_instruction->operands.oir.assignee,
 																				  		MOVE_E);
-	add_statement(current_block, first_conditional_move);
+	add_statement(current_block, conditional_move);
 
 	/**
 	 * Step 4: now that we've emitted the very first conditional move, we will
@@ -5955,25 +5956,34 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 	 * and having that as our else base. We do this until we've emitted the
 	 * entire chain of moves
 	 */
-	three_addr_var_t* previous_result_var = first_conditional_move->operands.oir.assignee;
+	three_addr_var_t* previous_result_var = conditional_move->operands.oir.assignee;
 	in_expression = in_expression->next_sibling;
 
 	//Crawl over the entire tree until we've emitted all values
 	while(in_expression != NULL){
-		//TODO NEED TO USE CONSTANT UNPACKING
+		//New current result var for us to use
 		three_addr_var_t* current_result_var = emit_temp_var(in_expression->inferred_type);
 
-		//First the comparison
-		instruction_t* current_comparison = emit_binary_operation_with_const_instruction(emit_temp_var(u8), conditional_expression_variable, DOUBLE_EQUALS, current_constant);
-		add_statement(current_block, current_comparison);
+		//Emit the constant from the node - we'll need to use unpacking to make this work due to the potential for float constants
+		constant_results = emit_constant_from_node(current_block, in_cursor);
+
+		//Emit the comparison instruction with either a var or a constant based on the result type
+		if(constant_results.type == CFG_RESULT_TYPE_VAR){
+			comparison_instruction = emit_binary_operation_instruction(emit_temp_var(u8), conditional_expression_variable, DOUBLE_EQUALS, constant_results.result_value.result_var);
+			add_statement(current_block, comparison_instruction);
+
+		} else {
+			comparison_instruction = emit_binary_operation_with_const_instruction(emit_temp_var(u8), conditional_expression_variable, DOUBLE_EQUALS, constant_results.result_value.result_const);
+			add_statement(current_block, comparison_instruction);
+		}
 
 		//And then the conditional move statement itself
-		instruction_t* current_conditional_move = emit_conditional_movement_statement(current_result_var,
-																						true_variable, 		 //True if it worked
-																						previous_result_var, //Default to the previous result if not
-																						current_comparison->operands.oir.assignee,
-																						MOVE_E);
-		add_statement(current_block, current_conditional_move);
+		conditional_move = emit_conditional_movement_statement(current_result_var,
+																true_variable, 		 //True if it worked
+																previous_result_var, //Default to the previous result if not
+																comparison_instruction->operands.oir.assignee,
+																MOVE_E);
+		add_statement(current_block, comparison_instruction);
 
 		//This is now the prior variable
 		previous_result_var = current_result_var;
@@ -5982,18 +5992,14 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 		in_expression = in_expression->next_sibling;
 	}
 
+	/**
+	 * The final result is whatever the last "previous result var" is as it
+	 * is the last assignee in our conditional move chain
+	 */
+	result_package.result_value.result_var = previous_result_var;
 
-
-	//TODO NEED TO FIX THE CONSTANT EMITTAL IF ITS A FLOAT
-
-
-	printf("TODO IF LOWERER NOT IMPLEMENTED\n");
-	exit(1);
-
-	//Package up and return the results
 	result_package.starting_block = starting_block;
 	result_package.final_block = current_block;
-
 	return result_package;
 }
 
