@@ -5882,14 +5882,6 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 	//Grab the first child - this is always the expression for the in statement
 	generic_ast_node_t* in_cursor = in_expression->first_child;
 
-	//We'll need the true and false values for later assignment
-	three_addr_const_t* true_constant = emit_direct_integer_or_char_constant(TRUE, i8);
-	three_addr_const_t* false_constant = emit_direct_integer_or_char_constant(FALSE, i8);
-
-	/**
-	 * Step 0: since OIR conditional move 
-	 */
-
 	/**
 	 * Step 1: emit the starting expression and unpack the results. This is what
 	 * we will be comparing to when we do our equals comparisons for each 
@@ -5899,7 +5891,45 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 	current_block = in_expression_results.final_block;
 
 	//Unpack the variable and keep it on hand
-	three_addr_var_t* in_variable = unpack_result_package(&in_expression_results, current_block);
+	three_addr_var_t* conditional_expression_variable = unpack_result_package(&in_expression_results, current_block);
+
+	/**
+	 * Step 2: Emit the true and false constants that we'll need for later on. 
+	 * Since OIR conditional moves do not have a place for two constants, we will
+	 * have to emit a temporary variable assignment for the true constant itself
+	 */
+	three_addr_const_t* true_constant = emit_direct_integer_or_char_constant(TRUE, i8);
+	three_addr_const_t* false_constant = emit_direct_integer_or_char_constant(FALSE, i8);
+	three_addr_var_t* true_variable = emit_temp_var(in_expression->inferred_type);
+
+	instruction_t* true_assignment = emit_assignment_with_const_instruction(true_variable, true_constant);
+	add_statement(current_block, true_assignment);
+
+	/**
+	 * Step 3: emit the very first conditional move. This is the
+	 * only conditional move that is going to have the false constant
+	 * explicitly inside of it, every other conditional move will
+	 * have the else using the previous move's value
+	 */
+	three_addr_var_t* first_result_var = emit_temp_var(in_expression->inferred_type);
+	in_cursor = in_cursor->next_sibling;
+	int32_t in_value = in_cursor->constant_value.signed_int_value;
+	three_addr_const_t* comparing_to_constant = emit_direct_integer_or_char_constant(in_value, conditional_expression_variable->type);
+
+	//First the comparison
+	instruction_t* comparison = emit_binary_operation_with_const_instruction(emit_temp_var(u8), conditional_expression_variable, DOUBLE_EQUALS, comparing_to_constant);
+	add_statement(current_block, comparison);
+
+	//And then the conditional move statement itself
+	instruction_t* conditional_move = emit_conditional_movement_with_const_statement(first_result_var,
+																				  		true_variable,
+																				  		false_constant,
+																				  		comparison->operands.oir.assignee,
+																				  		MOVE_E);
+	add_statement(current_block, conditional_move);
+
+
+
 
 	printf("TODO IF LOWERER NOT IMPLEMENTED\n");
 	exit(1);
