@@ -5621,6 +5621,8 @@ static inline cfg_result_package_t convert_in_expression_to_conditional_assignme
 	//Let the real worker get the constant out
 	cfg_result_package_t constant_results = emit_constant_from_node(current_block, in_cursor);
 
+	//TODO FLOAT VALUES
+
 	/**
 	 * Emit the appropriate comparison expression. We expect that this
 	 * will be a constant most of the time but there's no way to really know
@@ -5898,6 +5900,11 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 	instruction_t* conditional_move;
 	three_addr_var_t* current_result_var;
 	three_addr_var_t* previous_result_var;
+	generic_type_t* operand_type;
+
+	//When we unpack we may have either a constant or a variable
+	three_addr_var_t* in_constant_variable;
+	three_addr_const_t* in_constant;
 
 	//Keep track of where the current block is
 	basic_block_t* current_block = starting_block;
@@ -5945,12 +5952,23 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 
 	//Emit the comparison instruction with either a var or a constant based on the result type
 	if(constant_results.type == CFG_RESULT_TYPE_VAR){
-		comparison_instruction = emit_binary_operation_instruction(emit_temp_var(i8), conditional_expression_variable, DOUBLE_EQUALS, constant_results.result_value.result_var);
+		//Unpack it first
+		in_constant_variable = constant_results.result_value.result_var;
+
+		comparison_instruction = emit_binary_operation_instruction(emit_temp_var(i8), conditional_expression_variable, DOUBLE_EQUALS, in_constant_variable);
 		add_statement(current_block, comparison_instruction);
 
+		//TODO OPERAND TYPE
+
+
 	} else {
-		comparison_instruction = emit_binary_operation_with_const_instruction(emit_temp_var(i8), conditional_expression_variable, DOUBLE_EQUALS, constant_results.result_value.result_const);
+		//Unpack it first
+		in_constant = constant_results.result_value.result_const;
+
+		comparison_instruction = emit_binary_operation_with_const_instruction(emit_temp_var(i8), conditional_expression_variable, DOUBLE_EQUALS, in_constant);
 		add_statement(current_block, comparison_instruction);
+
+		//TODO OPERAND TYPE
 	}
 
 	//And then the conditional move statement itself - this is the only one with the false constant
@@ -5980,12 +5998,23 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 
 		//Emit the comparison instruction with either a var or a constant based on the result type
 		if(constant_results.type == CFG_RESULT_TYPE_VAR){
-			comparison_instruction = emit_binary_operation_instruction(emit_temp_var(i8), conditional_expression_variable, DOUBLE_EQUALS, constant_results.result_value.result_var);
+			//Unpack it first
+			in_constant_variable = constant_results.result_value.result_var;
+
+			comparison_instruction = emit_binary_operation_instruction(emit_temp_var(i8), conditional_expression_variable, DOUBLE_EQUALS, in_constant_variable);
 			add_statement(current_block, comparison_instruction);
 
+		//TODO OPERAND TYPE
+
 		} else {
-			comparison_instruction = emit_binary_operation_with_const_instruction(emit_temp_var(i8), conditional_expression_variable, DOUBLE_EQUALS, constant_results.result_value.result_const);
+			//Unpack it first
+			in_constant = constant_results.result_value.result_const;
+
+			comparison_instruction = emit_binary_operation_with_const_instruction(emit_temp_var(i8), conditional_expression_variable, DOUBLE_EQUALS, in_constant);
 			add_statement(current_block, comparison_instruction);
+
+		//TODO OPERAND TYPE
+			
 		}
 
 		//And then the conditional move statement itself
