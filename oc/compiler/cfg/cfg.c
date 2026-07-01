@@ -5589,6 +5589,13 @@ static inline cfg_result_package_t convert_in_expression_to_conditional_assignme
 	//Tracker for the current block
 	basic_block_t* current_block = starting_block;
 
+	//We'll need the true and false values for later assignment
+	three_addr_const_t* true_constant = emit_direct_integer_or_char_constant(TRUE, i8);
+	three_addr_const_t* false_constant = emit_direct_integer_or_char_constant(FALSE, i8);
+
+	//The final result variable that we'll return back
+	three_addr_var_t* result_var = emit_temp_var(in_expression->inferred_type);
+
 	//Grab a cursor to our first child
 	generic_ast_node_t* in_cursor = in_expression->first_child;
 
@@ -5597,7 +5604,33 @@ static inline cfg_result_package_t convert_in_expression_to_conditional_assignme
 
 	//Update the current block in case the expression had more than one
 	current_block = expression_results.final_block;
+	
+	//Unpack this just to be safe to get what we're comparing with
+	three_addr_var_t* conditional_expression_var = unpack_result_package(&expression_results, current_block);
 
+	/**
+	 * OIR conditional moves can take one constant in the else value(which will be false in this case). In the
+	 * if value though, we need a variable, so we'll need to do an assignment here for the true constant
+	 */
+	instruction_t* assign_true = emit_assignment_with_const_instruction(emit_temp_var(in_expression->inferred_type), true_constant);
+	add_statement(current_block, assign_true);
+
+	//The next sibling will contain our one and only value to compare to
+	in_cursor = in_cursor->next_sibling;
+	int32_t in_value = in_cursor->constant_value.signed_int_value;
+	three_addr_const_t* comparing_to_constant = emit_direct_integer_or_char_constant(in_value, conditional_expression_var->type);
+
+	//First emit our comparison that will be setting the condition codes
+	instruction_t* comparison = emit_binary_operation_with_const_instruction(emit_temp_var(u8), conditional_expression_var, DOUBLE_EQUALS, comparing_to_constant);
+	add_statement(current_block, comparison);
+
+	//Now we can emit and add the conditional move
+	instruction_t* conditional_move = emit_conditional_movement_with_const_statement(result_var, 
+																				  		assign_true->operands.oir.assignee,
+																				  		false_constant,
+																				  		comparison->operands.oir.assignee,
+																				  		MOVE_E);
+	add_statement(current_block, conditional_move);
 
 
 	printf("TODO NOT IMPLEMENTED\n");
