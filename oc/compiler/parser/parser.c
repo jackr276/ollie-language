@@ -6358,7 +6358,7 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 	//Our lookahead token
 	lexitem_t lookahead;
 	//Keep track of how many members we have
-	u_int32_t in_statement_members = 0;
+	int32_t in_statement_members = 0;
 	//Is this in expression eligible to become a switch statement? Assume true by default
 	u_int8_t is_switch_eligible = TRUE;
 
@@ -6589,6 +6589,9 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		root_node->optional_storage.switch_bounds.lower_bound = min_value;
 		root_node->optional_storage.switch_bounds.upper_bound = max_value;
 	}
+
+	//Store how many members we have in here
+	root_node->num_case_members = in_statement_members;
 
 	//Give back the root of this node
 	return root_node;

@@ -5632,13 +5632,11 @@ static inline cfg_result_package_t convert_in_expression_to_conditional_assignme
 																				  		MOVE_E);
 	add_statement(current_block, conditional_move);
 
-
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
-
 	//Package up and return the result package
 	results.starting_block = starting_block;
 	results.final_block = current_block;
+	results.type = CFG_RESULT_TYPE_VAR;
+	results.result_value.result_var = result_var;
 	return results;
 }
 
@@ -5676,6 +5674,8 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	if(in_expression->num_case_members == 1){
 		return convert_in_expression_to_conditional_assignment(starting_block, in_expression);
 	}
+
+	printf("CASE MEMBERS %d\n\n", in_expression->num_case_members);
 	
 	//Initialize the blank results here
 	cfg_result_package_t in_results = INITIALIZE_BLANK_CFG_RESULT;
