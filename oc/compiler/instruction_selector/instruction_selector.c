@@ -8574,6 +8574,9 @@ static void handle_conditional_movement_statement(instruction_window_t* window){
 	 * If we have a destination that is a byte, that will actually not work for converting
 	 * moves because x86 does not support it. We will force these movements to be word
 	 * sized by forcing all of the operands to be word sized for now
+	 *
+	 * NOTE: if this is needed for the else assignee we will do that at the point where
+	 * the else assignee is needed. In most cases it won't be so we won't do that here
 	 */
 	if(destination_size == BYTE){
 		//Copy both variables
@@ -8690,6 +8693,19 @@ static void handle_conditional_movement_statement(instruction_window_t* window){
 
 				//We will use this cached version in our second parity move
 				three_addr_var_t* cached_else_result = copy_else->operands.x86.destination_register;
+
+				/**
+				 * If this is a byte sized value, then we need to emit a copy
+				 * that is an i16 similar to what we do for the assignee and
+				 * the if result. This is because cmovX in x86 does not support
+				 * byte operands
+				 */
+				if(cached_else_result->variable_size == BYTE){
+					cached_else_result = emit_var_copy(cached_else_result);
+
+					cached_else_result->type = i16;
+					cached_else_result->variable_size = WORD;
+				}
 
 				switch(destination_size){
 					case WORD:
