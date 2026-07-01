@@ -5583,6 +5583,11 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
  *
  * x == 5
  * result <- cmove true else false
+ *
+ *
+ * TODO CAN WE JUST REWIRE THIS INTO THE OTHER HELPER???
+ *
+ * IF so we're doing that, need to reduce the code surface of this enhancement
  */
 static inline cfg_result_package_t convert_in_expression_to_conditional_assignment(basic_block_t* starting_block, generic_ast_node_t* in_expression){
 	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
@@ -5684,6 +5689,8 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	/**
 	 * If an in statement only has one member, it would be overkill to do a whole switch-case OIR for it.
 	 * Instead, we will convert this into a regular conditional assignment using conditional moves
+	 *
+	 * TODO PUT IN OTHER HELPER
 	 */
 	if(in_expression->num_case_members == 1){
 		return convert_in_expression_to_conditional_assignment(starting_block, in_expression);
@@ -5701,17 +5708,15 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	int32_t lower_bound = in_expression->optional_storage.switch_bounds.lower_bound;
 	int32_t upper_bound = in_expression->optional_storage.switch_bounds.upper_bound;
 
+	//The type of the actual end result of our in expression
+	generic_type_t* result_type = in_expression->inferred_type;
+
 	/**
 	 * We will need a "temporary" variable that also works for SSA, which is why
 	 * we use this unique helper. There will be a phi join node at the end of the
 	 * in statement
 	 */
-	//TODO LOOK INTO THE TYPES HERE
-	//
-	//
-	//
-	//
-	symtab_variable_record_t* in_assignee = create_ssa_compatible_temp_var(current_function, in_expression->inferred_type, variable_symtab, increment_and_get_temp_id());
+	symtab_variable_record_t* in_assignee = create_ssa_compatible_temp_var(current_function, result_type, variable_symtab, increment_and_get_temp_id());
 	three_addr_var_t* true_variable = emit_var(in_assignee);
 	three_addr_var_t* false_variable = emit_var(in_assignee);
 	three_addr_var_t* final_result = emit_var(in_assignee);
@@ -5770,10 +5775,11 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	 * going into the switch table
 	 */
 	three_addr_var_t* conditional_variable = expression_results.result_value.result_var;
+	three_addr_const_t* lower_bound_constant_for_adjustment = emit_direct_integer_or_char_constant(lower_bound, i32);
 	three_addr_const_t* lower_bound_constant = emit_direct_integer_or_char_constant(lower_bound, i32);
 	three_addr_const_t* upper_bound_constant = emit_direct_integer_or_char_constant(upper_bound, i32);
-	three_addr_var_t* lower_than_decider = emit_temp_var(u8);
-	three_addr_var_t* higher_than_decider = emit_temp_var(u8);
+	three_addr_var_t* lower_than_decider = emit_temp_var(i8);
+	three_addr_var_t* higher_than_decider = emit_temp_var(i8);
 
 	/**
 	 * First emit the compare below branch. This will jump to the false block if we have a value
@@ -5838,7 +5844,7 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	add_statement(switch_entry, temp_assignment);
 
 	//Emit the adjustment subtraction and get it into the block
-	instruction_t* adjustment = emit_binary_operation_with_const_instruction(emit_temp_var(conditional_variable->type), temp_assignment->operands.oir.assignee, MINUS, emit_direct_integer_or_char_constant(lower_bound, i32));
+	instruction_t* adjustment = emit_binary_operation_with_const_instruction(emit_temp_var(conditional_variable->type), temp_assignment->operands.oir.assignee, MINUS, lower_bound_constant_for_adjustment);
 	add_statement(switch_entry, adjustment);
 
 	//Now we can emit the indirect jump statement itself
@@ -5850,7 +5856,7 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	 * a phi function to be inserted when the SSA helper runs and will also give us a variable
 	 * to report back with in the result package
 	 */
-	instruction_t* final_assignment = emit_assignment_instruction(emit_temp_var(in_expression->inferred_type), final_result);
+	instruction_t* final_assignment = emit_assignment_instruction(emit_temp_var(result_type), final_result);
 	add_statement(exit_block, final_assignment);
 
 	//Package up the result type with the the final assignee
@@ -5903,6 +5909,8 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
  * result5 <- cmov_ne result4 else true 
  *
  * final_result <- result5
+ *
+ * TODO I THINK THE WEIRD OUTPUT WITH THE ELSE ASSIGNMENT WILL ALSO BE RESOLVED BY THIS
  *
  * TODO RETHINK THIS - IF THESE ARE FLOAT VALUES - EVERY CMOV_E GENERATES AN EXTRA MOVE FOR EQUALS BUT *NOT* for NOT_EQUALS
  * Can we rework this entire thing to be a not equals chain instead?????
