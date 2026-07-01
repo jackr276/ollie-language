@@ -5618,12 +5618,23 @@ static inline cfg_result_package_t convert_in_expression_to_conditional_assignme
 
 	//The next sibling will contain our one and only value to compare to
 	in_cursor = in_cursor->next_sibling;
-	int32_t in_value = in_cursor->constant_value.signed_int_value;
-	three_addr_const_t* comparing_to_constant = emit_direct_integer_or_char_constant(in_value, conditional_expression_var->type);
+	//Let the real worker get the constant out
+	cfg_result_package_t constant_results = emit_constant_from_node(current_block, in_cursor);
 
-	//First emit our comparison that will be setting the condition codes
-	instruction_t* comparison = emit_binary_operation_with_const_instruction(emit_temp_var(u8), conditional_expression_var, DOUBLE_EQUALS, comparing_to_constant);
-	add_statement(current_block, comparison);
+	/**
+	 * Emit the appropriate comparison expression. We expect that this
+	 * will be a constant most of the time but there's no way to really know
+	 * 100% without doing this
+	 */
+	instruction_t* comparison;
+	if(constant_results.type == CFG_RESULT_TYPE_CONST){
+		comparison = emit_binary_operation_with_const_instruction(emit_temp_var(u8), conditional_expression_var, DOUBLE_EQUALS, constant_results.result_value.result_const);
+		add_statement(current_block, comparison);
+
+	} else {
+		comparison = emit_binary_operation_instruction(emit_temp_var(u8), conditional_expression_var, DOUBLE_EQUALS, constant_results.result_value.result_var);
+		add_statement(current_block, comparison);
+	}
 
 	//Now we can emit and add the conditional move
 	instruction_t* conditional_move = emit_conditional_movement_with_const_statement(result_var, 
@@ -5675,8 +5686,6 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	if(in_expression->num_case_members == 1){
 		return convert_in_expression_to_conditional_assignment(starting_block, in_expression);
 	}
-
-	printf("CASE MEMBERS %d\n\n", in_expression->num_case_members);
 	
 	//Initialize the blank results here
 	cfg_result_package_t in_results = INITIALIZE_BLANK_CFG_RESULT;
@@ -5912,6 +5921,7 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 	 * have the else using the previous move's value
 	 */
 	three_addr_var_t* first_result_var = emit_temp_var(in_expression->inferred_type);
+	//TODO NEED TO USE CONSTANT UNPACKING
 	in_cursor = in_cursor->next_sibling;
 	int32_t in_value = in_cursor->constant_value.signed_int_value; //TODO WRONG
 	three_addr_const_t* comparing_to_constant = emit_direct_integer_or_char_constant(in_value, conditional_expression_variable->type); //TODO WRONG
@@ -5939,6 +5949,7 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 
 	//Crawl over the entire tree until we've emitted all values
 	while(in_expression != NULL){
+		//TODO NEED TO USE CONSTANT UNPACKING
 		three_addr_var_t* current_result_var = emit_temp_var(in_expression->inferred_type);
 		int32_t current_in_value = in_cursor->constant_value.signed_int_value; //TODO WRONG
 		three_addr_const_t* current_constant = emit_direct_integer_or_char_constant(current_in_value, conditional_expression_variable->type); //TODO WRONG
