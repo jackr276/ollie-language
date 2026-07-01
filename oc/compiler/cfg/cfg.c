@@ -5589,9 +5589,10 @@ static inline cfg_result_package_t convert_in_expression_to_conditional_assignme
 	//Tracker for the current block
 	basic_block_t* current_block = starting_block;
 
-	//We'll need the true and false values for later assignment
+	//We'll need the true and false values/variables for later assignment
 	three_addr_const_t* true_constant = emit_direct_integer_or_char_constant(TRUE, i8);
 	three_addr_const_t* false_constant = emit_direct_integer_or_char_constant(FALSE, i8);
+	three_addr_var_t* true_variable = emit_temp_var(in_expression->inferred_type);
 
 	//The final result variable that we'll return back
 	three_addr_var_t* result_var = emit_temp_var(in_expression->inferred_type);
@@ -5612,7 +5613,7 @@ static inline cfg_result_package_t convert_in_expression_to_conditional_assignme
 	 * OIR conditional moves can take one constant in the else value(which will be false in this case). In the
 	 * if value though, we need a variable, so we'll need to do an assignment here for the true constant
 	 */
-	instruction_t* assign_true = emit_assignment_with_const_instruction(emit_temp_var(in_expression->inferred_type), true_constant);
+	instruction_t* assign_true = emit_assignment_with_const_instruction(true_variable, true_constant);
 	add_statement(current_block, assign_true);
 
 	//The next sibling will contain our one and only value to compare to
@@ -5626,7 +5627,7 @@ static inline cfg_result_package_t convert_in_expression_to_conditional_assignme
 
 	//Now we can emit and add the conditional move
 	instruction_t* conditional_move = emit_conditional_movement_with_const_statement(result_var, 
-																				  		assign_true->operands.oir.assignee,
+																				  		true_variable,
 																				  		false_constant,
 																				  		comparison->operands.oir.assignee,
 																				  		MOVE_E);
@@ -5873,9 +5874,41 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
  * a true value through even if it becomes true on one of the very first values
  */
 static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain(basic_block_t* starting_block, generic_ast_node_t* in_expression){
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
+
+	//Keep track of where the current block is
+	basic_block_t* current_block = starting_block;
+
+	//Grab the first child - this is always the expression for the in statement
+	generic_ast_node_t* in_cursor = in_expression->first_child;
+
+	//We'll need the true and false values for later assignment
+	three_addr_const_t* true_constant = emit_direct_integer_or_char_constant(TRUE, i8);
+	three_addr_const_t* false_constant = emit_direct_integer_or_char_constant(FALSE, i8);
+
+	/**
+	 * Step 0: since OIR conditional move 
+	 */
+
+	/**
+	 * Step 1: emit the starting expression and unpack the results. This is what
+	 * we will be comparing to when we do our equals comparisons for each 
+	 * conditional move
+	 */
+	cfg_result_package_t in_expression_results = emit_expression(current_block, in_cursor);
+	current_block = in_expression_results.final_block;
+
+	//Unpack the variable and keep it on hand
+	three_addr_var_t* in_variable = unpack_result_package(&in_expression_results, current_block);
 
 	printf("TODO IF LOWERER NOT IMPLEMENTED\n");
 	exit(1);
+
+	//Package up and return the results
+	result_package.starting_block = starting_block;
+	result_package.final_block = current_block;
+
+	return result_package;
 }
 
 
