@@ -5875,15 +5875,37 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
  * x == 5.5
  * result1 <- cmov_e t4 else false
  * x == 1.1
- * result2 <- cmov_e true else result1
+ * result2 <- cmov_e t5 else result1
  * x == 2.2
- * result3 <- cmov_e true else result2
+ * result3 <- cmov_e t5 else result2
  * x == 3.3
- * result4 <- cmov_e true else result3
+ * result4 <- cmov_e t5 else result3
  * x == 4.4
- * result5 <- cmov_e true else result4
+ * result5 <- cmov_e t5 else result4
  *
  * final_result <- result5
+ *
+ *
+ * TODO BELIEVE THIS REDO WILL WORK
+ *
+ * REDO:
+ *
+ * t5 <- false
+ * x == 5.5
+ * result1 <- cmov_ne t5 else true
+ * x == 1.1
+ * result2 <- cmov_ne result1 else true
+ * x == 2.2
+ * result3 <- cmov_ne result2 else true
+ * x == 3.3
+ * result4 <- cmov_ne result3 else true
+ * x == 4.4
+ * result5 <- cmov_ne result4 else true 
+ *
+ * final_result <- result5
+ *
+ * TODO RETHINK THIS - IF THESE ARE FLOAT VALUES - EVERY CMOV_E GENERATES AN EXTRA MOVE FOR EQUALS BUT *NOT* for NOT_EQUALS
+ * Can we rework this entire thing to be a not equals chain instead?????
  *
  * The way that this works is pretty simple. The very first comparison gives us either a true or false value inside of result1. Following
  * that, our conditional moves put in true if it works *or* default to whatever the old value was if it doesn't. We're able to carry
