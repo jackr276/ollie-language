@@ -5957,12 +5957,12 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 	 * entire chain of moves
 	 */
 	three_addr_var_t* previous_result_var = conditional_move->operands.oir.assignee;
-	in_expression = in_expression->next_sibling;
 
 	//Crawl over the entire tree until we've emitted all values
-	while(in_expression != NULL){
+	in_cursor = in_cursor->next_sibling;
+	while(in_cursor != NULL){
 		//New current result var for us to use
-		three_addr_var_t* current_result_var = emit_temp_var(in_expression->inferred_type);
+		three_addr_var_t* current_result_var = emit_temp_var(in_cursor->inferred_type);
 
 		//Emit the constant from the node - we'll need to use unpacking to make this work due to the potential for float constants
 		constant_results = emit_constant_from_node(current_block, in_cursor);
@@ -5983,13 +5983,13 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 																previous_result_var, //Default to the previous result if not
 																comparison_instruction->operands.oir.assignee,
 																MOVE_E);
-		add_statement(current_block, comparison_instruction);
+		add_statement(current_block, conditional_move);
 
 		//This is now the prior variable
 		previous_result_var = current_result_var;
 
 		//Bump up to the next sibling
-		in_expression = in_expression->next_sibling;
+		in_cursor = in_cursor->next_sibling;
 	}
 
 	/**
