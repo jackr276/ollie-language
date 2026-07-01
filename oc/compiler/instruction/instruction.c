@@ -5697,6 +5697,9 @@ instruction_t* emit_conditional_movement_statement(three_addr_var_t* assignee, t
 	//This relies on the conditional to set codes
 	stmt->relies_on = conditional;
 
+	//Flag that this value sets condition codes, and will not need a setX after it
+	stmt->relies_on->sets_cc = TRUE;
+
 	//Give back the statement
 	return stmt;
 }
@@ -5718,6 +5721,9 @@ instruction_t* emit_conditional_movement_with_const_statement(three_addr_var_t* 
 
 	//This relies on the conditional to set codes
 	stmt->relies_on = conditional;
+
+	//Flag that this value sets condition codes, and will not need a setX after it
+	stmt->relies_on->sets_cc = TRUE;
 
 	//Give back the statement
 	return stmt;
