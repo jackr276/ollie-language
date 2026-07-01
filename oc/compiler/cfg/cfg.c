@@ -5574,11 +5574,39 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 
 
 /**
- * TODO NOT IMPLEMENTED
+ * If we only have one value in the in-statement, then a switch would be very inefficient. Instead, we will turn this
+ * into a conditional move. Example is below
+ *
+ * x in (5)
+ *
+ * Will become
+ *
+ * x == 5
+ * result <- cmove true else false
  */
 static inline cfg_result_package_t convert_in_expression_to_conditional_assignment(basic_block_t* starting_block, generic_ast_node_t* in_expression){
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
+	//Tracker for the current block
+	basic_block_t* current_block = starting_block;
+
+	//Grab a cursor to our first child
+	generic_ast_node_t* in_cursor = in_expression->first_child;
+
+	//First thing that we'll do is emit our expression
+	cfg_result_package_t expression_results = emit_expression(current_block, in_cursor);
+
+	//Update the current block in case the expression had more than one
+	current_block = expression_results.final_block;
+
+
+
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
+
+	//Package up and return the result package
+	results.starting_block = starting_block;
+	results.final_block = current_block;
+	return results;
 }
 
 
