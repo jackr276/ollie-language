@@ -5848,9 +5848,29 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
  * Lower the entire in expression into an OIR if-else-if chain using regular branching. This if-else-if chain is done so that we 
  * automatically have a short circuit by the time this is implemented. 
  *
- * This will really only happen for floats, but sometimes for other types ss well. The general structure of the translation is:
- * 	
- * TODO HOW CAN WE DO THIS????? I DONT LIKE THE IDEA OF SO MANY BLOCKS
+ * This will really only happen for floats, but sometimes for other types as well. The general structure of the translation is:
+ *
+ * x in (5.5, 1.1, 2.2, 3.3, 4.4)
+ *
+ * can become
+ * 
+ * t5 <- true
+ * x == 5.5
+ * result1 <- cmov_e t4 else false
+ * x == 1.1
+ * result2 <- cmov_e true else result1
+ * x == 2.2
+ * result3 <- cmov_e true else result2
+ * x == 3.3
+ * result4 <- cmov_e true else result3
+ * x == 4.4
+ * result5 <- cmov_e true else result4
+ *
+ * final_result <- result5
+ *
+ * The way that this works is pretty simple. The very first comparison gives us either a true or false value inside of result1. Following
+ * that, our conditional moves put in true if it works *or* default to whatever the old value was if it doesn't. We're able to carry
+ * a true value through even if it becomes true on one of the very first values
  */
 static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain(basic_block_t* starting_block, generic_ast_node_t* in_expression){
 
