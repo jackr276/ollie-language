@@ -444,14 +444,12 @@ static inline basic_block_t* does_block_end_in_jump(basic_block_t* block){
 		return NULL;
 	}
 
-	//Go based on our type here
 	switch(block->exit_statement->statement_type){
 		//Direct jump, just use the if block
 		case THREE_ADDR_CODE_JUMP_STMT:
 			return block->exit_statement->if_block;
 
-		//In a branch statement, the else block is
-		//the direct jump
+		//In a branch statement, the else block is the direct jump
 		case THREE_ADDR_CODE_BRANCH_STMT:
 			return block->exit_statement->else_block;
 

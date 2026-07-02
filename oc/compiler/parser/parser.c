@@ -10230,9 +10230,11 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	//Wipe the entire thing so they're all 0's(FALSE)
 	memset(values, 0, MAX_SWITCH_RANGE * sizeof(int32_t));
 
-	//Now we can see as many expressions as we'd like. We'll keep looking for expressions so long as
-	//our lookahead token is not an R_CURLY. We'll use a do-while for this, because Ollie language requires
-	//that switch statements have at least one thing in them
+	/**
+	 * Now we can see as many expressions as we'd like. We'll keep looking for expressions so long as
+	 * our lookahead token is not an R_CURLY. We'll use a do-while for this, because Ollie language requires
+	 * that switch statements have at least one thing in them
+	 */
 
 	//Seed our search here
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -10251,8 +10253,10 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 		switch(lookahead.tok){
 			//We can see a case statement here
 			case CASE:
-				//Handle a case statement here. We'll need to pass
-				//the node in because of the type checking that we do
+				/**
+				 * Handle a case statement here. We'll need to pass
+				 * the entire node in because of the type checking that we do
+				 */
 				stmt = case_statement(token_stream, switch_stmt_node, values, &values_max_index);
 
 				//Go based on what our class here
@@ -10362,14 +10366,27 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 
 		//If we get here we know it worked, so we can add it in as a child
 		add_child_node(switch_stmt_node, stmt);
+
 		//Refresh the lookahead token
 		lookahead = get_next_token(token_stream, &parser_line_num);
+	}
+
+	//By the time we reach this, we should have seen a right curly
+	if(pop_token(&grouping_stack).tok != L_CURLY){
+		return print_and_return_error("Unmatched curly braces detected", parser_line_num);
 	}
 
 	//If we have an entirely empty switch statement, it's a failure
 	if(is_empty == TRUE){
 		return print_and_return_error("Switch statements with no cases are not allowed", parser_line_num);
 	}
+
+	/**
+	 * In Ollie, we define an "exhaustive switch" to be a switch that fully occupies the
+	 * range of all values. If a switch is exhaustive, we do *not* require a default
+	 * clause to be provided. An exhaustive switch is not the same as a switch that
+	 * simply has no gaps in between the members
+	 */
 
 	//Do we have a type that is eligible for a "exhaustive switch"? If so, this would
 	//mean that we may not need a default clause at all
@@ -10525,12 +10542,6 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 		switch_stmt_node->ast_node_type = AST_NODE_TYPE_C_STYLE_SWITCH_STMT; 
 	}
 	
-	//By the time we reach this, we should have seen a right curly
-	//However, we could still have matching issues, so we'll check for that here
-	if(pop_token(&grouping_stack).tok != L_CURLY){
-		return print_and_return_error("Unmatched curly braces detected", parser_line_num);
-	}
-
 	//Store this for later on processing in the CFG
 	switch_stmt_node->num_case_members = num_case_statements;
 
