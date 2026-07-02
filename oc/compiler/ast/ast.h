@@ -169,8 +169,8 @@ struct generic_ast_node_t{
 	u_int8_t is_assignable;
 	//Is a dereference needed at the end of this value?
 	u_int8_t dereference_needed;
-	//Is the given in statement switch eligible?
-	u_int8_t is_in_statement_switch_eligible;
+	//Is the given statement(switch or in) eligible to internally be a true switch?
+	u_int8_t is_switch_eligible;
 };
 
 /**

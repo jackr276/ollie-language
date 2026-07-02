@@ -6592,7 +6592,7 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 	}
 
 	//Store whether or not we are switch eligible
-	root_node->is_in_statement_switch_eligible = is_switch_eligible;
+	root_node->is_switch_eligible = is_switch_eligible;
 
 	//If this is switch eligible, then store our bounds here
 	if(is_switch_eligible == TRUE){
@@ -10034,6 +10034,10 @@ static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream){
  *
  * NOTE: The caller has already consumed the switch keyword by the time we get here
  *
+ * NOTE: If we determine that the range of values in the case statements is *larger* than the maximum allowed
+ * switch range by OC, we will flag this as not switch eligible and internally turn this into a chained if-else-if
+ * statement
+ *
  * BNF Rule: <switch-statement> ::= switch on( <logical-or-expression> ) from(<constant>, <constant>) { {<case-statement | default-statement>}+ }
  */
 static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
@@ -10045,6 +10049,8 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	ollie_switch_type_t ollie_switch_type = OLLIE_SWITCH_TYPE_UNDECIDED;
 	//How many case statements do we have for the switch?
 	u_int32_t num_case_statements = 0;
+	//Is this switch statement eligible to become a switch on the back-end? Not all of them are(see below)
+	u_int8_t is_switch_eligible = TRUE;
 
 	/**
 	 * Once we get here, we can allocate the root level node
@@ -10142,6 +10148,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	 * long. Every time we see a value in a case statement, we'll need to cross reference it with the
 	 * values in here
 	 */
+	//TODO NEEDS AN UPDATE - LIKELY NEEDS TO BE DYNAMIC
 	int32_t values[MAX_SWITCH_RANGE];
 
 	//Wipe the entire thing so they're all 0's(FALSE)
@@ -10456,6 +10463,9 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	//Now that we're done, we will remove this variable scope
 	finalize_variable_scope(variable_symtab);
 	finalize_type_scope(type_symtab);
+
+	//Store whether or not we are switch eligible
+	switch_stmt_node->is_switch_eligible = is_switch_eligible;
 
 	//If we make it here, all went well
 	return switch_stmt_node;
@@ -11430,6 +11440,8 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 	//If these are too far apart, we won't go for it. We'll check here, because once
 	//we hit this, there's no point in going on
 	if(switch_stmt_node->optional_storage.switch_bounds.upper_bound - switch_stmt_node->optional_storage.switch_bounds.lower_bound >= MAX_SWITCH_RANGE){
+
+		//TODO UPDATE THIS
 		sprintf(info, "Range from %d to %d exceeds %d, too large for a switch statement. Use a compound if statement instead",
 		  				switch_stmt_node->optional_storage.switch_bounds.lower_bound, 
 		  				switch_stmt_node->optional_storage.switch_bounds.upper_bound,

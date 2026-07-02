@@ -5987,7 +5987,7 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
  * the two lowering rules
  */
 static cfg_result_package_t emit_in_expression(basic_block_t* starting_block, generic_ast_node_t* in_expression){
-	if(in_expression->is_in_statement_switch_eligible == TRUE){
+	if(in_expression->is_switch_eligible == TRUE){
 		return lower_in_expression_to_oir_switch(starting_block, in_expression);
 	} else {
 		return lower_in_expression_to_conditional_move_chain(starting_block, in_expression);
@@ -9643,6 +9643,11 @@ static inline cfg_result_package_t c_style_switch_with_one_member_to_if_conversi
  * This rule is specifically for the c-style switch statements
  */
 static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* root_node){
+	if(root_node->is_switch_eligible == FALSE){
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(1);
+	}
+
 	//Declare and initialize off the bat
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
@@ -10091,6 +10096,11 @@ static cfg_result_package_t ollie_switch_with_one_case_to_if_conversion(generic_
  * will be put in the exact orientation that the user wants
  */
 static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node){
+	if(root_node->is_switch_eligible == FALSE){
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(1);
+	}
+
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	/**
