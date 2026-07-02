@@ -5626,7 +5626,7 @@ static inline cfg_result_package_t convert_in_expression_to_conditional_assignme
 	//Let the real worker get the constant out
 	cfg_result_package_t constant_results = emit_constant_from_node(current_block, in_cursor);
 
-	//TODO FLOAT VALUES
+	//TODO FLOAT VALUES - NOT NEEDED WHEN WE REWIRE
 
 	/**
 	 * Emit the appropriate comparison expression. We expect that this
@@ -5876,25 +5876,6 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
  * x in (5.5, 1.1, 2.2, 3.3, 4.4)
  *
  * can become
- * 
- * t5 <- true
- * x == 5.5
- * result1 <- cmov_e t4 else false
- * x == 1.1
- * result2 <- cmov_e t5 else result1
- * x == 2.2
- * result3 <- cmov_e t5 else result2
- * x == 3.3
- * result4 <- cmov_e t5 else result3
- * x == 4.4
- * result5 <- cmov_e t5 else result4
- *
- * final_result <- result5
- *
- *
- * TODO BELIEVE THIS REDO WILL WORK
- *
- * REDO:
  *
  * t5 <- false
  * x == 5.5
@@ -5909,11 +5890,6 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
  * result5 <- cmov_ne result4 else true 
  *
  * final_result <- result5
- *
- * TODO I THINK THE WEIRD OUTPUT WITH THE ELSE ASSIGNMENT WILL ALSO BE RESOLVED BY THIS
- *
- * TODO RETHINK THIS - IF THESE ARE FLOAT VALUES - EVERY CMOV_E GENERATES AN EXTRA MOVE FOR EQUALS BUT *NOT* for NOT_EQUALS
- * Can we rework this entire thing to be a not equals chain instead?????
  *
  * The way that this works is pretty simple. The very first comparison gives us either a true or false value inside of result1. Following
  * that, our conditional moves put in true if it works *or* default to whatever the old value was if it doesn't. We're able to carry
@@ -5956,14 +5932,14 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 	/**
 	 * Step 2: Emit the true and false constants that we'll need for later on. 
 	 * Since OIR conditional moves do not have a place for two constants, we will
-	 * have to emit a temporary variable assignment for the true constant itself
+	 * have to emit a temporary variable assignment for the false constant itself
 	 */
 	three_addr_const_t* true_constant = emit_direct_integer_or_char_constant(TRUE, i8);
 	three_addr_const_t* false_constant = emit_direct_integer_or_char_constant(FALSE, i8);
-	three_addr_var_t* true_variable = emit_temp_var(i8);
+	three_addr_var_t* false_variable = emit_temp_var(i8);
 
-	instruction_t* true_assignment = emit_assignment_with_const_instruction(true_variable, true_constant);
-	add_statement(current_block, true_assignment);
+	instruction_t* false_assignment = emit_assignment_with_const_instruction(false_variable, true_constant);
+	add_statement(current_block, false_assignment);
 
 	/**
 	 * Step 3: emit the very first conditional move. This is the
@@ -5985,7 +5961,7 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 		//Unpack it first
 		in_constant_variable = constant_results.result_value.result_var;
 
-		comparison_instruction = emit_binary_operation_instruction(emit_temp_var(i8), conditional_expression_variable, DOUBLE_EQUALS, in_constant_variable);
+		comparison_instruction = emit_binary_operation_instruction(emit_temp_var(i8), conditional_expression_variable, NOT_EQUALS, in_constant_variable);
 		add_statement(current_block, comparison_instruction);
 
 		//Get the operand type base don the two types provided
@@ -5995,7 +5971,7 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 		//Unpack it first
 		in_constant = constant_results.result_value.result_const;
 
-		comparison_instruction = emit_binary_operation_with_const_instruction(emit_temp_var(i8), conditional_expression_variable, DOUBLE_EQUALS, in_constant);
+		comparison_instruction = emit_binary_operation_with_const_instruction(emit_temp_var(i8), conditional_expression_variable, NOT_EQUALS, in_constant);
 		add_statement(current_block, comparison_instruction);
 
 		//Get the operand type base don the two types provided
@@ -6013,10 +5989,10 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 
 	//And then the conditional move statement itself - this is the only one with the false constant
 	conditional_move = emit_conditional_movement_with_const_statement(current_result_var,
-																  		true_variable,
-																  		false_constant,
+																  		false_variable,
+																  		true_constant,
 																  		comparison_instruction->operands.oir.assignee,
-																  		MOVE_E);
+																  		MOVE_NE);
 	add_statement(current_block, conditional_move);
 
 	/**
