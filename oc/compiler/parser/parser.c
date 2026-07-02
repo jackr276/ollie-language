@@ -10034,6 +10034,33 @@ static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream){
 
 
 /**
+ * Is the given type eligible to be switched on in a switch statement?
+ */
+static inline u_int8_t is_type_eligible_for_switch_statement(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_BASIC:
+			//Only things that don't count are voids and floats
+			switch(type->basic_type_token){
+				case VOID:
+				case F32:
+				case F64:
+					return FALSE;
+				default:
+					return TRUE;
+			}
+
+		//All enumerated types are valid
+		case TYPE_CLASS_ENUMERATED:
+			return TRUE;
+
+		//Anything else is an immediate no
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * A switch statement allows us to to see one or more labels defined by a certain expression. It allows
  * for the use of labeled statements followed by statements in general. We will do more static analysis
  * on this later. Like all rules in the system, this function returns the root node that it creates
@@ -10042,7 +10069,11 @@ static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream){
  *
  * NOTE: If we determine that the range of values in the case statements is *larger* than the maximum allowed
  * switch range by OC, we will flag this as not switch eligible and internally turn this into a chained if-else-if
- * statement
+ * statement.
+ *
+ * The "max switch range" refers to the maximum distance between the highest and lowest members of the switch
+ * statement, though in the case where all members are 1 apart, this also acts as our maximum case statement
+ * count period before we will internally convert to an if-else statement
  *
  * BNF Rule: <switch-statement> ::= switch on( <logical-or-expression> ) from(<constant>, <constant>) { {<case-statement | default-statement>}+ }
  */
@@ -10089,30 +10120,14 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 		return print_and_return_error("Invalid conditional expression provided to switch on", parser_line_num);
 	}
 	
-	//For a switch statement, we need an enum or some other kind of numeric type to switch based on. We cannot switch on
-	//types like floats, etc
-	
-	//Grab the type info out
-	generic_type_t* type = expr_node->inferred_type;
+	/**
+	 * What is the type that we are switching on? This is entirely
+	 * determined by the type on the switch expression itself
+	 */
+	generic_type_t* switching_on_type = expr_node->inferred_type;
 
-	//Let's see what kind of type we have here. If it isn't a basic type, it MUST be an enum
-	if(type->type_class != TYPE_CLASS_BASIC){
-		//Error out here
-		if(type->type_class != TYPE_CLASS_ENUMERATED){
-			sprintf(info, "Type \"%s\" cannot be switched", type->type_name.string);
-			return print_and_return_error(info, expr_node->line_number);
-		}
-	//Otherwise, it essentially needs to be an int or a char. Nothing else here is "switchable"	
-	} else {
-		//Grab the basic type
-		ollie_token_t basic_type = type->basic_type_token;
+	//TODO
 
-		//It needs to be an int or char
-		if(basic_type == VOID || basic_type == F32 || basic_type == F64){
-			sprintf(info, "Type \"%s\" cannot be switched", type->type_name.string);
-			return print_and_return_error(info, expr_node->line_number);
-		}
-	}
 
 	//Since we know it's valid, we can add this in as a child
 	add_child_node(switch_stmt_node, expr_node);
