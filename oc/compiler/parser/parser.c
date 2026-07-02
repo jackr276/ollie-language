@@ -10063,49 +10063,26 @@ static inline u_int8_t is_type_eligible_for_switch_statement(generic_type_t* typ
 /**
  * Is a given type "exhaustive switch eligible"?
  *
- * The only types that are are 8 bit integers and enums
- * who have less than 1024 member
+ * Remember that exhaustive switch statements do not require
+ * the user to enter a default clause. This will only ever
+ * work if we are confident that all possible values are
+ * accounted for within the switching on type's range
  *
- * TODO WRONG - THIS IS NOT CORRECT!!!!!!!
- *
- * We need more considerations here - potentially
- * different kinds of switch types.
- *
- * One type of exhaustive switch may mean no default is required. The other
- * type may mean that we have no gaps in between our values and can
- * do a different kind of optimization
- *
- * TODO
+ * Only enum types who have less than the MAX_SWITCH_RANGE members will
+ * even be considered. Even then, there will need to be *0* gaps
+ * in between the values for this to work
  */
-static inline u_int8_t is_exhaustive_switch_eligible(generic_type_t* type){
+static inline u_int8_t is_type_exhaustive_switch_eligible(generic_type_t* type){
 	//Make sure it's not aliased
 	type = dealias_type(type);
 
-	//The only 2 that could be are enums and 8 bit types
-	switch(type->type_class){
-		case TYPE_CLASS_BASIC:
-			//Only 8 bit values here
-			switch(type->basic_type_token){
-				case I8:
-				case U8:
-				case CHAR:
-					return TRUE;
-				default:
-					return FALSE;
-			}
-
-		//For an enum to work, the size must be less
-		//than 1024
-		case TYPE_CLASS_ENUMERATED:
-			if(type->internal_types.enumeration_table.current_index < MAX_SWITCH_RANGE){
-				return TRUE;
-			} else {
-				return FALSE;
-			}
-
-		default:
-			return FALSE;
+	//If it's not an enum type then this isn't going to work
+	if(type->type_class != TYPE_CLASS_ENUMERATED){
+		return FALSE;
 	}
+
+	//The enum type itself must have *less* than the max switch range of values to even be considered
+	return type->internal_types.enumeration_table.current_index < MAX_SWITCH_RANGE ? TRUE : FALSE;
 }
 
 
@@ -10391,7 +10368,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	//Do we have a type that is eligible for a "exhaustive switch"? If so, this would
 	//mean that we may not need a default clause at all
 	////TOODO NEED TO WORK ON THIS
-	if(is_exhaustive_switch_eligible(switching_on_type) == TRUE){
+	if(is_type_exhaustive_switch_eligible(switching_on_type) == TRUE){
 		//Should we check for exhaustiveness here? Assume true
 		//unless told otherwise
 		u_int8_t check_for_exhaustive = TRUE;
@@ -10479,6 +10456,8 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 					|| switch_stmt_node->optional_storage.switch_bounds.upper_bound != switching_on_type->max_enum_value){
 					check_for_exhaustive = FALSE;
 				}
+
+				//TODO THIS IS INCORRECT - WHAT IF THEY'RE OUT OF ORDER????
 
 				//Are we going to bother checking to see if it's exhaustive?
 				if(check_for_exhaustive == TRUE){
