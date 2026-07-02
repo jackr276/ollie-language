@@ -6581,6 +6581,18 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		root_node->inferred_type = immut_i8;
 	}
 
+	//Store how many members we have in here
+	root_node->num_case_members = in_statement_members;
+
+	/**
+	 * If we have only one member, then by default this is not
+	 * switch eligible and we will force it into being a conditional
+	 * move expression
+	 */
+	if(in_statement_members == 1){
+		is_switch_eligible = FALSE;
+	}
+
 	//Store whether or not we are switch eligible
 	root_node->is_in_statement_switch_eligible = is_switch_eligible;
 
@@ -6589,9 +6601,6 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		root_node->optional_storage.switch_bounds.lower_bound = min_value;
 		root_node->optional_storage.switch_bounds.upper_bound = max_value;
 	}
-
-	//Store how many members we have in here
-	root_node->num_case_members = in_statement_members;
 
 	//Give back the root of this node
 	return root_node;

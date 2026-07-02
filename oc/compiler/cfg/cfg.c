@@ -5574,93 +5574,6 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 
 
 /**
- * If we only have one value in the in-statement, then a switch would be very inefficient. Instead, we will turn this
- * into a conditional move. Example is below
- *
- * x in (5)
- *
- * Will become
- *
- * x == 5
- * result <- cmove true else false
- *
- *
- * TODO CAN WE JUST REWIRE THIS INTO THE OTHER HELPER???
- *
- * IF so we're doing that, need to reduce the code surface of this enhancement
- */
-static inline cfg_result_package_t convert_in_expression_to_conditional_assignment(basic_block_t* starting_block, generic_ast_node_t* in_expression){
-	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
-	//Tracker for the current block
-	basic_block_t* current_block = starting_block;
-
-	//We'll need the true and false values/variables for later assignment
-	three_addr_const_t* true_constant = emit_direct_integer_or_char_constant(TRUE, i8);
-	three_addr_const_t* false_constant = emit_direct_integer_or_char_constant(FALSE, i8);
-	three_addr_var_t* true_variable = emit_temp_var(in_expression->inferred_type);
-
-	//The final result variable that we'll return back
-	three_addr_var_t* result_var = emit_temp_var(in_expression->inferred_type);
-
-	//Grab a cursor to our first child
-	generic_ast_node_t* in_cursor = in_expression->first_child;
-
-	//First thing that we'll do is emit our expression
-	cfg_result_package_t expression_results = emit_expression(current_block, in_cursor);
-
-	//Update the current block in case the expression had more than one
-	current_block = expression_results.final_block;
-	
-	//Unpack this just to be safe to get what we're comparing with
-	three_addr_var_t* conditional_expression_var = unpack_result_package(&expression_results, current_block);
-
-	/**
-	 * OIR conditional moves can take one constant in the else value(which will be false in this case). In the
-	 * if value though, we need a variable, so we'll need to do an assignment here for the true constant
-	 */
-	instruction_t* assign_true = emit_assignment_with_const_instruction(true_variable, true_constant);
-	add_statement(current_block, assign_true);
-
-	//The next sibling will contain our one and only value to compare to
-	in_cursor = in_cursor->next_sibling;
-	//Let the real worker get the constant out
-	cfg_result_package_t constant_results = emit_constant_from_node(current_block, in_cursor);
-
-	//TODO FLOAT VALUES - NOT NEEDED WHEN WE REWIRE
-
-	/**
-	 * Emit the appropriate comparison expression. We expect that this
-	 * will be a constant most of the time but there's no way to really know
-	 * 100% without doing this
-	 */
-	instruction_t* comparison;
-	if(constant_results.type == CFG_RESULT_TYPE_CONST){
-		comparison = emit_binary_operation_with_const_instruction(emit_temp_var(u8), conditional_expression_var, DOUBLE_EQUALS, constant_results.result_value.result_const);
-		add_statement(current_block, comparison);
-
-	} else {
-		comparison = emit_binary_operation_instruction(emit_temp_var(u8), conditional_expression_var, DOUBLE_EQUALS, constant_results.result_value.result_var);
-		add_statement(current_block, comparison);
-	}
-
-	//Now we can emit and add the conditional move
-	instruction_t* conditional_move = emit_conditional_movement_with_const_statement(result_var, 
-																				  		true_variable,
-																				  		false_constant,
-																				  		comparison->operands.oir.assignee,
-																				  		MOVE_E);
-	add_statement(current_block, conditional_move);
-
-	//Package up and return the result package
-	results.starting_block = starting_block;
-	results.final_block = current_block;
-	results.type = CFG_RESULT_TYPE_VAR;
-	results.result_value.result_var = result_var;
-	return results;
-}
-
-
-/**
  * For an OIR in statement that is switch eligible, we will lower it into a switch-case statement with only two blocks, a true
  * block and a false block
  *
@@ -5686,16 +5599,6 @@ static inline cfg_result_package_t convert_in_expression_to_conditional_assignme
  * instead of the regular switch strategy to save space
  */
 static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block_t* starting_block, generic_ast_node_t* in_expression){
-	/**
-	 * If an in statement only has one member, it would be overkill to do a whole switch-case OIR for it.
-	 * Instead, we will convert this into a regular conditional assignment using conditional moves
-	 *
-	 * TODO PUT IN OTHER HELPER
-	 */
-	if(in_expression->num_case_members == 1){
-		return convert_in_expression_to_conditional_assignment(starting_block, in_expression);
-	}
-	
 	//Initialize the blank results here
 	cfg_result_package_t in_results = INITIALIZE_BLANK_CFG_RESULT;
 
