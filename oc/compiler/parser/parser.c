@@ -10126,14 +10126,20 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	 */
 	generic_type_t* switching_on_type = expr_node->inferred_type;
 
-	//TODO
-
+	/**
+	 * Internal checks to make sure that this is eligible - the only things
+	 * that are eligible are integers of any kind and enumerated values
+	 */
+	if(is_type_eligible_for_switch_statement(switching_on_type) == FALSE){
+		sprintf(info, "Type \"%s\" is ineligible for use on a switch statement", switching_on_type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
 
 	//Since we know it's valid, we can add this in as a child
 	add_child_node(switch_stmt_node, expr_node);
 
 	//Assign this to be the switch statement's inferred type, because it's what we'll be switching on
-	switch_stmt_node->inferred_type = type;
+	switch_stmt_node->inferred_type = switching_on_type;
 
 	//Now we must see a closing paren
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -10318,16 +10324,17 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 
 	//Do we have a type that is eligible for a "exhaustive switch"? If so, this would
 	//mean that we may not need a default clause at all
-	if(is_exhaustive_switch_eligible(type) == TRUE){
+	////TOODO NEED TO WORK ON THIS
+	if(is_exhaustive_switch_eligible(switching_on_type) == TRUE){
 		//Should we check for exhaustiveness here? Assume true
 		//unless told otherwise
 		u_int8_t check_for_exhaustive = TRUE;
 
 		//Now go based on what kind of type we have here
-		switch(type->type_class){
+		switch(switching_on_type->type_class){
 			//For basic types, we need to check if we're getting a full range
 			case TYPE_CLASS_BASIC:
-				switch(type->basic_type_token){
+				switch(switching_on_type->basic_type_token){
 					case U8:
 					case CHAR:
 						//If we want to check for exhaustive, we'll need 
@@ -10402,8 +10409,8 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 			//Go through our enum type here
 			case TYPE_CLASS_ENUMERATED:
 				//If we don't have these, then we already know we can't go further
-				if(switch_stmt_node->optional_storage.switch_bounds.lower_bound != type->min_enum_value
-					|| switch_stmt_node->optional_storage.switch_bounds.upper_bound != type->max_enum_value){
+				if(switch_stmt_node->optional_storage.switch_bounds.lower_bound != switching_on_type->min_enum_value
+					|| switch_stmt_node->optional_storage.switch_bounds.upper_bound != switching_on_type->max_enum_value){
 					check_for_exhaustive = FALSE;
 				}
 
