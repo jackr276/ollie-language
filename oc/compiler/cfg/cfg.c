@@ -5781,16 +5781,17 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
  * can become
  *
  * t5 <- false
+ * t6 <- true
  * x == 5.5
- * result1 <- cmov_ne t5 else true
+ * result1 <- cmov_ne t5 else t6
  * x == 1.1
- * result2 <- cmov_ne result1 else true
+ * result2 <- cmov_ne result1 else t6
  * x == 2.2
- * result3 <- cmov_ne result2 else true
+ * result3 <- cmov_ne result2 else t6 
  * x == 3.3
- * result4 <- cmov_ne result3 else true
+ * result4 <- cmov_ne result3 else t6 
  * x == 4.4
- * result5 <- cmov_ne result4 else true 
+ * result5 <- cmov_ne result4 else t6 
  *
  * final_result <- result5
  *
@@ -5835,14 +5836,18 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 	/**
 	 * Step 2: Emit the true and false constants that we'll need for later on. 
 	 * Since OIR conditional moves do not have a place for two constants, we will
-	 * have to emit a temporary variable assignment for the true constant
+	 * have to emit a temporary variable assignment for the true and false constants
 	 */
 	three_addr_const_t* true_constant = emit_direct_integer_or_char_constant(TRUE, i8);
 	three_addr_const_t* false_constant = emit_direct_integer_or_char_constant(FALSE, i8);
+	three_addr_var_t* true_variable = emit_temp_var(i8);
 	three_addr_var_t* false_variable = emit_temp_var(i8);
 
 	instruction_t* false_assignment = emit_assignment_with_const_instruction(false_variable, false_constant);
 	add_statement(current_block, false_assignment);
+
+	instruction_t* true_assignment = emit_assignment_with_const_instruction(true_variable, true_constant);
+	add_statement(current_block, true_assignment);
 
 	/**
 	 * Step 3: emit the very first conditional move. This is the
@@ -5890,12 +5895,12 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 		comparison_instruction->operands.oir.assignee->comes_from_fp_comparison = TRUE;
 	}
 
-	//And then the conditional move statement itself - this is the only one with the true constant
-	conditional_move = emit_conditional_movement_with_const_statement(current_result_var,
-													  					false_variable,
-													  					true_constant,
-																		comparison_instruction->operands.oir.assignee,
-																		MOVE_NE);
+	//And then the conditional move statement itself
+	conditional_move = emit_conditional_movement_statement(current_result_var,
+															false_variable, //If not equal then false
+															true_variable,  //If not not equal then true
+															comparison_instruction->operands.oir.assignee,
+															MOVE_NE);
 	add_statement(current_block, conditional_move);
 
 	/**
@@ -5947,11 +5952,11 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 		}
 
 		//And then the conditional move statement itself
-		conditional_move = emit_conditional_movement_with_const_statement(current_result_var,
-																			previous_result_var, //Default to the previous result if not equal
-																			true_constant, //If it's not not equal, then it worked so put true	
-																			comparison_instruction->operands.oir.assignee,
-																			MOVE_NE);
+		conditional_move = emit_conditional_movement_statement(current_result_var,
+																previous_result_var, //Default to the previous result if not equal
+																true_variable, //If it's not not equal, then it worked so put true	
+																comparison_instruction->operands.oir.assignee,
+																MOVE_NE);
 		add_statement(current_block, conditional_move);
 
 		//This is now the prior variable
