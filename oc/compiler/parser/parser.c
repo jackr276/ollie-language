@@ -10061,6 +10061,55 @@ static inline u_int8_t is_type_eligible_for_switch_statement(generic_type_t* typ
 
 
 /**
+ * Is a given type "exhaustive switch eligible"?
+ *
+ * The only types that are are 8 bit integers and enums
+ * who have less than 1024 member
+ *
+ * TODO WRONG - THIS IS NOT CORRECT!!!!!!!
+ *
+ * We need more considerations here - potentially
+ * different kinds of switch types.
+ *
+ * One type of exhaustive switch may mean no default is required. The other
+ * type may mean that we have no gaps in between our values and can
+ * do a different kind of optimization
+ *
+ * TODO
+ */
+static inline u_int8_t is_exhaustive_switch_eligible(generic_type_t* type){
+	//Make sure it's not aliased
+	type = dealias_type(type);
+
+	//The only 2 that could be are enums and 8 bit types
+	switch(type->type_class){
+		case TYPE_CLASS_BASIC:
+			//Only 8 bit values here
+			switch(type->basic_type_token){
+				case I8:
+				case U8:
+				case CHAR:
+					return TRUE;
+				default:
+					return FALSE;
+			}
+
+		//For an enum to work, the size must be less
+		//than 1024
+		case TYPE_CLASS_ENUMERATED:
+			if(type->internal_types.enumeration_table.current_index < MAX_SWITCH_RANGE){
+				return TRUE;
+			} else {
+				return FALSE;
+			}
+
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * A switch statement allows us to to see one or more labels defined by a certain expression. It allows
  * for the use of labeled statements followed by statements in general. We will do more static analysis
  * on this later. Like all rules in the system, this function returns the root node that it creates
