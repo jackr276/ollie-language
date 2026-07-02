@@ -6361,6 +6361,8 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 	int32_t in_statement_members = 0;
 	//Is this in expression eligible to become a switch statement? Assume true by default
 	u_int8_t is_switch_eligible = TRUE;
+	//Allocate space to hold all of the current constant values
+	dynamic_array_t in_member_array = dynamic_array_alloc();
 
 	//We'll need to track these for min/max value tracking
 	int32_t max_value = INT_MIN;
@@ -6472,15 +6474,13 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		 * constant inside of the member list. If we detect that this is a duplicate 
 		 * then we fail out
 		 */
-		generic_ast_node_t* member_cursor = root_node->first_child->next_sibling;
-		while(member_cursor != NULL){
+		for(u_int32_t i = 0; i < in_member_array.current_index; i++){
+			generic_ast_node_t* member = dynamic_array_get_at(&in_member_array, i);
+
 			//Fail out if they are equal
-			if(constant_nodes_equal(member_cursor, expression) == TRUE){
+			if(constant_nodes_equal(member, expression) == TRUE){
 				return print_and_return_error("Duplicate member values detected in in statement", parser_line_num);
 			}
-
-			//Bump it up to the next member
-			member_cursor = member_cursor->next_sibling;
 		}
 
 		/**
@@ -6501,6 +6501,9 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 
 		//Now that we know this is valid we can add it as a child to the in statement
 		add_child_node(root_node, expression);
+
+		//Also add this in as a member to our list of all current members
+		dynamic_array_add(&in_member_array, expression);
 
 		//Bump the member count up by one more
 		in_statement_members++;
@@ -6599,6 +6602,9 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		root_node->optional_storage.switch_bounds.lower_bound = min_value;
 		root_node->optional_storage.switch_bounds.upper_bound = max_value;
 	}
+
+	//Destroy this now that we're done
+	dynamic_array_dealloc(&in_member_array);
 
 	//Give back the root of this node
 	return root_node;
