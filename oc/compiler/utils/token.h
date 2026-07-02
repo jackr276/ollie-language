@@ -11,7 +11,7 @@
 #include "dynamic_string/dynamic_string.h"
 
 //Total number of keywords in ollie
-#define KEYWORD_COUNT 59
+#define KEYWORD_COUNT 60
 
 //Forward declare the lexitem struct
 typedef struct lexitem_t lexitem_t;
@@ -27,6 +27,7 @@ typedef enum {
 	BOOL,
 	ALIAS,
 	WHEN,
+	IN,
 	IDLE,
 	MUT,
 	DEFER,

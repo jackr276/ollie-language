@@ -32,6 +32,7 @@ typedef enum ast_node_type_t{
 	AST_NODE_TYPE_FOR_LOOP_CONDITION,
 	AST_NODE_TYPE_TERNARY_EXPRESSION,
 	AST_NODE_TYPE_NAMESPACE_DECLARATION,
+	AST_NODE_TYPE_IN_EXPRESSION,
 	AST_NODE_TYPE_DECL_STMT,
 	AST_NODE_TYPE_LET_STMT,
 	AST_NODE_TYPE_IDLE_STMT,
@@ -98,14 +99,17 @@ typedef enum address_specifier_type_t{
  * to what the actual node is
 */
 struct generic_ast_node_t{
-	//The string value could hold an identifier, string constant, or it could hold
-	//an assembly inline statement. It all depends based on context
-	dynamic_string_t string_value;
-	//What is the inferred type of the node
-	generic_type_t* inferred_type;
+	//What kind of node is it?
+	ast_node_type_t ast_node_type;
 	//These are the two pointers that make up the whole of the tree
 	generic_ast_node_t* first_child;
 	generic_ast_node_t* next_sibling;
+	//What side is this node on
+	side_type_t side;
+	//The type address specifier - for types
+	address_specifier_type_t address_type;
+	//What is the inferred type of the node
+	generic_type_t* inferred_type;
 	//Variable/jump label holder
 	symtab_variable_record_t* variable;
 	//The symtab function record
@@ -115,13 +119,11 @@ struct generic_ast_node_t{
 		symtab_type_record_t* type_record;
 		//Field in a struct or union
 		symtab_variable_record_t* field_variable;
-		//For enum constants - we'll hold onto the 
-		//enum type here too
+		//For enum constants - we'll hold onto the enum type here too
 		generic_type_t* enum_type;
 		//For error types in a hanldes statement
 		generic_type_t* error_type;
-		//For any/all error types, we'll hold onto the actual
-		//value of the error here
+		//For any/all error types, we'll hold onto the actual value of the error here
 		u_int32_t error_id;
 		//Storage for the elaborative param count
 		u_int32_t elaborative_param_count;
@@ -129,7 +131,15 @@ struct generic_ast_node_t{
 		u_int64_t bytes_to_copy;
 		//The label record that we're storing
 		symtab_label_record_t* label_record;
+		//Hold the upper and lower bounds for switch statement values
+		struct {
+			//The upper and lower bound for switch statements
+			int32_t lower_bound;
+			int32_t upper_bound;
+		} switch_bounds;
 	} optional_storage;
+	//Holds the token for what kind of constant it is
+	ollie_token_t constant_type;
 	//Storing the constant values
 	union {
 		int64_t signed_long_value;
@@ -144,11 +154,11 @@ struct generic_ast_node_t{
 		u_int8_t unsigned_byte_value;
 		char char_value;
 	} constant_value;
-	//Holds the token for what kind of constant it is
-	ollie_token_t constant_type;
-	//The upper and lower bound for switch statements
-	int32_t lower_bound;
-	int32_t upper_bound;
+	//The string value could hold an identifier, string constant, or it could hold
+	//an assembly inline statement. It all depends based on context
+	dynamic_string_t string_value;
+	//The number of case statement members in a switch
+	int32_t num_case_members;
 	//What line number is this from
 	u_int32_t line_number;
 	//Store a binary operator(if one exists)
@@ -159,14 +169,8 @@ struct generic_ast_node_t{
 	u_int8_t is_assignable;
 	//Is a dereference needed at the end of this value?
 	u_int8_t dereference_needed;
-	//The number of case statement members in a switch
-	u_int8_t num_case_members;
-	//What side is this node on
-	side_type_t side;
-	//What kind of node is it?
-	ast_node_type_t ast_node_type;
-	//The type address specifier - for types
-	address_specifier_type_t address_type;
+	//Is the given in statement switch eligible?
+	u_int8_t is_in_statement_switch_eligible;
 };
 
 /**
@@ -360,6 +364,12 @@ void less_than_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_no
  * The result will be: constant1 = constant1 <= constant2
  */
 void less_than_or_equal_to_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
+
+/**
+ * Return whether or not two constant nodes are considered equal. This rule will *not* modify
+ * any of the existing constant nodes themselves in comparison to other rules
+ */
+u_int8_t constant_nodes_equal(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
 // ================================= End in-flight constant simplification subystem ========================================
 
 /**

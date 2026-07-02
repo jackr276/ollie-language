@@ -5445,8 +5445,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * we will look to see if we are able to combine anything here. There are instances where we are able
 	 * to smash two instructions into one big addressing mode expression, which is a win for us in terms
 	 * of overall complexity and instruction count
+	 *
+	 * Special note: we will always skip indirect jump statements. It is never correct for us to try
+	 * and combine these due to the unqiue way they are handled, even though they do use addressing
+	 * modes
 	 */
 	if(does_operation_use_addressing_mode(window->instruction2) == TRUE
+		&& window->instruction2->statement_type != THREE_ADDR_CODE_INDIRECT_JUMP_STMT
 		&& window->instruction1->operands.oir.assignee != NULL
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction1->operands.oir.assignee->use_count <= 1){
@@ -8569,6 +8574,9 @@ static void handle_conditional_movement_statement(instruction_window_t* window){
 	 * If we have a destination that is a byte, that will actually not work for converting
 	 * moves because x86 does not support it. We will force these movements to be word
 	 * sized by forcing all of the operands to be word sized for now
+	 *
+	 * NOTE: if this is needed for the else assignee we will do that at the point where
+	 * the else assignee is needed. In most cases it won't be so we won't do that here
 	 */
 	if(destination_size == BYTE){
 		//Copy both variables
@@ -8685,6 +8693,19 @@ static void handle_conditional_movement_statement(instruction_window_t* window){
 
 				//We will use this cached version in our second parity move
 				three_addr_var_t* cached_else_result = copy_else->operands.x86.destination_register;
+
+				/**
+				 * If this is a byte sized value, then we need to emit a copy
+				 * that is an i16 similar to what we do for the assignee and
+				 * the if result. This is because cmovX in x86 does not support
+				 * byte operands
+				 */
+				if(cached_else_result->variable_size == BYTE){
+					cached_else_result = emit_var_copy(cached_else_result);
+
+					cached_else_result->type = i16;
+					cached_else_result->variable_size = WORD;
+				}
 
 				switch(destination_size){
 					case WORD:

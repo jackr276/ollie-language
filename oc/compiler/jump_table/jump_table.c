@@ -29,7 +29,7 @@ static int32_t increment_and_get_id(){
 /**
  * Allocate the jump table
  */
-jump_table_t* jump_table_alloc(u_int16_t size){
+jump_table_t* jump_table_alloc(int32_t size){
 	//Heap allocate
 	jump_table_t* table = calloc(1, sizeof(jump_table_t));
 
@@ -50,7 +50,7 @@ jump_table_t* jump_table_alloc(u_int16_t size){
 /**
  * Add a value into the jump table
  */
-void add_jump_table_entry(jump_table_t* table, u_int16_t index, void* entry){
+void add_jump_table_entry(jump_table_t* table, int32_t index, void* entry){
 	//Throw an error for the programmer if this happens - we should never reach this
 	if(table->num_nodes <= index){
 		fprintf(stderr, "ERROR: jump table out of bounds");

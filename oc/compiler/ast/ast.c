@@ -7704,6 +7704,467 @@ void less_than_or_equal_to_constant_nodes(generic_ast_node_t* constant_node1, ge
 
 
 /**
+ * Return whether or not two constant nodes are considered equal. This rule will *not* modify
+ * any of the existing constant nodes themselves in comparison to other rules
+ */
+u_int8_t constant_nodes_equal(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+	switch(constant_node1->constant_type){
+		case INT_CONST_FORCE_U:
+			switch(constant_node2->constant_type){
+				case DOUBLE_CONST:
+					return constant_node1->constant_value.unsigned_int_value == constant_node2->constant_value.double_value;
+
+				case LONG_CONST_FORCE_U:
+					return constant_node1->constant_value.unsigned_int_value == constant_node2->constant_value.unsigned_long_value;
+
+				case LONG_CONST:
+					 return constant_node1->constant_value.unsigned_int_value == (u_int64_t)(constant_node2->constant_value.signed_long_value);
+
+				case INT_CONST_FORCE_U:
+					 return constant_node1->constant_value.unsigned_int_value == constant_node2->constant_value.unsigned_int_value;
+
+				case FLOAT_CONST:
+					return constant_node1->constant_value.unsigned_int_value == constant_node2->constant_value.float_value;
+
+				case INT_CONST:
+					return constant_node1->constant_value.unsigned_int_value == (u_int32_t)(constant_node2->constant_value.signed_int_value);
+
+				case SHORT_CONST:
+					return constant_node1->constant_value.unsigned_int_value == (u_int16_t)(constant_node2->constant_value.signed_short_value);
+
+				case SHORT_CONST_FORCE_U:
+					return constant_node1->constant_value.unsigned_int_value == constant_node2->constant_value.unsigned_short_value;
+
+				case BYTE_CONST:
+					return constant_node1->constant_value.unsigned_int_value == (u_int8_t)(constant_node2->constant_value.signed_byte_value);
+
+				case BYTE_CONST_FORCE_U:
+					return constant_node1->constant_value.unsigned_int_value == constant_node2->constant_value.unsigned_byte_value;
+
+				case CHAR_CONST:
+					return constant_node1->constant_value.unsigned_int_value == (u_int8_t)(constant_node2->constant_value.char_value);
+
+				default:
+					printf("Fatal internal compiler error: Unsupported constant == operation\n");
+					exit(1);
+			}
+
+
+		case INT_CONST:
+			switch(constant_node2->constant_type){
+				case DOUBLE_CONST:
+					return constant_node1->constant_value.signed_int_value == constant_node2->constant_value.double_value;
+
+				case LONG_CONST_FORCE_U:
+					return (u_int64_t)(constant_node1->constant_value.signed_int_value) == constant_node2->constant_value.unsigned_long_value;
+
+				case LONG_CONST:
+					return constant_node1->constant_value.signed_int_value == constant_node2->constant_value.signed_long_value;
+
+				case INT_CONST_FORCE_U:
+					 return (u_int32_t)(constant_node1->constant_value.signed_int_value) == constant_node2->constant_value.unsigned_int_value;
+
+				case FLOAT_CONST:
+					return constant_node1->constant_value.signed_int_value == constant_node2->constant_value.float_value;
+
+				case INT_CONST:
+					return constant_node1->constant_value.signed_int_value == constant_node2->constant_value.signed_int_value;
+
+				case SHORT_CONST:
+					return constant_node1->constant_value.signed_int_value == constant_node2->constant_value.signed_short_value;
+
+				case SHORT_CONST_FORCE_U:
+					return (u_int32_t)(constant_node1->constant_value.signed_int_value) == constant_node2->constant_value.unsigned_short_value;
+
+				case BYTE_CONST:
+					 return constant_node1->constant_value.signed_int_value == constant_node2->constant_value.signed_byte_value;
+
+				case BYTE_CONST_FORCE_U:
+					return (u_int32_t)(constant_node1->constant_value.signed_int_value) == constant_node2->constant_value.unsigned_byte_value;
+
+				case CHAR_CONST:
+					return constant_node1->constant_value.signed_int_value == constant_node2->constant_value.char_value;
+
+				default:
+					printf("Fatal internal compiler error: Unsupported constant == operation\n");
+					exit(1);
+			}
+
+
+		case FLOAT_CONST:
+			switch(constant_node2->constant_type){
+				case DOUBLE_CONST:
+					return constant_node1->constant_value.float_value == constant_node2->constant_value.double_value;
+
+				case LONG_CONST_FORCE_U:
+					return constant_node1->constant_value.float_value == constant_node2->constant_value.unsigned_long_value;
+
+				case LONG_CONST:
+					 return constant_node1->constant_value.float_value == constant_node2->constant_value.signed_long_value;
+
+				case INT_CONST_FORCE_U:
+					 return constant_node1->constant_value.float_value == constant_node2->constant_value.unsigned_int_value;
+
+				case FLOAT_CONST:
+					return constant_node1->constant_value.float_value == constant_node2->constant_value.float_value;
+
+				case INT_CONST:
+					return constant_node1->constant_value.float_value == constant_node2->constant_value.signed_int_value;
+
+				case SHORT_CONST:
+					return constant_node1->constant_value.float_value == constant_node2->constant_value.signed_short_value;
+
+				case SHORT_CONST_FORCE_U:
+					return constant_node1->constant_value.float_value == constant_node2->constant_value.unsigned_short_value;
+
+				case BYTE_CONST:
+					return constant_node1->constant_value.float_value == constant_node2->constant_value.signed_byte_value;
+
+				case BYTE_CONST_FORCE_U:
+					return constant_node1->constant_value.float_value == constant_node2->constant_value.unsigned_byte_value;
+
+				case CHAR_CONST:
+					return constant_node1->constant_value.float_value == constant_node2->constant_value.char_value;
+
+				default:
+					printf("Fatal internal compiler error: Unsupported constant == operation\n");
+					exit(1);
+			}
+
+
+		case LONG_CONST_FORCE_U:
+			switch(constant_node2->constant_type){
+				case DOUBLE_CONST:
+					return constant_node1->constant_value.unsigned_long_value == constant_node2->constant_value.double_value;
+				case LONG_CONST_FORCE_U:
+					return constant_node1->constant_value.unsigned_long_value == constant_node2->constant_value.unsigned_long_value;
+
+				case LONG_CONST:
+					 return constant_node1->constant_value.unsigned_long_value == (u_int64_t)(constant_node2->constant_value.signed_long_value);
+
+				case INT_CONST_FORCE_U:
+					 return constant_node1->constant_value.unsigned_long_value == constant_node2->constant_value.unsigned_int_value;
+
+				case FLOAT_CONST:
+					return constant_node1->constant_value.unsigned_long_value == constant_node2->constant_value.float_value;
+
+				case INT_CONST:
+					return constant_node1->constant_value.unsigned_long_value == (u_int32_t)(constant_node2->constant_value.signed_int_value);
+
+				case SHORT_CONST:
+					 return constant_node1->constant_value.unsigned_long_value == (u_int16_t)(constant_node2->constant_value.signed_short_value);
+
+				case SHORT_CONST_FORCE_U:
+					return constant_node1->constant_value.unsigned_long_value == constant_node2->constant_value.unsigned_short_value;
+
+				case BYTE_CONST:
+					return constant_node1->constant_value.unsigned_long_value == (u_int16_t)(constant_node2->constant_value.signed_byte_value);
+
+				case BYTE_CONST_FORCE_U:
+					return constant_node1->constant_value.unsigned_long_value == constant_node2->constant_value.unsigned_byte_value;
+
+				case CHAR_CONST:
+					return constant_node1->constant_value.unsigned_long_value == (u_int8_t)(constant_node2->constant_value.char_value);
+
+				default:
+					printf("Fatal internal compiler error: Unsupported constant == operation\n");
+					exit(1);
+			}
+
+		case LONG_CONST:
+			switch(constant_node2->constant_type){
+				case DOUBLE_CONST:
+					return constant_node1->constant_value.signed_long_value == constant_node2->constant_value.double_value;
+
+				case LONG_CONST_FORCE_U:
+					return (u_int64_t)(constant_node1->constant_value.signed_long_value) == constant_node2->constant_value.unsigned_long_value;
+
+				case LONG_CONST:
+					return constant_node1->constant_value.signed_long_value == constant_node2->constant_value.signed_long_value;
+
+				case INT_CONST_FORCE_U:
+					return (u_int64_t)(constant_node1->constant_value.signed_long_value) == constant_node2->constant_value.unsigned_int_value;
+
+				case FLOAT_CONST:
+					return constant_node1->constant_value.signed_long_value == constant_node2->constant_value.float_value;
+
+				case INT_CONST:
+					return constant_node1->constant_value.signed_long_value == constant_node2->constant_value.signed_int_value;
+
+				case SHORT_CONST:
+					return constant_node1->constant_value.signed_long_value == constant_node2->constant_value.signed_short_value;
+
+				case SHORT_CONST_FORCE_U:
+					return (u_int64_t)(constant_node1->constant_value.signed_long_value) == constant_node2->constant_value.unsigned_short_value;
+
+				case BYTE_CONST:
+					return constant_node1->constant_value.signed_long_value == constant_node2->constant_value.signed_byte_value;
+
+				case BYTE_CONST_FORCE_U:
+					return (u_int64_t)(constant_node1->constant_value.signed_long_value) == constant_node2->constant_value.unsigned_byte_value;
+
+				case CHAR_CONST:
+					return constant_node1->constant_value.signed_long_value == constant_node2->constant_value.char_value;
+
+				default:
+					printf("Fatal internal compiler error: Unsupported constant == operation\n");
+					exit(1);
+			}
+
+
+		case DOUBLE_CONST:
+			switch(constant_node2->constant_type){
+				case DOUBLE_CONST:
+					return constant_node1->constant_value.double_value == constant_node2->constant_value.double_value;
+
+				case LONG_CONST_FORCE_U:
+					return constant_node1->constant_value.double_value == constant_node2->constant_value.unsigned_long_value;
+
+				case LONG_CONST:
+					return constant_node1->constant_value.double_value == constant_node2->constant_value.signed_long_value;
+
+				case INT_CONST_FORCE_U:
+					return constant_node1->constant_value.double_value == constant_node2->constant_value.unsigned_int_value;
+
+				case FLOAT_CONST:
+					return constant_node1->constant_value.double_value == constant_node2->constant_value.float_value;
+
+				case INT_CONST:
+					return constant_node1->constant_value.double_value == constant_node2->constant_value.signed_int_value;
+
+				case SHORT_CONST:
+					return constant_node1->constant_value.double_value == constant_node2->constant_value.signed_short_value;
+
+				case SHORT_CONST_FORCE_U:
+					return constant_node1->constant_value.double_value == constant_node2->constant_value.unsigned_short_value;
+
+				case BYTE_CONST:
+					return constant_node1->constant_value.double_value == constant_node2->constant_value.signed_byte_value;
+
+				case BYTE_CONST_FORCE_U:
+					return constant_node1->constant_value.double_value == constant_node2->constant_value.unsigned_byte_value;
+
+				case CHAR_CONST:
+					return constant_node1->constant_value.double_value == constant_node2->constant_value.char_value;
+
+				default:
+					printf("Fatal internal compiler error: Unsupported constant == operation\n");
+					exit(1);
+			}
+
+
+		case BYTE_CONST:
+			switch(constant_node2->constant_type){
+				case DOUBLE_CONST:
+					return constant_node1->constant_value.signed_byte_value == constant_node2->constant_value.double_value;
+
+				case LONG_CONST_FORCE_U:
+					return (u_int8_t)(constant_node1->constant_value.signed_byte_value) == constant_node2->constant_value.unsigned_long_value;
+
+				case LONG_CONST:
+					return constant_node1->constant_value.signed_byte_value == constant_node2->constant_value.signed_long_value;
+
+				case INT_CONST_FORCE_U:
+					return (u_int8_t)(constant_node1->constant_value.signed_byte_value) == constant_node2->constant_value.unsigned_int_value;
+
+				case INT_CONST:
+					return constant_node1->constant_value.signed_byte_value == constant_node2->constant_value.signed_int_value;
+
+				case FLOAT_CONST:
+					return constant_node1->constant_value.signed_byte_value == constant_node2->constant_value.float_value;
+
+				case SHORT_CONST:
+					return constant_node1->constant_value.signed_byte_value == constant_node2->constant_value.signed_short_value;
+
+				case SHORT_CONST_FORCE_U:
+					return (u_int8_t)(constant_node1->constant_value.signed_byte_value) == constant_node2->constant_value.unsigned_short_value;
+
+				case BYTE_CONST:
+					return constant_node1->constant_value.signed_byte_value == constant_node2->constant_value.signed_byte_value;
+
+				case BYTE_CONST_FORCE_U:
+					return (u_int8_t)(constant_node1->constant_value.signed_byte_value) == constant_node2->constant_value.unsigned_byte_value;
+
+				case CHAR_CONST:
+					return constant_node1->constant_value.signed_byte_value == constant_node2->constant_value.char_value;
+
+				default:
+					printf("Fatal internal compiler error: Unsupported constant == operation\n");
+					exit(1);
+			}
+
+
+		case BYTE_CONST_FORCE_U:
+			switch(constant_node2->constant_type){
+				case DOUBLE_CONST:
+					return constant_node1->constant_value.unsigned_byte_value == constant_node2->constant_value.double_value;
+
+				case LONG_CONST_FORCE_U:
+					return constant_node1->constant_value.unsigned_byte_value == constant_node2->constant_value.unsigned_long_value;
+
+				case LONG_CONST:
+					return constant_node1->constant_value.unsigned_byte_value == (u_int64_t)(constant_node2->constant_value.signed_long_value);
+
+				case INT_CONST_FORCE_U:
+					return constant_node1->constant_value.unsigned_byte_value == constant_node2->constant_value.unsigned_int_value;
+
+				case INT_CONST:
+					return constant_node1->constant_value.unsigned_byte_value == (u_int32_t)(constant_node2->constant_value.signed_int_value);
+
+				case FLOAT_CONST:
+					return constant_node1->constant_value.unsigned_byte_value == constant_node2->constant_value.float_value;
+
+				case SHORT_CONST:
+					return constant_node1->constant_value.unsigned_byte_value == (u_int16_t)(constant_node2->constant_value.signed_short_value);
+
+				case SHORT_CONST_FORCE_U:
+					return constant_node1->constant_value.unsigned_byte_value == constant_node2->constant_value.unsigned_short_value;
+
+				case BYTE_CONST:
+					return constant_node1->constant_value.unsigned_byte_value == (u_int8_t)(constant_node2->constant_value.signed_byte_value);
+
+				case BYTE_CONST_FORCE_U:
+					return constant_node1->constant_value.unsigned_byte_value == constant_node2->constant_value.unsigned_byte_value;
+
+				case CHAR_CONST:
+					return constant_node1->constant_value.unsigned_byte_value == (u_int8_t)(constant_node2->constant_value.char_value);
+
+				default:
+					printf("Fatal internal compiler error: Unsupported constant == operation\n");
+					exit(1);
+			}
+
+
+		case SHORT_CONST:
+			switch(constant_node2->constant_type){
+				case DOUBLE_CONST:
+					return constant_node1->constant_value.signed_short_value == constant_node2->constant_value.double_value;
+
+				case LONG_CONST_FORCE_U:
+					return (u_int16_t)(constant_node1->constant_value.signed_short_value) == constant_node2->constant_value.unsigned_long_value;
+
+				case LONG_CONST:
+					return constant_node1->constant_value.signed_short_value == constant_node2->constant_value.signed_long_value;
+
+				case INT_CONST_FORCE_U:
+					return (u_int16_t)(constant_node1->constant_value.signed_short_value) == constant_node2->constant_value.unsigned_int_value;
+
+				case FLOAT_CONST:
+					return constant_node1->constant_value.signed_short_value == constant_node2->constant_value.float_value;
+
+				case INT_CONST:
+					return constant_node1->constant_value.signed_short_value == constant_node2->constant_value.signed_int_value;
+
+				case SHORT_CONST:
+					return constant_node1->constant_value.signed_short_value == constant_node2->constant_value.signed_short_value;
+
+				case SHORT_CONST_FORCE_U:
+				 	return (u_int16_t)(constant_node1->constant_value.signed_short_value) == constant_node2->constant_value.unsigned_short_value;
+
+				case BYTE_CONST:
+					return constant_node1->constant_value.signed_short_value == constant_node2->constant_value.signed_byte_value;
+
+				case BYTE_CONST_FORCE_U:
+					return (u_int16_t)(constant_node1->constant_value.signed_short_value) == constant_node2->constant_value.unsigned_byte_value;
+
+				case CHAR_CONST:
+					return constant_node1->constant_value.signed_short_value == constant_node2->constant_value.char_value;
+
+				default:
+					printf("Fatal internal compiler error: Unsupported constant == operation\n");
+					exit(1);
+			}
+
+
+		case SHORT_CONST_FORCE_U:
+			switch(constant_node2->constant_type){
+				case DOUBLE_CONST:
+					return constant_node1->constant_value.unsigned_short_value == constant_node2->constant_value.double_value;
+
+				case LONG_CONST_FORCE_U:
+					return constant_node1->constant_value.unsigned_short_value == constant_node2->constant_value.unsigned_long_value;
+
+				case LONG_CONST:
+					return constant_node1->constant_value.unsigned_short_value == (u_int64_t)(constant_node2->constant_value.signed_long_value);
+
+				case INT_CONST_FORCE_U:
+					return constant_node1->constant_value.unsigned_short_value == constant_node2->constant_value.unsigned_int_value;
+
+				case FLOAT_CONST:
+					return constant_node1->constant_value.unsigned_short_value == constant_node2->constant_value.float_value;
+
+				case INT_CONST:
+					return constant_node1->constant_value.unsigned_short_value == (u_int32_t)(constant_node2->constant_value.signed_int_value);
+
+				case SHORT_CONST:
+					return constant_node1->constant_value.unsigned_short_value == (u_int32_t)(constant_node2->constant_value.signed_short_value);
+
+				case SHORT_CONST_FORCE_U:
+					return constant_node1->constant_value.unsigned_short_value == constant_node2->constant_value.unsigned_short_value;
+				
+				case BYTE_CONST:
+					return constant_node1->constant_value.unsigned_short_value == (u_int8_t)(constant_node2->constant_value.signed_byte_value);
+
+				case BYTE_CONST_FORCE_U:
+					return constant_node1->constant_value.unsigned_short_value == constant_node2->constant_value.unsigned_byte_value;
+
+				case CHAR_CONST:
+					return constant_node1->constant_value.unsigned_short_value == (u_int8_t)(constant_node2->constant_value.char_value);
+
+				default:
+					printf("Fatal internal compiler error: Unsupported constant == operation\n");
+					exit(1);
+			}
+
+
+		case CHAR_CONST:
+			switch(constant_node2->constant_type){
+				case DOUBLE_CONST:
+					return constant_node1->constant_value.char_value == constant_node2->constant_value.double_value;
+
+				case LONG_CONST_FORCE_U:
+					return (u_int8_t)(constant_node1->constant_value.char_value) == constant_node2->constant_value.unsigned_long_value;
+
+				case LONG_CONST:
+					 return constant_node1->constant_value.char_value == constant_node2->constant_value.signed_long_value;
+
+				case INT_CONST_FORCE_U:
+					 return (u_int8_t)(constant_node1->constant_value.char_value) == constant_node2->constant_value.unsigned_int_value;
+
+				case FLOAT_CONST:
+					return constant_node1->constant_value.char_value == constant_node2->constant_value.float_value;
+
+				case INT_CONST:
+					return  constant_node1->constant_value.char_value == constant_node2->constant_value.signed_int_value;
+
+				case SHORT_CONST:
+					return constant_node1->constant_value.char_value == constant_node2->constant_value.signed_short_value;
+
+				case SHORT_CONST_FORCE_U:
+					return (u_int8_t)(constant_node1->constant_value.char_value) == constant_node2->constant_value.unsigned_short_value;
+
+				case BYTE_CONST:
+					return constant_node1->constant_value.char_value == constant_node2->constant_value.signed_byte_value;
+
+				case BYTE_CONST_FORCE_U:
+					return (u_int8_t)(constant_node1->constant_value.char_value) == constant_node2->constant_value.unsigned_byte_value;
+
+				case CHAR_CONST:
+					return constant_node1->constant_value.char_value == constant_node2->constant_value.char_value;
+
+				default:
+					printf("Fatal internal compiler error: Unsupported constant == operation\n");
+					exit(1);
+			}
+
+		default:
+			printf("Fatal internal compiler error: Unsupported constant == operation\n");
+			exit(1);
+	}
+}
+
+
+/**
  * We will completely duplicate a deferred statement here. Since all deferred statements
  * are logical expressions, we will perform a deep copy to create an entirely new
  * chain of deferred statements

@@ -13,6 +13,7 @@
 */
 
 #include "cfg.h"
+#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -155,19 +156,19 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 static cfg_result_package_t emit_expression_chain(basic_block_t* basic_block, generic_ast_node_t* expression_chain_node);
 static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr);
 static cfg_result_package_t emit_ternary_expression(basic_block_t* basic_block, generic_ast_node_t* ternary_operation);
+static cfg_result_package_t emit_in_expression(basic_block_t* basic_block, generic_ast_node_t* in_operation);
 static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node);
 static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression);
 static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node);
 static cfg_result_package_t emit_string_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* string_initializer);
 static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* struct_initializer);
 static void emit_global_struct_initializer(generic_ast_node_t* struct_initializer, dynamic_array_t* intializer_values);
-
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_const_t* constant);
 static void visit_declaration_statement(generic_ast_node_t* node);
 static void visit_static_let_statement(generic_ast_node_t* node);
 static inline void visit_static_declare_statement(generic_ast_node_t* node);
 static inline void handle_raise_statement(basic_block_t* basic_block, generic_ast_node_t* node);
-
+static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, branch_type_t branch_type, three_addr_var_t* conditional_result);
 
 /**
  * Unpack a result package. We assume that if this function is being called that the caller
@@ -2725,10 +2726,13 @@ static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, t
  * Emit the conditional for a branch. This can be a ternary or binary expression
  */
 static inline cfg_result_package_t emit_branch_conditional_expression(basic_block_t* starting_block, generic_ast_node_t* branch_node){
-	if(branch_node->ast_node_type == AST_NODE_TYPE_TERNARY_EXPRESSION){
-		return emit_ternary_expression(starting_block, branch_node);
-	} else {
-		return emit_binary_expression(starting_block, branch_node);
+	switch(branch_node->ast_node_type){
+		case AST_NODE_TYPE_IN_EXPRESSION:
+			return emit_in_expression(starting_block, branch_node);
+		case AST_NODE_TYPE_TERNARY_EXPRESSION:
+			return emit_ternary_expression(starting_block, branch_node);
+		default:
+			return emit_binary_expression(starting_block, branch_node);
 	}
 }
 
@@ -5570,6 +5574,428 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 
 
 /**
+ * For an OIR in statement that is switch eligible, we will lower it into a switch-case statement with only two blocks, a true
+ * block and a false block
+ *
+ * x in (1, 2, 3, 4)
+ *
+ * switch(x){
+ * 	case 1:
+ * 	case 2:
+ * 	case 3:
+ * 	case 4:
+ * 		result = true;
+ * 	default:
+ * 		result = false;
+ * }
+ *
+ * This strategy allows us to maintain the fast processing of a switch without the overhead of spamming out so many
+ * basic blocks, which would be memory inefficient
+ *
+ * When the subtree is provided to us, the very first child is the starting expression. Every child after that should
+ * be a constant node that we can use for our switch
+ *
+ * NOTE: for in expressions that only have one member, we will automatically convert them to use conditional assignment
+ * instead of the regular switch strategy to save space
+ */
+static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block_t* starting_block, generic_ast_node_t* in_expression){
+	//Initialize the blank results here
+	cfg_result_package_t in_results = INITIALIZE_BLANK_CFG_RESULT;
+
+	//Emit and store our overall start and overall exit
+	basic_block_t* exit_block = basic_block_alloc_and_estimate();
+	in_results.starting_block = starting_block;
+	in_results.final_block = exit_block;
+
+	//Extract these two values for later
+	int32_t lower_bound = in_expression->optional_storage.switch_bounds.lower_bound;
+	int32_t upper_bound = in_expression->optional_storage.switch_bounds.upper_bound;
+
+	//The type of the actual end result of our in expression
+	generic_type_t* result_type = in_expression->inferred_type;
+
+	/**
+	 * We will need a "temporary" variable that also works for SSA, which is why
+	 * we use this unique helper. There will be a phi join node at the end of the
+	 * in statement
+	 */
+	symtab_variable_record_t* in_assignee = create_ssa_compatible_temp_var(current_function, result_type, variable_symtab, increment_and_get_temp_id());
+	three_addr_var_t* true_variable = emit_var(in_assignee);
+	three_addr_var_t* false_variable = emit_var(in_assignee);
+	three_addr_var_t* final_result = emit_var(in_assignee);
+
+	/**
+	 * Step 1: setup the true and false blocks
+	 *
+	 * Because an in statement just assigns true or false, all
+	 * that needs to be in each of these blocks is a true or false
+	 * assignment. Recall that the false block really acts as our
+	 * default
+	 */
+	basic_block_t* true_block = basic_block_alloc_and_estimate();
+	basic_block_t* false_block = basic_block_alloc_and_estimate();
+
+	//The true block is just a true assignment followed by a jump to the exit
+	instruction_t* true_assignment = emit_assignment_with_const_instruction(true_variable, emit_direct_integer_or_char_constant(TRUE, i8));
+	add_statement(true_block, true_assignment);
+	emit_jump(true_block, exit_block);
+
+	//The false block is just a false assignment followed by a jump to the exit
+	instruction_t* false_assignment = emit_assignment_with_const_instruction(false_variable, emit_direct_integer_or_char_constant(FALSE, i8));
+	add_statement(false_block, false_assignment);
+	emit_jump(false_block, exit_block);
+
+	/**
+	 * Step 2: emit our conditional statement. The conditional is always
+	 * the very first child of the in statement cursor.
+	 */
+	generic_ast_node_t* in_statement_cursor = in_expression->first_child;
+	cfg_result_package_t expression_results = emit_expression(starting_block, in_statement_cursor);
+
+	/**
+	 * Emit/assign all of the blocks that we're going to need:
+	 * 	first conditional block(jump if lower)
+	 * 	second conditional block(jump if higher)
+	 * 	switch entry block
+	 */
+	basic_block_t* first_switch_conditional = expression_results.final_block;
+	basic_block_t* second_switch_conditional = basic_block_alloc_and_estimate();
+	basic_block_t* switch_entry = basic_block_alloc_and_estimate();
+	switch_entry->block_type = BLOCK_TYPE_SWITCH;
+
+	//Unpack the results from the result package
+	three_addr_var_t* input_result = unpack_result_package(&expression_results, first_switch_conditional);
+
+	//Grab the type our for convenience
+	generic_type_t* input_result_type = input_result->type;
+
+	//Grab the signedness of the result
+	u_int8_t is_signed = is_type_signed(input_result_type);
+
+	/**
+	 * Step 3: emit our jump to default(in this case false). If a value is above the highest
+	 * value or below the lowest value, we will jump out to the false block before even
+	 * going into the switch table
+	 */
+	three_addr_var_t* conditional_variable = expression_results.result_value.result_var;
+	three_addr_const_t* lower_bound_constant_for_adjustment = emit_direct_integer_or_char_constant(lower_bound, i32);
+	three_addr_const_t* lower_bound_constant = emit_direct_integer_or_char_constant(lower_bound, i32);
+	three_addr_const_t* upper_bound_constant = emit_direct_integer_or_char_constant(upper_bound, i32);
+	three_addr_var_t* lower_than_decider = emit_temp_var(i8);
+	three_addr_var_t* higher_than_decider = emit_temp_var(i8);
+
+	/**
+	 * First emit the compare below branch. This will jump to the false block if we have a value
+	 * that is lower than the smallest value in the given in statement
+	 */
+	instruction_t* compare_below = emit_binary_operation_with_const_instruction(lower_than_decider, conditional_variable, L_THAN, lower_bound_constant);
+	add_statement(first_switch_conditional, compare_below);
+
+	branch_type_t branch_less_than = select_appropriate_branch_statement(L_THAN, BRANCH_CATEGORY_NORMAL, is_signed);
+	emit_branch_for_switch_statement(first_switch_conditional, false_block, second_switch_conditional, branch_less_than, lower_than_decider);
+
+	/**
+	 * Then emit the compare above branch. This will jump to the false block if we have a value
+	 * that is larger than the largest value in the given in statement
+	 */
+	instruction_t* compare_above = emit_binary_operation_with_const_instruction(higher_than_decider, conditional_variable, G_THAN, upper_bound_constant);
+	add_statement(second_switch_conditional, compare_above);
+
+	branch_type_t branch_greater_than = select_appropriate_branch_statement(G_THAN, BRANCH_CATEGORY_NORMAL, is_signed);
+	emit_branch_for_switch_statement(second_switch_conditional, false_block, switch_entry, branch_greater_than, higher_than_decider);
+
+	/**
+	 * Step 4: emit the actual jump table itself. Luckily for us, this jump table is very
+	 * easy to write because every single value in it that is listed always goes to the
+	 * true block, while everything else goes to the false block
+	 */
+	switch_entry->jump_table = jump_table_alloc(upper_bound - lower_bound + 1);
+
+	//Crawl the entire in statement and add jump table entries where appropriate
+	in_statement_cursor = in_statement_cursor->next_sibling;
+	while(in_statement_cursor != NULL){
+		//The value's index is the actual value with the lower bound adjustment subtracted to make the lowest index 0-based
+		int32_t value_index = in_statement_cursor->constant_value.signed_int_value - lower_bound;
+		add_jump_table_entry(switch_entry->jump_table, value_index, true_block);
+
+		in_statement_cursor = in_statement_cursor->next_sibling;
+	}
+
+	/**
+	 * Now that we have everything added in that is explicitly in the in statement, we
+	 * need to fill in all of the gaps with jumps to the default statement
+	 */
+	for(int32_t i = 0; i < switch_entry->jump_table->num_nodes; i++){
+		if(dynamic_array_get_at(&(switch_entry->jump_table->nodes), i) == NULL){
+			dynamic_array_set_at(&(switch_entry->jump_table->nodes), false_block, i);
+		}
+	}
+
+	/**
+	 * Since we only have two places to go here, we don't need to worry about
+	 * adding successors above. We know that the only two successors of the
+	 * switch block are the true block and the false block
+	 */
+	add_successor(switch_entry, true_block);
+	add_successor(switch_entry, false_block);
+
+	/**
+	 * Step 5: emit the temp assignment, then emit the adjustment to get the index for the jump calculation down to 0 
+	 * and then emit the indirect jump itself
+	 */
+	instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(conditional_variable->type), conditional_variable);
+	add_statement(switch_entry, temp_assignment);
+
+	//Emit the adjustment subtraction and get it into the block
+	instruction_t* adjustment = emit_binary_operation_with_const_instruction(emit_temp_var(conditional_variable->type), temp_assignment->operands.oir.assignee, MINUS, lower_bound_constant_for_adjustment);
+	add_statement(switch_entry, adjustment);
+
+	//Now we can emit the indirect jump statement itself
+	instruction_t* indirect_jump = emit_indirect_jump_statement(switch_entry->jump_table, adjustment->operands.oir.assignee, 8);
+	add_statement(switch_entry, indirect_jump);
+
+	/**
+	 * Step 6: Emit one final assignment in the exit block. This final assignment will trigger
+	 * a phi function to be inserted when the SSA helper runs and will also give us a variable
+	 * to report back with in the result package
+	 */
+	instruction_t* final_assignment = emit_assignment_instruction(emit_temp_var(result_type), final_result);
+	add_statement(exit_block, final_assignment);
+
+	//Package up the result type with the the final assignee
+	in_results.result_value.result_var = final_assignment->operands.oir.assignee;
+	in_results.type = CFG_RESULT_TYPE_VAR;
+
+	return in_results;
+}
+
+
+/**
+ * Lower the entire in expression into an OIR if-else-if chain using regular branching. This if-else-if chain is done so that we 
+ * automatically have a short circuit by the time this is implemented. 
+ *
+ * This will really only happen for floats, but sometimes for other types as well. The general structure of the translation is:
+ *
+ * x in (5.5, 1.1, 2.2, 3.3, 4.4)
+ *
+ * can become
+ *
+ * t5 <- false
+ * t6 <- true
+ * x == 5.5
+ * result1 <- cmov_ne t5 else t6
+ * x == 1.1
+ * result2 <- cmov_ne result1 else t6
+ * x == 2.2
+ * result3 <- cmov_ne result2 else t6 
+ * x == 3.3
+ * result4 <- cmov_ne result3 else t6 
+ * x == 4.4
+ * result5 <- cmov_ne result4 else t6 
+ *
+ * final_result <- result5
+ *
+ * The way that this works is pretty simple. The very first comparison gives us either a true or false value inside of result1. Following
+ * that, our conditional moves put in true if it works *or* default to whatever the old value was if it doesn't. We're able to carry
+ * a true value through even if it becomes true on one of the very first values
+ *
+ * Every intermediate variable in our emission will be an 8-bit integer(i8). At the end, there is a chance to expand to whatever
+ * the actual inferred type is in the final assignment. Using the 8-bit integer initially allows us to stay generic
+ */
+static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain(basic_block_t* starting_block, generic_ast_node_t* in_expression){
+	cfg_result_package_t constant_results = INITIALIZE_BLANK_CFG_RESULT;
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
+
+	instruction_t* comparison_instruction;
+	instruction_t* conditional_move;
+	three_addr_var_t* current_result_var;
+	three_addr_var_t* previous_result_var;
+	generic_type_t* operand_type;
+
+	//When we unpack we may have either a constant or a variable
+	three_addr_var_t* in_constant_variable;
+	three_addr_const_t* in_constant;
+
+	//Keep track of where the current block is
+	basic_block_t* current_block = starting_block;
+
+	//Grab the first child - this is always the expression for the in statement
+	generic_ast_node_t* in_cursor = in_expression->first_child;
+
+	/**
+	 * Step 1: emit the starting expression and unpack the results. This is what
+	 * we will be comparing to when we do our equals comparisons for each 
+	 * conditional move
+	 */
+	cfg_result_package_t in_expression_results = emit_expression(current_block, in_cursor);
+	current_block = in_expression_results.final_block;
+
+	//Unpack the variable and keep it on hand
+	three_addr_var_t* conditional_expression_variable = unpack_result_package(&in_expression_results, current_block);
+
+	/**
+	 * Step 2: Emit the true and false constants that we'll need for later on. 
+	 * Since OIR conditional moves do not have a place for two constants, we will
+	 * have to emit a temporary variable assignment for the true and false constants
+	 */
+	three_addr_const_t* true_constant = emit_direct_integer_or_char_constant(TRUE, i8);
+	three_addr_const_t* false_constant = emit_direct_integer_or_char_constant(FALSE, i8);
+	three_addr_var_t* false_variable = emit_temp_var(i8);
+
+	instruction_t* false_assignment = emit_assignment_with_const_instruction(false_variable, false_constant);
+	add_statement(current_block, false_assignment);
+
+	/**
+	 * Step 3: emit the very first conditional move. This is the
+	 * only conditional move that is going to have the false constant
+	 * explicitly inside of it, every other conditional move will
+	 * have the else using the previous move's value
+	 *
+	 * Remember that our constants here could be floating point numbers, so we're going
+	 * to have to unpack them to see if we have either a variable or a constant 
+	 */
+	current_result_var = emit_temp_var(in_expression->inferred_type);
+
+	//Get the constant out
+	in_cursor = in_cursor->next_sibling;
+	constant_results = emit_constant_from_node(current_block, in_cursor);
+
+	//Emit the comparison instruction with either a var or a constant based on the result type
+	if(constant_results.type == CFG_RESULT_TYPE_VAR){
+		//Unpack it first
+		in_constant_variable = constant_results.result_value.result_var;
+
+		comparison_instruction = emit_binary_operation_instruction(emit_temp_var(i8), conditional_expression_variable, NOT_EQUALS, in_constant_variable);
+		add_statement(current_block, comparison_instruction);
+
+		//Get the operand type base don the two types provided
+		operand_type = get_operand_type_for_logical_operation(type_symtab, conditional_expression_variable->type, in_constant_variable->type);
+
+	} else {
+		//Unpack it first
+		in_constant = constant_results.result_value.result_const;
+
+		comparison_instruction = emit_binary_operation_with_const_instruction(emit_temp_var(i8), conditional_expression_variable, NOT_EQUALS, in_constant);
+		add_statement(current_block, comparison_instruction);
+
+		//Get the operand type base don the two types provided
+		operand_type = get_operand_type_for_logical_operation(type_symtab, conditional_expression_variable->type, in_constant->type);
+	}
+
+	/**
+	 * If this operand type is a floating point number,
+	 * we need to flag that this comparison is itself a floating point comparison
+	 * for the instruction selector
+	 */
+	if(IS_FLOATING_POINT(operand_type) == TRUE){
+		comparison_instruction->operands.oir.assignee->comes_from_fp_comparison = TRUE;
+	}
+
+	//And then the conditional move statement itself
+	conditional_move = emit_conditional_movement_with_const_statement(current_result_var,
+																		false_variable, //If not equal then false
+																		true_constant,  //If not not equal then true
+																		comparison_instruction->operands.oir.assignee,
+																		MOVE_NE);
+	add_statement(current_block, conditional_move);
+
+	/**
+	 * Step 4: now that we've emitted the very first conditional move, we will
+	 * emit every subsequent move by keeping track of the prior result variable 
+	 * and having that as our else base. We do this until we've emitted the
+	 * entire chain of moves
+	 */
+	previous_result_var = conditional_move->operands.oir.assignee;
+
+	//Crawl over the entire tree until we've emitted all values
+	in_cursor = in_cursor->next_sibling;
+	while(in_cursor != NULL){
+		//New current result var for us to use
+		current_result_var = emit_temp_var(i8);
+
+		//Emit the constant from the node - we'll need to use unpacking to make this work due to the potential for float constants
+		constant_results = emit_constant_from_node(current_block, in_cursor);
+
+		//Emit the comparison instruction with either a var or a constant based on the result type
+		if(constant_results.type == CFG_RESULT_TYPE_VAR){
+			//Unpack it first
+			in_constant_variable = constant_results.result_value.result_var;
+
+			comparison_instruction = emit_binary_operation_instruction(emit_temp_var(i8), conditional_expression_variable, NOT_EQUALS, in_constant_variable);
+			add_statement(current_block, comparison_instruction);
+
+			//Get the operand type base don the two types provided
+			operand_type = get_operand_type_for_logical_operation(type_symtab, conditional_expression_variable->type, in_constant_variable->type);
+
+		} else {
+			//Unpack it first
+			in_constant = constant_results.result_value.result_const;
+
+			comparison_instruction = emit_binary_operation_with_const_instruction(emit_temp_var(i8), conditional_expression_variable, NOT_EQUALS, in_constant);
+			add_statement(current_block, comparison_instruction);
+
+			//Get the operand type base don the two types provided
+			operand_type = get_operand_type_for_logical_operation(type_symtab, conditional_expression_variable->type, in_constant->type);
+		}
+
+		/**
+		 * If this operand type is a floating point number,
+		 * we need to flag that this comparison is itself a floating point comparison
+		 * for the instruction selector
+		 */
+		if(IS_FLOATING_POINT(operand_type) == TRUE){
+			comparison_instruction->operands.oir.assignee->comes_from_fp_comparison = TRUE;
+		}
+
+		//And then the conditional move statement itself
+		conditional_move = emit_conditional_movement_with_const_statement(current_result_var,
+																			previous_result_var, //Default to the previous result if not equal
+																			true_constant, //If it's not not equal, then it worked so put true	
+																			comparison_instruction->operands.oir.assignee,
+																			MOVE_NE);
+		add_statement(current_block, conditional_move);
+
+		//This is now the prior variable
+		previous_result_var = current_result_var;
+
+		//Bump up to the next sibling
+		in_cursor = in_cursor->next_sibling;
+	}
+
+	/**
+	 * For the final assignment - we will emit an assignment into a variable of the
+	 * inferred type from the in statement. This will handle any/all conversions
+	 * for us if the need arises
+	 */
+	three_addr_var_t* final_result = emit_temp_var(in_expression->inferred_type);
+	instruction_t* final_assignment = emit_assignment_instruction(final_result, previous_result_var);
+	add_statement(current_block, final_assignment);
+
+	//Package up and return our results
+	result_package.type = CFG_RESULT_TYPE_VAR;
+	result_package.result_value.result_var = final_result;
+	result_package.starting_block = starting_block;
+	result_package.final_block = current_block;
+	return result_package;
+}
+
+
+/**
+ * For an in expression, we have to options for lowering this language construct into OIR. For most cases,
+ * we are able to translate this directly into a switch statement. However, for other cases where floats
+ * are involved, we will need to lower this into a conditional move chain. This top level rule acts as a multiplexer between
+ * the two lowering rules
+ */
+static cfg_result_package_t emit_in_expression(basic_block_t* starting_block, generic_ast_node_t* in_expression){
+	if(in_expression->is_in_statement_switch_eligible == TRUE){
+		return lower_in_expression_to_oir_switch(starting_block, in_expression);
+	} else {
+		return lower_in_expression_to_conditional_move_chain(starting_block, in_expression);
+	}
+}
+
+
+/**
  * Does a given binary expression use pointer arithmetic? We can determine this by looking at the type
  * of the first operand and the binary operator
  */
@@ -6313,6 +6739,9 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
 			return emit_function_call(basic_block, expr_node);
 
+		case AST_NODE_TYPE_IN_EXPRESSION:
+			return emit_in_expression(basic_block, expr_node);
+
 		case AST_NODE_TYPE_TERNARY_EXPRESSION:
 			return emit_ternary_expression(basic_block, expr_node);
 
@@ -6585,8 +7014,8 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 	basic_block_t* default_block = NULL;
 
 	//The lower bound is always 0, and the upper bound is determined by the parser
-	u_int32_t lower_bound = handle_node->lower_bound;
-	u_int32_t upper_bound = handle_node->upper_bound;
+	u_int32_t lower_bound = handle_node->optional_storage.switch_bounds.lower_bound;
+	u_int32_t upper_bound = handle_node->optional_storage.switch_bounds.upper_bound;
 
 	/**
 	 * Let's mark this block as a switch block and at the same time create our jump table. We'll
@@ -6700,7 +7129,7 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 	 * Run through the jump table here - anything that isn't handled goes to the default
 	 * generic error clause
 	 */
-	for(u_int32_t i = 0; i < jump_calculation_block->jump_table->nodes.current_index; i++){
+	for(int32_t i = 0; i < jump_calculation_block->jump_table->nodes.current_index; i++){
 		//If it's null, it's going to the default
 		if(dynamic_array_get_at(&(jump_calculation_block->jump_table->nodes), i) == NULL){
 			dynamic_array_set_at(&(jump_calculation_block->jump_table->nodes), default_block, i);
@@ -9255,12 +9684,12 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	jump_calculation_block->block_type = BLOCK_TYPE_SWITCH;
 
 	//We'll now allocate this one's jump table
-	jump_calculation_block->jump_table = jump_table_alloc(root_node->upper_bound - root_node->lower_bound + 1);
+	jump_calculation_block->jump_table = jump_table_alloc(root_node->optional_storage.switch_bounds.upper_bound - root_node->optional_storage.switch_bounds.lower_bound + 1);
 
 	//The offset(amount that we'll need to knock down any case values by) is always the 
 	//case statement's value subtracted by the lower bound. We'll call it offset here
 	//for consistency
-	int32_t offset = root_node->lower_bound;
+	int32_t offset = root_node->optional_storage.switch_bounds.lower_bound;
 
 	//A generic result package for all of our case/default statements
 	cfg_result_package_t case_default_results = INITIALIZE_BLANK_CFG_RESULT;
@@ -9417,7 +9846,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	 * Run through the entire jump table. Any nodes that are not occupied(meaning there's no case statement with that value)
 	 * will be set to point to the default block. 
 	 */
-	for(u_int32_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
+	for(int32_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
 		/**
 		 * If it's null, we'll make it the default. This should only happen in switches
 		 * that are non-exhaustive. For exhaustive switches, the parser has already ensured that we
@@ -9441,8 +9870,8 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	}
 
 	//We'll need both of these as constants for our computation
-	three_addr_const_t* lower_bound = emit_direct_integer_or_char_constant(root_node->lower_bound, i32);
-	three_addr_const_t* upper_bound = emit_direct_integer_or_char_constant(root_node->upper_bound, i32);
+	three_addr_const_t* lower_bound = emit_direct_integer_or_char_constant(root_node->optional_storage.switch_bounds.lower_bound, i32);
+	three_addr_const_t* upper_bound = emit_direct_integer_or_char_constant(root_node->optional_storage.switch_bounds.upper_bound, i32);
 
 	//Now that we have our expression, we'll want to speed things up by seeing if our value is either below the lower
 	//range or above the upper range. If it is, we jump to the very end
@@ -9704,11 +10133,11 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	
 	//Let's also allocate our jump table. We know how large the jump table needs to be from
 	//data passed in by the parser
-	jump_calculation_block->jump_table = jump_table_alloc(root_node->upper_bound - root_node->lower_bound + 1);
+	jump_calculation_block->jump_table = jump_table_alloc(root_node->optional_storage.switch_bounds.upper_bound - root_node->optional_storage.switch_bounds.lower_bound + 1);
 
 	//We'll also have some adjustment amount, since we always want the lowest value in the jump table to be 0. This
 	//adjustment will be subtracted from every value at the top to "knock it down" to be within the jump table
-	int32_t offset = root_node->lower_bound;
+	int32_t offset = root_node->optional_storage.switch_bounds.lower_bound;
 
 	//Wipe this out here just in case
 	cfg_result_package_t case_default_results = INITIALIZE_BLANK_CFG_RESULT;
@@ -9781,10 +10210,10 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 	//Now at the ever end, we'll need to fill the remaining jump table blocks that are empty
 	//with the default value
-	for(u_int32_t _ = 0; _ < jump_calculation_block->jump_table->num_nodes; _++){
+	for(int32_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
 		//If it's null, we'll make it the default
-		if(dynamic_array_get_at(&(jump_calculation_block->jump_table->nodes), _) == NULL){
-			dynamic_array_set_at(&(jump_calculation_block->jump_table->nodes), default_block, _);
+		if(dynamic_array_get_at(&(jump_calculation_block->jump_table->nodes), i) == NULL){
+			dynamic_array_set_at(&(jump_calculation_block->jump_table->nodes), default_block, i);
 
 			//Once we get here we know it's not exhaustive
 			switch_is_exhaustive = FALSE;
@@ -9809,8 +10238,8 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	//Now that everything has been situated, we can start emitting the values in the initial node
 
 	//We'll need both of these as constants for our computation
-	three_addr_const_t* lower_bound = emit_direct_integer_or_char_constant(root_node->lower_bound, i32);
-	three_addr_const_t* upper_bound = emit_direct_integer_or_char_constant(root_node->upper_bound, i32);
+	three_addr_const_t* lower_bound = emit_direct_integer_or_char_constant(root_node->optional_storage.switch_bounds.lower_bound, i32);
+	three_addr_const_t* upper_bound = emit_direct_integer_or_char_constant(root_node->optional_storage.switch_bounds.upper_bound, i32);
 
 	/**
 	 * Now that we have our expression, we'll want to speed things up by seeing if our value is either below the lower

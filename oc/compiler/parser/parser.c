@@ -65,6 +65,7 @@ static lex_stack_t assignment_grouping_stack;
 
 //Generic types here for us to repeatedly reference
 static generic_type_t* immut_char = NULL;
+static generic_type_t* immut_bool = NULL;
 static generic_type_t* immut_u8 = NULL;
 static generic_type_t* immut_i8 = NULL;
 static generic_type_t* immut_u16 = NULL;
@@ -119,6 +120,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 static generic_ast_node_t* defer_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* idle_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream, side_type_t side);
+static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream, visibilty_type_t visibility);
 static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream);
@@ -973,7 +975,7 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 	}
 
 	//Otherwise if we get here, we need to see a valid conditional expression
-	generic_ast_node_t* expr_node = ternary_expression(token_stream, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* expr_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//If this is bad, we fail out
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -1245,7 +1247,7 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 			push_back_token(token_stream, &parser_line_num);
 
 			//Now we can invoke the helper
-			result_node = ternary_expression(token_stream, SIDE_TYPE_RIGHT);
+			result_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 			//If this fails then we're done
 			if(result_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -1446,8 +1448,8 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 	 * statement that this is going to generate. The lower bound is always zero(NO_ERROR) and the
 	 * upper bound is whatever we found it to be
 	 */
-	parent_handle_clause->lower_bound = 0;
-	parent_handle_clause->upper_bound = upper_bound;
+	parent_handle_clause->optional_storage.switch_bounds.lower_bound = 0;
+	parent_handle_clause->optional_storage.switch_bounds.upper_bound = upper_bound;
 
 	//We're done here, deallocate
 	dynamic_array_dealloc(&errors_seen);
@@ -1518,7 +1520,7 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 		//Forever loop until we hit the R_PAREN
 		do {
 			//Handle the actual parameter
-			generic_ast_node_t* elaborated_param = ternary_expression(token_stream, side);
+			generic_ast_node_t* elaborated_param = in_expression(token_stream, side);
 
 			//It failed so we just get out here
 			if(elaborated_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -1728,7 +1730,7 @@ static inline u_int8_t validate_function_access(symtab_function_record_t* functi
  * 
  * By the time we get here, we will have already consumed the "@" token
  *
- * BNF Rule: <function-call> ::= @{<identifier>|<qualified-function-name>}({<ternary_expression>}?{, <ternary_expression>}*){<handle-statement>}?
+ * BNF Rule: <function-call> ::= @{<identifier>|<qualified-function-name>}({<in_expression>}?{, <in_expression>}*){<handle-statement>}?
  */
 static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, side_type_t side){
 	//The lookahead token
@@ -1988,7 +1990,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 			 */
 			if(param_type->type_class != TYPE_CLASS_ELABORATIVE){
 				//Parameters are in the form of a ternary expression
-				current_param = ternary_expression(token_stream, side);
+				current_param = in_expression(token_stream, side);
 
 				//We now have an error of some kind
 				if(current_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -3001,7 +3003,7 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 loop_end:
 	//If whatever our operator here is is not an assignment operator, we can just use the ternary rule
 	if(is_assignment_operator(assignment_operator) == FALSE){
-		return ternary_expression(token_stream, SIDE_TYPE_RIGHT);
+		return in_expression(token_stream, SIDE_TYPE_RIGHT);
 	}
 
 	//If we make it here however, that means that we did see the assign keyword. Since
@@ -3047,7 +3049,7 @@ loop_end:
 	}
 
 	//Holder for our expression
-	generic_ast_node_t* expr = ternary_expression(token_stream, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* expr = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//Fail case here
 	if(expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -3525,7 +3527,7 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 
 	//Now we are required to see a valid constant expression representing what
 	//the actual index is.
-	generic_ast_node_t* expr = ternary_expression(token_stream, side);
+	generic_ast_node_t* expr = in_expression(token_stream, side);
 
 	//If we fail, automatic exit here
 	if(expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -6073,7 +6075,7 @@ static generic_ast_node_t* struct_initializer(ollie_token_stream_t* token_stream
  * An initializer can either decay into an expression chain or it can turn into an initializer of
  * some kind(string or list)
  *
- * BNF Rule: <initializer> ::= <ternary_expression> | <initializer_list>
+ * BNF Rule: <initializer> ::= <in_expression> | <initializer_list>
  */
 static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_type_t side){
 	//Grab the next token
@@ -6100,7 +6102,7 @@ static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_
 		//As such, we'll push the token back and call the ternary expression rule
 		default:
 			push_back_token(token_stream, &parser_line_num);
-			return ternary_expression(token_stream, side);
+			return in_expression(token_stream, side);
 	}
 }
 
@@ -6109,7 +6111,7 @@ static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_
  * A ternary expression is a kind of syntactic sugar that allows if/else chains to be
  * inlined. They can be nested, though this is not recommended
  *
- * BNF Rule: <logical_or_expression> ? <ternary_expression> else <ternary_expression>
+ * BNF Rule: <logical_or_expression> ? <in_expression> else <in_expression>
  */
 static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream, side_type_t side){
 	//Declare the lookahead token
@@ -6146,10 +6148,10 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 	}
 
 	//Allocate the ternary expression node
-	generic_ast_node_t* ternary_expression_node = ast_node_alloc(AST_NODE_TYPE_TERNARY_EXPRESSION, side);
+	generic_ast_node_t* in_expression_node = ast_node_alloc(AST_NODE_TYPE_TERNARY_EXPRESSION, side);
 
 	//The first child is the conditional
-	add_child_node(ternary_expression_node, conditional);
+	add_child_node(in_expression_node, conditional);
 
 	//We must now see a valid top level expression
 	generic_ast_node_t* if_branch = ternary_expression(token_stream, side);
@@ -6160,7 +6162,7 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 	}
 
 	//Otherwise it's fine so we add it and move on
-	add_child_node(ternary_expression_node, if_branch);
+	add_child_node(in_expression_node, if_branch);
 
 	//Once we've seen the if branch, we need to see the colon to separate the else branch
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -6179,16 +6181,427 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 	}
 
 	//Otherwise it's fine so we add it and move on
-	add_child_node(ternary_expression_node, else_branch);
+	add_child_node(in_expression_node, else_branch);
 
 	//Determine the compatibility of these ternary nodes, and coerce it
-	ternary_expression_node->inferred_type = determine_ternary_compatibility(type_symtab, &(if_branch->inferred_type), &(else_branch->inferred_type));
+	in_expression_node->inferred_type = determine_ternary_compatibility(type_symtab, &(if_branch->inferred_type), &(else_branch->inferred_type));
 
 	//A ternary is not assignable
-	ternary_expression_node->is_assignable = FALSE;
+	in_expression_node->is_assignable = FALSE;
 
 	//Give back the parent level node
-	return ternary_expression_node;
+	return in_expression_node;
+}
+
+
+/**
+ * Determine if the given type is valid for an in statement. The only valid
+ * types are enumerated types or basic types, everything else does not count
+ */
+static inline u_int8_t is_type_valid_for_in_statement(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_BASIC:
+			//We can't have a void type here
+			if(type->basic_type_token == VOID){
+				return FALSE;
+			}
+
+			return TRUE;
+
+		case TYPE_CLASS_ENUMERATED:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Is the given constant node eligible for the in statement comparator type? This is slightly different than
+ * the other rules because we know that we will always have a constant, and there are some unique restrictions
+ * here like us not being able to mix floats and enums 
+ */
+static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* in_comparator_type, generic_ast_node_t* constant_node){
+	//Needed local variables
+	generic_type_t* result_type;
+	generic_type_t* constant_node_type = constant_node->inferred_type;
+
+
+	switch(in_comparator_type->type_class){
+		/**
+		 * If we have an enum type then we've got strict
+		 * rules for what we can compare to.
+		 * 	1.) No floats - enum types must be compatible enums or integers
+		 * 	2.) If we have raw constants, then we need to make sure that they are potential values
+		 */
+		case TYPE_CLASS_ENUMERATED:
+			/**
+			 * Option 1: Our constant came from an enum.
+			 * If they have the literal exact same enum type, then we're good.
+			 * If not, we don't allow mixing of enums
+			 */
+			if(constant_node->optional_storage.enum_type != NULL){
+				if(in_comparator_type == constant_node->optional_storage.enum_type){
+					return TRUE;
+				} else {
+					sprintf(info, "Attempt to use separate enum type %s in comparison with enum %s",
+			 						constant_node_type->type_name.string,
+			 						in_comparator_type->type_name.string);
+					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+					num_errors++;
+					return FALSE;
+				}
+			}
+
+			/**
+			 * Option 2: we're just a regular constant. This is fine so long
+			 * as we don't have a floating point number
+			 */
+			if(IS_FLOATING_POINT(constant_node_type) == TRUE){
+				print_parse_message(MESSAGE_TYPE_ERROR, "Floating point values may not be used in in statement with enum comparator", parser_line_num);
+				num_errors++;
+				return FALSE;
+			}
+
+			/**
+			 * If we survive to here then we can run the types_assignable on this and see if we get a non-null answer
+			 */
+			result_type = types_assignable_constant(in_comparator_type, constant_node_type);
+			
+			//Fail out if we get a bad result
+			if(result_type == NULL){
+				sprintf(info, "Attempt to use incompatible type %s in in statement with comparator of type %s",
+								constant_node_type->type_name.string,
+								in_comparator_type->type_name.string);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				num_errors++;
+				return FALSE;
+			}
+
+			//Once we're done we can assign and coerce our constant here
+			constant_node->inferred_type = result_type;
+			coerce_constant(constant_node);
+
+			/**
+			 * One last thing to check - if we have a constant value that literally does not exist in the enum
+			 * type, then we will fail out because we have an impossible in statement in that case
+			 */
+			if(does_enum_contain_integer_member(in_comparator_type, constant_node->constant_value.signed_int_value) == FALSE){
+				sprintf(info, "Enum type %s contains no member that maps to integer value %d", in_comparator_type->type_name.string, constant_node->constant_value.signed_int_value);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				num_errors++;
+				return FALSE;
+			}
+
+			//If we survived to here then this worked
+			return TRUE;
+
+		/**
+		 * For basic types we really just rely on the types_assignable_constant rule
+		 */
+		case TYPE_CLASS_BASIC:
+			/**
+			 * If our constant node was an enum, we bar it from being compared with floating point
+			 * values
+			 */
+			if(constant_node->optional_storage.enum_type != NULL){
+				if(IS_FLOATING_POINT(in_comparator_type) == TRUE){
+					print_parse_message(MESSAGE_TYPE_ERROR, "Enums may not be used in in statement with floating point comparator", parser_line_num);
+					num_errors++;
+					return FALSE;
+				}
+			}
+
+			/**
+			 * If we survive to here then we can run the types_assignable on this and see if we get a non-null answer
+			 */
+			result_type = types_assignable_constant(in_comparator_type, constant_node_type);
+			
+			//Fail out if we get a bad result
+			if(result_type == NULL){
+				sprintf(info, "Attempt to use incompatible type %s in in statement with comparator of type %s",
+								constant_node_type->type_name.string,
+								in_comparator_type->type_name.string);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				num_errors++;
+				return FALSE;
+			}
+
+			//Once we're done we can assign and coerce our constant here
+			constant_node->inferred_type = result_type;
+			coerce_constant(constant_node);
+
+			//If we survived to here then this worked
+			return TRUE;
+
+		//This should be impossible
+		default:
+			printf("Fatal internal compiler error. Invalid in comparator type detected\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * An ollie in expression is a syntactic convenience expression type that allows us to check
+ * if the result of a given logical or expression exists within a range of compatible values
+ *
+ * BNF Rule: <in_expression> ::= <ternary-expression> in (<logical_or_expression>{, <logical_or_expression}*);
+ *
+ * For in expressions, if we do not see any floating point values, then we will attempt to turn this into
+ * a switch statement. We maintain a flag here that we will invalidate if we get a floating point value, as
+ * that is the one type that we cannot make into a switch
+ *
+ * The logical or expressions must be either constants or enumerated values to make this work
+ */
+static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, side_type_t side){
+	//Our lookahead token
+	lexitem_t lookahead;
+	//Keep track of how many members we have
+	int32_t in_statement_members = 0;
+	//Is this in expression eligible to become a switch statement? Assume true by default
+	u_int8_t is_switch_eligible = TRUE;
+
+	//We'll need to track these for min/max value tracking
+	int32_t max_value = INT_MIN;
+	int32_t min_value = INT_MAX;
+
+	//The first thing that we need to see is some kind of valid ternary expression
+	generic_ast_node_t* starting_expression = ternary_expression(token_stream, side);
+
+	//Fail out at the top level here if we see this
+	if(starting_expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return starting_expression;
+	}
+
+	//Now that we have the expression, we need to search for the "in" keyword
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	/**
+	 * If we don't have anything then push it back and be done with this
+	 */
+	if(lookahead.tok != IN){
+		push_back_token(token_stream, &parser_line_num);
+		return starting_expression;
+	}
+
+	//Extract the type that we're comparing to 
+	generic_type_t* comparing_to_type = starting_expression->inferred_type;
+
+	/**
+	 * If the type is not valid for an in statement then we have an issue here
+	 */
+	if(is_type_valid_for_in_statement(comparing_to_type) == FALSE){
+		sprintf(info, "The type \"%s\" may not be used with an in statement", comparing_to_type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Now that we're here we can allocate the node
+	generic_ast_node_t* root_node = ast_node_alloc(AST_NODE_TYPE_IN_EXPRESSION, side); 
+
+	/**
+	 * An in statement will always give back a return type of an immutable 8 bit integer. This is because we've only
+	 * got TRUE or FALSE to work with
+	 */
+	root_node->inferred_type = immut_i8;
+
+	//The starting expression is always our very first child
+	add_child_node(root_node, starting_expression);
+
+	/**
+	 * Otherwise we've gotten here by seeing the specified in keyword, so we are
+	 * dealing with an in expression. Our first order of business is parsing the parenthesis
+	 * that are required
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != L_PAREN){
+		sprintf(info, "Expected opening parenthesis after in keyword but saw %s instead", lexitem_to_string(&lookahead));
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Push this up for later
+	push_token(&grouping_stack, lookahead);
+
+	/**
+	 * We need to see at least one value inside of the in list. If we see
+	 * none then this is invalid
+	 */
+	do {
+		//First we need to see an expression
+		generic_ast_node_t* expression = logical_or_expression(token_stream, parser_line_num);
+
+		/**
+		 * The only valid kind of expression is one that reduces to a constant. If whatever we have does not reduce
+		 * to a constant then this is all wrong
+		 */
+		switch(expression->ast_node_type){
+			case AST_NODE_TYPE_ERR_NODE:
+				return print_and_return_error("Invalid expression given in in statement value list", parser_line_num);
+
+			//Constant is valid
+			case AST_NODE_TYPE_CONSTANT:
+				break;
+
+			default:
+				return print_and_return_error("In statement members must be constant expressions", parser_line_num);
+		}
+
+		/**
+		 * If we see *at least one* floating point number before we coerce, then this
+		 * whole thing is going to be forced to use the if chain
+		 */
+		if(IS_FLOATING_POINT(expression->inferred_type) == TRUE){
+			is_switch_eligible = FALSE;
+		}
+
+		/**
+		 * Let's now determine if the types in here are assignable or not. If they're not then we're out. This
+		 * rule also handles the needed constant coercion for us
+		 *
+		 * This rule prints out any/all errors so we don't need to worry about that
+		 */
+		u_int8_t compatible = is_constant_valid_for_in_statement_type(comparing_to_type, expression);
+		
+		//Fail out if we don't have it
+		if(compatible == FALSE){
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
+		}
+
+		/**
+		 * Duplicate detection - we do not allow for more than one of the same
+		 * constant inside of the member list. If we detect that this is a duplicate 
+		 * then we fail out
+		 */
+		generic_ast_node_t* member_cursor = root_node->first_child->next_sibling;
+		while(member_cursor != NULL){
+			//Fail out if they are equal
+			if(constant_nodes_equal(member_cursor, expression) == TRUE){
+				return print_and_return_error("Duplicate member values detected in in statement", parser_line_num);
+			}
+
+			//Bump it up to the next member
+			member_cursor = member_cursor->next_sibling;
+		}
+
+		/**
+		 * Once we know that they're equal, if this is switch eligible, we will need to maintain
+		 * a list of switch values here for tracking
+		 */
+		if(is_switch_eligible == TRUE){
+			int32_t current_value = expression->constant_value.signed_int_value;
+
+			if(current_value > max_value){
+				max_value = current_value;
+			}
+
+			if(current_value < min_value){
+				min_value = current_value;
+			}
+		}
+
+		//Now that we know this is valid we can add it as a child to the in statement
+		add_child_node(root_node, expression);
+
+		//Bump the member count up by one more
+		in_statement_members++;
+
+		//Now we can either see a comma or a closing parenthesis
+		lookahead = get_next_token(token_stream, &parser_line_num);
+
+		/**
+		 * If we have a comma keep going. If we see the closing paren then leave. Anything else this is wrong
+		 */
+		if(lookahead.tok == COMMA){
+			continue;
+		} else if(lookahead.tok == R_PAREN){
+			break;
+		} else {
+			sprintf(info, "Expected comma or closing parenthesis after in expression member but saw %s instead", lexitem_to_string(&lookahead));
+			return print_and_return_error(info, parser_line_num);
+		}
+
+	} while(TRUE);
+
+	/**
+	 * Once we exit we should have seen an R_PAREN token. Let's make sure that we can
+	 * match this with the opening paren from before
+	 */
+	if(pop_token(&grouping_stack).tok != L_PAREN){
+		return print_and_return_error("Mismatched parenthesis detected in in statement list", parser_line_num);
+	}
+
+	/**
+	 * If the user has done something silly like an in-statement with only one member, we will rewrite this for them
+	 */
+	if(in_statement_members == 1){
+		print_parse_message(MESSAGE_TYPE_WARNING, "Consider rewrite of in statment with 1 member into a regular comparison expression", parser_line_num);
+		num_warnings++;
+	}
+
+	/**
+	 * If we have an in statement where the first expression is a constant, then we are able to evaluate this 
+	 * in statement here and just give back a final constant
+	 */
+	if(root_node->first_child->ast_node_type == AST_NODE_TYPE_CONSTANT){
+		//Extract the constant that we're comparing to
+		generic_ast_node_t* comparing_to_constant = root_node->first_child;
+
+		//By default assume we found nothing
+		u_int8_t found = FALSE;
+
+		//The first member comes right after the expression
+		generic_ast_node_t* member_cursor = comparing_to_constant->next_sibling; 
+
+		//Crawl through the entire list of members
+		while(member_cursor != NULL){
+			//Break out if we do have a match
+			if(constant_nodes_equal(member_cursor, comparing_to_constant) == TRUE){
+				found = TRUE;
+				break;
+			}
+
+			//Bump it up to the next one
+			member_cursor = member_cursor->next_sibling;
+		}
+
+		//Match or no match, we will now rework the root node into being just a plain constant
+		root_node->ast_node_type = AST_NODE_TYPE_CONSTANT;
+		root_node->constant_type = BYTE_CONST;
+		root_node->constant_value.signed_byte_value = found;
+		root_node->inferred_type = immut_i8;
+	}
+
+	//Store how many members we have in here
+	root_node->num_case_members = in_statement_members;
+
+	/**
+	 * If we have only one member, then by default this is not
+	 * switch eligible and we will force it into being a conditional
+	 * move expression
+	 */
+	if(in_statement_members == 1){
+		is_switch_eligible = FALSE;
+	}
+
+	/**
+	 * If we run into a case where we are larger than the max switch range, we will
+	 * converting to a conditional assignment chain instead
+	 */
+	if(max_value - min_value >= MAX_SWITCH_RANGE){
+		is_switch_eligible = FALSE;
+	}
+
+	//Store whether or not we are switch eligible
+	root_node->is_in_statement_switch_eligible = is_switch_eligible;
+
+	//If this is switch eligible, then store our bounds here
+	if(is_switch_eligible == TRUE){
+		root_node->optional_storage.switch_bounds.lower_bound = min_value;
+		root_node->optional_storage.switch_bounds.upper_bound = max_value;
+	}
+
+	//Give back the root of this node
+	return root_node;
 }
 
 
@@ -8932,8 +9345,8 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 	//Push onto the stack for matching later
 	push_token(&grouping_stack, lookahead);
 	
-	//We now need to see a valid conditional expression
-	generic_ast_node_t* expression_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
+	//We now need to see a valid expression
+	generic_ast_node_t* expression_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//If we see an invalid one
 	if(expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -8994,7 +9407,7 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 		push_token(&grouping_stack, lookahead);
 	
 		//We now need to see a valid conditional expression
-		generic_ast_node_t* else_if_expression_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
+		generic_ast_node_t* else_if_expression_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 		//If we see an invalid one
 		if(else_if_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -9147,7 +9560,7 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 		push_token(&grouping_stack, lookahead);
 
 		//Now we need to see a valid conditional expression
-		generic_ast_node_t* conditional = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
+		generic_ast_node_t* conditional = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 		//If this is invalid, we fail out
 		if(conditional->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -9259,7 +9672,7 @@ static generic_ast_node_t* continue_statement(ollie_token_stream_t* token_stream
 	push_token(&grouping_stack, lookahead);
 
 	//Now we need to see a valid conditional expression
-	generic_ast_node_t* expr_node = ternary_expression(token_stream, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* expr_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//If it failed, we also fail
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -9350,7 +9763,7 @@ static generic_ast_node_t* break_statement(ollie_token_stream_t* token_stream){
 	push_token(&grouping_stack, lookahead);
 
 	//Now we need to see a valid expression
-	generic_ast_node_t* expr_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* expr_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//If it failed, we also fail
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -9440,7 +9853,7 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 	}
 
 	//Otherwise if we get here, we need to see a valid conditional expression
-	generic_ast_node_t* expr_node = ternary_expression(token_stream, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* expr_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//If this is bad, we fail out
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -9642,8 +10055,8 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	generic_ast_node_t* switch_stmt_node = ast_node_alloc(AST_NODE_TYPE_SWITCH_STMT, SIDE_TYPE_LEFT);
 
 	//We will find these throughout our search
-	switch_stmt_node->upper_bound = INT_MIN;
-	switch_stmt_node->lower_bound = INT_MAX;
+	switch_stmt_node->optional_storage.switch_bounds.upper_bound = INT_MIN;
+	switch_stmt_node->optional_storage.switch_bounds.lower_bound = INT_MAX;
 
 	//Now we must see an lparen
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -9657,7 +10070,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	push_token(&grouping_stack, lookahead);
 
 	//Now we must see a valid ternary-level expression
-	generic_ast_node_t* expr_node = ternary_expression(token_stream, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* expr_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//If we see an invalid one we fail right out
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -9891,8 +10304,8 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 					case CHAR:
 						//If we want to check for exhaustive, we'll need 
 						//the low and high to be the lower and upper bounds
-						if(switch_stmt_node->lower_bound != 0 
-							|| switch_stmt_node->upper_bound != UINT8_MAX){
+						if(switch_stmt_node->optional_storage.switch_bounds.lower_bound != 0 
+							|| switch_stmt_node->optional_storage.switch_bounds.upper_bound != UINT8_MAX){
 
 							//Don't bother checking
 							check_for_exhaustive = FALSE;
@@ -9903,8 +10316,8 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 					case I8:
 						//If we want to check for exhaustive, we'll need 
 						//the low and high to be the lower and upper bounds
-						if(switch_stmt_node->lower_bound != INT8_MIN 
-							|| switch_stmt_node->upper_bound != INT8_MAX){
+						if(switch_stmt_node->optional_storage.switch_bounds.lower_bound != INT8_MIN 
+							|| switch_stmt_node->optional_storage.switch_bounds.upper_bound != INT8_MAX){
 
 							//Don't bother checking
 							check_for_exhaustive = FALSE;
@@ -9961,8 +10374,8 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 			//Go through our enum type here
 			case TYPE_CLASS_ENUMERATED:
 				//If we don't have these, then we already know we can't go further
-				if(switch_stmt_node->lower_bound != type->min_enum_value
-					|| switch_stmt_node->upper_bound != type->max_enum_value){
+				if(switch_stmt_node->optional_storage.switch_bounds.lower_bound != type->min_enum_value
+					|| switch_stmt_node->optional_storage.switch_bounds.upper_bound != type->max_enum_value){
 					check_for_exhaustive = FALSE;
 				}
 
@@ -10080,7 +10493,7 @@ static generic_ast_node_t* while_statement(ollie_token_stream_t* token_stream){
 	push_token(&grouping_stack, lookahead);
 
 	//Now we need to see a valid conditional block in here
-	generic_ast_node_t* conditional_expr = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* conditional_expr = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//Fail out if this happens
 	if(conditional_expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -10212,7 +10625,7 @@ static generic_ast_node_t* do_while_statement(ollie_token_stream_t* token_stream
 	push_token(&grouping_stack, lookahead);
 
 	//Now we need to see a valid conditional block in here
-	generic_ast_node_t* expr_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* expr_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//Fail out if this happens
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -10322,7 +10735,7 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 		push_back_token(token_stream, &parser_line_num);
 
 		//Following that, we must see a logical or expression here
-		generic_ast_node_t* expression_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
+		generic_ast_node_t* expression_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 		//If it fails, we fail too
 		if(expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -10969,7 +11382,7 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 
 	//Let the binary expression helper deal with this. We know that ultimately, the only
 	//valid solution here is one where we end up with a constant in the end
-	generic_ast_node_t* constant_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* constant_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//There is only one valid result here - and that is a constant node
 	switch(constant_node->ast_node_type){
@@ -10981,7 +11394,6 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 			return print_and_return_error("Invalid constant found in switch statment", parser_line_num);
 
 		default:
-			printf("NODE TYPE IS %d\n", constant_node->ast_node_type);
 			return print_and_return_error("Case statements must be values that expand to constants", parser_line_num);
 	}
 
@@ -11006,19 +11418,22 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 	case_stmt->constant_value.signed_int_value = constant_node->constant_value.signed_int_value;
 	
 	//If it's higher than the upper bound, it now is the upper bound
-	if(case_stmt->constant_value.signed_int_value > switch_stmt_node->upper_bound){
-		switch_stmt_node->upper_bound = case_stmt->constant_value.signed_int_value;
+	if(case_stmt->constant_value.signed_int_value > switch_stmt_node->optional_storage.switch_bounds.upper_bound){
+		switch_stmt_node->optional_storage.switch_bounds.upper_bound = case_stmt->constant_value.signed_int_value;
 	}
 
 	//If it's lower than the lower bound, it is now the lower bound
-	if(case_stmt->constant_value.signed_int_value < switch_stmt_node->lower_bound){
-		switch_stmt_node->lower_bound = case_stmt->constant_value.signed_int_value;
+	if(case_stmt->constant_value.signed_int_value < switch_stmt_node->optional_storage.switch_bounds.lower_bound){
+		switch_stmt_node->optional_storage.switch_bounds.lower_bound = case_stmt->constant_value.signed_int_value;
 	}
 
 	//If these are too far apart, we won't go for it. We'll check here, because once
 	//we hit this, there's no point in going on
-	if(switch_stmt_node->upper_bound - switch_stmt_node->lower_bound >= MAX_SWITCH_RANGE){
-		sprintf(info, "Range from %d to %d exceeds %d, too large for a switch statement. Use a compound if statement instead", switch_stmt_node->lower_bound, switch_stmt_node->upper_bound, MAX_SWITCH_RANGE);
+	if(switch_stmt_node->optional_storage.switch_bounds.upper_bound - switch_stmt_node->optional_storage.switch_bounds.lower_bound >= MAX_SWITCH_RANGE){
+		sprintf(info, "Range from %d to %d exceeds %d, too large for a switch statement. Use a compound if statement instead",
+		  				switch_stmt_node->optional_storage.switch_bounds.lower_bound, 
+		  				switch_stmt_node->optional_storage.switch_bounds.upper_bound,
+		  				MAX_SWITCH_RANGE);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -11680,7 +12095,7 @@ static inline u_int8_t is_initializer_node(generic_ast_node_t* initializer_node)
  *
  * NOTE: By the time we get here, we've already consumed the let keyword
  *
- * BNF Rule: <let-statement> ::= let {static}? <identifier> : <type-specifier> := <ternary_expression>
+ * BNF Rule: <let-statement> ::= let {static}? <identifier> : <type-specifier> := <in_expression>
  */
 static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global, visibilty_type_t visibility){
 	//The line number
@@ -14254,6 +14669,7 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	//Keep these at hand because we use them so frequently, that repeatedly 
 	//searching is needlessly expensive
 	immut_char = lookup_type_name_only(type_symtab, "char", NOT_MUTABLE)->type;
+	immut_bool = lookup_type_name_only(type_symtab, "bool", NOT_MUTABLE)->type;
 	immut_u8 = lookup_type_name_only(type_symtab, "u8", NOT_MUTABLE)->type;
 	immut_i8 = lookup_type_name_only(type_symtab, "i8", NOT_MUTABLE)->type;
 	immut_u16 = lookup_type_name_only(type_symtab, "u16", NOT_MUTABLE)->type;
