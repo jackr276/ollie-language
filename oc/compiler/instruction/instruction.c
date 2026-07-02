@@ -381,6 +381,55 @@ u_int8_t is_destination_also_operand(instruction_t* instruction){
 		//Floating point comparisons do have their destination overwritten
 		case CMPSS:
 		case CMPSD:
+		/**
+		 * All conditional move instructions also in a way have their
+		 * destinations as operands. If the conditional move does not
+		 * take action, we can really think of something like a
+		 * comvel %eax, %ecx as -> %ecx = %eax if equal else %ecx, so
+		 * in reality this is a read as well
+		 */
+		case CMOVEW:
+		case CMOVEL:
+		case CMOVEQ:
+		case CMOVNEW:
+		case CMOVNEL:
+		case CMOVNEQ:
+		case CMOVGW:
+		case CMOVGL:
+		case CMOVGQ:
+		case CMOVLW:
+		case CMOVLL:
+		case CMOVLQ:
+		case CMOVGEW:
+		case CMOVGEL:
+		case CMOVGEQ:
+		case CMOVLEW:
+		case CMOVLEL:
+		case CMOVLEQ:
+		case CMOVZW:
+		case CMOVZL:
+		case CMOVZQ:
+		case CMOVNZW:
+		case CMOVNZL:
+		case CMOVNZQ:
+		case CMOVAW:
+		case CMOVAL:
+		case CMOVAQ:
+		case CMOVAEW:
+		case CMOVAEL:
+		case CMOVAEQ:
+		case CMOVBW:
+		case CMOVBL:
+		case CMOVBQ:
+		case CMOVBEW:
+		case CMOVBEL:
+		case CMOVBEQ:
+		case CMOVNPW:
+		case CMOVNPL:
+		case CMOVNPQ:
+		case CMOVPW:
+		case CMOVPL:
+		case CMOVPQ:
 			return TRUE;
 		default:
 			return FALSE;
