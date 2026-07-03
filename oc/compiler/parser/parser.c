@@ -10081,6 +10081,8 @@ static inline u_int8_t is_type_exhaustive_switch_eligible(generic_type_t* type){
 		return FALSE;
 	}
 
+	//TODO
+
 	//The enum type itself must have *less* than the max switch range of values to even be considered
 	return type->internal_types.enumeration_table.current_index < MAX_SWITCH_RANGE ? TRUE : FALSE;
 }
@@ -10364,6 +10366,18 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	 * clause to be provided. An exhaustive switch is not the same as a switch that
 	 * simply has no gaps in between the members
 	 */
+	if(is_type_exhaustive_switch_eligible(switching_on_type) == TRUE){
+
+
+	/**
+	 * If the type is not exhaustive switch eligible, and we haven't found the default
+	 * clause, we will smack this down now
+	 */
+	} else {
+		if(found_default_clause == FALSE){
+			return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
+		}	
+	}
 
 	//Do we have a type that is eligible for a "exhaustive switch"? If so, this would
 	//mean that we may not need a default clause at all
@@ -10373,144 +10387,56 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 		//unless told otherwise
 		u_int8_t check_for_exhaustive = TRUE;
 
-		//Now go based on what kind of type we have here
-		switch(switching_on_type->type_class){
-			//For basic types, we need to check if we're getting a full range
-			case TYPE_CLASS_BASIC:
-				switch(switching_on_type->basic_type_token){
-					case U8:
-					case CHAR:
-						//If we want to check for exhaustive, we'll need 
-						//the low and high to be the lower and upper bounds
-						if(switch_stmt_node->optional_storage.switch_bounds.lower_bound != 0 
-							|| switch_stmt_node->optional_storage.switch_bounds.upper_bound != UINT8_MAX){
 
-							//Don't bother checking
-							check_for_exhaustive = FALSE;
-						}
-
-						break;
-					
-					case I8:
-						//If we want to check for exhaustive, we'll need 
-						//the low and high to be the lower and upper bounds
-						if(switch_stmt_node->optional_storage.switch_bounds.lower_bound != INT8_MIN 
-							|| switch_stmt_node->optional_storage.switch_bounds.upper_bound != INT8_MAX){
-
-							//Don't bother checking
-							check_for_exhaustive = FALSE;
-						}
-						
-						break;
-
-					//Unreachable so if we hit this get out
-					default:
-						printf("Fatal internal compiler error. Unreachable path hit in switch statement validator\n");
-						exit(1);
-				}
-
-				//Are we going to bother checking to see if it's exhaustive?
-				if(check_for_exhaustive == TRUE){
-					//Did we find a gap? assume no to start
-					u_int8_t gap_found = FALSE;
-
-					//Run through the list and ensure that there are no gaps between the values
-					for(int32_t i = 1; i < values_max_index; i++){
-						//This is a gap, immediate exit
-						if(values[i] - values[i - 1] != 1){
-							gap_found = TRUE;
-							break;
-						}
-					}
-
-					//If there is no gap, then this is exhaustive and we do *not* need 
-					//a default clause
-					if(gap_found == FALSE){
-						//If we haven't found a default clause, it's a failure
-						if(found_default_clause == TRUE){
-							return print_and_return_error("\"default\" clause in exhaustive switch is unreachable", parser_line_num);
-						}	
-
-					//Otherwise it's not exhaustive, so we do
-					} else {
-						//If we haven't found a default clause, it's a failure
-						if(found_default_clause == FALSE){
-							return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
-						}	
-					}
-
-				//If not, then this *needs* to have a default statement
-				} else {
-					//If we haven't found a default clause, it's a failure
-					if(found_default_clause == FALSE){
-						return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
-					}	
-				}
-
-				break;
-
-			//Go through our enum type here
-			case TYPE_CLASS_ENUMERATED:
-				//If we don't have these, then we already know we can't go further
-				if(switch_stmt_node->optional_storage.switch_bounds.lower_bound != switching_on_type->min_enum_value
-					|| switch_stmt_node->optional_storage.switch_bounds.upper_bound != switching_on_type->max_enum_value){
-					check_for_exhaustive = FALSE;
-				}
-
-				//TODO THIS IS INCORRECT - WHAT IF THEY'RE OUT OF ORDER????
-
-				//Are we going to bother checking to see if it's exhaustive?
-				if(check_for_exhaustive == TRUE){
-					//Did we find a gap? assume no to start
-					u_int8_t gap_found = FALSE;
-
-					//Run through the list and ensure that there are no gaps between the values
-					for(int32_t i = 1; i < values_max_index; i++){
-						//This is a gap, immediate exit
-						if(values[i] - values[i - 1] != 1){
-							gap_found = TRUE;
-							break;
-						}
-					}
-
-					//If there is no gap, then this is exhaustive and we do *not* need 
-					//a default clause
-					if(gap_found == FALSE){
-						//If we haven't found a default clause, it's a failure
-						if(found_default_clause == TRUE){
-							return print_and_return_error("\"default\" clause in exhaustive switch is unreachable", parser_line_num);
-						}	
-
-					//Otherwise it's not exhaustive, so we do
-					} else {
-						//If we haven't found a default clause, it's a failure
-						if(found_default_clause == FALSE){
-							return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
-						}	
-					}
-
-				//If not, then this *needs* to have a default statement
-				} else {
-					//If we haven't found a default clause, it's a failure
-					if(found_default_clause == FALSE){
-						return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
-					}	
-				}
-
-				break;
-				
-			//We should never hit this, so if we do get out
-			default:
-				printf("Fatal internal compiler error. Unreachable path hit in switch statement validator\n");
-				exit(1);
+		//If we don't have these, then we already know we can't go further
+		if(switch_stmt_node->optional_storage.switch_bounds.lower_bound != switching_on_type->min_enum_value
+			|| switch_stmt_node->optional_storage.switch_bounds.upper_bound != switching_on_type->max_enum_value){
+			check_for_exhaustive = FALSE;
 		}
+
+		//TODO THIS IS INCORRECT - WHAT IF THEY'RE OUT OF ORDER????
+
+		//Are we going to bother checking to see if it's exhaustive?
+		if(check_for_exhaustive == TRUE){
+			//Did we find a gap? assume no to start
+			u_int8_t gap_found = FALSE;
+
+			//Run through the list and ensure that there are no gaps between the values
+			for(int32_t i = 1; i < values_max_index; i++){
+				//This is a gap, immediate exit
+				if(values[i] - values[i - 1] != 1){
+					gap_found = TRUE;
+					break;
+				}
+			}
+
+			//If there is no gap, then this is exhaustive and we do *not* need 
+			//a default clause
+			if(gap_found == FALSE){
+				//If we haven't found a default clause, it's a failure
+				if(found_default_clause == TRUE){
+					return print_and_return_error("\"default\" clause in exhaustive switch is unreachable", parser_line_num);
+				}	
+
+			//Otherwise it's not exhaustive, so we do
+			} else {
+				//If we haven't found a default clause, it's a failure
+				if(found_default_clause == FALSE){
+					return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
+				}	
+			}
+
+		//If not, then this *needs* to have a default statement
+		} else {
+			//If we haven't found a default clause, it's a failure
+			if(found_default_clause == FALSE){
+				return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
+			}	
+		}
+				
 
 	//Otherwise it's not even exhaustive switch eligible, so a default clause is a must in Ollie
 	} else {
-		//If we haven't found a default clause, it's a failure
-		if(found_default_clause == FALSE){
-			return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
-		}	
 	}
 
 	/**
