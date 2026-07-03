@@ -9845,6 +9845,13 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	}
 
 	//If a switch is exhaustive, there are no gaps between any of the case members
+	//
+	//
+	//
+	//TODO FIX THIS
+	//
+	//
+	//WHAT DOES THIS EVEN DO
 	u_int8_t switch_is_exhaustive = TRUE;
 
 	/**
