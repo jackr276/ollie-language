@@ -10080,11 +10080,51 @@ static inline u_int8_t is_type_exhaustive_switch_eligible(generic_type_t* type){
 	if(type->type_class != TYPE_CLASS_ENUMERATED){
 		return FALSE;
 	}
+	
+	dynamic_array_t* enumeration_table = &(type->internal_types.enumeration_table);
 
-	//TODO
+	//If this has more values than there is area in the range, it's not eligible
+	if(enumeration_table->current_index >= MAX_SWITCH_RANGE){
+		return FALSE;
+	}
 
-	//The enum type itself must have *less* than the max switch range of values to even be considered
-	return type->internal_types.enumeration_table.current_index < MAX_SWITCH_RANGE ? TRUE : FALSE;
+	/**
+	 * Remember that in Ollie, users are able to assign enum values their
+	 * own types. This means that values may *not* always be 1 apart from
+	 * each other. We'll need to check and see if all of the values inside of
+	 * the enumeration are in fact 1 apart
+	 */
+	u_int32_t min_enum_value = type->min_enum_value;
+	u_int32_t max_enum_value = type->max_enum_value;
+
+	//The range of all possible enum values
+	u_int32_t enum_range = max_enum_value - min_enum_value + 1;
+
+	//Define a bytemap of all potential enum values and wipe it all out to 0
+	u_int8_t value_map[enum_range];
+	memset(value_map, 0, sizeof(u_int8_t) * enum_range);
+
+
+	for(u_int32_t i = 0; i < enumeration_table->current_index; i++){
+		symtab_variable_record_t* member = dynamic_array_get_at(enumeration_table, i);
+
+	}
+
+	/**
+	 * Now for our final check - if any of the indices
+	 * here have 0, that means that that value in the enum
+	 * range simply doesn't exist. If we see that, we
+	 * fail out
+	 */
+	for(u_int32_t i = 0; i < enum_range; i++){
+		if(value_map[i] == 0){
+			return FALSE;
+		}
+	}
+
+	
+	//If we survived to here then we're true
+	return TRUE;
 }
 
 
