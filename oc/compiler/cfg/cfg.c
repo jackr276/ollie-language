@@ -9844,20 +9844,12 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 		emit_jump(default_block, result_package.final_block);
 	}
 
-	//If a switch is exhaustive, there are no gaps between any of the case members
-	//
-	//
-	//
-	//TODO FIX THIS
-	//
-	//
-	//WHAT DOES THIS EVEN DO
-	u_int8_t switch_is_exhaustive = TRUE;
 
 	/**
 	 * Run through the entire jump table. Any nodes that are not occupied(meaning there's no case statement with that value)
 	 * will be set to point to the default block. 
 	 */
+	u_int8_t switch_is_exhaustive;
 	for(int32_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
 		/**
 		 * If it's null, we'll make it the default. This should only happen in switches
@@ -10222,11 +10214,11 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 		emit_jump(default_block, ending_block);
 	}
 
-	//If a switch is exhaustive, there are no gaps between any of the case members
+	/**
+	 * Now at the ever end, we'll need to fill the remaining jump table blocks that are empty
+	 * with the default value
+	 */
 	u_int8_t switch_is_exhaustive = TRUE;
-
-	//Now at the ever end, we'll need to fill the remaining jump table blocks that are empty
-	//with the default value
 	for(int32_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
 		//If it's null, we'll make it the default
 		if(dynamic_array_get_at(&(jump_calculation_block->jump_table->nodes), i) == NULL){

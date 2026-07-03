@@ -10494,6 +10494,9 @@ end_exhaustive_check:
 	
 	//Store this for later on processing in the CFG
 	switch_stmt_node->num_case_members = num_case_statements;
+	
+	//Store whether or not we are an exhaustive switch
+	switch_stmt_node->is_exhaustive_switch = is_exhaustive_switch;
 
 	//Return the line number
 	switch_stmt_node->line_number = parser_line_num;

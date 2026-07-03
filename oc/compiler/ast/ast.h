@@ -171,6 +171,8 @@ struct generic_ast_node_t{
 	u_int8_t dereference_needed;
 	//Is the given statement(switch or in) eligible to internally be a true switch?
 	u_int8_t is_switch_eligible;
+	//Is the given switch "exhaustive" - this is most usually false
+	u_int8_t is_exhaustive_switch;
 };
 
 /**
