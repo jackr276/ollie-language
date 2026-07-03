@@ -10474,7 +10474,15 @@ end_exhaustive_check:
 	 */
 	if(is_exhaustive_switch == FALSE && found_default_clause == FALSE){
 		return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
-	}	
+	}
+
+	/**
+	 * If this is exhaustive and we do have a default clause, then that default clause is actually unreachable. We will fail
+	 * out if we detect that this is the case
+	 */
+	if(is_exhaustive_switch == TRUE && found_default_clause == TRUE){
+		return print_and_return_error("Default clause is unreachable in exhaustive switch statement", parser_line_num);
+	}
 
 	/**
 	 * If we do have a c-style switch statement here, we'll need to redefine the type
