@@ -10104,10 +10104,20 @@ static inline u_int8_t is_type_exhaustive_switch_eligible(generic_type_t* type){
 	u_int8_t value_map[enum_range];
 	memset(value_map, 0, sizeof(u_int8_t) * enum_range);
 
-
+	/**
+	 * Let's now go through and fill out the byte map that we've made
+	 * with all of the values in the enumeration table. When we're done,
+	 * if this is switch eligible we'd have an array like: [1, 1, 1, 1, 1, 1].
+	 * If it's not, we may have something like [1, 1, 0, 1, 1] where there
+	 * are gaps in the exhaustive range
+	 */
 	for(u_int32_t i = 0; i < enumeration_table->current_index; i++){
+		//Extract the members enum value
 		symtab_variable_record_t* member = dynamic_array_get_at(enumeration_table, i);
+		int32_t raw_enum_value = member->enum_member_value;
 
+		//Fill out that this exists now
+		value_map[raw_enum_value - min_enum_value] = TRUE;
 	}
 
 	/**
@@ -10117,11 +10127,10 @@ static inline u_int8_t is_type_exhaustive_switch_eligible(generic_type_t* type){
 	 * fail out
 	 */
 	for(u_int32_t i = 0; i < enum_range; i++){
-		if(value_map[i] == 0){
+		if(value_map[i] == FALSE){
 			return FALSE;
 		}
 	}
-
 	
 	//If we survived to here then we're true
 	return TRUE;
