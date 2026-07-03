@@ -10165,6 +10165,8 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	u_int32_t num_case_statements = 0;
 	//Is this switch statement eligible to become a switch on the back-end? Not all of them are(see below)
 	u_int8_t is_switch_eligible = TRUE;
+	//Is this an "exhaustive" switch. This has a very specific meaning that is elaborated below
+	u_int8_t is_exhaustive_switch;
 
 	/**
 	 * Once we get here, we can allocate the root level node
@@ -10416,77 +10418,63 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	 * simply has no gaps in between the members
 	 */
 	if(is_type_exhaustive_switch_eligible(switching_on_type) == TRUE){
+		int32_t min_case_value = switch_stmt_node->optional_storage.switch_bounds.lower_bound;
+		int32_t max_case_value = switch_stmt_node->optional_storage.switch_bounds.upper_bound;
 
+		/**
+		 * Check 1: if the min/max case values do not match up with the enum's min and max values,
+		 * then there's no point in checking any more
+		 */
+		if(min_case_value != switching_on_type->min_enum_value || max_case_value != switching_on_type->max_enum_value){
+			is_exhaustive_switch = FALSE;
+			goto end_exhaustive_check;
+		}
 
+		/**
+		 * Check 2: we know that the min and max values are good, but is every other value in between
+		 * represented in our case statements? If they are not, then this also does not count as exhaustive
+		 */
+		int32_t range = max_case_value - min_case_value + 1;
+		u_int8_t value_byte_map[range];
+		memset(value_byte_map, 0, sizeof(u_int8_t) * range);
+
+		/**
+		 * Populate the value byte map with a TRUE value if one of
+		 * our values is represented at the index which corresponds
+		 * to that value's offset from the minimum value
+		 */
+		for(int32_t i = 0; i < values_max_index; i++){
+			int32_t case_value = values[i];
+			value_byte_map[case_value - min_case_value] = TRUE;
+		}
+
+		/**
+		 * Now that we're all populated, if we detect
+		 * any gaps in our byte map, then we know that this
+		 * is in fact not exhaustive. If we don't than the
+		 * original TRUE value will be preserved
+		 */
+		is_exhaustive_switch = TRUE;
+		for(int32_t i = 0; i < range; i++){
+			if(value_byte_map[i] == FALSE){
+				is_exhaustive_switch = FALSE;
+				break;
+			}
+		}
+
+	} else {
+		//Set the flag
+		is_exhaustive_switch = FALSE;
+	}
+
+end_exhaustive_check:
 	/**
-	 * If the type is not exhaustive switch eligible, and we haven't found the default
-	 * clause, we will smack this down now
+	 * If this is not exhaustive and we have not found the default clause, then this is an error
+	 * and we fail out
 	 */
-	} else {
-		if(found_default_clause == FALSE){
-			return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
-		}	
-	}
-
-	//Do we have a type that is eligible for a "exhaustive switch"? If so, this would
-	//mean that we may not need a default clause at all
-	////TOODO NEED TO WORK ON THIS
-	if(is_type_exhaustive_switch_eligible(switching_on_type) == TRUE){
-		//Should we check for exhaustiveness here? Assume true
-		//unless told otherwise
-		u_int8_t check_for_exhaustive = TRUE;
-
-
-		//If we don't have these, then we already know we can't go further
-		if(switch_stmt_node->optional_storage.switch_bounds.lower_bound != switching_on_type->min_enum_value
-			|| switch_stmt_node->optional_storage.switch_bounds.upper_bound != switching_on_type->max_enum_value){
-			check_for_exhaustive = FALSE;
-		}
-
-		//TODO THIS IS INCORRECT - WHAT IF THEY'RE OUT OF ORDER????
-
-		//Are we going to bother checking to see if it's exhaustive?
-		if(check_for_exhaustive == TRUE){
-			//Did we find a gap? assume no to start
-			u_int8_t gap_found = FALSE;
-
-			//Run through the list and ensure that there are no gaps between the values
-			for(int32_t i = 1; i < values_max_index; i++){
-				//This is a gap, immediate exit
-				if(values[i] - values[i - 1] != 1){
-					gap_found = TRUE;
-					break;
-				}
-			}
-
-			//If there is no gap, then this is exhaustive and we do *not* need 
-			//a default clause
-			if(gap_found == FALSE){
-				//If we haven't found a default clause, it's a failure
-				if(found_default_clause == TRUE){
-					return print_and_return_error("\"default\" clause in exhaustive switch is unreachable", parser_line_num);
-				}	
-
-			//Otherwise it's not exhaustive, so we do
-			} else {
-				//If we haven't found a default clause, it's a failure
-				if(found_default_clause == FALSE){
-					return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
-				}	
-			}
-
-		//If not, then this *needs* to have a default statement
-		} else {
-			//If we haven't found a default clause, it's a failure
-			if(found_default_clause == FALSE){
-				return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
-			}	
-		}
-				
-
-	//Otherwise it's not even exhaustive switch eligible, so a default clause is a must in Ollie
-	} else {
-	}
+	if(is_exhaustive_switch == FALSE && found_default_clause == FALSE){
+		return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
+	}	
 
 	/**
 	 * If we do have a c-style switch statement here, we'll need to redefine the type
