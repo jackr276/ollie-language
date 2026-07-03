@@ -9849,7 +9849,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	 * Run through the entire jump table. Any nodes that are not occupied(meaning there's no case statement with that value)
 	 * will be set to point to the default block. 
 	 */
-	u_int8_t switch_is_exhaustive;
+	u_int8_t switch_is_exhaustive = TRUE;
 	for(int32_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
 		/**
 		 * If it's null, we'll make it the default. This should only happen in switches
