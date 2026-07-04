@@ -464,6 +464,8 @@ static inline u_int8_t can_variable_be_assigned_to(symtab_variable_record_t* var
  * We assume that the list is inherently large enought to do this.
  * This is meant primarily for case statement handling. It also validates
  * the uniqueness constraint of the list given in
+ *
+ * TODO NEED TO UPDATE THIS AS A DYNAMIC INT ARRAY
  */
 static int32_t sorted_list_insert_unique(int32_t* list, int32_t* max_index, int32_t value){
 	//We will need this outside of the loop's scope
