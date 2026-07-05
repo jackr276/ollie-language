@@ -465,12 +465,21 @@ static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, 
 	token->ignore = TRUE;
 
 	/**
+	 * Now we can go through and validate that the OUNIT directive that we've seen
+	 * is actually valid. As of writing this, there are only two valid OUNIT
+	 * types:
+	 * 	1.) console = <constant> - this tells OUNIT that it should compile and then run the program
+	 * 		and expect to get a console output(echo $?) of the value provided
+	 * 	2.) failtocompile - this tells OUNIT that it should expect compilation to fail in some way. It
+	 * 		does not have the granularity to tell how it fails
+	 */
+
+	/**
 	 * Now for the purpose of the preprocessor, we will run through
 	 * everything inside of these brackets until we hit the closing
 	 * bracket. If we reach EOF without hitting the closing
 	 * bracket then we have an error
 	 */
-	(*stream_index)++;
 	while(*stream_index < stream->token_stream.current_index){
 		//Extract it
 		token = &(stream->token_stream.internal_array[*stream_index]);

@@ -156,7 +156,7 @@ typedef enum {
 	MACRO_PARAM, //The special macro param token is used to show that we are a parameter
 	STACK_PASSED_PARAM_OFFSET, //Special constant type that will display the stack offset of a passed param
 	OUNIT, //Special token for ollie unit testing
-	NOCOMPILE, //Flag to OUNIT that we expect this file to fail to compile
+	FAILTOCOMPILE, //Flag to OUNIT that we expect this file to fail to compile
 } ollie_token_t;
 
 
