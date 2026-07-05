@@ -453,6 +453,33 @@ char* operator_token_to_string(ollie_token_t token){
 
 
 /**
+ * Is the given token a constant or not
+ */
+u_int8_t is_constant_token(ollie_token_t token){
+	switch(token){
+		case CHAR_CONST:
+		case FUNC_CONST:
+		case INT_CONST:
+		case INT_CONST_FORCE_U:
+		case LONG_CONST_FORCE_U:
+		case SHORT_CONST:
+		case SHORT_CONST_FORCE_U:
+		case BYTE_CONST:
+		case BYTE_CONST_FORCE_U:
+		case LONG_CONST:
+		case FLOAT_CONST:
+		case DOUBLE_CONST:
+		case STR_CONST:
+		case REL_ADDRESS_CONST:
+		case PADDING_CONST:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Helper that will determine if we have whitespace(ws) 
  */
 static inline u_int8_t is_whitespace(char ch, u_int32_t* line_number){

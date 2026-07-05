@@ -473,11 +473,21 @@ static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, 
 			(*stream_index)++;
 			token = &(stream->token_stream.internal_array[*stream_index]);
 			
+			//Incorrect input here so we fail out
 			if(token->tok != EQUALS){
-				
+				sprintf(info_message, "Expected \"=\" but got %s instead", lexitem_to_string(token));
+				return print_and_return_preprocessor_failure(info_message, token->line_num);
 			}
-		
+
+			//Otherwise we want to ignore this token and advance to the next one
+			token->ignore = TRUE;
+			(*stream_index)++;
+			token = &(stream->token_stream.internal_array[*stream_index]);
+
+			//TODO VALIDATE CONSTANT
+
 			
+			break;
 
 		/**
 		 * Only thing for a failure to compile is the keyword itself. We will
@@ -495,19 +505,17 @@ static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, 
 			return print_and_return_preprocessor_failure(info_message, token->line_num);
 	}
 
-	/**
-	 * If we exited but didn't have the R_BRACKET then this is a
-	 * problem. Odds are we ran off the end of the file
-	 */
-	if(token->tok != R_BRACKET){
-		if(token->tok == DONE){
-			return print_and_return_preprocessor_failure("Unterminated OUNIT directive detected", token->line_num);
+	//Refresh token and stream index
+	(*stream_index)++;
+	token = &(stream->token_stream.internal_array[*stream_index]);
 
-		//Some weird error here
-		} else {
-			return print_and_return_preprocessor_failure("Invalid OUNIT Directive", token->line_num);
-		}
+	//If it's not a closing bracket we fail out
+	if(token->tok != R_BRACKET){
+		return print_and_return_preprocessor_failure("Invalid OUNIT Directive: missing closing bracket", token->line_num);
 	}
+	
+	//Flag that this needs to be ignored
+	token->ignore = TRUE;
 
 	//If we get here then we have success
 	return SUCCESS;
