@@ -483,10 +483,14 @@ static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, 
 			token->ignore = TRUE;
 			(*stream_index)++;
 			token = &(stream->token_stream.internal_array[*stream_index]);
-
-			//TODO VALIDATE CONSTANT
-
 			
+			//If we don't have a constant then this is incorrect
+			if(is_constant_token(token->tok) == FALSE){
+				sprintf(info_message, "Expected constant in OUNIT directive but got %s intead", lexitem_to_string(token));
+				return print_and_return_preprocessor_failure(info_message, token->line_num);
+			}
+			
+			token->ignore = TRUE;
 			break;
 
 		/**
