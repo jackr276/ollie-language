@@ -60,6 +60,17 @@ static inline void print_preprocessor_message(error_message_type_t message, char
 
 
 /**
+ * A generic helper to print the preprocessor message, bump the error count up, and return a FAILURE. This
+ * reduces the amount code to generate a failure
+ */
+static inline u_int8_t print_and_return_preprocessor_failure(char* info, u_int32_t line_number){
+	print_preprocessor_message(MESSAGE_TYPE_ERROR, info, line_number);
+	preprocessor_error_count++;
+	return FAILURE;
+}
+
+
+/**
  * A simple wrapper that will help us maintain the *per-parameter* nesting level
  * whenever we push to the grouping stack. This is just for cohesion so when
  * we revisit this it's clear what is happening
@@ -468,8 +479,9 @@ static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, 
 	 * Now we can go through and validate that the OUNIT directive that we've seen
 	 * is actually valid. As of writing this, there are only two valid OUNIT
 	 * types:
-	 * 	1.) console = <constant> - this tells OUNIT that it should compile and then run the program
-	 * 		and expect to get a console output(echo $?) of the value provided
+	 * 	1.) exit_status = <constant> - this tells OUNIT that it should compile and then run the program
+	 * 		and expect to get an exit status(echo $?) of the value provided. This is a quick and easy
+	 * 		to validate all sorts of things without relying on printing to the console
 	 * 	2.) failtocompile - this tells OUNIT that it should expect compilation to fail in some way. It
 	 * 		does not have the granularity to tell how it fails
 	 */
@@ -479,7 +491,21 @@ static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, 
 	token = &(stream->token_stream.internal_array[*stream_index]);
 
 	switch(token->tok){
-		//TODO EXIT_STATUS
+		/**
+		 * The EXIT_STATUS keyword expects an equals sign and then a constant value after it
+		 */
+		case EXIT_STATUS:
+			token->ignore = TRUE;
+
+			//The next token has to be an equals
+			(*stream_index)++;
+			token = &(stream->token_stream.internal_array[*stream_index]);
+			
+			if(token->tok != EQUALS){
+				
+			}
+		
+			
 
 		/**
 		 * Only thing for a failure to compile is the keyword itself. We will
