@@ -474,26 +474,29 @@ static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, 
 	 * 		does not have the granularity to tell how it fails
 	 */
 
-	/**
-	 * Now for the purpose of the preprocessor, we will run through
-	 * everything inside of these brackets until we hit the closing
-	 * bracket. If we reach EOF without hitting the closing
-	 * bracket then we have an error
-	 */
-	while(*stream_index < stream->token_stream.current_index){
-		//Extract it
-		token = &(stream->token_stream.internal_array[*stream_index]);
+	//Get the next token in the stream index
+	(*stream_index)++;
+	token = &(stream->token_stream.internal_array[*stream_index]);
 
-		//Flag to ignore this
-		token->ignore = TRUE;
+	switch(token->tok){
+		//TODO EXIT_STATUS
 
-		//Get out
-		if(token->tok == R_BRACKET){
+		/**
+		 * Only thing for a failure to compile is the keyword itself. We will
+		 * flag that it should be ignored and move along
+		 */
+		case FAIL_TO_COMPILE:
+			token->ignore = TRUE;
 			break;
-		}
 
-		//Onto the next one
-		(*stream_index)++;
+		/**
+		 * Unknown/invalid directive - fail out here so that the entire compiilation breaks
+		 */
+		default:
+			sprintf(info_message, "Invalid OUNIT directive detected, [%s] is not a valid OUNIT keyword", lexitem_to_string(token));
+			print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, token->line_num);
+			preprocessor_error_count++;
+			return FAILURE;
 	}
 
 	/**

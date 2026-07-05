@@ -11,7 +11,7 @@
 #include "dynamic_string/dynamic_string.h"
 
 //Total number of keywords in ollie
-#define KEYWORD_COUNT 61
+#define KEYWORD_COUNT 62
 
 //Forward declare the lexitem struct
 typedef struct lexitem_t lexitem_t;
@@ -156,7 +156,8 @@ typedef enum {
 	MACRO_PARAM, //The special macro param token is used to show that we are a parameter
 	STACK_PASSED_PARAM_OFFSET, //Special constant type that will display the stack offset of a passed param
 	OUNIT, //Special token for ollie unit testing
-	FAILTOCOMPILE, //Flag to OUNIT that we expect this file to fail to compile
+	FAIL_TO_COMPILE, //Flag to OUNIT that we expect this file to fail to compile
+	EXIT_STATUS, //Flag to OUNIT that we want to check the exit status as part of this test
 } ollie_token_t;
 
 
