@@ -130,82 +130,14 @@ static inline void add_failed_to_compile_file_threadsafe(char* error_file){
 } 
 
 
-
-static inline ounit_type_t parse_exit_status_OUNIT_directive(ollie_token_array_t* tokens, int32_t* index){
-
-}
-
-
 /**
- * Parser the OUNIT test command. If the command is found to be invalid, we return a state 
- * that represents said invalidity. Otherwise, we will store the result that we expect(must
- * be an integer) inside of the passed parameter pointer
+ * The exit_status OUNIT directive tells OUNIT to run the generated executable and check for a result
+ * using the echo $? command. The user will pass an integer constant into OUNIT to be checked for. We will
+ * do validations here to ensure that everything is proper
  *
- * NOTE: By the time we get here we've already seen and advanced the pointer past the OUNIT 
- * token
- *
- * Example OUNIT command: OUNIT: [exit_status = 5]
- *
- * This tells us that the final exit_status return value(echo $?) of the test should be 5
- *
- * The example above is just one of the test types that OUNIT supports
+ * OUNIT: [exit_status = <integer_constant>]
  */
-static inline ounit_type_t parse_OUNIT_test_command(ollie_token_array_t* tokens, int32_t index, int32_t* expected_result){
-	//Generic pointer for our lexitem
-	lexitem_t* lexitem = token_array_get_pointer_at(tokens, index);
-
-	/**
-	 * We need to see a colon here. If we don't then we fail 
-	 * out now
-	 */
-	if(lexitem->tok != COLON){
-		pthread_mutex_lock(&stdout_mutex);
-		fprintf(stdout, "Expected \":\" but got \"%s\" instead\n", lexitem_to_string(lexitem));
-		pthread_mutex_unlock(&stdout_mutex);
-
-		return OUNIT_TYPE_INVALID;
-	}
-
-	//Otherwise bump the index up
-	index++;
-	lexitem = token_array_get_pointer_at(tokens, index);
-
-	/**
-	 * Again another fail case here, we need to see an L_BRACKET
-	 */
-	if(lexitem->tok != L_BRACKET){
-		pthread_mutex_lock(&stdout_mutex);
-		fprintf(stdout, "Expected \"[\" but got \"%s\" instead\n", lexitem_to_string(lexitem));
-		pthread_mutex_unlock(&stdout_mutex);
-
-		return OUNIT_TYPE_INVALID;
-	}
-
-	index++;
-	lexitem = token_array_get_pointer_at(tokens, index);
-
-	/**
-	 * What we are requesting to do with OUNIT here depends on the token in
-	 * this area. An unrecognized token will produce an error that will be flagged 
-	 * to the user
-	 */
-	switch(lexitem->tok){
-		case EXIT_STATUS:
-			parse_exit_status_OUNIT_directive(tokens, index);
-			break;
-			
-		case FAIL_TO_COMPILE:
-			//TODO NOT IMPLEMENTED
-			exit(1);
-
-		default:
-			pthread_mutex_lock(&stdout_mutex);
-			fprintf(stdout, "Expected \"exit_status\" but got \"%s\" instead\n", lexitem_to_string(lexitem));
-			pthread_mutex_unlock(&stdout_mutex);
-
-			return OUNIT_COMPATIBLE_BUT_INVALID;
-	}
-
+static inline ounit_type_t parse_exit_status_OUNIT_directive(ollie_token_array_t* tokens, int32_t* index){
 	//Otherwise bump the index up
 	index++;
 	lexitem = token_array_get_pointer_at(tokens, index);
@@ -286,6 +218,82 @@ static inline ounit_type_t parse_OUNIT_test_command(ollie_token_array_t* tokens,
 			return OUNIT_TYPE_INVALID;
 	}
 
+}
+
+
+/**
+ * Parser the OUNIT test command. If the command is found to be invalid, we return a state 
+ * that represents said invalidity. Otherwise, we will store the result that we expect(must
+ * be an integer) inside of the passed parameter pointer
+ *
+ * NOTE: By the time we get here we've already seen and advanced the pointer past the OUNIT 
+ * token
+ *
+ * Example OUNIT command: OUNIT: [exit_status = 5]
+ *
+ * This tells us that the final exit_status return value(echo $?) of the test should be 5
+ *
+ * The example above is just one of the test types that OUNIT supports
+ */
+static inline ounit_type_t parse_OUNIT_test_command(ollie_token_array_t* tokens, int32_t index, ){
+	//By default assume we're invalid
+	ounit_type_t ounit_type = OUNIT_TYPE_INVALID;
+
+	//Generic pointer for our lexitem
+	lexitem_t* lexitem = token_array_get_pointer_at(tokens, index);
+
+	/**
+	 * We need to see a colon here. If we don't then we fail 
+	 * out now
+	 */
+	if(lexitem->tok != COLON){
+		pthread_mutex_lock(&stdout_mutex);
+		fprintf(stdout, "Expected \":\" but got \"%s\" instead\n", lexitem_to_string(lexitem));
+		pthread_mutex_unlock(&stdout_mutex);
+
+		return OUNIT_TYPE_INVALID;
+	}
+
+	//Otherwise bump the index up
+	index++;
+	lexitem = token_array_get_pointer_at(tokens, index);
+
+	/**
+	 * Again another fail case here, we need to see an L_BRACKET
+	 */
+	if(lexitem->tok != L_BRACKET){
+		pthread_mutex_lock(&stdout_mutex);
+		fprintf(stdout, "Expected \"[\" but got \"%s\" instead\n", lexitem_to_string(lexitem));
+		pthread_mutex_unlock(&stdout_mutex);
+
+		return OUNIT_TYPE_INVALID;
+	}
+
+	index++;
+	lexitem = token_array_get_pointer_at(tokens, index);
+
+	/**
+	 * What we are requesting to do with OUNIT here depends on the token in
+	 * this area. An unrecognized token will produce an error that will be flagged 
+	 * to the user
+	 */
+	switch(lexitem->tok){
+		case EXIT_STATUS:
+			ounit_type = parse_exit_status_OUNIT_directive(tokens, &index);
+			break;
+			
+		case FAIL_TO_COMPILE:
+			//TODO NOT IMPLEMENTED
+			exit(1);
+
+		default:
+			pthread_mutex_lock(&stdout_mutex);
+			fprintf(stdout, "Expected \"exit_status\" but got \"%s\" instead\n", lexitem_to_string(lexitem));
+			pthread_mutex_unlock(&stdout_mutex);
+
+			return OUNIT_COMPATIBLE_BUT_INVALID;
+	}
+
 	//Bump it up one last time
 	index++;
 	lexitem = token_array_get_pointer_at(tokens, index);
@@ -301,8 +309,8 @@ static inline ounit_type_t parse_OUNIT_test_command(ollie_token_array_t* tokens,
 		return OUNIT_TYPE_INVALID;
 	}
 
-	//Otherwise if we survived to down here, we are good
-	return OUNIT_COMPATBILE;
+	//Give back whatever OUNIT type we ended up with 
+	return ounit_type;
 }
 
 
