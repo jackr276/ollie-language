@@ -36,6 +36,8 @@
 #define DEFAULT_ARRAY_SIZE 1000
 //Max file name size on linux
 #define LINUX_MAX_FILE_NAME_LENGTH 300
+//The maximum console output value in UNIX
+#define MAX_EXIT_STATUS_VALUE 255
 
 /**
  * There are 4 potential things that we need to lock. To avoid holding
@@ -63,8 +65,11 @@ static dynamic_array_t test_files;
 static dynamic_array_t error_files;
 static dynamic_array_t failed_to_compile_files;
 
-//Keep track of the total number of files and the total error files
-static u_int32_t number_of_files_eligible_for_run_validation = 0;
+//Keep track of the file counts for all different OUNIT types
+static u_int32_t number_of_ounit_compatible_files = 0;
+static u_int32_t number_of_exit_status_validation_files = 0;
+static u_int32_t number_of_fail_to_compile_validation_files = 0;
+//TODO UPDATE
 static u_int32_t number_of_failed_to_compile = 0;
 static u_int32_t number_of_error_files = 0;
 
@@ -128,6 +133,9 @@ static inline void add_error_file_threadsafe(char* error_file){
 /**
  * Lockdown the failed to compile file array and add the given
  * file pointer to it
+ *
+ *
+ * TODO NEEDS A LOOK
  */
 static inline void add_failed_to_compile_file_threadsafe(char* error_file){
 	pthread_mutex_lock(&error_queue_mutex);
@@ -230,6 +238,20 @@ static inline ounit_type_t parse_exit_status_OUNIT_directive(ollie_token_array_t
 			return OUNIT_TYPE_INVALID;
 	}
 
+	/**
+	 * We'll have this fail. We don't want to let the developer waste
+	 * time confused as to why this isn't working
+	 */
+	if(parameters->expected_exit_status >= MAX_EXIT_STATUS_VALUE){
+		pthread_mutex_lock(&stdout_mutex);
+		fprintf(stdout, "The OUNIT expected return value of %d is higher than the maximum UNIX return value of %d. Please remediate your test\n",
+		  		parameters->expected_exit_status,
+		  		MAX_EXIT_STATUS_VALUE);
+		pthread_mutex_unlock(&stdout_mutex);
+
+		return OUNIT_TYPE_INVALID;
+	}
+
 	//If we make it to here then we're good, and we're of this given type
 	return OUNIT_TYPE_EXIT_STATUS_VALIDATION;
 }
@@ -249,7 +271,7 @@ static inline ounit_type_t parse_exit_status_OUNIT_directive(ollie_token_array_t
  *
  * The example above is just one of the test types that OUNIT supports
  */
-static inline ounit_type_t parse_OUNIT_test_command(ollie_token_array_t* tokens, int32_t index, test_parameters_t* paremeters){
+static inline ounit_type_t parse_OUNIT_test_command(ollie_token_array_t* tokens, int32_t index, test_parameters_t* parameters){
 	//By default assume we're invalid
 	ounit_type_t ounit_type = OUNIT_TYPE_INVALID;
 
@@ -293,7 +315,7 @@ static inline ounit_type_t parse_OUNIT_test_command(ollie_token_array_t* tokens,
 	 */
 	switch(lexitem->tok){
 		case EXIT_STATUS:
-			ounit_type = parse_exit_status_OUNIT_directive(tokens, &index);
+			ounit_type = parse_exit_status_OUNIT_directive(tokens, &index, parameters);
 			break;
 			
 		case FAIL_TO_COMPILE:
@@ -302,10 +324,10 @@ static inline ounit_type_t parse_OUNIT_test_command(ollie_token_array_t* tokens,
 
 		default:
 			pthread_mutex_lock(&stdout_mutex);
-			fprintf(stdout, "Expected \"exit_status\" but got \"%s\" instead\n", lexitem_to_string(lexitem));
+			fprintf(stdout, "Invalid OUNIT directive \"%s\", please review the directive list\n", lexitem_to_string(lexitem));
 			pthread_mutex_unlock(&stdout_mutex);
 
-			return OUNIT_COMPATIBLE_BUT_INVALID;
+			return OUNIT_TYPE_INVALID;
 	}
 
 	//Bump it up one last time
@@ -351,6 +373,109 @@ static ounit_type_t is_test_OUNIT_compatible(ollie_token_stream_t* stream, test_
 	return OUNIT_TYPE_NONE;
 }
 
+
+static inline void handle_exit_status_validation(u_int32_t thread_id, char* file_name, u_int32_t* thread_error_count, test_parameters_t* parameters){
+	//All needed string buffers
+	char output_file_name[1000];
+	char fully_qualified_file_name[1000];
+	char command_buffer[3000];
+	char run_command_buffer[2000];
+
+	//Generate the *.test file name for the compiled file
+	sprintf(output_file_name, "%s.test", file_name);
+
+	//Construct the fully qualified file name
+	sprintf(fully_qualified_file_name, "%s%s", test_file_dir, file_name);
+
+	//Save that this was eligible to be run
+	pthread_mutex_lock(&stdout_mutex);
+	number_of_exit_status_validation_files++;
+	pthread_mutex_unlock(&stdout_mutex);
+
+	/**
+	 * Otherwise it is compatible so we will begin our testing
+	 * here by first compiling the actual item
+	 */
+	sprintf(command_buffer, "%s/oc -f %s%s -o %s > /dev/null 2>&1", output_directory, test_file_dir, file_name, output_file_name);
+
+	/**
+	 * Run the compilation command. The compiler relies on a shared temporary output file, so we 
+	 * need to lock here to make this all work
+	 */
+	pthread_mutex_lock(&compiler_mutex);
+	int32_t compilation_result = system(command_buffer);
+	pthread_mutex_unlock(&compiler_mutex);
+
+	/**
+	 * If for any reason we have a failure here, then
+	 * we will note a compilation failure and move on
+	 */
+	if(compilation_result != 0){
+		pthread_mutex_lock(&stdout_mutex);
+		fprintf(stdout, "[Thread %d]: Ran compilation command: %s\n", thread_id, command_buffer);
+		fprintf(stdout, "[Thread %d]: The OUNIT configured test %s failed to compile with exit code %d. Developer attention is required\n\n", thread_id, file_name, compilation_result);
+		pthread_mutex_unlock(&stdout_mutex);
+
+		//Store this in the list of files that failed to compile when they should have
+		add_failed_to_compile_file_threadsafe(file_name);
+
+		//Bump up the per-thread result
+		(*thread_error_count)++;
+
+		//Exit out
+		return;
+	}
+
+	/**
+	 * Create the actual run command and get a result out
+	 */
+	sprintf(run_command_buffer, "./%s", output_file_name);
+	int32_t runtime_result = WEXITSTATUS(system(run_command_buffer));
+
+	/**
+	 * If the results match then we are all set here. If they
+	 * do not then we will need to display an error
+	 */
+	if(runtime_result == parameters->expected_exit_status){
+		pthread_mutex_lock(&stdout_mutex);
+		fprintf(stdout, "Compilation command ran: %s\n", command_buffer);
+		fprintf(stdout, "Execution command ran: %s\n", run_command_buffer);
+		fprintf(stdout, "Expected execution result [%d] matched the expected result [%d]. Test was a success.\n", runtime_result, parameters->expected_exit_status);
+		pthread_mutex_unlock(&stdout_mutex);
+
+	} else {
+		pthread_mutex_lock(&stdout_mutex);
+		fprintf(stdout, "Compilation command ran: %s\n", command_buffer);
+		fprintf(stdout, "Execution command ran: %s\n", run_command_buffer);
+		fprintf(stdout, "Expected execution result was [%d], but got [%d] instead\n", parameters->expected_exit_status, runtime_result);
+		pthread_mutex_unlock(&stdout_mutex);
+
+		//This is an error file now
+		add_error_file_threadsafe(file_name);
+		
+		//Count it as one more error
+		(*thread_error_count)++;
+	}
+
+	/**
+	 * Delete the output file now that we are done with it. Output file
+	 * names should be unique so in theory we should not have to lock this
+	 */
+	sprintf(command_buffer, "rm %s", output_file_name);
+	int32_t deletion_result = system(command_buffer);
+
+	/**
+	 * If somehow this didn't work we should flag it
+	 */
+	if(deletion_result != 0){
+		pthread_mutex_lock(&stdout_mutex);
+		fprintf(stdout, "[Thread %d]: Failed to delete output file %s\n", thread_id, output_file_name);
+		(*thread_error_count)++;
+		pthread_mutex_unlock(&stdout_mutex);
+	}
+}
+
+
 /**
  * Our worker thread operates by polling the file list(trying to delete from the back), 
  * and attempting to validate it if it is OUNIT compatible. Once validated it will update
@@ -358,21 +483,16 @@ static ounit_type_t is_test_OUNIT_compatible(ollie_token_stream_t* stream, test_
  * of the queue it will exit
  */
 void* worker(void* thread_parameters) {
-	//Needed strings
-	char output_file_name[1000];
-	char fully_qualified_file_name[1000];
-	char command_buffer[3000];
-	char run_command_buffer[2000];
-
 	//Test parameters that certain test types require
 	test_parameters_t test_parameters;
+	//Storage for the full file name
+	char fully_qualified_file_name[1000];
 
 	//Extract our thread ID
 	u_int32_t thread_id = ((thread_parameters_t*)(thread_parameters))->thread_number;
 
 	//Keep track of how many errors this exact thread has seen
 	u_int32_t errors_per_thread = 0;
-	u_int32_t failed_to_compile_per_thread = 0;
 
 	//Display for debug info
 	pthread_mutex_lock(&stdout_mutex);
@@ -399,12 +519,8 @@ void* worker(void* thread_parameters) {
 			pthread_mutex_lock(&stdout_mutex);
 			fprintf(stdout, "[Thread %d]: Thread has no files left to validate. Thread will now exit\n\n", thread_id);
 			pthread_mutex_unlock(&stdout_mutex);
-
 			break;
 		}
-
-		//Generate the *.test file name for the compiled file
-		sprintf(output_file_name, "%s.test", file_name);
 
 		//Construct the fully qualified file name
 		sprintf(fully_qualified_file_name, "%s%s", test_file_dir, file_name);
@@ -427,7 +543,7 @@ void* worker(void* thread_parameters) {
 		 */
 		if(token_stream.status == STREAM_STATUS_FAILURE){
 			pthread_mutex_lock(&stdout_mutex);
-			fprintf(stdout, "[Thread %d]: File %s has failed to tokenize\n", thread_id, file_name);
+			fprintf(stdout, "[Thread %d]: File %s has failed to tokenize. This file will not be tested\n", thread_id, file_name);
 			pthread_mutex_unlock(&stdout_mutex);
 			continue;
 		}
@@ -443,42 +559,21 @@ void* worker(void* thread_parameters) {
 			 * Easiest case just skip the whole thing
 			 */
 			case OUNIT_TYPE_NONE:
-				continue;
+				break;
 
 			/**
 			 * Another easy case. The only thing that we want to validate is that the
 			 * expected result is actually a valid value. Remember that on UNIX, 
 			 * the highest return value from a shell is 255
 			 */
-			case OUNIT_COMPATBILE:
-				/**
-				 * We'll have this fail. We don't want to let the developer waste
-				 * time confused as to why this isn't working
-				 *
-				 * TODO MOVE ME
-				 */
-				if(expected_result >= 255){
-					pthread_mutex_lock(&stdout_mutex);
-					fprintf(stdout, "[Thread %d]: File \"%s\" - The OUNIT expected return value of %d is higher than the maximum UNIX return value of %d. Please remediate your test\n", thread_id, file_name, expected_result, 255);
-					pthread_mutex_unlock(&stdout_mutex);
-
-					//Add to the error array
-					add_error_file_threadsafe(file_name);
-
-					//Per-thread tracking
-					errors_per_thread++;
-
-					//Onto the next file
-					continue;
-
-				} else {
-					//Save that this was eligible to be run
-					pthread_mutex_lock(&stdout_mutex);
-					number_of_files_eligible_for_run_validation++;
-					pthread_mutex_unlock(&stdout_mutex);
-				}
-
+			case OUNIT_TYPE_EXIT_STATUS_VALIDATION:
+				handle_exit_status_validation(file_name, &errors_per_thread, &test_parameters);
 				break;
+
+
+			case OUNIT_TYPE_FAIL_TO_COMPILE:
+				//TODO NOT IMPLEMENTED
+				exit(1);
 
 			/**
 			 * This means that the developer tried to make their test OUNIT compatible
@@ -496,88 +591,7 @@ void* worker(void* thread_parameters) {
 				errors_per_thread++;
 
 				//Onto the next file don't bother compiling
-				continue;
-		}
-
-		/**
-		 * Otherwise it is compatible so we will begin our testing
-		 * here by first compiling the actual item
-		 */
-		sprintf(command_buffer, "%s/oc -f %s%s -o %s > /dev/null 2>&1", output_directory, test_file_dir, file_name, output_file_name);
-
-		/**
-		 * Run the compilation command. The compiler relies on a shared temporary output file, so we 
-		 * need to lock here to make this all work
-		 */
-		pthread_mutex_lock(&compiler_mutex);
-		int32_t compilation_result = system(command_buffer);
-		pthread_mutex_unlock(&compiler_mutex);
-
-		/**
-		 * If for any reason we have a failure here, then
-		 * we will note a compilation failure and move on
-		 */
-		if(compilation_result != 0){
-			pthread_mutex_lock(&stdout_mutex);
-			fprintf(stdout, "[Thread %d]: Ran compilation command: %s\n", thread_id, command_buffer);
-			fprintf(stdout, "[Thread %d]: The OUNIT configured test %s failed to compile with exit code %d. Developer attention is required\n\n", thread_id, file_name, compilation_result);
-			pthread_mutex_unlock(&stdout_mutex);
-
-			//Store this in the list of files that failed to compile when they should have
-			add_failed_to_compile_file_threadsafe(file_name);
-
-			//Bump up the per-thread result
-			failed_to_compile_per_thread++;
-
-			//Onto the next one
-			continue;
-		}
-
-		/**
-		 * Create the actual run command and get a result out
-		 */
-		sprintf(run_command_buffer, "./%s", output_file_name);
-		int32_t runtime_result = WEXITSTATUS(system(run_command_buffer));
-
-		/**
-		 * If the results match then we are all set here. If they
-		 * do not then we will need to display an error
-		 */
-		if(runtime_result == expected_result){
-			pthread_mutex_lock(&stdout_mutex);
-			fprintf(stdout, "Compilation command ran: %s\n", command_buffer);
-			fprintf(stdout, "Execution command ran: %s\n", run_command_buffer);
-			fprintf(stdout, "Expected execution result [%d] matched the expected result [%d]. Test was a success.\n", runtime_result, expected_result);
-			pthread_mutex_unlock(&stdout_mutex);
-
-		} else {
-			pthread_mutex_lock(&stdout_mutex);
-			fprintf(stdout, "Compilation command ran: %s\n", command_buffer);
-			fprintf(stdout, "Execution command ran: %s\n", run_command_buffer);
-			fprintf(stdout, "Expected execution result was [%d], but got [%d] instead\n", expected_result, runtime_result);
-			pthread_mutex_unlock(&stdout_mutex);
-
-			//This is an error file now
-			add_error_file_threadsafe(file_name);
-			
-			//Count it as one more error
-			errors_per_thread++;
-		}
-
-		/**
-		 * Delete the output file now that we are done with it. Output file
-		 * names should be unique so in theory we should not have to lock this
-		 */
-		sprintf(command_buffer, "rm %s", output_file_name);
-		int32_t deletion_result = system(command_buffer);
-
-		/**
-		 * If somehow this didn't work we should flag it
-		 */
-		if(deletion_result != 0){
-			pthread_mutex_lock(&stdout_mutex);
-			fprintf(stdout, "[Thread %d]: Failed to delete output file %s\n", thread_id, output_file_name);
-		   	pthread_mutex_unlock(&stdout_mutex);
+				break;
 		}
 	}
 
@@ -585,7 +599,6 @@ void* worker(void* thread_parameters) {
 	pthread_mutex_lock(&stdout_mutex);
 	fprintf(stdout, "\n-----------------------------------------------\n");
 	fprintf(stdout, "[Thread %d]: Work Finished\n", thread_id);
-	fprintf(stdout, "Failed to compile: %d\n", failed_to_compile_per_thread);
 	fprintf(stdout, "Ran but errored: %d\n", errors_per_thread);
 	fprintf(stdout, "-----------------------------------------------\n");
 	pthread_mutex_unlock(&stdout_mutex);
@@ -700,6 +713,7 @@ int main(int argc, char** argv) {
 	clock_t stop_time = clock();
 	double time_taken = (double)(stop_time - start_time) / CLOCKS_PER_SEC;
 
+	//TODO REWORK
 	printf("\n\n\n\n\n\n================================ Ollie Run Validation Summary =================================== \n");
 	printf("FILES CONSIDERED: %d\n", test_file_count);
 	printf("FILES ELIGIBLE FOR RUN VALIDATION: %d\n", number_of_files_eligible_for_run_validation);
