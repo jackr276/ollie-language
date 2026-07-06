@@ -84,18 +84,20 @@ struct thread_parameters_t {
 };
 
 /**
- * For OUNIT compatibility, we have 3 possible
+ * For OUNIT types, we have a few possible
  * scenarios:
- * 	1.) Not at all compatible
- * 	2.) Compatible
- * 	3.) Compatible but incorrect syntax
+ * 	1.) Not at all compatible - just ignore
+ * 	2.) Flagged as compatible but incorrect - fail
+ * 	3.) exit_status directive - OUNIT wants the test ran and the exit statuses compared
+ * 	4.) fail_to_compile - we expect that this test will not compile intentionally
  * This enumeration represents all possible states
  */
 typedef enum {
-	OUNIT_NOT_COMPATIBLE,
-	OUNIT_COMPATBILE,
-	OUNIT_COMPATIBLE_BUT_INVALID
-} ounit_compatibility_status_t;
+	OUNIT_TYPE_NONE,
+	OUNIT_TYPE_INVALID,
+	OUNIT_TYPE_EXIT_STATUS_VALIDATION,
+	OUNIT_TYPE_FAIL_TO_COMPILE,
+} ounit_type_t;
 
 
 /**
@@ -128,6 +130,12 @@ static inline void add_failed_to_compile_file_threadsafe(char* error_file){
 } 
 
 
+
+static inline ounit_type_t parse_exit_status_OUNIT_directive(ollie_token_array_t* tokens, int32_t* index){
+
+}
+
+
 /**
  * Parser the OUNIT test command. If the command is found to be invalid, we return a state 
  * that represents said invalidity. Otherwise, we will store the result that we expect(must
@@ -136,14 +144,13 @@ static inline void add_failed_to_compile_file_threadsafe(char* error_file){
  * NOTE: By the time we get here we've already seen and advanced the pointer past the OUNIT 
  * token
  *
- * Example OUNIT command: OUNIT: [console = 5]
+ * Example OUNIT command: OUNIT: [exit_status = 5]
  *
- * This tells us that the final console return value(echo $?) of the test should be 5
+ * This tells us that the final exit_status return value(echo $?) of the test should be 5
  *
- * This is currently the only test type that OUNIT supports. More may be added later on
- * if it is determined that other scenarios should be tested
+ * The example above is just one of the test types that OUNIT supports
  */
-static inline u_int8_t parse_OUNIT_test_command(ollie_token_array_t* tokens, int32_t index, int32_t* expected_result){
+static inline ounit_type_t parse_OUNIT_test_command(ollie_token_array_t* tokens, int32_t index, int32_t* expected_result){
 	//Generic pointer for our lexitem
 	lexitem_t* lexitem = token_array_get_pointer_at(tokens, index);
 
@@ -156,7 +163,7 @@ static inline u_int8_t parse_OUNIT_test_command(ollie_token_array_t* tokens, int
 		fprintf(stdout, "Expected \":\" but got \"%s\" instead\n", lexitem_to_string(lexitem));
 		pthread_mutex_unlock(&stdout_mutex);
 
-		return OUNIT_COMPATIBLE_BUT_INVALID;
+		return OUNIT_TYPE_INVALID;
 	}
 
 	//Otherwise bump the index up
@@ -171,22 +178,32 @@ static inline u_int8_t parse_OUNIT_test_command(ollie_token_array_t* tokens, int
 		fprintf(stdout, "Expected \"[\" but got \"%s\" instead\n", lexitem_to_string(lexitem));
 		pthread_mutex_unlock(&stdout_mutex);
 
-		return OUNIT_COMPATIBLE_BUT_INVALID;
+		return OUNIT_TYPE_INVALID;
 	}
 
 	index++;
 	lexitem = token_array_get_pointer_at(tokens, index);
 
 	/**
-	 * We now need to see an identifier that says "console". If we don't
-	 * then we are done with this
+	 * What we are requesting to do with OUNIT here depends on the token in
+	 * this area. An unrecognized token will produce an error that will be flagged 
+	 * to the user
 	 */
-	if((lexitem->tok != IDENT) || (strcmp(lexitem->lexeme.string, "console") != 0)){
-		pthread_mutex_lock(&stdout_mutex);
-		fprintf(stdout, "Expected \"console\" but got \"%s\" instead\n", lexitem_to_string(lexitem));
-		pthread_mutex_unlock(&stdout_mutex);
+	switch(lexitem->tok){
+		case EXIT_STATUS:
+			parse_exit_status_OUNIT_directive(tokens, index);
+			break;
+			
+		case FAIL_TO_COMPILE:
+			//TODO NOT IMPLEMENTED
+			exit(1);
 
-		return OUNIT_COMPATIBLE_BUT_INVALID;
+		default:
+			pthread_mutex_lock(&stdout_mutex);
+			fprintf(stdout, "Expected \"exit_status\" but got \"%s\" instead\n", lexitem_to_string(lexitem));
+			pthread_mutex_unlock(&stdout_mutex);
+
+			return OUNIT_COMPATIBLE_BUT_INVALID;
 	}
 
 	//Otherwise bump the index up
@@ -266,7 +283,7 @@ static inline u_int8_t parse_OUNIT_test_command(ollie_token_array_t* tokens, int
 			fprintf(stdout, "An integer adjacent constant was expected after the =, instead saw \"%s\"\n", lexitem_to_string(lexitem));
 			pthread_mutex_unlock(&stdout_mutex);
 
-			return OUNIT_COMPATIBLE_BUT_INVALID;
+			return OUNIT_TYPE_INVALID;
 	}
 
 	//Bump it up one last time
@@ -281,7 +298,7 @@ static inline u_int8_t parse_OUNIT_test_command(ollie_token_array_t* tokens, int
 		fprintf(stdout, "Expected \"]\" but got \"%s\" instead\n", lexitem_to_string(lexitem));
 		pthread_mutex_unlock(&stdout_mutex);
 
-		return OUNIT_COMPATIBLE_BUT_INVALID;
+		return OUNIT_TYPE_INVALID;
 	}
 
 	//Otherwise if we survived to down here, we are good
@@ -296,7 +313,7 @@ static inline u_int8_t parse_OUNIT_test_command(ollie_token_array_t* tokens, int
  * also piggy-back off of this function to parse and get out what we
  * expect the actual result of the test to be
  */
-static ounit_compatibility_status_t is_test_OUNIT_compatible(ollie_token_stream_t* stream, int32_t* expected_result){
+static ounit_type_t is_test_OUNIT_compatible(ollie_token_stream_t* stream, int32_t* expected_result){
 	//Run through and see if we can find the OUNIT token
 	for(u_int32_t i = 0; i < stream->token_stream.current_index; i++){
 		//Extract the token pointer
@@ -309,7 +326,7 @@ static ounit_compatibility_status_t is_test_OUNIT_compatible(ollie_token_stream_
 	}
 
 	//If we made it all the way down here then it is not OUNIT compatible
-	return OUNIT_NOT_COMPATIBLE;
+	return OUNIT_TYPE_NONE;
 }
 
 /**
@@ -395,7 +412,7 @@ void* worker(void* thread_parameters) {
 		 * the expected result for later validations
 		 */
 		int32_t expected_result;
-		ounit_compatibility_status_t compatibility = is_test_OUNIT_compatible(&token_stream, &expected_result);
+		ounit_type_t test_type = is_test_OUNIT_compatible(&token_stream, &expected_result);
 
 		switch(compatibility){
 			/**
@@ -441,7 +458,7 @@ void* worker(void* thread_parameters) {
 			 * This means that the developer tried to make their test OUNIT compatible
 			 * but they messed it up somehow
 			 */
-			case OUNIT_COMPATIBLE_BUT_INVALID:
+			case OUNIT_TYPE_INVALID:
 				pthread_mutex_lock(&stdout_mutex);
 				fprintf(stdout, "[Thread %d]: The file \"%s\" has an incorrect OUNIT configuration and will not be processed\n", thread_id, file_name);
 				pthread_mutex_unlock(&stdout_mutex);
