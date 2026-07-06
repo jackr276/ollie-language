@@ -26,6 +26,6 @@ pub fn copy_struct() -> i32 {
 
 //Once we're done echo $? should be 6 if all is correct
 pub fn main() -> i32 {
-	OUNIT: [console = 6]
+	OUNIT: [exit_status = 6]
 	ret @copy_struct();
 }

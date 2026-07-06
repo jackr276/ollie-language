@@ -26,6 +26,6 @@ pub fn to_conditional_move(x:i32) -> i32 {
 
 
 pub fn main() -> i32 {
-	OUNIT:[console = 4]
+	OUNIT:[exit_status = 4]
 	ret @to_conditional_move(6);
 }

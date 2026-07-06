@@ -28,6 +28,6 @@ pub fn main() -> i32 {
 	let tester:struct a = {1, 2, {[1, 2, 3, 4, 5], 5.5, {11, 12}}};
 
 	//Verify that we can distinguish the three x's
-	OUNIT: [console = 14]
+	OUNIT: [exit_status = 14]
 	ret tester:x + tester:b:x[1] + tester:b:z:x;
 }

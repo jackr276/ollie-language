@@ -14,6 +14,6 @@ pub fn ineligible_in(x:f32) -> i32 {
 
 
 pub fn main() -> i32 {
-	OUNIT: [console = 55]
+	OUNIT: [exit_status = 55]
 	ret @ineligible_in(3.33);
 }

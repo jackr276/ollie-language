@@ -10,6 +10,6 @@ pub fn array_as_param(x:i32[5]) -> i32 {
 pub fn main() -> i32 {
 	let x:i32[] = [1, 2, 3, 4, 5];
 
-	OUNIT: [console = 4]
+	OUNIT: [exit_status = 4]
 	ret @array_as_param(x);
 }

@@ -18,6 +18,6 @@ pub fn in_statement_assignment_conditional(x:u32) -> u32 {
 
 
 pub fn main() -> i32 {
-	OUNIT: [console = 6]
+	OUNIT: [exit_status = 6]
 	ret @in_statement_assignment_conditional(1234);
 }

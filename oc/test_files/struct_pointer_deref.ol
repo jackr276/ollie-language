@@ -32,6 +32,6 @@ pub fn main(arg:i32, argv:char**) -> i32{
 	@mutate_structure_pointer(&a);
 
 	//Should come out as a 32
-	OUNIT:[console = 32]
+	OUNIT:[exit_status = 32]
 	ret a:y[1];
 }

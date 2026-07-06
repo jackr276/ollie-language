@@ -11,6 +11,6 @@ pub fn in_single_member(x:i32) -> i32 {
 
 
 pub fn main() -> i32 {
-	OUNIT: [console = 1]
+	OUNIT: [exit_status = 1]
 	ret @in_single_member(1);
 }

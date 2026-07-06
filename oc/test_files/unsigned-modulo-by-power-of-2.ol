@@ -21,6 +21,6 @@ pub fn mod_by_power_2(x:u32) -> u32 {
 
 pub fn main() -> i32 {
 	//Should give: 0 + 0 + 0 + 0 + 16 = 16
-	OUNIT: [console = 16]
+	OUNIT: [exit_status = 16]
 	ret @mod_by_power_2(16);
 }

@@ -16,6 +16,6 @@ pub fn byte_static_array(x:bool) -> i32 {
 
 
 pub fn main() -> i32 {
-	OUNIT:[console = 3]
+	OUNIT:[exit_status = 3]
 	ret @byte_static_array(false);
 }

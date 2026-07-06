@@ -9,6 +9,6 @@ pub fn float_logical_not(x:f32) -> i32 {
 
 
 pub fn main() -> i32 {
-	OUNIT: [console = 0]
+	OUNIT: [exit_status = 0]
 	ret @float_logical_not(3.33);
 }

@@ -34,6 +34,6 @@ pub fn main() -> i32 {
 	let fn_ptr:fn(i32, value_struct) -> i32 = use_struct_param;
 
 	//Should return 5 + 3 + 97('a') = 105
-	OUNIT: [console = 105]
+	OUNIT: [exit_status = 105]
 	ret @fn_ptr(5, @construct_struct(3, 4, 'a'));
 }

@@ -26,6 +26,6 @@ pub fn main() -> i32 {
 	//Get this value to actually be NaN
 	let NaN:f32 = *(<f32*>(&x));
 
-	OUNIT: [console = 9]
+	OUNIT: [exit_status = 9]
 	ret @float_if_assignment(NaN, 8, 9);
 }

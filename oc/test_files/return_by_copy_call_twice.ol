@@ -26,6 +26,6 @@ pub fn return_struct2(x:i32, y:i32) -> custom_struct {
 
 pub fn main() -> i32 {
 	//Should return 3 + 5 = 8
-	OUNIT:[console = 8]
+	OUNIT:[exit_status = 8]
 	ret @return_struct(1, 2):y[3] + @return_struct2(1, 2):y[3];
 }

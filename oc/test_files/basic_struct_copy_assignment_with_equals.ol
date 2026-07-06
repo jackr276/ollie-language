@@ -19,6 +19,6 @@ pub fn main() -> i32 {
 	//Copy assignment here
 	y = x;
 
-	OUNIT: [console = 'a']
+	OUNIT: [exit_status = 'a']
 	ret y:y;
 }

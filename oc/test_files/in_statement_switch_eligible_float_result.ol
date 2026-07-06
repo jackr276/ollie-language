@@ -12,6 +12,6 @@ pub fn in_statement_float_result(x:i32) -> f32 {
 
 
 pub fn main() -> i32 {
-	OUNIT: [console = 1]
+	OUNIT: [exit_status = 1]
 	ret @in_statement_float_result(3);
 }

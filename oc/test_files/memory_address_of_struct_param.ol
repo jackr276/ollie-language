@@ -27,6 +27,6 @@ pub fn main() -> i32 {
 	let my_struct:passing_struct = {1, 5, '\0'};
 
 	//Should return 1 + 5 + '\0' which is 6 
-	OUNIT: [console = 6]
+	OUNIT: [exit_status = 6]
 	ret @pass_by_copy_struct_pass_through(my_struct);
 }

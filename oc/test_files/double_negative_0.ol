@@ -9,7 +9,7 @@
 pub fn main() -> i32 {
 	let x:f64 = -0.0d;
 
-	OUNIT: [console = 1]
+	OUNIT: [exit_status = 1]
 	if((*(<u64*>(&x)) >> 63) == 1){
 		ret 1;
 	} else {

@@ -17,6 +17,6 @@ pub fn main() -> i32 {
 			break;
 	}
 
-	OUNIT: [console = 5]
+	OUNIT: [exit_status = 5]
 	ret x;
 }

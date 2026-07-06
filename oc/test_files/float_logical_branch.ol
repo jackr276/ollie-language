@@ -16,6 +16,6 @@ pub fn float_branch(x:f32) -> bool {
 
 //Dummy
 pub fn main() -> i32 {
-	OUNIT:[console = 0]
+	OUNIT:[exit_status = 0]
 	ret @float_branch(0.0);
 }

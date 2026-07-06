@@ -31,6 +31,6 @@ pub fn ollie_loops(arr:i32[3][5]) -> i32 {
 pub fn main() -> i32 {
 	let arr:i32[3][5] = [[1, 2, 3, 4, 5], [6, 7, 8, 9, 10], [11, 12, 13, 14, 15]];
 	//Sum should be 15 + 40 + 65 = 120
-	OUNIT: [console = 120]
+	OUNIT: [exit_status = 120]
 	ret @ollie_loops(arr);
 }

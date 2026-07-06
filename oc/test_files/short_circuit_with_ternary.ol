@@ -14,6 +14,6 @@ pub fn short_circuit_ternary(x:i32, y:i32, z:i32, aa:i32) -> i32 {
 
 
 pub fn main() -> i32 {
-	OUNIT:[console = 5]
+	OUNIT:[exit_status = 5]
 	ret @short_circuit_ternary(5, 4, 0, -1);
 }

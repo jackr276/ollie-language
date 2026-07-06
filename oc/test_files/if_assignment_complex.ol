@@ -27,6 +27,6 @@ pub fn complex_if_assignment(x:i32) -> i32 {
 
 
 pub fn main() -> i32 {
-	OUNIT: [console = 6]
+	OUNIT: [exit_status = 6]
 	ret @complex_if_assignment(10);
 }

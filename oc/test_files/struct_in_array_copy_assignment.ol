@@ -19,6 +19,6 @@ pub fn main() -> i32 {
 	struct_array[3] = to_be_copied;
 
 	//Should return 1 if this worked
-	OUNIT: [console = 1]
+	OUNIT: [exit_status = 1]
 	ret struct_array[3]:x;
 }

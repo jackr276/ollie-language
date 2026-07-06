@@ -12,6 +12,6 @@ pub fn main() -> i32 {
 	* this into x * 4 + 5. They will both give the right
 	* result of 25
 	*/
-	OUNIT: [console = 25]
+	OUNIT: [exit_status = 25]
 	ret 5 + 4 * x;
 }

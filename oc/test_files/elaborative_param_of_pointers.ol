@@ -23,6 +23,6 @@ pub fn main() -> i32 {
 	let z:mut i32[4] = [4, 5, 8, 9];
 
 	//Should return - 0 + (1 + 2) + (3 + 6) + (4 + 5) = 21
-	OUNIT: [console = 21]
+	OUNIT: [exit_status = 21]
 	ret @elaborative_param_of_pointers(0, x, y, z);
 }

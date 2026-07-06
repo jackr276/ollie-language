@@ -17,6 +17,6 @@ pub fn main() -> i32 {
 	//Copy assignment here
 	let y:mut my_struct = x;
 
-	OUNIT: [console = 'a']
+	OUNIT: [exit_status = 'a']
 	ret y:y;
 }

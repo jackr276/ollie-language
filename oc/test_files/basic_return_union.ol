@@ -36,6 +36,6 @@ pub fn return_union() -> custom_union {
 
 
 pub fn main() -> i32 {
-	OUNIT: [console = 'a']
+	OUNIT: [exit_status = 'a']
 	ret @return_union().struct_value:z;
 }

@@ -10,6 +10,6 @@ pub fn ineligible_in(x:f32) -> i32 {
 
 
 pub fn main() -> i32 {
-	OUNIT: [console = 1]
+	OUNIT: [exit_status = 1]
 	ret @ineligible_in(1);
 }

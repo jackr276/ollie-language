@@ -18,6 +18,6 @@ pub fn main() -> i32 {
 	//Small struct copy
 	let copy:super_small_union = original;
 
-	OUNIT: [console = 'a']
+	OUNIT: [exit_status = 'a']
 	ret copy.y;
 }
