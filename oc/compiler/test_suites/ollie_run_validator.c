@@ -62,22 +62,29 @@ pthread_mutex_t error_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
  * to be in error. This is done for the final summary
  */
 static dynamic_array_t test_files;
-static dynamic_array_t error_files;
-static dynamic_array_t failed_to_compile_files;
 
 //Keep track of the file counts for all different OUNIT types
 static u_int32_t number_of_ounit_compatible_files = 0;
+
+/**
+ * For exit status validation, we have two ways to fail:
+ * 	1.) It could fail to compile
+ * 	2.) The actual output could differ from the expected
+ */
 static u_int32_t number_of_exit_status_validation_files = 0;
+static dynamic_array_t failed_to_compile_exit_status_validation_files;
+static dynamic_array_t failed_exit_status_validation_files;
+
+/**
+ * For failed to compile validation:
+ * 	1.) The file could compile when we want it to fail 
+ */
 static u_int32_t number_of_fail_to_compile_validation_files = 0;
-//TODO UPDATE
-static u_int32_t number_of_failed_to_compile = 0;
-static u_int32_t number_of_error_files = 0;
+static dynamic_array_t compiled_when_failure_expected_files;
 
-//Hold onto the overall directory path
-static char* test_file_dir;
-
-//What is the compilation output directory that we are using
+//Holders for our output and test file directories
 static char* output_directory;
+static char* test_file_dir;
 
 /**
  * Our current thread parameter structure only contains
@@ -98,6 +105,7 @@ struct test_parameters_t {
 	int32_t expected_exit_status;
 };
 
+
 /**
  * For OUNIT types, we have a few possible
  * scenarios:
@@ -113,39 +121,6 @@ typedef enum {
 	OUNIT_TYPE_EXIT_STATUS_VALIDATION,
 	OUNIT_TYPE_FAIL_TO_COMPILE,
 } ounit_type_t;
-
-
-/**
- * Lockdown the error file array and add the given
- * file pointer to it
- */
-static inline void add_error_file_threadsafe(char* error_file){
-	pthread_mutex_lock(&error_queue_mutex);
-
-	//Add to the array and bump the count
-	dynamic_array_add(&error_files, error_file);
-	number_of_error_files++;
-
-	pthread_mutex_unlock(&error_queue_mutex);
-} 
-
-
-/**
- * Lockdown the failed to compile file array and add the given
- * file pointer to it
- *
- *
- * TODO NEEDS A LOOK
- */
-static inline void add_failed_to_compile_file_threadsafe(char* error_file){
-	pthread_mutex_lock(&error_queue_mutex);
-
-	//Add to the array and bump the count
-	dynamic_array_add(&failed_to_compile_files, error_file);
-	number_of_failed_to_compile++;
-
-	pthread_mutex_unlock(&error_queue_mutex);
-} 
 
 
 /**
@@ -416,8 +391,10 @@ static inline void handle_exit_status_validation(u_int32_t thread_id, char* file
 		fprintf(stdout, "[Thread %d]: The OUNIT configured test %s failed to compile with exit code %d. Developer attention is required\n\n", thread_id, file_name, compilation_result);
 		pthread_mutex_unlock(&stdout_mutex);
 
-		//Store this in the list of files that failed to compile when they should have
-		add_failed_to_compile_file_threadsafe(file_name);
+		//Add to the array and bump the count
+		pthread_mutex_lock(&error_queue_mutex);
+		dynamic_array_add(&failed_to_compile_exit_status_validation_files, file_name);
+		pthread_mutex_unlock(&error_queue_mutex);
 
 		//Bump up the per-thread result
 		(*thread_error_count)++;
@@ -450,8 +427,10 @@ static inline void handle_exit_status_validation(u_int32_t thread_id, char* file
 		fprintf(stdout, "Expected execution result was [%d], but got [%d] instead\n", parameters->expected_exit_status, runtime_result);
 		pthread_mutex_unlock(&stdout_mutex);
 
-		//This is an error file now
-		add_error_file_threadsafe(file_name);
+		//Add to the list failing the actual exit status validation
+		pthread_mutex_lock(&error_queue_mutex);
+		dynamic_array_add(&failed_exit_status_validation_files, file_name);
+		pthread_mutex_unlock(&error_queue_mutex);
 		
 		//Count it as one more error
 		(*thread_error_count)++;
@@ -647,10 +626,11 @@ int main(int argc, char** argv) {
 	 */
 	output_directory = argv[3];
 
-	//Create our two dynamic arrays with initial sizes
+	//Allocate all dynamic arrays now
 	test_files = dynamic_array_alloc_initial_size(DEFAULT_ARRAY_SIZE);
-	failed_to_compile_files = dynamic_array_alloc_initial_size(DEFAULT_ARRAY_SIZE);
-	error_files = dynamic_array_alloc_initial_size(DEFAULT_ARRAY_SIZE);
+	failed_exit_status_validation_files = dynamic_array_alloc_initial_size(DEFAULT_ARRAY_SIZE);
+	failed_to_compile_exit_status_validation_files = dynamic_array_alloc_initial_size(DEFAULT_ARRAY_SIZE);	
+	compiled_when_failure_expected_files = dynamic_array_alloc_initial_size(DEFAULT_ARRAY_SIZE);
 
 	//Start the clock as we begin our run
 	clock_t start_time = clock();
@@ -715,10 +695,12 @@ int main(int argc, char** argv) {
 
 	//TODO REWORK
 	printf("\n\n\n\n\n\n================================ Ollie Run Validation Summary =================================== \n");
+	printf("SETUP:\n");
 	printf("FILES CONSIDERED: %d\n", test_file_count);
 	printf("FILES ELIGIBLE FOR EXIT STATUS VALIDATION: %d\n", number_of_exit_status_validation_files);
 	printf("FILES ELIGIBLE FOR COMPILATION FAILURE VALIDATION: %d\n", number_of_fail_to_compile_validation_files);
 	printf("TOTAL ELIGIBLE FILE COUNT: %d\n", number_of_ounit_compatible_files);
+	printf("\nRESULTS:\n");
 	//TODO NEEDS MORE
 
 
