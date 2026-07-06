@@ -567,7 +567,7 @@ void* worker(void* thread_parameters) {
 			 * the highest return value from a shell is 255
 			 */
 			case OUNIT_TYPE_EXIT_STATUS_VALIDATION:
-				handle_exit_status_validation(file_name, &errors_per_thread, &test_parameters);
+				handle_exit_status_validation(thread_id, file_name, &errors_per_thread, &test_parameters);
 				break;
 
 
@@ -716,7 +716,12 @@ int main(int argc, char** argv) {
 	//TODO REWORK
 	printf("\n\n\n\n\n\n================================ Ollie Run Validation Summary =================================== \n");
 	printf("FILES CONSIDERED: %d\n", test_file_count);
-	printf("FILES ELIGIBLE FOR RUN VALIDATION: %d\n", number_of_files_eligible_for_run_validation);
+	printf("FILES ELIGIBLE FOR EXIT STATUS VALIDATION: %d\n", number_of_exit_status_validation_files);
+	printf("FILES ELIGIBLE FOR COMPILATION FAILURE VALIDATION: %d\n", number_of_fail_to_compile_validation_files);
+	printf("TOTAL ELIGIBLE FILE COUNT: %d\n", number_of_ounit_compatible_files);
+	//TODO NEEDS MORE
+
+
 	printf("CPU TIME ELAPSED: %.4f seconds\n", time_taken);
 	printf("FILES FAILING RUNTIME VALIDATION: %d\n", number_of_error_files);
 	printf("FILES FAILING TO COMPILE: %d\n", number_of_failed_to_compile);
