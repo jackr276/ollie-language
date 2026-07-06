@@ -83,6 +83,16 @@ struct thread_parameters_t {
 	u_int8_t thread_number;
 };
 
+
+/**
+ * The test parameters struct is optionally filled by the OUNIT
+ * parser, depending on what our test type is
+ */
+typedef struct test_parameters_t test_parameters_t;
+struct test_parameters_t {
+	int32_t expected_exit_status;
+};
+
 /**
  * For OUNIT types, we have a few possible
  * scenarios:
@@ -137,10 +147,12 @@ static inline void add_failed_to_compile_file_threadsafe(char* error_file){
  *
  * OUNIT: [exit_status = <integer_constant>]
  */
-static inline ounit_type_t parse_exit_status_OUNIT_directive(ollie_token_array_t* tokens, int32_t* index){
-	//Otherwise bump the index up
-	index++;
-	lexitem = token_array_get_pointer_at(tokens, index);
+static inline ounit_type_t parse_exit_status_OUNIT_directive(ollie_token_array_t* tokens, int32_t* index, test_parameters_t* parameters){
+	lexitem_t* lexitem;
+
+	//Advance up to the next token in the stream
+	(*index)++;
+	lexitem = token_array_get_pointer_at(tokens, *index);
 
 	/**
 	 * Again another fail case here, we need to see an =
@@ -150,12 +162,12 @@ static inline ounit_type_t parse_exit_status_OUNIT_directive(ollie_token_array_t
 		fprintf(stdout, "Expected \"=\" but got \"%s\" instead\n", lexitem_to_string(lexitem));
 		pthread_mutex_unlock(&stdout_mutex);
 
-		return OUNIT_COMPATIBLE_BUT_INVALID;
+		return OUNIT_TYPE_INVALID;
 	}
 
-	//Otherwise bump the index up
-	index++;
-	lexitem = token_array_get_pointer_at(tokens, index);
+	//Advance to the next token
+	(*index)++;
+	lexitem = token_array_get_pointer_at(tokens, *index);
 
 	/**
 	 * We now need to see any kind of integer equivalent constant. This means
@@ -163,47 +175,47 @@ static inline ounit_type_t parse_exit_status_OUNIT_directive(ollie_token_array_t
 	 */
 	switch(lexitem->tok){
 		case SHORT_CONST:
-			*expected_result = lexitem->constant_values.signed_short_value;
+			parameters->expected_exit_status = lexitem->constant_values.signed_short_value;
 			break;
 
 		case SHORT_CONST_FORCE_U:
-			*expected_result = lexitem->constant_values.unsigned_short_value;
+			parameters->expected_exit_status = lexitem->constant_values.unsigned_short_value;
 			break;
 
 		case INT_CONST:
-			*expected_result = lexitem->constant_values.signed_int_value;
+			parameters->expected_exit_status = lexitem->constant_values.signed_int_value;
 			break;
 
 		case INT_CONST_FORCE_U:
-			*expected_result = lexitem->constant_values.unsigned_int_value;
+			parameters->expected_exit_status = lexitem->constant_values.unsigned_int_value;
 			break;
 
 		case LONG_CONST:
-			*expected_result = lexitem->constant_values.signed_long_value;
+			parameters->expected_exit_status = lexitem->constant_values.signed_long_value;
 			break;
 
 		case LONG_CONST_FORCE_U:
-			*expected_result = lexitem->constant_values.unsigned_long_value;
+			parameters->expected_exit_status = lexitem->constant_values.unsigned_long_value;
 			break;
 
 		case BYTE_CONST:
-			*expected_result = lexitem->constant_values.signed_byte_value;
+			parameters->expected_exit_status = lexitem->constant_values.signed_byte_value;
 			break;
 
 		case BYTE_CONST_FORCE_U:
-			*expected_result = lexitem->constant_values.unsigned_byte_value;
+			parameters->expected_exit_status = lexitem->constant_values.unsigned_byte_value;
 			break;
 
 		case CHAR_CONST:
-			*expected_result = lexitem->constant_values.char_value;
+			parameters->expected_exit_status = lexitem->constant_values.char_value;
 			break;
 
 		case TRUE_CONST:
-			*expected_result = TRUE;
+			parameters->expected_exit_status = TRUE;
 			break;
 			
 		case FALSE_CONST:
-			*expected_result = FALSE;
+			parameters->expected_exit_status = FALSE;
 			break;
 
 		/**
@@ -218,6 +230,8 @@ static inline ounit_type_t parse_exit_status_OUNIT_directive(ollie_token_array_t
 			return OUNIT_TYPE_INVALID;
 	}
 
+	//If we make it to here then we're good, and we're of this given type
+	return OUNIT_TYPE_EXIT_STATUS_VALIDATION;
 }
 
 
@@ -235,7 +249,7 @@ static inline ounit_type_t parse_exit_status_OUNIT_directive(ollie_token_array_t
  *
  * The example above is just one of the test types that OUNIT supports
  */
-static inline ounit_type_t parse_OUNIT_test_command(ollie_token_array_t* tokens, int32_t index, ){
+static inline ounit_type_t parse_OUNIT_test_command(ollie_token_array_t* tokens, int32_t index, test_parameters_t* paremeters){
 	//By default assume we're invalid
 	ounit_type_t ounit_type = OUNIT_TYPE_INVALID;
 
@@ -321,7 +335,7 @@ static inline ounit_type_t parse_OUNIT_test_command(ollie_token_array_t* tokens,
  * also piggy-back off of this function to parse and get out what we
  * expect the actual result of the test to be
  */
-static ounit_type_t is_test_OUNIT_compatible(ollie_token_stream_t* stream, int32_t* expected_result){
+static ounit_type_t is_test_OUNIT_compatible(ollie_token_stream_t* stream, test_parameters_t* parameters){
 	//Run through and see if we can find the OUNIT token
 	for(u_int32_t i = 0; i < stream->token_stream.current_index; i++){
 		//Extract the token pointer
@@ -329,7 +343,7 @@ static ounit_type_t is_test_OUNIT_compatible(ollie_token_stream_t* stream, int32
 
 		//If we see the OUNIT token then we will let the helper determine its compatibilty
 		if(lexitem->tok == OUNIT){
-			return parse_OUNIT_test_command(&(stream->token_stream), i + 1, expected_result);
+			return parse_OUNIT_test_command(&(stream->token_stream), i + 1, parameters);
 		}
 	}
 
@@ -349,6 +363,9 @@ void* worker(void* thread_parameters) {
 	char fully_qualified_file_name[1000];
 	char command_buffer[3000];
 	char run_command_buffer[2000];
+
+	//Test parameters that certain test types require
+	test_parameters_t test_parameters;
 
 	//Extract our thread ID
 	u_int32_t thread_id = ((thread_parameters_t*)(thread_parameters))->thread_number;
@@ -419,14 +436,13 @@ void* worker(void* thread_parameters) {
 		 * The helper will parse the OUNIT test command(if one exists) and populate
 		 * the expected result for later validations
 		 */
-		int32_t expected_result;
-		ounit_type_t test_type = is_test_OUNIT_compatible(&token_stream, &expected_result);
+		ounit_type_t test_type = is_test_OUNIT_compatible(&token_stream, &test_parameters);
 
-		switch(compatibility){
+		switch(test_type){
 			/**
 			 * Easiest case just skip the whole thing
 			 */
-			case OUNIT_NOT_COMPATIBLE:
+			case OUNIT_TYPE_NONE:
 				continue;
 
 			/**
@@ -438,6 +454,8 @@ void* worker(void* thread_parameters) {
 				/**
 				 * We'll have this fail. We don't want to let the developer waste
 				 * time confused as to why this isn't working
+				 *
+				 * TODO MOVE ME
 				 */
 				if(expected_result >= 255){
 					pthread_mutex_lock(&stdout_mutex);
