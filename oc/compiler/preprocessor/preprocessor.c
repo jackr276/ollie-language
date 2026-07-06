@@ -411,7 +411,7 @@ finalize_macro:
  */
 static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, u_int32_t* stream_index){
 	//Extract the token at the given index
-	lexitem_t* token = &(stream->token_stream.internal_array[*stream_index]);
+	lexitem_t* token = get_next_token_pointer(&(stream->token_stream), stream_index);
 
 	//Some very weird failure here
 	if(token->tok != OUNIT){
