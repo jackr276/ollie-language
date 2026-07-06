@@ -84,6 +84,7 @@ static inline void push_token_and_update_nesting_level(lex_stack_t* paren_groupi
 }
 
 
+
 /**
  * A simple wrapper that will help us maintain the *per-parameter* nesting level
  * we pop from the grouping stack. This is for cohesion so when we revisit this 
@@ -105,7 +106,7 @@ static inline ollie_token_t pop_token_and_update_nesting_level(lex_stack_t* pare
  * Simple helper that just wraps the token_array_get_pointer_at and takes care of the index bumping
  * for us
  */
-static inline lexitem_t* get_token_pointer_and_increment(ollie_token_array_t* array, u_int32_t* index){
+static inline lexitem_t* get_next_token_pointer(ollie_token_array_t* array, u_int32_t* index){
 	//Extract the token pointer
 	lexitem_t* token_pointer = token_array_get_pointer_at(array, *index);
 
@@ -146,7 +147,7 @@ static inline lexitem_t* push_back_token_pointer(ollie_token_array_t* array, u_i
  */
 static inline u_int8_t process_macro_parameter(symtab_macro_record_t* macro, ollie_token_array_t* token_array, u_int32_t* index){
 	//Get the next token
-	lexitem_t* lookahead = get_token_pointer_and_increment(token_array, index);
+	lexitem_t* lookahead = get_next_token_pointer(token_array, index);
 
 	//There's only one correct option to see here
 	switch(lookahead->tok){
@@ -203,7 +204,7 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 	ollie_token_array_t* token_array = &(stream->token_stream);
 
 	//Let's get the first pointer here
-	lexitem_t* lookahead = get_token_pointer_and_increment(token_array, index);
+	lexitem_t* lookahead = get_next_token_pointer(token_array, index);
 
 	/**
 	 * This really shouldn't happen because
@@ -221,7 +222,7 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 	 * Now that we've seen the $macro keyword, we need to see the name
 	 * of the macro via an identifier
 	 */
-	lookahead = get_token_pointer_and_increment(token_array, index);
+	lookahead = get_next_token_pointer(token_array, index);
 
 	//If we did not see an identifier then we are in bad shape here
 	if(lookahead->tok != IDENT){
@@ -251,7 +252,7 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 	ollie_token_array_t* macro_token_array = &(macro_record->tokens);
 
 	//Refresh the lookahead to see if we have any parameters
-	lookahead = get_token_pointer_and_increment(token_array, index);
+	lookahead = get_next_token_pointer(token_array, index);
 
 	//If we see an L_PAREN, we will begin processing parameters
 	if(lookahead->tok == L_PAREN){
@@ -275,7 +276,7 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 			}
 
 			//Refresh the token
-			lookahead = get_token_pointer_and_increment(token_array, index);
+			lookahead = get_next_token_pointer(token_array, index);
 
 			//Flag that we're ignoring this too
 			lookahead->ignore = TRUE;
@@ -314,7 +315,7 @@ end_parameter_processing:
 	//Unbounded loop through the entire macro
 	while(TRUE){
 		//Refresh the lookahead token
-		lookahead = get_token_pointer_and_increment(token_array, index);
+		lookahead = get_next_token_pointer(token_array, index);
 
 		//Bump the number of tokens in this macro
 		macro_record->total_token_count++;
@@ -422,8 +423,7 @@ static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, 
 	token->ignore = TRUE;
 
 	//Bump the token index up and refresh the token
-	(*stream_index)++;
-	token = &(stream->token_stream.internal_array[*stream_index]);
+	token = get_next_token_pointer(&(stream->token_stream), stream_index);
 
 	//We need to now see a colon, if we don't then this is a failure
 	if(token->tok != COLON){
@@ -435,8 +435,7 @@ static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, 
 	token->ignore = TRUE;
 
 	//Now we should see an opening bracket
-	(*stream_index)++;
-	token = &(stream->token_stream.internal_array[*stream_index]);
+	token = get_next_token_pointer(&(stream->token_stream), stream_index);
 
 	//Fail out if we don't have one
 	if(token->tok != L_BRACKET){
@@ -459,8 +458,7 @@ static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, 
 	 */
 
 	//Get the next token in the stream index
-	(*stream_index)++;
-	token = &(stream->token_stream.internal_array[*stream_index]);
+	token = get_next_token_pointer(&(stream->token_stream), stream_index);
 
 	switch(token->tok){
 		/**
@@ -470,8 +468,7 @@ static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, 
 			token->ignore = TRUE;
 
 			//The next token has to be an equals
-			(*stream_index)++;
-			token = &(stream->token_stream.internal_array[*stream_index]);
+			token = get_next_token_pointer(&(stream->token_stream), stream_index);
 			
 			//Incorrect input here so we fail out
 			if(token->tok != EQUALS){
@@ -481,8 +478,7 @@ static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, 
 
 			//Otherwise we want to ignore this token and advance to the next one
 			token->ignore = TRUE;
-			(*stream_index)++;
-			token = &(stream->token_stream.internal_array[*stream_index]);
+			token = get_next_token_pointer(&(stream->token_stream), stream_index);
 			
 			//If we don't have a constant then this is incorrect
 			if(is_constant_token(token->tok) == FALSE){
@@ -510,8 +506,7 @@ static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, 
 	}
 
 	//Refresh token and stream index
-	(*stream_index)++;
-	token = &(stream->token_stream.internal_array[*stream_index]);
+	token = get_next_token_pointer(&(stream->token_stream), stream_index);
 
 	//If it's not a closing bracket we fail out
 	if(token->tok != R_BRACKET){
@@ -636,7 +631,7 @@ static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symt
 	//Unterminating loop here
 	while(TRUE){
 		//Advance the lookahead here
-		lexitem_t* lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
+		lexitem_t* lookahead = get_next_token_pointer(old_array, old_token_array_index);
 	
 		//Handle any/all cases we have here
 		switch(lookahead->tok){
@@ -791,7 +786,7 @@ static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab,
 	u_int32_t paren_grouping_level = 0;
 
 	//Otherwise, this macro does have parameters, so we need to process accordingly
-	lexitem_t* old_array_lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
+	lexitem_t* old_array_lookahead = get_next_token_pointer(old_array, old_token_array_index);
 
 	//We need to see this here
 	if(old_array_lookahead->tok != L_PAREN){
@@ -851,7 +846,7 @@ static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab,
 		current_parameter_number++;
 
 		//Refresh the token
-		old_array_lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
+		old_array_lookahead = get_next_token_pointer(old_array, old_token_array_index);
 
 		//Based on the token here we could have an exit
 		switch(old_array_lookahead->tok){
