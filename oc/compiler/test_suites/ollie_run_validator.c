@@ -345,6 +345,7 @@ static ounit_type_t is_test_OUNIT_compatible(ollie_token_stream_t* stream, test_
 
 		//If we see the OUNIT token then we will let the helper determine its compatibilty
 		if(lexitem->tok == OUNIT){
+			number_of_ounit_compatible_files++;
 			return parse_OUNIT_test_command(&(stream->token_stream), i + 1, parameters);
 		}
 	}

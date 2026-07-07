@@ -41,5 +41,6 @@ fn tester(mut param:custom_enum) -> i32{
 
 
 pub fn main() -> i32{
+	OUNIT: [fail_to_compile]
 	@tester(D);
 }
