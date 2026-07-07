@@ -497,28 +497,49 @@ static inline void handle_fail_to_compile_validation(u_int32_t thread_id, char* 
 	pthread_mutex_unlock(&compiler_mutex);
 
 	/**
-	 * If the coimp
+	 * If the compilation result was *not* zero, then we have a compilation failure which is good in this case.
 	 */
 	if(compilation_result != 0){
 		pthread_mutex_lock(&stdout_mutex);
 		fprintf(stdout, "[Thread %d]: Ran compilation command: %s\n", thread_id, command_buffer);
-		fprintf(stdout, "[Thread %d]: The OUNIT configured test %s failed to compile with exit code %d. Developer attention is required\n\n", thread_id, file_name, compilation_result);
+		fprintf(stdout, "[Thread %d]: The OUNIT configured test %s failed to compile as expected with exit code %d\n\n", thread_id, file_name, compilation_result);
 		pthread_mutex_unlock(&stdout_mutex);
-
-		//Add to the array and bump the count
-		pthread_mutex_lock(&error_queue_mutex);
-		dynamic_array_add(&failed_to_compile_exit_status_validation_files, file_name);
-		pthread_mutex_unlock(&error_queue_mutex);
-
 
 	/**
 	 * Otherwise, the compilation code was 0. Note that in this case, that is an *error*. We wanted
 	 * this to fail. We'll need to record an error for this
 	 */
 	} else {
+		pthread_mutex_lock(&stdout_mutex);
+		fprintf(stdout, "[Thread %d]: Ran compilation command: %s\n", thread_id, command_buffer);
+		fprintf(stdout, "[Thread %d]: The OUNIT configured test %s was expected to fail, but compiled successfully. Developer attention is required\n\n",
+							thread_id,
+		  					file_name);
+		pthread_mutex_unlock(&stdout_mutex);
+
+		//Add to the array and bump the count
+		pthread_mutex_lock(&error_queue_mutex);
+		dynamic_array_add(&compiled_when_failure_expected_files, file_name);
+		pthread_mutex_unlock(&error_queue_mutex);
 
 		//Bump up the per-thread result
 		(*thread_error_count)++;
+
+		/**
+		 * Since the file compiled we're going to need to clean this up
+		 */
+		sprintf(command_buffer, "rm %s", output_file_name);
+		int32_t deletion_result = system(command_buffer);
+
+		/**
+		 * If somehow this didn't work we should flag it
+		 */
+		if(deletion_result != 0){
+			pthread_mutex_lock(&stdout_mutex);
+			fprintf(stdout, "[Thread %d]: Failed to delete output file %s\n", thread_id, output_file_name);
+			(*thread_error_count)++;
+			pthread_mutex_unlock(&stdout_mutex);
+		}
 	}
 }
 
@@ -619,8 +640,8 @@ void* worker(void* thread_parameters) {
 
 
 			case OUNIT_TYPE_FAIL_TO_COMPILE:
-				//TODO NOT IMPLEMENTED
-				exit(1);
+				handle_fail_to_compile_validation(thread_id, file_name, &errors_per_thread);
+				break;
 
 			/**
 			 * This means that the developer tried to make their test OUNIT compatible
