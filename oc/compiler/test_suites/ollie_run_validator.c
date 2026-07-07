@@ -466,7 +466,7 @@ static inline void handle_exit_status_validation(u_int32_t thread_id, char* file
 
 
 /**
- * TODO
+ * Handle an OUNIT test type where we explicitly want the compilation to fail
  */
 static inline void handle_fail_to_compile_validation(u_int32_t thread_id, char* file_name, u_int32_t* thread_error_count){
 	//All needed string buffers
@@ -846,7 +846,7 @@ int main(int argc, char** argv) {
 
 	//Only print out if we need to
 	if(compiled_when_failure_expected_files.current_index > 0){
-		printf("\nFAILING TO COMPILE FOR EXIT STATUS VALIDATION:\n");
+		printf("\nFILES COMPILING WHEN FAILURE WAS EXPECTED:\n");
 
 		//Print out all of them
 		for(u_int32_t i = 0; i < compiled_when_failure_expected_files.current_index; i++){
