@@ -82,6 +82,11 @@ static dynamic_array_t failed_exit_status_validation_files;
 static u_int32_t number_of_fail_to_compile_validation_files = 0;
 static dynamic_array_t compiled_when_failure_expected_files;
 
+/**
+ * Also keep track of our invalid files if there are any
+ */
+static dynamic_array_t invalid_ounit_configuration_files;
+
 //Holders for our output and test file directories
 static char* output_directory;
 static char* test_file_dir;
@@ -563,7 +568,9 @@ void* worker(void* thread_parameters) {
 				fprintf(stdout, "[Thread %d]: The file \"%s\" has an incorrect OUNIT configuration and will not be processed\n", thread_id, file_name);
 				pthread_mutex_unlock(&stdout_mutex);
 
-				//TODO CREATE AN INVALID FILE OUTPUT ARRAY
+				pthread_mutex_lock(&error_queue_mutex);
+				dynamic_array_add(&invalid_ounit_configuration_files, file_name);
+				pthread_mutex_unlock(&error_queue_mutex);
 
 				//Per-thread tracking
 				errors_per_thread++;
@@ -630,6 +637,7 @@ int main(int argc, char** argv) {
 	failed_exit_status_validation_files = dynamic_array_alloc_initial_size(DEFAULT_ARRAY_SIZE);
 	failed_to_compile_exit_status_validation_files = dynamic_array_alloc_initial_size(DEFAULT_ARRAY_SIZE);	
 	compiled_when_failure_expected_files = dynamic_array_alloc_initial_size(DEFAULT_ARRAY_SIZE);
+	invalid_ounit_configuration_files = dynamic_array_alloc_initial_size(DEFAULT_ARRAY_SIZE);
 
 	//Start the clock as we begin our run
 	clock_t start_time = clock();
@@ -695,15 +703,28 @@ int main(int argc, char** argv) {
 	//Record the total number of errors
 	u_int32_t total_error_count = compiled_when_failure_expected_files.current_index 
 								+ failed_to_compile_exit_status_validation_files.current_index 
-								+ failed_exit_status_validation_files.current_index;
+								+ failed_exit_status_validation_files.current_index
+								+ invalid_ounit_configuration_files.current_index;
 
 	printf("\n\n\n\n\n\n================================ Ollie Run Validation Summary =================================== \n");
-	printf("SETUP:\n");
 	printf("FILES CONSIDERED: %d\n", test_file_count);
 	printf("FILES ELIGIBLE FOR EXIT STATUS VALIDATION: %d\n", number_of_exit_status_validation_files);
 	printf("FILES ELIGIBLE FOR COMPILATION FAILURE VALIDATION: %d\n", number_of_fail_to_compile_validation_files);
 	printf("TOTAL ELIGIBLE FILE COUNT: %d\n", number_of_ounit_compatible_files);
 	printf("CPU TIME ELAPSED: %.4f seconds\n", time_taken);
+
+	/**
+	 * If we have any files that were setup incorrectly we should print that now
+	 */
+	if(invalid_ounit_configuration_files.current_index != 0){
+		printf("\n===============================================\n");
+		printf("INVALID OUNIT CONFIGURATION DETECTED IN THE FOLLOWING FILES:\n");
+		for(u_int32_t i = 0; i < invalid_ounit_configuration_files.current_index; i++){
+			char* file_name = dynamic_array_get_at(&invalid_ounit_configuration_files, i);
+			printf("%d) %s\n", i + 1, file_name);
+		}
+		printf("\n===============================================\n");
+	}
 
 	printf("\n===============================================\n");
 	printf("EXIT STATUS VALIDATION:\n");
@@ -712,29 +733,26 @@ int main(int argc, char** argv) {
 
 	//Only print out if we need to
 	if(failed_exit_status_validation_files.current_index > 0){
-		printf("FILES FAILING EXIT STATUS VALIDATION:\n");
+		printf("\nFILES FAILING EXIT STATUS VALIDATION:\n");
 
 		//Print out all of them
 		for(u_int32_t i = 0; i < failed_exit_status_validation_files.current_index; i++){
 			//Get the error file out
 			char* error_file_name = dynamic_array_get_at(&failed_exit_status_validation_files, i);
-			printf("t%d) %s\n", i, error_file_name);
+			printf("%d) %s\n", i + 1, error_file_name);
 		}
-		printf("###############################################\n\n");
 	}
 
 	//Only print out if we need to
 	if(failed_to_compile_exit_status_validation_files.current_index > 0){
-		printf("\n\nFAILING TO COMPILE FOR EXIT STATUS VALIDATION:\n");
+		printf("\nFAILING TO COMPILE FOR EXIT STATUS VALIDATION:\n");
 
 		//Print out all of them
 		for(u_int32_t i = 0; i < failed_to_compile_exit_status_validation_files.current_index; i++){
 			//Get the error file out
 			char* failed_to_compile_file = dynamic_array_get_at(&failed_to_compile_exit_status_validation_files, i);
-			printf("%d) %s\n", i, failed_to_compile_file);
+			printf("%d) %s\n", i + 1, failed_to_compile_file);
 		}
-
-		printf("###############################################\n\n");
 	}
 	printf("===============================================\n");
 
@@ -744,16 +762,14 @@ int main(int argc, char** argv) {
 
 	//Only print out if we need to
 	if(compiled_when_failure_expected_files.current_index > 0){
-		printf("\n\nFAILING TO COMPILE FOR EXIT STATUS VALIDATION:\n");
+		printf("\nFAILING TO COMPILE FOR EXIT STATUS VALIDATION:\n");
 
 		//Print out all of them
 		for(u_int32_t i = 0; i < compiled_when_failure_expected_files.current_index; i++){
 			//Get the error file out
 			char* failed_to_compile_file = dynamic_array_get_at(&compiled_when_failure_expected_files, i);
-			printf("%d) %s\n", i, failed_to_compile_file);
+			printf("%d) %s\n", i + 1, failed_to_compile_file);
 		}
-
-		printf("###############################################\n\n");
 	}
 	printf("===============================================\n");
 	
