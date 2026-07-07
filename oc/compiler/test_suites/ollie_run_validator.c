@@ -703,57 +703,59 @@ int main(int argc, char** argv) {
 	printf("FILES ELIGIBLE FOR EXIT STATUS VALIDATION: %d\n", number_of_exit_status_validation_files);
 	printf("FILES ELIGIBLE FOR COMPILATION FAILURE VALIDATION: %d\n", number_of_fail_to_compile_validation_files);
 	printf("TOTAL ELIGIBLE FILE COUNT: %d\n", number_of_ounit_compatible_files);
-
-	printf("\nRESULTS:\n");
 	printf("CPU TIME ELAPSED: %.4f seconds\n", time_taken);
-	printf("\n\tEXIT STATUS VALIDATION:\n");
-	printf("\t\tFILES FAILING EXIT STATUS VALIDATION: %d\n", failed_exit_status_validation_files.current_index);
-	printf("\t\tFILES FAILING TO COMPILE: %d\n", failed_to_compile_exit_status_validation_files.current_index);
+
+	printf("\n===============================================\n");
+	printf("EXIT STATUS VALIDATION:\n");
+	printf("FILES FAILING EXIT STATUS VALIDATION: %d\n", failed_exit_status_validation_files.current_index);
+	printf("FILES FAILING TO COMPILE: %d\n", failed_to_compile_exit_status_validation_files.current_index);
 
 	//Only print out if we need to
 	if(failed_exit_status_validation_files.current_index > 0){
-		printf("\n\n\t\t===============================================\n");
-		printf("\t\tFILES FAILING EXIT STATUS VALIDATION:\n");
+		printf("FILES FAILING EXIT STATUS VALIDATION:\n");
 
 		//Print out all of them
 		for(u_int32_t i = 0; i < failed_exit_status_validation_files.current_index; i++){
 			//Get the error file out
 			char* error_file_name = dynamic_array_get_at(&failed_exit_status_validation_files, i);
-			printf("\t\t%d) %s\n", i, error_file_name);
+			printf("t%d) %s\n", i, error_file_name);
 		}
-		printf("\n\t\t===============================================\n");
+		printf("###############################################\n\n");
 	}
 
 	//Only print out if we need to
 	if(failed_to_compile_exit_status_validation_files.current_index > 0){
-		printf("\n\n\t\tFAILING TO COMPILE FOR EXIT STATUS VALIDATION:\n");
+		printf("\n\nFAILING TO COMPILE FOR EXIT STATUS VALIDATION:\n");
 
 		//Print out all of them
 		for(u_int32_t i = 0; i < failed_to_compile_exit_status_validation_files.current_index; i++){
 			//Get the error file out
 			char* failed_to_compile_file = dynamic_array_get_at(&failed_to_compile_exit_status_validation_files, i);
-			printf("\t\t%d) %s\n", i, failed_to_compile_file);
+			printf("%d) %s\n", i, failed_to_compile_file);
 		}
 
-		printf("\n\t\t===============================================\n");
+		printf("###############################################\n\n");
 	}
+	printf("===============================================\n");
 
-	printf("\n\t COMPILATION FAILURE VALIDATION:\n");
-	printf("\t\tFILES COMPILING WHEN FAILURE WAS EXPECTED: %d\n", compiled_when_failure_expected_files.current_index);
+	printf("\n===============================================\n");
+	printf("COMPILATION FAILURE VALIDATION:\n");
+	printf("FILES COMPILING WHEN FAILURE WAS EXPECTED: %d\n", compiled_when_failure_expected_files.current_index);
 
 	//Only print out if we need to
 	if(compiled_when_failure_expected_files.current_index > 0){
-		printf("\n\n\t\tFAILING TO COMPILE FOR EXIT STATUS VALIDATION:\n");
+		printf("\n\nFAILING TO COMPILE FOR EXIT STATUS VALIDATION:\n");
 
 		//Print out all of them
 		for(u_int32_t i = 0; i < compiled_when_failure_expected_files.current_index; i++){
 			//Get the error file out
 			char* failed_to_compile_file = dynamic_array_get_at(&compiled_when_failure_expected_files, i);
-			printf("\t\t%d) %s\n", i, failed_to_compile_file);
+			printf("%d) %s\n", i, failed_to_compile_file);
 		}
 
-		printf("\n\t\t===============================================\n");
+		printf("###############################################\n\n");
 	}
+	printf("===============================================\n");
 	
 	//Flag that the developer needs to look at this
 	if(total_error_count != 0){
