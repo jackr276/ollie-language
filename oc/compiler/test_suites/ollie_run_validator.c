@@ -299,8 +299,8 @@ static inline ounit_type_t parse_OUNIT_test_command(ollie_token_array_t* tokens,
 			break;
 			
 		case FAIL_TO_COMPILE:
-			//TODO NOT IMPLEMENTED
-			exit(1);
+			ounit_type = OUNIT_TYPE_FAIL_TO_COMPILE;
+			break;
 
 		default:
 			pthread_mutex_lock(&stdout_mutex);
@@ -354,6 +354,11 @@ static ounit_type_t is_test_OUNIT_compatible(ollie_token_stream_t* stream, test_
 }
 
 
+/**
+ * Exit status validation requires both the compilation and execution of a given program. This 
+ * helper does those steps in that order. This is a thread safe helper, locking is used to
+ * maintain thread safety around the compiler as it is not inherently thread safe
+ */
 static inline void handle_exit_status_validation(u_int32_t thread_id, char* file_name, u_int32_t* thread_error_count, test_parameters_t* parameters){
 	//All needed string buffers
 	char output_file_name[1000];
@@ -456,6 +461,64 @@ static inline void handle_exit_status_validation(u_int32_t thread_id, char* file
 		fprintf(stdout, "[Thread %d]: Failed to delete output file %s\n", thread_id, output_file_name);
 		(*thread_error_count)++;
 		pthread_mutex_unlock(&stdout_mutex);
+	}
+}
+
+
+/**
+ * TODO
+ */
+static inline void handle_fail_to_compile_validation(u_int32_t thread_id, char* file_name, u_int32_t* thread_error_count){
+	//All needed string buffers
+	char output_file_name[1000];
+	char command_buffer[3000];
+	char run_command_buffer[2000];
+
+	//Save that this was eligible to be run
+	pthread_mutex_lock(&stdout_mutex);
+	number_of_fail_to_compile_validation_files++;
+	pthread_mutex_unlock(&stdout_mutex);
+
+	//Generate the *.test file name for the compiled file
+	sprintf(output_file_name, "%s.test", file_name);
+
+	/**
+	 * Use the @ flag to avoid directing this into an output file. We should
+	 * just see it fail to compile
+	 */
+	sprintf(command_buffer, "%s/oc -f %s%s -o %s > /dev/null 2>&1", output_directory, test_file_dir, file_name, output_file_name);
+
+	/**
+	 * Run the compilation command. The compiler relies on a shared temporary output file, so we 
+	 * need to lock here to make this all work
+	 */
+	pthread_mutex_lock(&compiler_mutex);
+	int32_t compilation_result = system(command_buffer);
+	pthread_mutex_unlock(&compiler_mutex);
+
+	/**
+	 * If the coimp
+	 */
+	if(compilation_result != 0){
+		pthread_mutex_lock(&stdout_mutex);
+		fprintf(stdout, "[Thread %d]: Ran compilation command: %s\n", thread_id, command_buffer);
+		fprintf(stdout, "[Thread %d]: The OUNIT configured test %s failed to compile with exit code %d. Developer attention is required\n\n", thread_id, file_name, compilation_result);
+		pthread_mutex_unlock(&stdout_mutex);
+
+		//Add to the array and bump the count
+		pthread_mutex_lock(&error_queue_mutex);
+		dynamic_array_add(&failed_to_compile_exit_status_validation_files, file_name);
+		pthread_mutex_unlock(&error_queue_mutex);
+
+
+	/**
+	 * Otherwise, the compilation code was 0. Note that in this case, that is an *error*. We wanted
+	 * this to fail. We'll need to record an error for this
+	 */
+	} else {
+
+		//Bump up the per-thread result
+		(*thread_error_count)++;
 	}
 }
 
