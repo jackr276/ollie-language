@@ -631,15 +631,16 @@ void* worker(void* thread_parameters) {
 				break;
 
 			/**
-			 * Another easy case. The only thing that we want to validate is that the
-			 * expected result is actually a valid value. Remember that on UNIX, 
-			 * the highest return value from a shell is 255
+			 * Let the helper handle the case where the tester is requesting to run and validate the exit status
+			 * for a test
 			 */
 			case OUNIT_TYPE_EXIT_STATUS_VALIDATION:
 				handle_exit_status_validation(thread_id, file_name, &errors_per_thread, &test_parameters);
 				break;
 
-
+			/**
+			 * Let the helper handle the case where the tester is requesting that a test should fail to compile
+			 */
 			case OUNIT_TYPE_FAIL_TO_COMPILE:
 				handle_fail_to_compile_validation(thread_id, file_name, &errors_per_thread);
 				break;
