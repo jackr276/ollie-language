@@ -14,5 +14,6 @@ let x:i32[] = [a, 2, a, 4, z, 6, 7];
 
 //Dummy just for testing
 pub fn main() -> i32 {
+	OUNIT: [fail_to_compile]
 	ret	x[3];
 }

@@ -15,5 +15,6 @@ pub fn tester(duplicate:i32) -> i32 {
 
 //Dummy
 pub fn main() -> i32 {
+	OUNIT: [fail_to_compile]
 	ret 0;
 }

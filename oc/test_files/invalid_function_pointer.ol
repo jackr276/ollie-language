@@ -27,5 +27,6 @@ pub fn main() -> i32 {
 	let x:mut i32 = 3;
 
 	//An attempt to call a variable that is not a function pointer. Should error out right here
+	OUNIT: [fail_to_compile]
 	ret @x(1, 3);
 }

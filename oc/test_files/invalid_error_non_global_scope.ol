@@ -7,5 +7,6 @@ pub fn main() -> i32 {
 	//Should fail, non-global scope
 	define error invalid_error;
 
+	OUNIT: [fail_to_compile]
 	ret 0;
 }

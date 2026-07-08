@@ -25,5 +25,6 @@ pub fn main() -> i32 {
 												divide_by_zero_error_t => ret -1
 												);
 
+	OUNIT: [fail_to_compile]
 	ret result;
 }

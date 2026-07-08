@@ -22,6 +22,7 @@ pub fn main() -> i32 {
 	//Divide values specifically requires us to handle for the divide by zero error
 	let result:i32 = @divide_values(x, y) handle(error => ret -1);
 
+	OUNIT: [fail_to_compile]
 	ret result;
 }
 

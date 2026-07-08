@@ -21,5 +21,6 @@ pub fn main() -> i32 {
 	//Going to fail - we need to see a handle statement here
 	let result:i32 = @x(3);
 
+	OUNIT: [fail_to_compile]
 	ret result;
 }
