@@ -18,5 +18,6 @@ pub fn! my_func() -> i32 {
 
 
 pub fn main() -> i32 {
+	OUNIT: [fail_to_compile]
 	ret 0;
 }

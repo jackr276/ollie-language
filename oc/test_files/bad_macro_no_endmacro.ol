@@ -7,5 +7,6 @@
 $macro BAD_MACRO_NO_END 333
 
 pub fn main() -> i32 {
+	OUNIT: [fail_to_compile]
 	ret BAD_MACRO_NO_END;
 }

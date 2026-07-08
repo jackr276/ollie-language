@@ -15,5 +15,6 @@ inline fn direct_recursive(x:mut i32, acc:mut i32) -> i32 {
 
 
 pub fn main() -> i32 {
+	OUNIT: [fail_to_compile]
 	ret @direct_recursive(55, 0);
 }

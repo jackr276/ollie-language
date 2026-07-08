@@ -9,5 +9,6 @@ pub fn main() -> i32{
 	//Should be caught by parser and hard fail
 	let y:i32 = x / 0;
 
+	OUNIT: [fail_to_compile]
 	ret y;
 }

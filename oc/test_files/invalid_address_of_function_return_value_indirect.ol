@@ -20,5 +20,6 @@ pub fn main() -> i32 {
 	let x:i32* = &(@func_ptr(2));
 
 	//Won't ever even get here
+	OUNIT: [fail_to_compile]
 	ret *x;
 }

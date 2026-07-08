@@ -12,5 +12,6 @@ pub fn main() -> i32 {
 	//INVALID - you can never assign an array
 	arr = arr2;
 
+	OUNIT: [fail_to_compile]
 	ret 0;
 }

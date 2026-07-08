@@ -27,5 +27,6 @@ pub fn is_in_enum_enum(x:enum my_enum) -> i32 {
 
 
 pub fn main() -> i32 {
+	OUNIT: [fail_to_compile]
 	ret @is_in_enum_int(THREE) + @is_in_enum_enum(FOUR);
 }

@@ -11,5 +11,6 @@ pub fn error_test() -> i32 raises(custom_error){
 }
 
 pub fn main() -> i32 {
+	OUNIT: [fail_to_compile]
 	ret 0;
 }
