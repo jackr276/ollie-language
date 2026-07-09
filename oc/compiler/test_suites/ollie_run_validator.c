@@ -680,6 +680,25 @@ void* worker(void* thread_parameters) {
 
 
 /**
+ * Print out a list of all invalid OUNIT configured files, if any exist
+ */
+static inline void print_invalid_ounit_configuration_summary(){
+	/**
+	 * If we have any files that were setup incorrectly we should print that now
+	 */
+	if(invalid_ounit_configuration_files.current_index != 0){
+		printf("\n===============================================\n");
+		printf("INVALID OUNIT CONFIGURATION DETECTED IN THE FOLLOWING FILES:\n");
+		for(u_int32_t i = 0; i < invalid_ounit_configuration_files.current_index; i++){
+			char* file_name = dynamic_array_get_at(&invalid_ounit_configuration_files, i);
+			printf("%d) %s\n", i + 1, file_name);
+		}
+		printf("\n===============================================\n");
+	}
+}
+
+
+/**
  * Wrapper that helps us print all exit status OUNIT type statistics
  */
 static inline void print_exit_status_validation_summary(){
@@ -858,19 +877,11 @@ int main(int argc, char** argv) {
 	printf("TOTAL ELIGIBLE FILE COUNT: %d\n", number_of_ounit_compatible_files);
 	printf("CPU TIME ELAPSED: %.4f seconds\n", time_taken);
 
-	/**
-	 * If we have any files that were setup incorrectly we should print that now
-	 */
-	if(invalid_ounit_configuration_files.current_index != 0){
-		printf("\n===============================================\n");
-		printf("INVALID OUNIT CONFIGURATION DETECTED IN THE FOLLOWING FILES:\n");
-		for(u_int32_t i = 0; i < invalid_ounit_configuration_files.current_index; i++){
-			char* file_name = dynamic_array_get_at(&invalid_ounit_configuration_files, i);
-			printf("%d) %s\n", i + 1, file_name);
-		}
-		printf("\n===============================================\n");
-	}
-	
+	//Use the helpers to print out all of our summaries
+	print_invalid_ounit_configuration_summary();
+	print_exit_status_validation_summary();
+	print_fail_to_compile_validation_summary();
+
 	//Flag that the developer needs to look at this
 	if(total_error_count != 0){
 		printf("\n\nFAILURES DETECTED: DEVELOPER ATTENTION IS REQUIRED\n");
