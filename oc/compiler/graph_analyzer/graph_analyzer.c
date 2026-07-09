@@ -20,7 +20,7 @@
  */
 static inline void reset_visit_status_for_function(dynamic_array_t* function_blocks){
 	//Run through all of the blocks
-	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		//Extract the current block
 		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
 
@@ -435,12 +435,12 @@ static inline void link_ancestor(basic_block_t* ancestor, basic_block_t* descend
  */
 static void compute_immediate_dominators(basic_block_t* function_entry_block, dynamic_array_t* function_blocks){
 	//The number of blocks is static
-	const u_int32_t number_of_blocks = function_blocks->current_index;
+	const int32_t number_of_blocks = function_blocks->current_index;
 
 	/**
 	 * Wipe every block's existing dominator info completely clean
 	 */
-	for(u_int32_t i = 0; i < number_of_blocks; i++){
+	for(int32_t i = 0; i < number_of_blocks; i++){
 		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
 		initialize_block_for_idom_computation(block);
 	}
@@ -473,7 +473,7 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 		 * Compute the semidominators for each given block. Remember that semidominators
 		 * are the earliest DFS ancestor that can "almost" dominate a given block
 		 */
-		for(u_int32_t j = 0; j < working_block->predecessors.current_index; j++){
+		for(int32_t j = 0; j < working_block->predecessors.current_index; j++){
 			//Our semidominator candidate
 			basic_block_t* candidate = NULL;
 			basic_block_t* predecessor = dynamic_array_get_at(&(working_block->predecessors), j);
@@ -548,7 +548,7 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 		 * IDOM
 		 */
 		dynamic_array_t* parent_worklist = &(dominator_parent->dominator_info.worklist);
-		for(u_int32_t k = 0; k < parent_worklist->current_index; k++){
+		for(int32_t k = 0; k < parent_worklist->current_index; k++){
 			/**
 			 * Extract our bucket block and use evaluate to perform path compression
 			 * and get compute the smallest semidominator number along this path
@@ -687,12 +687,12 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
  */
 static void compute_immediate_postdominators(basic_block_t* function_exit_block, dynamic_array_t* function_blocks){
 	//Extract the number of blocks that we have 
-	const u_int32_t number_of_blocks = function_blocks->current_index;
+	const int32_t number_of_blocks = function_blocks->current_index;
 
 	/**
 	 * The first thing that we need to do is initialize every block for IPDOM calculation
 	 */
-	for(u_int32_t i = 0; i < number_of_blocks; i++){
+	for(int32_t i = 0; i < number_of_blocks; i++){
 		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
 		initialize_block_for_ipdom_computation(block);
 	}
@@ -724,7 +724,7 @@ static void compute_immediate_postdominators(basic_block_t* function_exit_block,
 		 * Remember that a semipostdominator is a block that just barely does not postdominate
 		 * this one
 		 */
-		for(u_int32_t j = 0; j < working_block->successors.current_index; j++){
+		for(int32_t j = 0; j < working_block->successors.current_index; j++){
 			//Our semipostdominator candidate
 			basic_block_t* candidate;
 			basic_block_t* successor = dynamic_array_get_at(&(working_block->successors), j);
@@ -791,7 +791,7 @@ static void compute_immediate_postdominators(basic_block_t* function_exit_block,
 		 * IPDOM
 		 */
 		dynamic_array_t* parent_worklist = &(postdominator_parent->dominator_info.worklist);
-		for(u_int32_t k = 0; k < parent_worklist->current_index; k++){
+		for(int32_t k = 0; k < parent_worklist->current_index; k++){
 			/**
 			 * Extract our semipostdominated block and use evaluate to perform path compression
 			 * and get compute the smallest semidominator number along this path
@@ -915,7 +915,7 @@ static inline void add_block_to_dominance_frontier(basic_block_t* block, basic_b
 	}
 
 	//Let's just check - is this already in there. If it is, we will not add it
-	for(u_int32_t i = 0; i < block->dominance_frontier.current_index; i++){
+	for(int32_t i = 0; i < block->dominance_frontier.current_index; i++){
 		//This is not a problem at all, we just won't add it
 		if(block->dominance_frontier.internal_array[i] == df_block){
 			return;
@@ -951,7 +951,7 @@ static inline void add_block_to_dominance_frontier(basic_block_t* block, basic_b
  */
 static inline void calculate_dominance_frontiers(dynamic_array_t* function_blocks){
 	//Run through every block
-	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		//Grab this from the array
 		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
 
@@ -961,7 +961,7 @@ static inline void calculate_dominance_frontiers(dynamic_array_t* function_block
 		}
 
 		//Now we run through every predecessor of the block
-		for(u_int32_t j = 0; j < block->predecessors.current_index; j++){
+		for(int32_t j = 0; j < block->predecessors.current_index; j++){
 			basic_block_t* cursor = dynamic_array_get_at(&(block->predecessors), j);
 
 			//While cursor is not the immediate dominator of block
@@ -990,7 +990,7 @@ static inline void add_block_to_reverse_dominance_frontier(basic_block_t* block,
 	}
 
 	//Let's just check - is this already in there. If it is, we will not add it
-	for(u_int32_t i = 0; i < block->reverse_dominance_frontier.current_index; i++){
+	for(int32_t i = 0; i < block->reverse_dominance_frontier.current_index; i++){
 		if(block->reverse_dominance_frontier.internal_array[i] == rdf_block){
 			return;
 		}
@@ -1025,7 +1025,7 @@ static inline void add_block_to_reverse_dominance_frontier(basic_block_t* block,
  */
 static inline void calculate_reverse_dominance_frontiers(dynamic_array_t* function_blocks){
 	//Run through every block
-	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		//Grab this from the array
 		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
 
@@ -1035,7 +1035,7 @@ static inline void calculate_reverse_dominance_frontiers(dynamic_array_t* functi
 		}
 
 		//Now we run through every successor of the block
-		for(u_int32_t j  = 0; j  < block->successors.current_index; j++){
+		for(int32_t j  = 0; j  < block->successors.current_index; j++){
 			//Extract the successor
 			basic_block_t* cursor = dynamic_array_get_at(&(block->successors), j);
 
@@ -1068,7 +1068,7 @@ static void post_order_traversal_rec(dynamic_array_t* post_order_traversal, basi
 	entry->visited = TRUE;
 
 	//Run through every successor
-	for(u_int32_t i = 0; i < entry->successors.current_index; i++){
+	for(int32_t i = 0; i < entry->successors.current_index; i++){
 		//Recursive call to every child first
 		post_order_traversal_rec(post_order_traversal, dynamic_array_get_at(&(entry->successors), i));
 	}
@@ -1107,7 +1107,7 @@ static void reverse_post_order_traversal_reverse_cfg_rec(heap_stack_t* stack, ba
 	block->visited = TRUE;
 
 	//For every child(predecessor-it's reverse), we visit it as well
-	for(u_int32_t i = 0; i < block->predecessors.current_index; i++){
+	for(int32_t i = 0; i < block->predecessors.current_index; i++){
 		reverse_post_order_traversal_reverse_cfg_rec(stack, dynamic_array_get_at(&(block->predecessors), i));
 	}
 
@@ -1266,7 +1266,7 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
  * over with artifacts from previous runs that skew our results
  */
 void cleanup_all_control_relations(dynamic_array_t* function_blocks){
-	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		//Grab the block out
 		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
 

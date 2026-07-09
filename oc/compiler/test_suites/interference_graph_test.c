@@ -36,7 +36,7 @@ static live_range_t* live_range_alloc(u_int16_t live_range_id){
  * Everything in here is run through the main function, we're
  * just verifying functionality
 */
-int main(int argc, char** argv){
+int main(){
 	//Here's our graph
 	interference_graph_t* graph = NULL;
 	
