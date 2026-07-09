@@ -11480,16 +11480,12 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 		switch_stmt_node->optional_storage.switch_bounds.lower_bound = case_stmt->constant_value.signed_int_value;
 	}
 
-	//If these are too far apart, we won't go for it. We'll check here, because once
-	//we hit this, there's no point in going on
+	/**
+	 * If these values are too far apart, we will flag that this switch is *not* switch eligible. The CFG
+	 * will construct this into an if-else-if statement in the backend
+	 */
 	if(switch_stmt_node->optional_storage.switch_bounds.upper_bound - switch_stmt_node->optional_storage.switch_bounds.lower_bound >= MAX_SWITCH_RANGE){
-
-		//TODO UPDATE THIS
-		sprintf(info, "Range from %d to %d exceeds %d, too large for a switch statement. Use a compound if statement instead",
-		  				switch_stmt_node->optional_storage.switch_bounds.lower_bound, 
-		  				switch_stmt_node->optional_storage.switch_bounds.upper_bound,
-		  				MAX_SWITCH_RANGE);
-		return print_and_return_error(info, parser_line_num);
+		switch_stmt_node->is_switch_eligible = FALSE;
 	}
 
 	//Let the helper deal with this. If we get a false here, then we bail out. This ensures that we have a nice sorted list
