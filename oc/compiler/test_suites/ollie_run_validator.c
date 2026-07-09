@@ -473,7 +473,6 @@ static inline void handle_fail_to_compile_validation(u_int32_t thread_id, char* 
 	//All needed string buffers
 	char output_file_name[1000];
 	char command_buffer[3000];
-	char run_command_buffer[2000];
 
 	//Save that this was eligible to be run
 	pthread_mutex_lock(&stdout_mutex);
@@ -513,9 +512,7 @@ static inline void handle_fail_to_compile_validation(u_int32_t thread_id, char* 
 	} else {
 		pthread_mutex_lock(&stdout_mutex);
 		fprintf(stdout, "[Thread %d]: Ran compilation command: %s\n", thread_id, command_buffer);
-		fprintf(stdout, "[Thread %d]: The OUNIT configured test %s was expected to fail, but compiled successfully. Developer attention is required\n\n",
-							thread_id,
-		  					file_name);
+		fprintf(stdout, "[Thread %d]: The OUNIT configured test %s was expected to fail, but compiled successfully. Developer attention is required\n\n", thread_id, file_name);
 		pthread_mutex_unlock(&stdout_mutex);
 
 		//Add to the array and bump the count
