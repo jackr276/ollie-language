@@ -31,6 +31,6 @@ pub fn valid_exhaustive(x:enum my_enum) -> i32 {
 
 
 pub fn main() -> i32 {
-	OUNIT: [console = 4]
+	OUNIT: [exit_status = 4]
 	ret @valid_exhaustive(FOUR);
 }
