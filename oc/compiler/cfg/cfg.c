@@ -551,7 +551,7 @@ static inline void delete_block(basic_block_t* block){
  */
 static inline void reset_visited_status_for_function(dynamic_array_t* function_blocks){
 	//Run through all of the blocks
-	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		//Extract the current block
 		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
 
@@ -609,7 +609,7 @@ static inline void delete_all_unreachable_blocks(dynamic_array_t* function_block
 
 	//First bulid the array of things that need to go. A block is considered
 	//unreachable if it has no predecessors and it is *not* an entry block
-	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		basic_block_t* current_block = dynamic_array_get_at(function_blocks, i);
 
 		//Doesn't count
@@ -629,7 +629,7 @@ static inline void delete_all_unreachable_blocks(dynamic_array_t* function_block
 		basic_block_t* target = dynamic_array_delete_from_back(&to_be_deleted);
 
 		//Every successor needs to be uncoupled
-		for(u_int32_t i = 0; i < target->successors.current_index; i++){
+		for(int32_t i = 0; i < target->successors.current_index; i++){
 			//Extract it
 			basic_block_t* successor = dynamic_array_get_at(&(target->successors), i);
 
@@ -1009,7 +1009,7 @@ void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_s
 		printf("(");
 
 		//Run through all of the live variables and print them out
-		for(u_int16_t i = 0; i < block->used_before_definition.current_index; i++){
+		for(int32_t i = 0; i < block->used_before_definition.current_index; i++){
 			//Print it out
 			print_variable(stdout, block->used_before_definition.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
 
@@ -1033,7 +1033,7 @@ void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_s
 
 	//If we have predecessors
 	if(block->predecessors.internal_array != NULL){
-		for(u_int16_t i = 0; i < block->predecessors.current_index; i++){
+		for(int32_t i = 0; i < block->predecessors.current_index; i++){
 			basic_block_t* predecessor = block->predecessors.internal_array[i];
 
 			//Print the block's ID or the function name
@@ -1054,7 +1054,7 @@ void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_s
 	printf("Successors: {");
 	//If we have successor
 	if(block->successors.internal_array != NULL){
-		for(u_int16_t i = 0; i < block->successors.current_index; i++){
+		for(int32_t i = 0; i < block->successors.current_index; i++){
 			basic_block_t* successor = block->successors.internal_array[i];
 
 			//Print the block's ID or the function name
@@ -1076,7 +1076,7 @@ void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_s
 	if(block->assigned_variables.current_index != 0){
 		printf("Assigned: (");
 
-		for(u_int16_t i = 0; i < block->assigned_variables.current_index; i++){
+		for(int32_t i = 0; i < block->assigned_variables.current_index; i++){
 			print_variable(stdout, block->assigned_variables.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
 
 			//If it isn't the very last one, we need a comma
@@ -1091,7 +1091,7 @@ void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_s
 	if(block->live_in.internal_array != NULL){
 		printf("LIVE_IN: (");
 
-		for(u_int16_t i = 0; i < block->live_in.current_index; i++){
+		for(int32_t i = 0; i < block->live_in.current_index; i++){
 			print_variable(stdout, block->live_in.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
 
 			//If it isn't the very last one, print out a comma
@@ -1108,7 +1108,7 @@ void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_s
 	if(block->live_out.internal_array != NULL){
 		printf("LIVE_OUT: (");
 
-		for(u_int16_t i = 0; i < block->live_out.current_index; i++){
+		for(int32_t i = 0; i < block->live_out.current_index; i++){
 			print_variable(stdout, block->live_out.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
 
 			//If it isn't the very last one, print out a comma
@@ -1127,7 +1127,7 @@ void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_s
 		printf("Dominance frontier: {");
 
 		//Run through and print them all out
-		for(u_int16_t i = 0; i < block->dominance_frontier.current_index; i++){
+		for(int32_t i = 0; i < block->dominance_frontier.current_index; i++){
 			basic_block_t* printing_block = block->dominance_frontier.internal_array[i];
 
 			//Print the block's ID or the function name
@@ -1152,7 +1152,7 @@ void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_s
 		printf("Reverse Dominance frontier: {");
 
 		//Run through and print them all out
-		for(u_int16_t i = 0; i < block->reverse_dominance_frontier.current_index; i++){
+		for(int32_t i = 0; i < block->reverse_dominance_frontier.current_index; i++){
 			basic_block_t* printing_block = block->reverse_dominance_frontier.internal_array[i];
 
 			//Print the block's ID or the function name
@@ -1403,7 +1403,7 @@ static inline u_int8_t does_block_assign_variable(basic_block_t* block, symtab_v
 	/**
 	 * If the linked variable to this var is ours, we do assign
 	 */
-	for(u_int32_t i = 0; i < block->assigned_variables.current_index; i++){
+	for(int32_t i = 0; i < block->assigned_variables.current_index; i++){
 		three_addr_var_t* var = dynamic_array_get_at(&(block->assigned_variables), i);
 		
 		//Now we'll compare the linked variable to the record
@@ -1431,7 +1431,7 @@ static int16_t variable_dynamic_array_contains(dynamic_array_t* variable_array, 
 	three_addr_var_t* current_var;
 
 	//Run through every record in here
-	for(u_int16_t i = 0; i < variable_array->current_index; i++){
+	for(int32_t i = 0; i < variable_array->current_index; i++){
 		//Grab a reference
 		current_var = variable_array->internal_array[i];
 
@@ -1486,7 +1486,7 @@ static void add_variable_to_use_set(three_addr_var_t* variable, basic_block_t* b
 	dynamic_array_t* use_set = &(block->used_before_definition);
 
 	//Otherwise, let's make sure it's not also in DEF
-	for(u_int32_t i = 0; i < def_set->current_index; i++){
+	for(int32_t i = 0; i < def_set->current_index; i++){
 		//Grab it out
 		three_addr_var_t* defined = dynamic_array_get_at(def_set, i);
 
@@ -1498,7 +1498,7 @@ static void add_variable_to_use_set(three_addr_var_t* variable, basic_block_t* b
 
 	//Otherwise, we need to add this into the USE set *if* it's unique. We don't want to add
 	//things more than once
-	for(u_int32_t i = 0; i < use_set->current_index; i++){
+	for(int32_t i = 0; i < use_set->current_index; i++){
 		//Grab it out
 		three_addr_var_t* used = dynamic_array_get_at(use_set, i);
 
@@ -1548,7 +1548,7 @@ static inline void add_variable_to_def_set(three_addr_var_t* variable, basic_blo
 	dynamic_array_t* def_set = &(block->assigned_variables);
 
 	//Otherwise, let's make sure it's not also in DEF
-	for(u_int32_t i = 0; i < def_set->current_index; i++){
+	for(int32_t i = 0; i < def_set->current_index; i++){
 		//Grab it out
 		three_addr_var_t* defined = dynamic_array_get_at(def_set, i);
 
@@ -1591,7 +1591,7 @@ static inline void add_variable_to_def_set(three_addr_var_t* variable, basic_blo
  */
 static void compute_use_and_def_sets_for_function(dynamic_array_t* function_blocks){
 	//For every single block in the set of all function blocks
-	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		//Grab the block out
 		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
 
@@ -1608,7 +1608,7 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 				//Function calls have parameters - so special case
 				case THREE_ADDR_CODE_FUNC_CALL:
 					//Run through the params and add them
-					for(u_int32_t _ = 0; _ < cursor->parameters.current_index; _++){
+					for(int32_t _ = 0; _ < cursor->parameters.current_index; _++){
 						//Grab the param out
 						three_addr_var_t* parameter = dynamic_array_get_at(&(cursor->parameters), _);
 
@@ -1628,7 +1628,7 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 					add_variable_to_use_set(cursor->operands.oir.operand1, block);
 
 					//Run through the params and add them
-					for(u_int32_t _ = 0; _ < cursor->parameters.current_index; _++){
+					for(int32_t _ = 0; _ < cursor->parameters.current_index; _++){
 						//Grab the param out
 						three_addr_var_t* parameter = dynamic_array_get_at(&(cursor->parameters), _);
 
@@ -1758,7 +1758,7 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
 		difference_found = FALSE;
 
 		//Now we can go through the entire RPO set
-		for(u_int32_t _ = 0; _ < reverse_post_order_reverse_cfg.current_index; _++){
+		for(int32_t _ = 0; _ < reverse_post_order_reverse_cfg.current_index; _++){
 			//The current block is whichever we grab
 			current = dynamic_array_get_at(&reverse_post_order_reverse_cfg, _);
 
@@ -1770,14 +1770,14 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
 			current->live_out = dynamic_array_alloc();
 			
 			//Run through all of the successors
-			for(u_int32_t k = 0; k < current->successors.current_index; k++){
+			for(int32_t k = 0; k < current->successors.current_index; k++){
 				//Grab the successor out
 				basic_block_t* successor = dynamic_array_get_at(&(current->successors), k);
 
 				//If it has a live in set
 				if(successor->live_in.internal_array != NULL){
 					//Add everything in his live_in set into the live_out set
-					for(u_int32_t l = 0; l < successor->live_in.current_index; l++){
+					for(int32_t l = 0; l < successor->live_in.current_index; l++){
 						//Let's check to make sure we haven't already added this
 						three_addr_var_t* successor_live_in_var = dynamic_array_get_at(&(successor->live_in), l);
 
@@ -1799,7 +1799,7 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
 			current->live_in = clone_dynamic_array(&(current->used_before_definition));
 
 			//Now we need to add every variable that is in LIVE_OUT but NOT in assigned
-			for(u_int16_t j = 0; j < current->live_out.current_index; j++){
+			for(int32_t j = 0; j < current->live_out.current_index; j++){
 				//Grab a reference for our use
 				three_addr_var_t* live_out_var = dynamic_array_get_at(&(current->live_out), j);
 
@@ -1846,7 +1846,7 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
  */
 static inline void reset_status_for_phi_function_insertion(dynamic_array_t* function_blocks){
 	//Run through all of the blocks
-	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		//Extract the current block
 		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
 
@@ -1865,7 +1865,7 @@ static inline void reset_status_for_phi_function_insertion(dynamic_array_t* func
  * variable itself. This does a simple linear scan to search
  */
 static inline u_int8_t does_variable_dynamic_array_contain_symtab_variable(dynamic_array_t* variable_array, symtab_variable_record_t* variable){
-	for(u_int32_t i = 0; i < variable_array->current_index; i++){
+	for(int32_t i = 0; i < variable_array->current_index; i++){
 		//Avoid a function call by grabbing directly
 		three_addr_var_t* candidate = variable_array->internal_array[i];
 
@@ -1937,11 +1937,11 @@ static void insert_phi_functions(variable_symtab_t* var_symtab){
 	 * Step 1: For every single sheaf(lexical level/scope) that we have in the symbol table,
 	 * and within every sheaf run through every single defined variable
 	 */
-	for	(u_int32_t i = 0; i < var_symtab->sheafs.current_index; i++){
+	for(int32_t i = 0; i < var_symtab->sheafs.current_index; i++){
 		//Grab the current sheaf
 		symtab_variable_sheaf_t* sheaf_cursor = dynamic_array_get_at(&(var_symtab->sheafs), i);
 
-		for(u_int32_t j = 0; j < VARIABLE_KEYSPACE; j++){
+		for(int32_t j = 0; j < VARIABLE_KEYSPACE; j++){
 			symtab_variable_record_t* record = sheaf_cursor->records[j];
 
 			/**
@@ -1979,7 +1979,7 @@ static void insert_phi_functions(variable_symtab_t* var_symtab){
 				 * Queue up every block that we have on record as assigning this
 				 * given variable
 				 */
-				for(u_int32_t k = 0; k < function_blocks->current_index; k++){
+				for(int32_t k = 0; k < function_blocks->current_index; k++){
 					basic_block_t* block = dynamic_array_get_at(function_blocks, k);
 
 					/**
@@ -2005,7 +2005,7 @@ static void insert_phi_functions(variable_symtab_t* var_symtab){
 					 * live_out at that block, we'll need to insert a phi function
 					 * join node
 					 */
-					for(u_int32_t l = 0; l < node->dominance_frontier.current_index; l++){
+					for(int32_t l = 0; l < node->dominance_frontier.current_index; l++){
 						basic_block_t* df_node = dynamic_array_get_at(&(node->dominance_frontier), l);
 
 						//If this already has a phi function for this run we skip it
@@ -2179,7 +2179,7 @@ static void rename_block(basic_block_t* entry){
 		 * We store function parameters as symtab variables so we'll need to perform a direct
 		 * rename here
 		 */
-		for(u_int32_t i = 0; i < function_defined_in->function_parameters.current_index; i++){
+		for(int32_t i = 0; i < function_defined_in->function_parameters.current_index; i++){
 			lhs_new_name_direct(dynamic_array_get_at(&(function_defined_in->function_parameters), i));
 		}
 	}
@@ -2209,7 +2209,7 @@ static void rename_block(basic_block_t* entry){
 				//Function calls contain parameters that count as RHS vars
 				dynamic_array_t* func_params = &(cursor->parameters);
 
-				for(u_int32_t k = 0; k < func_params->current_index; k++){
+				for(int32_t k = 0; k < func_params->current_index; k++){
 					three_addr_var_t* current_param = dynamic_array_get_at(func_params, k);
 
 					if(is_variable_ssa_eligible(current_param) == TRUE){
@@ -2262,7 +2262,7 @@ static void rename_block(basic_block_t* entry){
 	 * For each successor of i, we'll need to update the phi functions with the new names
 	 * that we've given for variables in this block
 	 */
-	for(u_int32_t i = 0; i < entry->successors.current_index; i++){
+	for(int32_t i = 0; i < entry->successors.current_index; i++){
 		basic_block_t* successor = dynamic_array_get_at(&(entry->successors), i);
 		instruction_t* succ_cursor = successor->leader_statement;
 
@@ -2291,7 +2291,7 @@ static void rename_block(basic_block_t* entry){
 	 * Now that we're done with the renaming, we'll go through each dominator child in this node
 	 * and perform the same operation
 	 */
-	for(u_int32_t i = 0; i < entry->dominator_children.current_index; i++){
+	for(int32_t i = 0; i < entry->dominator_children.current_index; i++){
 		rename_block(dynamic_array_get_at(&(entry->dominator_children), i));
 	}
 
@@ -2303,7 +2303,7 @@ static void rename_block(basic_block_t* entry){
 		symtab_function_record_t* function_defined_in = entry->function_defined_in;
 		
 		//We need to pop these all only once so that we have parity with what we did up top
-		for(u_int32_t i = 0; i < function_defined_in->function_parameters.current_index; i++){
+		for(int32_t i = 0; i < function_defined_in->function_parameters.current_index; i++){
 			//Get the function parameter out
 			symtab_variable_record_t* function_param = dynamic_array_get_at(&(function_defined_in->function_parameters), i);
 
@@ -2342,7 +2342,7 @@ static inline void rename_all_variables(cfg_t* cfg){
 	 * for each of our functions. The rename block function is 
 	 * recursive, so that should in theory take care of everything for us
 	 */
-	for(u_int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		rename_block(dynamic_array_get_at(&(cfg->function_entry_blocks), i));
 	}
 }
@@ -6796,7 +6796,7 @@ static inline u_int32_t get_number_of_gp_params(function_type_t* signature){
 	u_int32_t number_of_gp_params = 0;
 
 	//Run through all of them
-	for(u_int32_t i = 0; i < signature->function_parameters.current_index; i++){
+	for(int32_t i = 0; i < signature->function_parameters.current_index; i++){
 		//Extract it
 		generic_type_t* parameter_type = dynamic_array_get_at(&(signature->function_parameters), i);
 
@@ -6819,7 +6819,7 @@ static inline u_int32_t get_number_of_sse_params(function_type_t* signature){
 	u_int32_t number_of_sse_params = 0;
 
 	//Run through all of them
-	for(u_int32_t i = 0; i < signature->function_parameters.current_index; i++){
+	for(int32_t i = 0; i < signature->function_parameters.current_index; i++){
 		//Extract it
 		generic_type_t* parameter_type = dynamic_array_get_at(&(signature->function_parameters), i);
 
@@ -8030,7 +8030,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 * of the source memory region because we've emitted new stack allocation statements
 		 * for it
 		 */
-		for(u_int32_t i = 0; i < memory_addresses_to_adjust.current_index; i++){
+		for(int32_t i = 0; i < memory_addresses_to_adjust.current_index; i++){
 			//Get the variable out
 			three_addr_var_t* memory_address = dynamic_array_get_at(&memory_addresses_to_adjust, i);
 
@@ -8123,7 +8123,7 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 
 	//Now we'll print out each and every function inside of the function_entry_blocks
 	//array. Each function will be printed using the BFS strategy
-	for(u_int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Clear the traversal queue
 		heap_queue_clear(&traversal_queue);
 
@@ -8151,7 +8151,7 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 			block->visited = TRUE;
 
 			//And finally we'll add all of these onto the queue
-			for(u_int16_t j = 0; j < block->successors.current_index; j++){
+			for(int32_t j = 0; j < block->successors.current_index; j++){
 				//Add the successor into the queue, if it has not yet been visited
 				basic_block_t* successor = block->successors.internal_array[j];
 
@@ -8247,7 +8247,7 @@ void basic_block_dealloc(basic_block_t* block){
  */
 void dealloc_cfg(cfg_t* cfg){
 	//Run through all of the blocks here and delete them
-	for(u_int16_t i = 0; i < cfg->created_blocks.current_index; i++){
+	for(int32_t i = 0; i < cfg->created_blocks.current_index; i++){
 		//Use this to deallocate
 		basic_block_dealloc(dynamic_array_get_at(&(cfg->created_blocks), i));
 	}
@@ -8263,7 +8263,7 @@ void dealloc_cfg(cfg_t* cfg){
 
 	if(cfg->local_f32_constants.internal_array != NULL){
 		//Run through all of the local constants and deallcoate them
-		for(u_int32_t i = 0; i < cfg->local_f32_constants.current_index; i++){
+		for(int32_t i = 0; i < cfg->local_f32_constants.current_index; i++){
 			local_constant_t* target = dynamic_array_get_at((&cfg->local_f32_constants), i);
 			local_constant_dealloc(target);
 		}
@@ -8273,7 +8273,7 @@ void dealloc_cfg(cfg_t* cfg){
 	}
 
 	if(cfg->local_f64_constants.internal_array != NULL){
-		for(u_int32_t i = 0; i < cfg->local_f64_constants.current_index; i++){
+		for(int32_t i = 0; i < cfg->local_f64_constants.current_index; i++){
 			local_constant_t* target = dynamic_array_get_at((&cfg->local_f64_constants), i);
 			local_constant_dealloc(target);
 		}
@@ -8283,7 +8283,7 @@ void dealloc_cfg(cfg_t* cfg){
 	}
 
 	if(cfg->local_string_constants.internal_array != NULL){
-		for(u_int32_t i = 0; i < cfg->local_string_constants.current_index; i++){
+		for(int32_t i = 0; i < cfg->local_string_constants.current_index; i++){
 			local_constant_t* target = dynamic_array_get_at((&cfg->local_string_constants), i);
 			local_constant_dealloc(target);
 		}
@@ -8293,7 +8293,7 @@ void dealloc_cfg(cfg_t* cfg){
 	}
 
 	if(cfg->local_xmm128_constants.internal_array != NULL){
-		for(u_int32_t i = 0; i < cfg->local_xmm128_constants.current_index; i++){
+		for(int32_t i = 0; i < cfg->local_xmm128_constants.current_index; i++){
 			local_constant_t* target = dynamic_array_get_at((&cfg->local_xmm128_constants), i);
 			local_constant_dealloc(target);
 		}
@@ -8448,13 +8448,13 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 
 	//If we're gonna merge two blocks, then they'll share all the same successors and predecessors
 	//Let's merge predecessors first if we have any
-	for(u_int16_t i = 0; i < b->predecessors.current_index; i++){
+	for(int32_t i = 0; i < b->predecessors.current_index; i++){
 		//Add b's predecessor as one to a
 		add_predecessor_only(a, b->predecessors.internal_array[i]);
 	}
 
 	//Now merge successors if we have any
-	for(u_int16_t i = 0; i < b->successors.current_index; i++){
+	for(int32_t i = 0; i < b->successors.current_index; i++){
 		//Add b's successors to be a's successors
 		add_successor_only(a, b->successors.internal_array[i]);
 	}
@@ -8462,14 +8462,14 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	//FOR EACH Successor of B, it will have a reference to B as a predecessor.
 	//This is now wrong though. So, for each successor of B, it will need
 	//to have A as predecessor
-	for(u_int16_t i = 0; i < b->successors.current_index; i++){
+	for(int32_t i = 0; i < b->successors.current_index; i++){
 		//Grab the block first
 		basic_block_t* successor_block = b->successors.internal_array[i];
 
 		//If the successor block has predecessors
 		if(successor_block->predecessors.internal_array != NULL){
 			//Now for each of the predecessors that equals b, it needs to now point to A
-			for(u_int8_t i = 0; i < successor_block->predecessors.current_index; i++){
+			for(int32_t i = 0; i < successor_block->predecessors.current_index; i++){
 				//If it's pointing to b, it needs to be updated
 				if(successor_block->predecessors.internal_array[i] == b){
 					//Update it to now be correct
@@ -11381,7 +11381,7 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 	u_int8_t is_main_function = strcmp(function_defined_in->func_name.string, "main") == 0 ? TRUE : FALSE;
 
 	//Run through all of the predecessors
-	for(u_int16_t i = 0; i < function_exit_block->predecessors.current_index; i++){
+	for(int32_t i = 0; i < function_exit_block->predecessors.current_index; i++){
 		//Grab the predecessor out
 		basic_block_t* block = dynamic_array_get_at(&(function_exit_block->predecessors), i);
 
@@ -11453,7 +11453,7 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
  */
 static inline void finalize_all_user_defined_jump_statements(dynamic_array_t* user_defined_jumps){
 	//Run through every jump statement in here
-	for(u_int32_t i = 0; i < user_defined_jumps->current_index; i++){
+	for(int32_t i = 0; i < user_defined_jumps->current_index; i++){
 		//Grab the jump/branch out
 		instruction_t* instruction = dynamic_array_get_at(user_defined_jumps, i);
 
@@ -11530,7 +11530,7 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 	 * Now we are going to process all of our normal function parameters. There is a special
 	 * case that we need to account for: if the user takes that address of a *non stack-passed*
 	 */
-	for(u_int32_t i = 0; i < function_record->function_parameters.current_index; i++){
+	for(int32_t i = 0; i < function_record->function_parameters.current_index; i++){
 		//Extract the parameter
 		symtab_variable_record_t* parameter = dynamic_array_get_at(&(function_record->function_parameters), i);
 
@@ -12881,7 +12881,7 @@ void print_all_cfg_blocks(cfg_t* cfg){
  */
 void reset_visited_status(cfg_t* cfg, u_int8_t reset_direct_successor){
 	//For each block in the CFG
-	for(u_int16_t _ = 0; _ < cfg->created_blocks.current_index; _++){
+	for(int32_t _ = 0; _ < cfg->created_blocks.current_index; _++){
 		//Grab the block out
 		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), _);
 
@@ -12944,7 +12944,7 @@ static void mangle_static_variable_names(dynamic_array_t* global_variables){
 	/**
 	 * Run through all of our global variables here
 	 */
-	for(u_int32_t i = 0; i < global_variables->current_index; i++){
+	for(int32_t i = 0; i < global_variables->current_index; i++){
 		//Extract our current candidate
 		global_variable_t* candidate = dynamic_array_get_at(global_variables, i);
 		
