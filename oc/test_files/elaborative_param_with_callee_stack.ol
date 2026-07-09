@@ -22,6 +22,6 @@ pub fn elaborative_params(x:mut i32, y:params i32) -> i32 {
 
 pub fn main() -> i32 {
 	//Valide use where we don't pass anything
-	OUNIT: [console = 1]
+	OUNIT: [exit_status = 1]
 	ret @elaborative_params(1);
 }

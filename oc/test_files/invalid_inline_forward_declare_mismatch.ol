@@ -13,5 +13,6 @@ pub fn main() -> i32 {
 
 
 fn example(x:i32, y:i32) -> i32 {
+	OUNIT: [fail_to_compile]
 	ret x * y;
 }

@@ -10,7 +10,7 @@ pub fn main() -> i32 {
 	//Should be x_1 = x_0 + 4
 	x += 4;
 
-	OUNIT: [console = 9]
+	OUNIT: [exit_status = 9]
 	ret x;
 }
 

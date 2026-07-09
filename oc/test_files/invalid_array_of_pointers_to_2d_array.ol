@@ -14,5 +14,6 @@ pub fn main() -> i32 {
 
 	//This should fail. We cannot assign a flat data structure(x)
 	//to a non-contiguous region(the function param)
+	OUNIT: [fail_to_compile]
 	ret @take_pointer_array(x);
 }

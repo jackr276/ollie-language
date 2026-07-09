@@ -11,5 +11,6 @@ pub fn main() -> i32 {
 	let y:mut i32** = &x;
 	
 
+	OUNIT: [fail_to_compile]
 	ret 0;
 }

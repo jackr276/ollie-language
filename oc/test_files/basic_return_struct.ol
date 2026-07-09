@@ -21,6 +21,6 @@ pub fn return_struct() -> custom_struct {
 
 
 pub fn main() -> i32 {
-	OUNIT: [console = 'a']
+	OUNIT: [exit_status = 'a']
 	ret @return_struct():z;
 }

@@ -24,6 +24,6 @@ pub fn main() -> i32 {
 	let copied_ret_val:custom_struct = @return_struct(1, 2);
 
 	//Should return 1 + 3 = 4
-	OUNIT:[console = 4]
+	OUNIT:[exit_status = 4]
 	ret copied_ret_val:x + copied_ret_val:y[3];
 }

@@ -12,5 +12,6 @@ pub fn main() -> i32 {
 	let x:i32[] = [1, 2, 3, 4];
 
 	//Should fail - size mismatch
+	OUNIT: [fail_to_compile]
 	ret @get_array_value(x);
 }

@@ -12,5 +12,6 @@ pub fn invalid_param_count(x:i32, y:i32, z:i32[5]) -> i32 {
 }
 
 pub fn main() -> i32 {
+	OUNIT: [fail_to_compile]
 	ret 0;
 }

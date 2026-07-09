@@ -27,6 +27,6 @@ pub fn main() -> i32 {
 	//Grab a function pointer to the one that we want
 	let func_ptr:fn(i32, i32, i32, i32, i32, i32) -> custom_struct = return_by_copy_with_6;
 
-	OUNIT: [console = 6]
+	OUNIT: [exit_status = 6]
 	ret @func_ptr(1, 2, 3, 4, 5, 6):c;
 }

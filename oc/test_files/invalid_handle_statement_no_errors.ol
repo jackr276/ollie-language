@@ -14,5 +14,6 @@ pub fn main() -> i32 {
 	//Invalid - no errors so nothing to handle
 	let result:i32 = @no_errors(3) handle(generic_errror => -1, error => 1);
 
+	OUNIT: [fail_to_compile]
 	ret result;
 }

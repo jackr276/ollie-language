@@ -32,6 +32,6 @@ pub fn main() -> i32 {
 	let func:fn(struct my_struct, i32, i32) -> i32 = param_passed_struct;
 
 	//Should give back: 3 + 'a' + 3 + 2 + 3 = 108
-	OUNIT: [console = 108]
+	OUNIT: [exit_status = 108]
 	ret @func(param_struct, 2, 3);
 }

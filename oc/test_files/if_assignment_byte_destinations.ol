@@ -11,6 +11,6 @@ pub fn byte_sized(x:i8, y:i8) -> i8 {
 
 
 pub fn main() -> i32 {
-	OUNIT: [console = 5]
+	OUNIT: [exit_status = 5]
 	ret @byte_sized(5, 4);
 }

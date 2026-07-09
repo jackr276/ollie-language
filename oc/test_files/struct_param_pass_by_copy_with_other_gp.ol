@@ -27,6 +27,6 @@ pub fn main() -> i32 {
 	let param_struct:param_passed = {'a', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 3};
 
 	//Should give back: 3 + 97 + 3 + 2 + 3 = 108
-	OUNIT: [console = 108]
+	OUNIT: [exit_status = 108]
 	ret @param_passed_struct(param_struct, 2, 3);
 }

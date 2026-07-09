@@ -20,6 +20,6 @@ pub fn main() -> i32 {
 	let my_struct1:passing_struct = {1, 5, '\0'};
 	let my_struct2:passing_struct = {3, 7, 'a'};
 
-	OUNIT: [console = 101]
+	OUNIT: [exit_status = 101]
 	ret @pass_by_copy_struct(my_struct1, my_struct2);
 }

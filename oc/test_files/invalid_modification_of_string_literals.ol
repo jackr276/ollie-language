@@ -13,5 +13,6 @@ pub fn main() -> i32 {
 	//Shouldn't even get here
 	x[3] = 'a';
 	
+	OUNIT: [fail_to_compile]
 	ret 0;
 }

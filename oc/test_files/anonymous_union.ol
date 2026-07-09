@@ -29,6 +29,6 @@ pub fn main() -> i32 {
 	tester:b.x = 11;
 
 	//Verify that we can distinguish the two x's
-	OUNIT: [console = 16]
+	OUNIT: [exit_status = 16]
 	ret tester:x + tester:b.x;
 }

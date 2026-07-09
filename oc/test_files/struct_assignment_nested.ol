@@ -24,7 +24,7 @@ pub fn main() -> i32 {
 	//Try to assign a component of the inner struct over here
 	outer:nested_inner = inner;
 
-	//OUNIT tester tells us that the console should return 5
-	OUNIT: [console = 5]
+	//OUNIT tester tells us that the exit_status should return 5
+	OUNIT: [exit_status = 5]
 	ret outer:nested_inner:x;
 }

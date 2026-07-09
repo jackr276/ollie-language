@@ -19,7 +19,7 @@ define enum type_enum{
 pub fn main() -> i32 {
 	let x:i32 = 3;
 
-	OUNIT: [console = 1]
+	OUNIT: [exit_status = 1]
 	ret x in (TYPE_ONE, TYPE_TWO, TYPE_THREE, TYPE_FOUR, TYPE_FIVE);
 }
 

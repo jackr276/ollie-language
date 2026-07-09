@@ -23,6 +23,6 @@ pub fn main() -> i32 {
 	let x_arr:mut i32[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 	//Should return 4 + 5 = 9
-	OUNIT: [console = 9]
+	OUNIT: [exit_status = 9]
 	ret @add_to_address(&x_arr[1]) + @subtract_from_address(&x_arr[7]);
 }

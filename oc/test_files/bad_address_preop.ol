@@ -22,5 +22,6 @@ pub fn main() -> i32 {
 	//Should fail
 	@mutate_int(&(++construct:y));
 
+	OUNIT: [fail_to_compile]
 	ret 0;
 }

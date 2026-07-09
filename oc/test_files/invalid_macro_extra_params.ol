@@ -15,5 +15,6 @@ pub fn main() -> i32 >{
 	let aa:i32 = 17;
 
 	//Far too many, let's see the error message it generates
+	OUNIT: [fail_to_compile]
 	ret ADD(x, y, z, aa);
 }

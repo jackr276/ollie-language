@@ -38,6 +38,6 @@ pub fn main() -> i32 {
 	/**
 	 * Should return: 2 + 3 + 3 + 5 + 4 + 7 + 5 + 8 = 37
 	 */
-	OUNIT: [console = 37]
+	OUNIT: [exit_status = 37]
 	ret @elaborative_param_structs(struct1, struct2, struct3, struct4);
 }

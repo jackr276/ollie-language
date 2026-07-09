@@ -12,5 +12,6 @@ pub fn! invalid_raises_non_error_type(x:i32) -> i32 {
 		raise u_int64_t;
 	}
 	
+	OUNIT: [fail_to_compile]
 	ret x;
 }

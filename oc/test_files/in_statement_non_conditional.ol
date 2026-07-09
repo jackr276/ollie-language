@@ -11,6 +11,6 @@ pub fn in_in_use(x:i32) -> i32 {
 
 
 pub fn main() -> i32 {
-	OUNIT: [console = 1]
+	OUNIT: [exit_status = 1]
 	ret @in_in_use(7);
 }

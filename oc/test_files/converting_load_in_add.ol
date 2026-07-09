@@ -13,6 +13,6 @@ pub fn main() -> i32 {
 	let x:i32 = 5;
 	let y:i8 = 7;
 
-	OUNIT: [console = 12]
+	OUNIT: [exit_status = 12]
 	ret @load_in_add(&x, &y);
 }

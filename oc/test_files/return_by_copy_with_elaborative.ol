@@ -22,6 +22,6 @@ pub fn return_by_copy_with_elaborative(array:params i32) -> custom_struct {
 
 
 pub fn main() -> i32 {
-	OUNIT: [console = 6]
+	OUNIT: [exit_status = 6]
 	ret @return_by_copy_with_elaborative(1, 2, 3, 4, 5, 6):c;
 }

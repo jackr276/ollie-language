@@ -35,6 +35,6 @@ fn function_call_wrapper(func_ptr:arithmetic_function, x:i32) -> i32 {
 
 //Makes the call to the helper
 pub fn main() -> i32 {
-	OUNIT: [console = 7]
+	OUNIT: [exit_status = 7]
 	ret @function_call_wrapper(add, 0);
 }

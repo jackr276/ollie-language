@@ -7,5 +7,6 @@
 let x:char[][] = ["Hi", "Hello", "Hey"];
 
 pub fn main() -> i32 {
+	OUNIT: [fail_to_compile]
 	ret x[0][0];
 }

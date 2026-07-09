@@ -30,6 +30,6 @@ pub fn switch_with_negatives(x:i32) -> i32 {
 
 
 pub fn main() -> i32 {
-	OUNIT: [console = 5]
+	OUNIT: [exit_status = 5]
 	ret @switch_with_negatives(-11);
 }

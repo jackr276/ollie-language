@@ -17,5 +17,6 @@ pub fn main() -> i32 {
 	//Test the same thing for a function pointer
 	let result:i32 = @x(3) handle(generic_errror => -1, error => 1);
 
+	OUNIT: [fail_to_compile]
 	ret result;
 }

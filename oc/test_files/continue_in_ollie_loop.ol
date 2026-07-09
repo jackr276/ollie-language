@@ -30,6 +30,6 @@ pub fn main() -> i32 {
 	let x:mut i32 = 5;
 
 	//Should return x + 50 = 55
-	OUNIT: [console = 55]
+	OUNIT: [exit_status = 55]
 	ret @ollie_loop(x);
 }

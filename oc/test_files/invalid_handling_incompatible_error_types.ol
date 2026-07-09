@@ -19,6 +19,7 @@ pub fn main() -> i32 {
 	//Can't assign a float to an i8 - this should fail
 	let result:i8 = @divide_values(5, 0) handle(divide_by_zero_error_t => -4.333,  error => -3.232);
 
+	OUNIT: [fail_to_compile]
 	ret result;
 }
 

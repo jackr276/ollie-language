@@ -31,6 +31,6 @@ fn use_struct_param(x:i32, y:value_struct) -> i32 {
 
 pub fn main() -> i32 {
 	//Should return 5 + 3 + 97('a') = 105
-	OUNIT: [console = 105]
+	OUNIT: [exit_status = 105]
 	ret @use_struct_param(5, @construct_struct(3, 4, 'a'));
 }

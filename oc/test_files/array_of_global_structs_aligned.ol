@@ -21,7 +21,7 @@ let array_of_global_structs:struct my_struct[] = [{'a', 12, 9, 5}, {'b', 13, 12,
 
 pub fn main() -> i32 {
 	//Should return 97('a') + 11 + 9 = 117
-	OUNIT: [console = 117]
+	OUNIT: [exit_status = 117]
 	ret array_of_global_structs[0]:a + array_of_global_structs[1]:d + array_of_global_structs[2]:d;
 	
 }

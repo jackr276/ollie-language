@@ -16,5 +16,6 @@ pub fn main() -> i32 {
 	let x:i32* = &(@invalid_return_address(2));
 
 	//Won't ever even get here
+	OUNIT: [fail_to_compile]
 	ret *x;
 }

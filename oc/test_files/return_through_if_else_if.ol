@@ -19,6 +19,6 @@ pub fn return_through_every_path(x:i32) -> i32 {
 
 
 pub fn main() -> i32 {
-	OUNIT: [console = 2]
+	OUNIT: [exit_status = 2]
 	ret @return_through_every_path(2);
 }

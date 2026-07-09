@@ -18,5 +18,6 @@ pub fn main() -> i32 {
 	//Should fail, using the wrong syntax
 	let double_struct_arr:mut my_struct[][] = [[[1, 3l, 'a'], [2, 4l, 'b']], [[1, 3l, 'a'], [2, 4l, 'b']]];
 
+	OUNIT: [fail_to_compile]
 	ret double_struct_arr[1][1].y;
 }

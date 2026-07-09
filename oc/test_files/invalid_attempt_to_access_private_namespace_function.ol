@@ -19,6 +19,7 @@ namespace tester
 
 pub fn main() -> i32 {
 	//Should fail, "private_function" is not visible
+	OUNIT: [fail_to_compile]
 	ret @tester::inner::private_function();
 }
 

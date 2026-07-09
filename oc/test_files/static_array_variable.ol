@@ -16,6 +16,6 @@ pub fn static_array(input:i32, i:i32) -> i32 {
 
 
 pub fn main() -> i32 {
-	OUNIT: [console = 3]
+	OUNIT: [exit_status = 3]
 	ret @static_array(3, 1);
 }

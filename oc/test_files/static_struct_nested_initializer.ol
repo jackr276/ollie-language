@@ -30,6 +30,6 @@ pub fn static_struct(i:bool) -> i32 {
 
 
 pub fn main() -> i32 {
-	OUNIT:[console = 11]
+	OUNIT:[exit_status = 11]
 	ret @static_struct(false);
 }

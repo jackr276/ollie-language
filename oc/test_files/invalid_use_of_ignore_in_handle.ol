@@ -30,6 +30,7 @@ pub fn main() -> i32 {
 												arithmetic_error_t => ignore,
 												error => ret -1
 												);
+	OUNIT: [fail_to_compile]
 	ret result;
 }
 

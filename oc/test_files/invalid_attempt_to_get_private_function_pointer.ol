@@ -21,5 +21,6 @@ pub fn main() -> i32 {
 	//Should fail, "private_function" is not visible
 	let func_ptr:fn() -> i32 = tester::inner::private_function;
 
+	OUNIT: [fail_to_compile]
 	ret @func_ptr();
 }

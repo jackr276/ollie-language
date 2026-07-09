@@ -8,5 +8,6 @@
 define error my_error
 
 pub fn main() -> i32 {
+	OUNIT: [fail_to_compile]
 	ret 0;
 }

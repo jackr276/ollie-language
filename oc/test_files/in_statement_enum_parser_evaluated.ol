@@ -19,6 +19,6 @@ define enum my_enum {
 
 
 pub fn main() -> i32 {
-	OUNIT: [console = 1]
+	OUNIT: [exit_status = 1]
 	ret 5 in (ONE, TWO, THREE, FOUR, FIVE, SIX, SEVEN, EIGHT, NINE, TEN);
 }
