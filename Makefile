@@ -294,7 +294,7 @@ dynamic_array_test.o: $(TEST_SUITE_PATH)/dynamic_array_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/dynamic_array_test.c -o $(OUT_LOCAL)/dynamic_array_test.o
 
 dynamic_array_testd.o: $(TEST_SUITE_PATH)/dynamic_array_test.c
-	$(CC) $(CFLAGS) -g $(TEST_SUITE_PATh)/dynamic_array_test.c -o $(OUT_LOCAL)/dynamic_array_testd.o
+	$(CC) $(CFLAGS) -g $(TEST_SUITE_PATH)/dynamic_array_test.c -o $(OUT_LOCAL)/dynamic_array_testd.o
 
 dynamic_set_test.o: $(TEST_SUITE_PATH)/dynamic_set_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/dynamic_set_test.c -o $(OUT_LOCAL)/dynamic_set_test.o
