@@ -460,50 +460,6 @@ static inline u_int8_t can_variable_be_assigned_to(symtab_variable_record_t* var
 
 
 /**
- * Insert a value into a list in sorted order(least to greatest).
- * We assume that the list is inherently large enought to do this.
- * This is meant primarily for case statement handling. It also validates
- * the uniqueness constraint of the list given in
- *
- * TODO NEED TO UPDATE THIS AS A DYNAMIC INT ARRAY
- */
-static int32_t sorted_list_insert_unique(int32_t* list, int32_t* max_index, int32_t value){
-	//We will need this outside of the loop's scope
-	int32_t i;
-
-	//Run through everything in the list
-	for(i = 0; i < *max_index; i++){
-		//Once we've found it, we can get out
-		if(value < list[i]){
-			break;
-		}
-
-		//This invalidates the uniqueness constraint
-		//so we need to fail out
-		if(value == list[i]){
-			return FALSE;
-		}
-	}
-
-	//Bump this up now, we're going to have one more element
-	*max_index += 1;
-
-	//Shift everything in the list to the right to
-	//make room
-	for(int32_t j = *max_index - 1; j > i; j--){
-		//Shift over by 1 each time
-		list[j] = list[j - 1];
-	}
-
-	//And finally, put in our guy
-	list[i] = value;
-
-	//This worked
-	return TRUE;
-}
-
-
-/**
  * Determine whether or not a duplicate function exists with the given
  * name
  *

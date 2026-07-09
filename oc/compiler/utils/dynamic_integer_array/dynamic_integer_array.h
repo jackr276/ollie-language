@@ -80,6 +80,15 @@ int32_t dynamic_integer_array_get_at(dynamic_integer_array_t* array, int32_t ind
 void dynamic_integer_array_set_at(dynamic_integer_array_t* array, int32_t value, int32_t index);
 
 /**
+ * Insert a value into a list in sorted order(least to greatest).
+ * This is meant primarily for case statement handling. It also validates
+ * the uniqueness constraint of the list given in
+ *
+ * Returns TRUE if the insertion worked, FALSE if a duplicate was found
+ */
+u_int8_t sorted_dynamic_integer_array_insert_unique(dynamic_integer_array_t* array, int32_t value);
+
+/**
  * Delete an element from the dynamic array at a given index. Returns
  * the element at said index
  */

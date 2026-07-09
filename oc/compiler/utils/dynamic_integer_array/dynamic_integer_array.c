@@ -175,6 +175,55 @@ void dynamic_integer_array_set_at(dynamic_integer_array_t* array, int32_t value,
 
 
 /**
+ * Insert a value into a list in sorted order(least to greatest).
+ * This is meant primarily for case statement handling. It also validates
+ * the uniqueness constraint of the list given in
+ *
+ * Returns TRUE if the insertion worked, FALSE if a duplicate was found
+ */
+u_int8_t sorted_dynamic_integer_array_insert_unique(dynamic_integer_array_t* array, int32_t value){
+	//Handle dynamic resize - always double
+	if(array->current_index == array->current_max_size){
+		array->current_max_size *= 2;
+
+		array->internal_array = realloc(array->internal_array, sizeof(int32_t) * array->current_max_size);
+	}
+	
+	//We will need this outside of the loop's scope
+	int32_t i;
+
+	//Run through everything in the list
+	for(i = 0; i < array->current_index; i++){
+		//Once we've found it, we can get out
+		if(value < array->internal_array[i]){
+			break;
+		}
+
+		//This invalidates the uniqueness constraint so we need to fail out
+		if(value == array->internal_array[i]){
+			return FALSE;
+		}
+	}
+
+	//Bump this up now, we're going to have one more element
+	array->current_index++;
+
+	//Shift everything in the list to the right to make room
+	for(int32_t j = array->current_index - 1; j > i; j--){
+		//Shift over by 1 each time
+		array->internal_array[j] = array->internal_array[j - 1];
+	}
+
+	//And finally, put in our guy
+	array->internal_array[i] = value;
+
+	//This worked
+	return TRUE;
+}
+
+
+
+/**
  * Delete an element from a specified index. The element itself
  * is returned, allowing this to be used as a search & delete function
  * all in one
