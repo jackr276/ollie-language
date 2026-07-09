@@ -31,5 +31,6 @@ pub fn invalid_exhaustive(x:enum my_enum) -> i32 {
 
 
 pub fn main() -> i32 {
+	OUNIT: [fail_to_compile]
 	ret 0;
 }

@@ -16,4 +16,6 @@ pub fn main() -> i32 {
 			ret 0;
 		}
 	}
+
+	OUNIT: [fail_to_compile]
 }
