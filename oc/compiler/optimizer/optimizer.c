@@ -69,7 +69,7 @@ typedef enum{
  */
 static inline void reset_visit_status_for_function(dynamic_array_t* function_blocks){
 	//Run through all of the blocks
-	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		//Extract the current block
 		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
 
@@ -201,7 +201,7 @@ static inline u_int8_t does_statement_have_block_external_side_effects(instructi
  */
 static inline void reset_all_marks(dynamic_array_t* function_blocks){
 	//Run through every block
-	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		//Block to work on
 		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
 
@@ -425,7 +425,7 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 	}
 
 	//Run through everything here
-	for(u_int32_t _ = 0; _ < current_function_blocks->current_index; _++){
+	for(int32_t _ = 0; _ < current_function_blocks->current_index; _++){
 		//Grab the block out
 		basic_block_t* block = dynamic_array_get_at(current_function_blocks, _);
 
@@ -534,7 +534,7 @@ static void mark(dynamic_array_t* function_blocks){
 	dynamic_array_t worklist = dynamic_array_alloc();
 
 	//Now we'll go through every single operation in every single block
-	for(u_int32_t _ = 0; _ < function_blocks->current_index; _++){
+	for(int32_t _ = 0; _ < function_blocks->current_index; _++){
 		//Grab the block we'll work on
 		basic_block_t* current = dynamic_array_get_at(function_blocks, _);
 
@@ -851,7 +851,7 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 	dynamic_array_t clone = clone_dynamic_array(&(empty_block->predecessors));
 
 	//For everything in the predecessor set of the empty block
-	for(u_int32_t i = 0; i < clone.current_index; i++){
+	for(int32_t i = 0; i < clone.current_index; i++){
 		//Grab a given predecessor out
 		basic_block_t* predecessor = dynamic_array_get_at(&clone, i);
 
@@ -1038,7 +1038,7 @@ void sweep_local_constants(cfg_t* cfg){
  */
 static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entry_block){
 	//For each and every operation in every basic block
-	for(u_int32_t _ = 0; _ < function_blocks->current_index; _++){
+	for(int32_t _ = 0; _ < function_blocks->current_index; _++){
 		//Grab the block out
 		basic_block_t* block = dynamic_array_get_at(function_blocks, _);
 
@@ -1317,7 +1317,7 @@ static inline void mark_all_branch_related_statements(basic_block_t* block){
 			 */
 			case THREE_ADDR_CODE_FUNC_CALL:
 				//Run through them all and mark them
-				for(u_int32_t i = 0; i < current->parameters.current_index; i++){
+				for(int32_t i = 0; i < current->parameters.current_index; i++){
 					mark_and_add_definition_block_local(current, dynamic_array_get_at(&(current->parameters), i), worklist, &worklist_current_index);
 				}
 
@@ -1456,7 +1456,7 @@ static inline u_int8_t are_blocks_eligible_for_branch_hoisting(basic_block_t* de
  */
 static inline u_int8_t does_block_assign_variable(basic_block_t* block, three_addr_var_t* variable){
 	//Run through every assigned variable
-	for(u_int32_t i = 0; i < block->assigned_variables.current_index; i++){
+	for(int32_t i = 0; i < block->assigned_variables.current_index; i++){
 		//Extract it
 		three_addr_var_t* candidate = dynamic_array_get_at(&(block->assigned_variables), i);
 
@@ -1580,7 +1580,7 @@ static instruction_t* clone_instruction(instruction_t* cloned, temporary_variabl
 	}
 
 	//Run through and copy individually
-	for(u_int32_t i = 0; i < cloned->parameters.current_index; i++){
+	for(int32_t i = 0; i < cloned->parameters.current_index; i++){
 		dynamic_array_add(&(copy->parameters), clone_variable(dynamic_array_get_at(&(cloned->parameters), i), mapping, mapping_current_index, mapping_max_size));
 	}
 
@@ -1617,7 +1617,7 @@ static void remediate_phi_functions(basic_block_t* target, basic_block_t* former
 		}
 
 		//Run through all of the parameters
-		for(u_int32_t i = 0; i < phi_function_cursor->parameters.current_index; i++){
+		for(int32_t i = 0; i < phi_function_cursor->parameters.current_index; i++){
 			//Extract the parameter
 			three_addr_var_t* parameter = dynamic_array_get_at(&(phi_function_cursor->parameters), i);
 
@@ -1737,7 +1737,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 	/**
 	 * For each block in postorder
 	 */
-	for(u_int32_t _ = 0; _ < postorder->current_index; _++){
+	for(int32_t _ = 0; _ < postorder->current_index; _++){
 		//Grab the current block out
 		current = dynamic_array_get_at(postorder, _);
 
@@ -1858,18 +1858,18 @@ static inline instruction_t* emit_test_not_zero_instruction(three_addr_var_t* de
  */
 static inline void remove_all_successors(basic_block_t* block){
 	//Extract the number of successors
-	u_int32_t number_of_successors = block->successors.current_index;
+	int32_t number_of_successors = block->successors.current_index;
 
 	//We'll need a stack VLA to hold all of these successors
 	basic_block_t* successors_to_remove[number_of_successors];
 
 	//Run through everything here and populate the removal array
-	for(u_int32_t i = 0; i < number_of_successors; i++){
+	for(int32_t i = 0; i < number_of_successors; i++){
 		successors_to_remove[i] = dynamic_array_get_at(&(block->successors), i);
 	}
 
 	//Now we'll run through the array again and do our deletion
-	for(u_int32_t i = 0; i < number_of_successors; i++){
+	for(int32_t i = 0; i < number_of_successors; i++){
 		//Extract it
 		basic_block_t* successor_to_remove = successors_to_remove[i];
 
@@ -2049,7 +2049,7 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 	instruction_t* unconditional_jump;
 
 	//Run through every single block in the CFG
-	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		//Extract the given block
 		basic_block_t* current_block = dynamic_array_get_at(function_blocks, i);
 
@@ -2359,7 +2359,7 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 	u_int8_t optimized_branching_assigment = FALSE;
 
 	//Run through all of the function blocks that we have
-	for(u_int32_t i = 0; i < current_function_blocks->current_index; i++){
+	for(int32_t i = 0; i < current_function_blocks->current_index; i++){
 		//The variable that we're going to optimize assignment for
 		three_addr_var_t* branching_assignment_variable = NULL;
 
@@ -2409,7 +2409,7 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		 * We will also be checking if each one of these predecessors has *one*
 		 * unified branching predecessor itself. If it does not then we're also disqualified
 		 */
-		for(u_int32_t i = 0; i < candidate_block->predecessors.current_index; i++){
+		for(int32_t i = 0; i < candidate_block->predecessors.current_index; i++){
 			//Extract the predecessor
 			basic_block_t* predecessor = dynamic_array_get_at(&(candidate_block->predecessors), i);
 
@@ -2697,7 +2697,7 @@ static void dfs_flag_block_reachability_rec(basic_block_t* block){
 	block->visited = TRUE;
 
 	//For each of the successors recursively flag as reachable
-	for(u_int32_t i = 0; i < block->successors.current_index; i++){
+	for(int32_t i = 0; i < block->successors.current_index; i++){
 		basic_block_t* successor = dynamic_array_get_at(&(block->successors), i);
 		dfs_flag_block_reachability_rec(successor);
 	}
@@ -2726,7 +2726,7 @@ static inline void delete_all_unreachable_blocks(basic_block_t* function_entry, 
 	/**
 	 * For each block reset visited flag to false
 	 */
-	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		basic_block_t* block = function_blocks->internal_array[i];
 		block->visited = FALSE;
 	}
@@ -2745,7 +2745,7 @@ static inline void delete_all_unreachable_blocks(basic_block_t* function_entry, 
 	 * Now run through our blocks again. Anything that is not flagged
 	 * as reachable is going to be deleted
 	 */
-	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		basic_block_t* block = function_blocks->internal_array[i];
 
 		/**
@@ -2773,7 +2773,7 @@ static inline void delete_all_unreachable_blocks(basic_block_t* function_entry, 
 		 * For each predecessor of the target, remove the target as
 		 * a successor
 		 */
-		for(u_int32_t j = 0; j < target->predecessors.current_index; j++){
+		for(int32_t j = 0; j < target->predecessors.current_index; j++){
 			basic_block_t* predecessor = target->predecessors.internal_array[j];
 			delete_successor_only(predecessor, target);
 		}
@@ -2782,7 +2782,7 @@ static inline void delete_all_unreachable_blocks(basic_block_t* function_entry, 
 		 * For each successor of the target, remove the target 
 		 * as a predecessor
 		 */
-		for(u_int32_t j = 0; j < target->successors.current_index; j++){
+		for(int32_t j = 0; j < target->successors.current_index; j++){
 			basic_block_t* successor = target->successors.internal_array[j];
 			delete_predecessor_only(successor, target);
 		}
@@ -2811,7 +2811,7 @@ cfg_t* optimize(cfg_t* cfg){
 	 * over entire sets of blocks repeatedly. 
 	 */
 	//Run through all of the functions
-	for(u_int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Extract the entry and exit blocks
 		basic_block_t* function_entry_block = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 		basic_block_t* function_exit_block = dynamic_array_get_at(&(cfg->function_exit_blocks), i);

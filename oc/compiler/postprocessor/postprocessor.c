@@ -576,7 +576,7 @@ static instruction_t* clone_instruction(instruction_t* source){
 	}
 
 	//Run through and copy individually
-	for(u_int32_t i = 0; i < source->parameters.current_index; i++){
+	for(int32_t i = 0; i < source->parameters.current_index; i++){
 		dynamic_array_add(&(copy->parameters), clone_variable(dynamic_array_get_at(&(source->parameters), i)));
 	}
 
@@ -653,7 +653,7 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 	/**
 	 * For each block in postorder
 	 */
-	for(u_int32_t _ = 0; _ < postorder->current_index; _++){
+	for(int32_t _ = 0; _ < postorder->current_index; _++){
 		//Grab the current block out
 		current = dynamic_array_get_at(postorder, _);
 
@@ -884,7 +884,7 @@ static void reorder_blocks(basic_block_t* function_entry_block){
 		}
 
 		//Now we'll go through each of the successors in this node
-		for(u_int32_t idx = 0; idx < current->successors.current_index; idx++){
+		for(int32_t idx = 0; idx < current->successors.current_index; idx++){
 			//Now as we go through here, if the direct end jump wasn't NULL, we'll have already added it in. We don't
 			//want to have that happen again, so we'll make sure that if it's not NULL we don't double add it
 
@@ -928,7 +928,7 @@ void postprocess(cfg_t* cfg){
 	bfs_queue = heap_queue_alloc();
 
 	//Run through every function block here separately
-	for(u_int32_t i = 0 ; i < cfg->function_entry_blocks.current_index; i++){
+	for(int32_t i = 0 ; i < cfg->function_entry_blocks.current_index; i++){
 		//Extract the given function block
 		basic_block_t* function_entry_block = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 

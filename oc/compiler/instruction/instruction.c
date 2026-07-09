@@ -2143,7 +2143,7 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 				initializer_values = variable->initializer_value.array_initializer_values;
 
 				//Run through all the values
-				for(u_int32_t i = 0; i < initializer_values.current_index; i++){
+				for(int32_t i = 0; i < initializer_values.current_index; i++){
 					//These will always be constant values
 					three_addr_const_t* constant_value = dynamic_array_get_at(&initializer_values, i);
 
@@ -2159,7 +2159,7 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 				 initializer_values = variable->initializer_value.struct_initializer_values;
 
 				//Run through all the values
-				for(u_int32_t i = 0; i < initializer_values.current_index; i++){
+				for(int32_t i = 0; i < initializer_values.current_index; i++){
 					//These will always be constant values
 					three_addr_const_t* constant_value = dynamic_array_get_at(&initializer_values, i);
 
@@ -6579,7 +6579,7 @@ instruction_t* copy_instruction(instruction_t* copied){
 	}
 
 	//Run through and copy individually
-	for(u_int32_t i = 0; i < copied->parameters.current_index; i++){
+	for(int32_t i = 0; i < copied->parameters.current_index; i++){
 		dynamic_array_add(&(copy->parameters), duplicate_variable(dynamic_array_get_at(&(copied->parameters), i)));
 	}
 
