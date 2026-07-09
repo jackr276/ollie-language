@@ -18,6 +18,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include "parser.h"
+#include "../utils/dynamic_integer_array/dynamic_integer_array.h"
 #include "../utils/stack/lexstack.h"
 #include "../utils/stack/nesting_stack.h"
 #include "../utils/queue/heap_queue.h"
@@ -114,7 +115,7 @@ static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream
 static generic_ast_node_t* statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global, visibilty_type_t visibility);
 static generic_ast_node_t* logical_or_expression(ollie_token_stream_t* token_stream, side_type_t side);
-static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, generic_ast_node_t* switch_stmt_node, int32_t* values, int32_t* current_case_value);
+static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, generic_ast_node_t* switch_stmt_node, dynamic_integer_array_t* switch_values);
 static generic_ast_node_t* default_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream, u_int8_t is_global, visibilty_type_t visibility);
 static generic_ast_node_t* defer_statement(ollie_token_stream_t* token_stream);
@@ -10212,11 +10213,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	 * long. Every time we see a value in a case statement, we'll need to cross reference it with the
 	 * values in here
 	 */
-	//TODO NEEDS AN UPDATE - LIKELY NEEDS TO BE DYNAMIC
-	int32_t values[MAX_SWITCH_RANGE];
-
-	//Wipe the entire thing so they're all 0's(FALSE)
-	memset(values, 0, MAX_SWITCH_RANGE * sizeof(int32_t));
+	dynamic_integer_array_t switch_values = dynamic_integer_array_alloc_initial_size(MAX_SWITCH_RANGE);
 
 	/**
 	 * Now we can see as many expressions as we'd like. We'll keep looking for expressions so long as
@@ -10231,10 +10228,6 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	//Handle our statement here
 	generic_ast_node_t* stmt;
 
-	//What is the current case statement value that we're on?. This is 
-	//used in the values[] above
-	int32_t values_max_index = 0;
-
 	//So long as we don't see a right curly
 	while(lookahead.tok != R_CURLY){
 		//Switch by the lookahead
@@ -10245,7 +10238,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 				 * Handle a case statement here. We'll need to pass
 				 * the entire node in because of the type checking that we do
 				 */
-				stmt = case_statement(token_stream, switch_stmt_node, values, &values_max_index);
+				stmt = case_statement(token_stream, switch_stmt_node, &switch_values);
 
 				//Go based on what our class here
 				switch(stmt->ast_node_type){
@@ -10401,8 +10394,8 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 		 * our values is represented at the index which corresponds
 		 * to that value's offset from the minimum value
 		 */
-		for(int32_t i = 0; i < values_max_index; i++){
-			int32_t case_value = values[i];
+		for(int32_t i = 0; i < switch_values.current_index; i++){
+			int32_t case_value = dynamic_integer_array_get_at(&switch_values, i);
 			value_byte_map[case_value - min_case_value] = TRUE;
 		}
 
@@ -10465,6 +10458,9 @@ end_exhaustive_check:
 
 	//Store whether or not we are switch eligible
 	switch_stmt_node->is_switch_eligible = is_switch_eligible;
+
+	//Destroy this now that we're done with it
+	dynamic_integer_array_dealloc(&switch_values);
 
 	//If we make it here, all went well
 	return switch_stmt_node;
@@ -11376,7 +11372,7 @@ static generic_ast_node_t* default_statement(ollie_token_stream_t* token_stream)
  *
  * NOTE: We assume that we have already seen and consumed the first case token here
  */
-static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, generic_ast_node_t* switch_stmt_node, int32_t* values, int32_t* values_max_index){
+static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, generic_ast_node_t* switch_stmt_node, dynamic_integer_array_t* switch_values){
 	//Lookahead token
 	lexitem_t lookahead;
 	//Switch compound statement node for later on
@@ -11446,7 +11442,7 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 
 	//Let the helper deal with this. If we get a false here, then we bail out. This ensures that we have a nice sorted list
 	//of values to deal with, which makes completeness validations in the parent method easier
-	u_int8_t uniqueness_worked = sorted_list_insert_unique(values, values_max_index, case_stmt->constant_value.signed_int_value);
+	u_int8_t uniqueness_worked = sorted_dynamic_integer_array_insert_unique(switch_values, case_stmt->constant_value.signed_int_value);
 
 	//This means that a duplicate value was detected
 	if(uniqueness_worked == FALSE){
