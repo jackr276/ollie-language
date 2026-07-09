@@ -44,12 +44,12 @@ dynamic_integer_array_t dynamic_integer_array_alloc();
  * size. This is useful if we already know
  * the size we need
  */
-dynamic_integer_array_t dynamic_integer_array_alloc_initial_size(u_int32_t initial_size);
+dynamic_integer_array_t dynamic_integer_array_alloc_initial_size(int32_t initial_size);
 
 /**
  * Does the dynamic integer array contain this value?
  */
-u_int8_t dynamic_array_contains(dynamic_integer_array_t* array, int32_t value);
+u_int8_t dynamic_integer_array_contains(dynamic_integer_array_t* array, int32_t value);
 
 /**
  * Is the dynamic integer array empty?
@@ -65,46 +65,30 @@ void dynamic_integer_array_add(dynamic_integer_array_t* array, int32_t value);
  * Clear a dynamic array entirely - keeps the size unchanged, but
  * sets the entire internal array to 0
  */
-void clear_dynamic_array(dynamic_array_t* array);
+void clear_dynamic_integer_array(dynamic_integer_array_t* array);
 
 /**
  * Get an element at a specified index. Do not remove the element
  */
-void* dynamic_array_get_at(dynamic_array_t* array, u_int16_t index);
-
+int32_t dynamic_integer_array_get_at(dynamic_integer_array_t* array, int32_t index);
 
 /**
  * Set an element at a specified index. No check will be performed
  * to see if the element is already there. Dynamic resize
  * will be in effect here
  */
-void dynamic_array_set_at(dynamic_array_t* array, void* ptr, u_int16_t index);
-
+void dynamic_integer_array_set_at(dynamic_integer_array_t* array, int32_t value, int32_t index);
 
 /**
  * Delete an element from the dynamic array at a given index. Returns
  * the element at said index
  */
-void* dynamic_array_delete_at(dynamic_array_t* array, u_int16_t index);
-
-/**
- * Delete the pointer itself from the dynamic array
- *
- * Will not complain if it cannot be found - it simply won't be deleted
- */
-void dynamic_array_delete(dynamic_array_t* array, void* ptr);
+int32_t dynamic_integer_array_delete_at(dynamic_integer_array_t* array, int32_t index);
 
 /**
  * Remove an element from the back of the dynamic array - O(1) removal
  */
-void* dynamic_array_delete_from_back(dynamic_array_t* array);
-
-/**
- * Are two dynamic arrays completely equal? A "deep equals" 
- * will ensure that every single element in one array is also inside of the
- * other, and that no elements in one array are different
- */
-u_int8_t dynamic_arrays_equal(dynamic_array_t* a, dynamic_array_t* b);
+int32_t dynamic_integer_array_delete_from_back(dynamic_integer_array_t* array);
 
 /**
  * Deallocate an entire dynamic array. 
@@ -112,6 +96,6 @@ u_int8_t dynamic_arrays_equal(dynamic_array_t* a, dynamic_array_t* b);
  * NOTE: This will not touch/free any pointers in the array itself,
  * just the overall structure
 */
-void dynamic_array_dealloc(dynamic_array_t* array);
+void dynamic_integer_array_dealloc(dynamic_integer_array_t* array);
 
 #endif /* DYNAMIC_INTEGER_ARRAY_H */
