@@ -12,5 +12,6 @@ pub fn sample() -> i32 {
 pub fn main() -> i32 {
 	let x:fn() -> i32 raises(custom_error) = sample;
 
+	OUNIT: [fail_to_compile]
 	ret @x();
 }

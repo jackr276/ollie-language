@@ -15,6 +15,6 @@ pub fn main(argc:i32, argv:char**) -> i32{
 		x = a;
 	}
 
-	OUNIT: [console = 5]
+	OUNIT: [exit_status = 5]
 	ret x;
 }

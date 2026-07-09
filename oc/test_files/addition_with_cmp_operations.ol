@@ -9,5 +9,6 @@ pub fn main() -> i32 {
 	let z:mut i32 = 7;
 	
 	//Chaining additions like this
+	OUNIT: [exit_status = 1]
 	ret (x > 7) + (y < z);
 }

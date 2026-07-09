@@ -15,6 +15,6 @@ pub fn in_in_use(x:mut i32) -> i32 {
 
 pub fn main() -> i32 {
 	//Should return 8 + 4 = 12
-	OUNIT: [console = 12]
+	OUNIT: [exit_status = 12]
 	ret @in_in_use(7) + @in_in_use(5);
 }

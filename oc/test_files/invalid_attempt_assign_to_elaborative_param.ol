@@ -23,5 +23,6 @@ pub fn elaborative_param(x:i32, y:i32, elaborative_params:params i32) -> i32 {
 
 //Dummy
 pub fn main() -> i32 {
+	OUNIT: [fail_to_compile]
 	ret 0;
 }

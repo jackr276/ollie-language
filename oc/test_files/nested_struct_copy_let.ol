@@ -37,6 +37,6 @@ pub fn main() -> i32 {
 	 * Use the ternary struct assignment as the parameter 
 	 * Should return 1 * 3 = 3
 	 */
-	OUNIT: [console = 3]
+	OUNIT: [exit_status = 3]
 	ret @my_fn(final_struct);
 }

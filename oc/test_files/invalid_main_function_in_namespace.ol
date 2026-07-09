@@ -8,6 +8,7 @@ namespace invalid
 {
 	//This should fail - you may never declare a function named "main" inside of a namespace
 	pub fn main() -> i32 {
+		OUNIT: [fail_to_compile]
 		ret 0;
 	}
 }

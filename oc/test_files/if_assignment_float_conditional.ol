@@ -33,6 +33,6 @@
 
  pub fn main() -> i32 {
  	//Should return 3 + 3 = 6
- 	OUNIT: [console = 6]
+ 	OUNIT: [exit_status = 6]
  	ret @float_if_eq(3.333) + @float_if_not_eq(3);
  }

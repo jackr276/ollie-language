@@ -17,6 +17,6 @@ pub fn exhaustive_in(x:i32) -> i32 {
 
 pub fn main() -> i32 {
 	//Should return 5 + 2 = 7
-	OUNIT: [console = 7]
+	OUNIT: [exit_status = 7]
 	ret @exhaustive_in(5) + @exhaustive_in(11);
 }

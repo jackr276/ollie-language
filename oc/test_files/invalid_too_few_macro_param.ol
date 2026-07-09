@@ -12,5 +12,6 @@ pub fn main() -> i32 {
 	let x:i32 = 3;
 
 	//Should fail, we have too few
+	OUNIT: [fail_to_compile]
 	ret ADD(x);
 }

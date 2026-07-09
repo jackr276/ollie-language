@@ -25,6 +25,6 @@ pub fn main() -> i32 {
 	@access_array(&arr);
 
 	//Should return 5 post modifications
-	OUNIT:[console = 5]
+	OUNIT:[exit_status = 5]
 	ret arr[2];
 }

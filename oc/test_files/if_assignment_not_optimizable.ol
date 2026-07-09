@@ -27,6 +27,6 @@ pub fn if_assignment(x:i32) -> i32 {
 
 
 pub fn main() -> i32 {
-	OUNIT:[console = 3]
+	OUNIT:[exit_status = 3]
 	ret @if_assignment(3);
 }

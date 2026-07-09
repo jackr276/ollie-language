@@ -19,6 +19,6 @@ pub fn float_if_assignment(x:f32, y:i32, z:i32) -> i32 {
 
 
 pub fn main() -> i32 {
-	OUNIT: [console = 8]
+	OUNIT: [exit_status = 8]
 	ret @float_if_assignment(4.44, 8, 9);
 }

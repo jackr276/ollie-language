@@ -60,6 +60,17 @@ static inline void print_preprocessor_message(error_message_type_t message, char
 
 
 /**
+ * A generic helper to print the preprocessor message, bump the error count up, and return a FAILURE. This
+ * reduces the amount code to generate a failure
+ */
+static inline u_int8_t print_and_return_preprocessor_failure(char* info, u_int32_t line_number){
+	print_preprocessor_message(MESSAGE_TYPE_ERROR, info, line_number);
+	preprocessor_error_count++;
+	return FAILURE;
+}
+
+
+/**
  * A simple wrapper that will help us maintain the *per-parameter* nesting level
  * whenever we push to the grouping stack. This is just for cohesion so when
  * we revisit this it's clear what is happening
@@ -71,6 +82,7 @@ static inline void push_token_and_update_nesting_level(lex_stack_t* paren_groupi
 	//Increment the nesting level since we pushed
 	(*nesting_level)++;
 }
+
 
 
 /**
@@ -94,7 +106,7 @@ static inline ollie_token_t pop_token_and_update_nesting_level(lex_stack_t* pare
  * Simple helper that just wraps the token_array_get_pointer_at and takes care of the index bumping
  * for us
  */
-static inline lexitem_t* get_token_pointer_and_increment(ollie_token_array_t* array, u_int32_t* index){
+static inline lexitem_t* get_next_token_pointer(ollie_token_array_t* array, u_int32_t* index){
 	//Extract the token pointer
 	lexitem_t* token_pointer = token_array_get_pointer_at(array, *index);
 
@@ -135,15 +147,13 @@ static inline lexitem_t* push_back_token_pointer(ollie_token_array_t* array, u_i
  */
 static inline u_int8_t process_macro_parameter(symtab_macro_record_t* macro, ollie_token_array_t* token_array, u_int32_t* index){
 	//Get the next token
-	lexitem_t* lookahead = get_token_pointer_and_increment(token_array, index);
+	lexitem_t* lookahead = get_next_token_pointer(token_array, index);
 
 	//There's only one correct option to see here
 	switch(lookahead->tok){
 		//We can't see this - it would mean it's empty
 		case R_PAREN:
-			print_preprocessor_message(MESSAGE_TYPE_ERROR, "Macro parameter lists may not be empty. Remove the paranthesis for an unparameterized macro", lookahead->line_num);
-			preprocessor_error_count++;
-			return FAILURE;
+			return print_and_return_preprocessor_failure("Macro parameter lists may not be empty. Remove the paranthesis for an unparameterized macro", lookahead->line_num);
 
 		//This is the one and only valid thing to see
 		case IDENT:
@@ -152,9 +162,7 @@ static inline u_int8_t process_macro_parameter(symtab_macro_record_t* macro, oll
 		//Anything else here is some weird error - we will throw and then get out
 		default:
 			sprintf(info_message, "Expected identifier in macro parameter list but got %s", lexitem_to_string(lookahead));
-			print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, lookahead->line_num);
-			preprocessor_error_count++;
-			return FAILURE;
+			return print_and_return_preprocessor_failure(info_message, lookahead->line_num);
 	}
 
 	//Flag that we're ignoring
@@ -169,9 +177,7 @@ static inline u_int8_t process_macro_parameter(symtab_macro_record_t* macro, oll
 		//If these two are equal, then we'll need to fail out because the user cannot duplicate parameters
 		if(dynamic_strings_equal(&(token->lexeme), &(lookahead->lexeme)) == TRUE){
 			sprintf(info_message, "Macro \"%s\" already has a parameter \"%s\"", macro->name.string, lookahead->lexeme.string);
-			print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, lookahead->line_num);
-			preprocessor_error_count++;
-			return FAILURE;
+			return print_and_return_preprocessor_failure(info_message, lookahead->line_num);
 		}
 	}
 
@@ -198,7 +204,7 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 	ollie_token_array_t* token_array = &(stream->token_stream);
 
 	//Let's get the first pointer here
-	lexitem_t* lookahead = get_token_pointer_and_increment(token_array, index);
+	lexitem_t* lookahead = get_next_token_pointer(token_array, index);
 
 	/**
 	 * This really shouldn't happen because
@@ -206,9 +212,7 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 	 * but we'll catch it just in case
 	 */
 	if(lookahead->tok != MACRO){
-		print_preprocessor_message(MESSAGE_TYPE_ERROR, "$macro keyword expected before macro declaration", lookahead->line_num);
-		preprocessor_error_count++;
-		return FAILURE;
+		return print_and_return_preprocessor_failure("$macro keyword expected before macro declaration", lookahead->line_num);
 	}
 
 	//IMPORTANT - flag that this token needs to be ignored by the replacer
@@ -218,14 +222,12 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 	 * Now that we've seen the $macro keyword, we need to see the name
 	 * of the macro via an identifier
 	 */
-	lookahead = get_token_pointer_and_increment(token_array, index);
+	lookahead = get_next_token_pointer(token_array, index);
 
 	//If we did not see an identifier then we are in bad shape here
 	if(lookahead->tok != IDENT){
 		sprintf(info_message, "Expected identifier after $macro keyword but got %s", lexitem_to_string(lookahead));
-		print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, lookahead->line_num);
-		preprocessor_error_count++;
-		return FAILURE;
+		return print_and_return_preprocessor_failure(info_message, lookahead->line_num);
 	}
 
 	/**
@@ -237,9 +239,7 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 	//Fail case - we have a duplicate
 	if(found_macro != NULL){
 		sprintf(info_message, "The macro \"%s\" has already been defined. Originally defined on line %d", lookahead->lexeme.string, found_macro->line_number);
-		print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, lookahead->line_num);
-		preprocessor_error_count++;
-		return FAILURE;
+		return print_and_return_preprocessor_failure(info_message, lookahead->line_num);
 	}
 
 	//IMPORTANT - flag that this token needs to be ignored by the replacer
@@ -252,7 +252,7 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 	ollie_token_array_t* macro_token_array = &(macro_record->tokens);
 
 	//Refresh the lookahead to see if we have any parameters
-	lookahead = get_token_pointer_and_increment(token_array, index);
+	lookahead = get_next_token_pointer(token_array, index);
 
 	//If we see an L_PAREN, we will begin processing parameters
 	if(lookahead->tok == L_PAREN){
@@ -276,7 +276,7 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 			}
 
 			//Refresh the token
-			lookahead = get_token_pointer_and_increment(token_array, index);
+			lookahead = get_next_token_pointer(token_array, index);
 
 			//Flag that we're ignoring this too
 			lookahead->ignore = TRUE;
@@ -291,9 +291,7 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 				case R_PAREN:
 					//Just a quick check here
 					if(pop_token(paren_grouping_stack).tok != L_PAREN){
-						print_preprocessor_message(MESSAGE_TYPE_ERROR, "Mismatched parenthesis detected", lookahead->line_num);
-						preprocessor_error_count++;
-						return FAILURE;
+						return print_and_return_preprocessor_failure("Mismatched parenthesis detected", lookahead->line_num);
 					}
 
 					goto end_parameter_processing;
@@ -301,9 +299,7 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 				//Anything else here does not work
 				default:
 					sprintf(info_message, "Comma expected between parameters but saw %s instead", lexitem_to_string(lookahead));
-					print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, lookahead->line_num);
-					preprocessor_error_count++;
-					return FAILURE;
+					return print_and_return_preprocessor_failure(info_message, lookahead->line_num);
 			}
 		}
 
@@ -319,7 +315,7 @@ end_parameter_processing:
 	//Unbounded loop through the entire macro
 	while(TRUE){
 		//Refresh the lookahead token
-		lookahead = get_token_pointer_and_increment(token_array, index);
+		lookahead = get_next_token_pointer(token_array, index);
 
 		//Bump the number of tokens in this macro
 		macro_record->total_token_count++;
@@ -329,22 +325,16 @@ end_parameter_processing:
 
 		//Based on our token here we'll do a few things
 		switch(lookahead->tok){
-			//This is bad - there is no such thing as a nested macro and we are already
-			//in one
+			//This is bad - there is no such thing as a nested macro and we are already in one
 			case MACRO:
-				print_preprocessor_message(MESSAGE_TYPE_ERROR, "$macro keyword found inside of a macro definition", lookahead->line_num);
-				preprocessor_error_count++;
-				return FAILURE;
+				return print_and_return_preprocessor_failure("$macro keyword found inside of a macro definition", lookahead->line_num);
 
 			//This could be good or bad depending on what we're after
 			case ENDMACRO:
-				//This is invalid, we cannot have a completely 
-				//empty macro
+				//This is invalid, we cannot have a completely empty macro
 				if(macro_token_array->current_index == 0){
 					sprintf(info_message, "Ollie macro \"%s\" is empty and is therefore invalid. Macros must have at least one token in them", macro_record->name.string);
-					print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, macro_record->line_number);
-					preprocessor_error_count++;
-					return FAILURE;
+					return print_and_return_preprocessor_failure(info_message, macro_record->line_number);
 				}
 
 				//Otherwise this should be fine, so we will go ahead and add this on in
@@ -356,9 +346,7 @@ end_parameter_processing:
 			 */
 			case DONE:
 				sprintf(info_message, "End of file hit. Are you missing a \"$endmacro\" directive for macro \"%s\"?", macro_record->name.string);
-				print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, macro_record->line_number);
-				preprocessor_error_count++;
-				return FAILURE;
+				return print_and_return_preprocessor_failure(info_message, macro_record->line_number);
 
 			/**
 			 * If we have an identifier, there is a chance that this is a macro parameter. If it is, then we're going to
@@ -423,7 +411,7 @@ finalize_macro:
  */
 static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, u_int32_t* stream_index){
 	//Extract the token at the given index
-	lexitem_t* token = &(stream->token_stream.internal_array[*stream_index]);
+	lexitem_t* token = get_next_token_pointer(&(stream->token_stream), stream_index);
 
 	//Some very weird failure here
 	if(token->tok != OUNIT){
@@ -435,75 +423,98 @@ static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, 
 	token->ignore = TRUE;
 
 	//Bump the token index up and refresh the token
-	(*stream_index)++;
-	token = &(stream->token_stream.internal_array[*stream_index]);
+	token = get_next_token_pointer(&(stream->token_stream), stream_index);
 
 	//We need to now see a colon, if we don't then this is a failure
 	if(token->tok != COLON){
 		sprintf(info_message, "Expected \":\" after OUNIT directive but got \"%s\" instead", lexitem_to_string(token));
-		print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, token->line_num);
-		preprocessor_error_count++;
-		return FAILURE;
+		return print_and_return_preprocessor_failure(info_message, token->line_num);
 	}
 
 	//Make it here then we're good, flag to ignore and continue
 	token->ignore = TRUE;
 
 	//Now we should see an opening bracket
-	(*stream_index)++;
-	token = &(stream->token_stream.internal_array[*stream_index]);
+	token = get_next_token_pointer(&(stream->token_stream), stream_index);
 
 	//Fail out if we don't have one
 	if(token->tok != L_BRACKET){
 		sprintf(info_message, "Expected \"[\" but got \"%s\" instead", lexitem_to_string(token));
-		print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, token->line_num);
-		preprocessor_error_count++;
-		return FAILURE;
+		return print_and_return_preprocessor_failure(info_message, token->line_num);
 	}
 
 	//Flag to ignore
 	token->ignore = TRUE;
 
 	/**
-	 * Now for the purpose of the preprocessor, we will run through
-	 * everything inside of these brackets until we hit the closing
-	 * bracket. If we reach EOF without hitting the closing
-	 * bracket then we have an error
+	 * Now we can go through and validate that the OUNIT directive that we've seen
+	 * is actually valid. As of writing this, there are only two valid OUNIT
+	 * types:
+	 * 	1.) exit_status = <constant> - this tells OUNIT that it should compile and then run the program
+	 * 		and expect to get an exit status(echo $?) of the value provided. This is a quick and easy
+	 * 		to validate all sorts of things without relying on printing to the console
+	 * 	2.) failtocompile - this tells OUNIT that it should expect compilation to fail in some way. It
+	 * 		does not have the granularity to tell how it fails
 	 */
-	(*stream_index)++;
-	while(*stream_index < stream->token_stream.current_index){
-		//Extract it
-		token = &(stream->token_stream.internal_array[*stream_index]);
 
-		//Flag to ignore this
-		token->ignore = TRUE;
+	//Get the next token in the stream index
+	token = get_next_token_pointer(&(stream->token_stream), stream_index);
 
-		//Get out
-		if(token->tok == R_BRACKET){
+	switch(token->tok){
+		/**
+		 * The EXIT_STATUS keyword expects an equals sign and then a constant value after it
+		 */
+		case EXIT_STATUS:
+			token->ignore = TRUE;
+
+			//The next token has to be an equals
+			token = get_next_token_pointer(&(stream->token_stream), stream_index);
+			
+			//Incorrect input here so we fail out
+			if(token->tok != EQUALS){
+				sprintf(info_message, "Expected \"=\" but got %s instead", lexitem_to_string(token));
+				return print_and_return_preprocessor_failure(info_message, token->line_num);
+			}
+
+			//Otherwise we want to ignore this token and advance to the next one
+			token->ignore = TRUE;
+			token = get_next_token_pointer(&(stream->token_stream), stream_index);
+			
+			//If we don't have a constant then this is incorrect
+			if(is_constant_token(token->tok) == FALSE){
+				sprintf(info_message, "Expected constant in OUNIT directive but got %s intead", lexitem_to_string(token));
+				return print_and_return_preprocessor_failure(info_message, token->line_num);
+			}
+			
+			token->ignore = TRUE;
 			break;
-		}
 
-		//Onto the next one
-		(*stream_index)++;
+		/**
+		 * Only thing for a failure to compile is the keyword itself. We will
+		 * flag that it should be ignored and move along
+		 */
+		case FAIL_TO_COMPILE:
+			token->ignore = TRUE;
+			break;
+
+		/**
+		 * Unknown/invalid directive - fail out here so that the entire compiilation breaks
+		 */
+		default:
+			sprintf(info_message, "Invalid OUNIT directive detected, [%s] is not a valid OUNIT keyword", lexitem_to_string(token));
+			return print_and_return_preprocessor_failure(info_message, token->line_num);
 	}
 
-	/**
-	 * If we exited but didn't have the R_BRACKET then this is a
-	 * problem. Odds are we ran off the end of the file
-	 */
+	//Refresh token and stream index
+	token = get_next_token_pointer(&(stream->token_stream), stream_index);
+
+	//If it's not a closing bracket we fail out
 	if(token->tok != R_BRACKET){
-		if(token->tok == DONE){
-			print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unterminated OUNIT directive detected", token->line_num);
-			preprocessor_error_count++;
-			return FAILURE;
-
-		//Some weird error here
-		} else {
-			print_preprocessor_message(MESSAGE_TYPE_ERROR, "Invalid OUNIT Directive", token->line_num);
-			preprocessor_error_count++;
-			return FAILURE;
-		}
+		return print_and_return_preprocessor_failure("Invalid OUNIT Directive: missing closing bracket", token->line_num);
 	}
+	
+	//Flag that this needs to be ignored
+	token->ignore = TRUE;
 
 	//If we get here then we have success
 	return SUCCESS;
@@ -562,9 +573,7 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 
 			//If we see this, that means we have a floating endmacro in there
 			case ENDMACRO:
-				print_preprocessor_message(MESSAGE_TYPE_ERROR, "Floating $endmacro directive declared. Are you missing a $macro directive?", token->line_num);
-				preprocessor_error_count++;
-				return FAILURE;
+				return print_and_return_preprocessor_failure("Floating $endmacro directive declared. Are you missing a $macro directive?", token->line_num);
 
 			/**
 			 * If we hit this then we are seeing an "OUNIT" directive for the ollie compiler's
@@ -622,7 +631,7 @@ static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symt
 	//Unterminating loop here
 	while(TRUE){
 		//Advance the lookahead here
-		lexitem_t* lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
+		lexitem_t* lookahead = get_next_token_pointer(old_array, old_token_array_index);
 	
 		//Handle any/all cases we have here
 		switch(lookahead->tok){
@@ -632,9 +641,7 @@ static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symt
 				if(*nesting_level == 1){
 					//Fail case: we cannot have an empty parameter
 					if(target_array->current_index == 0){
-						print_preprocessor_message(MESSAGE_TYPE_ERROR, "Parameters may not be left empty", lookahead->line_num);
-						preprocessor_error_count++;
-						return FAILURE;
+						return print_and_return_preprocessor_failure("Parameters may not be left empty", lookahead->line_num);
 					}
 
 					//Will be reprocessed by the caller
@@ -654,9 +661,7 @@ static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symt
 				if(*nesting_level == 1){
 					//Fail case: we cannot have an empty parameter
 					if(target_array->current_index == 0){
-						print_preprocessor_message(MESSAGE_TYPE_ERROR, "Parameters may not be left empty", lookahead->line_num);
-						preprocessor_error_count++;
-						return FAILURE;
+						return print_and_return_preprocessor_failure("Parameters may not be left empty", lookahead->line_num);
 					}
 
 					//Will be reprocessed by the caller
@@ -711,20 +716,15 @@ static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symt
 
 				//If it failed then fail out
 				if(recursive_macro_success == FAILURE){
-					print_preprocessor_message(MESSAGE_TYPE_ERROR, "Invalid recursive macro parameter given", lookahead->line_num);
-					preprocessor_error_count++;
-					return FAILURE;
+					return print_and_return_preprocessor_failure("Invalid recursive macro parameter given", lookahead->line_num);
 				}
 
 				break;
 				
 
-			//If we get this it means we've run off of the end of file. This is a big error
-			//and an immediate fail case
+			//If we get this it means we've run off of the end of file. This is a big error and an immediate fail case
 			case DONE:
-				print_preprocessor_message(MESSAGE_TYPE_ERROR, "Parser ran off of the file. Do you have an unterminated parenthesis?", lookahead->line_num);
-				preprocessor_error_count++;
-				return FAILURE;
+				return print_and_return_preprocessor_failure("Parser ran off of the file. Do you have an unterminated parenthesis?", lookahead->line_num);
 
 			//By default this just goes into the array
 			default:
@@ -786,14 +786,12 @@ static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab,
 	u_int32_t paren_grouping_level = 0;
 
 	//Otherwise, this macro does have parameters, so we need to process accordingly
-	lexitem_t* old_array_lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
+	lexitem_t* old_array_lookahead = get_next_token_pointer(old_array, old_token_array_index);
 
 	//We need to see this here
 	if(old_array_lookahead->tok != L_PAREN){
 		sprintf(info_message, "Macro \"%s\" takes %d parameters. Opening parenthesis is expected", macro->name.string, parameter_count);
-		print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, old_array_lookahead->line_num);
-		preprocessor_error_count++;
-		return FAILURE;
+		return print_and_return_preprocessor_failure(info_message, old_array_lookahead->line_num);
 	}
 
 	//Let the helper push this and maintain our grouping level counter
@@ -825,9 +823,7 @@ static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab,
 
 		//If this didn't work then we're done
 		if(result == FAILURE){
-			print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable parameter macro detected", old_array_lookahead->line_num);
-			preprocessor_error_count++;
-			return FAILURE;
+			return print_and_return_preprocessor_failure("Unparseable parameter macro detected", old_array_lookahead->line_num);
 		}
 
 		//If we are printing out the debug logging, emit the final token array that we got for this substitution
@@ -850,7 +846,7 @@ static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab,
 		current_parameter_number++;
 
 		//Refresh the token
-		old_array_lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
+		old_array_lookahead = get_next_token_pointer(old_array, old_token_array_index);
 
 		//Based on the token here we could have an exit
 		switch(old_array_lookahead->tok){
@@ -876,9 +872,7 @@ parameter_list_end:
 	 */
 	if(current_parameter_number != parameter_count){
 		sprintf(info_message, "Macro \"%s\" expects %d parameters but was given %d instead", macro->name.string, parameter_count, current_parameter_number);
-		print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, old_array_lookahead->line_num);
-		preprocessor_error_count++;
-		return FAILURE;
+		return print_and_return_preprocessor_failure(info_message, old_array_lookahead->line_num);
 	}
 
 	/**
@@ -888,23 +882,17 @@ parameter_list_end:
 	 * case
 	 */
 	if(paren_grouping_level != 1){
-		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable macro parameter list detected", old_array_lookahead->line_num);
-		preprocessor_error_count++;
-		return FAILURE;
+		return print_and_return_preprocessor_failure("Unparseable macro parameter list detected", old_array_lookahead->line_num);
 	}
 
 	//Double check that this is working too
 	if(old_array_lookahead->tok != R_PAREN){
-		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Closing parenthesis expected", old_array_lookahead->line_num);
-		preprocessor_error_count++;
-		return FAILURE;
+		return print_and_return_preprocessor_failure("Closing parenthesis expected", old_array_lookahead->line_num);
 	}
 
 	//Let's also clean up the grouping stack
 	if(pop_token_and_update_nesting_level(paren_grouping_stack, &paren_grouping_level) != L_PAREN){
-		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", old_array_lookahead->line_num);
-		preprocessor_error_count++;
-		return FAILURE;
+		return print_and_return_preprocessor_failure("Unmatched parenthesis detected", old_array_lookahead->line_num);
 	}
 
 	/**

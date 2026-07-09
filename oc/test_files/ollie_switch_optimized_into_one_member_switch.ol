@@ -28,7 +28,7 @@ pub fn main() -> i32 {
 	}
 
 	//Only x is useful, y will be scrapped
-	OUNIT: [console = 6]
+	OUNIT: [exit_status = 6]
 	ret x;
 }
 

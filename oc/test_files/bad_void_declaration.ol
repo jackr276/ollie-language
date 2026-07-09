@@ -39,9 +39,8 @@ pub fn main(void, argc:i32, argv:char**) -> i32{
 			let i:i32 = 3;
 		}
 	}
-	
-	
 
 	//So it isn't optimized away
+	OUNIT: [fail_to_compile]
 	ret x;
 }

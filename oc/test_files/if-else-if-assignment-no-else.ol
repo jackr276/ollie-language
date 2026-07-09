@@ -19,6 +19,6 @@ pub fn chained_assignment(x:i32) -> i32 {
 
 
 pub fn main() -> i32 {
-	OUNIT: [console = 5]
+	OUNIT: [exit_status = 5]
 	ret @chained_assignment(0);
 }

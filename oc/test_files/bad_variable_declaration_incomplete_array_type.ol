@@ -6,5 +6,6 @@
 pub fn main() -> i32 {
 	declare x:mut i32[][2]; //INCOMPLETE & bad
 	
+	OUNIT: [fail_to_compile]
 	ret 0;
 }

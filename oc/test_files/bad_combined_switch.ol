@@ -28,5 +28,6 @@ pub fn main(argc:i32, argv:char**) -> i32 {
 		}
 	}
 
+	OUNIT: [fail_to_compile]
 	ret x;
 }

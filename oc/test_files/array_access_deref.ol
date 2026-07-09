@@ -31,6 +31,6 @@ pub fn main() -> i32 {
 	@access_array(&arr);
 
 	//Should return 7 post modification
-	OUNIT: [console = 7]
+	OUNIT: [exit_status = 7]
 	ret arr[2];
 }

@@ -34,6 +34,6 @@ pub fn main() -> i32 {
 										];
 
 	//Should return 5 + 3 + 'a' which is 105 - coming from element 3 in the array
-	OUNIT: [console = 105]
+	OUNIT: [exit_status = 105]
 	ret @pass_by_copy_struct_pass_through(my_struct_arr);
 }

@@ -14,6 +14,6 @@ pub fn over_max_bounds(x:i32) -> i32 {
 
 
 pub fn main() -> i32 {
-	OUNIT: [console = 100]
+	OUNIT: [exit_status = 100]
 	ret @over_max_bounds(54);
 }

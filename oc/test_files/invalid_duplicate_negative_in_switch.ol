@@ -65,5 +65,6 @@ pub fn main() -> i32 {
 	@negative_c_style(3);
 	@negative_ollie_style(3);
 
+	OUNIT: [fail_to_compile]
 	ret 0;
 }

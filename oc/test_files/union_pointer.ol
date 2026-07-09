@@ -27,6 +27,6 @@ pub fn main() -> i32{
 	@mut_union(&my_union);
 	
 	//Should come out as a 2
-	OUNIT:[console = 2]
+	OUNIT:[exit_status = 2]
 	ret my_union.ch;
 }

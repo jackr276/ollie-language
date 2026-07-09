@@ -24,6 +24,6 @@ pub fn main() -> i32 {
 	let ret_val_ptr:custom_struct* = &(@return_struct(1, 2));
 
 	//Should return 1 + 3 = 4
-	OUNIT:[console = 4]
+	OUNIT:[exit_status = 4]
 	ret ret_val_ptr=>x + ret_val_ptr=>y[3];
 }

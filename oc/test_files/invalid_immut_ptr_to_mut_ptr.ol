@@ -16,5 +16,6 @@ pub fn main() -> i32 {
 
 	@tester(y);
 	
+	OUNIT: [fail_to_compile]
 	ret 0;
 }

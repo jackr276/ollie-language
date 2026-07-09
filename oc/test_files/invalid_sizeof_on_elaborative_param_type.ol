@@ -13,5 +13,6 @@ pub fn invalid_elaborative_type(x:i32, y:i32, elaborative_type:params i32) -> i3
 }
 
 pub fn main() -> i32 {
+	OUNIT: [fail_to_compile]
 	ret 0;
 }

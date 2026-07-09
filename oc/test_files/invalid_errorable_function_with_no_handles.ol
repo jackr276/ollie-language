@@ -18,5 +18,6 @@ pub fn main() -> i32 {
 	//Going to fail - we need to see a handle statement here
 	let result:i32 = @errorable_function(0);
 
+	OUNIT: [fail_to_compile]
 	ret result;
 }

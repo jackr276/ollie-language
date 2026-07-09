@@ -14,5 +14,6 @@ pub fn main() -> i32 {
 	//Invalid - x is immutable
 	@tester(&x);
 	
+	OUNIT: [fail_to_compile]
 	ret 0;
 }

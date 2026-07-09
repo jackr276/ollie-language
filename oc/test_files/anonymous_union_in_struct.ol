@@ -21,6 +21,6 @@ pub fn main() -> i32 {
 	tester:b = 7;
 	tester:c.a = 11;
 
-	OUNIT: [console = 16]
+	OUNIT: [exit_status = 16]
 	ret tester:a + tester:c.a;
 }

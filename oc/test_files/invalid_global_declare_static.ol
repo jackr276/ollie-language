@@ -10,5 +10,6 @@ declare static x:i32;
 pub fn main() -> i32 {
 	x = 0;
 
+	OUNIT: [fail_to_compile]
 	ret x;
 }

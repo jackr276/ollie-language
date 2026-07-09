@@ -7,5 +7,6 @@
 let global_char_arr:char[][] = ["Hello", "Alien", "ok"];
 
 pub fn main() -> i32 {
+	OUNIT: [fail_to_compile]
 	ret 0;
 }

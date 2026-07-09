@@ -17,6 +17,6 @@ pub fn main() -> i32 {
 	let arr:i16[5] = [1, 2, 3, 4, 5];
 
 	//Should return 10 + 4 + 10 - 5 = 19
-	OUNIT: [console = 19]
+	OUNIT: [exit_status = 19]
 	ret @add_with_dest_conversion(arr, 10) + @sub_with_dest_conversion(arr, 10);
 }

@@ -17,6 +17,6 @@
 
 
  pub fn main() -> i32 {
- 	OUNIT: [console = 2]
+ 	OUNIT: [exit_status = 2]
  	ret @float_if(-3.333);
  }

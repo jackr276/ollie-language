@@ -22,6 +22,6 @@ pub fn is_in_enum_invalid(x:f32) -> i32 {
 
 
 pub fn main() -> i32 {
+	OUNIT: [fail_to_compile]
 	ret @is_in_enum_invalid(5.555);
-	
 }

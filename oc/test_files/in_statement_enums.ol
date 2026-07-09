@@ -27,7 +27,7 @@ pub fn is_in_enum_enum(x:enum my_enum) -> i32 {
 
 pub fn main() -> i32 {
 	//Should return 1 + 1 = 2
-	OUNIT: [console = 2]
+	OUNIT: [exit_status = 2]
 	ret @is_in_enum_int(THREE) + @is_in_enum_enum(FOUR);
 	
 }

@@ -20,6 +20,6 @@ pub fn main() -> i32 {
 	let arr:f32[5] = [1.1, 2.2, 3.3, 4.4, 5.5];
 
 	//Should return (5 + 4.4 = 9(rounded)) + (5 - 3.3 = 1(rounded)) = 10
-	OUNIT: [console = 10]
+	OUNIT: [exit_status = 10]
 	ret @add_with_memory_op(arr, x) + @sub_with_memory_op(arr, x);
 }

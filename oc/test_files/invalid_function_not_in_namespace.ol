@@ -17,5 +17,6 @@ namespace my_namespace
 
 pub fn main() -> i32 {
 	//Tester1 doesn't exist so we fail out
+	OUNIT: [fail_to_compile]
 	ret @my_namespace::duplicate::tester1();
 }

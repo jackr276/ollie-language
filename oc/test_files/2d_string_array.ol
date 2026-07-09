@@ -6,5 +6,6 @@
 pub fn main() -> i32 {
 	let x:char[][] = ["Hi", "Oh", "No"];
 
+	OUNIT: [exit_status = 'O'];
 	ret x[1][0];
 }

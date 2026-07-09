@@ -18,6 +18,6 @@ pub fn branch_one_member(x:i32) -> i32 {
 
 
 pub fn main() -> i32 {
-	OUNIT:[console = 12]
+	OUNIT:[exit_status = 12]
 	ret @branch_one_member(-1);
 }

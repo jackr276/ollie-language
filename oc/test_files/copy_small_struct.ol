@@ -15,6 +15,6 @@ pub fn main() -> i32 {
 	//Small struct copy
 	let copy:small_struct = original;
 
-	OUNIT: [console = 'a']
+	OUNIT: [exit_status = 'a']
 	ret copy:y;
 }

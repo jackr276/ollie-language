@@ -17,5 +17,6 @@ pub fn not_raisable(x:i32) -> i32 {
 
 
 pub fn main() -> i32 {
+	OUNIT: [fail_to_compile]
 	ret 0;
 }

@@ -24,6 +24,6 @@ pub fn return_by_copy_with_6(x:i32, y:i32, z:i32, a:i32, b:i32, c:i32) -> custom
 
 
 pub fn main() -> i32 {
-	OUNIT: [console = 6]
+	OUNIT: [exit_status = 6]
 	ret @return_by_copy_with_6(1, 2, 3, 4, 5, 6):c;
 }

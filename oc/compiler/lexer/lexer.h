@@ -94,4 +94,9 @@ char* lexitem_to_string(lexitem_t* lexitem);
  */
 char* operator_token_to_string(ollie_token_t token);
 
+/**
+ * Is the given token a constant or not
+ */
+u_int8_t is_constant_token(ollie_token_t token);
+
 #endif /* LEXER_H */

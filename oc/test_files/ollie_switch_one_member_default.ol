@@ -18,6 +18,6 @@ pub fn main() -> i32 {
 		}
 	}
 
-	OUNIT: [console = 3]
+	OUNIT: [exit_status = 3]
 	ret x;
 }

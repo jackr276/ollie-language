@@ -10,5 +10,6 @@ pub fn main() -> i32 {
 	//INVALID - cannot assign to this array
 	arr = arr + 1;
 
+	OUNIT: [fail_to_compile]
 	ret 0;
 }

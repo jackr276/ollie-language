@@ -29,5 +29,6 @@ pub fn main() -> i32{
 	@mut_union(&my_union);
 	
 	//Read as char
+	OUNIT: [fail_to_compile]
 	ret my_union.ch;
 }

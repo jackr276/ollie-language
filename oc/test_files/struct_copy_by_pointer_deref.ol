@@ -28,6 +28,6 @@ pub fn copy_struct(struct_ptr:custom_struct*) -> i32 {
 pub fn main() -> i32 {
 	let original:custom_struct = {1, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 2.0};
 		
-	OUNIT: [console = 3]
+	OUNIT: [exit_status = 3]
 	ret @copy_struct(&original);
 }

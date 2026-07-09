@@ -24,7 +24,7 @@ pub fn increment_tester(x:i32, y:i32) -> i32 {
 
 
 pub fn main() -> i32 {
-	OUNIT: [console = 7]
+	OUNIT: [exit_status = 7]
 	ret @increment_tester(2, 3);
 }
 

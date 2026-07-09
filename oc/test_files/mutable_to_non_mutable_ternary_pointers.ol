@@ -17,6 +17,6 @@ pub fn tester(param:i32) -> i32* {
 
 
 pub fn main() -> i32 {
-	OUNIT: [console = 2]
+	OUNIT: [exit_status = 2]
 	ret *@tester(5);
 }

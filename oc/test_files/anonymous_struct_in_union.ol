@@ -27,6 +27,6 @@ pub fn main() -> i32 {
 	tester.x:b = 7.0;
 
 	//Should give us back 7
-	OUNIT: [console = 7]
+	OUNIT: [exit_status = 7]
 	ret tester.x:b;
 }

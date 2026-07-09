@@ -14,5 +14,6 @@ pub fn main() -> i32 {
 	//INVALID - empty
 	PARAMED_MACRO();
 
+	OUNIT: [fail_to_compile]
 	ret x;
 }

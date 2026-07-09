@@ -10,6 +10,6 @@
 pub fn main() -> i32 {
 	let x:f32 = -0.0;
 
-	OUNIT: [console = 1]
+	OUNIT: [exit_status = 1]
 	ret (*(<u32*>(&x))) >> 31;
 }

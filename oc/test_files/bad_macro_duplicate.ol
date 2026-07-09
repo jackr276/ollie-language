@@ -9,5 +9,6 @@ $macro DUPLICATE 1 $endmacro
 
 
 pub fn main() -> i32 {
+	OUNIT: [fail_to_compile]
 	ret duplicate;
 }
