@@ -9,5 +9,6 @@ pub fn main() -> i32 {
 	//This is illegal - can't have an i32* to an i16*
 	let y:mut i32* = &x;
 
+	OUNIT: [fail_to_compile]
 	ret *y + x;
 }

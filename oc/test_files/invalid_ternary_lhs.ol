@@ -10,5 +10,6 @@ pub fn main() -> i32 {
 
 	(z == 6 ? x else y) = 32;
 
+	OUNIT: [fail_to_compile]
 	ret x + y;
 }

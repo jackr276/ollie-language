@@ -15,5 +15,6 @@ pub fn ternary_assign(decider:i32, x:i32*, y:mut i32*) -> mut i32* {
 
 
 pub fn main() -> i32 {
+	OUNIT: [fail_to_compile]
 	ret 0;
 }

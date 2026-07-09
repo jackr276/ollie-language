@@ -18,5 +18,6 @@ pub fn main() -> i32 {
 	//Will fail
 	let x:mut my_struct = [3, 5l, 'a'];
 
+	OUNIT: [fail_to_compile]
 	ret x.x;
 }
