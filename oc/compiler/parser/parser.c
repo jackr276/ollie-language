@@ -198,7 +198,7 @@ static inline u_int8_t does_enum_contain_integer_member(generic_type_t* enum_typ
 	dynamic_array_t* member_table = &(enum_type->internal_types.enumeration_table);
 
 	//Run through the enum type's table
-	for(u_int16_t i = 0; i < member_table->current_index; i++){
+	for(int32_t i = 0; i < member_table->current_index; i++){
 		symtab_variable_record_t* member = dynamic_array_get_at((member_table), i);
 
 		//Match found - we can get out
@@ -1342,7 +1342,7 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 		 * We need to make sure that we do not have any duplicates here. Since this is a switch statement internally,
 		 * it's very important that every error is unique
 		 */
-		for(u_int32_t i = 0; i < errors_seen.current_index; i++){
+		for(int32_t i = 0; i < errors_seen.current_index; i++){
 			//Extract it
 			generic_type_t* error_type = dynamic_array_get_at(&errors_seen, i);
 
@@ -1396,7 +1396,7 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 	
 	//First search for the generic error
 	u_int8_t found_generic_error = FALSE;
-	for(u_int32_t i = 0; i < errors_seen.current_index; i++){
+	for(int32_t i = 0; i < errors_seen.current_index; i++){
 		//Extract the type
 		generic_type_t* error_type = dynamic_array_get_at(&errors_seen, i);
 	
@@ -1416,7 +1416,7 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 	 * Now let's validate that *if* the function has a specific raises statement, we validate
 	 * all of those as well
 	 */
-	for(u_int32_t i = 0; i < function_type->potential_errors.current_index; i++){
+	for(int32_t i = 0; i < function_type->potential_errors.current_index; i++){
 		//Extract the error
 		generic_type_t* mandatory_checked_error = dynamic_array_get_at(&(function_type->potential_errors), i);
 
@@ -1424,7 +1424,7 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 		u_int32_t seen_error = FALSE;
 
 		//Now we need to see if this error is inside of the errors that we've handled before
-		for(u_int32_t j = 0; j < errors_seen.current_index; j++){
+		for(int32_t j = 0; j < errors_seen.current_index; j++){
 			//Extract it
 			generic_type_t* error_handled = dynamic_array_get_at(&errors_seen, j);
 
@@ -1644,7 +1644,7 @@ static inline u_int8_t is_namespace_predecessor_of_given(function_namespace_t* p
 			return SUCCESS;
 		}
 
-		for(u_int32_t i = 0; i < cursor->child_namespaces.current_index; i++){
+		for(int32_t i = 0; i < cursor->child_namespaces.current_index; i++){
 			//Extract it
 			function_namespace_t* candidate = dynamic_array_get_at(&(cursor->child_namespaces), i);
 
@@ -6476,7 +6476,7 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		 * constant inside of the member list. If we detect that this is a duplicate 
 		 * then we fail out
 		 */
-		for(u_int32_t i = 0; i < in_member_array.current_index; i++){
+		for(int32_t i = 0; i < in_member_array.current_index; i++){
 			generic_ast_node_t* member = dynamic_array_get_at(&in_member_array, i);
 
 			//Fail out if they are equal
@@ -10096,11 +10096,11 @@ static inline u_int8_t is_type_exhaustive_switch_eligible(generic_type_t* type){
 	 * each other. We'll need to check and see if all of the values inside of
 	 * the enumeration are in fact 1 apart
 	 */
-	u_int32_t min_enum_value = type->min_enum_value;
-	u_int32_t max_enum_value = type->max_enum_value;
+	int32_t min_enum_value = type->min_enum_value;
+	int32_t max_enum_value = type->max_enum_value;
 
 	//The range of all possible enum values
-	u_int32_t enum_range = max_enum_value - min_enum_value + 1;
+	int32_t enum_range = max_enum_value - min_enum_value + 1;
 
 	//Define a bytemap of all potential enum values and wipe it all out to 0
 	u_int8_t value_map[enum_range];
@@ -10113,7 +10113,7 @@ static inline u_int8_t is_type_exhaustive_switch_eligible(generic_type_t* type){
 	 * If it's not, we may have something like [1, 1, 0, 1, 1] where there
 	 * are gaps in the exhaustive range
 	 */
-	for(u_int32_t i = 0; i < enumeration_table->current_index; i++){
+	for(int32_t i = 0; i < enumeration_table->current_index; i++){
 		//Extract the members enum value
 		symtab_variable_record_t* member = dynamic_array_get_at(enumeration_table, i);
 		int32_t raw_enum_value = member->enum_member_value;
@@ -10128,7 +10128,7 @@ static inline u_int8_t is_type_exhaustive_switch_eligible(generic_type_t* type){
 	 * range simply doesn't exist. If we see that, we
 	 * fail out
 	 */
-	for(u_int32_t i = 0; i < enum_range; i++){
+	for(int32_t i = 0; i < enum_range; i++){
 		if(value_map[i] == FALSE){
 			return FALSE;
 		}
@@ -12493,7 +12493,7 @@ static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_globa
  */
 static inline u_int8_t check_jump_labels(){
 	//Run through all of these statements
-	for(u_int32_t i=  0; i < current_function_jump_statements.current_index; i++){
+	for(int32_t i=  0; i < current_function_jump_statements.current_index; i++){
 		//Extract the one we need
 		generic_ast_node_t* current_jump_statement = dynamic_array_get_at(&(current_function_jump_statements), i);
 
@@ -12530,7 +12530,7 @@ static u_int8_t validate_error_list_against_raised_errors(symtab_function_record
 	dynamic_array_t* mandatory_checked_errors = &(function->signature->internal_types.function_type->potential_errors);
 
 	//Run through all of the mandatory checked errors
-	for(u_int32_t i = 0; i < mandatory_checked_errors->current_index; i++){
+	for(int32_t i = 0; i < mandatory_checked_errors->current_index; i++){
 		//Extract the error that we require
 		generic_type_t* mandatory_error = dynamic_array_get_at(mandatory_checked_errors, i);
 
@@ -12538,7 +12538,7 @@ static u_int8_t validate_error_list_against_raised_errors(symtab_function_record
 		u_int8_t raised_by_function = FALSE;
 
 		//Now let's go through all of the errors that are raised and check those
-		for(u_int32_t j = 0; j < errors_raised_by_current_function.current_index; j++){
+		for(int32_t j = 0; j < errors_raised_by_current_function.current_index; j++){
 			//Extract the error that we raised
 			generic_type_t* raised_error = dynamic_set_get_at(&errors_raised_by_current_function, j);
 
@@ -12870,7 +12870,7 @@ static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* f
 	push_token(&grouping_stack, lookahead);
 
 	//Start the error count off at 0
-	u_int32_t error_count = 0;
+	int32_t error_count = 0;
 
 	//Now we need to see at least one, but possibly many, error types in here
 	do {
@@ -12918,7 +12918,7 @@ static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* f
 		 */
 		if(defining_predeclared_function == FALSE){
 			//Let's first check for duplicated errors
-			for(u_int32_t i = 0; i < internal_function_type->potential_errors.current_index; i++){
+			for(int32_t i = 0; i < internal_function_type->potential_errors.current_index; i++){
 				//Extrace it
 				generic_type_t* candidate = dynamic_array_get_at(&(internal_function_type->potential_errors), i);
 
@@ -13019,10 +13019,10 @@ static u_int8_t validate_function_parameter_list(generic_type_t* function_type){
 	}
 
 	//Extract the number of parameters
-	u_int32_t num_params = internal_type->function_parameters.current_index;
+	int32_t num_params = internal_type->function_parameters.current_index;
 
 	//Run through all of the parameters
-	for(u_int32_t i = 0; i < num_params; i++){
+	for(int32_t i = 0; i < num_params; i++){
 		//Extract it
 		generic_type_t* parameter_type = dynamic_array_get_at(&(internal_type->function_parameters), i);
 
@@ -14445,11 +14445,11 @@ static inline u_int8_t validate_inlined_functions_are_non_recursive(function_sym
 	u_int32_t error_count = 0;
 
 	//Run through every namespace
-	for(u_int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
+	for(int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
 		function_namespace_t* sheaf = dynamic_array_get_at(&(symtab->namespaces), _);
 
 		//Now for every record in the namespace
-		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+		for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
 			if(sheaf->records[i] == NULL){
 				continue;
 			}
@@ -14512,11 +14512,11 @@ static inline void flag_function_for_alignment(function_symtab_t* symtab, symtab
 	u_int32_t function_count = symtab->current_function_id;
 
 	//Run through every namespace
-	for(u_int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
+	for(int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
 		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->namespaces), _);
 
 		//For each record inside of the namespace
-		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+		for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
 			symtab_function_record_t* other = current_namespace->records[i];
 			
 			//Traverse the linked list in case of collisions
@@ -14567,12 +14567,12 @@ static void flag_functions_that_require_initial_alignment(function_symtab_t* sym
 	/**
 	 * Run through all of the records in the function keyspace
 	 */
-	for(u_int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
+	for(int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
 		//Extract the current namespace
 		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->namespaces), _);
 
 		//Now run through everything in that namespace
-		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+		for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
 			//Extract it
 			symtab_function_record_t* record = current_namespace->records[i];
 
@@ -14607,7 +14607,7 @@ static void mangle_all_function_names(function_symtab_t* symtab){
 	heap_stack_t namespace_stack = heap_stack_alloc();
 
 	//Run through all of the given namespaces
-	for(u_int32_t i = 0; i < symtab->namespaces.current_index; i++){
+	for(int32_t i = 0; i < symtab->namespaces.current_index; i++){
 		//Pointer for the current namespace
 		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->namespaces), i);
 
@@ -14617,7 +14617,7 @@ static void mangle_all_function_names(function_symtab_t* symtab){
 		}
 
 		//Otherwise run through all of the functions
-		for(u_int32_t j = 0; j < FUNCTION_KEYSPACE; j++){
+		for(int32_t j = 0; j < FUNCTION_KEYSPACE; j++){
 			//Grab it out
 			symtab_function_record_t* record_to_mangle = current_namespace->records[j];
 

@@ -2524,7 +2524,7 @@ void* get_struct_member(generic_type_t* structure, char* name){
 	dynamic_array_t struct_table = structure->internal_types.struct_table;
 
 	//Run through everything here
-	for(u_int32_t i = 0; i < struct_table.current_index; i++){
+	for(int32_t i = 0; i < struct_table.current_index; i++){
 		//Grab the variable out
 		var = dynamic_array_get_at(&struct_table, i);
 
@@ -2551,7 +2551,7 @@ void* get_union_member(generic_type_t* union_type, char* name){
 	dynamic_array_t union_table = union_type->internal_types.union_table;
 
 	//Run through everything here
-	for(u_int32_t i = 0; i < union_table.current_index; i++){
+	for(int32_t i = 0; i < union_table.current_index; i++){
 		//Grab the variable out
 		var = dynamic_array_get_at(&union_table, i);
 
@@ -2722,7 +2722,7 @@ u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member, u_int8_t 
 	 */
 	if(user_defined_values == TRUE){
 		//Extract the enum member's actual value
-		for(u_int32_t i = 0; i < enum_type->internal_types.enumeration_table.current_index; i++){
+		for(int32_t i = 0; i < enum_type->internal_types.enumeration_table.current_index; i++){
 			//Grab the variable out
 			symtab_variable_record_t* variable = dynamic_array_get_at(&(enum_type->internal_types.enumeration_table), i);
 
@@ -3298,10 +3298,10 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
 	}
 
 	//Store this for our uses
-	u_int32_t num_params = function_type->function_parameters.current_index;
+	int32_t num_params = function_type->function_parameters.current_index;
 
 	//Run through all of our parameters
-	for(u_int32_t i = 0; i < num_params; i++){
+	for(int32_t i = 0; i < num_params; i++){
 		//Extract the parameter type
 		generic_type_t* paramter_type = dynamic_array_get_at(&(function_type->function_parameters), i);
 
@@ -3336,14 +3336,14 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
 	dynamic_string_concatenate(&(function_pointer_type->type_name), var_string);
 
 	//Get the count
-	u_int32_t num_errors_to_raise = function_type->potential_errors.current_index;
+	int32_t num_errors_to_raise = function_type->potential_errors.current_index;
 
 	//If we have potential errors that we raise, we'll add that now
 	if(num_errors_to_raise != 0){
 		dynamic_string_concatenate(&(function_pointer_type->type_name), " raises (");
 
 		//Run through them all
-		for(u_int32_t i = 0; i < num_errors_to_raise; i++){
+		for(int32_t i = 0; i < num_errors_to_raise; i++){
 			//Get it out
 			generic_type_t* error_type = dynamic_array_get_at(&function_type->potential_errors, i);
 
