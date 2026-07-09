@@ -72,7 +72,7 @@ u_int8_t dynamic_integer_array_contains(dynamic_integer_array_t* array, int32_t 
 	}
 
 	//We'll run through the entire array, comparing pointer by pointer
-	for(u_int32_t i = 0; i < array->current_index; i++){
+	for(int32_t i = 0; i < array->current_index; i++){
 		//If we find an exact memory address match return true
 		if(array->internal_array[i] == value){
 			return TRUE;
@@ -182,7 +182,7 @@ void dynamic_integer_array_set_at(dynamic_integer_array_t* array, int32_t value,
 int32_t dynamic_integer_array_delete_at(dynamic_integer_array_t* array, int32_t index){
 	//Again if we can't do this, we won't disrupt the program. Just return NULL
 	if(array->current_index <= index){
-		return NULL;
+		return -1;
 	}
 
 	//We'll grab the element at this index first
