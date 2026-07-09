@@ -19,5 +19,6 @@ pub fn tester(param:i32) -> mut i32* {
 
 
 pub fn main() -> i32 {
+	OUNIT: [fail_to_compile]
 	ret *@tester(5);
 }

@@ -19,5 +19,6 @@ fn string_init() -> char* {
 pub fn main(argc:i32, argv:char**) -> i32 {
 	@string_init();
 
+	OUNIT: [fail_to_compile]
 	ret 0;
 }

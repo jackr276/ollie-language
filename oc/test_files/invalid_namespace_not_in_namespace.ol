@@ -17,5 +17,6 @@ namespace my_namespace
 
 pub fn main() -> i32 {
 	//"not_there" isn't there so we fail
+	OUNIT: [fail_to_compile]
 	ret @my_namespace::not_there::tester();
 }

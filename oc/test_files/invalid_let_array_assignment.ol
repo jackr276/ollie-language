@@ -10,5 +10,6 @@ pub fn main() -> i32 {
 	//an array initializer to do this
 	let arr2:mut i32[] = arr;
 
+	OUNIT: [fail_to_compile]
 	ret 0;
 }

@@ -19,5 +19,6 @@ pub fn main() -> i32 {
 	//Should not work
 	let x:i64* = arr;
 
+	OUNIT: [fail_to_compile]
 	ret 0;
 }
