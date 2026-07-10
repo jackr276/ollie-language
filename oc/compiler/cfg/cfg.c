@@ -9842,7 +9842,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	 *
 	 * TODO THIS IS CAUSING ISSUES FOR US
 	 *
-	 * WHAT IF EXHAUSTIVE?
+	 * WHAT IF EXHAUSTIVE? - THIS SHOULD NOT BE HERE
 	 */
 	if(default_block == NULL){
 		printf("HERE\n");
@@ -9858,7 +9858,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	 * Run through the entire jump table. Any nodes that are not occupied(meaning there's no case statement with that value)
 	 * will be set to point to the default block. 
 	 */
-	u_int8_t switch_is_exhaustive = TRUE;
+	u_int8_t switch_has_default_jumps = TRUE;
 	for(int32_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
 		/**
 		 * If it's null, we'll make it the default. This should only happen in switches
@@ -9869,7 +9869,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 			dynamic_array_set_at(&(jump_calculation_block->jump_table->nodes), default_block, i);
 			
 			//If we have to add one of these then the switch is not exhaustive
-			switch_is_exhaustive = FALSE;
+			switch_has_default_jumps = FALSE;
 		}
 	}
 
@@ -9878,7 +9878,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	 * a successor to the jump calculation block. We only do this once we get down here to
 	 * avoid any issues with unneeded successors if it is exhaustive
 	 */
-	if(switch_is_exhaustive == FALSE){
+	if(switch_has_default_jumps == FALSE){
 		add_successor(jump_calculation_block, default_block);
 	}
 
