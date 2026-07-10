@@ -9824,23 +9824,28 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 		emit_jump(current_block, ending_block);
 	}
 
-	//If the ending block has no successors at all, that means that we've returned through every control path. Instead
-	//of using the ending block, we can change it to be the function ending block
-	//
-	// TODO NEEDS A LOOK - WHAT IF IT RETURNS ALWAYS
+	/**
+	 * If the ending block has no successors at all, that means that we've returned through every control path. Instead
+	 * of using the ending block, we can change it to be the function ending block
+	 */
 	if(ending_block->predecessors.internal_array == NULL || ending_block->predecessors.current_index == 0){
 		result_package.final_block = function_exit_block;
 	}
 
 	/**
-	 * If the default clause is NULL, which it may very well be, we will created
-	 * our own dummy default clause that just jumps to the end. This maintains
+	 * If the default clause is NULL, which it may very well be, we will creat
+	 * our own dummy default clause that just jumps to the of the switch statement end. This maintains
 	 * the intention of the programmer but also allows us to reuse the code
 	 * from default blocks
 	 *
+	 * THe only exception to this is if
+	 *
 	 * TODO THIS IS CAUSING ISSUES FOR US
+	 *
+	 * WHAT IF EXHAUSTIVE?
 	 */
 	if(default_block == NULL){
+		printf("HERE\n");
 		//Create it
 		default_block = basic_block_alloc_and_estimate();
 
