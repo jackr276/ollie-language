@@ -44,9 +44,9 @@ fn tester(param:my_enum_type) -> i32{
 
 
 pub fn main() -> i32{
-	let x:i8 = 88;
+	let x:i32 = 88;
 
 	OUNIT: [fail_to_compile]
-	//BAD - can't have an i8 in here - must be an enum of the same type
+	//BAD - can't have an i32 in here - must be an enum of the same type
 	ret @tester(x);
 }
