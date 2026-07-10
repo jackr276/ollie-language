@@ -9654,6 +9654,8 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	/**
 	 * If we have a c style switch statement that exclusively has one member, we will 
 	 * optimize this into an if-else statement
+	 *
+	 * TODO SHOULD MAKE THIS ROLLED INTO THE ABOVE
 	 */
 	if(root_node->num_case_members == 1){
 		return c_style_switch_with_one_member_to_if_conversion(root_node);
@@ -9838,21 +9840,22 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	 * the intention of the programmer but also allows us to reuse the code
 	 * from default blocks
 	 *
-	 * THe only exception to this is if
-	 *
-	 * TODO THIS IS CAUSING ISSUES FOR US
-	 *
-	 * WHAT IF EXHAUSTIVE? - THIS SHOULD NOT BE HERE
+	 * Special case here: if we are returning through all paths, then we're going to need a dummy
+	 * return through the default block. This will be handled by us later, but for now all that
+	 * we'll need to is create a block and add the exit block as a successor to it
 	 */
 	if(default_block == NULL){
-		printf("HERE\n");
 		//Create it
 		default_block = basic_block_alloc_and_estimate();
 
-		//Emit a jump from it to the end block
-		emit_jump(default_block, result_package.final_block);
-	}
+		if(result_package.final_block != function_exit_block){
+			//Emit a jump from it to the end block
+			emit_jump(default_block, result_package.final_block);
 
+		} else {
+			add_successor(default_block, function_exit_block);
+		}
+	}
 
 	/**
 	 * Run through the entire jump table. Any nodes that are not occupied(meaning there's no case statement with that value)
