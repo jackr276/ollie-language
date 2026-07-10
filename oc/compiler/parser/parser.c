@@ -10445,6 +10445,14 @@ end_exhaustive_check:
 	
 	//Store this for later on processing in the CFG
 	switch_stmt_node->num_case_members = num_case_statements;
+
+	/**
+	 * If we only have one case statement we are *not* switch
+	 * eligible and will be converted into an if statement
+	 */
+	if(num_case_statements == 1){
+		is_switch_eligible = FALSE;
+	}
 	
 	//Store whether or not we are an exhaustive switch
 	switch_stmt_node->is_exhaustive_switch = is_exhaustive_switch;

@@ -10000,6 +10000,8 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
  *
  * Ollie style statements also don't support switch level breaks, so we don't need to worry about
  * that either in this case
+ *
+ * TODO NEEDS TO BE GENERALIZED
  */
 static cfg_result_package_t ollie_switch_with_one_case_to_if_conversion(generic_ast_node_t* root_node){
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
@@ -10102,30 +10104,13 @@ static cfg_result_package_t ollie_switch_with_one_case_to_if_conversion(generic_
 
 
 /**
- * Visit a switch statement. In Ollie's current implementation, 
- * the values here will not be reordered at all. Instead, they
- * will be put in the exact orientation that the user wants
+ * A non-exhaustive ollie switch statement will have an above/below check before our actual
+ * indirect jump and will always have a default clause for us to handle
  */
-static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node){
-	if(root_node->is_switch_eligible == FALSE){
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(1);
-	}
-
+static cfg_result_package_t visit_non_exhaustive_ollie_switch_statement(generic_ast_node_t* root_node){
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
-	/**
-	 * If we just have one case member, we will need to handle this differently. 
-	 * The invoked rule will convert this into an equivalent if-else-if statement
-	 *
-	 * TODO GET THIS ROLLED INTO THE THING ABOVE
-	 */
-	if(root_node->num_case_members == 1){
-		return ollie_switch_with_one_case_to_if_conversion(root_node);
-	}
-
 	//The starting block for the switch statement - we'll want this in a new block
-	//TODO NOT ALL NEEDED
 	basic_block_t* root_level_block = basic_block_alloc_and_estimate();
 	//We will need to new blocks to check the bounds
 	basic_block_t* upper_bound_check_block = basic_block_alloc_and_estimate();
@@ -10212,180 +10197,168 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	}
 
 	/**
-	 * Our most common case is that the switch is not exhaustive.
-	 * A non-exhaustive switch by necessity will always have a default clause
-	 * and by nature of it not being exhaustive, will have the starting jump
-	 * above/jump below logic
+	 * It is entirely possible that we have no default block here. In that case, we will
+	 * make our own "dummy" default block that simply breaks to end and has no effect. This
+	 * will preserve the intention of the programmer and keep our flow simpler here
 	 */
-	if(root_node->is_exhaustive_switch == FALSE){
-		/**
-		 * It is entirely possible that we have no default block here. In that case, we will
-		 * make our own "dummy" default block that simply breaks to end and has no effect. This
-		 * will preserve the intention of the programmer and keep our flow simpler here
-		 */
-		if(default_block == NULL){
-			//Create it
-			default_block = basic_block_alloc_and_estimate();
+	if(default_block == NULL){
+		//Create it
+		default_block = basic_block_alloc_and_estimate();
 
-			//All that this block has is a direct jump to the end
-			emit_jump(default_block, ending_block);
-		}
-
-		/**
-		 * Now at the ever end, we'll need to fill the remaining jump table blocks that are empty
-		 * with the default value
-		 */
-		u_int8_t switch_has_default_jumps = FALSE;
-		for(int32_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
-			//If it's null, we'll make it the default
-			if(dynamic_array_get_at(&(jump_calculation_block->jump_table->nodes), i) == NULL){
-				dynamic_array_set_at(&(jump_calculation_block->jump_table->nodes), default_block, i);
-
-				//Once we get here we know it's not exhaustive
-				switch_has_default_jumps = TRUE;
-			}
-		}
-
-		/**
-		 * If the switch is not exhaustive, then we will have the default block as a successor
-		 * to the jump calculation block. This however only happens if it is not exhaustive, 
-		 * which is why we've waited until now to add this
-		 */
-		if(switch_has_default_jumps == TRUE){
-			add_successor(jump_calculation_block, default_block);
-		}
-
-		/**
-		 * If the end block has no predecessors, that means that every case statement ended in a return statement.
-		 * If this is the case, then the final block should not be the ending block, it should be the function ending block
-		 */
-		if(dynamic_array_is_empty(&(ending_block->predecessors)) == TRUE){
-			result_package.final_block = function_exit_block;
-		}
-
-		//We'll need both of these as constants for our computation
-		three_addr_const_t* lower_bound = emit_direct_integer_or_char_constant(root_node->optional_storage.switch_bounds.lower_bound, i32);
-		three_addr_const_t* upper_bound = emit_direct_integer_or_char_constant(root_node->optional_storage.switch_bounds.upper_bound, i32);
-
-		/**
-		 * Now that we have our expression, we'll want to speed things up by seeing if our value is either below the lower
-		 * range or above the upper range. If it is, we jump to the very end
-		 *
-		 * Jumping(conditional or indirect), does not affect condition codes. As such, we can rely 
-		 * on the condition codes being set from the operation to take us through all three
-		 * jumps. We will emit a jump if we are: lower, higher or an indirect jump if we
-		 * are in the range
-		 */
-		three_addr_var_t* input_result = unpack_result_package(&input_results, root_level_block);
-
-		//Grab the type our for convenience
-		generic_type_t* input_result_type = input_result->type;
-
-		//Grab the signedness of the result
-		u_int8_t is_signed = is_type_signed(input_result_type);
-
-		//This will be used for tracking
-		three_addr_var_t* lower_than_decider = emit_temp_var(input_result_type);
-
-		//First step -> if we're below the minimum, we jump to default 
-		emit_binary_operation_with_constant(root_level_block, lower_than_decider, input_result, L_THAN, lower_bound);
-
-		//Select a branch for the lower type
-		branch_type_t branch_lower_than = select_appropriate_branch_statement(L_THAN, BRANCH_CATEGORY_NORMAL, is_signed);
-
-		/**
-		 * Now we'll emit the branch like this:
-		 *
-		 * if lower than:
-		 * 	goto default block 
-		 * else:
-		 * 	goto upper_bound_check
-		 */
-		emit_branch_for_switch_statement(root_level_block, default_block, upper_bound_check_block, branch_lower_than, lower_than_decider);
-
-		//This will be used for tracking
-		three_addr_var_t* higher_than_decider = emit_temp_var(input_result_type);
-
-		//Now we handle the case where we're above the upper bound
-		emit_binary_operation_with_constant(upper_bound_check_block, higher_than_decider, input_result, G_THAN, upper_bound);
-
-		//Select a branch for the higher type
-		branch_type_t branch_greater_than = select_appropriate_branch_statement(G_THAN, BRANCH_CATEGORY_NORMAL, is_signed);
-
-		/**
-		 * Now we'll emit the branch like this
-		 *
-		 * if greater than:
-		 * 	goto default block
-		 * else:
-		 *  goto jump block calculation
-		 */
-		emit_branch_for_switch_statement(upper_bound_check_block, default_block, jump_calculation_block, branch_greater_than, higher_than_decider);
-
-		//To avoid violating SSA rules, we'll emit a temporary assignment here
-		instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_result);
-
-		//Add it into the block
-		add_statement(jump_calculation_block, temporary_variable_assignent);
-
-		//Now that all this is done, we can use our jump table for the rest
-		three_addr_var_t* input = emit_binary_operation_with_constant(jump_calculation_block, temporary_variable_assignent->operands.oir.assignee, temporary_variable_assignent->operands.oir.assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32));
-
-		/**
-		 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
-		 * 	base address(.JT1) + input * 8 
-		 *
-		 * We have a special kind of statement for doing this
-		 * 	
-		 */
-		instruction_t* indirect_jump = emit_indirect_jump_statement(jump_calculation_block->jump_table, input, 8);
-		add_statement(jump_calculation_block, indirect_jump);
-
-	/**
-	 * TODO DOC ME
-	 */
-	} else {
-		//If we have no predecessors, that means that every case statement ended in a return statement.
-		//If this is the case, then the final block should not be the ending block, it should be the function ending block
-		//
-		// TODO NEEDS A LOOK - WHAT IF IT RETURNS ALWAYS
-		if(ending_block->predecessors.internal_array == NULL || ending_block->predecessors.current_index == 0){
-			result_package.final_block = function_exit_block;
-		}
-
-		//Unpack the result from the switch input
-		three_addr_var_t* input_result = unpack_result_package(&input_results, root_level_block);
-
-		//Grab the type our for convenience
-		generic_type_t* input_result_type = input_result->type;
-
-		//Grab the signedness of the result
-		u_int8_t is_signed = is_type_signed(input_result_type);
-
-		//To avoid violating SSA rules, we'll emit a temporary assignment here
-		instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_result);
-
-		//Add it into the block
-		add_statement(jump_calculation_block, temporary_variable_assignent);
-
-		//Now that all this is done, we can use our jump table for the rest
-		three_addr_var_t* input = emit_binary_operation_with_constant(jump_calculation_block, temporary_variable_assignent->operands.oir.assignee, temporary_variable_assignent->operands.oir.assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32));
-
-		/**
-		 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
-		 * 	base address(.JT1) + input * 8 
-		 *
-		 * We have a special kind of statement for doing this
-		 * 	
-		 */
-		instruction_t* indirect_jump = emit_indirect_jump_statement(jump_calculation_block->jump_table, input, 8);
-		add_statement(jump_calculation_block, indirect_jump);
-
+		//All that this block has is a direct jump to the end
+		emit_jump(default_block, ending_block);
 	}
 
+	/**
+	 * Now at the ever end, we'll need to fill the remaining jump table blocks that are empty
+	 * with the default value
+	 */
+	u_int8_t switch_has_default_jumps = FALSE;
+	for(int32_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
+		//If it's null, we'll make it the default
+		if(dynamic_array_get_at(&(jump_calculation_block->jump_table->nodes), i) == NULL){
+			dynamic_array_set_at(&(jump_calculation_block->jump_table->nodes), default_block, i);
+
+			//Once we get here we know it's not exhaustive
+			switch_has_default_jumps = TRUE;
+		}
+	}
+
+	/**
+	 * If the switch is not exhaustive, then we will have the default block as a successor
+	 * to the jump calculation block. This however only happens if it is not exhaustive, 
+	 * which is why we've waited until now to add this
+	 */
+	if(switch_has_default_jumps == TRUE){
+		add_successor(jump_calculation_block, default_block);
+	}
+
+	/**
+	 * If the end block has no predecessors, that means that every case statement ended in a return statement.
+	 * If this is the case, then the final block should not be the ending block, it should be the function ending block
+	 */
+	if(dynamic_array_is_empty(&(ending_block->predecessors)) == TRUE){
+		result_package.final_block = function_exit_block;
+	}
+
+	//We'll need both of these as constants for our computation
+	three_addr_const_t* lower_bound = emit_direct_integer_or_char_constant(root_node->optional_storage.switch_bounds.lower_bound, i32);
+	three_addr_const_t* upper_bound = emit_direct_integer_or_char_constant(root_node->optional_storage.switch_bounds.upper_bound, i32);
+
+	/**
+	 * Now that we have our expression, we'll want to speed things up by seeing if our value is either below the lower
+	 * range or above the upper range. If it is, we jump to the very end
+	 *
+	 * Jumping(conditional or indirect), does not affect condition codes. As such, we can rely 
+	 * on the condition codes being set from the operation to take us through all three
+	 * jumps. We will emit a jump if we are: lower, higher or an indirect jump if we
+	 * are in the range
+	 */
+	three_addr_var_t* input_result = unpack_result_package(&input_results, root_level_block);
+
+	//Grab the type our for convenience
+	generic_type_t* input_result_type = input_result->type;
+
+	//Grab the signedness of the result
+	u_int8_t is_signed = is_type_signed(input_result_type);
+
+	//This will be used for tracking
+	three_addr_var_t* lower_than_decider = emit_temp_var(input_result_type);
+
+	//First step -> if we're below the minimum, we jump to default 
+	emit_binary_operation_with_constant(root_level_block, lower_than_decider, input_result, L_THAN, lower_bound);
+
+	//Select a branch for the lower type
+	branch_type_t branch_lower_than = select_appropriate_branch_statement(L_THAN, BRANCH_CATEGORY_NORMAL, is_signed);
+
+	/**
+	 * Now we'll emit the branch like this:
+	 *
+	 * if lower than:
+	 * 	goto default block 
+	 * else:
+	 * 	goto upper_bound_check
+	 */
+	emit_branch_for_switch_statement(root_level_block, default_block, upper_bound_check_block, branch_lower_than, lower_than_decider);
+
+	//This will be used for tracking
+	three_addr_var_t* higher_than_decider = emit_temp_var(input_result_type);
+
+	//Now we handle the case where we're above the upper bound
+	emit_binary_operation_with_constant(upper_bound_check_block, higher_than_decider, input_result, G_THAN, upper_bound);
+
+	//Select a branch for the higher type
+	branch_type_t branch_greater_than = select_appropriate_branch_statement(G_THAN, BRANCH_CATEGORY_NORMAL, is_signed);
+
+	/**
+	 * Now we'll emit the branch like this
+	 *
+	 * if greater than:
+	 * 	goto default block
+	 * else:
+	 *  goto jump block calculation
+	 */
+	emit_branch_for_switch_statement(upper_bound_check_block, default_block, jump_calculation_block, branch_greater_than, higher_than_decider);
+
+	//To avoid violating SSA rules, we'll emit a temporary assignment here
+	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_result);
+
+	//Add it into the block
+	add_statement(jump_calculation_block, temporary_variable_assignent);
+
+	//Now that all this is done, we can use our jump table for the rest
+	three_addr_var_t* input = emit_binary_operation_with_constant(jump_calculation_block, temporary_variable_assignent->operands.oir.assignee, temporary_variable_assignent->operands.oir.assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32));
+
+	/**
+	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
+	 * 	base address(.JT1) + input * 8 
+	 *
+	 * We have a special kind of statement for doing this
+	 * 	
+	 */
+	instruction_t* indirect_jump = emit_indirect_jump_statement(jump_calculation_block->jump_table, input, 8);
+	add_statement(jump_calculation_block, indirect_jump);
 
 	//Give back the starting block
 	return result_package;
+}
+
+
+
+static cfg_result_package_t visit_exhaustive_ollie_switch_statement(generic_ast_node_t* root_node){
+	printf("TODO NOT IMPLEMENTED EXHAUSTIVE OLLIE\n");
+	exit(1);
+}
+
+
+/**
+ * Visit a switch statement. In Ollie's current implementation, 
+ * the values here will not be reordered at all. Instead, they
+ * will be put in the exact orientation that the user wants
+ */
+static inline cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node){
+	/**
+	 * First case - is this even switch eligible? If it isn't,
+	 * then we need to convert this into an if-else-if statement
+	 * in a separate process
+	 */
+	if(root_node->is_switch_eligible == FALSE){
+		printf("TODO NOT IMPLEMENTED INELIGIBLE OLLIE\n");
+		exit(1);
+	}
+
+	/**
+	 * There are two kinds of switch statements - non-exhaustive(most common)
+	 * and exhaustive. A non-exhaustive switch statement will have a default
+	 * clause and higher/lower than bound jumping logic, whereas an exhaustive
+	 * switch will not have that. These types of switches are different enough
+	 * to warrant separate methods
+	 */
+	if(root_node->is_exhaustive_switch == FALSE){
+		return visit_non_exhaustive_ollie_switch_statement(root_node);
+	} else {
+		return visit_exhaustive_ollie_switch_statement(root_node);
+	}
 }
 
 
