@@ -46,5 +46,6 @@ fn tester(param:my_enum_type) -> i32{
 
 
 pub fn main() -> i32{
-	@tester(TYPE_ONE);
+	OUNIT: [exit_status = 32]
+	ret @tester(TYPE_ONE);
 }
