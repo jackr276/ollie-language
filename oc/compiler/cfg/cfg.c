@@ -9861,7 +9861,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	 * Run through the entire jump table. Any nodes that are not occupied(meaning there's no case statement with that value)
 	 * will be set to point to the default block. 
 	 */
-	u_int8_t switch_has_default_jumps = TRUE;
+	u_int8_t switch_has_default_jumps = FALSE;
 	for(int32_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
 		/**
 		 * If it's null, we'll make it the default. This should only happen in switches
@@ -9872,7 +9872,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 			dynamic_array_set_at(&(jump_calculation_block->jump_table->nodes), default_block, i);
 			
 			//If we have to add one of these then the switch is not exhaustive
-			switch_has_default_jumps = FALSE;
+			switch_has_default_jumps = TRUE;
 		}
 	}
 
@@ -9881,7 +9881,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	 * a successor to the jump calculation block. We only do this once we get down here to
 	 * avoid any issues with unneeded successors if it is exhaustive
 	 */
-	if(switch_has_default_jumps == FALSE){
+	if(switch_has_default_jumps == TRUE){
 		add_successor(jump_calculation_block, default_block);
 	}
 
@@ -10117,6 +10117,8 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	/**
 	 * If we just have one case member, we will need to handle this differently. 
 	 * The invoked rule will convert this into an equivalent if-else-if statement
+	 *
+	 * TODO GET THIS ROLLED INTO THE THING ABOVE
 	 */
 	if(root_node->num_case_members == 1){
 		return ollie_switch_with_one_case_to_if_conversion(root_node);
@@ -10232,14 +10234,14 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	 * Now at the ever end, we'll need to fill the remaining jump table blocks that are empty
 	 * with the default value
 	 */
-	u_int8_t switch_is_exhaustive = TRUE;
+	u_int8_t switch_has_default_jumps = FALSE;
 	for(int32_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
 		//If it's null, we'll make it the default
 		if(dynamic_array_get_at(&(jump_calculation_block->jump_table->nodes), i) == NULL){
 			dynamic_array_set_at(&(jump_calculation_block->jump_table->nodes), default_block, i);
 
 			//Once we get here we know it's not exhaustive
-			switch_is_exhaustive = FALSE;
+			switch_has_default_jumps = TRUE;
 		}
 	}
 
@@ -10248,7 +10250,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	 * to the jump calculation block. This however only happens if it is not exhaustive, 
 	 * which is why we've waited until now to add this
 	 */
-	if(switch_is_exhaustive == FALSE){
+	if(switch_has_default_jumps == TRUE){
 		add_successor(jump_calculation_block, default_block);
 	}
 
@@ -10259,8 +10261,6 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	if(ending_block->predecessors.internal_array == NULL || ending_block->predecessors.current_index == 0){
 		result_package.final_block = function_exit_block;
 	}
-
-	//Now that everything has been situated, we can start emitting the values in the initial node
 
 	//We'll need both of these as constants for our computation
 	three_addr_const_t* lower_bound = emit_direct_integer_or_char_constant(root_node->optional_storage.switch_bounds.lower_bound, i32);
