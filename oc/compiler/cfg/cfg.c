@@ -10125,6 +10125,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	}
 
 	//The starting block for the switch statement - we'll want this in a new block
+	//TODO NOT ALL NEEDED
 	basic_block_t* root_level_block = basic_block_alloc_and_estimate();
 	//We will need to new blocks to check the bounds
 	basic_block_t* upper_bound_check_block = basic_block_alloc_and_estimate();
@@ -10153,8 +10154,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	//IMPORTANT - we'll also mark this as a block type switch, because this is where any/all switching logic will be happening
 	jump_calculation_block->block_type = BLOCK_TYPE_SWITCH;
 	
-	//Let's also allocate our jump table. We know how large the jump table needs to be from
-	//data passed in by the parser
+	//Let's also allocate our jump table. We know how large the jump table needs to be from data passed in by the parser
 	jump_calculation_block->jump_table = jump_table_alloc(root_node->optional_storage.switch_bounds.upper_bound - root_node->optional_storage.switch_bounds.lower_bound + 1);
 
 	/**
@@ -10211,18 +10211,17 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 		case_stmt_cursor = case_stmt_cursor->next_sibling;
 	}
 
-
 	/**
 	 * Our most common case is that the switch is not exhaustive.
-	 * A non-exhaustive switch by necessity will have a default clause
+	 * A non-exhaustive switch by necessity will always have a default clause
+	 * and by nature of it not being exhaustive, will have the starting jump
+	 * above/jump below logic
 	 */
 	if(root_node->is_exhaustive_switch == FALSE){
 		/**
 		 * It is entirely possible that we have no default block here. In that case, we will
 		 * make our own "dummy" default block that simply breaks to end and has no effect. This
 		 * will preserve the intention of the programmer and keep our flow simpler here
-		 *
-		 * TODO NEEDS A LOOK - WHAT IF IT RETURNS ALWAYS
 		 */
 		if(default_block == NULL){
 			//Create it
@@ -10256,11 +10255,11 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 			add_successor(jump_calculation_block, default_block);
 		}
 
-		//If we have no predecessors, that means that every case statement ended in a return statement.
-		//If this is the case, then the final block should not be the ending block, it should be the function ending block
-		//
-		// TODO NEEDS A LOOK - WHAT IF IT RETURNS ALWAYS
-		if(ending_block->predecessors.internal_array == NULL || ending_block->predecessors.current_index == 0){
+		/**
+		 * If the end block has no predecessors, that means that every case statement ended in a return statement.
+		 * If this is the case, then the final block should not be the ending block, it should be the function ending block
+		 */
+		if(dynamic_array_is_empty(&(ending_block->predecessors)) == TRUE){
 			result_package.final_block = function_exit_block;
 		}
 
@@ -10342,7 +10341,9 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 		instruction_t* indirect_jump = emit_indirect_jump_statement(jump_calculation_block->jump_table, input, 8);
 		add_statement(jump_calculation_block, indirect_jump);
 
-
+	/**
+	 * TODO DOC ME
+	 */
 	} else {
 		//If we have no predecessors, that means that every case statement ended in a return statement.
 		//If this is the case, then the final block should not be the ending block, it should be the function ending block
@@ -10351,6 +10352,34 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 		if(ending_block->predecessors.internal_array == NULL || ending_block->predecessors.current_index == 0){
 			result_package.final_block = function_exit_block;
 		}
+
+		//Unpack the result from the switch input
+		three_addr_var_t* input_result = unpack_result_package(&input_results, root_level_block);
+
+		//Grab the type our for convenience
+		generic_type_t* input_result_type = input_result->type;
+
+		//Grab the signedness of the result
+		u_int8_t is_signed = is_type_signed(input_result_type);
+
+		//To avoid violating SSA rules, we'll emit a temporary assignment here
+		instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_result);
+
+		//Add it into the block
+		add_statement(jump_calculation_block, temporary_variable_assignent);
+
+		//Now that all this is done, we can use our jump table for the rest
+		three_addr_var_t* input = emit_binary_operation_with_constant(jump_calculation_block, temporary_variable_assignent->operands.oir.assignee, temporary_variable_assignent->operands.oir.assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32));
+
+		/**
+		 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
+		 * 	base address(.JT1) + input * 8 
+		 *
+		 * We have a special kind of statement for doing this
+		 * 	
+		 */
+		instruction_t* indirect_jump = emit_indirect_jump_statement(jump_calculation_block->jump_table, input, 8);
+		add_statement(jump_calculation_block, indirect_jump);
 
 	}
 
