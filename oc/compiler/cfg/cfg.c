@@ -9952,13 +9952,13 @@ static cfg_result_package_t convert_c_style_switch_to_if_statement(generic_ast_n
 				comparison_expression->operands.oir.assignee->sets_cc = TRUE;
 				add_statement(current_conditional_block, comparison_expression);
 
-				//TODO BRANCH TYPE UPDATES
 				/**
 				 * Our branch will always be an inverse branch to maintain the actual code execution as in the hotpath. It has
 				 * been shown that users will usually put the most likely case statement first when writing switch/case, so
 				 * we assume that this will be the case and instead conditionally jump to the "else" in our case
 				 */
-				instruction_t* branch_instruction = emit_branch_statement(new_conditional_block, case_default_results.starting_block, comparison_expression->operands.oir.assignee, BRANCH_NE);
+				branch_type_t branch_type = select_appropriate_branch_statement(DOUBLE_EQUALS, BRANCH_CATEGORY_INVERSE, is_type_signed(input_variable->type));
+				instruction_t* branch_instruction = emit_branch_statement(new_conditional_block, case_default_results.starting_block, comparison_expression->operands.oir.assignee, branch_type);
 				add_statement(current_conditional_block, branch_instruction);
 
 				//Do the successor bookkeeping as needed for this
@@ -10170,14 +10170,13 @@ static cfg_result_package_t convert_ollie_switch_to_if_statement(generic_ast_nod
 				//We'll need a new conditional block to jump to
 				basic_block_t* new_conditional_block = basic_block_alloc_and_estimate();
 
-				//TODO BRANCH TYPE UPDATES
-
 				/**
 				 * Our branch will always be an inverse branch to maintain the actual code execution as in the hotpath. It has
 				 * been shown that users will usually put the most likely case statement first when writing switch/case, so
 				 * we assume that this will be the case and instead conditionally jump to the "else" in our case
 				 */
-				instruction_t* branch_instruction = emit_branch_statement(new_conditional_block, case_default_results.starting_block, comparsion_expression->operands.oir.assignee, BRANCH_NE);
+				branch_type_t branch_type = select_appropriate_branch_statement(DOUBLE_EQUALS, BRANCH_CATEGORY_INVERSE, is_type_signed(switching_on_variable->type));
+				instruction_t* branch_instruction = emit_branch_statement(new_conditional_block, case_default_results.starting_block, comparsion_expression->operands.oir.assignee, branch_type);
 				add_statement(current_conditional_block, branch_instruction);
 
 				//Do the successor bookkeeping as needed for this
