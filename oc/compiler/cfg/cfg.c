@@ -10007,35 +10007,36 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
  * Ollie style statements also don't support switch level breaks, so we don't need to worry about
  * that either in this case
  */
-static cfg_result_package_t convert_ollies_switch_to_if_statement(generic_ast_node_t* root_node){
-
-	//TODO CONVERT
-	
+static cfg_result_package_t convert_ollie_switch_to_if_statement(generic_ast_node_t* root_node){
+	//Holders for the overall results as well as the individual results for each node
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
-	cfg_result_package_t case_results;
-	cfg_result_package_t default_results;
-	int64_t case_statement_constant;
+	cfg_result_package_t case_default_results;
+
+	//Every case statement has a constant in it
+	int32_t case_statement_constant;
 
 	/**
-	 * We'll need all the same blocks that we would need if this was an if statement
+	 * We'll need all the same blocks that we would need if this was an if statement, which
+	 * are an entry and exit block
 	 */
-	basic_block_t* top_level_block = basic_block_alloc_and_estimate();
-	basic_block_t* exit_block = basic_block_alloc_and_estimate();
+	basic_block_t* if_entry_block = basic_block_alloc_and_estimate();
+	basic_block_t* if_exit_block = basic_block_alloc_and_estimate();
+	if_entry_block->block_type = BLOCK_TYPE_IF_ENTRY;
+	if_exit_block->block_type = BLOCK_TYPE_IF_EXIT;
+
+	//We can already do the bookkeeping for this now
+	result_package.starting_block = if_entry_block;
+	result_package.final_block = if_exit_block;
+
 	//These two remain uninitialized for now
 	basic_block_t* if_block = NULL;
 	basic_block_t* else_block = NULL;
 
-	top_level_block->block_type = BLOCK_TYPE_IF_ENTRY;
-	exit_block->block_type = BLOCK_TYPE_IF_EXIT;
-
-	//We can already do the bookkeeping for this now
-	result_package.starting_block = top_level_block;
-	result_package.final_block = exit_block;
-
 	//Grab a cursor that we will use to traverse
 	generic_ast_node_t* case_statement_cursor = root_node->first_child;
-	//Save for later
-	generic_ast_node_t* conditional_node = case_statement_cursor;
+
+	//This is the expression that we're switching on - we'll save it for later
+	generic_ast_node_t* switch_statement_expression = case_statement_cursor;
 
 	//Bump it up and process through the case statements and default if one exists
 	case_statement_cursor = case_statement_cursor->next_sibling;
@@ -10458,8 +10459,7 @@ static inline cfg_result_package_t visit_switch_statement(generic_ast_node_t* ro
 	 * in a separate process
 	 */
 	if(root_node->is_switch_eligible == FALSE){
-		printf("TODO NOT IMPLEMENTED INELIGIBLE OLLIE\n");
-		exit(1);
+		return convert_ollie_switch_to_if_statement(root_node);
 	}
 
 	/**
