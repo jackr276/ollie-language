@@ -10209,9 +10209,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 
 	/**
 	 * We'll need to keep track of whether or not we have any duplicated values. As such, we'll keep an array
-	 * of all the values that we do have. Since we can only have 1024 values, this array need only be 1024
-	 * long. Every time we see a value in a case statement, we'll need to cross reference it with the
-	 * values in here
+	 * of all the values that we do have.
 	 */
 	dynamic_integer_array_t switch_values = dynamic_integer_array_alloc_initial_size(MAX_SWITCH_RANGE);
 
