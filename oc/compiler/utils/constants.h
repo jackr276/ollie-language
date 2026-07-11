@@ -22,9 +22,6 @@
 //For loops, we estimate that they'll execute 10 times each
 #define LOOP_ESTIMATED_COST 10
 
-//The max switch/case range is 256
-#define MAX_SWITCH_RANGE 256
-
 //All error sizes are 2000
 #define ERROR_SIZE 2000
 

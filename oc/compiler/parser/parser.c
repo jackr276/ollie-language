@@ -10097,6 +10097,21 @@ static inline u_int8_t is_type_exhaustive_switch_eligible(generic_type_t* type){
 
 
 /**
+ * Determine whether or not the (sorted) list of switch statement values is eligible 
+ * to be internally considered as a switch statement, or if the switch statement should
+ * instead be internally converted to an if-else statement.
+ *
+ * The two main checks are:
+ * 	1.) Case count - if we have less than 3 case statements, a switch is not worthwhile
+ * 	2.) Sparseness - if the average distance between values is greater than <TODO DETERMINE ME>, then an
+ * 		if statement would be better suited
+ */
+static inline u_int8_t is_switch_eligible(dynamic_integer_array_t* switch_statement_values){
+
+}
+
+
+/**
  * A switch statement allows us to to see one or more labels defined by a certain expression. It allows
  * for the use of labeled statements followed by statements in general. We will do more static analysis
  * on this later. Like all rules in the system, this function returns the root node that it creates
@@ -10120,10 +10135,6 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	u_int8_t found_default_clause = FALSE;
 	//We are initially undecided on the type
 	ollie_switch_type_t ollie_switch_type = OLLIE_SWITCH_TYPE_UNDECIDED;
-	//How many case statements do we have for the switch?
-	u_int32_t num_case_statements = 0;
-	//Is this switch statement eligible to become a switch on the back-end? Not all of them are(see below)
-	u_int8_t is_switch_eligible = TRUE;
 	//Is this an "exhaustive" switch. This has a very specific meaning that is elaborated below
 	u_int8_t is_exhaustive_switch;
 
@@ -10211,7 +10222,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	 * We'll need to keep track of whether or not we have any duplicated values. As such, we'll keep an array
 	 * of all the values that we do have.
 	 */
-	dynamic_integer_array_t switch_values = dynamic_integer_array_alloc_initial_size(MAX_SWITCH_RANGE);
+	dynamic_integer_array_t switch_values = dynamic_integer_array_alloc();
 
 	/**
 	 * Now we can see as many expressions as we'd like. We'll keep looking for expressions so long as
@@ -10279,7 +10290,6 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 
 				//No longer empty
 				is_empty = FALSE;
-				num_case_statements++;
 
 				break;
 
@@ -10361,20 +10371,13 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	}
 
 	/**
-	 * If these values are too far apart, we will flag that this switch is *not* switch eligible. The CFG
-	 * will construct this into an if-else-if statement in the backend
-	 */
-	if(switch_stmt_node->optional_storage.switch_bounds.upper_bound - switch_stmt_node->optional_storage.switch_bounds.lower_bound >= MAX_SWITCH_RANGE){
-		is_switch_eligible = FALSE;
-	}
-
-	/**
 	 * In Ollie, we define an "exhaustive switch" to be a switch that fully occupies the
 	 * range of all values. If a switch is exhaustive, we do *not* require a default
 	 * clause to be provided. An exhaustive switch is not the same as a switch that
 	 * simply has no gaps in between the members
 	 */
 	if(is_type_exhaustive_switch_eligible(switching_on_type) == TRUE){
+		//TODO FIX - I DON'T THINK WE NEED ANYTHING HERE
 		int32_t min_case_value = switch_stmt_node->optional_storage.switch_bounds.lower_bound;
 		int32_t max_case_value = switch_stmt_node->optional_storage.switch_bounds.upper_bound;
 
@@ -10450,15 +10453,10 @@ end_exhaustive_check:
 	}
 	
 	//Store this for later on processing in the CFG
-	switch_stmt_node->num_case_members = num_case_statements;
+	switch_stmt_node->num_case_members = switch_values.current_index;
 
-	/**
-	 * If we only have one case statement we are *not* switch
-	 * eligible and will be converted into an if statement
-	 */
-	if(num_case_statements == 1){
-		is_switch_eligible = FALSE;
-	}
+	//Let the helper run through its checks to determine our switch eligibility
+	switch_stmt_node->is_switch_eligible = deterine_switch_eligibility(&switch_values);
 	
 	//Store whether or not we are an exhaustive switch
 	switch_stmt_node->is_exhaustive_switch = is_exhaustive_switch;
@@ -10470,8 +10468,6 @@ end_exhaustive_check:
 	finalize_variable_scope(variable_symtab);
 	finalize_type_scope(type_symtab);
 
-	//Store whether or not we are switch eligible
-	switch_stmt_node->is_switch_eligible = is_switch_eligible;
 
 	//Destroy this now that we're done with it
 	dynamic_integer_array_dealloc(&switch_values);
