@@ -9972,9 +9972,9 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 
 
 /**
- * If we have a switch statement that only has one non-default member(one case), then we will
- * internally convert this into an if-else-if statement to reduce complexity and avoid any
- * issues with the dominator analysis that have happened in the past
+ * Take an ollie switch statement and convert it internally to be an if-else-if statement. This will
+ * happen when the compiler decides that a given switch statement is not eligible to internally
+ * be represented by a jump table and indirect jump
  *
  * Since this is an ollie style switch statement, we do not need to worry about any fall-through
  * cases. We'll just need to emit the if-else-if chain as given
@@ -9985,25 +9985,32 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
  *
  * 	 }
  *
+ * 	 case 2 -> {
+ * 	 	//Stuff 2
+ * 	 }
+ *
  * 	 default -> {
- * 	 	//stuff 2
+ * 	 	//stuff 3
  * 	 }
  *
  * Will turn into
  * 	
  * 	if(x == 1){
  * 		//stuff 1
- * 	} else {
+ * 	} else if(x == 2){
  * 		//stuff 2
+ * 	} else {
+ * 		//stuff 3
  * 	}
  * }
  *
  * Ollie style statements also don't support switch level breaks, so we don't need to worry about
  * that either in this case
- *
- * TODO NEEDS TO BE GENERALIZED
  */
-static cfg_result_package_t ollie_switch_with_one_case_to_if_conversion(generic_ast_node_t* root_node){
+static cfg_result_package_t convert_ollies_switch_to_if_statement(generic_ast_node_t* root_node){
+
+	//TODO CONVERT
+	
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 	cfg_result_package_t case_results;
 	cfg_result_package_t default_results;
