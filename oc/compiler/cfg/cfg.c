@@ -9199,7 +9199,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 					 * control path. In this instance, we need to set the result package's final block to be the
 					 * exit block
 					 */
-					if(overall_exit_block->predecessors.current_index == 0){
+					if(dynamic_array_is_empty(&(overall_exit_block->predecessors)) == TRUE){
 						if_results_package.final_block = function_exit_block;
 					} else {
 						if_results_package.final_block = overall_exit_block;
@@ -10010,7 +10010,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 static cfg_result_package_t convert_ollie_switch_to_if_statement(generic_ast_node_t* root_node){
 	//Holders for the overall results as well as the individual results for each node
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
-	cfg_result_package_t case_default_results;
+	cfg_result_package_t case_default_results = INITIALIZE_BLANK_CFG_RESULT;
 
 	//Every case statement has a constant in it
 	int32_t case_statement_constant;
@@ -10021,65 +10021,81 @@ static cfg_result_package_t convert_ollie_switch_to_if_statement(generic_ast_nod
 	 */
 	basic_block_t* if_entry_block = basic_block_alloc_and_estimate();
 	basic_block_t* if_exit_block = basic_block_alloc_and_estimate();
-	if_entry_block->block_type = BLOCK_TYPE_IF_ENTRY;
 	if_exit_block->block_type = BLOCK_TYPE_IF_EXIT;
 
 	//We can already do the bookkeeping for this now
 	result_package.starting_block = if_entry_block;
 	result_package.final_block = if_exit_block;
 
-	//These two remain uninitialized for now
-	basic_block_t* if_block = NULL;
+	//The else block is *always* the default statement
 	basic_block_t* else_block = NULL;
 
-	//Grab a cursor that we will use to traverse
-	generic_ast_node_t* case_statement_cursor = root_node->first_child;
+	//First let's process the starting expression
+	generic_ast_node_t* switch_statement_expression = root_node->first_child;
 
-	//This is the expression that we're switching on - we'll save it for later
-	generic_ast_node_t* switch_statement_expression = case_statement_cursor;
+	//Emit the expression into the entry block and do any bookkeeping needed afterwards
+	cfg_result_package_t expression_results = emit_expression(if_entry_block, switch_statement_expression);
 
-	//Bump it up and process through the case statements and default if one exists
-	case_statement_cursor = case_statement_cursor->next_sibling;
+	//We're now able to flag this as the if entry
+	if_entry_block = expression_results.final_block;
+	if_entry_block->block_type = BLOCK_TYPE_IF_ENTRY;
+	
+	//Unpack the result and get the variable that we are using for all comparisons
+	three_addr_var_t* switching_on_variable = unpack_result_package(&expression_results, if_entry_block);
+
+	/**
+	 * Run through every single case/one default statement and process
+	 * them accordingly. There is no need to worry about fall through/
+	 * breakage in an ollie switch because they do not support those
+	 * concepts
+	 */
+	generic_ast_node_t* case_statement_cursor = switch_statement_expression->next_sibling;
 	while(case_statement_cursor != NULL){
 		switch(case_statement_cursor->ast_node_type){
 			/**
-			 * The one case statement is always the if block.
+			 * A case statement is always an if(<conditional>) type of
+			 * statement, where the conditional is always a comparison
+			 * with a constant
 			 */
 			case AST_NODE_TYPE_CASE_STMT:
-				case_results = visit_case_statement(case_statement_cursor);
+				case_default_results = visit_case_statement(case_statement_cursor);
 
-				//The if block is always the first thing here
-				if_block = case_results.starting_block;
+				//Let the helper construct a branch new AST sub tree for us to work off of
+				generic_ast_node_t* equals_expression = construct_binary_expression_with_const_ast_subtree(conditional_node, case_statement_constant, DOUBLE_EQUALS); 
 
 				/**
 				 * Do any/all needed bookkeeping with the final block where we
 				 * jump to the end block if appropriate
 				 */
-				basic_block_t* final_case_block = case_results.final_block;
+				basic_block_t* final_case_block = case_default_results.final_block;
 				if(does_block_end_in_terminal_statement(final_case_block) == FALSE){
-					emit_jump(final_case_block, exit_block);
+					emit_jump(final_case_block, if_exit_block);
 				}
 
 				//Extract the value for our given constant
+				//TODO
 				case_statement_constant = if_block->case_stmt_val;
 
 				break;
+
 			/**
-			 * The default *always* goes into the else block
+			 * The default *always* goes into the else block. We are not able to
+			 * connect the default block itself until the very end because
+			 * it must be last in the chain
 			 */
 			case AST_NODE_TYPE_DEFAULT_STMT:
-				default_results = visit_default_statement(case_statement_cursor);
+				case_default_results = visit_default_statement(case_statement_cursor);
 
 				//This becomes our else block
-				else_block = default_results.starting_block;
+				else_block = case_default_results.starting_block;
 				
 				/**
 				 * Do any/all needed bookkeeping with the final block where we
 				 * jump to the end block if appropriate
 				 */
-				basic_block_t* final_default_block = default_results.final_block;
+				basic_block_t* final_default_block = case_default_results.final_block;
 				if(does_block_end_in_terminal_statement(final_default_block) == FALSE){
-					emit_jump(final_default_block, exit_block);
+					emit_jump(final_default_block, if_exit_block);
 				}
 
 				break;
@@ -10093,19 +10109,8 @@ static cfg_result_package_t convert_ollie_switch_to_if_statement(generic_ast_nod
 		case_statement_cursor = case_statement_cursor->next_sibling;
 	}
 
-	//Let the helper construct a branch new AST sub tree for us to work off of
-	generic_ast_node_t* equals_expression = construct_binary_expression_with_const_ast_subtree(conditional_node, case_statement_constant, DOUBLE_EQUALS); 
+	//TODO HANDLE THE ELSE!!!
 
-	/**
-	 * Two options here - either we've seen/have a default block and we're able to direct
-	 * the else to that, or we have no default block so we'll just have a one-branch
-	 * if. Either one is fine they're just handled differently
-	 */
-	if(else_block != NULL){
-		emit_branch(top_level_block, equals_expression, else_block, if_block, BRANCH_CATEGORY_INVERSE);
-	} else {
-		emit_branch(top_level_block, equals_expression, exit_block, if_block, BRANCH_CATEGORY_INVERSE);
-	}
 
 	return result_package;
 }
