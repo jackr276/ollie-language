@@ -10013,11 +10013,6 @@ static cfg_result_package_t convert_ollie_switch_to_if_statement(generic_ast_nod
 	//Holders for the overall results as well as the individual results for each node
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 	cfg_result_package_t case_default_results = INITIALIZE_BLANK_CFG_RESULT;
-	
-	exit(1);
-
-	//Every case statement has a constant in it
-	int32_t case_statement_constant;
 
 	/**
 	 * We'll need all the same blocks that we would need if this was an if statement, which
@@ -10047,7 +10042,8 @@ static cfg_result_package_t convert_ollie_switch_to_if_statement(generic_ast_nod
 	//Unpack the result and get the variable that we are using for all comparisons
 	three_addr_var_t* switching_on_variable = unpack_result_package(&expression_results, if_entry_block);
 
-	instruction_t* previous_branch_statement = NULL;
+	//Seed the current conditional block as the if entry initially
+	basic_block_t* current_conditional_block = if_entry_block;
 
 	/**
 	 * Run through every single case/one default statement and process
@@ -10066,10 +10062,7 @@ static cfg_result_package_t convert_ollie_switch_to_if_statement(generic_ast_nod
 			case AST_NODE_TYPE_CASE_STMT:
 				//The case statement itself is what we need to go to if the conditional is true
 				case_default_results = visit_case_statement(case_statement_cursor);
-
-				//Let the helper construct a branch new AST sub tree for us to work off of
-				//generic_ast_node_t* equals_expression = construct_binary_expression_with_const_ast_subtree(conditional_node, case_statement_constant, DOUBLE_EQUALS); 
-
+				
 				/**
 				 * Do any/all needed bookkeeping with the final block where we
 				 * jump to the end block if appropriate
@@ -10079,9 +10072,34 @@ static cfg_result_package_t convert_ollie_switch_to_if_statement(generic_ast_nod
 					emit_jump(final_case_block, if_exit_block);
 				}
 
-				//Extract the value for our given constant
-				//TODO
-				//case_statement_constant = if_block->case_stmt_val;
+				//Extract the constant value from the head block
+				int32_t case_statement_constant = case_default_results.starting_block->case_stmt_val;
+
+				//Emit the comparison instruction - this is always an equals
+				instruction_t* comparsion_expression = emit_binary_operation_with_const_instruction(emit_temp_var(u8),
+																									switching_on_variable,
+																									DOUBLE_EQUALS,
+																									emit_direct_integer_or_char_constant(case_statement_constant, i32));
+				//Add this into whatever the current conditional block is
+				add_statement(current_conditional_block, comparsion_expression);
+
+				//We'll need a new conditional block to jump to
+				basic_block_t* new_conditional_block = basic_block_alloc_and_estimate();
+
+				/**
+				 * Our branch will always be an inverse branch to maintain the actual code execution as in the hotpath. It has
+				 * been shown that users will usually put the most likely case statement first when writing switch/case, so
+				 * we assume that this will be the case and instead conditionally jump to the "else" in our case
+				 */
+				instruction_t* branch_instruction = emit_branch_statement(new_conditional_block, case_default_results.starting_block, comparsion_expression->operands.oir.assignee, BRANCH_NE);
+				add_statement(current_conditional_block, branch_instruction);
+
+				//Do the successor bookkeeping as needed for this
+				add_successor(current_conditional_block, new_conditional_block);
+				add_successor(current_conditional_block, case_default_results.starting_block);
+
+				//Set the current conditional to be this new one
+				current_conditional_block = new_conditional_block;
 
 				break;
 
@@ -10117,8 +10135,19 @@ static cfg_result_package_t convert_ollie_switch_to_if_statement(generic_ast_nod
 		case_statement_cursor = case_statement_cursor->next_sibling;
 	}
 
-	//TODO HANDLE THE ELSE!!!
-
+	/**
+	 * If we have a default statement, we'll need to add it as the very last thing
+	 * in the branch chain. We'll do this by just merging it with the 
+	 * current conditional block that we have made
+	 *
+	 * If there is no default, then we'll just need to emit a jump from the
+	 * current conditional straight to the exit
+	 */
+	if(else_block != NULL){
+		emit_jump(current_conditional_block, else_block);
+	} else {
+		emit_jump(current_conditional_block, if_exit_block);
+	}
 
 	return result_package;
 }
