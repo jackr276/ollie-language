@@ -9639,51 +9639,20 @@ static cfg_result_package_t convert_c_style_switch_to_if_statement(generic_ast_n
 }
 
 
-static cfg_result_package_t visit_non_exhaustive_c_style_switch_statement(generic_ast_node_t* root_node){
-
-}
-
-
-static cfg_result_package_t visit_exhaustive_c_style_switch_statement(generic_ast_node_t* root_node){
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
-}
-
-
 /**
- * Visit a C-style switch statement. Ollie supports a new version of switch statements(with no fallthrough),
- * and the older C-version as well that allows break through. To keep the order true, ollie 
- * This rule is specifically for the c-style switch statements
+ * A non-exhaustive c-style switch requires default statement logic, which includes filling in the jump
+ * table and adding jump if above or below logic for the minimum and maximum values
  */
-static inline cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* root_node){
-	/**
-	 * If a given switch is flagged as ineligible, we'll need to 
-	 * use a special helper to convert it to an if statement
-	 */
-	if(root_node->is_switch_eligible == FALSE){
-		return convert_c_style_switch_to_if_statement(root_node);
-	}
+static cfg_result_package_t visit_non_exhaustive_c_style_switch_statement(generic_ast_node_t* root_node){
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
-	/**
-	 * If the switch is not flagged as exhaustive(most common), we will
-	 * route this to a more elaborate converter that has the needed logic
-	 * for non-exhaustive switches. If it is exhaustive, we'll route it to
-	 * the simpler exhaustive switch converter
-	 */
-	if(root_node->is_exhaustive_switch == FALSE){
-
-	} else {
-
-	}
-
-	//Th starting and ending blocks for the switch statements
+	//The starting and ending blocks for the switch statements
 	basic_block_t* root_level_block = basic_block_alloc_and_estimate();
 	//The upper bound check block
 	basic_block_t* upper_bound_check_block = basic_block_alloc_and_estimate();
 	//The jump calculation block
 	basic_block_t* jump_calculation_block = basic_block_alloc_and_estimate();
-	//Since C-style switches support break statements, we'll need
-	//this as well
+	//Since C-style switches support break statements, we'll need this as well
 	basic_block_t* ending_block = basic_block_alloc_and_estimate();
 
 	//The ending block now goes onto the breaking stack
@@ -9708,16 +9677,17 @@ static inline cfg_result_package_t visit_c_style_switch_statement(generic_ast_no
 	//We'll now allocate this one's jump table
 	jump_calculation_block->jump_table = jump_table_alloc(root_node->optional_storage.switch_bounds.upper_bound - root_node->optional_storage.switch_bounds.lower_bound + 1);
 
-	//The offset(amount that we'll need to knock down any case values by) is always the 
-	//case statement's value subtracted by the lower bound. We'll call it offset here
-	//for consistency
+	/**
+	 * The offset(amount that we'll need to knock down any case values by) is always the 
+	 * case statement's value subtracted by the lower bound. We'll call it offset here
+	 * for consistency
+	 */
 	int32_t offset = root_node->optional_storage.switch_bounds.lower_bound;
 
 	//A generic result package for all of our case/default statements
 	cfg_result_package_t case_default_results = INITIALIZE_BLANK_CFG_RESULT;
 
-	//We will eventually need to know what the default block is,
-	//so reserve a variable here
+	//We will eventually need to know what the default block is, so reserve a variable here
 	basic_block_t* default_block = NULL;
 
 	//We'll also need a current block variable for chaining things together
@@ -9748,8 +9718,7 @@ static inline cfg_result_package_t visit_c_style_switch_statement(generic_ast_no
 				//Let the helper rule handle it
 				case_default_results = visit_c_style_default_statement(cursor);
 
-				//This is the default block. We'll save this for later when
-				//we need to fill in the rest of the jump table
+				//This is the default block. We'll save this for later when we need to fill in the rest of the jump table
 				default_block= case_default_results.starting_block;
 
 				break;
@@ -9764,6 +9733,9 @@ static inline cfg_result_package_t visit_c_style_switch_statement(generic_ast_no
 
 		//If we have a previous block and this one has a non-jump ex
 		if(previous_block != NULL) {
+			//TODO REWORK
+
+
 			//If the previous block isn't totally empty, we'll check to see if it has
 			//an exit statement or not
 			if(previous_block->exit_statement != NULL){
@@ -9776,12 +9748,12 @@ static inline cfg_result_package_t visit_c_style_switch_statement(generic_ast_no
 					case THREE_ADDR_CODE_RET_STMT:
 						break;
 
-					//If we get here though, we either have a conditional jump or some other statement.
-					//In this case, to guarantee the fallthrough property, we must
-					//add a jump here
+					/**
+					 * If we get here though, we either have a conditional jump or some other statement.
+					 * In this case, to guarantee the fallthrough property, we must
+					 */
 					default:
-						//Emit the direct jump. This may be optimized away in the optimizer, but we
-						//need to guarantee behavior
+						//Emit the direct jump. This may be optimized away in the optimizer, but we need to guarantee behavior
 						emit_jump(previous_block, case_default_results.starting_block);
 						
 						break;
@@ -9789,8 +9761,7 @@ static inline cfg_result_package_t visit_c_style_switch_statement(generic_ast_no
 
 			//If it is null, then we definitiely need a jump here
 			} else {
-				//Emit the direct jump. This may be optimized away in the optimizer, but we
-				//need to guarantee behavior
+				//Emit the direct jump. This may be optimized away in the optimizer, but we need to guarantee behavior
 				emit_jump(previous_block, case_default_results.starting_block);
 			}
 		}
@@ -9812,6 +9783,7 @@ static inline cfg_result_package_t visit_c_style_switch_statement(generic_ast_no
 	if(current_block->exit_statement != NULL){
 		//Switch based on what the end of the current block is
 		switch(current_block->exit_statement->statement_type){
+			//TODO REWORK
 			//If it's a jump or ret statement, we don't need to add one
 			case THREE_ADDR_CODE_RET_STMT:
 			case THREE_ADDR_CODE_RAISE_STMT:
@@ -9904,10 +9876,10 @@ static inline cfg_result_package_t visit_c_style_switch_statement(generic_ast_no
 	three_addr_const_t* lower_bound = emit_direct_integer_or_char_constant(root_node->optional_storage.switch_bounds.lower_bound, i32);
 	three_addr_const_t* upper_bound = emit_direct_integer_or_char_constant(root_node->optional_storage.switch_bounds.upper_bound, i32);
 
-	//Now that we have our expression, we'll want to speed things up by seeing if our value is either below the lower
-	//range or above the upper range. If it is, we jump to the very end
-
 	/**
+	 * Now that we have our expression, we'll want to speed things up by seeing if our value is either below the lower
+	 * range or above the upper range. If it is, we jump to the very end
+	 *
 	 * Jumping(conditional or indirect), does not affect condition codes. As such, we can rely 
 	 * on the condition codes being set from the operation to take us through all three
 	 * jumps. We will emit a jump if we are: lower, higher or an indirect jump if we
@@ -9926,7 +9898,6 @@ static inline cfg_result_package_t visit_c_style_switch_statement(generic_ast_no
 	//This will be used for tracking
 	three_addr_var_t* lower_than_decider = emit_temp_var(input_result_type);
 
-	//Let's first do our lower than comparison
 	//First step -> if we're below the minimum, we jump to default 
 	emit_binary_operation_with_constant(root_level_block, lower_than_decider, input_result, L_THAN, lower_bound);
 
@@ -9983,6 +9954,41 @@ static inline cfg_result_package_t visit_c_style_switch_statement(generic_ast_no
 
 	//Give back the starting block
 	return result_package;
+
+}
+
+
+static cfg_result_package_t visit_exhaustive_c_style_switch_statement(generic_ast_node_t* root_node){
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
+}
+
+
+/**
+ * Visit a C-style switch statement. Ollie supports a new version of switch statements(with no fallthrough),
+ * and the older C-version as well that allows break through. To keep the order true, ollie 
+ * This rule is specifically for the c-style switch statements
+ */
+static inline cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* root_node){
+	/**
+	 * If a given switch is flagged as ineligible, we'll need to 
+	 * use a special helper to convert it to an if statement
+	 */
+	if(root_node->is_switch_eligible == FALSE){
+		return convert_c_style_switch_to_if_statement(root_node);
+	}
+
+	/**
+	 * If the switch is not flagged as exhaustive(most common), we will
+	 * route this to a more elaborate converter that has the needed logic
+	 * for non-exhaustive switches. If it is exhaustive, we'll route it to
+	 * the simpler exhaustive switch converter
+	 */
+	if(root_node->is_exhaustive_switch == FALSE){
+		return visit_non_exhaustive_c_style_switch_statement(root_node);
+	} else {
+		return visit_exhaustive_c_style_switch_statement(root_node);
+	}
 }
 
 
