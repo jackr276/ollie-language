@@ -6537,16 +6537,10 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 	 * If we have only one member, then by default this is not
 	 * switch eligible and we will force it into being a conditional
 	 * move expression
+	 *
+	 * TODO UPDATE CRITERIA
 	 */
 	if(in_statement_members == 1){
-		is_switch_eligible = FALSE;
-	}
-
-	/**
-	 * If we run into a case where we are larger than the max switch range, we will
-	 * converting to a conditional assignment chain instead
-	 */
-	if(max_value - min_value >= MAX_SWITCH_RANGE){
 		is_switch_eligible = FALSE;
 	}
 
@@ -10031,7 +10025,7 @@ static inline u_int8_t determine_switch_eligibility(dynamic_integer_array_t* swi
 	 * 3 statements or less - a switch would actually lead to more
 	 * branching so we will convert this to an if-else
 	 */
-	if(switch_statement_values->current_index <= 3){
+	if(switch_statement_values->current_index < 3){
 		return FALSE;
 	}
 
@@ -10042,14 +10036,12 @@ static inline u_int8_t determine_switch_eligibility(dynamic_integer_array_t* swi
 	 */
 	double average_distance = 0.0;
 
-	//Seed the previous value
-	int32_t previous_value = switch_statement_values->internal_array[0]; 
-
 	//Now run through every other value and sum up the distance
 	for(int32_t i = 1; i < switch_statement_values->current_index; i++){
+		int32_t previous_value = switch_statement_values->internal_array[i - 1];
 		int32_t value = switch_statement_values->internal_array[i];
 
-		//Add this to our average distance
+		//Add this to our average distance. This should always be positive
 		average_distance += (value - previous_value);
 
 		//This now is the previous value
@@ -10061,6 +10053,7 @@ static inline u_int8_t determine_switch_eligibility(dynamic_integer_array_t* swi
 
 	//Greater than 30, we are too sparse for switching
 	if(average_distance >= MAX_AVERAGE_CASE_DIFFERENCE){
+		printf("TOO SPARSE\n\n");
 		return FALSE;
 	}
 
@@ -10151,61 +10144,71 @@ static inline u_int8_t is_type_exhaustive_switch_eligible(generic_type_t* type){
  */
 static inline u_int8_t is_switch_exhaustive_switch(generic_type_t* switching_on_type, dynamic_integer_array_t* switch_statement_values){
 	/**
-	 * Only enum types are eligible. 
+	 * Determine if we meet the very strict criteria for type eligibility
+	 * before doing anything else
 	 */
 	if(is_type_exhaustive_switch_eligible(switching_on_type) == TRUE){
 		return FALSE;
 	}
 
-		//TODO FIX - I DON'T THINK WE NEED ANYTHING HERE
-		int32_t min_case_value = switch_stmt_node->optional_storage.switch_bounds.lower_bound;
-		int32_t max_case_value = switch_stmt_node->optional_storage.switch_bounds.upper_bound;
+	/**
+	 * Extract the min and max values from our sorted list
+	 */
+	int32_t min_case_value = switch_statement_values->internal_array[0];
+	int32_t max_case_value = switch_statement_values->internal_array[switch_statement_values->current_index - 1];
 
-		/**
-		 * Check 1: if the min/max case values do not match up with the enum's min and max values,
-		 * then there's no point in checking any more
-		 */
-		if(min_case_value != switching_on_type->min_enum_value || max_case_value != switching_on_type->max_enum_value){
-			is_exhaustive_switch = FALSE;
-			goto end_exhaustive_check;
-		}
-
-		/**
-		 * Check 2: we know that the min and max values are good, but is every other value in between
-		 * represented in our case statements? If they are not, then this also does not count as exhaustive
-		 */
-		int32_t range = max_case_value - min_case_value + 1;
-		u_int8_t value_byte_map[range];
-		memset(value_byte_map, 0, sizeof(u_int8_t) * range);
-
-		/**
-		 * Populate the value byte map with a TRUE value if one of
-		 * our values is represented at the index which corresponds
-		 * to that value's offset from the minimum value
-		 */
-		for(int32_t i = 0; i < switch_values.current_index; i++){
-			int32_t case_value = dynamic_integer_array_get_at(&switch_values, i);
-			value_byte_map[case_value - min_case_value] = TRUE;
-		}
-
-		/**
-		 * Now that we're all populated, if we detect
-		 * any gaps in our byte map, then we know that this
-		 * is in fact not exhaustive. If we don't than the
-		 * original TRUE value will be preserved
-		 */
-		is_exhaustive_switch = TRUE;
-		for(int32_t i = 0; i < range; i++){
-			if(value_byte_map[i] == FALSE){
-				is_exhaustive_switch = FALSE;
-				break;
-			}
-		}
-
-	} else {
-		//Set the flag
-		is_exhaustive_switch = FALSE;
+	/**
+	 * Check 1: if the min/max case values do not match up with the enum's min and max values,
+	 * then there's no point in checking any more
+	 */
+	if(min_case_value != switching_on_type->min_enum_value || max_case_value != switching_on_type->max_enum_value){
+		return FALSE;
 	}
+
+	/**
+	 * Check 2: we know that the min and max values are good, but is every other value in between
+	 * represented in our case statements? If they are not, then this also does not count as exhaustive.
+	 * We can determine this by 
+	 */
+	int32_t min_enum_value = switching_on_type->min_enum_value;
+	int32_t max_enum_value = switching_on_type->max_enum_value;
+
+	//The range of all possible enum values
+	int32_t enum_range = max_enum_value - min_enum_value + 1;
+
+	//Define a bytemap of all potential enum values and wipe it all out to 0
+	u_int8_t value_map[enum_range];
+	memset(value_map, 0, sizeof(u_int8_t) * enum_range);
+
+	/**
+	 * Let's now go through and fill out the byte map that we've made
+	 * with all of the values in the enumeration table. When we're done,
+	 * if this is switch eligible we'd have an array like: [1, 1, 1, 1, 1, 1].
+	 * If it's not, we may have something like [1, 1, 0, 1, 1] where there
+	 * are gaps in the exhaustive range
+	 */
+	for(int32_t i = 0; i < switch_statement_values->current_index; i++){
+		//Extract the value
+		int32_t value = dynamic_integer_array_get_at(switch_statement_values, i);
+
+		//Fill out that this exists now
+		value_map[value - min_enum_value] = TRUE;
+	}
+
+	/**
+	 * Now for our final check - if any of the indices
+	 * here have 0, that means that that value in the enum
+	 * range simply doesn't exist. If we see that, we
+	 * fail out
+	 */
+	for(int32_t i = 0; i < enum_range; i++){
+		if(value_map[i] == FALSE){
+			return FALSE;
+		}
+	}
+
+	//If we survived to here then it worked
+	return TRUE;
 }
 
 
@@ -10466,7 +10469,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 		return print_and_return_error("Switch statements with no cases are not allowed", parser_line_num);
 	}
 
-	//Let the helper run through its checks to determine our switch eligibility
+	//Let the helpers determine the switch eligibility and exhaustive switch eligibility
 	switch_stmt_node->is_switch_eligible = determine_switch_eligibility(&switch_values);
 	switch_stmt_node->is_exhaustive_switch = is_switch_exhaustive_switch(switching_on_type, &switch_values);
 
