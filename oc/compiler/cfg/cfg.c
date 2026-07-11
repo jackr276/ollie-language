@@ -9764,6 +9764,9 @@ static cfg_result_package_t visit_exhaustive_c_style_switch_statement(generic_as
 	//Unpack this for later
 	three_addr_var_t* input_result = unpack_result_package(&input_results, starting_block);
 
+	//Jump from our starting block into the jump calculation block
+	emit_jump(starting_block, jump_calculation_block);
+
 	//We'll now allocate this one's jump table
 	jump_calculation_block->block_type = BLOCK_TYPE_SWITCH;
 	jump_calculation_block->jump_table = jump_table_alloc(root_node->optional_storage.switch_bounds.upper_bound - root_node->optional_storage.switch_bounds.lower_bound + 1);
