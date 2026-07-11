@@ -9911,92 +9911,31 @@ static cfg_result_package_t convert_c_style_switch_to_if_statement(generic_ast_n
 	//The next sibling of the expression will always be the first case/default value
 	generic_ast_node_t* case_default_cursor = expression->next_sibling;
 
-
-
-
-	/**
-	 * Option 1: the case statement comes first, and then the default
-	 * statement. In code this would look something like:
-	 * 	
-	 * 	switch(x){
-	 * 		case 5:
-	 * 			//stuff
-	 * 			break; //may or may not be here
-	 * 		default:
-	 * 			//stuff
-	 * 			break;
-	 * 	}
-	 *
-	 * We need to account for cases when the break is missing from the
-	 * case and we fall through
-	 */
-	if(first_child->ast_node_type == AST_NODE_TYPE_C_STYLE_CASE_STMT){
-		case_results = visit_c_style_case_statement(first_child);
-		default_results = visit_c_style_default_statement(second_child);
-
-		//We know what these two are off the bat
-		if_block = case_results.starting_block;
-		else_block = default_results.starting_block;
-
-		/**
-		 * If the case block does not end in a termination statement, that means
-		 * that we have a fall-through scenario where the case statement falls
-		 * through to the default block
-		 */
-		if(does_block_end_in_terminal_statement(case_results.final_block) == FALSE){
-			emit_jump(case_results.final_block, else_block);
-		}
-
-		//For the default block, we'll just need to mkae sure that it goes to the exit block
-		if(does_block_end_in_terminal_statement(default_results.final_block) == FALSE){
-			emit_jump(default_results.final_block, exit_block);
-		}
-	
+	//All of the holders that we eventually will need
+	basic_block_t* default_block = NULL;
+	basic_block_t* previous_end_block = NULL;
+	basic_block_t* current_case_block = NULL;
 
 	/**
-	 * Option 2: the default statement comes first, and then the case statement. In code
-	 * this would look something like this:
-	 *
-	 * switch(x){
-	 * 		default:
-	 * 			//stuff
-	 *			break; //may or may not be here
-	 *		case 5:
-	 *			//stuff
-	 *			break;
-	 * }
-	 *
-	 * We need to account for cases where the break is missing from the default and
-	 * we fall through
+	 * Crawl the subtree and emit everything in order. We will need special logic for
+	 * the default block when we get to it due to no conditional existing for it
 	 */
-	} else {
-		default_results = visit_c_style_default_statement(first_child);
-		case_results = visit_c_style_case_statement(second_child);
+	while(case_default_cursor != NULL){
+		switch(case_default_cursor->ast_node_type){
+			case AST_NODE_TYPE_C_STYLE_CASE_STMT:
+				break;
 
-		//We know what these two are off the bat
-		if_block = case_results.starting_block;
-		else_block = default_results.starting_block;
+			case AST_NODE_TYPE_C_STYLE_DEFAULT_STMT:
+				break;
 
-		/**
-		 * If the default block does not end in a terminal statement, then we have
-		 * a fall-through scneario to the case block
-		 */
-		if(does_block_end_in_terminal_statement(default_results.final_block) == FALSE){
-			emit_jump(default_results.final_block, if_block);
-		}
-
-		//For the case block, we'll just need to worry about going to the exit
-		if(does_block_end_in_terminal_statement(case_results.final_block) == FALSE){
-			emit_jump(case_results.final_block, exit_block);
+			default:
+				fprintf(stderr, "Fatal internal compiler error: Exprected c-style case or default statement but got neither\n");
+				exit(1);
 		}
 	}
 
-	/**
-	 * Now that we have all of the blocks emitted, we can emit the branch
-	 * using the case statement value and saved expression from before
-	 */
-	case_statement_value = if_block->case_stmt_val;
-	generic_ast_node_t* comparison_expression = construct_binary_expression_with_const_ast_subtree(expression, case_statement_value, DOUBLE_EQUALS);
+	//TODO DEFAULT HANDLING
+
 
 	//Emit the branch using the same inverse jump strategy as regular if statements
 	emit_branch(entry_block, comparison_expression, else_block, if_block, BRANCH_CATEGORY_INVERSE);
