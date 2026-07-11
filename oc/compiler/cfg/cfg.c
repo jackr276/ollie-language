@@ -9914,7 +9914,9 @@ static cfg_result_package_t convert_c_style_switch_to_if_statement(generic_ast_n
 	//All of the holders that we eventually will need
 	basic_block_t* default_block = NULL;
 	basic_block_t* previous_end_block = NULL;
-	basic_block_t* current_case_block = NULL;
+
+	//The current block where our conditional will sit is the entry block
+	basic_block_t* current_conditional_block = entry_block;
 
 	/**
 	 * Crawl the subtree and emit everything in order. We will need special logic for
@@ -9923,9 +9925,30 @@ static cfg_result_package_t convert_c_style_switch_to_if_statement(generic_ast_n
 	while(case_default_cursor != NULL){
 		switch(case_default_cursor->ast_node_type){
 			case AST_NODE_TYPE_C_STYLE_CASE_STMT:
+				case_default_results = visit_c_style_case_statement(case_default_cursor);
+
+				//Extract this value for our conditional
+				int32_t case_value = case_default_results.starting_block->case_stmt_val;
+
 				break;
 
 			case AST_NODE_TYPE_C_STYLE_DEFAULT_STMT:
+				case_default_results = visit_c_style_default_statement(case_default_cursor);
+
+				//Save the default block for later processing
+				default_block = case_default_results.starting_block;
+
+				/**
+				 * If the previous end block does not end in a terminal statement, we will need to simulate
+				 * a fall-through type scenario where the prior block falls through to this one
+				 */
+				if(previous_end_block != NULL && does_block_end_in_terminal_statement(previous_end_block) == FALSE){
+					emit_jump(previous_end_block, default_block);
+				}
+
+				//Now update what the previous end block is
+				previous_end_block = case_default_results.final_block;
+
 				break;
 
 			default:
@@ -9936,9 +9959,6 @@ static cfg_result_package_t convert_c_style_switch_to_if_statement(generic_ast_n
 
 	//TODO DEFAULT HANDLING
 
-
-	//Emit the branch using the same inverse jump strategy as regular if statements
-	emit_branch(entry_block, comparison_expression, else_block, if_block, BRANCH_CATEGORY_INVERSE);
 
 	//Now that we're done this should not be on the break stack
 	pop(&break_stack);
