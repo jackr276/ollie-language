@@ -9304,10 +9304,12 @@ static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node){
 	//This is nesting inside of a case statement
 	push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
 
-	//The case statement should have some kind of constant value here, whether
-	//it's an enum value or regular const. All validation should have been
-	//done by the parser, so we're guaranteed to see something
-	//correct here
+	/**
+	 * The case statement should have some kind of constant value here, whether
+	 * it's an enum value or regular const. All validation should have been
+	 * done by the parser, so we're guaranteed to see something
+	 * correct here
+	 */
 	
 	generic_ast_node_t* case_stmt_cursor = root_node;
 
@@ -10011,6 +10013,8 @@ static cfg_result_package_t convert_ollie_switch_to_if_statement(generic_ast_nod
 	//Holders for the overall results as well as the individual results for each node
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 	cfg_result_package_t case_default_results = INITIALIZE_BLANK_CFG_RESULT;
+	
+	exit(1);
 
 	//Every case statement has a constant in it
 	int32_t case_statement_constant;
@@ -10043,6 +10047,8 @@ static cfg_result_package_t convert_ollie_switch_to_if_statement(generic_ast_nod
 	//Unpack the result and get the variable that we are using for all comparisons
 	three_addr_var_t* switching_on_variable = unpack_result_package(&expression_results, if_entry_block);
 
+	instruction_t* previous_branch_statement = NULL;
+
 	/**
 	 * Run through every single case/one default statement and process
 	 * them accordingly. There is no need to worry about fall through/
@@ -10058,10 +10064,11 @@ static cfg_result_package_t convert_ollie_switch_to_if_statement(generic_ast_nod
 			 * with a constant
 			 */
 			case AST_NODE_TYPE_CASE_STMT:
+				//The case statement itself is what we need to go to if the conditional is true
 				case_default_results = visit_case_statement(case_statement_cursor);
 
 				//Let the helper construct a branch new AST sub tree for us to work off of
-				generic_ast_node_t* equals_expression = construct_binary_expression_with_const_ast_subtree(conditional_node, case_statement_constant, DOUBLE_EQUALS); 
+				//generic_ast_node_t* equals_expression = construct_binary_expression_with_const_ast_subtree(conditional_node, case_statement_constant, DOUBLE_EQUALS); 
 
 				/**
 				 * Do any/all needed bookkeeping with the final block where we
@@ -10074,7 +10081,7 @@ static cfg_result_package_t convert_ollie_switch_to_if_statement(generic_ast_nod
 
 				//Extract the value for our given constant
 				//TODO
-				case_statement_constant = if_block->case_stmt_val;
+				//case_statement_constant = if_block->case_stmt_val;
 
 				break;
 
@@ -10084,6 +10091,7 @@ static cfg_result_package_t convert_ollie_switch_to_if_statement(generic_ast_nod
 			 * it must be last in the chain
 			 */
 			case AST_NODE_TYPE_DEFAULT_STMT:
+				//The default statement itself is what we need to go to if the conditional is true
 				case_default_results = visit_default_statement(case_statement_cursor);
 
 				//This becomes our else block
