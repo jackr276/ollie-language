@@ -157,8 +157,6 @@ struct generic_ast_node_t{
 	//The string value could hold an identifier, string constant, or it could hold
 	//an assembly inline statement. It all depends based on context
 	dynamic_string_t string_value;
-	//The number of case statement members in a switch
-	int32_t num_case_members;
 	//What line number is this from
 	u_int32_t line_number;
 	//Store a binary operator(if one exists)

@@ -6533,9 +6533,6 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		root_node->inferred_type = immut_i8;
 	}
 
-	//Store how many members we have in here
-	root_node->num_case_members = in_statement_members;
-
 	/**
 	 * If we have only one member, then by default this is not
 	 * switch eligible and we will force it into being a conditional
@@ -10020,83 +10017,6 @@ static inline u_int8_t is_type_eligible_for_switch_statement(generic_type_t* typ
 
 
 /**
- * Is a given type "exhaustive switch eligible"?
- *
- * Remember that exhaustive switch statements do not require
- * the user to enter a default clause. This will only ever
- * work if we are confident that all possible values are
- * accounted for within the switching on type's range
- *
- * Only enum types who have less than the MAX_SWITCH_RANGE members will
- * even be considered. Even then, there will need to be *0* gaps
- * in between the values for this to work
- */
-static inline u_int8_t is_type_exhaustive_switch_eligible(generic_type_t* type){
-	//Make sure it's not aliased
-	type = dealias_type(type);
-
-	//If it's not an enum type then this isn't going to work
-	if(type->type_class != TYPE_CLASS_ENUMERATED){
-		return FALSE;
-	}
-	
-	dynamic_array_t* enumeration_table = &(type->internal_types.enumeration_table);
-
-	//If this has more values than there is area in the range, it's not eligible
-	if(enumeration_table->current_index >= MAX_SWITCH_RANGE){
-		return FALSE;
-	}
-
-	/**
-	 * Remember that in Ollie, users are able to assign enum values their
-	 * own types. This means that values may *not* always be 1 apart from
-	 * each other. We'll need to check and see if all of the values inside of
-	 * the enumeration are in fact 1 apart
-	 */
-	int32_t min_enum_value = type->min_enum_value;
-	int32_t max_enum_value = type->max_enum_value;
-
-	//The range of all possible enum values
-	int32_t enum_range = max_enum_value - min_enum_value + 1;
-
-	//Define a bytemap of all potential enum values and wipe it all out to 0
-	u_int8_t value_map[enum_range];
-	memset(value_map, 0, sizeof(u_int8_t) * enum_range);
-
-	/**
-	 * Let's now go through and fill out the byte map that we've made
-	 * with all of the values in the enumeration table. When we're done,
-	 * if this is switch eligible we'd have an array like: [1, 1, 1, 1, 1, 1].
-	 * If it's not, we may have something like [1, 1, 0, 1, 1] where there
-	 * are gaps in the exhaustive range
-	 */
-	for(int32_t i = 0; i < enumeration_table->current_index; i++){
-		//Extract the members enum value
-		symtab_variable_record_t* member = dynamic_array_get_at(enumeration_table, i);
-		int32_t raw_enum_value = member->enum_member_value;
-
-		//Fill out that this exists now
-		value_map[raw_enum_value - min_enum_value] = TRUE;
-	}
-
-	/**
-	 * Now for our final check - if any of the indices
-	 * here have 0, that means that that value in the enum
-	 * range simply doesn't exist. If we see that, we
-	 * fail out
-	 */
-	for(int32_t i = 0; i < enum_range; i++){
-		if(value_map[i] == FALSE){
-			return FALSE;
-		}
-	}
-	
-	//If we survived to here then we're true
-	return TRUE;
-}
-
-
-/**
  * Determine whether or not the (sorted) list of switch statement values is eligible 
  * to be internally considered as a switch statement, or if the switch statement should
  * instead be internally converted to an if-else statement.
@@ -10150,6 +10070,146 @@ static inline u_int8_t determine_switch_eligibility(dynamic_integer_array_t* swi
 
 
 /**
+ * Is a given type "exhaustive switch eligible"?
+ *
+ * Remember that exhaustive switch statements do not require
+ * the user to enter a default clause. This will only ever
+ * work if we are confident that all possible values are
+ * accounted for within the switching on type's range
+ *
+ * Only enum types who have less than the MAX_SWITCH_RANGE members will
+ * even be considered. Even then, there will need to be *0* gaps
+ * in between the values for this to work
+ */
+static inline u_int8_t is_type_exhaustive_switch_eligible(generic_type_t* type){
+	//Make sure it's not aliased
+	type = dealias_type(type);
+
+	//If it's not an enum type then this isn't going to work
+	if(type->type_class != TYPE_CLASS_ENUMERATED){
+		return FALSE;
+	}
+	
+	//Extract for convenience
+	dynamic_array_t* enumeration_table = &(type->internal_types.enumeration_table);
+
+	/**
+	 * Remember that in Ollie, users are able to assign enum values their
+	 * own types. This means that values may *not* always be 1 apart from
+	 * each other. We'll need to check and see if all of the values inside of
+	 * the enumeration are in fact 1 apart
+	 */
+	int32_t min_enum_value = type->min_enum_value;
+	int32_t max_enum_value = type->max_enum_value;
+
+	//The range of all possible enum values
+	int32_t enum_range = max_enum_value - min_enum_value + 1;
+
+	//Define a bytemap of all potential enum values and wipe it all out to 0
+	u_int8_t value_map[enum_range];
+	memset(value_map, 0, sizeof(u_int8_t) * enum_range);
+
+	/**
+	 * Let's now go through and fill out the byte map that we've made
+	 * with all of the values in the enumeration table. When we're done,
+	 * if this is switch eligible we'd have an array like: [1, 1, 1, 1, 1, 1].
+	 * If it's not, we may have something like [1, 1, 0, 1, 1] where there
+	 * are gaps in the exhaustive range
+	 */
+	for(int32_t i = 0; i < enumeration_table->current_index; i++){
+		//Extract the members enum value
+		symtab_variable_record_t* member = dynamic_array_get_at(enumeration_table, i);
+		int32_t raw_enum_value = member->enum_member_value;
+
+		//Fill out that this exists now
+		value_map[raw_enum_value - min_enum_value] = TRUE;
+	}
+
+	/**
+	 * Now for our final check - if any of the indices
+	 * here have 0, that means that that value in the enum
+	 * range simply doesn't exist. If we see that, we
+	 * fail out
+	 */
+	for(int32_t i = 0; i < enum_range; i++){
+		if(value_map[i] == FALSE){
+			return FALSE;
+		}
+	}
+	
+	//If we survived to here then we're true
+	return TRUE;
+}
+
+
+/**
+ * In Ollie, we define an "exhaustive switch" to be a switch that fully occupies the
+ * range of all values. If a switch is exhaustive, we do *not* require a default
+ * clause to be provided. An exhaustive switch is not the same as a switch that
+ * simply has no gaps in between the members. This helper will validate both the
+ * exhaustive switch type and the members themselves and return a determination
+ */
+static inline u_int8_t is_switch_exhaustive_switch(generic_type_t* switching_on_type, dynamic_integer_array_t* switch_statement_values){
+	/**
+	 * Only enum types are eligible. 
+	 */
+	if(is_type_exhaustive_switch_eligible(switching_on_type) == TRUE){
+		return FALSE;
+	}
+
+		//TODO FIX - I DON'T THINK WE NEED ANYTHING HERE
+		int32_t min_case_value = switch_stmt_node->optional_storage.switch_bounds.lower_bound;
+		int32_t max_case_value = switch_stmt_node->optional_storage.switch_bounds.upper_bound;
+
+		/**
+		 * Check 1: if the min/max case values do not match up with the enum's min and max values,
+		 * then there's no point in checking any more
+		 */
+		if(min_case_value != switching_on_type->min_enum_value || max_case_value != switching_on_type->max_enum_value){
+			is_exhaustive_switch = FALSE;
+			goto end_exhaustive_check;
+		}
+
+		/**
+		 * Check 2: we know that the min and max values are good, but is every other value in between
+		 * represented in our case statements? If they are not, then this also does not count as exhaustive
+		 */
+		int32_t range = max_case_value - min_case_value + 1;
+		u_int8_t value_byte_map[range];
+		memset(value_byte_map, 0, sizeof(u_int8_t) * range);
+
+		/**
+		 * Populate the value byte map with a TRUE value if one of
+		 * our values is represented at the index which corresponds
+		 * to that value's offset from the minimum value
+		 */
+		for(int32_t i = 0; i < switch_values.current_index; i++){
+			int32_t case_value = dynamic_integer_array_get_at(&switch_values, i);
+			value_byte_map[case_value - min_case_value] = TRUE;
+		}
+
+		/**
+		 * Now that we're all populated, if we detect
+		 * any gaps in our byte map, then we know that this
+		 * is in fact not exhaustive. If we don't than the
+		 * original TRUE value will be preserved
+		 */
+		is_exhaustive_switch = TRUE;
+		for(int32_t i = 0; i < range; i++){
+			if(value_byte_map[i] == FALSE){
+				is_exhaustive_switch = FALSE;
+				break;
+			}
+		}
+
+	} else {
+		//Set the flag
+		is_exhaustive_switch = FALSE;
+	}
+}
+
+
+/**
  * A switch statement allows us to to see one or more labels defined by a certain expression. It allows
  * for the use of labeled statements followed by statements in general. We will do more static analysis
  * on this later. Like all rules in the system, this function returns the root node that it creates
@@ -10173,8 +10233,6 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	u_int8_t found_default_clause = FALSE;
 	//We are initially undecided on the type
 	ollie_switch_type_t ollie_switch_type = OLLIE_SWITCH_TYPE_UNDECIDED;
-	//Is this an "exhaustive" switch. This has a very specific meaning that is elaborated below
-	u_int8_t is_exhaustive_switch;
 
 	/**
 	 * Once we get here, we can allocate the root level node
@@ -10410,70 +10468,13 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 
 	//Let the helper run through its checks to determine our switch eligibility
 	switch_stmt_node->is_switch_eligible = determine_switch_eligibility(&switch_values);
+	switch_stmt_node->is_exhaustive_switch = is_switch_exhaustive_switch(switching_on_type, &switch_values);
 
-	/**
-	 * In Ollie, we define an "exhaustive switch" to be a switch that fully occupies the
-	 * range of all values. If a switch is exhaustive, we do *not* require a default
-	 * clause to be provided. An exhaustive switch is not the same as a switch that
-	 * simply has no gaps in between the members
-	 */
-	if(is_type_exhaustive_switch_eligible(switching_on_type) == TRUE){
-		//TODO FIX - I DON'T THINK WE NEED ANYTHING HERE
-		int32_t min_case_value = switch_stmt_node->optional_storage.switch_bounds.lower_bound;
-		int32_t max_case_value = switch_stmt_node->optional_storage.switch_bounds.upper_bound;
-
-		/**
-		 * Check 1: if the min/max case values do not match up with the enum's min and max values,
-		 * then there's no point in checking any more
-		 */
-		if(min_case_value != switching_on_type->min_enum_value || max_case_value != switching_on_type->max_enum_value){
-			is_exhaustive_switch = FALSE;
-			goto end_exhaustive_check;
-		}
-
-		/**
-		 * Check 2: we know that the min and max values are good, but is every other value in between
-		 * represented in our case statements? If they are not, then this also does not count as exhaustive
-		 */
-		int32_t range = max_case_value - min_case_value + 1;
-		u_int8_t value_byte_map[range];
-		memset(value_byte_map, 0, sizeof(u_int8_t) * range);
-
-		/**
-		 * Populate the value byte map with a TRUE value if one of
-		 * our values is represented at the index which corresponds
-		 * to that value's offset from the minimum value
-		 */
-		for(int32_t i = 0; i < switch_values.current_index; i++){
-			int32_t case_value = dynamic_integer_array_get_at(&switch_values, i);
-			value_byte_map[case_value - min_case_value] = TRUE;
-		}
-
-		/**
-		 * Now that we're all populated, if we detect
-		 * any gaps in our byte map, then we know that this
-		 * is in fact not exhaustive. If we don't than the
-		 * original TRUE value will be preserved
-		 */
-		is_exhaustive_switch = TRUE;
-		for(int32_t i = 0; i < range; i++){
-			if(value_byte_map[i] == FALSE){
-				is_exhaustive_switch = FALSE;
-				break;
-			}
-		}
-
-	} else {
-		//Set the flag
-		is_exhaustive_switch = FALSE;
-	}
-
-end_exhaustive_check:
 	/**
 	 * If this is not exhaustive and we have not found the default clause, then this is an error
 	 * and we fail out
 	 */
-	if(is_exhaustive_switch == FALSE && found_default_clause == FALSE){
+	if(switch_stmt_node->is_exhaustive_switch == FALSE && found_default_clause == FALSE){
 		return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
 	}
 
@@ -10481,7 +10482,7 @@ end_exhaustive_check:
 	 * If this is exhaustive and we do have a default clause, then that default clause is actually unreachable. We will fail
 	 * out if we detect that this is the case
 	 */
-	if(is_exhaustive_switch == TRUE && found_default_clause == TRUE){
+	if(switch_stmt_node->is_exhaustive_switch == TRUE && found_default_clause == TRUE){
 		return print_and_return_error("Default clause is unreachable in exhaustive switch statement", parser_line_num);
 	}
 
@@ -10492,12 +10493,6 @@ end_exhaustive_check:
 	if(ollie_switch_type == OLLIE_SWITCH_TYPE_C_STYLE){
 		switch_stmt_node->ast_node_type = AST_NODE_TYPE_C_STYLE_SWITCH_STMT; 
 	}
-	
-	//Store this for later on processing in the CFG
-	switch_stmt_node->num_case_members = switch_values.current_index;
-
-	//Store whether or not we are an exhaustive switch
-	switch_stmt_node->is_exhaustive_switch = is_exhaustive_switch;
 
 	//Return the line number
 	switch_stmt_node->line_number = parser_line_num;
@@ -10505,7 +10500,6 @@ end_exhaustive_check:
 	//Now that we're done, we will remove this variable scope
 	finalize_variable_scope(variable_symtab);
 	finalize_type_scope(type_symtab);
-
 
 	//Destroy this now that we're done with it
 	dynamic_integer_array_dealloc(&switch_values);
