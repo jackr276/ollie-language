@@ -9713,7 +9713,11 @@ static cfg_result_package_t visit_non_exhaustive_c_style_switch_statement(generi
 	add_statement(jump_calculation_block, temporary_variable_assignent);
 
 	//Now that all this is done, we can use our jump table for the rest
-	three_addr_var_t* input = emit_binary_operation_with_constant(jump_calculation_block, temporary_variable_assignent->operands.oir.assignee, temporary_variable_assignent->operands.oir.assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32));
+	three_addr_var_t* input = emit_binary_operation_with_constant(jump_calculation_block,
+															   		temporary_variable_assignent->operands.oir.assignee,
+															   		temporary_variable_assignent->operands.oir.assignee,
+															   		MINUS,
+															   		emit_direct_integer_or_char_constant(offset, i32));
 
 	/**
 	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
@@ -9757,6 +9761,9 @@ static cfg_result_package_t visit_exhaustive_c_style_switch_statement(generic_as
 	cfg_result_package_t input_results = emit_expression(starting_block, cursor);
 	starting_block = input_results.final_block;
 
+	//Unpack this for later
+	three_addr_var_t* input_result = unpack_result_package(&input_results, starting_block);
+
 	//We'll now allocate this one's jump table
 	jump_calculation_block->block_type = BLOCK_TYPE_SWITCH;
 	jump_calculation_block->jump_table = jump_table_alloc(root_node->optional_storage.switch_bounds.upper_bound - root_node->optional_storage.switch_bounds.lower_bound + 1);
@@ -9789,7 +9796,7 @@ static cfg_result_package_t visit_exhaustive_c_style_switch_statement(generic_as
 		add_successor(jump_calculation_block, case_results.starting_block);
 
 		//Reassign current block
-		current_block = case_default_results.final_block;
+		current_block = case_results.final_block;
 
 		/**
 		 * If the previous block did not end in a terminal statement, then we need to
@@ -9797,7 +9804,7 @@ static cfg_result_package_t visit_exhaustive_c_style_switch_statement(generic_as
 		 * behavior
 		 */
 		if(previous_block != NULL && does_block_end_in_terminal_statement(previous_block) == FALSE){
-			emit_jump(previous_block, case_default_results.starting_block);
+			emit_jump(previous_block, case_results.starting_block);
 		}
 
 		//Now the old previous block is the current block
@@ -9824,75 +9831,18 @@ static cfg_result_package_t visit_exhaustive_c_style_switch_statement(generic_as
 		result_package.final_block = function_exit_block;
 	}
 
-	//We'll need both of these as constants for our computation
-	three_addr_const_t* lower_bound = emit_direct_integer_or_char_constant(root_node->optional_storage.switch_bounds.lower_bound, i32);
-	three_addr_const_t* upper_bound = emit_direct_integer_or_char_constant(root_node->optional_storage.switch_bounds.upper_bound, i32);
-
-	/**
-	 * Now that we have our expression, we'll want to speed things up by seeing if our value is either below the lower
-	 * range or above the upper range. If it is, we jump to the very end
-	 *
-	 * Jumping(conditional or indirect), does not affect condition codes. As such, we can rely 
-	 * on the condition codes being set from the operation to take us through all three
-	 * jumps. We will emit a jump if we are: lower, higher or an indirect jump if we
-	 * are in the range
-	 */
-
-	//Unpack the results from the result package
-	three_addr_var_t* input_result = unpack_result_package(&input_results, root_level_block);
-
-	//Grab the type our for convenience
-	generic_type_t* input_result_type = input_result->type;
-
-	//Grab the signedness of the result
-	u_int8_t is_signed = is_type_signed(input_result_type);
-
-	//This will be used for tracking
-	three_addr_var_t* lower_than_decider = emit_temp_var(input_result_type);
-
-	//First step -> if we're below the minimum, we jump to default 
-	emit_binary_operation_with_constant(root_level_block, lower_than_decider, input_result, L_THAN, lower_bound);
-
-	//Select a branch for the lower type
-	branch_type_t branch_lower_than = select_appropriate_branch_statement(L_THAN, BRANCH_CATEGORY_NORMAL, is_signed);
-
-	/**
-	 * Now we'll emit the branch like this:
-	 *
-	 * if lower than:
-	 * 	goto default block 
-	 * else:
-	 * 	goto upper_bound_check
-	 */
-	emit_branch_for_switch_statement(root_level_block, default_block, upper_bound_check_block, branch_lower_than, lower_than_decider);
-
-	//This will be used for tracking
-	three_addr_var_t* higher_than_decider = emit_temp_var(input_result_type);
-
-	//Now we handle the case where we're above the upper bound
-	emit_binary_operation_with_constant(upper_bound_check_block, higher_than_decider, input_result, G_THAN, upper_bound);
-
-	//Select a branch for the higher type
-	branch_type_t branch_greater_than = select_appropriate_branch_statement(G_THAN, BRANCH_CATEGORY_NORMAL, is_signed);
-
-	/**
-	 * Now we'll emit the branch like this
-	 *
-	 * if greater than:
-	 * 	goto default block
-	 * else:
-	 *  goto jump block calculation
-	 */
-	emit_branch_for_switch_statement(upper_bound_check_block, default_block, jump_calculation_block, branch_greater_than, higher_than_decider);
-
 	//To avoid violating SSA rules, we'll emit a temporary assignment here
-	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_result);
+	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result->type), input_result);
 
 	//Add it into the block
 	add_statement(jump_calculation_block, temporary_variable_assignent);
 
 	//Now that all this is done, we can use our jump table for the rest
-	three_addr_var_t* input = emit_binary_operation_with_constant(jump_calculation_block, temporary_variable_assignent->operands.oir.assignee, temporary_variable_assignent->operands.oir.assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32));
+	three_addr_var_t* input = emit_binary_operation_with_constant(jump_calculation_block,
+															   		temporary_variable_assignent->operands.oir.assignee,
+															   		temporary_variable_assignent->operands.oir.assignee,
+															   		MINUS,
+															   		emit_direct_integer_or_char_constant(offset, i32));
 
 	/**
 	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
@@ -9905,11 +9855,6 @@ static cfg_result_package_t visit_exhaustive_c_style_switch_statement(generic_as
 	add_statement(jump_calculation_block, indirect_jump);
 
 	return result_package;
-
-
-
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
 }
 
 
