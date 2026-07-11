@@ -5,7 +5,7 @@
  */
 
 
- pub fn ineligible_ollie_negative(x:i32) -> i32 {
+ pub fn ineligible_c_style_negative(x:i32) -> i32 {
  	let result:mut i32 = 5;
 
 	switch(x) {
@@ -32,5 +32,5 @@
 
  pub fn main() -> i32 {
  	OUNIT: [exit_status = 25]
- 	ret @ineligible_ollie_negative(-1000);
+ 	ret @ineligible_c_style_negative(-1000);
  }
