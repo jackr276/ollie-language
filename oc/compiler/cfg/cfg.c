@@ -9534,9 +9534,7 @@ static cfg_result_package_t visit_non_exhaustive_c_style_switch_statement(generi
 	//So long as we haven't hit the end
 	while(cursor != NULL){
 		switch(cursor->ast_node_type){
-			//C-style case statement, we'll let the appropriate rule handle
 			case AST_NODE_TYPE_C_STYLE_CASE_STMT:
-				//Let the helper rule handle it
 				case_default_results = visit_c_style_case_statement(cursor);
 
 				//Add this in as an entry to the jump table
@@ -9544,11 +9542,10 @@ static cfg_result_package_t visit_non_exhaustive_c_style_switch_statement(generi
 
 				//A case statement is always a successor to the jump calculation block
 				add_successor(jump_calculation_block, case_default_results.starting_block);
+
 				break;
 
-			//C-style default, also let the appropriate rule handle
 			case AST_NODE_TYPE_C_STYLE_DEFAULT_STMT:
-				//Let the helper rule handle it
 				case_default_results = visit_c_style_default_statement(cursor);
 
 				//This is the default block. We'll save this for later when we need to fill in the rest of the jump table
@@ -9556,53 +9553,25 @@ static cfg_result_package_t visit_non_exhaustive_c_style_switch_statement(generi
 
 				break;
 
-			//Some weird error, this should never happen
 			default:
-				exit(0);
+				fprintf(stderr, "Fatal internal compiler error: expected a c-style case or default statement but got neither\n");
+				exit(1);
 		}
 
 		//Reassign current block
 		current_block = case_default_results.final_block;
 
-		//If we have a previous block and this one has a non-jump ex
-		if(previous_block != NULL) {
-			//TODO REWORK
-
-
-			//If the previous block isn't totally empty, we'll check to see if it has
-			//an exit statement or not
-			if(previous_block->exit_statement != NULL){
-				//Switch based on what is in here
-				switch(previous_block->exit_statement->statement_type){
-					//And of course a return/branch statement means we can't add anything afterwards
-					case THREE_ADDR_CODE_BRANCH_STMT:
-					case THREE_ADDR_CODE_RAISE_STMT:
-					case THREE_ADDR_CODE_JUMP_STMT:
-					case THREE_ADDR_CODE_RET_STMT:
-						break;
-
-					/**
-					 * If we get here though, we either have a conditional jump or some other statement.
-					 * In this case, to guarantee the fallthrough property, we must
-					 */
-					default:
-						//Emit the direct jump. This may be optimized away in the optimizer, but we need to guarantee behavior
-						emit_jump(previous_block, case_default_results.starting_block);
-						
-						break;
-				}
-
-			//If it is null, then we definitiely need a jump here
-			} else {
-				//Emit the direct jump. This may be optimized away in the optimizer, but we need to guarantee behavior
-				emit_jump(previous_block, case_default_results.starting_block);
-			}
+		/**
+		 * If the previous block did not end in a terminal statement, then we need to
+		 * emit a jump from the previous block to the current starting block to simulate fall-through
+		 * behavior
+		 */
+		if(previous_block != NULL && does_block_end_in_terminal_statement(previous_block) == FALSE){
+			emit_jump(previous_block, case_default_results.starting_block);
 		}
 
 		//Now the old previous block is the current block
 		previous_block = current_block;
-
-		//Otherwise if we don't satisfy this condition, we don't need to emit any jump at all
 
 		//Advance the cursor to the next one
 		cursor = cursor->next_sibling;
@@ -9613,36 +9582,7 @@ static cfg_result_package_t visit_non_exhaustive_c_style_switch_statement(generi
 	 * then it needs to be sent to the final block so that we guarantee the fall-through
 	 * property
 	 */
-	if(current_block->exit_statement != NULL){
-		//Switch based on what the end of the current block is
-		switch(current_block->exit_statement->statement_type){
-			//TODO REWORK
-			//If it's a jump or ret statement, we don't need to add one
-			case THREE_ADDR_CODE_RET_STMT:
-			case THREE_ADDR_CODE_RAISE_STMT:
-			case THREE_ADDR_CODE_JUMP_STMT:
-				break;
-
-			/**
-			 * However if we have this, we need to ensure that we go from this final block
-			 * directly to the end
-			 */
-			default:
-				/**
-				 * Emit the direct jump. This may be optimized away in the optimizer, but we
-				 * need to guarantee behavior
-				 */
-				emit_jump(current_block, ending_block);
-
-				break;
-		}
-
-	//Otherwise it is null, so we definitely need a jump to the end here
-	} else {
-		/**
-		 * Emit the direct jump. This may be optimized away in the optimizer, but we
-		 * need to guarantee behavior
-		 */
+	if(does_block_end_in_terminal_statement(current_block) == FALSE){
 		emit_jump(current_block, ending_block);
 	}
 
@@ -9650,7 +9590,7 @@ static cfg_result_package_t visit_non_exhaustive_c_style_switch_statement(generi
 	 * If the ending block has no successors at all, that means that we've returned through every control path. Instead
 	 * of using the ending block, we can change it to be the function ending block
 	 */
-	if(ending_block->predecessors.internal_array == NULL || ending_block->predecessors.current_index == 0){
+	if(dynamic_array_is_empty(&(ending_block->predecessors)) == TRUE){
 		result_package.final_block = function_exit_block;
 	}
 
@@ -9785,9 +9725,7 @@ static cfg_result_package_t visit_non_exhaustive_c_style_switch_statement(generi
 	instruction_t* indirect_jump = emit_indirect_jump_statement(jump_calculation_block->jump_table, input, 8);
 	add_statement(jump_calculation_block, indirect_jump);
 
-	//Give back the starting block
 	return result_package;
-
 }
 
 
