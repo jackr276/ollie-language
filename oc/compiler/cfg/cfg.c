@@ -9965,6 +9965,9 @@ static cfg_result_package_t convert_c_style_switch_to_if_statement(generic_ast_n
 				add_successor(current_conditional_block, new_conditional_block);
 				add_successor(current_conditional_block, case_default_results.starting_block);
 
+				//The current conditional block is now the new one
+				current_conditional_block = new_conditional_block;
+
 				break;
 
 			case AST_NODE_TYPE_C_STYLE_DEFAULT_STMT:
@@ -9990,10 +9993,30 @@ static cfg_result_package_t convert_c_style_switch_to_if_statement(generic_ast_n
 				fprintf(stderr, "Fatal internal compiler error: Exprected c-style case or default statement but got neither\n");
 				exit(1);
 		}
+
+		//Advance the cursor up
+		case_default_cursor = case_default_cursor->next_sibling;
 	}
 
-	//TODO DEFAULT HANDLING
+	/**
+	 * If the very last block does not end in a terminal statement, we will
+	 * need to manually emit the jump from it to the end block
+	 */
+	if(does_block_end_in_terminal_statement(previous_end_block) == FALSE){
+		emit_jump(previous_end_block, exit_block);
+	}
 
+	/**
+	 * We now need to handle the default block case. If we have a default block,
+	 * then we'll just need to emit a jump from the current conditional block over
+	 * to the default block. If we don't, then we'll jump from the current conditional
+	 * block right to the exit
+	 */
+	if(default_block != NULL){
+		emit_jump(current_conditional_block, default_block);
+	} else {
+		emit_jump(current_conditional_block, exit_block);
+	}
 
 	//Now that we're done this should not be on the break stack
 	pop(&break_stack);
@@ -10084,7 +10107,7 @@ static cfg_result_package_t convert_ollie_switch_to_if_statement(generic_ast_nod
 	result_package.final_block = if_exit_block;
 
 	//The else block is *always* the default statement
-	basic_block_t* else_block = NULL;
+	basic_block_t* default_block = NULL;
 
 	//First let's process the starting expression
 	generic_ast_node_t* switch_statement_expression = root_node->first_child;
@@ -10176,7 +10199,7 @@ static cfg_result_package_t convert_ollie_switch_to_if_statement(generic_ast_nod
 				case_default_results = visit_default_statement(case_statement_cursor);
 
 				//This becomes our else block
-				else_block = case_default_results.starting_block;
+				default_block = case_default_results.starting_block;
 				
 				/**
 				 * Do any/all needed bookkeeping with the final block where we
@@ -10206,8 +10229,8 @@ static cfg_result_package_t convert_ollie_switch_to_if_statement(generic_ast_nod
 	 * If there is no default, then we'll just need to emit a jump from the
 	 * current conditional straight to the exit
 	 */
-	if(else_block != NULL){
-		emit_jump(current_conditional_block, else_block);
+	if(default_block != NULL){
+		emit_jump(current_conditional_block, default_block);
 	} else {
 		emit_jump(current_conditional_block, if_exit_block);
 	}
