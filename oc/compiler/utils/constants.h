@@ -22,6 +22,12 @@
 //For loops, we estimate that they'll execute 10 times each
 #define LOOP_ESTIMATED_COST 10
 
+/**
+ * The maximum average distance between consecutive case values for 
+ * a switch statement to be considered as internally jump table eligible
+ */
+#define MAX_AVERAGE_CASE_DIFFERENCE 30
+
 //All error sizes are 2000
 #define ERROR_SIZE 2000
 

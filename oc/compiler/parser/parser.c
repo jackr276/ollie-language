@@ -10103,11 +10103,49 @@ static inline u_int8_t is_type_exhaustive_switch_eligible(generic_type_t* type){
  *
  * The two main checks are:
  * 	1.) Case count - if we have less than 3 case statements, a switch is not worthwhile
- * 	2.) Sparseness - if the average distance between values is greater than <TODO DETERMINE ME>, then an
+ * 	2.) Sparseness - if the average distance between values is greater than 30, then an
  * 		if statement would be better suited
  */
-static inline u_int8_t is_switch_eligible(dynamic_integer_array_t* switch_statement_values){
+static inline u_int8_t determine_switch_eligibility(dynamic_integer_array_t* switch_statement_values){
+	/**
+	 * 3 statements or less - a switch would actually lead to more
+	 * branching so we will convert this to an if-else
+	 */
+	if(switch_statement_values->current_index <= 3){
+		return FALSE;
+	}
 
+	/**
+	 * Now we will compute the average distance between values. If the average distance
+	 * is more than 20 between nodes, we consider this to be a "sparse" switch statement where
+	 * we are better of converting to an if-else-if
+	 */
+	double average_distance = 0.0;
+
+	//Seed the previous value
+	int32_t previous_value = switch_statement_values->internal_array[0]; 
+
+	//Now run through every other value and sum up the distance
+	for(int32_t i = 1; i < switch_statement_values->current_index; i++){
+		int32_t value = switch_statement_values->internal_array[i];
+
+		//Add this to our average distance
+		average_distance += (value - previous_value);
+
+		//This now is the previous value
+		previous_value = value;
+	}
+
+	//Now get the actual average distance
+	average_distance /= switch_statement_values->current_index;
+
+	//Greater than 30, we are too sparse for switching
+	if(average_distance >= MAX_AVERAGE_CASE_DIFFERENCE){
+		return FALSE;
+	}
+
+	//If we survived to down here then we are switch eligible
+	return TRUE;
 }
 
 
@@ -10370,6 +10408,9 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 		return print_and_return_error("Switch statements with no cases are not allowed", parser_line_num);
 	}
 
+	//Let the helper run through its checks to determine our switch eligibility
+	switch_stmt_node->is_switch_eligible = determine_switch_eligibility(&switch_values);
+
 	/**
 	 * In Ollie, we define an "exhaustive switch" to be a switch that fully occupies the
 	 * range of all values. If a switch is exhaustive, we do *not* require a default
@@ -10455,9 +10496,6 @@ end_exhaustive_check:
 	//Store this for later on processing in the CFG
 	switch_stmt_node->num_case_members = switch_values.current_index;
 
-	//Let the helper run through its checks to determine our switch eligibility
-	switch_stmt_node->is_switch_eligible = deterine_switch_eligibility(&switch_values);
-	
 	//Store whether or not we are an exhaustive switch
 	switch_stmt_node->is_exhaustive_switch = is_exhaustive_switch;
 
