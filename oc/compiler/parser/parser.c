@@ -10363,6 +10363,14 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	}
 
 	/**
+	 * If these values are too far apart, we will flag that this switch is *not* switch eligible. The CFG
+	 * will construct this into an if-else-if statement in the backend
+	 */
+	if(switch_stmt_node->optional_storage.switch_bounds.upper_bound - switch_stmt_node->optional_storage.switch_bounds.lower_bound >= MAX_SWITCH_RANGE){
+		is_switch_eligible = FALSE;
+	}
+
+	/**
 	 * In Ollie, we define an "exhaustive switch" to be a switch that fully occupies the
 	 * range of all values. If a switch is exhaustive, we do *not* require a default
 	 * clause to be provided. An exhaustive switch is not the same as a switch that
@@ -11438,14 +11446,6 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 	//If it's lower than the lower bound, it is now the lower bound
 	if(case_stmt->constant_value.signed_int_value < switch_stmt_node->optional_storage.switch_bounds.lower_bound){
 		switch_stmt_node->optional_storage.switch_bounds.lower_bound = case_stmt->constant_value.signed_int_value;
-	}
-
-	/**
-	 * If these values are too far apart, we will flag that this switch is *not* switch eligible. The CFG
-	 * will construct this into an if-else-if statement in the backend
-	 */
-	if(switch_stmt_node->optional_storage.switch_bounds.upper_bound - switch_stmt_node->optional_storage.switch_bounds.lower_bound >= MAX_SWITCH_RANGE){
-		switch_stmt_node->is_switch_eligible = FALSE;
 	}
 
 	//Let the helper deal with this. If we get a false here, then we bail out. This ensures that we have a nice sorted list
