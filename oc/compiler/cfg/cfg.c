@@ -9729,8 +9729,14 @@ static cfg_result_package_t visit_non_exhaustive_c_style_switch_statement(generi
 }
 
 
+/**
+ * Visit an exhaustive c-style switch statement. Unlike the more common non-exhaustive case, exhaustive
+ * c-style switch statements do not have default clauses, and as such do not need the above/below checks
+ * before the jump table that a normal switch does
+ */
 static cfg_result_package_t visit_exhaustive_c_style_switch_statement(generic_ast_node_t* root_node){
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
+	cfg_result_package_t case_results = INITIALIZE_BLANK_CFG_RESULT;
 
 	//Allocate the three blocks that we will for sure need
 	basic_block_t* starting_block = basic_block_alloc_and_estimate();
@@ -9748,15 +9754,11 @@ static cfg_result_package_t visit_exhaustive_c_style_switch_statement(generic_as
 	generic_ast_node_t* cursor = root_node->first_child;
 
 	//We'll first need to emit the expression node
-	cfg_result_package_t input_results = emit_expression(root_level_block, cursor);
-
-	//Update the block
-	root_level_block = input_results.final_block;
-
-	//This is a switch type block
-	jump_calculation_block->block_type = BLOCK_TYPE_SWITCH;
+	cfg_result_package_t input_results = emit_expression(starting_block, cursor);
+	starting_block = input_results.final_block;
 
 	//We'll now allocate this one's jump table
+	jump_calculation_block->block_type = BLOCK_TYPE_SWITCH;
 	jump_calculation_block->jump_table = jump_table_alloc(root_node->optional_storage.switch_bounds.upper_bound - root_node->optional_storage.switch_bounds.lower_bound + 1);
 
 	/**
@@ -9766,47 +9768,25 @@ static cfg_result_package_t visit_exhaustive_c_style_switch_statement(generic_as
 	 */
 	int32_t offset = root_node->optional_storage.switch_bounds.lower_bound;
 
-	//A generic result package for all of our case/default statements
-	cfg_result_package_t case_default_results = INITIALIZE_BLANK_CFG_RESULT;
-
-	//We will eventually need to know what the default block is, so reserve a variable here
-	basic_block_t* default_block = NULL;
-
 	//We'll also need a current block variable for chaining things together
 	basic_block_t* current_block = NULL;
 	//Keep track of what the previous block was(for fall through)
 	basic_block_t* previous_block = NULL;
 
-	//Now we advance to the first real case statement
+	/**
+	 * Crawl through all of the case statements in exact order and 
+	 * process them. Remember that exhaustive switches never have default clauses
+	 * so we don't need to worry about those here
+	 */
 	cursor = cursor->next_sibling;
-
-	//So long as we haven't hit the end
-	//TODO NO DEFAULT NEEDED
 	while(cursor != NULL){
-		switch(cursor->ast_node_type){
-			case AST_NODE_TYPE_C_STYLE_CASE_STMT:
-				case_default_results = visit_c_style_case_statement(cursor);
+		case_results = visit_c_style_case_statement(cursor);
 
-				//Add this in as an entry to the jump table
-				add_jump_table_entry(jump_calculation_block->jump_table, cursor->constant_value.signed_int_value - offset, case_default_results.starting_block);
+		//Add this in as an entry to the jump table
+		add_jump_table_entry(jump_calculation_block->jump_table, cursor->constant_value.signed_int_value - offset, case_results.starting_block);
 
-				//A case statement is always a successor to the jump calculation block
-				add_successor(jump_calculation_block, case_default_results.starting_block);
-
-				break;
-
-			case AST_NODE_TYPE_C_STYLE_DEFAULT_STMT:
-				case_default_results = visit_c_style_default_statement(cursor);
-
-				//This is the default block. We'll save this for later when we need to fill in the rest of the jump table
-				default_block= case_default_results.starting_block;
-
-				break;
-
-			default:
-				fprintf(stderr, "Fatal internal compiler error: expected a c-style case or default statement but got neither\n");
-				exit(1);
-		}
+		//A case statement is always a successor to the jump calculation block
+		add_successor(jump_calculation_block, case_results.starting_block);
 
 		//Reassign current block
 		current_block = case_default_results.final_block;
@@ -9842,57 +9822,6 @@ static cfg_result_package_t visit_exhaustive_c_style_switch_statement(generic_as
 	 */
 	if(dynamic_array_is_empty(&(ending_block->predecessors)) == TRUE){
 		result_package.final_block = function_exit_block;
-	}
-
-	/**
-	 * If the default clause is NULL, which it may very well be, we will creat
-	 * our own dummy default clause that just jumps to the of the switch statement end. This maintains
-	 * the intention of the programmer but also allows us to reuse the code
-	 * from default blocks
-	 *
-	 * Special case here: if we are returning through all paths, then we're going to need a dummy
-	 * return through the default block. This will be handled by us later, but for now all that
-	 * we'll need to is create a block and add the exit block as a successor to it
-	 */
-	if(default_block == NULL){
-		//Create it
-		default_block = basic_block_alloc_and_estimate();
-
-		if(result_package.final_block != function_exit_block){
-			//Emit a jump from it to the end block
-			emit_jump(default_block, result_package.final_block);
-
-		} else {
-			add_successor(default_block, function_exit_block);
-		}
-	}
-
-	/**
-	 * Run through the entire jump table. Any nodes that are not occupied(meaning there's no case statement with that value)
-	 * will be set to point to the default block. 
-	 */
-	u_int8_t switch_has_default_jumps = FALSE;
-	for(int32_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
-		/**
-		 * If it's null, we'll make it the default. This should only happen in switches
-		 * that are non-exhaustive. For exhaustive switches, the parser has already ensured that we
-		 * will have a block for every case value
-		 */
-		if(dynamic_array_get_at(&(jump_calculation_block->jump_table->nodes), i) == NULL){
-			dynamic_array_set_at(&(jump_calculation_block->jump_table->nodes), default_block, i);
-			
-			//If we have to add one of these then the switch is not exhaustive
-			switch_has_default_jumps = TRUE;
-		}
-	}
-
-	/**
-	 * If the switch is not exhaustive, we *will* need to add the default statement as
-	 * a successor to the jump calculation block. We only do this once we get down here to
-	 * avoid any issues with unneeded successors if it is exhaustive
-	 */
-	if(switch_has_default_jumps == TRUE){
-		add_successor(jump_calculation_block, default_block);
 	}
 
 	//We'll need both of these as constants for our computation
