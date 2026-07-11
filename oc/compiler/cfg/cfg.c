@@ -10080,6 +10080,10 @@ static cfg_result_package_t convert_ollie_switch_to_if_statement(generic_ast_nod
 																									switching_on_variable,
 																									DOUBLE_EQUALS,
 																									emit_direct_integer_or_char_constant(case_statement_constant, i32));
+
+				//Flag that this is used to set condition codes
+				comparsion_expression->operands.oir.assignee->sets_cc = TRUE;
+
 				//Add this into whatever the current conditional block is
 				add_statement(current_conditional_block, comparsion_expression);
 
