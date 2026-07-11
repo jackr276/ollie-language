@@ -9436,43 +9436,6 @@ static cfg_result_package_t visit_c_style_default_statement(generic_ast_node_t* 
 
 
 /**
- * Simple helper that will take an expression and a constant and construct an ast subtree that can
- * subsequently be parsed by the expression converter. This is done because it's easier to do this
- * than deal with the expression converter directly
- *
- * NOTE: this rule is designed specifically for switch statements. Because of this, we're just going
- * to force the type of the constant that we emit to be the same as the expression itself
- */
-static inline generic_ast_node_t* construct_binary_expression_with_const_ast_subtree(generic_ast_node_t* expression, int32_t constant, ollie_token_t binary_operator){
-	//We always have a double equals node here
-	generic_ast_node_t* equals_node = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, SIDE_TYPE_RIGHT);
-	//Copy the inferred type up
-	equals_node->inferred_type = expression->inferred_type;
-	equals_node->binary_operator = binary_operator;
-
-	//First child is always the expression
-	add_child_node(equals_node, expression);
-
-	/**
-	 * IMPORTANT - break any/all associations here with prior next siblings
-	 */
-	expression->next_sibling = NULL;
-
-	//Now we'll need a constant node
-	generic_ast_node_t* constant_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, SIDE_TYPE_RIGHT);
-	constant_node->constant_value.signed_int_value = constant;
-	constant_node->constant_type = INT_CONST;
-
-	//Give it the actual type and coerce it
-	constant_node->inferred_type = expression->inferred_type;
-	coerce_constant(constant_node);
-
-	add_child_node(equals_node, constant_node);
-	return equals_node;
-}
-
-
-/**
  * A non-exhaustive c-style switch requires default statement logic, which includes filling in the jump
  * table and adding jump if above or below logic for the minimum and maximum values
  */
