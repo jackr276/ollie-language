@@ -9825,16 +9825,21 @@ static cfg_result_package_t visit_exhaustive_c_style_switch_statement(generic_as
 
 
 /**
- * Take a c-style switch-case statement with only one case member and convert it into an if-else statement. This
- * has some different logic when compared to the ollie style switch statement because we can have breaks and we
- * are able to fall through these case values
+ * Take a c-style switch statement that has been determined to be non-switch eligible and convert it into
+ * an if-else statement. This is more complex than the ollie switch example because we have concepts like 
+ * fall through
  *
- * Take our most complex example:
+ * Take a complex example:
  *
  * switch(x){
  * 		default:
- * 			//Some stuff
+ * 			//Stuff1
  *			//fall through
+ *
+ *		case 7:
+ *			//Stuff2
+ *			//Fall through
+ *
  * 		case 5:
  * 			x--;
  * 			break;
@@ -9843,39 +9848,43 @@ static cfg_result_package_t visit_exhaustive_c_style_switch_statement(generic_as
  * This should become:
  *
  * .L4(conditional)
- * 	x == 5
+ * 	x == 7
  * 	branch_ne .L5 else .L6
  *
- * .L5(default):
- * 	//Default stuff
- *	jmp .L6 //Simulate the fall through behavior
+ * 	.L5:
+ * 	 x == 5
+ * 	 branch_ne .L7 else .L8
  *
- * .L6(case):
- * 	x--;
- * 	jmp .L7
+ * 	.L6:
+ * 	 //Stuff2
+ * 	 jmp .L7 //Simulate fall through
+ * 	
+ * 	.L7:
+ * 	 x--
+ * 	 jmp .L9
  *
- * .L7(Overall end):
- * 	//Phi function and other stuff
+ * 	.L8:
+ * 	  //Stuff1
+ * 	  jmp .L6 //Simulate fall through to .L6
+ *
+ * 	.L9(end block)
+ * 	  //END OF SWITCH
  */
 static cfg_result_package_t convert_c_style_switch_to_if_statement(generic_ast_node_t* root_node){
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
+	//Needed result packages for later on
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
-	cfg_result_package_t case_results;
-	cfg_result_package_t default_results;
-	int64_t case_statement_value = 0;
+	cfg_result_package_t case_default_results = INITIALIZE_BLANK_CFG_RESULT;
+	cfg_result_package_t expression_results = INITIALIZE_BLANK_CFG_RESULT;
 
 	//We know we need entry/exit blocks, if and else come from the case/default themselves
 	basic_block_t* entry_block = basic_block_alloc_and_estimate();
 	basic_block_t* exit_block = basic_block_alloc_and_estimate();
-	basic_block_t* if_block = NULL;
-	basic_block_t* else_block = NULL;
 
+	//We can package these up now
 	result_package.starting_block = entry_block;
 	result_package.final_block = exit_block;
 
 	//Assign types for later optimization
-	entry_block->block_type = BLOCK_TYPE_IF_ENTRY;
 	exit_block->block_type = BLOCK_TYPE_IF_EXIT;
 
 	/**
@@ -9886,18 +9895,24 @@ static cfg_result_package_t convert_c_style_switch_to_if_statement(generic_ast_n
 	push(&break_stack, exit_block);
 
 	/**
-	 * The first child node is also the expression, which we'll need to stash
-	 * away for later when we emit the if's actual conditional
+	 * The first child is always the expression. We'll need to emit
+	 * this to get the 
 	 */
 	generic_ast_node_t* expression = root_node->first_child;
+	expression_results = emit_expression(entry_block, expression);
 
-	/**
-	 * The first child can either be a case statement or the default. This
-	 * goes for the second child. Once we know what the first child is, we
-	 * know what the second one has to be
-	 */
-	generic_ast_node_t* first_child = expression->next_sibling;
-	generic_ast_node_t* second_child = first_child->next_sibling;
+	//Update the entry block and flag it as the true if entry
+	entry_block = expression_results.final_block; 
+	entry_block->block_type = BLOCK_TYPE_IF_ENTRY;
+
+	//Unpack our result variable. This is what is used in every conditional
+	three_addr_var_t* input_variable = unpack_result_package(&expression_results, entry_block);
+
+	//The next sibling of the expression will always be the first case/default value
+	generic_ast_node_t* case_default_cursor = expression->next_sibling;
+
+
+
 
 	/**
 	 * Option 1: the case statement comes first, and then the default
