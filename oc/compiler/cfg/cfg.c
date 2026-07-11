@@ -9911,7 +9911,7 @@ static cfg_result_package_t convert_c_style_switch_to_if_statement(generic_ast_n
 	//The next sibling of the expression will always be the first case/default value
 	generic_ast_node_t* case_default_cursor = expression->next_sibling;
 
-	//All of the holders that we eventually will need
+	//We'll need holders for the default block and the previous end block
 	basic_block_t* default_block = NULL;
 	basic_block_t* previous_end_block = NULL;
 
@@ -9927,8 +9927,43 @@ static cfg_result_package_t convert_c_style_switch_to_if_statement(generic_ast_n
 			case AST_NODE_TYPE_C_STYLE_CASE_STMT:
 				case_default_results = visit_c_style_case_statement(case_default_cursor);
 
+				/**
+				 * If the previous end block does not end in a terminal statement, we will need to simulate
+				 * a fall-through type scenario where the prior block falls through to this one
+				 */
+				if(previous_end_block != NULL && does_block_end_in_terminal_statement(previous_end_block) == FALSE){
+					emit_jump(previous_end_block, case_default_results.starting_block);
+				}
+
+				//The previous end block now is this one's final block
+				previous_end_block = case_default_results.final_block;
+
 				//Extract this value for our conditional
 				int32_t case_value = case_default_results.starting_block->case_stmt_val;
+
+				//Create a new conditional block for us to jump to
+				basic_block_t* new_conditional_block = basic_block_alloc_and_estimate();
+
+				//Emit and add the comparison expression for our branch here
+				instruction_t* comparison_expression = emit_binary_operation_with_const_instruction(emit_temp_var(u8),
+																										input_variable,
+																										DOUBLE_EQUALS,
+																										emit_direct_integer_or_char_constant(case_value, i32));
+				comparison_expression->operands.oir.assignee->sets_cc = TRUE;
+				add_statement(current_conditional_block, comparison_expression);
+
+				//TODO BRANCH TYPE UPDATES
+				/**
+				 * Our branch will always be an inverse branch to maintain the actual code execution as in the hotpath. It has
+				 * been shown that users will usually put the most likely case statement first when writing switch/case, so
+				 * we assume that this will be the case and instead conditionally jump to the "else" in our case
+				 */
+				instruction_t* branch_instruction = emit_branch_statement(new_conditional_block, case_default_results.starting_block, comparison_expression->operands.oir.assignee, BRANCH_NE);
+				add_statement(current_conditional_block, branch_instruction);
+
+				//Do the successor bookkeeping as needed for this
+				add_successor(current_conditional_block, new_conditional_block);
+				add_successor(current_conditional_block, case_default_results.starting_block);
 
 				break;
 
@@ -10111,6 +10146,8 @@ static cfg_result_package_t convert_ollie_switch_to_if_statement(generic_ast_nod
 
 				//We'll need a new conditional block to jump to
 				basic_block_t* new_conditional_block = basic_block_alloc_and_estimate();
+
+				//TODO BRANCH TYPE UPDATES
 
 				/**
 				 * Our branch will always be an inverse branch to maintain the actual code execution as in the hotpath. It has
