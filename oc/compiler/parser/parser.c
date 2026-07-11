@@ -10036,7 +10036,7 @@ static inline u_int8_t determine_switch_eligibility(dynamic_integer_array_t* swi
 	 * is more than 20 between nodes, we consider this to be a "sparse" switch statement where
 	 * we are better of converting to an if-else-if
 	 */
-	double average_distance = 0.0;
+	int64_t average_distance = 0;
 
 	//Now run through every other value and sum up the distance
 	for(int32_t i = 1; i < switch_statement_values->current_index; i++){
