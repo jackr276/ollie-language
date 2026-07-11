@@ -10024,8 +10024,10 @@ static inline u_int8_t determine_switch_eligibility(dynamic_integer_array_t* swi
 	/**
 	 * 3 statements or less - a switch would actually lead to more
 	 * branching so we will convert this to an if-else
+	 *
+	 * 2 is here because remember, there is almost always a default clause
 	 */
-	if(switch_statement_values->current_index < 3){
+	if(switch_statement_values->current_index < 2){
 		return FALSE;
 	}
 
@@ -10053,7 +10055,6 @@ static inline u_int8_t determine_switch_eligibility(dynamic_integer_array_t* swi
 
 	//Greater than 30, we are too sparse for switching
 	if(average_distance >= MAX_AVERAGE_CASE_DIFFERENCE){
-		printf("TOO SPARSE\n\n");
 		return FALSE;
 	}
 
@@ -10147,7 +10148,7 @@ static inline u_int8_t is_switch_exhaustive_switch(generic_type_t* switching_on_
 	 * Determine if we meet the very strict criteria for type eligibility
 	 * before doing anything else
 	 */
-	if(is_type_exhaustive_switch_eligible(switching_on_type) == TRUE){
+	if(is_type_exhaustive_switch_eligible(switching_on_type) == FALSE){
 		return FALSE;
 	}
 
@@ -10156,29 +10157,23 @@ static inline u_int8_t is_switch_exhaustive_switch(generic_type_t* switching_on_
 	 */
 	int32_t min_case_value = switch_statement_values->internal_array[0];
 	int32_t max_case_value = switch_statement_values->internal_array[switch_statement_values->current_index - 1];
+	int32_t min_enum_value = switching_on_type->min_enum_value;
+	int32_t max_enum_value = switching_on_type->max_enum_value;
 
 	/**
 	 * Check 1: if the min/max case values do not match up with the enum's min and max values,
 	 * then there's no point in checking any more
 	 */
-	if(min_case_value != switching_on_type->min_enum_value || max_case_value != switching_on_type->max_enum_value){
+	if(min_case_value != min_enum_value || max_case_value != max_enum_value){
 		return FALSE;
 	}
 
-	/**
-	 * Check 2: we know that the min and max values are good, but is every other value in between
-	 * represented in our case statements? If they are not, then this also does not count as exhaustive.
-	 * We can determine this by 
-	 */
-	int32_t min_enum_value = switching_on_type->min_enum_value;
-	int32_t max_enum_value = switching_on_type->max_enum_value;
-
 	//The range of all possible enum values
-	int32_t enum_range = max_enum_value - min_enum_value + 1;
+	int32_t range = max_enum_value - min_enum_value + 1;
 
 	//Define a bytemap of all potential enum values and wipe it all out to 0
-	u_int8_t value_map[enum_range];
-	memset(value_map, 0, sizeof(u_int8_t) * enum_range);
+	u_int8_t value_map[range];
+	memset(value_map, 0, sizeof(u_int8_t) * range);
 
 	/**
 	 * Let's now go through and fill out the byte map that we've made
@@ -10201,7 +10196,7 @@ static inline u_int8_t is_switch_exhaustive_switch(generic_type_t* switching_on_
 	 * range simply doesn't exist. If we see that, we
 	 * fail out
 	 */
-	for(int32_t i = 0; i < enum_range; i++){
+	for(int32_t i = 0; i < range; i++){
 		if(value_map[i] == FALSE){
 			return FALSE;
 		}
