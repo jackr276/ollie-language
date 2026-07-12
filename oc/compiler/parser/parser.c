@@ -6302,6 +6302,34 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 
 
 /**
+ * Determine whether an in-statement's values are eligible to be considered as
+ * a switch statement internally, or if we will instead use an if-else statement
+ * to handle this
+ */
+static inline u_int8_t determine_in_statement_switch_eligibility(dynamic_array_t* in_members){
+
+
+	/**
+	 * If the user has done something silly like an in-statement with only one member, we will rewrite this for them
+	 */
+	if(in_statement_members == 1){
+		print_parse_message(MESSAGE_TYPE_WARNING, "Consider rewrite of in statment with 1 member into a regular comparison expression", parser_line_num);
+		num_warnings++;
+	}
+
+
+	/**
+	 * If we see *at least one* floating point number before we coerce, then this
+	 * whole thing is going to be forced to use the if chain
+	 */
+	if(IS_FLOATING_POINT(expression->inferred_type) == TRUE){
+		is_switch_eligible = FALSE;
+	}
+
+}
+
+
+/**
  * An ollie in expression is a syntactic convenience expression type that allows us to check
  * if the result of a given logical or expression exists within a range of compatible values
  *
@@ -6316,10 +6344,6 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, side_type_t side){
 	//Our lookahead token
 	lexitem_t lookahead;
-	//Keep track of how many members we have
-	int32_t in_statement_members = 0;
-	//Is this in expression eligible to become a switch statement? Assume true by default
-	u_int8_t is_switch_eligible = TRUE;
 	//Allocate space to hold all of the current constant values
 	dynamic_array_t in_member_array = dynamic_array_alloc();
 
@@ -6408,14 +6432,6 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		}
 
 		/**
-		 * If we see *at least one* floating point number before we coerce, then this
-		 * whole thing is going to be forced to use the if chain
-		 */
-		if(IS_FLOATING_POINT(expression->inferred_type) == TRUE){
-			is_switch_eligible = FALSE;
-		}
-
-		/**
 		 * Let's now determine if the types in here are assignable or not. If they're not then we're out. This
 		 * rule also handles the needed constant coercion for us
 		 *
@@ -6464,9 +6480,6 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		//Also add this in as a member to our list of all current members
 		dynamic_array_add(&in_member_array, expression);
 
-		//Bump the member count up by one more
-		in_statement_members++;
-
 		//Now we can either see a comma or a closing parenthesis
 		lookahead = get_next_token(token_stream, &parser_line_num);
 
@@ -6490,14 +6503,6 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 	 */
 	if(pop_token(&grouping_stack).tok != L_PAREN){
 		return print_and_return_error("Mismatched parenthesis detected in in statement list", parser_line_num);
-	}
-
-	/**
-	 * If the user has done something silly like an in-statement with only one member, we will rewrite this for them
-	 */
-	if(in_statement_members == 1){
-		print_parse_message(MESSAGE_TYPE_WARNING, "Consider rewrite of in statment with 1 member into a regular comparison expression", parser_line_num);
-		num_warnings++;
 	}
 
 	/**
@@ -6531,17 +6536,6 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		root_node->constant_type = BYTE_CONST;
 		root_node->constant_value.signed_byte_value = found;
 		root_node->inferred_type = immut_i8;
-	}
-
-	/**
-	 * If we have only one member, then by default this is not
-	 * switch eligible and we will force it into being a conditional
-	 * move expression
-	 *
-	 * TODO UPDATE CRITERIA
-	 */
-	if(in_statement_members == 1){
-		is_switch_eligible = FALSE;
 	}
 
 	//Store whether or not we are switch eligible
