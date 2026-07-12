@@ -34,6 +34,12 @@
  */
 #define MIN_CASE_MEMBERS 2
 
+/**
+ * The minimum number of values that an in statement must have to be considered
+ * internally as a switch statement
+ */
+#define MIN_IN_MEMBERS 3
+
 //All error sizes are 2000
 #define ERROR_SIZE 2000
 

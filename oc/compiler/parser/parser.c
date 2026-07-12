@@ -6313,7 +6313,7 @@ static inline u_int8_t determine_in_statement_switch_eligibility(generic_ast_nod
 	/**
 	 * If the user has done something silly like an in-statement with only one member, we will rewrite this for them
 	 */
-	if(sorted_in_member_values->current_index < MIN_CASE_MEMBERS){
+	if(sorted_in_member_values->current_index < MIN_IN_MEMBERS){
 		//If it's just 1 member we'll warn the user
 		if(sorted_in_member_values->current_index == 1){
 			print_parse_message(MESSAGE_TYPE_WARNING, "Consider rewrite of in statment with 1 member into a regular comparison expression", parser_line_num);
