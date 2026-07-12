@@ -6305,8 +6305,14 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
  * Determine whether an in-statement's values are eligible to be considered as
  * a switch statement internally, or if we will instead use an if-else statement
  * to handle this
+ *
+ * This rule will also leverage the traversal of the in members that it is already
+ * doing to determine a min and max value
  */
-static inline u_int8_t determine_in_statement_switch_eligibility(dynamic_array_t* in_members){
+static inline u_int8_t determine_in_statement_switch_eligibility(generic_ast_node_t* in_statement_node, dynamic_array_t* in_members){
+	//We'll need to track these for min/max value tracking
+	int32_t max_value = INT_MIN;
+	int32_t min_value = INT_MAX;
 
 
 	/**
@@ -6324,6 +6330,28 @@ static inline u_int8_t determine_in_statement_switch_eligibility(dynamic_array_t
 	 */
 	if(IS_FLOATING_POINT(expression->inferred_type) == TRUE){
 		is_switch_eligible = FALSE;
+	}
+
+	/**
+	 * Once we know that they're equal, if this is switch eligible, we will need to maintain
+	 * a list of switch values here for tracking
+	 */
+	if(is_switch_eligible == TRUE){
+		int32_t current_value = expression->constant_value.signed_int_value;
+
+		if(current_value > max_value){
+			max_value = current_value;
+		}
+
+		if(current_value < min_value){
+			min_value = current_value;
+		}
+	}
+
+	//If this is switch eligible, then store our bounds here
+	if(is_switch_eligible == TRUE){
+		root_node->optional_storage.switch_bounds.lower_bound = min_value;
+		root_node->optional_storage.switch_bounds.upper_bound = max_value;
 	}
 
 }
@@ -6346,10 +6374,6 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 	lexitem_t lookahead;
 	//Allocate space to hold all of the current constant values
 	dynamic_array_t in_member_array = dynamic_array_alloc();
-
-	//We'll need to track these for min/max value tracking
-	int32_t max_value = INT_MIN;
-	int32_t min_value = INT_MAX;
 
 	//The first thing that we need to see is some kind of valid ternary expression
 	generic_ast_node_t* starting_expression = ternary_expression(token_stream, side);
@@ -6458,22 +6482,6 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 			}
 		}
 
-		/**
-		 * Once we know that they're equal, if this is switch eligible, we will need to maintain
-		 * a list of switch values here for tracking
-		 */
-		if(is_switch_eligible == TRUE){
-			int32_t current_value = expression->constant_value.signed_int_value;
-
-			if(current_value > max_value){
-				max_value = current_value;
-			}
-
-			if(current_value < min_value){
-				min_value = current_value;
-			}
-		}
-
 		//Now that we know this is valid we can add it as a child to the in statement
 		add_child_node(root_node, expression);
 
@@ -6538,14 +6546,8 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		root_node->inferred_type = immut_i8;
 	}
 
-	//Store whether or not we are switch eligible
-	root_node->is_switch_eligible = is_switch_eligible;
-
-	//If this is switch eligible, then store our bounds here
-	if(is_switch_eligible == TRUE){
-		root_node->optional_storage.switch_bounds.lower_bound = min_value;
-		root_node->optional_storage.switch_bounds.upper_bound = max_value;
-	}
+	//Let the helper determine our eligiblity for a switch and deal with the min/max determinations
+	determine_in_statement_switch_eligibility(root_node, &in_member_array);
 
 	//Destroy this now that we're done
 	dynamic_array_dealloc(&in_member_array);
