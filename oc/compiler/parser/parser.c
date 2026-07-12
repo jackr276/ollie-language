@@ -6462,10 +6462,7 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		 *
 		 * This rule prints out any/all errors so we don't need to worry about that
 		 */
-		u_int8_t compatible = is_constant_valid_for_in_statement_type(comparing_to_type, expression);
-		
-		//Fail out if we don't have it
-		if(compatible == FALSE){
+		if(is_constant_valid_for_in_statement_type(comparing_to_type, expression) == FALSE){
 			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
 		}
 
@@ -6569,7 +6566,7 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 	 * it as not eligible
 	 */
 	if(are_all_members_switch_eligible == TRUE){
-		determine_in_statement_switch_eligibility(root_node, &sorted_in_member_array);
+		root_node->is_switch_eligible = determine_in_statement_switch_eligibility(root_node, &sorted_in_member_array);
 	} else {
 		root_node->is_switch_eligible = FALSE;
 	}
