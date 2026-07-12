@@ -28,6 +28,12 @@
  */
 #define MAX_AVERAGE_CASE_DIFFERENCE 30
 
+/**
+ * The minimum number of case statements that we must have to be considered
+ * for a switch statement at all
+ */
+#define MIN_CASE_MEMBERS 2
+
 //All error sizes are 2000
 #define ERROR_SIZE 2000
 
