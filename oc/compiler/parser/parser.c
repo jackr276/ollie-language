@@ -6457,6 +6457,17 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		}
 
 		/**
+		 * If we see *at least one* floating point number before we coerce, then this
+		 * whole thing is going to be forced to use the if chain
+		 *
+		 * NOTE: we *must* do this before the is_constant_valid check because that
+		 * check will perform coercion. We need the raw type for this to be accurate
+		 */
+		if(IS_FLOATING_POINT(expression->inferred_type) == TRUE){
+			are_all_members_switch_eligible = FALSE;
+		}
+
+		/**
 		 * Let's now determine if the types in here are assignable or not. If they're not then we're out. This
 		 * rule also handles the needed constant coercion for us
 		 *
@@ -6478,14 +6489,6 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 			if(constant_nodes_equal(member, expression) == TRUE){
 				return print_and_return_error("Duplicate member values detected in in statement", parser_line_num);
 			}
-		}
-
-		/**
-		 * If we see *at least one* floating point number before we coerce, then this
-		 * whole thing is going to be forced to use the if chain
-		 */
-		if(IS_FLOATING_POINT(expression->inferred_type) == TRUE){
-			are_all_members_switch_eligible = FALSE;
 		}
 
 		//Now that we know this is valid we can add it as a child to the in statement
