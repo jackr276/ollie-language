@@ -686,7 +686,7 @@ static inline void print_invalid_ounit_configuration_summary(){
 	if(invalid_ounit_configuration_files.current_index != 0){
 		printf("\n===============================================\n");
 		printf("INVALID OUNIT CONFIGURATION DETECTED IN THE FOLLOWING FILES:\n");
-		for(u_int32_t i = 0; i < invalid_ounit_configuration_files.current_index; i++){
+		for(int32_t i = 0; i < invalid_ounit_configuration_files.current_index; i++){
 			char* file_name = dynamic_array_get_at(&invalid_ounit_configuration_files, i);
 			printf("%d) %s\n", i + 1, file_name);
 		}
@@ -709,7 +709,7 @@ static inline void print_exit_status_validation_summary(){
 		printf("\nFILES FAILING EXIT STATUS VALIDATION:\n");
 
 		//Print out all of them
-		for(u_int32_t i = 0; i < failed_exit_status_validation_files.current_index; i++){
+		for(int32_t i = 0; i < failed_exit_status_validation_files.current_index; i++){
 			//Get the error file out
 			char* error_file_name = dynamic_array_get_at(&failed_exit_status_validation_files, i);
 			printf("%d) %s\n", i + 1, error_file_name);
@@ -721,7 +721,7 @@ static inline void print_exit_status_validation_summary(){
 		printf("\nFAILING TO COMPILE FOR EXIT STATUS VALIDATION:\n");
 
 		//Print out all of them
-		for(u_int32_t i = 0; i < failed_to_compile_exit_status_validation_files.current_index; i++){
+		for(int32_t i = 0; i < failed_to_compile_exit_status_validation_files.current_index; i++){
 			//Get the error file out
 			char* failed_to_compile_file = dynamic_array_get_at(&failed_to_compile_exit_status_validation_files, i);
 			printf("%d) %s\n", i + 1, failed_to_compile_file);
@@ -744,7 +744,7 @@ static inline void print_fail_to_compile_validation_summary(){
 		printf("\nFILES COMPILING WHEN FAILURE WAS EXPECTED:\n");
 
 		//Print out all of them
-		for(u_int32_t i = 0; i < compiled_when_failure_expected_files.current_index; i++){
+		for(int32_t i = 0; i < compiled_when_failure_expected_files.current_index; i++){
 			//Get the error file out
 			char* failed_to_compile_file = dynamic_array_get_at(&compiled_when_failure_expected_files, i);
 			printf("%d) %s\n", i + 1, failed_to_compile_file);

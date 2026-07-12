@@ -551,7 +551,7 @@ static inline void delete_block(basic_block_t* block){
  */
 static inline void reset_visited_status_for_function(dynamic_array_t* function_blocks){
 	//Run through all of the blocks
-	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		//Extract the current block
 		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
 
@@ -609,7 +609,7 @@ static inline void delete_all_unreachable_blocks(dynamic_array_t* function_block
 
 	//First bulid the array of things that need to go. A block is considered
 	//unreachable if it has no predecessors and it is *not* an entry block
-	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		basic_block_t* current_block = dynamic_array_get_at(function_blocks, i);
 
 		//Doesn't count
@@ -629,7 +629,7 @@ static inline void delete_all_unreachable_blocks(dynamic_array_t* function_block
 		basic_block_t* target = dynamic_array_delete_from_back(&to_be_deleted);
 
 		//Every successor needs to be uncoupled
-		for(u_int32_t i = 0; i < target->successors.current_index; i++){
+		for(int32_t i = 0; i < target->successors.current_index; i++){
 			//Extract it
 			basic_block_t* successor = dynamic_array_get_at(&(target->successors), i);
 
@@ -1009,7 +1009,7 @@ void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_s
 		printf("(");
 
 		//Run through all of the live variables and print them out
-		for(u_int16_t i = 0; i < block->used_before_definition.current_index; i++){
+		for(int32_t i = 0; i < block->used_before_definition.current_index; i++){
 			//Print it out
 			print_variable(stdout, block->used_before_definition.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
 
@@ -1033,7 +1033,7 @@ void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_s
 
 	//If we have predecessors
 	if(block->predecessors.internal_array != NULL){
-		for(u_int16_t i = 0; i < block->predecessors.current_index; i++){
+		for(int32_t i = 0; i < block->predecessors.current_index; i++){
 			basic_block_t* predecessor = block->predecessors.internal_array[i];
 
 			//Print the block's ID or the function name
@@ -1054,7 +1054,7 @@ void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_s
 	printf("Successors: {");
 	//If we have successor
 	if(block->successors.internal_array != NULL){
-		for(u_int16_t i = 0; i < block->successors.current_index; i++){
+		for(int32_t i = 0; i < block->successors.current_index; i++){
 			basic_block_t* successor = block->successors.internal_array[i];
 
 			//Print the block's ID or the function name
@@ -1076,7 +1076,7 @@ void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_s
 	if(block->assigned_variables.current_index != 0){
 		printf("Assigned: (");
 
-		for(u_int16_t i = 0; i < block->assigned_variables.current_index; i++){
+		for(int32_t i = 0; i < block->assigned_variables.current_index; i++){
 			print_variable(stdout, block->assigned_variables.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
 
 			//If it isn't the very last one, we need a comma
@@ -1091,7 +1091,7 @@ void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_s
 	if(block->live_in.internal_array != NULL){
 		printf("LIVE_IN: (");
 
-		for(u_int16_t i = 0; i < block->live_in.current_index; i++){
+		for(int32_t i = 0; i < block->live_in.current_index; i++){
 			print_variable(stdout, block->live_in.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
 
 			//If it isn't the very last one, print out a comma
@@ -1108,7 +1108,7 @@ void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_s
 	if(block->live_out.internal_array != NULL){
 		printf("LIVE_OUT: (");
 
-		for(u_int16_t i = 0; i < block->live_out.current_index; i++){
+		for(int32_t i = 0; i < block->live_out.current_index; i++){
 			print_variable(stdout, block->live_out.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
 
 			//If it isn't the very last one, print out a comma
@@ -1127,7 +1127,7 @@ void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_s
 		printf("Dominance frontier: {");
 
 		//Run through and print them all out
-		for(u_int16_t i = 0; i < block->dominance_frontier.current_index; i++){
+		for(int32_t i = 0; i < block->dominance_frontier.current_index; i++){
 			basic_block_t* printing_block = block->dominance_frontier.internal_array[i];
 
 			//Print the block's ID or the function name
@@ -1152,7 +1152,7 @@ void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_s
 		printf("Reverse Dominance frontier: {");
 
 		//Run through and print them all out
-		for(u_int16_t i = 0; i < block->reverse_dominance_frontier.current_index; i++){
+		for(int32_t i = 0; i < block->reverse_dominance_frontier.current_index; i++){
 			basic_block_t* printing_block = block->reverse_dominance_frontier.internal_array[i];
 
 			//Print the block's ID or the function name
@@ -1403,7 +1403,7 @@ static inline u_int8_t does_block_assign_variable(basic_block_t* block, symtab_v
 	/**
 	 * If the linked variable to this var is ours, we do assign
 	 */
-	for(u_int32_t i = 0; i < block->assigned_variables.current_index; i++){
+	for(int32_t i = 0; i < block->assigned_variables.current_index; i++){
 		three_addr_var_t* var = dynamic_array_get_at(&(block->assigned_variables), i);
 		
 		//Now we'll compare the linked variable to the record
@@ -1431,7 +1431,7 @@ static int16_t variable_dynamic_array_contains(dynamic_array_t* variable_array, 
 	three_addr_var_t* current_var;
 
 	//Run through every record in here
-	for(u_int16_t i = 0; i < variable_array->current_index; i++){
+	for(int32_t i = 0; i < variable_array->current_index; i++){
 		//Grab a reference
 		current_var = variable_array->internal_array[i];
 
@@ -1486,7 +1486,7 @@ static void add_variable_to_use_set(three_addr_var_t* variable, basic_block_t* b
 	dynamic_array_t* use_set = &(block->used_before_definition);
 
 	//Otherwise, let's make sure it's not also in DEF
-	for(u_int32_t i = 0; i < def_set->current_index; i++){
+	for(int32_t i = 0; i < def_set->current_index; i++){
 		//Grab it out
 		three_addr_var_t* defined = dynamic_array_get_at(def_set, i);
 
@@ -1498,7 +1498,7 @@ static void add_variable_to_use_set(three_addr_var_t* variable, basic_block_t* b
 
 	//Otherwise, we need to add this into the USE set *if* it's unique. We don't want to add
 	//things more than once
-	for(u_int32_t i = 0; i < use_set->current_index; i++){
+	for(int32_t i = 0; i < use_set->current_index; i++){
 		//Grab it out
 		three_addr_var_t* used = dynamic_array_get_at(use_set, i);
 
@@ -1548,7 +1548,7 @@ static inline void add_variable_to_def_set(three_addr_var_t* variable, basic_blo
 	dynamic_array_t* def_set = &(block->assigned_variables);
 
 	//Otherwise, let's make sure it's not also in DEF
-	for(u_int32_t i = 0; i < def_set->current_index; i++){
+	for(int32_t i = 0; i < def_set->current_index; i++){
 		//Grab it out
 		three_addr_var_t* defined = dynamic_array_get_at(def_set, i);
 
@@ -1591,7 +1591,7 @@ static inline void add_variable_to_def_set(three_addr_var_t* variable, basic_blo
  */
 static void compute_use_and_def_sets_for_function(dynamic_array_t* function_blocks){
 	//For every single block in the set of all function blocks
-	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		//Grab the block out
 		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
 
@@ -1608,7 +1608,7 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 				//Function calls have parameters - so special case
 				case THREE_ADDR_CODE_FUNC_CALL:
 					//Run through the params and add them
-					for(u_int32_t _ = 0; _ < cursor->parameters.current_index; _++){
+					for(int32_t _ = 0; _ < cursor->parameters.current_index; _++){
 						//Grab the param out
 						three_addr_var_t* parameter = dynamic_array_get_at(&(cursor->parameters), _);
 
@@ -1628,7 +1628,7 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 					add_variable_to_use_set(cursor->operands.oir.operand1, block);
 
 					//Run through the params and add them
-					for(u_int32_t _ = 0; _ < cursor->parameters.current_index; _++){
+					for(int32_t _ = 0; _ < cursor->parameters.current_index; _++){
 						//Grab the param out
 						three_addr_var_t* parameter = dynamic_array_get_at(&(cursor->parameters), _);
 
@@ -1758,7 +1758,7 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
 		difference_found = FALSE;
 
 		//Now we can go through the entire RPO set
-		for(u_int32_t _ = 0; _ < reverse_post_order_reverse_cfg.current_index; _++){
+		for(int32_t _ = 0; _ < reverse_post_order_reverse_cfg.current_index; _++){
 			//The current block is whichever we grab
 			current = dynamic_array_get_at(&reverse_post_order_reverse_cfg, _);
 
@@ -1770,14 +1770,14 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
 			current->live_out = dynamic_array_alloc();
 			
 			//Run through all of the successors
-			for(u_int32_t k = 0; k < current->successors.current_index; k++){
+			for(int32_t k = 0; k < current->successors.current_index; k++){
 				//Grab the successor out
 				basic_block_t* successor = dynamic_array_get_at(&(current->successors), k);
 
 				//If it has a live in set
 				if(successor->live_in.internal_array != NULL){
 					//Add everything in his live_in set into the live_out set
-					for(u_int32_t l = 0; l < successor->live_in.current_index; l++){
+					for(int32_t l = 0; l < successor->live_in.current_index; l++){
 						//Let's check to make sure we haven't already added this
 						three_addr_var_t* successor_live_in_var = dynamic_array_get_at(&(successor->live_in), l);
 
@@ -1799,7 +1799,7 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
 			current->live_in = clone_dynamic_array(&(current->used_before_definition));
 
 			//Now we need to add every variable that is in LIVE_OUT but NOT in assigned
-			for(u_int16_t j = 0; j < current->live_out.current_index; j++){
+			for(int32_t j = 0; j < current->live_out.current_index; j++){
 				//Grab a reference for our use
 				three_addr_var_t* live_out_var = dynamic_array_get_at(&(current->live_out), j);
 
@@ -1846,7 +1846,7 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
  */
 static inline void reset_status_for_phi_function_insertion(dynamic_array_t* function_blocks){
 	//Run through all of the blocks
-	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		//Extract the current block
 		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
 
@@ -1865,7 +1865,7 @@ static inline void reset_status_for_phi_function_insertion(dynamic_array_t* func
  * variable itself. This does a simple linear scan to search
  */
 static inline u_int8_t does_variable_dynamic_array_contain_symtab_variable(dynamic_array_t* variable_array, symtab_variable_record_t* variable){
-	for(u_int32_t i = 0; i < variable_array->current_index; i++){
+	for(int32_t i = 0; i < variable_array->current_index; i++){
 		//Avoid a function call by grabbing directly
 		three_addr_var_t* candidate = variable_array->internal_array[i];
 
@@ -1937,11 +1937,11 @@ static void insert_phi_functions(variable_symtab_t* var_symtab){
 	 * Step 1: For every single sheaf(lexical level/scope) that we have in the symbol table,
 	 * and within every sheaf run through every single defined variable
 	 */
-	for	(u_int32_t i = 0; i < var_symtab->sheafs.current_index; i++){
+	for(int32_t i = 0; i < var_symtab->sheafs.current_index; i++){
 		//Grab the current sheaf
 		symtab_variable_sheaf_t* sheaf_cursor = dynamic_array_get_at(&(var_symtab->sheafs), i);
 
-		for(u_int32_t j = 0; j < VARIABLE_KEYSPACE; j++){
+		for(int32_t j = 0; j < VARIABLE_KEYSPACE; j++){
 			symtab_variable_record_t* record = sheaf_cursor->records[j];
 
 			/**
@@ -1979,7 +1979,7 @@ static void insert_phi_functions(variable_symtab_t* var_symtab){
 				 * Queue up every block that we have on record as assigning this
 				 * given variable
 				 */
-				for(u_int32_t k = 0; k < function_blocks->current_index; k++){
+				for(int32_t k = 0; k < function_blocks->current_index; k++){
 					basic_block_t* block = dynamic_array_get_at(function_blocks, k);
 
 					/**
@@ -2005,7 +2005,7 @@ static void insert_phi_functions(variable_symtab_t* var_symtab){
 					 * live_out at that block, we'll need to insert a phi function
 					 * join node
 					 */
-					for(u_int32_t l = 0; l < node->dominance_frontier.current_index; l++){
+					for(int32_t l = 0; l < node->dominance_frontier.current_index; l++){
 						basic_block_t* df_node = dynamic_array_get_at(&(node->dominance_frontier), l);
 
 						//If this already has a phi function for this run we skip it
@@ -2179,7 +2179,7 @@ static void rename_block(basic_block_t* entry){
 		 * We store function parameters as symtab variables so we'll need to perform a direct
 		 * rename here
 		 */
-		for(u_int32_t i = 0; i < function_defined_in->function_parameters.current_index; i++){
+		for(int32_t i = 0; i < function_defined_in->function_parameters.current_index; i++){
 			lhs_new_name_direct(dynamic_array_get_at(&(function_defined_in->function_parameters), i));
 		}
 	}
@@ -2209,7 +2209,7 @@ static void rename_block(basic_block_t* entry){
 				//Function calls contain parameters that count as RHS vars
 				dynamic_array_t* func_params = &(cursor->parameters);
 
-				for(u_int32_t k = 0; k < func_params->current_index; k++){
+				for(int32_t k = 0; k < func_params->current_index; k++){
 					three_addr_var_t* current_param = dynamic_array_get_at(func_params, k);
 
 					if(is_variable_ssa_eligible(current_param) == TRUE){
@@ -2262,7 +2262,7 @@ static void rename_block(basic_block_t* entry){
 	 * For each successor of i, we'll need to update the phi functions with the new names
 	 * that we've given for variables in this block
 	 */
-	for(u_int32_t i = 0; i < entry->successors.current_index; i++){
+	for(int32_t i = 0; i < entry->successors.current_index; i++){
 		basic_block_t* successor = dynamic_array_get_at(&(entry->successors), i);
 		instruction_t* succ_cursor = successor->leader_statement;
 
@@ -2291,7 +2291,7 @@ static void rename_block(basic_block_t* entry){
 	 * Now that we're done with the renaming, we'll go through each dominator child in this node
 	 * and perform the same operation
 	 */
-	for(u_int32_t i = 0; i < entry->dominator_children.current_index; i++){
+	for(int32_t i = 0; i < entry->dominator_children.current_index; i++){
 		rename_block(dynamic_array_get_at(&(entry->dominator_children), i));
 	}
 
@@ -2303,7 +2303,7 @@ static void rename_block(basic_block_t* entry){
 		symtab_function_record_t* function_defined_in = entry->function_defined_in;
 		
 		//We need to pop these all only once so that we have parity with what we did up top
-		for(u_int32_t i = 0; i < function_defined_in->function_parameters.current_index; i++){
+		for(int32_t i = 0; i < function_defined_in->function_parameters.current_index; i++){
 			//Get the function parameter out
 			symtab_variable_record_t* function_param = dynamic_array_get_at(&(function_defined_in->function_parameters), i);
 
@@ -2342,7 +2342,7 @@ static inline void rename_all_variables(cfg_t* cfg){
 	 * for each of our functions. The rename block function is 
 	 * recursive, so that should in theory take care of everything for us
 	 */
-	for(u_int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		rename_block(dynamic_array_get_at(&(cfg->function_entry_blocks), i));
 	}
 }
@@ -5987,7 +5987,7 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
  * the two lowering rules
  */
 static cfg_result_package_t emit_in_expression(basic_block_t* starting_block, generic_ast_node_t* in_expression){
-	if(in_expression->is_in_statement_switch_eligible == TRUE){
+	if(in_expression->is_switch_eligible == TRUE){
 		return lower_in_expression_to_oir_switch(starting_block, in_expression);
 	} else {
 		return lower_in_expression_to_conditional_move_chain(starting_block, in_expression);
@@ -6796,7 +6796,7 @@ static inline u_int32_t get_number_of_gp_params(function_type_t* signature){
 	u_int32_t number_of_gp_params = 0;
 
 	//Run through all of them
-	for(u_int32_t i = 0; i < signature->function_parameters.current_index; i++){
+	for(int32_t i = 0; i < signature->function_parameters.current_index; i++){
 		//Extract it
 		generic_type_t* parameter_type = dynamic_array_get_at(&(signature->function_parameters), i);
 
@@ -6819,7 +6819,7 @@ static inline u_int32_t get_number_of_sse_params(function_type_t* signature){
 	u_int32_t number_of_sse_params = 0;
 
 	//Run through all of them
-	for(u_int32_t i = 0; i < signature->function_parameters.current_index; i++){
+	for(int32_t i = 0; i < signature->function_parameters.current_index; i++){
 		//Extract it
 		generic_type_t* parameter_type = dynamic_array_get_at(&(signature->function_parameters), i);
 
@@ -8030,7 +8030,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 * of the source memory region because we've emitted new stack allocation statements
 		 * for it
 		 */
-		for(u_int32_t i = 0; i < memory_addresses_to_adjust.current_index; i++){
+		for(int32_t i = 0; i < memory_addresses_to_adjust.current_index; i++){
 			//Get the variable out
 			three_addr_var_t* memory_address = dynamic_array_get_at(&memory_addresses_to_adjust, i);
 
@@ -8123,7 +8123,7 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 
 	//Now we'll print out each and every function inside of the function_entry_blocks
 	//array. Each function will be printed using the BFS strategy
-	for(u_int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Clear the traversal queue
 		heap_queue_clear(&traversal_queue);
 
@@ -8151,7 +8151,7 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 			block->visited = TRUE;
 
 			//And finally we'll add all of these onto the queue
-			for(u_int16_t j = 0; j < block->successors.current_index; j++){
+			for(int32_t j = 0; j < block->successors.current_index; j++){
 				//Add the successor into the queue, if it has not yet been visited
 				basic_block_t* successor = block->successors.internal_array[j];
 
@@ -8247,7 +8247,7 @@ void basic_block_dealloc(basic_block_t* block){
  */
 void dealloc_cfg(cfg_t* cfg){
 	//Run through all of the blocks here and delete them
-	for(u_int16_t i = 0; i < cfg->created_blocks.current_index; i++){
+	for(int32_t i = 0; i < cfg->created_blocks.current_index; i++){
 		//Use this to deallocate
 		basic_block_dealloc(dynamic_array_get_at(&(cfg->created_blocks), i));
 	}
@@ -8263,7 +8263,7 @@ void dealloc_cfg(cfg_t* cfg){
 
 	if(cfg->local_f32_constants.internal_array != NULL){
 		//Run through all of the local constants and deallcoate them
-		for(u_int32_t i = 0; i < cfg->local_f32_constants.current_index; i++){
+		for(int32_t i = 0; i < cfg->local_f32_constants.current_index; i++){
 			local_constant_t* target = dynamic_array_get_at((&cfg->local_f32_constants), i);
 			local_constant_dealloc(target);
 		}
@@ -8273,7 +8273,7 @@ void dealloc_cfg(cfg_t* cfg){
 	}
 
 	if(cfg->local_f64_constants.internal_array != NULL){
-		for(u_int32_t i = 0; i < cfg->local_f64_constants.current_index; i++){
+		for(int32_t i = 0; i < cfg->local_f64_constants.current_index; i++){
 			local_constant_t* target = dynamic_array_get_at((&cfg->local_f64_constants), i);
 			local_constant_dealloc(target);
 		}
@@ -8283,7 +8283,7 @@ void dealloc_cfg(cfg_t* cfg){
 	}
 
 	if(cfg->local_string_constants.internal_array != NULL){
-		for(u_int32_t i = 0; i < cfg->local_string_constants.current_index; i++){
+		for(int32_t i = 0; i < cfg->local_string_constants.current_index; i++){
 			local_constant_t* target = dynamic_array_get_at((&cfg->local_string_constants), i);
 			local_constant_dealloc(target);
 		}
@@ -8293,7 +8293,7 @@ void dealloc_cfg(cfg_t* cfg){
 	}
 
 	if(cfg->local_xmm128_constants.internal_array != NULL){
-		for(u_int32_t i = 0; i < cfg->local_xmm128_constants.current_index; i++){
+		for(int32_t i = 0; i < cfg->local_xmm128_constants.current_index; i++){
 			local_constant_t* target = dynamic_array_get_at((&cfg->local_xmm128_constants), i);
 			local_constant_dealloc(target);
 		}
@@ -8448,13 +8448,13 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 
 	//If we're gonna merge two blocks, then they'll share all the same successors and predecessors
 	//Let's merge predecessors first if we have any
-	for(u_int16_t i = 0; i < b->predecessors.current_index; i++){
+	for(int32_t i = 0; i < b->predecessors.current_index; i++){
 		//Add b's predecessor as one to a
 		add_predecessor_only(a, b->predecessors.internal_array[i]);
 	}
 
 	//Now merge successors if we have any
-	for(u_int16_t i = 0; i < b->successors.current_index; i++){
+	for(int32_t i = 0; i < b->successors.current_index; i++){
 		//Add b's successors to be a's successors
 		add_successor_only(a, b->successors.internal_array[i]);
 	}
@@ -8462,14 +8462,14 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	//FOR EACH Successor of B, it will have a reference to B as a predecessor.
 	//This is now wrong though. So, for each successor of B, it will need
 	//to have A as predecessor
-	for(u_int16_t i = 0; i < b->successors.current_index; i++){
+	for(int32_t i = 0; i < b->successors.current_index; i++){
 		//Grab the block first
 		basic_block_t* successor_block = b->successors.internal_array[i];
 
 		//If the successor block has predecessors
 		if(successor_block->predecessors.internal_array != NULL){
 			//Now for each of the predecessors that equals b, it needs to now point to A
-			for(u_int8_t i = 0; i < successor_block->predecessors.current_index; i++){
+			for(int32_t i = 0; i < successor_block->predecessors.current_index; i++){
 				//If it's pointing to b, it needs to be updated
 				if(successor_block->predecessors.internal_array[i] == b){
 					//Update it to now be correct
@@ -9199,7 +9199,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 					 * control path. In this instance, we need to set the result package's final block to be the
 					 * exit block
 					 */
-					if(overall_exit_block->predecessors.current_index == 0){
+					if(dynamic_array_is_empty(&(overall_exit_block->predecessors)) == TRUE){
 						if_results_package.final_block = function_exit_block;
 					} else {
 						if_results_package.final_block = overall_exit_block;
@@ -9304,10 +9304,12 @@ static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node){
 	//This is nesting inside of a case statement
 	push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
 
-	//The case statement should have some kind of constant value here, whether
-	//it's an enum value or regular const. All validation should have been
-	//done by the parser, so we're guaranteed to see something
-	//correct here
+	/**
+	 * The case statement should have some kind of constant value here, whether
+	 * it's an enum value or regular const. All validation should have been
+	 * done by the parser, so we're guaranteed to see something
+	 * correct here
+	 */
 	
 	generic_ast_node_t* case_stmt_cursor = root_node;
 
@@ -9434,234 +9436,19 @@ static cfg_result_package_t visit_c_style_default_statement(generic_ast_node_t* 
 
 
 /**
- * Simple helper that will take an expression and a constant and construct an ast subtree that can
- * subsequently be parsed by the expression converter. This is done because it's easier to do this
- * than deal with the expression converter directly
- *
- * NOTE: this rule is designed specifically for switch statements. Because of this, we're just going
- * to force the type of the constant that we emit to be the same as the expression itself
+ * A non-exhaustive c-style switch requires default statement logic, which includes filling in the jump
+ * table and adding jump if above or below logic for the minimum and maximum values
  */
-static inline generic_ast_node_t* construct_binary_expression_with_const_ast_subtree(generic_ast_node_t* expression, int32_t constant, ollie_token_t binary_operator){
-	//We always have a double equals node here
-	generic_ast_node_t* equals_node = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, SIDE_TYPE_RIGHT);
-	//Copy the inferred type up
-	equals_node->inferred_type = expression->inferred_type;
-	equals_node->binary_operator = binary_operator;
-
-	//First child is always the expression
-	add_child_node(equals_node, expression);
-
-	/**
-	 * IMPORTANT - break any/all associations here with prior next siblings
-	 */
-	expression->next_sibling = NULL;
-
-	//Now we'll need a constant node
-	generic_ast_node_t* constant_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, SIDE_TYPE_RIGHT);
-	constant_node->constant_value.signed_int_value = constant;
-	constant_node->constant_type = INT_CONST;
-
-	//Give it the actual type and coerce it
-	constant_node->inferred_type = expression->inferred_type;
-	coerce_constant(constant_node);
-
-	add_child_node(equals_node, constant_node);
-	return equals_node;
-}
-
-
-/**
- * Take a c-style switch-case statement with only one case member and convert it into an if-else statement. This
- * has some different logic when compared to the ollie style switch statement because we can have breaks and we
- * are able to fall through these case values
- *
- * Take our most complex example:
- *
- * switch(x){
- * 		default:
- * 			//Some stuff
- *			//fall through
- * 		case 5:
- * 			x--;
- * 			break;
- * }
- *
- * This should become:
- *
- * .L4(conditional)
- * 	x == 5
- * 	branch_ne .L5 else .L6
- *
- * .L5(default):
- * 	//Default stuff
- *	jmp .L6 //Simulate the fall through behavior
- *
- * .L6(case):
- * 	x--;
- * 	jmp .L7
- *
- * .L7(Overall end):
- * 	//Phi function and other stuff
- */
-static inline cfg_result_package_t c_style_switch_with_one_member_to_if_conversion(generic_ast_node_t* root_node){
-	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
-	cfg_result_package_t case_results;
-	cfg_result_package_t default_results;
-	int64_t case_statement_value = 0;
-
-	//We know we need entry/exit blocks, if and else come from the case/default themselves
-	basic_block_t* entry_block = basic_block_alloc_and_estimate();
-	basic_block_t* exit_block = basic_block_alloc_and_estimate();
-	basic_block_t* if_block = NULL;
-	basic_block_t* else_block = NULL;
-
-	result_package.starting_block = entry_block;
-	result_package.final_block = exit_block;
-
-	//Assign types for later optimization
-	entry_block->block_type = BLOCK_TYPE_IF_ENTRY;
-	exit_block->block_type = BLOCK_TYPE_IF_EXIT;
-
-	/**
-	 * If we have any internal breaks, those will go to the exit block. As such,
-	 * we need to push the exit block to the break stack so that they are redirected
-	 * properly when emitted
-	 */
-	push(&break_stack, exit_block);
-
-	/**
-	 * The first child node is also the expression, which we'll need to stash
-	 * away for later when we emit the if's actual conditional
-	 */
-	generic_ast_node_t* expression = root_node->first_child;
-
-	/**
-	 * The first child can either be a case statement or the default. This
-	 * goes for the second child. Once we know what the first child is, we
-	 * know what the second one has to be
-	 */
-	generic_ast_node_t* first_child = expression->next_sibling;
-	generic_ast_node_t* second_child = first_child->next_sibling;
-
-	/**
-	 * Option 1: the case statement comes first, and then the default
-	 * statement. In code this would look something like:
-	 * 	
-	 * 	switch(x){
-	 * 		case 5:
-	 * 			//stuff
-	 * 			break; //may or may not be here
-	 * 		default:
-	 * 			//stuff
-	 * 			break;
-	 * 	}
-	 *
-	 * We need to account for cases when the break is missing from the
-	 * case and we fall through
-	 */
-	if(first_child->ast_node_type == AST_NODE_TYPE_C_STYLE_CASE_STMT){
-		case_results = visit_c_style_case_statement(first_child);
-		default_results = visit_c_style_default_statement(second_child);
-
-		//We know what these two are off the bat
-		if_block = case_results.starting_block;
-		else_block = default_results.starting_block;
-
-		/**
-		 * If the case block does not end in a termination statement, that means
-		 * that we have a fall-through scenario where the case statement falls
-		 * through to the default block
-		 */
-		if(does_block_end_in_terminal_statement(case_results.final_block) == FALSE){
-			emit_jump(case_results.final_block, else_block);
-		}
-
-		//For the default block, we'll just need to mkae sure that it goes to the exit block
-		if(does_block_end_in_terminal_statement(default_results.final_block) == FALSE){
-			emit_jump(default_results.final_block, exit_block);
-		}
-	
-
-	/**
-	 * Option 2: the default statement comes first, and then the case statement. In code
-	 * this would look something like this:
-	 *
-	 * switch(x){
-	 * 		default:
-	 * 			//stuff
-	 *			break; //may or may not be here
-	 *		case 5:
-	 *			//stuff
-	 *			break;
-	 * }
-	 *
-	 * We need to account for cases where the break is missing from the default and
-	 * we fall through
-	 */
-	} else {
-		default_results = visit_c_style_default_statement(first_child);
-		case_results = visit_c_style_case_statement(second_child);
-
-		//We know what these two are off the bat
-		if_block = case_results.starting_block;
-		else_block = default_results.starting_block;
-
-		/**
-		 * If the default block does not end in a terminal statement, then we have
-		 * a fall-through scneario to the case block
-		 */
-		if(does_block_end_in_terminal_statement(default_results.final_block) == FALSE){
-			emit_jump(default_results.final_block, if_block);
-		}
-
-		//For the case block, we'll just need to worry about going to the exit
-		if(does_block_end_in_terminal_statement(case_results.final_block) == FALSE){
-			emit_jump(case_results.final_block, exit_block);
-		}
-	}
-
-	/**
-	 * Now that we have all of the blocks emitted, we can emit the branch
-	 * using the case statement value and saved expression from before
-	 */
-	case_statement_value = if_block->case_stmt_val;
-	generic_ast_node_t* comparison_expression = construct_binary_expression_with_const_ast_subtree(expression, case_statement_value, DOUBLE_EQUALS);
-
-	//Emit the branch using the same inverse jump strategy as regular if statements
-	emit_branch(entry_block, comparison_expression, else_block, if_block, BRANCH_CATEGORY_INVERSE);
-
-	//Now that we're done this should not be on the break stack
-	pop(&break_stack);
-
-	return result_package;
-}
-
-
-/**
- * Visit a C-style switch statement. Ollie supports a new version of switch statements(with no fallthrough),
- * and the older C-version as well that allows break through. To keep the order true, ollie 
- * This rule is specifically for the c-style switch statements
- */
-static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* root_node){
-	//Declare and initialize off the bat
+static cfg_result_package_t visit_non_exhaustive_c_style_switch_statement(generic_ast_node_t* root_node){
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
-	/**
-	 * If we have a c style switch statement that exclusively has one member, we will 
-	 * optimize this into an if-else statement
-	 */
-	if(root_node->num_case_members == 1){
-		return c_style_switch_with_one_member_to_if_conversion(root_node);
-	}
-
-	//Th starting and ending blocks for the switch statements
+	//The starting and ending blocks for the switch statements
 	basic_block_t* root_level_block = basic_block_alloc_and_estimate();
 	//The upper bound check block
 	basic_block_t* upper_bound_check_block = basic_block_alloc_and_estimate();
 	//The jump calculation block
 	basic_block_t* jump_calculation_block = basic_block_alloc_and_estimate();
-	//Since C-style switches support break statements, we'll need
-	//this as well
+	//Since C-style switches support break statements, we'll need this as well
 	basic_block_t* ending_block = basic_block_alloc_and_estimate();
 
 	//The ending block now goes onto the breaking stack
@@ -9686,16 +9473,17 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	//We'll now allocate this one's jump table
 	jump_calculation_block->jump_table = jump_table_alloc(root_node->optional_storage.switch_bounds.upper_bound - root_node->optional_storage.switch_bounds.lower_bound + 1);
 
-	//The offset(amount that we'll need to knock down any case values by) is always the 
-	//case statement's value subtracted by the lower bound. We'll call it offset here
-	//for consistency
+	/**
+	 * The offset(amount that we'll need to knock down any case values by) is always the 
+	 * case statement's value subtracted by the lower bound. We'll call it offset here
+	 * for consistency
+	 */
 	int32_t offset = root_node->optional_storage.switch_bounds.lower_bound;
 
 	//A generic result package for all of our case/default statements
 	cfg_result_package_t case_default_results = INITIALIZE_BLANK_CFG_RESULT;
 
-	//We will eventually need to know what the default block is,
-	//so reserve a variable here
+	//We will eventually need to know what the default block is, so reserve a variable here
 	basic_block_t* default_block = NULL;
 
 	//We'll also need a current block variable for chaining things together
@@ -9709,9 +9497,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	//So long as we haven't hit the end
 	while(cursor != NULL){
 		switch(cursor->ast_node_type){
-			//C-style case statement, we'll let the appropriate rule handle
 			case AST_NODE_TYPE_C_STYLE_CASE_STMT:
-				//Let the helper rule handle it
 				case_default_results = visit_c_style_case_statement(cursor);
 
 				//Add this in as an entry to the jump table
@@ -9719,64 +9505,36 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 
 				//A case statement is always a successor to the jump calculation block
 				add_successor(jump_calculation_block, case_default_results.starting_block);
+
 				break;
 
-			//C-style default, also let the appropriate rule handle
 			case AST_NODE_TYPE_C_STYLE_DEFAULT_STMT:
-				//Let the helper rule handle it
 				case_default_results = visit_c_style_default_statement(cursor);
 
-				//This is the default block. We'll save this for later when
-				//we need to fill in the rest of the jump table
+				//This is the default block. We'll save this for later when we need to fill in the rest of the jump table
 				default_block= case_default_results.starting_block;
 
 				break;
 
-			//Some weird error, this should never happen
 			default:
-				exit(0);
+				fprintf(stderr, "Fatal internal compiler error: expected a c-style case or default statement but got neither\n");
+				exit(1);
 		}
 
 		//Reassign current block
 		current_block = case_default_results.final_block;
 
-		//If we have a previous block and this one has a non-jump ex
-		if(previous_block != NULL) {
-			//If the previous block isn't totally empty, we'll check to see if it has
-			//an exit statement or not
-			if(previous_block->exit_statement != NULL){
-				//Switch based on what is in here
-				switch(previous_block->exit_statement->statement_type){
-					//And of course a return/branch statement means we can't add anything afterwards
-					case THREE_ADDR_CODE_BRANCH_STMT:
-					case THREE_ADDR_CODE_RAISE_STMT:
-					case THREE_ADDR_CODE_JUMP_STMT:
-					case THREE_ADDR_CODE_RET_STMT:
-						break;
-
-					//If we get here though, we either have a conditional jump or some other statement.
-					//In this case, to guarantee the fallthrough property, we must
-					//add a jump here
-					default:
-						//Emit the direct jump. This may be optimized away in the optimizer, but we
-						//need to guarantee behavior
-						emit_jump(previous_block, case_default_results.starting_block);
-						
-						break;
-				}
-
-			//If it is null, then we definitiely need a jump here
-			} else {
-				//Emit the direct jump. This may be optimized away in the optimizer, but we
-				//need to guarantee behavior
-				emit_jump(previous_block, case_default_results.starting_block);
-			}
+		/**
+		 * If the previous block did not end in a terminal statement, then we need to
+		 * emit a jump from the previous block to the current starting block to simulate fall-through
+		 * behavior
+		 */
+		if(previous_block != NULL && does_block_end_in_terminal_statement(previous_block) == FALSE){
+			emit_jump(previous_block, case_default_results.starting_block);
 		}
 
 		//Now the old previous block is the current block
 		previous_block = current_block;
-
-		//Otherwise if we don't satisfy this condition, we don't need to emit any jump at all
 
 		//Advance the cursor to the next one
 		cursor = cursor->next_sibling;
@@ -9787,65 +9545,46 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	 * then it needs to be sent to the final block so that we guarantee the fall-through
 	 * property
 	 */
-	if(current_block->exit_statement != NULL){
-		//Switch based on what the end of the current block is
-		switch(current_block->exit_statement->statement_type){
-			//If it's a jump or ret statement, we don't need to add one
-			case THREE_ADDR_CODE_RET_STMT:
-			case THREE_ADDR_CODE_RAISE_STMT:
-			case THREE_ADDR_CODE_JUMP_STMT:
-				break;
-
-			/**
-			 * However if we have this, we need to ensure that we go from this final block
-			 * directly to the end
-			 */
-			default:
-				/**
-				 * Emit the direct jump. This may be optimized away in the optimizer, but we
-				 * need to guarantee behavior
-				 */
-				emit_jump(current_block, ending_block);
-
-				break;
-		}
-
-	//Otherwise it is null, so we definitely need a jump to the end here
-	} else {
-		/**
-		 * Emit the direct jump. This may be optimized away in the optimizer, but we
-		 * need to guarantee behavior
-		 */
+	if(does_block_end_in_terminal_statement(current_block) == FALSE){
 		emit_jump(current_block, ending_block);
 	}
 
-	//If the ending block has no successors at all, that means that we've returned through every control path. Instead
-	//of using the ending block, we can change it to be the function ending block
-	if(ending_block->predecessors.internal_array == NULL || ending_block->predecessors.current_index == 0){
+	/**
+	 * If the ending block has no successors at all, that means that we've returned through every control path. Instead
+	 * of using the ending block, we can change it to be the function ending block
+	 */
+	if(dynamic_array_is_empty(&(ending_block->predecessors)) == TRUE){
 		result_package.final_block = function_exit_block;
 	}
 
 	/**
-	 * If the default clause is NULL, which it may very well be, we will created
-	 * our own dummy default clause that just jumps to the end. This maintains
+	 * If the default clause is NULL, which it may very well be, we will creat
+	 * our own dummy default clause that just jumps to the of the switch statement end. This maintains
 	 * the intention of the programmer but also allows us to reuse the code
 	 * from default blocks
+	 *
+	 * Special case here: if we are returning through all paths, then we're going to need a dummy
+	 * return through the default block. This will be handled by us later, but for now all that
+	 * we'll need to is create a block and add the exit block as a successor to it
 	 */
 	if(default_block == NULL){
 		//Create it
 		default_block = basic_block_alloc_and_estimate();
 
-		//Emit a jump from it to the end block
-		emit_jump(default_block, result_package.final_block);
-	}
+		if(result_package.final_block != function_exit_block){
+			//Emit a jump from it to the end block
+			emit_jump(default_block, result_package.final_block);
 
-	//If a switch is exhaustive, there are no gaps between any of the case members
-	u_int8_t switch_is_exhaustive = TRUE;
+		} else {
+			add_successor(default_block, function_exit_block);
+		}
+	}
 
 	/**
 	 * Run through the entire jump table. Any nodes that are not occupied(meaning there's no case statement with that value)
 	 * will be set to point to the default block. 
 	 */
+	u_int8_t switch_has_default_jumps = FALSE;
 	for(int32_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
 		/**
 		 * If it's null, we'll make it the default. This should only happen in switches
@@ -9856,7 +9595,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 			dynamic_array_set_at(&(jump_calculation_block->jump_table->nodes), default_block, i);
 			
 			//If we have to add one of these then the switch is not exhaustive
-			switch_is_exhaustive = FALSE;
+			switch_has_default_jumps = TRUE;
 		}
 	}
 
@@ -9865,7 +9604,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	 * a successor to the jump calculation block. We only do this once we get down here to
 	 * avoid any issues with unneeded successors if it is exhaustive
 	 */
-	if(switch_is_exhaustive == FALSE){
+	if(switch_has_default_jumps == TRUE){
 		add_successor(jump_calculation_block, default_block);
 	}
 
@@ -9873,10 +9612,10 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	three_addr_const_t* lower_bound = emit_direct_integer_or_char_constant(root_node->optional_storage.switch_bounds.lower_bound, i32);
 	three_addr_const_t* upper_bound = emit_direct_integer_or_char_constant(root_node->optional_storage.switch_bounds.upper_bound, i32);
 
-	//Now that we have our expression, we'll want to speed things up by seeing if our value is either below the lower
-	//range or above the upper range. If it is, we jump to the very end
-
 	/**
+	 * Now that we have our expression, we'll want to speed things up by seeing if our value is either below the lower
+	 * range or above the upper range. If it is, we jump to the very end
+	 *
 	 * Jumping(conditional or indirect), does not affect condition codes. As such, we can rely 
 	 * on the condition codes being set from the operation to take us through all three
 	 * jumps. We will emit a jump if we are: lower, higher or an indirect jump if we
@@ -9895,7 +9634,6 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	//This will be used for tracking
 	three_addr_var_t* lower_than_decider = emit_temp_var(input_result_type);
 
-	//Let's first do our lower than comparison
 	//First step -> if we're below the minimum, we jump to default 
 	emit_binary_operation_with_constant(root_level_block, lower_than_decider, input_result, L_THAN, lower_bound);
 
@@ -9938,7 +9676,11 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	add_statement(jump_calculation_block, temporary_variable_assignent);
 
 	//Now that all this is done, we can use our jump table for the rest
-	three_addr_var_t* input = emit_binary_operation_with_constant(jump_calculation_block, temporary_variable_assignent->operands.oir.assignee, temporary_variable_assignent->operands.oir.assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32));
+	three_addr_var_t* input = emit_binary_operation_with_constant(jump_calculation_block,
+															   		temporary_variable_assignent->operands.oir.assignee,
+															   		temporary_variable_assignent->operands.oir.assignee,
+															   		MINUS,
+															   		emit_direct_integer_or_char_constant(offset, i32));
 
 	/**
 	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
@@ -9950,15 +9692,371 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	instruction_t* indirect_jump = emit_indirect_jump_statement(jump_calculation_block->jump_table, input, 8);
 	add_statement(jump_calculation_block, indirect_jump);
 
-	//Give back the starting block
 	return result_package;
 }
 
 
 /**
- * If we have a switch statement that only has one non-default member(one case), then we will
- * internally convert this into an if-else-if statement to reduce complexity and avoid any
- * issues with the dominator analysis that have happened in the past
+ * Visit an exhaustive c-style switch statement. Unlike the more common non-exhaustive case, exhaustive
+ * c-style switch statements do not have default clauses, and as such do not need the above/below checks
+ * before the jump table that a normal switch does
+ */
+static cfg_result_package_t visit_exhaustive_c_style_switch_statement(generic_ast_node_t* root_node){
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
+	cfg_result_package_t case_results = INITIALIZE_BLANK_CFG_RESULT;
+
+	//Allocate the three blocks that we will for sure need
+	basic_block_t* starting_block = basic_block_alloc_and_estimate();
+	basic_block_t* jump_calculation_block = basic_block_alloc_and_estimate();
+	basic_block_t* ending_block = basic_block_alloc_and_estimate();
+
+	//The ending block now goes onto the breaking stack
+	push(&break_stack, ending_block);
+
+	//We already know what these will be, so populate them
+	result_package.starting_block = starting_block;
+	result_package.final_block = ending_block;
+
+	//We'll grab a cursor to the first child and begin crawling through
+	generic_ast_node_t* cursor = root_node->first_child;
+
+	//We'll first need to emit the expression node
+	cfg_result_package_t input_results = emit_expression(starting_block, cursor);
+	starting_block = input_results.final_block;
+
+	//Unpack this for later
+	three_addr_var_t* input_result = unpack_result_package(&input_results, starting_block);
+
+	//Jump from our starting block into the jump calculation block
+	emit_jump(starting_block, jump_calculation_block);
+
+	//We'll now allocate this one's jump table
+	jump_calculation_block->block_type = BLOCK_TYPE_SWITCH;
+	jump_calculation_block->jump_table = jump_table_alloc(root_node->optional_storage.switch_bounds.upper_bound - root_node->optional_storage.switch_bounds.lower_bound + 1);
+
+	/**
+	 * The offset(amount that we'll need to knock down any case values by) is always the 
+	 * case statement's value subtracted by the lower bound. We'll call it offset here
+	 * for consistency
+	 */
+	int32_t offset = root_node->optional_storage.switch_bounds.lower_bound;
+
+	//We'll also need a current block variable for chaining things together
+	basic_block_t* current_block = NULL;
+	//Keep track of what the previous block was(for fall through)
+	basic_block_t* previous_block = NULL;
+
+	/**
+	 * Crawl through all of the case statements in exact order and 
+	 * process them. Remember that exhaustive switches never have default clauses
+	 * so we don't need to worry about those here
+	 */
+	cursor = cursor->next_sibling;
+	while(cursor != NULL){
+		case_results = visit_c_style_case_statement(cursor);
+
+		//Add this in as an entry to the jump table
+		add_jump_table_entry(jump_calculation_block->jump_table, cursor->constant_value.signed_int_value - offset, case_results.starting_block);
+
+		//A case statement is always a successor to the jump calculation block
+		add_successor(jump_calculation_block, case_results.starting_block);
+
+		//Reassign current block
+		current_block = case_results.final_block;
+
+		/**
+		 * If the previous block did not end in a terminal statement, then we need to
+		 * emit a jump from the previous block to the current starting block to simulate fall-through
+		 * behavior
+		 */
+		if(previous_block != NULL && does_block_end_in_terminal_statement(previous_block) == FALSE){
+			emit_jump(previous_block, case_results.starting_block);
+		}
+
+		//Now the old previous block is the current block
+		previous_block = current_block;
+
+		//Advance the cursor to the next one
+		cursor = cursor->next_sibling;
+	}
+
+	/**
+	 * Now we've hit the final block. If this one does not end in a jump or return,
+	 * then it needs to be sent to the final block so that we guarantee the fall-through
+	 * property
+	 */
+	if(does_block_end_in_terminal_statement(current_block) == FALSE){
+		emit_jump(current_block, ending_block);
+	}
+
+	/**
+	 * If the ending block has no successors at all, that means that we've returned through every control path. Instead
+	 * of using the ending block, we can change it to be the function ending block
+	 */
+	if(dynamic_array_is_empty(&(ending_block->predecessors)) == TRUE){
+		result_package.final_block = function_exit_block;
+	}
+
+	//To avoid violating SSA rules, we'll emit a temporary assignment here
+	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result->type), input_result);
+
+	//Add it into the block
+	add_statement(jump_calculation_block, temporary_variable_assignent);
+
+	//Now that all this is done, we can use our jump table for the rest
+	three_addr_var_t* input = emit_binary_operation_with_constant(jump_calculation_block,
+															   		temporary_variable_assignent->operands.oir.assignee,
+															   		temporary_variable_assignent->operands.oir.assignee,
+															   		MINUS,
+															   		emit_direct_integer_or_char_constant(offset, i32));
+
+	/**
+	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
+	 * 	base address(.JT1) + input * 8 
+	 *
+	 * We have a special kind of statement for doing this
+	 * 	
+	 */
+	instruction_t* indirect_jump = emit_indirect_jump_statement(jump_calculation_block->jump_table, input, 8);
+	add_statement(jump_calculation_block, indirect_jump);
+
+	return result_package;
+}
+
+
+/**
+ * Take a c-style switch statement that has been determined to be non-switch eligible and convert it into
+ * an if-else statement. This is more complex than the ollie switch example because we have concepts like 
+ * fall through
+ *
+ * Take a complex example:
+ *
+ * switch(x){
+ * 		default:
+ * 			//Stuff1
+ *			//fall through
+ *
+ *		case 7:
+ *			//Stuff2
+ *			//Fall through
+ *
+ * 		case 5:
+ * 			x--;
+ * 			break;
+ * }
+ *
+ * This should become:
+ *
+ * .L4(conditional)
+ * 	x == 7
+ * 	branch_ne .L5 else .L6
+ *
+ * 	.L5:
+ * 	 x == 5
+ * 	 branch_ne .L7 else .L8
+ *
+ * 	.L6:
+ * 	 //Stuff2
+ * 	 jmp .L7 //Simulate fall through
+ * 	
+ * 	.L7:
+ * 	 x--
+ * 	 jmp .L9
+ *
+ * 	.L8:
+ * 	  //Stuff1
+ * 	  jmp .L6 //Simulate fall through to .L6
+ *
+ * 	.L9(end block)
+ * 	  //END OF SWITCH
+ */
+static cfg_result_package_t convert_c_style_switch_to_if_statement(generic_ast_node_t* root_node){
+	//Needed result packages for later on
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
+	cfg_result_package_t case_default_results = INITIALIZE_BLANK_CFG_RESULT;
+	cfg_result_package_t expression_results = INITIALIZE_BLANK_CFG_RESULT;
+
+	//We know we need entry/exit blocks, if and else come from the case/default themselves
+	basic_block_t* entry_block = basic_block_alloc_and_estimate();
+	basic_block_t* exit_block = basic_block_alloc_and_estimate();
+
+	//We can package these up now
+	result_package.starting_block = entry_block;
+	result_package.final_block = exit_block;
+
+	//Assign types for later optimization
+	exit_block->block_type = BLOCK_TYPE_IF_EXIT;
+
+	/**
+	 * If we have any internal breaks, those will go to the exit block. As such,
+	 * we need to push the exit block to the break stack so that they are redirected
+	 * properly when emitted
+	 */
+	push(&break_stack, exit_block);
+
+	/**
+	 * The first child is always the expression. We'll need to emit
+	 * this to get the 
+	 */
+	generic_ast_node_t* expression = root_node->first_child;
+	expression_results = emit_expression(entry_block, expression);
+
+	//Update the entry block and flag it as the true if entry
+	entry_block = expression_results.final_block; 
+	entry_block->block_type = BLOCK_TYPE_IF_ENTRY;
+
+	//Unpack our result variable. This is what is used in every conditional
+	three_addr_var_t* input_variable = unpack_result_package(&expression_results, entry_block);
+
+	//The next sibling of the expression will always be the first case/default value
+	generic_ast_node_t* case_default_cursor = expression->next_sibling;
+
+	//We'll need holders for the default block and the previous end block
+	basic_block_t* default_block = NULL;
+	basic_block_t* previous_end_block = NULL;
+
+	//The current block where our conditional will sit is the entry block
+	basic_block_t* current_conditional_block = entry_block;
+
+	/**
+	 * Crawl the subtree and emit everything in order. We will need special logic for
+	 * the default block when we get to it due to no conditional existing for it
+	 */
+	while(case_default_cursor != NULL){
+		switch(case_default_cursor->ast_node_type){
+			case AST_NODE_TYPE_C_STYLE_CASE_STMT:
+				case_default_results = visit_c_style_case_statement(case_default_cursor);
+
+				/**
+				 * If the previous end block does not end in a terminal statement, we will need to simulate
+				 * a fall-through type scenario where the prior block falls through to this one
+				 */
+				if(previous_end_block != NULL && does_block_end_in_terminal_statement(previous_end_block) == FALSE){
+					emit_jump(previous_end_block, case_default_results.starting_block);
+				}
+
+				//The previous end block now is this one's final block
+				previous_end_block = case_default_results.final_block;
+
+				//Extract this value for our conditional
+				int32_t case_value = case_default_results.starting_block->case_stmt_val;
+
+				//Create a new conditional block for us to jump to
+				basic_block_t* new_conditional_block = basic_block_alloc_and_estimate();
+
+				//Emit and add the comparison expression for our branch here
+				instruction_t* comparison_expression = emit_binary_operation_with_const_instruction(emit_temp_var(u8),
+																										input_variable,
+																										DOUBLE_EQUALS,
+																										emit_direct_integer_or_char_constant(case_value, i32));
+				comparison_expression->operands.oir.assignee->sets_cc = TRUE;
+				add_statement(current_conditional_block, comparison_expression);
+
+				/**
+				 * Our branch will always be an inverse branch to maintain the actual code execution as in the hotpath. It has
+				 * been shown that users will usually put the most likely case statement first when writing switch/case, so
+				 * we assume that this will be the case and instead conditionally jump to the "else" in our case
+				 */
+				branch_type_t branch_type = select_appropriate_branch_statement(DOUBLE_EQUALS, BRANCH_CATEGORY_INVERSE, is_type_signed(input_variable->type));
+				instruction_t* branch_instruction = emit_branch_statement(new_conditional_block, case_default_results.starting_block, comparison_expression->operands.oir.assignee, branch_type);
+				add_statement(current_conditional_block, branch_instruction);
+
+				//Do the successor bookkeeping as needed for this
+				add_successor(current_conditional_block, new_conditional_block);
+				add_successor(current_conditional_block, case_default_results.starting_block);
+
+				//The current conditional block is now the new one
+				current_conditional_block = new_conditional_block;
+
+				break;
+
+			case AST_NODE_TYPE_C_STYLE_DEFAULT_STMT:
+				case_default_results = visit_c_style_default_statement(case_default_cursor);
+
+				//Save the default block for later processing
+				default_block = case_default_results.starting_block;
+
+				/**
+				 * If the previous end block does not end in a terminal statement, we will need to simulate
+				 * a fall-through type scenario where the prior block falls through to this one
+				 */
+				if(previous_end_block != NULL && does_block_end_in_terminal_statement(previous_end_block) == FALSE){
+					emit_jump(previous_end_block, default_block);
+				}
+
+				//Now update what the previous end block is
+				previous_end_block = case_default_results.final_block;
+
+				break;
+
+			default:
+				fprintf(stderr, "Fatal internal compiler error: Exprected c-style case or default statement but got neither\n");
+				exit(1);
+		}
+
+		//Advance the cursor up
+		case_default_cursor = case_default_cursor->next_sibling;
+	}
+
+	/**
+	 * If the very last block does not end in a terminal statement, we will
+	 * need to manually emit the jump from it to the end block
+	 */
+	if(does_block_end_in_terminal_statement(previous_end_block) == FALSE){
+		emit_jump(previous_end_block, exit_block);
+	}
+
+	/**
+	 * We now need to handle the default block case. If we have a default block,
+	 * then we'll just need to emit a jump from the current conditional block over
+	 * to the default block. If we don't, then we'll jump from the current conditional
+	 * block right to the exit
+	 */
+	if(default_block != NULL){
+		emit_jump(current_conditional_block, default_block);
+	} else {
+		emit_jump(current_conditional_block, exit_block);
+	}
+
+	//Now that we're done this should not be on the break stack
+	pop(&break_stack);
+
+	return result_package;
+}
+
+
+/**
+ * Visit a C-style switch statement. Ollie supports a new version of switch statements(with no fallthrough),
+ * and the older C-version as well that allows break through. To keep the order true, ollie 
+ * This rule is specifically for the c-style switch statements
+ */
+static inline cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* root_node){
+	/**
+	 * If a given switch is flagged as ineligible, we'll need to 
+	 * use a special helper to convert it to an if statement
+	 */
+	if(root_node->is_switch_eligible == FALSE){
+		return convert_c_style_switch_to_if_statement(root_node);
+	}
+
+	/**
+	 * If the switch is not flagged as exhaustive(most common), we will
+	 * route this to a more elaborate converter that has the needed logic
+	 * for non-exhaustive switches. If it is exhaustive, we'll route it to
+	 * the simpler exhaustive switch converter
+	 */
+	if(root_node->is_exhaustive_switch == FALSE){
+		return visit_non_exhaustive_c_style_switch_statement(root_node);
+	} else {
+		return visit_exhaustive_c_style_switch_statement(root_node);
+	}
+}
+
+
+/**
+ * Take an ollie switch statement and convert it internally to be an if-else-if statement. This will
+ * happen when the compiler decides that a given switch statement is not eligible to internally
+ * be represented by a jump table and indirect jump
  *
  * Since this is an ollie style switch statement, we do not need to worry about any fall-through
  * cases. We'll just need to emit the if-else-if chain as given
@@ -9969,91 +10067,146 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
  *
  * 	 }
  *
+ * 	 case 2 -> {
+ * 	 	//Stuff 2
+ * 	 }
+ *
  * 	 default -> {
- * 	 	//stuff 2
+ * 	 	//stuff 3
  * 	 }
  *
  * Will turn into
  * 	
  * 	if(x == 1){
  * 		//stuff 1
- * 	} else {
+ * 	} else if(x == 2){
  * 		//stuff 2
+ * 	} else {
+ * 		//stuff 3
  * 	}
  * }
  *
  * Ollie style statements also don't support switch level breaks, so we don't need to worry about
  * that either in this case
  */
-static cfg_result_package_t ollie_switch_with_one_case_to_if_conversion(generic_ast_node_t* root_node){
+static cfg_result_package_t convert_ollie_switch_to_if_statement(generic_ast_node_t* root_node){
+	//Holders for the overall results as well as the individual results for each node
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
-	cfg_result_package_t case_results;
-	cfg_result_package_t default_results;
-	int64_t case_statement_constant;
+	cfg_result_package_t case_default_results = INITIALIZE_BLANK_CFG_RESULT;
 
 	/**
-	 * We'll need all the same blocks that we would need if this was an if statement
+	 * We'll need all the same blocks that we would need if this was an if statement, which
+	 * are an entry and exit block
 	 */
-	basic_block_t* top_level_block = basic_block_alloc_and_estimate();
-	basic_block_t* exit_block = basic_block_alloc_and_estimate();
-	//These two remain uninitialized for now
-	basic_block_t* if_block = NULL;
-	basic_block_t* else_block = NULL;
-
-	top_level_block->block_type = BLOCK_TYPE_IF_ENTRY;
-	exit_block->block_type = BLOCK_TYPE_IF_EXIT;
+	basic_block_t* if_entry_block = basic_block_alloc_and_estimate();
+	basic_block_t* if_exit_block = basic_block_alloc_and_estimate();
+	if_exit_block->block_type = BLOCK_TYPE_IF_EXIT;
 
 	//We can already do the bookkeeping for this now
-	result_package.starting_block = top_level_block;
-	result_package.final_block = exit_block;
+	result_package.starting_block = if_entry_block;
+	result_package.final_block = if_exit_block;
 
-	//Grab a cursor that we will use to traverse
-	generic_ast_node_t* case_statement_cursor = root_node->first_child;
-	//Save for later
-	generic_ast_node_t* conditional_node = case_statement_cursor;
+	//The else block is *always* the default statement
+	basic_block_t* default_block = NULL;
 
-	//Bump it up and process through the case statements and default if one exists
-	case_statement_cursor = case_statement_cursor->next_sibling;
+	//First let's process the starting expression
+	generic_ast_node_t* switch_statement_expression = root_node->first_child;
+
+	//Emit the expression into the entry block and do any bookkeeping needed afterwards
+	cfg_result_package_t expression_results = emit_expression(if_entry_block, switch_statement_expression);
+
+	//We're now able to flag this as the if entry
+	if_entry_block = expression_results.final_block;
+	if_entry_block->block_type = BLOCK_TYPE_IF_ENTRY;
+	
+	//Unpack the result and get the variable that we are using for all comparisons
+	three_addr_var_t* switching_on_variable = unpack_result_package(&expression_results, if_entry_block);
+
+	//Seed the current conditional block as the if entry initially
+	basic_block_t* current_conditional_block = if_entry_block;
+
+	/**
+	 * Run through every single case/one default statement and process
+	 * them accordingly. There is no need to worry about fall through/
+	 * breakage in an ollie switch because they do not support those
+	 * concepts
+	 */
+	generic_ast_node_t* case_statement_cursor = switch_statement_expression->next_sibling;
 	while(case_statement_cursor != NULL){
 		switch(case_statement_cursor->ast_node_type){
 			/**
-			 * The one case statement is always the if block.
+			 * A case statement is always an if(<conditional>) type of
+			 * statement, where the conditional is always a comparison
+			 * with a constant
 			 */
 			case AST_NODE_TYPE_CASE_STMT:
-				case_results = visit_case_statement(case_statement_cursor);
-
-				//The if block is always the first thing here
-				if_block = case_results.starting_block;
-
-				/**
-				 * Do any/all needed bookkeeping with the final block where we
-				 * jump to the end block if appropriate
-				 */
-				basic_block_t* final_case_block = case_results.final_block;
-				if(does_block_end_in_terminal_statement(final_case_block) == FALSE){
-					emit_jump(final_case_block, exit_block);
-				}
-
-				//Extract the value for our given constant
-				case_statement_constant = if_block->case_stmt_val;
-
-				break;
-			/**
-			 * The default *always* goes into the else block
-			 */
-			case AST_NODE_TYPE_DEFAULT_STMT:
-				default_results = visit_default_statement(case_statement_cursor);
-
-				//This becomes our else block
-				else_block = default_results.starting_block;
+				//The case statement itself is what we need to go to if the conditional is true
+				case_default_results = visit_case_statement(case_statement_cursor);
 				
 				/**
 				 * Do any/all needed bookkeeping with the final block where we
 				 * jump to the end block if appropriate
 				 */
-				basic_block_t* final_default_block = default_results.final_block;
+				basic_block_t* final_case_block = case_default_results.final_block;
+				if(does_block_end_in_terminal_statement(final_case_block) == FALSE){
+					emit_jump(final_case_block, if_exit_block);
+				}
+
+				//Extract the constant value from the head block
+				int32_t case_statement_constant = case_default_results.starting_block->case_stmt_val;
+
+				//Emit the comparison instruction - this is always an equals
+				instruction_t* comparsion_expression = emit_binary_operation_with_const_instruction(emit_temp_var(u8),
+																									switching_on_variable,
+																									DOUBLE_EQUALS,
+																									emit_direct_integer_or_char_constant(case_statement_constant, i32));
+
+				//Flag that this is used to set condition codes
+				comparsion_expression->operands.oir.assignee->sets_cc = TRUE;
+
+				//Add this into whatever the current conditional block is
+				add_statement(current_conditional_block, comparsion_expression);
+
+				//We'll need a new conditional block to jump to
+				basic_block_t* new_conditional_block = basic_block_alloc_and_estimate();
+
+				/**
+				 * Our branch will always be an inverse branch to maintain the actual code execution as in the hotpath. It has
+				 * been shown that users will usually put the most likely case statement first when writing switch/case, so
+				 * we assume that this will be the case and instead conditionally jump to the "else" in our case
+				 */
+				branch_type_t branch_type = select_appropriate_branch_statement(DOUBLE_EQUALS, BRANCH_CATEGORY_INVERSE, is_type_signed(switching_on_variable->type));
+				instruction_t* branch_instruction = emit_branch_statement(new_conditional_block, case_default_results.starting_block, comparsion_expression->operands.oir.assignee, branch_type);
+				add_statement(current_conditional_block, branch_instruction);
+
+				//Do the successor bookkeeping as needed for this
+				add_successor(current_conditional_block, new_conditional_block);
+				add_successor(current_conditional_block, case_default_results.starting_block);
+
+				//Set the current conditional to be this new one
+				current_conditional_block = new_conditional_block;
+
+				break;
+
+			/**
+			 * The default *always* goes into the else block. We are not able to
+			 * connect the default block itself until the very end because
+			 * it must be last in the chain
+			 */
+			case AST_NODE_TYPE_DEFAULT_STMT:
+				//The default statement itself is what we need to go to if the conditional is true
+				case_default_results = visit_default_statement(case_statement_cursor);
+
+				//This becomes our else block
+				default_block = case_default_results.starting_block;
+				
+				/**
+				 * Do any/all needed bookkeeping with the final block where we
+				 * jump to the end block if appropriate
+				 */
+				basic_block_t* final_default_block = case_default_results.final_block;
 				if(does_block_end_in_terminal_statement(final_default_block) == FALSE){
-					emit_jump(final_default_block, exit_block);
+					emit_jump(final_default_block, if_exit_block);
 				}
 
 				break;
@@ -10067,18 +10220,18 @@ static cfg_result_package_t ollie_switch_with_one_case_to_if_conversion(generic_
 		case_statement_cursor = case_statement_cursor->next_sibling;
 	}
 
-	//Let the helper construct a branch new AST sub tree for us to work off of
-	generic_ast_node_t* equals_expression = construct_binary_expression_with_const_ast_subtree(conditional_node, case_statement_constant, DOUBLE_EQUALS); 
-
 	/**
-	 * Two options here - either we've seen/have a default block and we're able to direct
-	 * the else to that, or we have no default block so we'll just have a one-branch
-	 * if. Either one is fine they're just handled differently
+	 * If we have a default statement, we'll need to add it as the very last thing
+	 * in the branch chain. We'll do this by just merging it with the 
+	 * current conditional block that we have made
+	 *
+	 * If there is no default, then we'll just need to emit a jump from the
+	 * current conditional straight to the exit
 	 */
-	if(else_block != NULL){
-		emit_branch(top_level_block, equals_expression, else_block, if_block, BRANCH_CATEGORY_INVERSE);
+	if(default_block != NULL){
+		emit_jump(current_conditional_block, default_block);
 	} else {
-		emit_branch(top_level_block, equals_expression, exit_block, if_block, BRANCH_CATEGORY_INVERSE);
+		emit_jump(current_conditional_block, if_exit_block);
 	}
 
 	return result_package;
@@ -10086,20 +10239,11 @@ static cfg_result_package_t ollie_switch_with_one_case_to_if_conversion(generic_
 
 
 /**
- * Visit a switch statement. In Ollie's current implementation, 
- * the values here will not be reordered at all. Instead, they
- * will be put in the exact orientation that the user wants
+ * A non-exhaustive ollie switch statement will have an above/below check before our actual
+ * indirect jump and will always have a default clause for us to handle
  */
-static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node){
+static cfg_result_package_t visit_non_exhaustive_ollie_switch_statement(generic_ast_node_t* root_node){
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
-
-	/**
-	 * If we just have one case member, we will need to handle this differently. 
-	 * The invoked rule will convert this into an equivalent if-else-if statement
-	 */
-	if(root_node->num_case_members == 1){
-		return ollie_switch_with_one_case_to_if_conversion(root_node);
-	}
 
 	//The starting block for the switch statement - we'll want this in a new block
 	basic_block_t* root_level_block = basic_block_alloc_and_estimate();
@@ -10127,36 +10271,33 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	//We could have had a ternary here, so we'll need to account for that possibility
 	root_level_block = input_results.final_block;
 
-	//IMPORTANT - we'll also mark this as a block type switch, because this is where any/all switching logic
-	//will be happening
+	//IMPORTANT - we'll also mark this as a block type switch, because this is where any/all switching logic will be happening
 	jump_calculation_block->block_type = BLOCK_TYPE_SWITCH;
 	
-	//Let's also allocate our jump table. We know how large the jump table needs to be from
-	//data passed in by the parser
+	//Let's also allocate our jump table. We know how large the jump table needs to be from data passed in by the parser
 	jump_calculation_block->jump_table = jump_table_alloc(root_node->optional_storage.switch_bounds.upper_bound - root_node->optional_storage.switch_bounds.lower_bound + 1);
 
-	//We'll also have some adjustment amount, since we always want the lowest value in the jump table to be 0. This
-	//adjustment will be subtracted from every value at the top to "knock it down" to be within the jump table
+	/**
+	 * We'll also have some adjustment amount, since we always want the lowest value in the jump table to be 0. This
+	 * adjustment will be subtracted from every value at the top to "knock it down" to be within the jump table
+	 */
 	int32_t offset = root_node->optional_storage.switch_bounds.lower_bound;
 
 	//Wipe this out here just in case
 	cfg_result_package_t case_default_results = INITIALIZE_BLANK_CFG_RESULT;
 
-	//Get to the next statement. This is the first actual case 
-	//statement
+	//Get to the next statement. This is the first actual case statement
 	case_stmt_cursor = case_stmt_cursor->next_sibling;
 
-	//So long as this isn't null
 	while(case_stmt_cursor != NULL){
-		//Switch based on the class
 		switch(case_stmt_cursor->ast_node_type){
-			//Handle a case statement
 			case AST_NODE_TYPE_CASE_STMT:
-				//Visit our case stmt here
 				case_default_results = visit_case_statement(case_stmt_cursor);
 
-				//We'll now need to add this into the jump table. We always subtract the adjustment to ensure
-				//that we start down at 0 as the lowest value
+				/**
+				 * We'll now need to add this into the jump table. We always subtract the adjustment to ensure
+				 * that we start down at 0 as the lowest value
+				 */
 				add_jump_table_entry(jump_calculation_block->jump_table, case_stmt_cursor->constant_value.signed_int_value - offset, case_default_results.starting_block);
 
 				//The starting block is a successor to the root block
@@ -10164,9 +10305,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 				break;
 
-			//Handle a default statement
 			case AST_NODE_TYPE_DEFAULT_STMT:
-				//Visit the default statement
 				case_default_results = visit_default_statement(case_stmt_cursor);
 
 				//This is the default block, so save for now
@@ -10176,7 +10315,8 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 			//Otherwise we have some weird error, so we'll fail out
 			default:
-				exit(0);
+				fprintf(stderr, "Fatal internal compiler error: unrecognized statement type detected inside of Ollie switch converter\n");
+				exit(1);
 		}
 
 		//Now we'll drill down to the bottom to prime the next pass
@@ -10205,37 +10345,37 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 		emit_jump(default_block, ending_block);
 	}
 
-	//If a switch is exhaustive, there are no gaps between any of the case members
-	u_int8_t switch_is_exhaustive = TRUE;
-
-	//Now at the ever end, we'll need to fill the remaining jump table blocks that are empty
-	//with the default value
+	/**
+	 * Now at the ever end, we'll need to fill the remaining jump table blocks that are empty
+	 * with the default value
+	 */
+	u_int8_t switch_has_default_jumps = FALSE;
 	for(int32_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
 		//If it's null, we'll make it the default
 		if(dynamic_array_get_at(&(jump_calculation_block->jump_table->nodes), i) == NULL){
 			dynamic_array_set_at(&(jump_calculation_block->jump_table->nodes), default_block, i);
 
-			//Once we get here we know it's not exhaustive
-			switch_is_exhaustive = FALSE;
+			//Once we get here we know it has a default jump
+			switch_has_default_jumps = TRUE;
 		}
 	}
 
 	/**
-	 * If the switch is not exhaustive, then we will have the default block as a successor
-	 * to the jump calculation block. This however only happens if it is not exhaustive, 
-	 * which is why we've waited until now to add this
+	 * If the switch has a default block in it, then we will have the default block as a successor
+	 * to the jump calculation block. This however only happens if we do have a default area inside
+	 * of the jump calculation which is why we've waited until now to add this
 	 */
-	if(switch_is_exhaustive == FALSE){
+	if(switch_has_default_jumps == TRUE){
 		add_successor(jump_calculation_block, default_block);
 	}
 
-	//If we have no predecessors, that means that every case statement ended in a return statement.
-	//If this is the case, then the final block should not be the ending block, it should be the function ending block
-	if(ending_block->predecessors.internal_array == NULL || ending_block->predecessors.current_index == 0){
+	/**
+	 * If the end block has no predecessors, that means that every case statement ended in a return statement.
+	 * If this is the case, then the final block should not be the ending block, it should be the function ending block
+	 */
+	if(dynamic_array_is_empty(&(ending_block->predecessors)) == TRUE){
 		result_package.final_block = function_exit_block;
 	}
-
-	//Now that everything has been situated, we can start emitting the values in the initial node
 
 	//We'll need both of these as constants for our computation
 	three_addr_const_t* lower_bound = emit_direct_integer_or_char_constant(root_node->optional_storage.switch_bounds.lower_bound, i32);
@@ -10250,8 +10390,6 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	 * jumps. We will emit a jump if we are: lower, higher or an indirect jump if we
 	 * are in the range
 	 */
-
-	//Unpack the result to get our actual variable out
 	three_addr_var_t* input_result = unpack_result_package(&input_results, root_level_block);
 
 	//Grab the type our for convenience
@@ -10263,7 +10401,6 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	//This will be used for tracking
 	three_addr_var_t* lower_than_decider = emit_temp_var(input_result_type);
 
-	//Let's first do our lower than comparison
 	//First step -> if we're below the minimum, we jump to default 
 	emit_binary_operation_with_constant(root_level_block, lower_than_decider, input_result, L_THAN, lower_bound);
 
@@ -10318,8 +10455,152 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	instruction_t* indirect_jump = emit_indirect_jump_statement(jump_calculation_block->jump_table, input, 8);
 	add_statement(jump_calculation_block, indirect_jump);
 
+	return result_package;
+}
+
+
+/**
+ * An exhaustive switch statement does not have to worry about the same things as its non-exhaustive
+ * counterpart. There is no default block for an exhaustive switch, and there is never a need for
+ * a beginning greater than/less than check
+ */
+static cfg_result_package_t visit_exhaustive_ollie_switch_statement(generic_ast_node_t* root_node){
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
+
+	//We know for sure that we'll need start and end blocks
+	basic_block_t* starting_block = basic_block_alloc_and_estimate();
+	basic_block_t* jump_calculation_block = basic_block_alloc_and_estimate();
+	basic_block_t* ending_block = basic_block_alloc_and_estimate();
+
+	//We can already fill in the result package
+	result_package.starting_block = starting_block;
+	result_package.final_block = ending_block;
+
+	//Grab a cursor to the case statements
+	generic_ast_node_t* case_stmt_cursor = root_node->first_child;
+	
+	//Let's first emit the expression. This will at least give us an assignee to work with
+	cfg_result_package_t input_results = emit_expression(starting_block, case_stmt_cursor);
+
+	//We could have had a ternary here, so we'll need to account for that possibility
+	starting_block = input_results.final_block;
+
+	//Starting block jumps down to the jump calculation block
+	emit_jump(starting_block, jump_calculation_block);
+
+	/**
+	 * Set up the jump calculation block by flagging it as a switch and creating our jump table
+	 */
+	jump_calculation_block->block_type = BLOCK_TYPE_SWITCH;
+	jump_calculation_block->jump_table = jump_table_alloc(root_node->optional_storage.switch_bounds.upper_bound - root_node->optional_storage.switch_bounds.lower_bound + 1);
+
+	/**
+	 * We'll also have some adjustment amount, since we always want the lowest value in the jump table to be 0. This
+	 * adjustment will be subtracted from every value at the top to "knock it down" to be within the jump table
+	 */
+	int32_t offset = root_node->optional_storage.switch_bounds.lower_bound;
+
+	//Wipe this out here just in case
+	cfg_result_package_t case_results = INITIALIZE_BLANK_CFG_RESULT;
+
+	//Get to the next statement. This is the first actual case statement
+	case_stmt_cursor = case_stmt_cursor->next_sibling;
+
+	/**
+	 * Unlike with non-exhaustive statements, we know for a fact that we can only ever
+	 * have case statements here. As such, we'll just iterate until we hit the end
+	 * and emit a case statement each time
+	 */
+	while(case_stmt_cursor != NULL){
+		case_results = visit_case_statement(case_stmt_cursor);
+
+		/**
+		 * We'll now need to add this into the jump table. We always subtract the adjustment to ensure
+		 * that we start down at 0 as the lowest value
+		 */
+		add_jump_table_entry(jump_calculation_block->jump_table, case_stmt_cursor->constant_value.signed_int_value - offset, case_results.starting_block);
+
+		//The starting block is a successor to the root block
+		add_successor(jump_calculation_block, case_results.starting_block);
+
+		/**
+		 * If we don't have a terminal statement in the final block, we jump to the
+		 * overall end block
+		 */
+		if(does_block_end_in_terminal_statement(case_results.final_block) == FALSE){
+			emit_jump(case_results.final_block, ending_block);
+		}
+		
+		//Move the cursor up
+		case_stmt_cursor = case_stmt_cursor->next_sibling;
+	}
+
+	/**
+	 * If the end block has no predecessors, that means that every case statement ended in a return statement.
+	 * If this is the case, then the final block should not be the ending block, it should be the function ending block
+	 */
+	if(dynamic_array_is_empty(&(ending_block->predecessors)) == TRUE){
+		result_package.final_block = function_exit_block;
+	}
+
+	//Unpack the result of our input package
+	three_addr_var_t* input_result = unpack_result_package(&input_results, jump_calculation_block);
+
+	//To avoid violating SSA rules, we'll emit a temporary assignment here
+	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result->type), input_result);
+
+	//Add it into the block
+	add_statement(jump_calculation_block, temporary_variable_assignent);
+
+	//Now that all this is done, we can use our jump table for the rest
+	three_addr_var_t* input = emit_binary_operation_with_constant(jump_calculation_block,
+															   		temporary_variable_assignent->operands.oir.assignee,
+															   		temporary_variable_assignent->operands.oir.assignee,
+															   		MINUS,
+															   		emit_direct_integer_or_char_constant(offset, i32));
+
+	/**
+	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
+	 * 	base address(.JT1) + input * 8 
+	 *
+	 * We have a special kind of statement for doing this
+	 * 	
+	 */
+	instruction_t* indirect_jump = emit_indirect_jump_statement(jump_calculation_block->jump_table, input, 8);
+	add_statement(jump_calculation_block, indirect_jump);
+
 	//Give back the starting block
 	return result_package;
+}
+
+
+/**
+ * Visit a switch statement. In Ollie's current implementation, 
+ * the values here will not be reordered at all. Instead, they
+ * will be put in the exact orientation that the user wants
+ */
+static inline cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node){
+	/**
+	 * First case - is this even switch eligible? If it isn't,
+	 * then we need to convert this into an if-else-if statement
+	 * in a separate process
+	 */
+	if(root_node->is_switch_eligible == FALSE){
+		return convert_ollie_switch_to_if_statement(root_node);
+	}
+
+	/**
+	 * There are two kinds of switch statements - non-exhaustive(most common)
+	 * and exhaustive. A non-exhaustive switch statement will have a default
+	 * clause and higher/lower than bound jumping logic, whereas an exhaustive
+	 * switch will not have that. These types of switches are different enough
+	 * to warrant separate methods
+	 */
+	if(root_node->is_exhaustive_switch == FALSE){
+		return visit_non_exhaustive_ollie_switch_statement(root_node);
+	} else {
+		return visit_exhaustive_ollie_switch_statement(root_node);
+	}
 }
 
 
@@ -11364,7 +11645,7 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 	u_int8_t is_main_function = strcmp(function_defined_in->func_name.string, "main") == 0 ? TRUE : FALSE;
 
 	//Run through all of the predecessors
-	for(u_int16_t i = 0; i < function_exit_block->predecessors.current_index; i++){
+	for(int32_t i = 0; i < function_exit_block->predecessors.current_index; i++){
 		//Grab the predecessor out
 		basic_block_t* block = dynamic_array_get_at(&(function_exit_block->predecessors), i);
 
@@ -11436,7 +11717,7 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
  */
 static inline void finalize_all_user_defined_jump_statements(dynamic_array_t* user_defined_jumps){
 	//Run through every jump statement in here
-	for(u_int32_t i = 0; i < user_defined_jumps->current_index; i++){
+	for(int32_t i = 0; i < user_defined_jumps->current_index; i++){
 		//Grab the jump/branch out
 		instruction_t* instruction = dynamic_array_get_at(user_defined_jumps, i);
 
@@ -11513,7 +11794,7 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 	 * Now we are going to process all of our normal function parameters. There is a special
 	 * case that we need to account for: if the user takes that address of a *non stack-passed*
 	 */
-	for(u_int32_t i = 0; i < function_record->function_parameters.current_index; i++){
+	for(int32_t i = 0; i < function_record->function_parameters.current_index; i++){
 		//Extract the parameter
 		symtab_variable_record_t* parameter = dynamic_array_get_at(&(function_record->function_parameters), i);
 
@@ -12864,7 +13145,7 @@ void print_all_cfg_blocks(cfg_t* cfg){
  */
 void reset_visited_status(cfg_t* cfg, u_int8_t reset_direct_successor){
 	//For each block in the CFG
-	for(u_int16_t _ = 0; _ < cfg->created_blocks.current_index; _++){
+	for(int32_t _ = 0; _ < cfg->created_blocks.current_index; _++){
 		//Grab the block out
 		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), _);
 
@@ -12927,7 +13208,7 @@ static void mangle_static_variable_names(dynamic_array_t* global_variables){
 	/**
 	 * Run through all of our global variables here
 	 */
-	for(u_int32_t i = 0; i < global_variables->current_index; i++){
+	for(int32_t i = 0; i < global_variables->current_index; i++){
 		//Extract our current candidate
 		global_variable_t* candidate = dynamic_array_get_at(global_variables, i);
 		

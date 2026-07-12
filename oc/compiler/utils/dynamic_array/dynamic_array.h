@@ -20,10 +20,10 @@ struct dynamic_array_t{
 	//The overall array - void* so it's generic
 	void** internal_array;
 	//The current maximum size
-	u_int16_t current_max_size;
+	int32_t current_max_size;
 	//The current index that we're on - it also happens to be
 	//how many nodes we have
-	u_int16_t current_index;
+	int32_t current_index;
 };
 
 /**
@@ -52,7 +52,7 @@ dynamic_array_t dynamic_array_alloc();
  * size. This is useful if we already know
  * the size we need
  */
-dynamic_array_t dynamic_array_alloc_initial_size(u_int16_t initial_size);
+dynamic_array_t dynamic_array_alloc_initial_size(int32_t initial_size);
 
 
 /**
@@ -88,7 +88,7 @@ void clear_dynamic_array(dynamic_array_t* array);
 /**
  * Get an element at a specified index. Do not remove the element
  */
-void* dynamic_array_get_at(dynamic_array_t* array, u_int16_t index);
+void* dynamic_array_get_at(dynamic_array_t* array, int32_t index);
 
 
 /**
@@ -96,14 +96,14 @@ void* dynamic_array_get_at(dynamic_array_t* array, u_int16_t index);
  * to see if the element is already there. Dynamic resize
  * will be in effect here
  */
-void dynamic_array_set_at(dynamic_array_t* array, void* ptr, u_int16_t index);
+void dynamic_array_set_at(dynamic_array_t* array, void* ptr, int32_t index);
 
 
 /**
  * Delete an element from the dynamic array at a given index. Returns
  * the element at said index
  */
-void* dynamic_array_delete_at(dynamic_array_t* array, u_int16_t index);
+void* dynamic_array_delete_at(dynamic_array_t* array, int32_t index);
 
 /**
  * Delete the pointer itself from the dynamic array

@@ -22,8 +22,23 @@
 //For loops, we estimate that they'll execute 10 times each
 #define LOOP_ESTIMATED_COST 10
 
-//The max switch/case range is 256
-#define MAX_SWITCH_RANGE 256
+/**
+ * The maximum average distance between consecutive case values for 
+ * a switch statement to be considered as internally jump table eligible
+ */
+#define MAX_AVERAGE_CASE_DIFFERENCE 30
+
+/**
+ * The minimum number of case statements that we must have to be considered
+ * for a switch statement at all
+ */
+#define MIN_CASE_MEMBERS 2
+
+/**
+ * The minimum number of values that an in statement must have to be considered
+ * internally as a switch statement
+ */
+#define MIN_IN_MEMBERS 3
 
 //All error sizes are 2000
 #define ERROR_SIZE 2000

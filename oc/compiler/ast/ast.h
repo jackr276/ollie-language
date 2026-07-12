@@ -157,8 +157,6 @@ struct generic_ast_node_t{
 	//The string value could hold an identifier, string constant, or it could hold
 	//an assembly inline statement. It all depends based on context
 	dynamic_string_t string_value;
-	//The number of case statement members in a switch
-	int32_t num_case_members;
 	//What line number is this from
 	u_int32_t line_number;
 	//Store a binary operator(if one exists)
@@ -169,8 +167,10 @@ struct generic_ast_node_t{
 	u_int8_t is_assignable;
 	//Is a dereference needed at the end of this value?
 	u_int8_t dereference_needed;
-	//Is the given in statement switch eligible?
-	u_int8_t is_in_statement_switch_eligible;
+	//Is the given statement(switch or in) eligible to internally be a true switch?
+	u_int8_t is_switch_eligible;
+	//Is the given switch "exhaustive" - this is most usually false
+	u_int8_t is_exhaustive_switch;
 };
 
 /**

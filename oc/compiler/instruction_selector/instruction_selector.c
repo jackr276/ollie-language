@@ -444,14 +444,12 @@ static inline basic_block_t* does_block_end_in_jump(basic_block_t* block){
 		return NULL;
 	}
 
-	//Go based on our type here
 	switch(block->exit_statement->statement_type){
 		//Direct jump, just use the if block
 		case THREE_ADDR_CODE_JUMP_STMT:
 			return block->exit_statement->if_block;
 
-		//In a branch statement, the else block is
-		//the direct jump
+		//In a branch statement, the else block is the direct jump
 		case THREE_ADDR_CODE_BRANCH_STMT:
 			return block->exit_statement->else_block;
 
@@ -6255,7 +6253,7 @@ static inline u_int8_t convert_phi_function_if_redundant(value_numbering_table_t
 	three_addr_var_t* first_parameter = dynamic_array_get_at(parameters, 0);
 
 	//Now run through every other parameter and compare
-	for(u_int32_t i = 1; i < parameters->current_index; i++){
+	for(int32_t i = 1; i < parameters->current_index; i++){
 		three_addr_var_t* compare_to_param = dynamic_array_get_at(parameters, i);
 
 		//If these aren't equal then we fail out
@@ -6314,7 +6312,7 @@ static inline void generate_value_name_key_for_instruction(instruction_t* instru
 			dynamic_string_concatenate(textual_key, "PHI");
 
 			//Concatenate the variable name of each of the parameters onto the end
-			for(u_int32_t i = 0; i < instruction->parameters.current_index; i++){
+			for(int32_t i = 0; i < instruction->parameters.current_index; i++){
 				//Extract the var
 				three_addr_var_t* variable = dynamic_array_get_at(&(instruction->parameters), i);
 
@@ -6443,7 +6441,7 @@ static inline u_int8_t replace_all_parameter_list_variables(value_numbering_tabl
 	u_int8_t performed_substitution = FALSE;
 
 	//Run through the entire list
-	for(u_int32_t i = 0; i < parameter_list->current_index; i++){
+	for(int32_t i = 0; i < parameter_list->current_index; i++){
 		//Grab the old one out
 		three_addr_var_t* old_variable = dynamic_array_get_at(parameter_list, i);
 
@@ -6706,7 +6704,7 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 	 * in the underlying phi functions with their value names that
 	 * we've computed in this block
 	 */
-	for(u_int32_t i = 0; i < block->successors.current_index; i++){
+	for(int32_t i = 0; i < block->successors.current_index; i++){
 		//Grab the successor
 		basic_block_t* successor = dynamic_array_get_at(&(block->successors), i);
 
@@ -6731,7 +6729,7 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 	 * For each child c of the block in the *dominator* tree, we will
 	 * invoke this same algorithm recursively
 	 */
-	for(u_int32_t i = 0; i < block->dominator_children.current_index; i++){
+	for(int32_t i = 0; i < block->dominator_children.current_index; i++){
 		//Extract the dominator chid
 		basic_block_t* dominator_child = dynamic_array_get_at(&(block->dominator_children), i);
 
@@ -6760,7 +6758,7 @@ static inline u_int32_t estimate_value_numbering_keyspace_for_function(dynamic_a
 	u_int32_t keyspace = 0;
 
 	//Run through every block in the function
-	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		basic_block_t* function_block = dynamic_array_get_at(function_blocks, i);
 
 		//Tally up the total instructions
@@ -6846,7 +6844,7 @@ static u_int8_t global_value_numbering_pass(basic_block_t* function_entry_block,
  */
 static inline void reset_visit_status_for_function(dynamic_array_t* function_blocks){
 	//Run through all of the blocks
-	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		//Extract the current block
 		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
 
@@ -6900,7 +6898,7 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 	}
 
 	//Run through everything here
-	for(u_int32_t _ = 0; _ < current_function_blocks->current_index; _++){
+	for(int32_t _ = 0; _ < current_function_blocks->current_index; _++){
 		//Grab the block out
 		basic_block_t* block = dynamic_array_get_at(current_function_blocks, _);
 
@@ -6986,7 +6984,7 @@ static simplification_type_t sweep(dynamic_array_t* function_blocks, basic_block
 	simplification_type_t result = NO_SIMPLIFICATION;
 
 	//For each and every operation in every basic block
-	for(u_int32_t _ = 0; _ < function_blocks->current_index; _++){
+	for(int32_t _ = 0; _ < function_blocks->current_index; _++){
 		//Grab the block out
 		basic_block_t* block = dynamic_array_get_at(function_blocks, _);
 
@@ -7130,7 +7128,7 @@ static inline void reset_marks_for_block(basic_block_t* block){
  */
 static inline void reset_all_marks(dynamic_array_t* function_blocks){
 	//Run through every block
-	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		//Block to work on
 		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
 
@@ -7169,7 +7167,7 @@ static void mark(dynamic_array_t* function_blocks){
 	dynamic_array_t worklist = dynamic_array_alloc();
 
 	//Now we'll go through every single operation in every single block
-	for(u_int32_t _ = 0; _ < function_blocks->current_index; _++){
+	for(int32_t _ = 0; _ < function_blocks->current_index; _++){
 		basic_block_t* current = dynamic_array_get_at(function_blocks, _);
 
 		instruction_t* current_stmt = current->leader_statement;
@@ -7316,7 +7314,7 @@ static void mark(dynamic_array_t* function_blocks){
 				params = stmt->parameters;
 
 				//Add this in here
-				for(u_int32_t i = 0; i < params.current_index; i++){
+				for(int32_t i = 0; i < params.current_index; i++){
 					//Grab the param out
 					three_addr_var_t* phi_func_param = dynamic_array_get_at(&params, i);
 
@@ -7332,7 +7330,7 @@ static void mark(dynamic_array_t* function_blocks){
 				params = stmt->parameters;
 
 				//Run through them all and mark them
-				for(u_int32_t i = 0; i < params.current_index; i++){
+				for(int32_t i = 0; i < params.current_index; i++){
 					mark_and_add_definition(function_blocks, dynamic_array_get_at(&params, i), &worklist);
 				}
 
@@ -7351,7 +7349,7 @@ static void mark(dynamic_array_t* function_blocks){
 				params = stmt->parameters;
 
 				//Run through them all and mark them
-				for(u_int32_t i = 0; i < params.current_index; i++){
+				for(int32_t i = 0; i < params.current_index; i++){
 					mark_and_add_definition(function_blocks, dynamic_array_get_at(&params, i), &worklist);
 				}
 
@@ -7403,7 +7401,7 @@ static void mark(dynamic_array_t* function_blocks){
 		 */
 		//If this block even has an RDF(it may now)
 		if(block->reverse_dominance_frontier.internal_array != NULL){
-			for(u_int32_t i = 0; i < block->reverse_dominance_frontier.current_index; i++){
+			for(int32_t i = 0; i < block->reverse_dominance_frontier.current_index; i++){
 				//Grab the block out of the RDF
 				basic_block_t* rdf_block = dynamic_array_get_at(&(block->reverse_dominance_frontier), i);
 
@@ -7492,7 +7490,7 @@ static void simplify(cfg_t* cfg){
 	 * one function requires a lot of simplification, it will not drag the rest of the 
 	 * functions along with it in each pass
 	 */
-	for(u_int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Extract it
 		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 

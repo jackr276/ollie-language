@@ -63,7 +63,7 @@ dynamic_array_t* dynamic_array_heap_alloc(){
  * size. This is useful if we already know
  * the size we need
  */
-dynamic_array_t dynamic_array_alloc_initial_size(u_int16_t initial_size){
+dynamic_array_t dynamic_array_alloc_initial_size(int32_t initial_size){
 //First we'll create the overall structure
  	dynamic_array_t array;
 
@@ -122,7 +122,7 @@ int16_t dynamic_array_contains(dynamic_array_t* array, void* ptr){
 	}
 
 	//We'll run through the entire array, comparing pointer by pointer
-	for(u_int32_t i = 0; i < array->current_index; i++){
+	for(int32_t i = 0; i < array->current_index; i++){
 		//If we find an exact memory address match return true
 		if(array->internal_array[i] == ptr){
 			return i;
@@ -198,7 +198,7 @@ void clear_dynamic_array(dynamic_array_t* array){
 /**
  * Get an element at a specified index. Do not remove the element
  */
-void* dynamic_array_get_at(dynamic_array_t* array, u_int16_t index){
+void* dynamic_array_get_at(dynamic_array_t* array, int32_t index){
 	//Return NULL here. It is the caller's responsibility
 	//to check this
 	if(array->current_max_size <= index){
@@ -216,7 +216,7 @@ void* dynamic_array_get_at(dynamic_array_t* array, u_int16_t index){
  * to see if the element is already there. Dynamic resize
  * will be in effect here
  */
-void dynamic_array_set_at(dynamic_array_t* array, void* ptr, u_int16_t index){
+void dynamic_array_set_at(dynamic_array_t* array, void* ptr, int32_t index){
 	//Let's just double check here
 	if(ptr == NULL){
 		printf("ERROR: Attempting to set index %d to a NULL pointer ino a dynamic array\n", index);
@@ -241,7 +241,7 @@ void dynamic_array_set_at(dynamic_array_t* array, void* ptr, u_int16_t index){
  * is returned, allowing this to be used as a search & delete function
  * all in one
  */
-void* dynamic_array_delete_at(dynamic_array_t* array, u_int16_t index){
+void* dynamic_array_delete_at(dynamic_array_t* array, int32_t index){
 	//Again if we can't do this, we won't disrupt the program. Just return NULL
 	if(array->current_index <= index){
 		return NULL;
@@ -252,7 +252,7 @@ void* dynamic_array_delete_at(dynamic_array_t* array, u_int16_t index){
 
 	//Now we'll run through everything from that index up until the end, 
 	//shifting left every time
-	for(u_int16_t i = index; i < array->current_index - 1; i++){
+	for(int32_t i = index; i < array->current_index - 1; i++){
 		//Shift left here
 		array->internal_array[i] = array->internal_array[i + 1];
 	}
@@ -340,7 +340,7 @@ u_int8_t dynamic_arrays_equal(dynamic_array_t* a, dynamic_array_t* b){
 	u_int8_t found_a;
 	
 	//For every node in the "a" array
-	for(u_int16_t i = 0; i < a->current_index; i++){
+	for(int32_t i = 0; i < a->current_index; i++){
 		//Let's grab out this pointer
 		void* a_ptr = a->internal_array[i];
 
@@ -349,7 +349,7 @@ u_int8_t dynamic_arrays_equal(dynamic_array_t* a, dynamic_array_t* b){
 
 		//Now we must find this a_ptr in b. If we can't find
 		//it, the whole thing is over
-		for(u_int16_t j = 0; j < b->current_index; j++){
+		for(int32_t j = 0; j < b->current_index; j++){
 			//If we have a match, set the flag to
 			//true and get out
 			if(a_ptr == b->internal_array[j]){

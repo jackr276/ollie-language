@@ -276,7 +276,7 @@ static void realign_data_area(stack_data_area_t* area){
 	area->total_size = 0;
 
 	//Run through every single variable
-	for(u_int32_t i = 0; i < area->stack_regions.current_index; i++){
+	for(int32_t i = 0; i < area->stack_regions.current_index; i++){
 		//Fetch the region out
 		stack_region_t* region = dynamic_array_get_at(&(area->stack_regions), i);
 
@@ -376,7 +376,7 @@ void sweep_stack_data_area(stack_data_area_t* area){
 	dynamic_array_t marked_for_deletion = dynamic_array_alloc();
 
 	//Run through the entire data area
-	for(u_int16_t i = 0; i < area->stack_regions.current_index; i++){
+	for(int32_t i = 0; i < area->stack_regions.current_index; i++){
 		//Grab the region out
 		stack_region_t* region = dynamic_array_get_at(&(area->stack_regions), i);
 
@@ -391,7 +391,7 @@ void sweep_stack_data_area(stack_data_area_t* area){
 	}
 
 	//Once we have all of these that are marked for deletion, we will delete them all
-	for(u_int16_t i = 0; i < marked_for_deletion.current_index; i++){
+	for(int32_t i = 0; i < marked_for_deletion.current_index; i++){
 		//Delete it from the stack
 		dynamic_array_delete(&(area->stack_regions), dynamic_array_get_at(&marked_for_deletion, i));
 	}
@@ -428,7 +428,7 @@ void recompute_stack_passed_parameter_region_offsets(stack_data_area_t* stack_pa
 	additional_offset += function_stack_frame_size_bytes;
 
 	//Now run through every stack region
-	for(u_int32_t i = 0; i < stack_passed_parameter_region->stack_regions.current_index; i++){
+	for(int32_t i = 0; i < stack_passed_parameter_region->stack_regions.current_index; i++){
 		//Extract the region to work on
 		stack_region_t* region = dynamic_array_get_at(&(stack_passed_parameter_region->stack_regions), i);
 
@@ -525,7 +525,7 @@ stack_region_t* does_stack_contain_pointer_to_variable(stack_data_area_t* area, 
  */
 void stack_data_area_dealloc(stack_data_area_t* stack_data_area){
 	//Run through all regions
-	for(u_int16_t i = 0; i < stack_data_area->stack_regions.current_index; i++){
+	for(int32_t i = 0; i < stack_data_area->stack_regions.current_index; i++){
 		//Grab it out
 		stack_region_t* region = dynamic_array_get_at(&(stack_data_area->stack_regions), i);
 

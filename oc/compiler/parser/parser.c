@@ -18,6 +18,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include "parser.h"
+#include "../utils/dynamic_integer_array/dynamic_integer_array.h"
 #include "../utils/stack/lexstack.h"
 #include "../utils/stack/nesting_stack.h"
 #include "../utils/queue/heap_queue.h"
@@ -114,7 +115,7 @@ static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream
 static generic_ast_node_t* statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global, visibilty_type_t visibility);
 static generic_ast_node_t* logical_or_expression(ollie_token_stream_t* token_stream, side_type_t side);
-static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, generic_ast_node_t* switch_stmt_node, int32_t* values, int32_t* current_case_value);
+static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, generic_ast_node_t* switch_stmt_node, dynamic_integer_array_t* switch_values);
 static generic_ast_node_t* default_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream, u_int8_t is_global, visibilty_type_t visibility);
 static generic_ast_node_t* defer_statement(ollie_token_stream_t* token_stream);
@@ -198,7 +199,7 @@ static inline u_int8_t does_enum_contain_integer_member(generic_type_t* enum_typ
 	dynamic_array_t* member_table = &(enum_type->internal_types.enumeration_table);
 
 	//Run through the enum type's table
-	for(u_int16_t i = 0; i < member_table->current_index; i++){
+	for(int32_t i = 0; i < member_table->current_index; i++){
 		symtab_variable_record_t* member = dynamic_array_get_at((member_table), i);
 
 		//Match found - we can get out
@@ -456,48 +457,6 @@ static inline u_int8_t can_variable_be_assigned_to(symtab_variable_record_t* var
 	} else {
 		return FALSE;
 	}
-}
-
-
-/**
- * Insert a value into a list in sorted order(least to greatest).
- * We assume that the list is inherently large enought to do this.
- * This is meant primarily for case statement handling. It also validates
- * the uniqueness constraint of the list given in
- */
-static int32_t sorted_list_insert_unique(int32_t* list, int32_t* max_index, int32_t value){
-	//We will need this outside of the loop's scope
-	int32_t i;
-
-	//Run through everything in the list
-	for(i = 0; i < *max_index; i++){
-		//Once we've found it, we can get out
-		if(value < list[i]){
-			break;
-		}
-
-		//This invalidates the uniqueness constraint
-		//so we need to fail out
-		if(value == list[i]){
-			return FALSE;
-		}
-	}
-
-	//Bump this up now, we're going to have one more element
-	*max_index += 1;
-
-	//Shift everything in the list to the right to
-	//make room
-	for(int32_t j = *max_index - 1; j > i; j--){
-		//Shift over by 1 each time
-		list[j] = list[j - 1];
-	}
-
-	//And finally, put in our guy
-	list[i] = value;
-
-	//This worked
-	return TRUE;
 }
 
 
@@ -1340,7 +1299,7 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 		 * We need to make sure that we do not have any duplicates here. Since this is a switch statement internally,
 		 * it's very important that every error is unique
 		 */
-		for(u_int32_t i = 0; i < errors_seen.current_index; i++){
+		for(int32_t i = 0; i < errors_seen.current_index; i++){
 			//Extract it
 			generic_type_t* error_type = dynamic_array_get_at(&errors_seen, i);
 
@@ -1394,7 +1353,7 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 	
 	//First search for the generic error
 	u_int8_t found_generic_error = FALSE;
-	for(u_int32_t i = 0; i < errors_seen.current_index; i++){
+	for(int32_t i = 0; i < errors_seen.current_index; i++){
 		//Extract the type
 		generic_type_t* error_type = dynamic_array_get_at(&errors_seen, i);
 	
@@ -1414,7 +1373,7 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 	 * Now let's validate that *if* the function has a specific raises statement, we validate
 	 * all of those as well
 	 */
-	for(u_int32_t i = 0; i < function_type->potential_errors.current_index; i++){
+	for(int32_t i = 0; i < function_type->potential_errors.current_index; i++){
 		//Extract the error
 		generic_type_t* mandatory_checked_error = dynamic_array_get_at(&(function_type->potential_errors), i);
 
@@ -1422,7 +1381,7 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 		u_int32_t seen_error = FALSE;
 
 		//Now we need to see if this error is inside of the errors that we've handled before
-		for(u_int32_t j = 0; j < errors_seen.current_index; j++){
+		for(int32_t j = 0; j < errors_seen.current_index; j++){
 			//Extract it
 			generic_type_t* error_handled = dynamic_array_get_at(&errors_seen, j);
 
@@ -1642,7 +1601,7 @@ static inline u_int8_t is_namespace_predecessor_of_given(function_namespace_t* p
 			return SUCCESS;
 		}
 
-		for(u_int32_t i = 0; i < cursor->child_namespaces.current_index; i++){
+		for(int32_t i = 0; i < cursor->child_namespaces.current_index; i++){
 			//Extract it
 			function_namespace_t* candidate = dynamic_array_get_at(&(cursor->child_namespaces), i);
 
@@ -6343,6 +6302,59 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 
 
 /**
+ * Determine whether an in-statement's values are eligible to be considered as
+ * a switch statement internally, or if we will instead use an if-else statement
+ * to handle this
+ *
+ * This rule will also leverage the traversal of the in members that it is already
+ * doing to determine a min and max value
+ */
+static inline u_int8_t determine_in_statement_switch_eligibility(generic_ast_node_t* in_statement_node, dynamic_integer_array_t* sorted_in_member_values){
+	/**
+	 * If the user has done something silly like an in-statement with only one member, we will rewrite this for them
+	 */
+	if(sorted_in_member_values->current_index < MIN_IN_MEMBERS){
+		//If it's just 1 member we'll warn the user
+		if(sorted_in_member_values->current_index == 1){
+			print_parse_message(MESSAGE_TYPE_WARNING, "Consider rewrite of in statment with 1 member into a regular comparison expression", parser_line_num);
+			num_warnings++;
+		}
+
+		//Either way just fail out as it's not switch eligible
+		return FALSE;
+	}
+
+	/**
+	 * If the average distance(sparseness) is greater than 30, we will
+	 * make this into an if-else statement. The sorted value array is 
+	 * important because we only care about the average distance between
+	 * values that are adjacent numerically. It doesn't matter if they're
+	 * out of order
+	 */
+	int64_t average_distance = 0;
+	for(int32_t i = 1; i < sorted_in_member_values->current_index; i++){
+		int32_t first_value = sorted_in_member_values->internal_array[i - 1];
+		int32_t second_value = sorted_in_member_values->internal_array[i];
+
+		average_distance += (second_value - first_value);
+	}
+
+	//Find the actual average
+	average_distance /= sorted_in_member_values->current_index;
+
+	//If it exceeds the max distance it is not switch eligible(too sparse)
+	if(average_distance > MAX_AVERAGE_CASE_DIFFERENCE){
+		return FALSE;
+	}
+
+	//If we've made it here, we can populate the bounds and return success
+	in_statement_node->optional_storage.switch_bounds.lower_bound = sorted_in_member_values->internal_array[0];
+	in_statement_node->optional_storage.switch_bounds.upper_bound = sorted_in_member_values->internal_array[sorted_in_member_values->current_index - 1];
+	return TRUE;
+}
+
+
+/**
  * An ollie in expression is a syntactic convenience expression type that allows us to check
  * if the result of a given logical or expression exists within a range of compatible values
  *
@@ -6357,14 +6369,12 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, side_type_t side){
 	//Our lookahead token
 	lexitem_t lookahead;
-	//Keep track of how many members we have
-	int32_t in_statement_members = 0;
-	//Is this in expression eligible to become a switch statement? Assume true by default
-	u_int8_t is_switch_eligible = TRUE;
-
-	//We'll need to track these for min/max value tracking
-	int32_t max_value = INT_MIN;
-	int32_t min_value = INT_MAX;
+	//Allocate space to hold all of the current constant values
+	dynamic_array_t in_member_array = dynamic_array_alloc();
+	//Allocate more space for all of our integer values
+	dynamic_integer_array_t sorted_in_member_array = dynamic_integer_array_alloc();
+	//Are all of the members switch eligible? Assume true by default
+	u_int8_t are_all_members_switch_eligible = TRUE;
 
 	//The first thing that we need to see is some kind of valid ternary expression
 	generic_ast_node_t* starting_expression = ternary_expression(token_stream, side);
@@ -6449,9 +6459,12 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		/**
 		 * If we see *at least one* floating point number before we coerce, then this
 		 * whole thing is going to be forced to use the if chain
+		 *
+		 * NOTE: we *must* do this before the is_constant_valid check because that
+		 * check will perform coercion. We need the raw type for this to be accurate
 		 */
 		if(IS_FLOATING_POINT(expression->inferred_type) == TRUE){
-			is_switch_eligible = FALSE;
+			are_all_members_switch_eligible = FALSE;
 		}
 
 		/**
@@ -6460,10 +6473,7 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		 *
 		 * This rule prints out any/all errors so we don't need to worry about that
 		 */
-		u_int8_t compatible = is_constant_valid_for_in_statement_type(comparing_to_type, expression);
-		
-		//Fail out if we don't have it
-		if(compatible == FALSE){
+		if(is_constant_valid_for_in_statement_type(comparing_to_type, expression) == FALSE){
 			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
 		}
 
@@ -6472,38 +6482,28 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		 * constant inside of the member list. If we detect that this is a duplicate 
 		 * then we fail out
 		 */
-		generic_ast_node_t* member_cursor = root_node->first_child->next_sibling;
-		while(member_cursor != NULL){
+		for(int32_t i = 0; i < in_member_array.current_index; i++){
+			generic_ast_node_t* member = dynamic_array_get_at(&in_member_array, i);
+
 			//Fail out if they are equal
-			if(constant_nodes_equal(member_cursor, expression) == TRUE){
+			if(constant_nodes_equal(member, expression) == TRUE){
 				return print_and_return_error("Duplicate member values detected in in statement", parser_line_num);
-			}
-
-			//Bump it up to the next member
-			member_cursor = member_cursor->next_sibling;
-		}
-
-		/**
-		 * Once we know that they're equal, if this is switch eligible, we will need to maintain
-		 * a list of switch values here for tracking
-		 */
-		if(is_switch_eligible == TRUE){
-			int32_t current_value = expression->constant_value.signed_int_value;
-
-			if(current_value > max_value){
-				max_value = current_value;
-			}
-
-			if(current_value < min_value){
-				min_value = current_value;
 			}
 		}
 
 		//Now that we know this is valid we can add it as a child to the in statement
 		add_child_node(root_node, expression);
 
-		//Bump the member count up by one more
-		in_statement_members++;
+		//Also add this in as a member to our list of all current members
+		dynamic_array_add(&in_member_array, expression);
+
+		/**
+		 * If we're still switch eligible, add the integer constant into
+		 * the sorted array in a sorted fashion
+		 */
+		if(are_all_members_switch_eligible == TRUE){
+			sorted_dynamic_integer_array_insert_unique(&sorted_in_member_array, expression->constant_value.signed_int_value);
+		}
 
 		//Now we can either see a comma or a closing parenthesis
 		lookahead = get_next_token(token_stream, &parser_line_num);
@@ -6528,14 +6528,6 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 	 */
 	if(pop_token(&grouping_stack).tok != L_PAREN){
 		return print_and_return_error("Mismatched parenthesis detected in in statement list", parser_line_num);
-	}
-
-	/**
-	 * If the user has done something silly like an in-statement with only one member, we will rewrite this for them
-	 */
-	if(in_statement_members == 1){
-		print_parse_message(MESSAGE_TYPE_WARNING, "Consider rewrite of in statment with 1 member into a regular comparison expression", parser_line_num);
-		num_warnings++;
 	}
 
 	/**
@@ -6571,34 +6563,20 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		root_node->inferred_type = immut_i8;
 	}
 
-	//Store how many members we have in here
-	root_node->num_case_members = in_statement_members;
-
 	/**
-	 * If we have only one member, then by default this is not
-	 * switch eligible and we will force it into being a conditional
-	 * move expression
+	 * Let the helper determine our eligiblity for a switch and deal with the min/max determinations. If
+	 * we've found at least one floating point value we will skip this entire thing and just flag
+	 * it as not eligible
 	 */
-	if(in_statement_members == 1){
-		is_switch_eligible = FALSE;
+	if(are_all_members_switch_eligible == TRUE){
+		root_node->is_switch_eligible = determine_in_statement_switch_eligibility(root_node, &sorted_in_member_array);
+	} else {
+		root_node->is_switch_eligible = FALSE;
 	}
 
-	/**
-	 * If we run into a case where we are larger than the max switch range, we will
-	 * converting to a conditional assignment chain instead
-	 */
-	if(max_value - min_value >= MAX_SWITCH_RANGE){
-		is_switch_eligible = FALSE;
-	}
-
-	//Store whether or not we are switch eligible
-	root_node->is_in_statement_switch_eligible = is_switch_eligible;
-
-	//If this is switch eligible, then store our bounds here
-	if(is_switch_eligible == TRUE){
-		root_node->optional_storage.switch_bounds.lower_bound = min_value;
-		root_node->optional_storage.switch_bounds.upper_bound = max_value;
-	}
+	//Destroy these now that we're done
+	dynamic_array_dealloc(&in_member_array);
+	dynamic_integer_array_dealloc(&sorted_in_member_array);
 
 	//Give back the root of this node
 	return root_node;
@@ -10028,11 +10006,243 @@ static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream){
 
 
 /**
+ * Is the given type eligible to be switched on in a switch statement?
+ */
+static inline u_int8_t is_type_eligible_for_switch_statement(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_BASIC:
+			//Only things that don't count are voids and floats
+			switch(type->basic_type_token){
+				case VOID:
+				case F32:
+				case F64:
+					return FALSE;
+				default:
+					return TRUE;
+			}
+
+		//All enumerated types are valid
+		case TYPE_CLASS_ENUMERATED:
+			return TRUE;
+
+		//Anything else is an immediate no
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Determine whether or not the (sorted) list of switch statement values is eligible 
+ * to be internally considered as a switch statement, or if the switch statement should
+ * instead be internally converted to an if-else statement.
+ *
+ * The two main checks are:
+ * 	1.) Case count - if we have less than 3 case statements, a switch is not worthwhile
+ * 	2.) Sparseness - if the average distance between values is greater than 30, then an
+ * 		if statement would be better suited
+ */
+static inline u_int8_t determine_switch_eligibility(dynamic_integer_array_t* switch_statement_values){
+	/**
+	 * 3 statements or less - a switch would actually lead to more
+	 * branching so we will convert this to an if-else
+	 *
+	 * 2 is here because remember, there is almost always a default clause
+	 */
+	if(switch_statement_values->current_index < MIN_CASE_MEMBERS){
+		return FALSE;
+	}
+
+	/**
+	 * Now we will compute the average distance between values. If the average distance
+	 * is more than 20 between nodes, we consider this to be a "sparse" switch statement where
+	 * we are better of converting to an if-else-if
+	 */
+	int64_t average_distance = 0;
+
+	//Now run through every other value and sum up the distance
+	for(int32_t i = 1; i < switch_statement_values->current_index; i++){
+		int32_t previous_value = switch_statement_values->internal_array[i - 1];
+		int32_t value = switch_statement_values->internal_array[i];
+
+		//Add this to our average distance. This should always be positive
+		average_distance += (value - previous_value);
+
+		//This now is the previous value
+		previous_value = value;
+	}
+
+	//Now get the actual average distance
+	average_distance /= switch_statement_values->current_index;
+
+	//Greater than 30, we are too sparse for switching
+	if(average_distance >= MAX_AVERAGE_CASE_DIFFERENCE){
+		return FALSE;
+	}
+
+	//If we survived to down here then we are switch eligible
+	return TRUE;
+}
+
+
+/**
+ * Is a given type "exhaustive switch eligible"?
+ *
+ * Remember that exhaustive switch statements do not require
+ * the user to enter a default clause. This will only ever
+ * work if we are confident that all possible values are
+ * accounted for within the switching on type's range
+ *
+ * Only enum types who have less than the MAX_SWITCH_RANGE members will
+ * even be considered. Even then, there will need to be *0* gaps
+ * in between the values for this to work
+ */
+static inline u_int8_t is_type_exhaustive_switch_eligible(generic_type_t* type){
+	//Make sure it's not aliased
+	type = dealias_type(type);
+
+	//If it's not an enum type then this isn't going to work
+	if(type->type_class != TYPE_CLASS_ENUMERATED){
+		return FALSE;
+	}
+	
+	//Extract for convenience
+	dynamic_array_t* enumeration_table = &(type->internal_types.enumeration_table);
+
+	/**
+	 * Remember that in Ollie, users are able to assign enum values their
+	 * own types. This means that values may *not* always be 1 apart from
+	 * each other. We'll need to check and see if all of the values inside of
+	 * the enumeration are in fact 1 apart
+	 */
+	int32_t min_enum_value = type->min_enum_value;
+	int32_t max_enum_value = type->max_enum_value;
+
+	//The range of all possible enum values
+	int32_t enum_range = max_enum_value - min_enum_value + 1;
+
+	//Define a bytemap of all potential enum values and wipe it all out to 0
+	u_int8_t value_map[enum_range];
+	memset(value_map, 0, sizeof(u_int8_t) * enum_range);
+
+	/**
+	 * Let's now go through and fill out the byte map that we've made
+	 * with all of the values in the enumeration table. When we're done,
+	 * if this is switch eligible we'd have an array like: [1, 1, 1, 1, 1, 1].
+	 * If it's not, we may have something like [1, 1, 0, 1, 1] where there
+	 * are gaps in the exhaustive range
+	 */
+	for(int32_t i = 0; i < enumeration_table->current_index; i++){
+		//Extract the members enum value
+		symtab_variable_record_t* member = dynamic_array_get_at(enumeration_table, i);
+		int32_t raw_enum_value = member->enum_member_value;
+
+		//Fill out that this exists now
+		value_map[raw_enum_value - min_enum_value] = TRUE;
+	}
+
+	/**
+	 * Now for our final check - if any of the indices
+	 * here have 0, that means that that value in the enum
+	 * range simply doesn't exist. If we see that, we
+	 * fail out
+	 */
+	for(int32_t i = 0; i < enum_range; i++){
+		if(value_map[i] == FALSE){
+			return FALSE;
+		}
+	}
+	
+	//If we survived to here then we're true
+	return TRUE;
+}
+
+
+/**
+ * In Ollie, we define an "exhaustive switch" to be a switch that fully occupies the
+ * range of all values. If a switch is exhaustive, we do *not* require a default
+ * clause to be provided. An exhaustive switch is not the same as a switch that
+ * simply has no gaps in between the members. This helper will validate both the
+ * exhaustive switch type and the members themselves and return a determination
+ */
+static inline u_int8_t is_switch_exhaustive_switch(generic_type_t* switching_on_type, dynamic_integer_array_t* switch_statement_values){
+	/**
+	 * Determine if we meet the very strict criteria for type eligibility
+	 * before doing anything else
+	 */
+	if(is_type_exhaustive_switch_eligible(switching_on_type) == FALSE){
+		return FALSE;
+	}
+
+	/**
+	 * Extract the min and max values from our sorted list
+	 */
+	int32_t min_case_value = switch_statement_values->internal_array[0];
+	int32_t max_case_value = switch_statement_values->internal_array[switch_statement_values->current_index - 1];
+	int32_t min_enum_value = switching_on_type->min_enum_value;
+	int32_t max_enum_value = switching_on_type->max_enum_value;
+
+	/**
+	 * Check 1: if the min/max case values do not match up with the enum's min and max values,
+	 * then there's no point in checking any more
+	 */
+	if(min_case_value != min_enum_value || max_case_value != max_enum_value){
+		return FALSE;
+	}
+
+	//The range of all possible enum values
+	int32_t range = max_enum_value - min_enum_value + 1;
+
+	//Define a bytemap of all potential enum values and wipe it all out to 0
+	u_int8_t value_map[range];
+	memset(value_map, 0, sizeof(u_int8_t) * range);
+
+	/**
+	 * Let's now go through and fill out the byte map that we've made
+	 * with all of the values in the enumeration table. When we're done,
+	 * if this is switch eligible we'd have an array like: [1, 1, 1, 1, 1, 1].
+	 * If it's not, we may have something like [1, 1, 0, 1, 1] where there
+	 * are gaps in the exhaustive range
+	 */
+	for(int32_t i = 0; i < switch_statement_values->current_index; i++){
+		//Extract the value
+		int32_t value = dynamic_integer_array_get_at(switch_statement_values, i);
+
+		//Fill out that this exists now
+		value_map[value - min_enum_value] = TRUE;
+	}
+
+	/**
+	 * Now for our final check - if any of the indices
+	 * here have 0, that means that that value in the enum
+	 * range simply doesn't exist. If we see that, we
+	 * fail out
+	 */
+	for(int32_t i = 0; i < range; i++){
+		if(value_map[i] == FALSE){
+			return FALSE;
+		}
+	}
+
+	//If we survived to here then it worked
+	return TRUE;
+}
+
+
+/**
  * A switch statement allows us to to see one or more labels defined by a certain expression. It allows
  * for the use of labeled statements followed by statements in general. We will do more static analysis
  * on this later. Like all rules in the system, this function returns the root node that it creates
  *
  * NOTE: The caller has already consumed the switch keyword by the time we get here
+ *
+ * NOTE: If we determine that the range of values in the case statements is *larger* than the maximum allowed
+ * switch range by OC, we will flag this as not switch eligible and internally turn this into a chained if-else-if
+ * statement.
+ *
+ * The "max switch range" refers to the maximum distance between the highest and lowest members of the switch
+ * statement, though in the case where all members are 1 apart, this also acts as our maximum case statement
+ * count period before we will internally convert to an if-else statement
  *
  * BNF Rule: <switch-statement> ::= switch on( <logical-or-expression> ) from(<constant>, <constant>) { {<case-statement | default-statement>}+ }
  */
@@ -10043,8 +10253,6 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	u_int8_t found_default_clause = FALSE;
 	//We are initially undecided on the type
 	ollie_switch_type_t ollie_switch_type = OLLIE_SWITCH_TYPE_UNDECIDED;
-	//How many case statements do we have for the switch?
-	u_int32_t num_case_statements = 0;
 
 	/**
 	 * Once we get here, we can allocate the root level node
@@ -10077,36 +10285,26 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 		return print_and_return_error("Invalid conditional expression provided to switch on", parser_line_num);
 	}
 	
-	//For a switch statement, we need an enum or some other kind of numeric type to switch based on. We cannot switch on
-	//types like floats, etc
-	
-	//Grab the type info out
-	generic_type_t* type = expr_node->inferred_type;
+	/**
+	 * What is the type that we are switching on? This is entirely
+	 * determined by the type on the switch expression itself
+	 */
+	generic_type_t* switching_on_type = expr_node->inferred_type;
 
-	//Let's see what kind of type we have here. If it isn't a basic type, it MUST be an enum
-	if(type->type_class != TYPE_CLASS_BASIC){
-		//Error out here
-		if(type->type_class != TYPE_CLASS_ENUMERATED){
-			sprintf(info, "Type \"%s\" cannot be switched", type->type_name.string);
-			return print_and_return_error(info, expr_node->line_number);
-		}
-	//Otherwise, it essentially needs to be an int or a char. Nothing else here is "switchable"	
-	} else {
-		//Grab the basic type
-		ollie_token_t basic_type = type->basic_type_token;
-
-		//It needs to be an int or char
-		if(basic_type == VOID || basic_type == F32 || basic_type == F64){
-			sprintf(info, "Type \"%s\" cannot be switched", type->type_name.string);
-			return print_and_return_error(info, expr_node->line_number);
-		}
+	/**
+	 * Internal checks to make sure that this is eligible - the only things
+	 * that are eligible are integers of any kind and enumerated values
+	 */
+	if(is_type_eligible_for_switch_statement(switching_on_type) == FALSE){
+		sprintf(info, "Type \"%s\" is ineligible for use on a switch statement", switching_on_type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Since we know it's valid, we can add this in as a child
 	add_child_node(switch_stmt_node, expr_node);
 
 	//Assign this to be the switch statement's inferred type, because it's what we'll be switching on
-	switch_stmt_node->inferred_type = type;
+	switch_stmt_node->inferred_type = switching_on_type;
 
 	//Now we must see a closing paren
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -10138,18 +10336,15 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 
 	/**
 	 * We'll need to keep track of whether or not we have any duplicated values. As such, we'll keep an array
-	 * of all the values that we do have. Since we can only have 1024 values, this array need only be 1024
-	 * long. Every time we see a value in a case statement, we'll need to cross reference it with the
-	 * values in here
+	 * of all the values that we do have.
 	 */
-	int32_t values[MAX_SWITCH_RANGE];
+	dynamic_integer_array_t switch_values = dynamic_integer_array_alloc();
 
-	//Wipe the entire thing so they're all 0's(FALSE)
-	memset(values, 0, MAX_SWITCH_RANGE * sizeof(int32_t));
-
-	//Now we can see as many expressions as we'd like. We'll keep looking for expressions so long as
-	//our lookahead token is not an R_CURLY. We'll use a do-while for this, because Ollie language requires
-	//that switch statements have at least one thing in them
+	/**
+	 * Now we can see as many expressions as we'd like. We'll keep looking for expressions so long as
+	 * our lookahead token is not an R_CURLY. We'll use a do-while for this, because Ollie language requires
+	 * that switch statements have at least one thing in them
+	 */
 
 	//Seed our search here
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -10158,19 +10353,17 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	//Handle our statement here
 	generic_ast_node_t* stmt;
 
-	//What is the current case statement value that we're on?. This is 
-	//used in the values[] above
-	int32_t values_max_index = 0;
-
 	//So long as we don't see a right curly
 	while(lookahead.tok != R_CURLY){
 		//Switch by the lookahead
 		switch(lookahead.tok){
 			//We can see a case statement here
 			case CASE:
-				//Handle a case statement here. We'll need to pass
-				//the node in because of the type checking that we do
-				stmt = case_statement(token_stream, switch_stmt_node, values, &values_max_index);
+				/**
+				 * Handle a case statement here. We'll need to pass
+				 * the entire node in because of the type checking that we do
+				 */
+				stmt = case_statement(token_stream, switch_stmt_node, &switch_values);
 
 				//Go based on what our class here
 				switch(stmt->ast_node_type){
@@ -10213,7 +10406,6 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 
 				//No longer empty
 				is_empty = FALSE;
-				num_case_statements++;
 
 				break;
 
@@ -10279,8 +10471,14 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 
 		//If we get here we know it worked, so we can add it in as a child
 		add_child_node(switch_stmt_node, stmt);
+
 		//Refresh the lookahead token
 		lookahead = get_next_token(token_stream, &parser_line_num);
+	}
+
+	//By the time we reach this, we should have seen a right curly
+	if(pop_token(&grouping_stack).tok != L_CURLY){
+		return print_and_return_error("Unmatched curly braces detected", parser_line_num);
 	}
 
 	//If we have an entirely empty switch statement, it's a failure
@@ -10288,149 +10486,24 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 		return print_and_return_error("Switch statements with no cases are not allowed", parser_line_num);
 	}
 
-	//Do we have a type that is eligible for a "exhaustive switch"? If so, this would
-	//mean that we may not need a default clause at all
-	if(is_exhaustive_switch_eligible(type) == TRUE){
-		//Should we check for exhaustiveness here? Assume true
-		//unless told otherwise
-		u_int8_t check_for_exhaustive = TRUE;
+	//Let the helpers determine the switch eligibility and exhaustive switch eligibility
+	switch_stmt_node->is_switch_eligible = determine_switch_eligibility(&switch_values);
+	switch_stmt_node->is_exhaustive_switch = is_switch_exhaustive_switch(switching_on_type, &switch_values);
 
-		//Now go based on what kind of type we have here
-		switch(type->type_class){
-			//For basic types, we need to check if we're getting a full range
-			case TYPE_CLASS_BASIC:
-				switch(type->basic_type_token){
-					case U8:
-					case CHAR:
-						//If we want to check for exhaustive, we'll need 
-						//the low and high to be the lower and upper bounds
-						if(switch_stmt_node->optional_storage.switch_bounds.lower_bound != 0 
-							|| switch_stmt_node->optional_storage.switch_bounds.upper_bound != UINT8_MAX){
+	/**
+	 * If this is not exhaustive and we have not found the default clause, then this is an error
+	 * and we fail out
+	 */
+	if(switch_stmt_node->is_exhaustive_switch == FALSE && found_default_clause == FALSE){
+		return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
+	}
 
-							//Don't bother checking
-							check_for_exhaustive = FALSE;
-						}
-
-						break;
-					
-					case I8:
-						//If we want to check for exhaustive, we'll need 
-						//the low and high to be the lower and upper bounds
-						if(switch_stmt_node->optional_storage.switch_bounds.lower_bound != INT8_MIN 
-							|| switch_stmt_node->optional_storage.switch_bounds.upper_bound != INT8_MAX){
-
-							//Don't bother checking
-							check_for_exhaustive = FALSE;
-						}
-						
-						break;
-
-					//Unreachable so if we hit this get out
-					default:
-						printf("Fatal internal compiler error. Unreachable path hit in switch statement validator\n");
-						exit(1);
-				}
-
-				//Are we going to bother checking to see if it's exhaustive?
-				if(check_for_exhaustive == TRUE){
-					//Did we find a gap? assume no to start
-					u_int8_t gap_found = FALSE;
-
-					//Run through the list and ensure that there are no gaps between the values
-					for(int32_t i = 1; i < values_max_index; i++){
-						//This is a gap, immediate exit
-						if(values[i] - values[i - 1] != 1){
-							gap_found = TRUE;
-							break;
-						}
-					}
-
-					//If there is no gap, then this is exhaustive and we do *not* need 
-					//a default clause
-					if(gap_found == FALSE){
-						//If we haven't found a default clause, it's a failure
-						if(found_default_clause == TRUE){
-							return print_and_return_error("\"default\" clause in exhaustive switch is unreachable", parser_line_num);
-						}	
-
-					//Otherwise it's not exhaustive, so we do
-					} else {
-						//If we haven't found a default clause, it's a failure
-						if(found_default_clause == FALSE){
-							return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
-						}	
-					}
-
-				//If not, then this *needs* to have a default statement
-				} else {
-					//If we haven't found a default clause, it's a failure
-					if(found_default_clause == FALSE){
-						return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
-					}	
-				}
-
-				break;
-
-			//Go through our enum type here
-			case TYPE_CLASS_ENUMERATED:
-				//If we don't have these, then we already know we can't go further
-				if(switch_stmt_node->optional_storage.switch_bounds.lower_bound != type->min_enum_value
-					|| switch_stmt_node->optional_storage.switch_bounds.upper_bound != type->max_enum_value){
-					check_for_exhaustive = FALSE;
-				}
-
-				//Are we going to bother checking to see if it's exhaustive?
-				if(check_for_exhaustive == TRUE){
-					//Did we find a gap? assume no to start
-					u_int8_t gap_found = FALSE;
-
-					//Run through the list and ensure that there are no gaps between the values
-					for(int32_t i = 1; i < values_max_index; i++){
-						//This is a gap, immediate exit
-						if(values[i] - values[i - 1] != 1){
-							gap_found = TRUE;
-							break;
-						}
-					}
-
-					//If there is no gap, then this is exhaustive and we do *not* need 
-					//a default clause
-					if(gap_found == FALSE){
-						//If we haven't found a default clause, it's a failure
-						if(found_default_clause == TRUE){
-							return print_and_return_error("\"default\" clause in exhaustive switch is unreachable", parser_line_num);
-						}	
-
-					//Otherwise it's not exhaustive, so we do
-					} else {
-						//If we haven't found a default clause, it's a failure
-						if(found_default_clause == FALSE){
-							return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
-						}	
-					}
-
-				//If not, then this *needs* to have a default statement
-				} else {
-					//If we haven't found a default clause, it's a failure
-					if(found_default_clause == FALSE){
-						return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
-					}	
-				}
-
-				break;
-				
-			//We should never hit this, so if we do get out
-			default:
-				printf("Fatal internal compiler error. Unreachable path hit in switch statement validator\n");
-				exit(1);
-		}
-
-	//Otherwise it's not even exhaustive switch eligible, so a default clause is a must in Ollie
-	} else {
-		//If we haven't found a default clause, it's a failure
-		if(found_default_clause == FALSE){
-			return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
-		}	
+	/**
+	 * If this is exhaustive and we do have a default clause, then that default clause is actually unreachable. We will fail
+	 * out if we detect that this is the case
+	 */
+	if(switch_stmt_node->is_exhaustive_switch == TRUE && found_default_clause == TRUE){
+		return print_and_return_error("Default clause is unreachable in exhaustive switch statement", parser_line_num);
 	}
 
 	/**
@@ -10440,15 +10513,6 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	if(ollie_switch_type == OLLIE_SWITCH_TYPE_C_STYLE){
 		switch_stmt_node->ast_node_type = AST_NODE_TYPE_C_STYLE_SWITCH_STMT; 
 	}
-	
-	//By the time we reach this, we should have seen a right curly
-	//However, we could still have matching issues, so we'll check for that here
-	if(pop_token(&grouping_stack).tok != L_CURLY){
-		return print_and_return_error("Unmatched curly braces detected", parser_line_num);
-	}
-
-	//Store this for later on processing in the CFG
-	switch_stmt_node->num_case_members = num_case_statements;
 
 	//Return the line number
 	switch_stmt_node->line_number = parser_line_num;
@@ -10456,6 +10520,9 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	//Now that we're done, we will remove this variable scope
 	finalize_variable_scope(variable_symtab);
 	finalize_type_scope(type_symtab);
+
+	//Destroy this now that we're done with it
+	dynamic_integer_array_dealloc(&switch_values);
 
 	//If we make it here, all went well
 	return switch_stmt_node;
@@ -11367,7 +11434,7 @@ static generic_ast_node_t* default_statement(ollie_token_stream_t* token_stream)
  *
  * NOTE: We assume that we have already seen and consumed the first case token here
  */
-static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, generic_ast_node_t* switch_stmt_node, int32_t* values, int32_t* values_max_index){
+static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, generic_ast_node_t* switch_stmt_node, dynamic_integer_array_t* switch_values){
 	//Lookahead token
 	lexitem_t lookahead;
 	//Switch compound statement node for later on
@@ -11427,19 +11494,9 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 		switch_stmt_node->optional_storage.switch_bounds.lower_bound = case_stmt->constant_value.signed_int_value;
 	}
 
-	//If these are too far apart, we won't go for it. We'll check here, because once
-	//we hit this, there's no point in going on
-	if(switch_stmt_node->optional_storage.switch_bounds.upper_bound - switch_stmt_node->optional_storage.switch_bounds.lower_bound >= MAX_SWITCH_RANGE){
-		sprintf(info, "Range from %d to %d exceeds %d, too large for a switch statement. Use a compound if statement instead",
-		  				switch_stmt_node->optional_storage.switch_bounds.lower_bound, 
-		  				switch_stmt_node->optional_storage.switch_bounds.upper_bound,
-		  				MAX_SWITCH_RANGE);
-		return print_and_return_error(info, parser_line_num);
-	}
-
 	//Let the helper deal with this. If we get a false here, then we bail out. This ensures that we have a nice sorted list
 	//of values to deal with, which makes completeness validations in the parent method easier
-	u_int8_t uniqueness_worked = sorted_list_insert_unique(values, values_max_index, case_stmt->constant_value.signed_int_value);
+	u_int8_t uniqueness_worked = sorted_dynamic_integer_array_insert_unique(switch_values, case_stmt->constant_value.signed_int_value);
 
 	//This means that a duplicate value was detected
 	if(uniqueness_worked == FALSE){
@@ -12442,7 +12499,7 @@ static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_globa
  */
 static inline u_int8_t check_jump_labels(){
 	//Run through all of these statements
-	for(u_int32_t i=  0; i < current_function_jump_statements.current_index; i++){
+	for(int32_t i=  0; i < current_function_jump_statements.current_index; i++){
 		//Extract the one we need
 		generic_ast_node_t* current_jump_statement = dynamic_array_get_at(&(current_function_jump_statements), i);
 
@@ -12479,7 +12536,7 @@ static u_int8_t validate_error_list_against_raised_errors(symtab_function_record
 	dynamic_array_t* mandatory_checked_errors = &(function->signature->internal_types.function_type->potential_errors);
 
 	//Run through all of the mandatory checked errors
-	for(u_int32_t i = 0; i < mandatory_checked_errors->current_index; i++){
+	for(int32_t i = 0; i < mandatory_checked_errors->current_index; i++){
 		//Extract the error that we require
 		generic_type_t* mandatory_error = dynamic_array_get_at(mandatory_checked_errors, i);
 
@@ -12487,7 +12544,7 @@ static u_int8_t validate_error_list_against_raised_errors(symtab_function_record
 		u_int8_t raised_by_function = FALSE;
 
 		//Now let's go through all of the errors that are raised and check those
-		for(u_int32_t j = 0; j < errors_raised_by_current_function.current_index; j++){
+		for(int32_t j = 0; j < errors_raised_by_current_function.current_index; j++){
 			//Extract the error that we raised
 			generic_type_t* raised_error = dynamic_set_get_at(&errors_raised_by_current_function, j);
 
@@ -12819,7 +12876,7 @@ static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* f
 	push_token(&grouping_stack, lookahead);
 
 	//Start the error count off at 0
-	u_int32_t error_count = 0;
+	int32_t error_count = 0;
 
 	//Now we need to see at least one, but possibly many, error types in here
 	do {
@@ -12867,7 +12924,7 @@ static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* f
 		 */
 		if(defining_predeclared_function == FALSE){
 			//Let's first check for duplicated errors
-			for(u_int32_t i = 0; i < internal_function_type->potential_errors.current_index; i++){
+			for(int32_t i = 0; i < internal_function_type->potential_errors.current_index; i++){
 				//Extrace it
 				generic_type_t* candidate = dynamic_array_get_at(&(internal_function_type->potential_errors), i);
 
@@ -12968,10 +13025,10 @@ static u_int8_t validate_function_parameter_list(generic_type_t* function_type){
 	}
 
 	//Extract the number of parameters
-	u_int32_t num_params = internal_type->function_parameters.current_index;
+	int32_t num_params = internal_type->function_parameters.current_index;
 
 	//Run through all of the parameters
-	for(u_int32_t i = 0; i < num_params; i++){
+	for(int32_t i = 0; i < num_params; i++){
 		//Extract it
 		generic_type_t* parameter_type = dynamic_array_get_at(&(internal_type->function_parameters), i);
 
@@ -14394,11 +14451,11 @@ static inline u_int8_t validate_inlined_functions_are_non_recursive(function_sym
 	u_int32_t error_count = 0;
 
 	//Run through every namespace
-	for(u_int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
+	for(int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
 		function_namespace_t* sheaf = dynamic_array_get_at(&(symtab->namespaces), _);
 
 		//Now for every record in the namespace
-		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+		for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
 			if(sheaf->records[i] == NULL){
 				continue;
 			}
@@ -14461,11 +14518,11 @@ static inline void flag_function_for_alignment(function_symtab_t* symtab, symtab
 	u_int32_t function_count = symtab->current_function_id;
 
 	//Run through every namespace
-	for(u_int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
+	for(int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
 		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->namespaces), _);
 
 		//For each record inside of the namespace
-		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+		for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
 			symtab_function_record_t* other = current_namespace->records[i];
 			
 			//Traverse the linked list in case of collisions
@@ -14516,12 +14573,12 @@ static void flag_functions_that_require_initial_alignment(function_symtab_t* sym
 	/**
 	 * Run through all of the records in the function keyspace
 	 */
-	for(u_int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
+	for(int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
 		//Extract the current namespace
 		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->namespaces), _);
 
 		//Now run through everything in that namespace
-		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+		for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
 			//Extract it
 			symtab_function_record_t* record = current_namespace->records[i];
 
@@ -14556,7 +14613,7 @@ static void mangle_all_function_names(function_symtab_t* symtab){
 	heap_stack_t namespace_stack = heap_stack_alloc();
 
 	//Run through all of the given namespaces
-	for(u_int32_t i = 0; i < symtab->namespaces.current_index; i++){
+	for(int32_t i = 0; i < symtab->namespaces.current_index; i++){
 		//Pointer for the current namespace
 		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->namespaces), i);
 
@@ -14566,7 +14623,7 @@ static void mangle_all_function_names(function_symtab_t* symtab){
 		}
 
 		//Otherwise run through all of the functions
-		for(u_int32_t j = 0; j < FUNCTION_KEYSPACE; j++){
+		for(int32_t j = 0; j < FUNCTION_KEYSPACE; j++){
 			//Grab it out
 			symtab_function_record_t* record_to_mangle = current_namespace->records[j];
 

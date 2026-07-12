@@ -947,7 +947,7 @@ void add_function_parameter(symtab_function_record_t* function_record, symtab_va
  * of them, as well as for their function_parameter_order
  */
 void remediate_return_by_copy_gp_parameter_order(symtab_function_record_t* record, function_type_t* signature){
-	for(u_int32_t i = 0; i < record->function_parameters.current_index; i++){
+	for(int32_t i = 0; i < record->function_parameters.current_index; i++){
 		//Grab the parameter out
 		symtab_variable_record_t* parameter = dynamic_array_get_at(&(record->function_parameters), i);
 
@@ -1659,7 +1659,7 @@ symtab_function_record_t* lookup_function_in_namespace(function_namespace_t* nam
  */
 function_namespace_t* lookup_namespace(function_symtab_t* symtab, char* name){
 	//Run through every namespace 
-	for(u_int32_t i = 0; i < symtab->namespaces.current_index; i++){
+	for(int32_t i = 0; i < symtab->namespaces.current_index; i++){
 		//Extract it
 		function_namespace_t* namespace = dynamic_array_get_at(&(symtab->namespaces), i);
 
@@ -1685,7 +1685,7 @@ function_namespace_t* lookup_namespace(function_symtab_t* symtab, char* name){
  */
 function_namespace_t* lookup_namespace_under_current(function_symtab_t* symtab, char* name){
 	//Run through the children of the current parent
-	for(u_int32_t i = 0; i < symtab->current->child_namespaces.current_index; i++){
+	for(int32_t i = 0; i < symtab->current->child_namespaces.current_index; i++){
 		//Extract the namespace
 		function_namespace_t* namespace = dynamic_array_get_at(&(symtab->current->child_namespaces), i);
 
@@ -1706,7 +1706,7 @@ function_namespace_t* lookup_namespace_under_current(function_symtab_t* symtab, 
  */
 function_namespace_t* lookup_namespace_under_parent(function_namespace_t* parent_namespace, char* name){
 	//Run through the children of the current parent
-	for(u_int32_t i = 0; i < parent_namespace->child_namespaces.current_index; i++){
+	for(int32_t i = 0; i < parent_namespace->child_namespaces.current_index; i++){
 		//Extract the namespace
 		function_namespace_t* namespace = dynamic_array_get_at(&(parent_namespace->child_namespaces), i);
 
@@ -2235,10 +2235,10 @@ void print_function_name_to_buffer(char* buffer, symtab_function_record_t* recor
 	}
 
 	//Extract the number of params
-	u_int32_t num_params = record->function_parameters.current_index;
+	int32_t num_params = record->function_parameters.current_index;
 
 	//Print out the params
-	for(u_int32_t i = 0; i < num_params; i++){
+	for(int32_t i = 0; i < num_params; i++){
 		symtab_variable_record_t* current_parameter = dynamic_array_get_at(&(record->function_parameters), i);
 
 		//Print if it's mutable
@@ -2284,7 +2284,7 @@ void print_function_name(symtab_function_record_t* record){
 	}
 
 	//Print out the params
-	for(u_int8_t i = 0; i < record->function_parameters.current_index; i++){
+	for(int32_t i = 0; i < record->function_parameters.current_index; i++){
 		symtab_variable_record_t* current_parameter = dynamic_array_get_at(&(record->function_parameters), i);
 
 		//Print if it's mutable
@@ -2501,11 +2501,11 @@ void print_call_graph_adjacency_matrix(FILE* fl, function_symtab_t* function_sym
 	min_priority_queue_t min_priority_queue = min_priority_queue_alloc();
 
 	//Run through all of the namespaces 
-	for(u_int32_t _ = 0; _ < function_symtab->namespaces.current_index; _++){
+	for(int32_t _ = 0; _ < function_symtab->namespaces.current_index; _++){
 		function_namespace_t* sheaf = dynamic_array_get_at(&(function_symtab->namespaces), _);
 
 		//Run through and print all of these out first
-		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+		for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
 			//Skip ahead
 			if(sheaf->records[i] == NULL){
 				continue;
@@ -2544,17 +2544,17 @@ void print_call_graph_adjacency_matrix(FILE* fl, function_symtab_t* function_sym
 	//IDs for the user
 
 	//Get the overall count
-	u_int32_t function_count = function_symtab->current_function_id;
+	int32_t function_count = function_symtab->current_function_id;
 
 	fprintf(fl, "============= Adjacency Matrix ==============\n");
 
 	//Run through each row
-	for(u_int32_t i = 0; i < function_count; i++){
+	for(int32_t i = 0; i < function_count; i++){
 		//Print out the row number
 		fprintf(fl, "[%2d]: ", i);
 
 		//Now print out the columns
-		for(u_int32_t j = 0; j < function_count; j++){
+		for(int32_t j = 0; j < function_count; j++){
 			//Will be 1(connected) or 0
 			fprintf(fl, "%d ", function_symtab->call_graph_matrix[i * function_count + j]);
 		}
@@ -2567,12 +2567,12 @@ void print_call_graph_adjacency_matrix(FILE* fl, function_symtab_t* function_sym
 	fprintf(fl, "============= Transitive Closure ==============\n");
 
 	//Run through each row
-	for(u_int32_t i = 0; i < function_count; i++){
+	for(int32_t i = 0; i < function_count; i++){
 		//Print out the row number
 		fprintf(fl, "[%2d]: ", i);
 
 		//Now print out the columns
-		for(u_int32_t j = 0; j < function_count; j++){
+		for(int32_t j = 0; j < function_count; j++){
 			//Will be 1(connected) or 0
 			fprintf(fl, "%d ", function_symtab->call_graph_transitive_closure[i * function_count + j]);
 		}
@@ -2629,12 +2629,12 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnin
 	min_priority_queue_t queue = min_priority_queue_alloc();
 
 	//Run thorugh all of the namespaces
-	for(u_int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
+	for(int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
 		//Grab the current sheaf to check
 		function_namespace_t* current_sheaf = dynamic_array_get_at(&(symtab->namespaces), _);
 
 		//Now run through the keyspace in this sheaf
-		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+		for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
 			record = current_sheaf->records[i];
 
 			//We could have chaining here, so run through just in case
@@ -2709,12 +2709,12 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 	min_priority_queue_t queue = min_priority_queue_alloc();
 
 	//So long as we have a sheaf
-	for(u_int16_t i = 0; i < symtab->sheafs.current_index; i++){
+	for(int32_t i = 0; i < symtab->sheafs.current_index; i++){
 		//Grab the actual sheaf out
 		symtab_variable_sheaf_t* sheaf = dynamic_array_get_at(&(symtab->sheafs), i);
 
 		//Now we'll run through every variable in here
-		for(u_int32_t i = 0; i < VARIABLE_KEYSPACE; i++){
+		for(int32_t i = 0; i < VARIABLE_KEYSPACE; i++){
 			record = sheaf->records[i];
 
 			//So long as the record is not NULL(we need to account for collisions)
@@ -2782,7 +2782,7 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
  */
 static inline void compute_call_graph_transitive_closure(function_symtab_t* symtab){
 	//Extract the number of functions
-	u_int32_t number_of_functions = symtab->current_function_id;
+	int32_t number_of_functions = symtab->current_function_id;
 
 	//Allocate the transitive closure
 	symtab->call_graph_transitive_closure = calloc(number_of_functions * number_of_functions, sizeof(u_int8_t));
@@ -2793,9 +2793,9 @@ static inline void compute_call_graph_transitive_closure(function_symtab_t* symt
 	//Now that we've made the copy, we can start on the actual transitive closure
 	
 	//For each node i(intermediate node)
-	for(u_int32_t i = 0; i < number_of_functions; i++){
-		for(u_int32_t j = 0; j < number_of_functions; j++){
-			for(u_int32_t k = 0; k < number_of_functions; k++){
+	for(int32_t i = 0; i < number_of_functions; i++){
+		for(int32_t j = 0; j < number_of_functions; j++){
+			for(int32_t k = 0; k < number_of_functions; k++){
 				//If there's a path from j to i, and a path from i to k
 				if(symtab->call_graph_transitive_closure[j * number_of_functions + i] == TRUE
 					&& symtab->call_graph_transitive_closure[i * number_of_functions + k] == TRUE){
@@ -2826,10 +2826,10 @@ void finalize_function_symtab(function_symtab_t* symtab){
 	/**
 	 * To populate the adjacency matrix, we'll need to run through literally ever function namespace 
 	 */
-	for(u_int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
+	for(int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
 		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->namespaces), _);
 
-		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+		for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
 			//Totally possible for this to happen
 			if(current_namespace->records[i] == NULL){
 				continue;
@@ -2849,7 +2849,7 @@ void finalize_function_symtab(function_symtab_t* symtab){
 
 				//Run through all of the functions that this function
 				//itself calls
-				for(u_int16_t j = 0; j < cursor->called_functions.current_index; j++){
+				for(int32_t j = 0; j < cursor->called_functions.current_index; j++){
 					//Extract it
 					symtab_function_record_t* called_function = dynamic_set_get_at(&(cursor->called_functions), j);
 
@@ -2881,12 +2881,12 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 	symtab_function_record_t* temp;
 
 	//Run through all of the namespaces 
-	for(u_int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
+	for(int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
 		//Get the sheaf out
 		sheaf = dynamic_array_get_at(&(symtab->namespaces), _);
 
 		//Now go through all records
-		for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+		for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
 			record = sheaf->records[i];
 
 			//We could have chaining here, so run through just in case
@@ -2964,7 +2964,7 @@ void variable_symtab_dealloc(variable_symtab_t* symtab){
 		cursor = dynamic_array_get_at(&(symtab->sheafs), i);
 
 		//Now we'll free all non-null records
-		for(u_int16_t j = 0; j < VARIABLE_KEYSPACE; j++){
+		for(int32_t j = 0; j < VARIABLE_KEYSPACE; j++){
 			record = cursor->records[j];
 
 			//We could have chaining here, so run through just in case
@@ -2999,7 +2999,7 @@ void type_symtab_dealloc(type_symtab_t* symtab){
 		cursor = dynamic_array_get_at(&(symtab->sheafs), i);
 
 		//Now we'll free all non-null records
-		for(u_int16_t j = 0; j < TYPE_KEYSPACE; j++){
+		for(int32_t j = 0; j < TYPE_KEYSPACE; j++){
 			record = cursor->records[j];
 
 			//We could have chaining here, so run through just in case
@@ -3035,7 +3035,7 @@ void macro_symtab_dealloc(macro_symtab_t* symtab){
 	symtab_macro_record_t* temp;
 
 	//Run through every single macro record
-	for(u_int32_t i = 0; i < MACRO_KEYSPACE; i++){
+	for(int32_t i = 0; i < MACRO_KEYSPACE; i++){
 		//Extract it
 		cursor = symtab->records[i];
 
@@ -3075,7 +3075,7 @@ void label_symtab_dealloc(label_symtab_t* symtab){
 	}
 
 	//Run through every record
-	for(u_int32_t i = 0; i < USER_DEFINED_LABELED_BLOCK_KEYSPACE; i++){
+	for(int32_t i = 0; i < USER_DEFINED_LABELED_BLOCK_KEYSPACE; i++){
 		//Extract the record
 		symtab_label_record_t* label_record_cursor = symtab->records[i];
 

@@ -799,7 +799,7 @@ static inline void reset_block_variable_tracking(basic_block_t* block){
  */
 static inline live_range_t* find_live_range_with_variable(dynamic_array_t* live_ranges, three_addr_var_t* variable){
 	//Run through all of the live ranges that we currently have
-	for(u_int32_t i = 0; i < live_ranges->current_index; i++){
+	for(int32_t i = 0; i < live_ranges->current_index; i++){
 		//Grab the given live range out
 		live_range_t* current = dynamic_array_get_at(live_ranges, i);
 
@@ -967,7 +967,7 @@ static inline void handle_live_ranges_for_instruction(dynamic_array_t* SSE_live_
 	/**
 	 * There may be function params. If there are just spin through and handle them
 	 */
-	for(u_int32_t i = 0; i < instruction->parameters.current_index; i++){
+	for(int32_t i = 0; i < instruction->parameters.current_index; i++){
 		three_addr_var_t* parameter = dynamic_array_get_at(&(instruction->parameters), i);
 		assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, parameter);
 	}
@@ -1059,7 +1059,7 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 			 */
 			case CALL:
 				//Do all of the parameters first
-				for(u_int32_t i = 0; i < current->parameters.current_index; i++){
+				for(int32_t i = 0; i < current->parameters.current_index; i++){
 					three_addr_var_t* parameter = dynamic_array_get_at(&(current->parameters), i);
 
 					//This should never be null so we don't need to check
@@ -1088,7 +1088,7 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 				add_live_range_to_use_set(current->operands.x86.source_register1->associated_live_range, basic_block);
 
 				//Do all of the parameters first
-				for(u_int32_t i = 0; i < current->parameters.current_index; i++){
+				for(int32_t i = 0; i < current->parameters.current_index; i++){
 					three_addr_var_t* parameter = dynamic_array_get_at(&(current->parameters), i);
 
 					//This should never be null so we don't need to check
@@ -1204,7 +1204,7 @@ static inline void construct_live_ranges_in_function(basic_block_t* function_ent
  * everything
  */
 static inline void reset_function_blocks_for_liveness(dynamic_array_t* function_blocks){
-	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
 
 		//Also reset the liveness sets
@@ -1265,7 +1265,7 @@ static void calculate_live_range_liveness_sets(dynamic_array_t* function_blocks,
 		difference_found = FALSE;
 
 		//Now we can go through the entire RPO set
-		for(u_int32_t _ = 0; _ < reverse_post_order_reverse_cfg.current_index; _++){
+		for(int32_t _ = 0; _ < reverse_post_order_reverse_cfg.current_index; _++){
 			//The current block is whichever we grab
 			current = dynamic_array_get_at(&reverse_post_order_reverse_cfg, _);
 
@@ -1277,12 +1277,12 @@ static void calculate_live_range_liveness_sets(dynamic_array_t* function_blocks,
 			current->live_out = dynamic_array_alloc();
 
 			//Run through all of the successors
-			for(u_int32_t k = 0; k < current->successors.current_index; k++){
+			for(int32_t k = 0; k < current->successors.current_index; k++){
 				//Grab the successor out
 				basic_block_t* successor = dynamic_array_get_at(&(current->successors), k);
 
 				//Add everything in his live_in set into the live_out set
-				for(u_int32_t l = 0; l < successor->live_in.current_index; l++){
+				for(int32_t l = 0; l < successor->live_in.current_index; l++){
 					//Let's check to make sure we haven't already added this
 					live_range_t* successor_live_in_var = dynamic_array_get_at(&(successor->live_in), l);
 
@@ -1300,7 +1300,7 @@ static void calculate_live_range_liveness_sets(dynamic_array_t* function_blocks,
 			current->live_in = clone_dynamic_array(&(current->used_before_definition));
 
 			//Now we need to add every variable that is in LIVE_OUT but NOT in assigned
-			for(u_int32_t j = 0; j  < current->live_out.current_index; j++){
+			for(int32_t j = 0; j  < current->live_out.current_index; j++){
 				//Grab a reference for our use
 				live_range_t* live_out_var = dynamic_array_get_at(&(current->live_out), j);
 
@@ -1980,7 +1980,7 @@ static inline void calculate_target_interferences_in_function(basic_block_t* fun
  */
 static inline void precolor_in_body_function_parameters(dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges){
 	//First we'll run through the general purpose ones
-	for(u_int32_t i = 0; i < general_purpose_live_ranges->current_index; i++){
+	for(int32_t i = 0; i < general_purpose_live_ranges->current_index; i++){
 		//Extract it
 		live_range_t* general_purpose_lr = dynamic_array_get_at(general_purpose_live_ranges, i);
 
@@ -2006,7 +2006,7 @@ static inline void precolor_in_body_function_parameters(dynamic_array_t* general
 	}
 
 	//Now do the exact same thing for SSE
-	for(u_int32_t i = 0; i < sse_live_ranges->current_index; i++){
+	for(int32_t i = 0; i < sse_live_ranges->current_index; i++){
 		//Extract it
 		live_range_t* sse_lr = dynamic_array_get_at(sse_live_ranges, i);
 
@@ -2334,7 +2334,7 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 			 */
 			case CALL:
 				//Do all of the parameters first
-				for(u_int32_t i = 0; i < cursor->parameters.current_index; i++){
+				for(int32_t i = 0; i < cursor->parameters.current_index; i++){
 					three_addr_var_t* parameter = dynamic_array_get_at(&(cursor->parameters), i);
 
 					//This should never be null so we don't need to check
@@ -2363,7 +2363,7 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 				add_live_range_to_use_set(cursor->operands.x86.source_register1->associated_live_range, block);
 
 				//Do all of the parameters first
-				for(u_int32_t i = 0; i < cursor->parameters.current_index; i++){
+				for(int32_t i = 0; i < cursor->parameters.current_index; i++){
 					three_addr_var_t* parameter = dynamic_array_get_at(&(cursor->parameters), i);
 
 					//This should never be null so we don't need to check
@@ -3754,7 +3754,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	 * Run through everything that is alive after this function runs(live_after)
 	 * and check if we need to save any registers from that set
 	 */
-	for(u_int32_t i = 0; i < live_after.current_index; i++){
+	for(int32_t i = 0; i < live_after.current_index; i++){
 		//Extract it
 		live_range_t* lr = dynamic_array_get_at(&live_after, i);
 
@@ -3877,7 +3877,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	 * afterwards. If we didn't do this, we'd run the risk of clobbering any SSE
 	 * values that had been saved on the stack
 	 */
-	for(u_int32_t i = 0; i < general_purpose_lrs_to_save.current_index; i++){
+	for(int32_t i = 0; i < general_purpose_lrs_to_save.current_index; i++){
 		//Grab out the LR
 		live_range_t* lr_to_save = dynamic_array_get_at(&general_purpose_lrs_to_save, i);
 
@@ -3910,7 +3910,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	 * Now let's do the exact same procedure for SSE registers. We're doing this last because again, we
 	 * need to guarantee that all of this movement happens *after* any pushing or popping
 	 */
-	for(u_int32_t i = 0; i < SSE_lrs_to_save.current_index; i++){
+	for(int32_t i = 0; i < SSE_lrs_to_save.current_index; i++){
 		//What is the LR that we want to save
 		live_range_t* lr_to_save = dynamic_array_get_at(&SSE_lrs_to_save, i);
 
@@ -4049,7 +4049,7 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 	 * Now we will run through every live range in live_after and check if it is caller-saved or not
 	 * We are not able to fine-tune things here like we are in the the direct call unfortunately
 	 */
-	for(u_int32_t i = 0; i < live_after.current_index; i++){
+	for(int32_t i = 0; i < live_after.current_index; i++){
 		//Grab it out
 		live_range_t* lr = dynamic_array_get_at(&live_after, i);
 
@@ -4142,7 +4142,7 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 	}
 
 	//Now let's run through all of the general purpose registers first
-	for(u_int32_t i = 0; i < general_purpose_lrs_to_save.current_index; i++){
+	for(int32_t i = 0; i < general_purpose_lrs_to_save.current_index; i++){
 		//Extract what we want to save
 		live_range_t* lr_to_save = dynamic_array_get_at(&general_purpose_lrs_to_save, i);
 
@@ -4171,7 +4171,7 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 	 * modifies the stack pointer, meaning that our offsets for this would be inaccurate if we did them
 	 * after pushing
 	 */
-	for(u_int32_t i = 0; i < SSE_lrs_to_save.current_index; i++){
+	for(int32_t i = 0; i < SSE_lrs_to_save.current_index; i++){
 		//Extract the LR
 		live_range_t* lr_to_save = dynamic_array_get_at(&SSE_lrs_to_save, i);
 
@@ -4296,7 +4296,7 @@ static void insert_callee_saving_logic(basic_block_t* function_entry, basic_bloc
 	symtab_function_record_t* function = function_entry->function_defined_in;
 
 	//We need to see which registers that we use
-	for(u_int32_t i = 0; i < K_COLORS_GEN_USE; i++){
+	for(int32_t i = 0; i < K_COLORS_GEN_USE; i++){
 		//We don't use this register, so move on
 		if(get_bitmap_at_index(function->assigned_general_purpose_registers, i) == FALSE){
 			continue;
@@ -4461,7 +4461,7 @@ static inline void handle_stack_passed_param_constant(three_addr_const_t* stack_
  */
 static inline void update_stack_passed_parameter_offsets(symtab_function_record_t* function){
 	//Run through every block in the function
-	for(u_int32_t i = 0; i < function->function_blocks.current_index; i++){
+	for(int32_t i = 0; i < function->function_blocks.current_index; i++){
 		//Extract it
 		basic_block_t* block = dynamic_array_get_at(&(function->function_blocks), i);
 
@@ -4591,7 +4591,7 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 		}
 		
 		//Now we need to go through every exit block and emit the stack deallocation
-		for(u_int32_t i = 0; i < function_exit->predecessors.current_index; i++){
+		for(int32_t i = 0; i < function_exit->predecessors.current_index; i++){
 			//Get the predecessor out
 			basic_block_t* predecessor = dynamic_array_get_at(&(function_exit->predecessors), i);
 
@@ -5130,7 +5130,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 
 	//Run through every function entry block individually and invoke the allocator on
 	//all of them separately
-	for(u_int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Extract the given function entry
 		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 

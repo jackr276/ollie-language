@@ -1,7 +1,7 @@
 /**
 * Author: Jack Robbins
-* Test switching on an enum that is exhaustive - and as such needs no default
-* clause
+* Test an exhaustive switch that has a bad input type and therefore will not
+* work right
 */
 
 /**
@@ -18,8 +18,6 @@ define enum type_enum{
 fn tester(param:my_enum_type) -> i32{
 	let x:mut i32 = 32;
 
-	//This is a so-called "exhaustive" switch - in that every possible
-	//input is covered so no default clause is needed
 	switch(param){
 		case TYPE_ONE -> {
 			x = 32;
@@ -46,6 +44,9 @@ fn tester(param:my_enum_type) -> i32{
 
 
 pub fn main() -> i32{
-	OUNIT: [exit_status = 32]
-	ret @tester(TYPE_ONE);
+	let x:i32 = 88;
+
+	OUNIT: [fail_to_compile]
+	//BAD - can't have an i32 in here - must be an enum of the same type
+	ret @tester(x);
 }
