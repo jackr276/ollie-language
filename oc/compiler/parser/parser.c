@@ -6310,9 +6310,6 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
  * doing to determine a min and max value
  */
 static inline u_int8_t determine_in_statement_switch_eligibility(generic_ast_node_t* in_statement_node, dynamic_integer_array_t* sorted_in_member_values){
-	//By default, assume it is switch eligible
-	u_int8_t is_switch_eligible = TRUE;
-
 	/**
 	 * If the user has done something silly like an in-statement with only one member, we will rewrite this for them
 	 */
@@ -6327,29 +6324,33 @@ static inline u_int8_t determine_in_statement_switch_eligibility(generic_ast_nod
 		return FALSE;
 	}
 
-
 	/**
-	 * Once we know that they're equal, if this is switch eligible, we will need to maintain
-	 * a list of switch values here for tracking
+	 * If the average distance(sparseness) is greater than 30, we will
+	 * make this into an if-else statement. The sorted value array is 
+	 * important because we only care about the average distance between
+	 * values that are adjacent numerically. It doesn't matter if they're
+	 * out of order
 	 */
-	if(is_switch_eligible == TRUE){
-		int32_t current_value = expression->constant_value.signed_int_value;
+	int64_t average_distance = 0;
+	for(int32_t i = 1; i < sorted_in_member_values->current_index; i++){
+		int32_t first_value = sorted_in_member_values->internal_array[i - 1];
+		int32_t second_value = sorted_in_member_values->internal_array[i];
 
-		if(current_value > max_value){
-			max_value = current_value;
-		}
-
-		if(current_value < min_value){
-			min_value = current_value;
-		}
+		average_distance += (second_value - first_value);
 	}
 
-	//If this is switch eligible, then store our bounds here
-	if(is_switch_eligible == TRUE){
-		root_node->optional_storage.switch_bounds.lower_bound = min_value;
-		root_node->optional_storage.switch_bounds.upper_bound = max_value;
+	//Find the actual average
+	average_distance /= sorted_in_member_values->current_index;
+
+	//If it exceeds the max distance it is not switch eligible(too sparse)
+	if(average_distance > MAX_AVERAGE_CASE_DIFFERENCE){
+		return FALSE;
 	}
 
+	//If we've made it here, we can populate the bounds and return success
+	in_statement_node->optional_storage.switch_bounds.lower_bound = sorted_in_member_values->internal_array[0];
+	in_statement_node->optional_storage.switch_bounds.upper_bound = sorted_in_member_values->internal_array[sorted_in_member_values->current_index - 1];
+	return TRUE;
 }
 
 
@@ -6373,7 +6374,7 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 	//Allocate more space for all of our integer values
 	dynamic_integer_array_t sorted_in_member_array = dynamic_integer_array_alloc();
 	//Are all of the members switch eligible? Assume true by default
-	u_int8_t are_members_switch_eligible = TRUE;
+	u_int8_t are_all_members_switch_eligible = TRUE;
 
 	//The first thing that we need to see is some kind of valid ternary expression
 	generic_ast_node_t* starting_expression = ternary_expression(token_stream, side);
@@ -6487,7 +6488,7 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		 * whole thing is going to be forced to use the if chain
 		 */
 		if(IS_FLOATING_POINT(expression->inferred_type) == TRUE){
-			are_members_switch_eligible = FALSE;
+			are_all_members_switch_eligible = FALSE;
 		}
 
 		//Now that we know this is valid we can add it as a child to the in statement
@@ -6500,7 +6501,7 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		 * If we're still switch eligible, add the integer constant into
 		 * the sorted array in a sorted fashion
 		 */
-		if(are_members_switch_eligible == TRUE){
+		if(are_all_members_switch_eligible == TRUE){
 			sorted_dynamic_integer_array_insert_unique(&sorted_in_member_array, expression->constant_value.signed_int_value);
 		}
 
@@ -6562,8 +6563,16 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		root_node->inferred_type = immut_i8;
 	}
 
-	//Let the helper determine our eligiblity for a switch and deal with the min/max determinations
-	determine_in_statement_switch_eligibility(root_node, &in_member_array);
+	/**
+	 * Let the helper determine our eligiblity for a switch and deal with the min/max determinations. If
+	 * we've found at least one floating point value we will skip this entire thing and just flag
+	 * it as not eligible
+	 */
+	if(are_all_members_switch_eligible == TRUE){
+		determine_in_statement_switch_eligibility(root_node, &sorted_in_member_array);
+	} else {
+		root_node->is_switch_eligible = FALSE;
+	}
 
 	//Destroy these now that we're done
 	dynamic_array_dealloc(&in_member_array);
