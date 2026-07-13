@@ -6330,46 +6330,37 @@ static inline u_int8_t determine_in_statement_switch_eligibility(generic_ast_nod
 	 * important because we only care about the average distance between
 	 * values that are adjacent numerically. It doesn't matter if they're
 	 * out of order
-	 *
-	 * If the distance is always 1, then we have what we call a contiguous in
-	 * statement where all of the integer values are 1 apart. This lends itself
-	 * to a natural optimization where instead of using a jump table, we can just use
-	 * two jump statements to determine if our value is within the given contiguous
-	 * range. We will set the flag here if this is the case
 	 */
 	int64_t average_distance = 0;
-	u_int8_t is_contiguous_in = TRUE;
 	for(int32_t i = 1; i < sorted_in_member_values->current_index; i++){
 		int32_t first_value = sorted_in_member_values->internal_array[i - 1];
 		int32_t second_value = sorted_in_member_values->internal_array[i];
 
-		int32_t distance = second_value - first_value;
-		average_distance += distance;
-
-		/**
-		 * If we have one instance where this is 1, we are no longer eligible
-		 * to be considered as a contiguous in expression
-		 */
-		if(distance != 1){
-			is_contiguous_in = FALSE;
-		}
+		average_distance += (second_value - first_value);
 	}
 
 	//Find the actual average
-	average_distance /= sorted_in_member_values->current_index;
+	average_distance /= (sorted_in_member_values->current_index - 1);
 
 	//If it exceeds the max distance it is not switch eligible(too sparse)
 	if(average_distance > MAX_AVERAGE_CASE_DIFFERENCE){
 		return FALSE;
 	}
+	
+	/**
+	 * If the average distance is 1, then we have what we call a contiguous in
+	 * statement where all of the integer values are 1 apart. This lends itself
+	 * to a natural optimization where instead of using a jump table, we can just use
+	 * two jump statements to determine if our value is within the given contiguous
+	 * range. We will set the flag here if this is the case
+	 */
+	if(average_distance == 1){
+		in_statement_node->switch_in_values.is_contiguous_in = TRUE;
+	}
 
 	//If we've made it here, we can populate the bounds and return success
 	in_statement_node->optional_storage.switch_bounds.lower_bound = sorted_in_member_values->internal_array[0];
 	in_statement_node->optional_storage.switch_bounds.upper_bound = sorted_in_member_values->internal_array[sorted_in_member_values->current_index - 1];
-
-	//Flag whether we are a contiguous in
-	in_statement_node->switch_in_values.is_contiguous_in = is_contiguous_in;
-
 	return TRUE;
 }
 
@@ -10093,7 +10084,7 @@ static inline u_int8_t determine_switch_eligibility(dynamic_integer_array_t* swi
 	}
 
 	//Now get the actual average distance
-	average_distance /= switch_statement_values->current_index;
+	average_distance /= (switch_statement_values->current_index - 1);
 
 	//Greater than 30, we are too sparse for switching
 	if(average_distance >= MAX_AVERAGE_CASE_DIFFERENCE){
