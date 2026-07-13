@@ -10201,42 +10201,26 @@ static inline u_int8_t is_switch_exhaustive_switch(generic_type_t* switching_on_
 		return FALSE;
 	}
 
-	//The range of all possible enum values
-	int32_t range = max_enum_value - min_enum_value + 1;
-
-	//Define a bytemap of all potential enum values and wipe it all out to 0
-	u_int8_t value_map[range];
-	memset(value_map, 0, sizeof(u_int8_t) * range);
-
 	/**
-	 * Let's now go through and fill out the byte map that we've made
-	 * with all of the values in the enumeration table. When we're done,
-	 * if this is switch eligible we'd have an array like: [1, 1, 1, 1, 1, 1].
-	 * If it's not, we may have something like [1, 1, 0, 1, 1] where there
-	 * are gaps in the exhaustive range
+	 * Check 2: if the average distance between values does not exactly equal
+	 * 1, then the switch is not exhaustive. If it does equal 1, then it is
+	 * exhaustive because we already know that the upper and lower bounds exactly
+	 * match the enum upper and lower bounds
 	 */
-	for(int32_t i = 0; i < switch_statement_values->current_index; i++){
-		//Extract the value
-		int32_t value = dynamic_integer_array_get_at(switch_statement_values, i);
+	int64_t average_distance = 0;
+	for(int32_t i = 1; i < switch_statement_values->current_index; i++){
+		int32_t first_value = switch_statement_values->internal_array[i - 1];
+		int32_t second_value = switch_statement_values->internal_array[i];
 
-		//Fill out that this exists now
-		value_map[value - min_enum_value] = TRUE;
+		average_distance += (second_value - first_value);
 	}
 
-	/**
-	 * Now for our final check - if any of the indices
-	 * here have 0, that means that that value in the enum
-	 * range simply doesn't exist. If we see that, we
-	 * fail out
-	 */
-	for(int32_t i = 0; i < range; i++){
-		if(value_map[i] == FALSE){
-			return FALSE;
-		}
-	}
+	//Compute the average distance by dividing by the number of distances(n-1 for n numbers)
+	average_distance /= (switch_statement_values->current_index - 1);
 
-	//If we survived to here then it worked
-	return TRUE;
+	printf("AVERAGE DISTANCE IS %ld\n", average_distance);
+
+	return average_distance != 1 ? FALSE : TRUE;
 }
 
 
