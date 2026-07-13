@@ -6307,9 +6307,13 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
  * to handle this
  *
  * This rule will also leverage the traversal of the in members that it is already
- * doing to determine a min and max value
+ * doing to determine a min and max value, and to determine if the in statement
+ * is a contiguous in statement(this is needed for optimizations down the road)
  */
 static inline u_int8_t determine_in_statement_switch_eligibility(generic_ast_node_t* in_statement_node, dynamic_integer_array_t* sorted_in_member_values){
+	//By default assume we are contiguosu
+	u_int8_t is_contiguous = TRUE;
+
 	/**
 	 * If the user has done something silly like an in-statement with only one member, we will rewrite this for them
 	 */
@@ -6336,6 +6340,11 @@ static inline u_int8_t determine_in_statement_switch_eligibility(generic_ast_nod
 		int32_t first_value = sorted_in_member_values->internal_array[i - 1];
 		int32_t second_value = sorted_in_member_values->internal_array[i];
 
+		//Only takes one case for this to not work
+		if(second_value - first_value != 1){
+			is_contiguous = FALSE;
+		}
+
 		average_distance += (second_value - first_value);
 	}
 
@@ -6346,18 +6355,14 @@ static inline u_int8_t determine_in_statement_switch_eligibility(generic_ast_nod
 	if(average_distance > MAX_AVERAGE_CASE_DIFFERENCE){
 		return FALSE;
 	}
-	
-	/**
-	 * If the average distance is 1, then we have what we call a contiguous in
-	 * statement where all of the integer values are 1 apart. This lends itself
-	 * to a natural optimization where instead of using a jump table, we can just use
-	 * two jump statements to determine if our value is within the given contiguous
-	 * range. We will set the flag here if this is the case
-	 */
-	if(average_distance == 1){
-		in_statement_node->switch_in_values.is_contiguous_in = TRUE;
-	}
 
+	//Set this flag for it being contiguous as well
+	in_statement_node->switch_in_values.is_contiguous_in = is_contiguous;
+
+	if(is_contiguous == TRUE){
+		printf("ITS CONTIGUOUS\n\n\n");
+	}
+	
 	//If we've made it here, we can populate the bounds and return success
 	in_statement_node->optional_storage.switch_bounds.lower_bound = sorted_in_member_values->internal_array[0];
 	in_statement_node->optional_storage.switch_bounds.upper_bound = sorted_in_member_values->internal_array[sorted_in_member_values->current_index - 1];
