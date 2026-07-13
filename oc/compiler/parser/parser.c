@@ -7782,6 +7782,8 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 	lexitem_t lookahead;
 	//Reserve space for the type name
 	dynamic_string_t type_name = dynamic_string_alloc();
+	//Allocate the array for our sorted integer values
+	dynamic_integer_array_t sorted_integer_values = dynamic_integer_array_alloc();
 
 	//Add the enum intro in
 	dynamic_string_set(&type_name, "enum ");
@@ -8128,6 +8130,9 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 	generic_type_t* immutable_alias = create_aliased_type(alias_name.string, immutable_enum_type, parser_line_num, NOT_MUTABLE);
 	//Once we've made the aliased type, we can record it in the symbol table
 	insert_type(type_symtab, create_type_record(immutable_alias));
+
+	//Destroy now that we're done
+	dynamic_integer_array_dealloc(&sorted_integer_values);
 
 	//This is a successful creation
 	return SUCCESS;
@@ -10122,55 +10127,8 @@ static inline u_int8_t is_type_exhaustive_switch_eligible(generic_type_t* type){
 		return FALSE;
 	}
 	
-	//Extract for convenience
-	dynamic_array_t* enumeration_table = &(type->internal_types.enumeration_table);
-
-	/**
-	 * Remember that in Ollie, users are able to assign enum values their
-	 * own types. This means that values may *not* always be 1 apart from
-	 * each other. We'll need to check and see if all of the values inside of
-	 * the enumeration are in fact 1 apart
-	 */
-	int32_t min_enum_value = type->min_enum_value;
-	int32_t max_enum_value = type->max_enum_value;
-
-	//The range of all possible enum values
-	int32_t enum_range = max_enum_value - min_enum_value + 1;
-
-	//Define a bytemap of all potential enum values and wipe it all out to 0
-	u_int8_t value_map[enum_range];
-	memset(value_map, 0, sizeof(u_int8_t) * enum_range);
-
-	/**
-	 * Let's now go through and fill out the byte map that we've made
-	 * with all of the values in the enumeration table. When we're done,
-	 * if this is switch eligible we'd have an array like: [1, 1, 1, 1, 1, 1].
-	 * If it's not, we may have something like [1, 1, 0, 1, 1] where there
-	 * are gaps in the exhaustive range
-	 */
-	for(int32_t i = 0; i < enumeration_table->current_index; i++){
-		//Extract the members enum value
-		symtab_variable_record_t* member = dynamic_array_get_at(enumeration_table, i);
-		int32_t raw_enum_value = member->enum_member_value;
-
-		//Fill out that this exists now
-		value_map[raw_enum_value - min_enum_value] = TRUE;
-	}
-
-	/**
-	 * Now for our final check - if any of the indices
-	 * here have 0, that means that that value in the enum
-	 * range simply doesn't exist. If we see that, we
-	 * fail out
-	 */
-	for(int32_t i = 0; i < enum_range; i++){
-		if(value_map[i] == FALSE){
-			return FALSE;
-		}
-	}
-	
-	//If we survived to here then we're true
-	return TRUE;
+	//If the enum type is contiguous, then we do have an exhaustive switch eligible type
+	return type->is_contiguous_enum == TRUE ? TRUE: FALSE;
 }
 
 
