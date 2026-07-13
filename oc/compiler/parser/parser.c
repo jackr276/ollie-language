@@ -8024,6 +8024,9 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 			num_errors++;
 			return FAILURE;
 		}
+		
+		//Add the enum member value into the sorted array for later
+		sorted_dynamic_integer_array_insert_unique(&sorted_integer_values, member_record->enum_member_value);
 
 		//This goes up by 1
 		current_enum_value++;
@@ -8060,6 +8063,28 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 	immutable_enum_type->internal_values.enum_integer_type = type_needed;
 	//Assign the size over as well
 	immutable_enum_type->type_size = type_needed->type_size;
+
+	/**
+	 * If we have an enum type that, when all members are sorted, each value
+	 * is 1 apart, we refer to that internally as a "contiguous enum". We will set
+	 * a flag in the type for this. This is important for exhaustive switch/contiguous
+	 * in determination later on
+	 */
+	u_int8_t is_contiguous = TRUE;
+	for(int32_t i = 1; i < sorted_integer_values.current_index; i++){
+		int32_t first_value = sorted_integer_values.internal_array[i - 1];
+		int32_t second_value = sorted_integer_values.internal_array[i];
+
+		//Only takes 1 for this to fail out
+		if(second_value - first_value != 1){
+			is_contiguous = FALSE;
+			break;
+		}
+	}
+
+	//Set both types to this
+	mutable_enum_type->is_contiguous_enum = is_contiguous;
+	immutable_enum_type->is_contiguous_enum = is_contiguous;
 
 	//Now once we are here, we can optionally see an alias command. These alias commands are helpful and convenient
 	//for redefining variables immediately upon declaration. They are prefaced by the "As" keyword
