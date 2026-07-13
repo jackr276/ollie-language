@@ -169,8 +169,16 @@ struct generic_ast_node_t{
 	u_int8_t dereference_needed;
 	//Is the given statement(switch or in) eligible to internally be a true switch?
 	u_int8_t is_switch_eligible;
-	//Is the given switch/in statement "exhaustive" - this is most usually false
-	u_int8_t is_exhaustive;
+	/**
+	 * This union has two values:
+	 *
+	 * 1.) Is the given switch statement "exhaustive" - this is most usually false
+	 * 2.) Is the given in statement "contiguous" - no gaps between values
+	 */
+	union {
+		u_int8_t is_exhaustive_switch;
+		u_int8_t is_contiguous_in;
+	} struct_in_values;
 };
 
 /**

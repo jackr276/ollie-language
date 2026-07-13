@@ -10488,13 +10488,13 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 
 	//Let the helpers determine the switch eligibility and exhaustive switch eligibility
 	switch_stmt_node->is_switch_eligible = determine_switch_eligibility(&switch_values);
-	switch_stmt_node->is_exhaustive = is_switch_exhaustive_switch(switching_on_type, &switch_values);
+	switch_stmt_node->struct_in_values.is_exhaustive_switch = is_switch_exhaustive_switch(switching_on_type, &switch_values);
 
 	/**
 	 * If this is not exhaustive and we have not found the default clause, then this is an error
 	 * and we fail out
 	 */
-	if(switch_stmt_node->is_exhaustive == FALSE && found_default_clause == FALSE){
+	if(switch_stmt_node->struct_in_values.is_exhaustive_switch == FALSE && found_default_clause == FALSE){
 		return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
 	}
 
@@ -10502,7 +10502,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	 * If this is exhaustive and we do have a default clause, then that default clause is actually unreachable. We will fail
 	 * out if we detect that this is the case
 	 */
-	if(switch_stmt_node->is_exhaustive == TRUE && found_default_clause == TRUE){
+	if(switch_stmt_node->struct_in_values.is_exhaustive_switch == TRUE && found_default_clause == TRUE){
 		return print_and_return_error("Default clause is unreachable in exhaustive switch statement", parser_line_num);
 	}
 
