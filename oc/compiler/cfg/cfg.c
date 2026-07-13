@@ -10045,7 +10045,7 @@ static inline cfg_result_package_t visit_c_style_switch_statement(generic_ast_no
 	 * for non-exhaustive switches. If it is exhaustive, we'll route it to
 	 * the simpler exhaustive switch converter
 	 */
-	if(root_node->struct_in_values.is_exhaustive_switch == FALSE){
+	if(root_node->switch_in_values.is_exhaustive_switch == FALSE){
 		return visit_non_exhaustive_c_style_switch_statement(root_node);
 	} else {
 		return visit_exhaustive_c_style_switch_statement(root_node);
@@ -10596,7 +10596,7 @@ static inline cfg_result_package_t visit_switch_statement(generic_ast_node_t* ro
 	 * switch will not have that. These types of switches are different enough
 	 * to warrant separate methods
 	 */
-	if(root_node->struct_in_values.is_exhaustive_switch == FALSE){
+	if(root_node->switch_in_values.is_exhaustive_switch == FALSE){
 		return visit_non_exhaustive_ollie_switch_statement(root_node);
 	} else {
 		return visit_exhaustive_ollie_switch_statement(root_node);

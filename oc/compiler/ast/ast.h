@@ -178,7 +178,7 @@ struct generic_ast_node_t{
 	union {
 		u_int8_t is_exhaustive_switch;
 		u_int8_t is_contiguous_in;
-	} struct_in_values;
+	} switch_in_values;
 };
 
 /**
