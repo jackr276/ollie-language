@@ -5874,12 +5874,41 @@ static inline cfg_result_package_t lower_contiguous_in_expression_to_oir_conditi
 																						 	first_move_type);
 	add_statement(current_block, first_conditional_move);
 
+	/**
+	 * Step 4: Emit the greater than comparison. If we are higher than the highest value, we will move
+	 * in a false constant. Otherwise, we move in true
+	 */
+	three_addr_const_t* max_value_constant = emit_direct_integer_or_char_constant(max_value, i32);
 
+	//Emit and add the greater than comparison
+	instruction_t* second_comparison = emit_binary_operation_with_const_instruction(emit_temp_var(i8), comparing_to_var, G_THAN, max_value_constant);
+	add_statement(current_block, first_comparison);
 
+	//Determine the appropriate type based on operand signenedness
+	conditional_movement_type_t second_move_type = is_type_signed(operand_type) == TRUE ? MOVE_G : MOVE_A;
 
+	//Now we can emit and add the first conditional variable
+	three_addr_var_t* result_var_2 = emit_temp_var(i8);
+	instruction_t* second_conditional_move =  emit_conditional_movement_with_const_statement(result_var_1,
+																						 	 false_variable,
+																						 	 true_constant,
+																						 	 second_comparison->operands.oir.assignee,
+																						 	 second_move_type);
+	add_statement(current_block, second_conditional_move);
 
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
+	/**
+	 * Step 5: emit one final assignment from the final result
+	 * var into a final temporary variable of our given type
+	 */
+	three_addr_var_t* final_variable = emit_temp_var(in_node->inferred_type);
+	instruction_t* final_assignment = emit_assignment_instruction(final_variable, result_var_2);
+	add_statement(current_block, final_assignment);
+
+	//Package up and give back our results
+	results.type = CFG_RESULT_TYPE_VAR;
+	results.result_value.result_var = final_variable;
+	results.final_block = current_block;
+	return results;
 }
 
 
