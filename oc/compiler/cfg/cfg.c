@@ -5805,16 +5805,52 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
  * 	final_result = result
  *
  * Notice how the jump table is really useless because they all have the same targets. Instead of this, we can do the following:
- * movl true, result
  * cmpl $1, x
- * cmovl false, result
+ * result1 <- cmov_l false else true
  * cmpl $5, x
- * cmovg false, result
+ * result2 <- cmov_g false else result1
+ * final_result = result2
  *
  * This achieves the same output with a much smaller final instruction footprint and a much smaller OIR footprint, which makes both
  * compilation and eventual runtime faster
  */
 static inline cfg_result_package_t lower_contiguous_in_expression_to_oir_conditional_move_chain(basic_block_t* starting_block, generic_ast_node_t* in_node){
+	//We can initialize these results off the bat
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
+	results.starting_block = starting_block;
+
+	//We'll need to keep track of the current block in case of expression changes
+	basic_block_t* current_block = starting_block;
+
+	//Extract the highest and lowest values for convenience
+	int32_t min_value = in_node->optional_storage.switch_bounds.lower_bound;
+	int32_t max_value = in_node->optional_storage.switch_bounds.upper_bound;
+
+	/**
+	 * The first child is always the starting expression. We will emit that first
+	 */
+	generic_ast_node_t* cursor = in_node->first_child;
+	cfg_result_package_t expression_results = emit_expression(starting_block, cursor);
+
+	//Update the current block and unpack the results
+	current_block = expression_results.final_block;
+	three_addr_var_t* comparing_to_var = unpack_result_package(&expression_results, current_block);
+
+	/**
+	 * Step 2: Emit the true and false constants that we'll need for later on. 
+	 * Since OIR conditional moves do not have a place for two constants, we will
+	 * have to emit a temporary variable assignment for the true and false constants
+	 */
+	three_addr_const_t* true_constant = emit_direct_integer_or_char_constant(TRUE, i8);
+	three_addr_const_t* false_constant = emit_direct_integer_or_char_constant(FALSE, i8);
+	three_addr_var_t* false_variable = emit_temp_var(i8);
+
+	instruction_t* false_assignment = emit_assignment_with_const_instruction(false_variable, false_constant);
+	add_statement(current_block, false_assignment);
+
+
+
+
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
 }
