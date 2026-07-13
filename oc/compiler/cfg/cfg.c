@@ -5770,6 +5770,12 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 }
 
 
+static inline cfg_result_package_t lower_contiguous_in_expression_to_oir_conditional_move_chain(basic_block_t* starting_block, generic_ast_node_t* in_node){
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
+}
+
+
 /**
  * Lower the entire in expression into an OIR if-else-if chain using regular branching. This if-else-if chain is done so that we 
  * automatically have a short circuit by the time this is implemented. 
@@ -5988,7 +5994,16 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
  */
 static cfg_result_package_t emit_in_expression(basic_block_t* starting_block, generic_ast_node_t* in_expression){
 	if(in_expression->is_switch_eligible == TRUE){
-		return lower_in_expression_to_oir_switch(starting_block, in_expression);
+		/**
+		 * If we have a "contiguous in", there is an optimization that we can
+		 * do to remove the need for a switch entirely. This is a case that is
+		 * common enough to consider a specialized optimization
+		 */
+		if(in_expression->switch_in_values.is_contiguous_in == FALSE){
+			return lower_in_expression_to_oir_switch(starting_block, in_expression);
+		} else {
+			return lower_contiguous_in_expression_to_oir_conditional_move_chain(starting_block, in_expression);
+		}
 	} else {
 		return lower_in_expression_to_conditional_move_chain(starting_block, in_expression);
 	}

@@ -6358,10 +6358,6 @@ static inline u_int8_t determine_in_statement_switch_eligibility(generic_ast_nod
 
 	//Set this flag for it being contiguous as well
 	in_statement_node->switch_in_values.is_contiguous_in = is_contiguous;
-
-	if(is_contiguous == TRUE){
-		printf("ITS CONTIGUOUS\n\n\n");
-	}
 	
 	//If we've made it here, we can populate the bounds and return success
 	in_statement_node->optional_storage.switch_bounds.lower_bound = sorted_in_member_values->internal_array[0];
