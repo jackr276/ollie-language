@@ -5770,6 +5770,50 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 }
 
 
+/**
+ * For in expressions that are contiguous - that is, they're values are all separated by 1 each - we can skip the switch statement
+ * and go right to a conditional move chain.
+ *
+ * Example: x in (1, 2, 3, 4, 5)
+ *
+ * If we were to use a switch statement, this would become:
+ *
+ * 	cmpl $1, x
+ * 	jl default
+ * 	cmpl $5, x
+ * 	jg default
+ *
+ * 	.JT1:
+ * 	  .L5
+ * 	  .L5
+ * 	  .L5
+ * 	  .L5
+ * 	  .L5
+ *
+ * 	temp = x - 1
+ * 	jmp *.JT1(, x, 8)
+ *
+ * 	.L5:
+ * 	  movl true, result
+ * 	  jmp end
+ *
+ * 	 default:
+ * 	  movl false, result
+ * 	  jmp end
+ *
+ * end:
+ * 	final_result = result
+ *
+ * Notice how the jump table is really useless because they all have the same targets. Instead of this, we can do the following:
+ * movl true, result
+ * cmpl $1, x
+ * cmovl false, result
+ * cmpl $5, x
+ * cmovg false, result
+ *
+ * This achieves the same output with a much smaller final instruction footprint and a much smaller OIR footprint, which makes both
+ * compilation and eventual runtime faster
+ */
 static inline cfg_result_package_t lower_contiguous_in_expression_to_oir_conditional_move_chain(basic_block_t* starting_block, generic_ast_node_t* in_node){
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
