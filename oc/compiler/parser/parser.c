@@ -10202,25 +10202,23 @@ static inline u_int8_t is_switch_exhaustive_switch(generic_type_t* switching_on_
 	}
 
 	/**
-	 * Check 2: if the average distance between values does not exactly equal
-	 * 1, then the switch is not exhaustive. If it does equal 1, then it is
-	 * exhaustive because we already know that the upper and lower bounds exactly
-	 * match the enum upper and lower bounds
+	 * Check 2: if the distance between each consecutive value is always 1, then
+	 * the switch must be exhaustive because the min and max values match the
+	 * enum min and max *and* we always have the correct distance. If there
+	 * is at least one instance where it is not one, we fail out
 	 */
-	int64_t average_distance = 0;
 	for(int32_t i = 1; i < switch_statement_values->current_index; i++){
 		int32_t first_value = switch_statement_values->internal_array[i - 1];
 		int32_t second_value = switch_statement_values->internal_array[i];
 
-		average_distance += (second_value - first_value);
+		//Only takes one instance to fail
+		if(second_value - first_value != 1){
+			return FALSE;
+		}
 	}
 
-	//Compute the average distance by dividing by the number of distances(n-1 for n numbers)
-	average_distance /= (switch_statement_values->current_index - 1);
-
-	printf("AVERAGE DISTANCE IS %ld\n", average_distance);
-
-	return average_distance != 1 ? FALSE : TRUE;
+	//If we made it to here then we're good
+	return TRUE;
 }
 
 
