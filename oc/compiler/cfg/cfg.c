@@ -5827,7 +5827,8 @@ static inline cfg_result_package_t lower_contiguous_in_expression_to_oir_conditi
 	int32_t max_value = in_node->optional_storage.switch_bounds.upper_bound;
 
 	/**
-	 * The first child is always the starting expression. We will emit that first
+	 * Step 1: The first child is always the starting expression. We will emit that first
+	 * and then unpack it to have on hand for our comparisons
 	 */
 	generic_ast_node_t* cursor = in_node->first_child;
 	cfg_result_package_t expression_results = emit_expression(starting_block, cursor);
@@ -5835,6 +5836,9 @@ static inline cfg_result_package_t lower_contiguous_in_expression_to_oir_conditi
 	//Update the current block and unpack the results
 	current_block = expression_results.final_block;
 	three_addr_var_t* comparing_to_var = unpack_result_package(&expression_results, current_block);
+
+	//Store the operand type - this will determine what we use for signed/unsigned comparison
+	generic_type_t* operand_type = get_operand_type_for_relational_operation(type_symtab, comparing_to_var->type, i32);
 
 	/**
 	 * Step 2: Emit the true and false constants that we'll need for later on. 
@@ -5847,6 +5851,29 @@ static inline cfg_result_package_t lower_contiguous_in_expression_to_oir_conditi
 
 	instruction_t* false_assignment = emit_assignment_with_const_instruction(false_variable, false_constant);
 	add_statement(current_block, false_assignment);
+
+	/**
+	 * Step 3: Emit the lower than comparison. If we are lower than the lowest value, we will move
+	 * in a false constant. Otherwise, we move in true
+	 */
+	three_addr_const_t* min_value_constant = emit_direct_integer_or_char_constant(min_value, i32);
+
+	//Emit and add the lower than comparison
+	instruction_t* first_comparison = emit_binary_operation_with_const_instruction(emit_temp_var(i8), comparing_to_var, L_THAN, min_value_constant);
+	add_statement(current_block, first_comparison);
+
+	//Determine the appropriate type based on operand signenedness
+	conditional_movement_type_t first_move_type = is_type_signed(operand_type) == TRUE ? MOVE_L : MOVE_B;
+
+	//Now we can emit and add the first conditional variable
+	three_addr_var_t* result_var_1 = emit_temp_var(i8);
+	instruction_t* first_conditional_move =  emit_conditional_movement_with_const_statement(result_var_1,
+																						 	false_variable,
+																						 	true_constant,
+																						 	first_comparison->operands.oir.assignee,
+																						 	first_move_type);
+	add_statement(current_block, first_conditional_move);
+
 
 
 
