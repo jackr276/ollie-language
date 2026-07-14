@@ -596,6 +596,24 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 
 				break;
 
+			/**
+			 * By the time we get here, the using keyword does not mean anything to us. Remember
+			 * that a using keyword can be fo
+			 */
+			case USING:
+				//TODO HANDLE
+				printf("TODO NOT IMPLEMENTED\n");
+				exit(1);
+
+			/**
+			 * This is entirely useless by the time we get here so we can skip it entirely along
+			 * with the identifier that follows it
+			 */
+			case MODULE:
+				//TODO HANDLE
+				printf("TODO NOT IMPLEMENTED\n");
+				exit(1);
+
 			//We haven't seen a macro, but the array index needs to be bumped
 			default:
 				array_index++;
@@ -720,7 +738,6 @@ static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symt
 				}
 
 				break;
-				
 
 			//If we get this it means we've run off of the end of file. This is a big error and an immediate fail case
 			case DONE:
