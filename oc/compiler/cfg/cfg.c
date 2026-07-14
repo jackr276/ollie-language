@@ -5771,6 +5771,148 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 
 
 /**
+ * For in expressions that are contiguous - that is, they're values are all separated by 1 each - we can skip the switch statement
+ * and go right to a conditional move chain.
+ *
+ * Example: x in (1, 2, 3, 4, 5)
+ *
+ * If we were to use a switch statement, this would become:
+ *
+ * 	cmpl $1, x
+ * 	jl default
+ * 	cmpl $5, x
+ * 	jg default
+ *
+ * 	.JT1:
+ * 	  .L5
+ * 	  .L5
+ * 	  .L5
+ * 	  .L5
+ * 	  .L5
+ *
+ * 	temp = x - 1
+ * 	jmp *.JT1(, x, 8)
+ *
+ * 	.L5:
+ * 	  movl true, result
+ * 	  jmp end
+ *
+ * 	 default:
+ * 	  movl false, result
+ * 	  jmp end
+ *
+ * end:
+ * 	final_result = result
+ *
+ * Notice how the jump table is really useless because they all have the same targets. Instead of this, we can do the following:
+ * cmpl $1, x
+ * result1 <- cmov_l false else true
+ * cmpl $5, x
+ * result2 <- cmov_g false else result1
+ * final_result = result2
+ *
+ * This achieves the same output with a much smaller final instruction footprint and a much smaller OIR footprint, which makes both
+ * compilation and eventual runtime faster
+ */
+static inline cfg_result_package_t lower_contiguous_in_expression_to_oir_conditional_move_chain(basic_block_t* starting_block, generic_ast_node_t* in_node){
+	//We can initialize these results off the bat
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
+	results.starting_block = starting_block;
+
+	//We'll need to keep track of the current block in case of expression changes
+	basic_block_t* current_block = starting_block;
+
+	//Extract the highest and lowest values for convenience
+	int32_t min_value = in_node->optional_storage.switch_bounds.lower_bound;
+	int32_t max_value = in_node->optional_storage.switch_bounds.upper_bound;
+
+	/**
+	 * Step 1: The first child is always the starting expression. We will emit that first
+	 * and then unpack it to have on hand for our comparisons
+	 */
+	generic_ast_node_t* cursor = in_node->first_child;
+	cfg_result_package_t expression_results = emit_expression(starting_block, cursor);
+
+	//Update the current block and unpack the results
+	current_block = expression_results.final_block;
+	three_addr_var_t* comparing_to_var = unpack_result_package(&expression_results, current_block);
+
+	//Store the operand type - this will determine what we use for signed/unsigned comparison
+	generic_type_t* operand_type = get_operand_type_for_relational_operation(type_symtab, comparing_to_var->type, i32);
+
+	/**
+	 * Step 2: Emit the true and false constants that we'll need for later on. 
+	 * Since OIR conditional moves do not have a place for two constants, we will
+	 * have to emit a temporary variable assignment for the true and false constants
+	 */
+	three_addr_const_t* true_constant = emit_direct_integer_or_char_constant(TRUE, i8);
+	three_addr_const_t* false_constant = emit_direct_integer_or_char_constant(FALSE, i8);
+	three_addr_var_t* false_variable = emit_temp_var(i8);
+
+	instruction_t* false_assignment = emit_assignment_with_const_instruction(false_variable, false_constant);
+	add_statement(current_block, false_assignment);
+
+	/**
+	 * Step 3: Emit the lower than comparison. If we are lower than the lowest value, we will move
+	 * in a false constant. Otherwise, we move in true
+	 */
+	three_addr_const_t* min_value_constant = emit_direct_integer_or_char_constant(min_value, i32);
+
+	//Emit and add the lower than comparison
+	instruction_t* first_comparison = emit_binary_operation_with_const_instruction(emit_temp_var(i8), comparing_to_var, L_THAN, min_value_constant);
+	add_statement(current_block, first_comparison);
+
+	//Determine the appropriate type based on operand signenedness
+	conditional_movement_type_t first_move_type = is_type_signed(operand_type) == TRUE ? MOVE_L : MOVE_B;
+
+	//Now we can emit and add the first conditional variable
+	three_addr_var_t* result_var_1 = emit_temp_var(i8);
+	instruction_t* first_conditional_move =  emit_conditional_movement_with_const_statement(result_var_1,
+																						 	false_variable,
+																						 	true_constant,
+																						 	first_comparison->operands.oir.assignee,
+																						 	first_move_type);
+	add_statement(current_block, first_conditional_move);
+
+	/**
+	 * Step 4: Emit the greater than comparison. If we are higher than the highest value, we will move
+	 * in a false constant. Otherwise, we defer to whatever the old value was
+	 */
+	three_addr_const_t* max_value_constant = emit_direct_integer_or_char_constant(max_value, i32);
+
+	//Emit and add the greater than comparison
+	instruction_t* second_comparison = emit_binary_operation_with_const_instruction(emit_temp_var(i8), comparing_to_var, G_THAN, max_value_constant);
+	add_statement(current_block, second_comparison);
+
+	//Determine the appropriate type based on operand signenedness
+	conditional_movement_type_t second_move_type = is_type_signed(operand_type) == TRUE ? MOVE_G : MOVE_A;
+
+	//Now we can emit and add the second conditional variable
+	three_addr_var_t* result_var_2 = emit_temp_var(i8);
+	instruction_t* second_conditional_move =  emit_conditional_movement_statement(result_var_2,
+																				  false_variable,
+																				  result_var_1,
+																				  second_comparison->operands.oir.assignee,
+																				  second_move_type);
+	add_statement(current_block, second_conditional_move);
+
+	/**
+	 * Step 5: emit one final assignment from the final result
+	 * var into a final temporary variable of our given type
+	 */
+	three_addr_var_t* final_variable = emit_temp_var(in_node->inferred_type);
+	instruction_t* final_assignment = emit_assignment_instruction(final_variable, result_var_2);
+	add_statement(current_block, final_assignment);
+
+	//Package up and give back our results
+	results.type = CFG_RESULT_TYPE_VAR;
+	results.result_value.result_var = final_variable;
+	results.final_block = current_block;
+	return results;
+}
+
+
+/**
  * Lower the entire in expression into an OIR if-else-if chain using regular branching. This if-else-if chain is done so that we 
  * automatically have a short circuit by the time this is implemented. 
  *
@@ -5988,7 +6130,16 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
  */
 static cfg_result_package_t emit_in_expression(basic_block_t* starting_block, generic_ast_node_t* in_expression){
 	if(in_expression->is_switch_eligible == TRUE){
-		return lower_in_expression_to_oir_switch(starting_block, in_expression);
+		/**
+		 * If we have a "contiguous in", there is an optimization that we can
+		 * do to remove the need for a switch entirely. This is a case that is
+		 * common enough to consider a specialized optimization
+		 */
+		if(in_expression->switch_in_values.is_contiguous_in == FALSE){
+			return lower_in_expression_to_oir_switch(starting_block, in_expression);
+		} else {
+			return lower_contiguous_in_expression_to_oir_conditional_move_chain(starting_block, in_expression);
+		}
 	} else {
 		return lower_in_expression_to_conditional_move_chain(starting_block, in_expression);
 	}
@@ -10045,7 +10196,7 @@ static inline cfg_result_package_t visit_c_style_switch_statement(generic_ast_no
 	 * for non-exhaustive switches. If it is exhaustive, we'll route it to
 	 * the simpler exhaustive switch converter
 	 */
-	if(root_node->is_exhaustive_switch == FALSE){
+	if(root_node->switch_in_values.is_exhaustive_switch == FALSE){
 		return visit_non_exhaustive_c_style_switch_statement(root_node);
 	} else {
 		return visit_exhaustive_c_style_switch_statement(root_node);
@@ -10596,7 +10747,7 @@ static inline cfg_result_package_t visit_switch_statement(generic_ast_node_t* ro
 	 * switch will not have that. These types of switches are different enough
 	 * to warrant separate methods
 	 */
-	if(root_node->is_exhaustive_switch == FALSE){
+	if(root_node->switch_in_values.is_exhaustive_switch == FALSE){
 		return visit_non_exhaustive_ollie_switch_statement(root_node);
 	} else {
 		return visit_exhaustive_ollie_switch_statement(root_node);

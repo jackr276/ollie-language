@@ -174,6 +174,8 @@ struct generic_type_t{
 	type_class_t type_class;
 	//Is this an anonymous type? Anonymous types have *no* name
 	u_int8_t is_anonymous;
+	//Is this a contiguous enum type? Contiguous enum types are enums where each value is 1 apart
+	u_int8_t is_contiguous_enum;
 };
 
 

@@ -6307,9 +6307,13 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
  * to handle this
  *
  * This rule will also leverage the traversal of the in members that it is already
- * doing to determine a min and max value
+ * doing to determine a min and max value, and to determine if the in statement
+ * is a contiguous in statement(this is needed for optimizations down the road)
  */
 static inline u_int8_t determine_in_statement_switch_eligibility(generic_ast_node_t* in_statement_node, dynamic_integer_array_t* sorted_in_member_values){
+	//By default assume we are contiguosu
+	u_int8_t is_contiguous = TRUE;
+
 	/**
 	 * If the user has done something silly like an in-statement with only one member, we will rewrite this for them
 	 */
@@ -6336,17 +6340,25 @@ static inline u_int8_t determine_in_statement_switch_eligibility(generic_ast_nod
 		int32_t first_value = sorted_in_member_values->internal_array[i - 1];
 		int32_t second_value = sorted_in_member_values->internal_array[i];
 
+		//Only takes one case for this to not work
+		if(second_value - first_value != 1){
+			is_contiguous = FALSE;
+		}
+
 		average_distance += (second_value - first_value);
 	}
 
 	//Find the actual average
-	average_distance /= sorted_in_member_values->current_index;
+	average_distance /= (sorted_in_member_values->current_index - 1);
 
 	//If it exceeds the max distance it is not switch eligible(too sparse)
 	if(average_distance > MAX_AVERAGE_CASE_DIFFERENCE){
 		return FALSE;
 	}
 
+	//Set this flag for it being contiguous as well
+	in_statement_node->switch_in_values.is_contiguous_in = is_contiguous;
+	
 	//If we've made it here, we can populate the bounds and return success
 	in_statement_node->optional_storage.switch_bounds.lower_bound = sorted_in_member_values->internal_array[0];
 	in_statement_node->optional_storage.switch_bounds.upper_bound = sorted_in_member_values->internal_array[sorted_in_member_values->current_index - 1];
@@ -7766,6 +7778,8 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 	lexitem_t lookahead;
 	//Reserve space for the type name
 	dynamic_string_t type_name = dynamic_string_alloc();
+	//Allocate the array for our sorted integer values
+	dynamic_integer_array_t sorted_integer_values = dynamic_integer_array_alloc();
 
 	//Add the enum intro in
 	dynamic_string_set(&type_name, "enum ");
@@ -8006,6 +8020,9 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 			num_errors++;
 			return FAILURE;
 		}
+		
+		//Add the enum member value into the sorted array for later
+		sorted_dynamic_integer_array_insert_unique(&sorted_integer_values, member_record->enum_member_value);
 
 		//This goes up by 1
 		current_enum_value++;
@@ -8042,6 +8059,28 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 	immutable_enum_type->internal_values.enum_integer_type = type_needed;
 	//Assign the size over as well
 	immutable_enum_type->type_size = type_needed->type_size;
+
+	/**
+	 * If we have an enum type that, when all members are sorted, each value
+	 * is 1 apart, we refer to that internally as a "contiguous enum". We will set
+	 * a flag in the type for this. This is important for exhaustive switch/contiguous
+	 * in determination later on
+	 */
+	u_int8_t is_contiguous = TRUE;
+	for(int32_t i = 1; i < sorted_integer_values.current_index; i++){
+		int32_t first_value = sorted_integer_values.internal_array[i - 1];
+		int32_t second_value = sorted_integer_values.internal_array[i];
+
+		//Only takes 1 for this to fail out
+		if(second_value - first_value != 1){
+			is_contiguous = FALSE;
+			break;
+		}
+	}
+
+	//Set both types to this
+	mutable_enum_type->is_contiguous_enum = is_contiguous;
+	immutable_enum_type->is_contiguous_enum = is_contiguous;
 
 	//Now once we are here, we can optionally see an alias command. These alias commands are helpful and convenient
 	//for redefining variables immediately upon declaration. They are prefaced by the "As" keyword
@@ -8112,6 +8151,9 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 	generic_type_t* immutable_alias = create_aliased_type(alias_name.string, immutable_enum_type, parser_line_num, NOT_MUTABLE);
 	//Once we've made the aliased type, we can record it in the symbol table
 	insert_type(type_symtab, create_type_record(immutable_alias));
+
+	//Destroy now that we're done
+	dynamic_integer_array_dealloc(&sorted_integer_values);
 
 	//This is a successful creation
 	return SUCCESS;
@@ -10073,7 +10115,7 @@ static inline u_int8_t determine_switch_eligibility(dynamic_integer_array_t* swi
 	}
 
 	//Now get the actual average distance
-	average_distance /= switch_statement_values->current_index;
+	average_distance /= (switch_statement_values->current_index - 1);
 
 	//Greater than 30, we are too sparse for switching
 	if(average_distance >= MAX_AVERAGE_CASE_DIFFERENCE){
@@ -10106,55 +10148,8 @@ static inline u_int8_t is_type_exhaustive_switch_eligible(generic_type_t* type){
 		return FALSE;
 	}
 	
-	//Extract for convenience
-	dynamic_array_t* enumeration_table = &(type->internal_types.enumeration_table);
-
-	/**
-	 * Remember that in Ollie, users are able to assign enum values their
-	 * own types. This means that values may *not* always be 1 apart from
-	 * each other. We'll need to check and see if all of the values inside of
-	 * the enumeration are in fact 1 apart
-	 */
-	int32_t min_enum_value = type->min_enum_value;
-	int32_t max_enum_value = type->max_enum_value;
-
-	//The range of all possible enum values
-	int32_t enum_range = max_enum_value - min_enum_value + 1;
-
-	//Define a bytemap of all potential enum values and wipe it all out to 0
-	u_int8_t value_map[enum_range];
-	memset(value_map, 0, sizeof(u_int8_t) * enum_range);
-
-	/**
-	 * Let's now go through and fill out the byte map that we've made
-	 * with all of the values in the enumeration table. When we're done,
-	 * if this is switch eligible we'd have an array like: [1, 1, 1, 1, 1, 1].
-	 * If it's not, we may have something like [1, 1, 0, 1, 1] where there
-	 * are gaps in the exhaustive range
-	 */
-	for(int32_t i = 0; i < enumeration_table->current_index; i++){
-		//Extract the members enum value
-		symtab_variable_record_t* member = dynamic_array_get_at(enumeration_table, i);
-		int32_t raw_enum_value = member->enum_member_value;
-
-		//Fill out that this exists now
-		value_map[raw_enum_value - min_enum_value] = TRUE;
-	}
-
-	/**
-	 * Now for our final check - if any of the indices
-	 * here have 0, that means that that value in the enum
-	 * range simply doesn't exist. If we see that, we
-	 * fail out
-	 */
-	for(int32_t i = 0; i < enum_range; i++){
-		if(value_map[i] == FALSE){
-			return FALSE;
-		}
-	}
-	
-	//If we survived to here then we're true
-	return TRUE;
+	//If the enum type is contiguous, then we do have an exhaustive switch eligible type
+	return type->is_contiguous_enum == TRUE ? TRUE: FALSE;
 }
 
 
@@ -10190,41 +10185,23 @@ static inline u_int8_t is_switch_exhaustive_switch(generic_type_t* switching_on_
 		return FALSE;
 	}
 
-	//The range of all possible enum values
-	int32_t range = max_enum_value - min_enum_value + 1;
-
-	//Define a bytemap of all potential enum values and wipe it all out to 0
-	u_int8_t value_map[range];
-	memset(value_map, 0, sizeof(u_int8_t) * range);
-
 	/**
-	 * Let's now go through and fill out the byte map that we've made
-	 * with all of the values in the enumeration table. When we're done,
-	 * if this is switch eligible we'd have an array like: [1, 1, 1, 1, 1, 1].
-	 * If it's not, we may have something like [1, 1, 0, 1, 1] where there
-	 * are gaps in the exhaustive range
+	 * Check 2: if the distance between each consecutive value is always 1, then
+	 * the switch must be exhaustive because the min and max values match the
+	 * enum min and max *and* we always have the correct distance. If there
+	 * is at least one instance where it is not one, we fail out
 	 */
-	for(int32_t i = 0; i < switch_statement_values->current_index; i++){
-		//Extract the value
-		int32_t value = dynamic_integer_array_get_at(switch_statement_values, i);
+	for(int32_t i = 1; i < switch_statement_values->current_index; i++){
+		int32_t first_value = switch_statement_values->internal_array[i - 1];
+		int32_t second_value = switch_statement_values->internal_array[i];
 
-		//Fill out that this exists now
-		value_map[value - min_enum_value] = TRUE;
-	}
-
-	/**
-	 * Now for our final check - if any of the indices
-	 * here have 0, that means that that value in the enum
-	 * range simply doesn't exist. If we see that, we
-	 * fail out
-	 */
-	for(int32_t i = 0; i < range; i++){
-		if(value_map[i] == FALSE){
+		//Only takes one instance to fail
+		if(second_value - first_value != 1){
 			return FALSE;
 		}
 	}
 
-	//If we survived to here then it worked
+	//If we made it to here then we're good
 	return TRUE;
 }
 
@@ -10488,13 +10465,13 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 
 	//Let the helpers determine the switch eligibility and exhaustive switch eligibility
 	switch_stmt_node->is_switch_eligible = determine_switch_eligibility(&switch_values);
-	switch_stmt_node->is_exhaustive_switch = is_switch_exhaustive_switch(switching_on_type, &switch_values);
+	switch_stmt_node->switch_in_values.is_exhaustive_switch = is_switch_exhaustive_switch(switching_on_type, &switch_values);
 
 	/**
 	 * If this is not exhaustive and we have not found the default clause, then this is an error
 	 * and we fail out
 	 */
-	if(switch_stmt_node->is_exhaustive_switch == FALSE && found_default_clause == FALSE){
+	if(switch_stmt_node->switch_in_values.is_exhaustive_switch == FALSE && found_default_clause == FALSE){
 		return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", parser_line_num);
 	}
 
@@ -10502,7 +10479,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	 * If this is exhaustive and we do have a default clause, then that default clause is actually unreachable. We will fail
 	 * out if we detect that this is the case
 	 */
-	if(switch_stmt_node->is_exhaustive_switch == TRUE && found_default_clause == TRUE){
+	if(switch_stmt_node->switch_in_values.is_exhaustive_switch == TRUE && found_default_clause == TRUE){
 		return print_and_return_error("Default clause is unreachable in exhaustive switch statement", parser_line_num);
 	}
 
