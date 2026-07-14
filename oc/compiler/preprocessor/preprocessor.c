@@ -560,20 +560,15 @@ static u_int8_t validate_and_skip_using_directive(ollie_token_stream_t* stream, 
 		token = token_array_get_pointer_at(&(stream->token_stream), *stream_index);
 		(*stream_index)++;
 
-		switch(token->tok){
-			//Comma means we expect to see more values
-			case COMMA:
-				token->ignore = TRUE;
-				continue;
-
-			//Once we see this we leave
-			case SEMICOLON:
-				token->ignore = TRUE;
-				break;
-
-			default:
-				sprintf(info_message, "Expected comma or semicolon in $using directive but got %s instead", lexitem_to_string(token));
-				return print_and_return_preprocessor_failure(info_message, token->line_num);
+		if(token->tok == COMMA){
+			token->ignore = TRUE;
+			continue;
+		} else if(token->tok == SEMICOLON){
+			token->ignore = TRUE;
+			break;
+		} else {
+			sprintf(info_message, "Expected comma or semicolon in $using directive but got %s instead", lexitem_to_string(token));
+			return print_and_return_preprocessor_failure(info_message, token->line_num);
 		}
 
 	} while(TRUE);
