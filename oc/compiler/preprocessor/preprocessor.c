@@ -583,6 +583,49 @@ static u_int8_t validate_and_skip_using_directive(ollie_token_stream_t* stream, 
 }
 
 
+/**
+ * Validate and skip over a module directive. It is *not* our job to validate the module itself,
+ * that has already been done by the time we get here. Instead, we need to just validate the syntax
+ * and flag it to be ignored by the replacement pass
+ *
+ * $module <str_const>;
+ */
+static u_int8_t validate_and_skip_module_directive(ollie_token_stream_t* stream, u_int32_t* stream_index){
+	//First grab the original token. This should be the using keyword
+	lexitem_t* token = token_array_get_pointer_at(&(stream->token_stream), *stream_index);
+	(*stream_index)++;
+
+	//This should not happen but just to be safe
+	if(token->tok != MODULE){
+		return print_and_return_preprocessor_failure("Fatal internal compiler error, exprected $using keyword but did not find it", token->line_num);
+	}
+
+	//Flag that we want to ignore this
+	token->ignore = TRUE;
+
+	//Now we need to see a string constant
+	token = token_array_get_pointer_at(&(stream->token_stream), *stream_index);
+	(*stream_index)++;
+
+	//Immediate fail out if we haven't seen it
+	if(token->tok != STR_CONST){
+		sprintf(info_message, "Expected identifier but got %s instead\n", lexitem_to_string(token));
+		return print_and_return_preprocessor_failure(info_message, token->line_num);
+	}
+
+	//We now need to see a semicolon
+	token = token_array_get_pointer_at(&(stream->token_stream), *stream_index);
+	(*stream_index)++;
+
+	//Immediate fail out if it's not here
+	if(token->tok != SEMICOLON){
+		return print_and_return_preprocessor_failure("Semicolon expected after $module directive", token->line_num);
+	}
+
+	//If we do get here then we have a success
+	return TRUE;
+}
+
 
 /**
  * Put simply, the consumption pass will run through the entire token
