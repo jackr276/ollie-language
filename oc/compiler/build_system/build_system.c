@@ -4,6 +4,7 @@
  */
 
 #include "build_system.h"
+#include <sys/types.h>
 
 
 
@@ -13,8 +14,10 @@
  * stream. This token stream is what we will use to actually parse and construct
  * the overall CFG
  */
-ollie_token_stream_t* parse_dependencies_and_construct_token_stream(compiler_options_t* options){
+ollie_token_stream_t parse_dependencies_and_construct_token_stream(compiler_options_t* options, u_int8_t silent_mode){
 
-	//TODO UPDATE
-	return NULL;
+	//TODO NOT AT ALL WORKING YET
+	ollie_token_stream_t token_stream = tokenize(options->file_name, silent_mode);
+
+	return token_stream;
 }

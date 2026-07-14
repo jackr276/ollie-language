@@ -30,7 +30,7 @@ int main(int argc, char** argv){
 	for(int32_t i = 1; i < argc; i++){
 		printf("=============== LEXER TEST FOR FILE %s =================\n\n", argv[i]);
 
-		//Let the helper do all of the work
+		//Let the tokenizer/build system do all of the work
 		ollie_token_stream_t token_stream = tokenize(argv[i], FALSE);
 
 		//If we failed, we move on to the next file

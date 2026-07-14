@@ -7,6 +7,7 @@
 //The symtab has what we need roped in
 #include "../symtab/symtab.h"
 //We'll also need three address vars
+#include "../build_system/build_system.h"
 #include "../instruction/instruction.h"
 #include "../parser/parser.h"
 #include "../utils/dynamic_array/dynamic_array.h"
@@ -86,8 +87,8 @@ int main(int argc, char** argv){
 	//Grab the compiler options
 	compiler_options_t* options = parse_and_store_options(argc, argv);
 
-	//Invoke the tokenizer
-	ollie_token_stream_t stream = tokenize(options->file_name, FALSE);
+	//Invoke the build system
+	ollie_token_stream_t stream = parse_dependencies_and_construct_token_stream(options->file_name, FALSE);
 
 	//If this fails, we need to leave
 	if(stream.status == STREAM_STATUS_FAILURE){

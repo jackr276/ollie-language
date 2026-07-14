@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <time.h>
 #include "ast/ast.h"
+#include "build_system/build_system.h"
 #include "lexer/lexer.h"
 #include "parser/parser.h"
 #include "preprocessor/preprocessor.h"
@@ -242,7 +243,7 @@ static void print_summary(compiler_options_t* options, module_times_t* times, u_
 
 	//If we want module specific timing, we'll print out here
 	if(options->module_specific_timing == TRUE){
-		printf("Lexer took: %.8f seconds\n", times->lexer_time);
+		printf("Lexer & Build System took: %.8f seconds\n", times->lexer_time);
 		printf("Preprocessor took: %.8f seconds\n", times->preprocessor_time);
 		printf("Parser took: %.8f seconds\n", times->parser_time);
 		printf("CFG constuctor took: %.8f seconds\n", times->cfg_time);
@@ -293,12 +294,28 @@ static u_int8_t compile(compiler_options_t* options){
 		begin = clock();
 	}
 
-	//Invoke the lexer. This handles all file IO
-	ollie_token_stream_t token_stream = tokenize(options->file_name, FALSE);
+	/**
+	 * Step 1: run the build system first. The build system will return one large
+	 * token stream with all of the tokens arranged in a proper order for compilation. 
+	 * This unified token stream approach allows us to only deal with the build system
+	 * once at the start of compilation, even when we have many many dependencies
+	 */
+	ollie_token_stream_t token_stream = parse_dependencies_and_construct_token_stream(options, FALSE);
+
+	//
+	//
+	//
+	//TODO REFACTOR WITH MORE DOCUMENTATION
+	//
+	//
+	//
+	//
+	//
+	//
 
 	//If it failed, we need to leave immediately
 	if(token_stream.status == STREAM_STATUS_FAILURE){
-		fprintf(stdout, "\n\n[FILE: %s]: Tokenizing failed. Please remedy the tokenizer error and recompile\n\n", options->file_name);
+		fprintf(stdout, "\n\n[FILE: %s]: Tokenizing/build system failed. Please remedy the error and recompile\n\n", options->file_name);
 		num_errors++;
 
 		//Timer end

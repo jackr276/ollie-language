@@ -13,6 +13,7 @@
 
 //Link to the preprocessor
 #include "../preprocessor/preprocessor.h"
+#include "../build_system/build_system.h"
 #include "../utils/constants.h"
 #include "../utils/utility_structs.h"
 
@@ -105,8 +106,8 @@ int main(int argc, char** argv){
 	//Start the timer
 	clock_t begin = clock();
 
-	//Invoke the tokenizer
-	ollie_token_stream_t stream = tokenize(options->file_name, FALSE);
+	//Invoke the build system to get our token array
+	ollie_token_stream_t stream = parse_dependencies_and_construct_token_stream(options, FALSE);
 
 	//Tokenizing failed, error out
 	if(stream.status == STREAM_STATUS_FAILURE){

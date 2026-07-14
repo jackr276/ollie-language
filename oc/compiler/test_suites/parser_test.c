@@ -6,6 +6,7 @@
 #include "../parser/parser.h"
 #include "../utils/constants.h"
 #include "../preprocessor/preprocessor.h"
+#include "../build_system/build_system.h"
 #include <unistd.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -78,8 +79,8 @@ int main(int argc, char** argv){
 	//Grab the options
 	compiler_options_t* options = parse_and_store_options(argc, argv);
 
-	//First things first - run the lexer
-	ollie_token_stream_t token_stream = tokenize(options->file_name, FALSE);
+	//Run the build system to generate one big token stream with all dependencies
+	ollie_token_stream_t token_stream = parse_dependencies_and_construct_token_stream(options, FALSE);
 
 	//If this fails, we need to leave
 	if(token_stream.status == STREAM_STATUS_FAILURE){

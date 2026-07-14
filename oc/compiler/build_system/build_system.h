@@ -8,6 +8,7 @@
 
 #include "../lexer/lexer.h"
 #include "../utils/utility_structs.h"
+#include <sys/types.h>
 
 /**
  * The main and only entry point to the build system revolves around
@@ -15,6 +16,6 @@
  * stream. This token stream is what we will use to actually parse and construct
  * the overall CFG
  */
-ollie_token_stream_t* parse_dependencies_and_construct_token_stream(compiler_options_t* options);
+ollie_token_stream_t parse_dependencies_and_construct_token_stream(compiler_options_t* options, u_int8_t silent_mode);
 
 #endif /* BUILD_SYSTEM_H */

@@ -11,15 +11,11 @@
 #include <sys/types.h>
 #include <time.h>
 
-//Link to the parser
+#include "../build_system/build_system.h"
 #include "../parser/parser.h"
-//Link to cfg
 #include "../cfg/cfg.h"
-//Link to the preprocessor
 #include "../preprocessor/preprocessor.h"
-//Link to the ollie optimizer
 #include "../optimizer/optimizer.h"
-//Link to the instruction selector
 #include "../instruction_selector/instruction_selector.h"
 #include "../utils/constants.h"
 
@@ -111,8 +107,8 @@ int main(int argc, char** argv){
 	//Start the timer
 	clock_t begin = clock();
 
-	//Invoke the tokenizer
-	ollie_token_stream_t stream = tokenize(options->file_name, FALSE);
+	//Let the build system construct the entire token stream
+	ollie_token_stream_t stream = parse_dependencies_and_construct_token_stream(options, FALSE);
 	
 	//Store it inside of the token stream
 	options->token_stream = &stream;
