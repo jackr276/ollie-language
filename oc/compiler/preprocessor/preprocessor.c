@@ -592,7 +592,7 @@ static u_int8_t validate_and_skip_module_directive(ollie_token_stream_t* stream,
 
 	//This should not happen but just to be safe
 	if(token->tok != MODULE){
-		return print_and_return_preprocessor_failure("Fatal internal compiler error, exprected $using keyword but did not find it", token->line_num);
+		return print_and_return_preprocessor_failure("Fatal internal compiler error, expected $module keyword but did not find it", token->line_num);
 	}
 
 	//Flag that we want to ignore this
@@ -604,9 +604,12 @@ static u_int8_t validate_and_skip_module_directive(ollie_token_stream_t* stream,
 
 	//Immediate fail out if we haven't seen it
 	if(token->tok != STR_CONST){
-		sprintf(info_message, "Expected identifier but got %s instead\n", lexitem_to_string(token));
+		sprintf(info_message, "Expected identifier in $module directive but got %s instead\n", lexitem_to_string(token));
 		return print_and_return_preprocessor_failure(info_message, token->line_num);
 	}
+
+	//Flag that we need to ignore it
+	token->ignore = TRUE;
 
 	//We now need to see a semicolon
 	token = token_array_get_pointer_at(&(stream->token_stream), *stream_index);
@@ -616,6 +619,9 @@ static u_int8_t validate_and_skip_module_directive(ollie_token_stream_t* stream,
 	if(token->tok != SEMICOLON){
 		return print_and_return_preprocessor_failure("Semicolon expected after $module directive", token->line_num);
 	}
+
+	//Flag down here for us to ignore it
+	token->ignore = TRUE;
 
 	//If we do get here then we have a success
 	return TRUE;
@@ -705,7 +711,8 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 				if(validate_and_skip_using_directive(stream, &array_index) == FALSE){
 					return FAILURE;
 				}
-				
+
+				(*num_macros)++;
 				break;
 
 			/**
@@ -717,6 +724,7 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 					return FAILURE;
 				}
 
+				(*num_macros)++;
 				break;
 
 			//We haven't seen a macro, but the array index needs to be bumped

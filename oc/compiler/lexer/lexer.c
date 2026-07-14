@@ -111,6 +111,10 @@ char* lexitem_to_string(lexitem_t* lexitem){
 			return ".";
 		case POUND:
 			return "#";
+		case MODULE:
+			return "$module";
+		case USING:
+			return "$using";
 		case L_PAREN:
 			return "(";
 		case R_PAREN:

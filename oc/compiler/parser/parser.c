@@ -14365,7 +14365,8 @@ static generic_ast_node_t* declaration_partition(ollie_token_stream_t* token_str
 			return namespace_declaration(token_stream);
 
 		default:
-			return print_and_return_error("Invalid/unknown expression type encountered in the top level scope", parser_line_num);
+			sprintf(info, "Invalid/unknown expression type encountered in top-level scope. Saw \"%s\".", lexitem_to_string(&lookahead));
+			return print_and_return_error(info, parser_line_num);
 	}
 }
 
