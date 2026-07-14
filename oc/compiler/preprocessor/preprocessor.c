@@ -720,6 +720,15 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 			 * with the identifier that follows it
 			 */
 			case MODULE:
+				/**
+				 * We may never, *ever*, see a module directive anywhere besides the very top
+				 * of the file(i.e. the very very first token). If we do, it is completely wrong
+				 * and causes an immediate failure
+				 */
+				if(array_index != 0){
+					return print_and_return_preprocessor_failure("The $module declaration directive must be the very first non-comment line in a file. There may only be one $module declaration per file", token->line_num);
+				}
+
 				if(validate_and_skip_module_directive(stream, &array_index) == FALSE){
 					return FAILURE;
 				}
@@ -1233,8 +1242,7 @@ preprocessor_results_t preprocess(compiler_options_t* options, ollie_token_strea
 
 	//If we failed here then there's no point in going further
 	if(consumption_pass_result == FAILURE){
-		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable/invalid macros detected. Please rememdy the errors and recompile", current_line_number);
-		//Note a failure
+		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable/invalid macros and/or build system directives macros detected. Please rememdy the errors and recompile", current_line_number);
 		results.status = PREPROCESSOR_FAILURE;
 		goto finalizer;
 	}
@@ -1257,8 +1265,7 @@ preprocessor_results_t preprocess(compiler_options_t* options, ollie_token_strea
 
 	//This is very rare but if it does happen we will note it
 	if(replacement_pass_result == FAILURE){
-		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable/invalid macros detected. Please rememdy the errors and recompile", current_line_number);
-		//Note a failure
+		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable/invalid macros and/or build system directives macros detected. Please rememdy the errors and recompile", current_line_number);
 		results.status = PREPROCESSOR_FAILURE;
 	}
 	
