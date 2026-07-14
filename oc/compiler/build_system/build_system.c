@@ -49,6 +49,42 @@ static void handle_file_dependencies_and_tokenization(char* file_name, u_int8_t 
  * us parsing dependencies and constructing them into one gigantic, unified token
  * stream. This token stream is what we will use to actually parse and construct
  * the overall CFG
+ *
+ *
+ * TODO $module $endmodule IDEA like we've done before with macros
+ *
+ * Example:
+ *
+ * $module "system.printer"
+ *
+ * //dependencies as need be
+ *
+ * //Actual code
+ *
+ * $endmodule
+ *
+ * Can be as big or as small as you want
+ *
+ * Each module should generate its own unique token stream - each module must be independently operable
+ *
+ * Many things to check with global vars, functions etc that need testing
+ *
+ * LATER IDEA NOT RIGHT NOW - submodules maybe
+ *
+ * BUT THEN HOW DO WE HANDLE FILES? How are we going to know which files to pull in and
+ * compile? If one file can have multiple modules then how do we find the modules on the first
+ * go around?
+ *
+ *
+ * Common pattern:
+ *
+ * search in two areas:
+ * 	The directory that we are being run in and all subdirectories under it
+ * 	The common library (/usr/lib/ollie/)
+ *
+ * We will search through here in an attempt to find our module
+ *
+ * NOTE: OLLIE WILL NEVER SUPPORT INCREMENTAL BUILDS OR CACHING PRECOMP'D FILES
  */
 ollie_token_stream_t parse_dependencies_and_construct_token_stream(compiler_options_t* options, u_int8_t silent_mode){
 	/**
