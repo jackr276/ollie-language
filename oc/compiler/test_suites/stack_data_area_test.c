@@ -88,7 +88,7 @@ int main(int argc, char** argv){
 	compiler_options_t* options = parse_and_store_options(argc, argv);
 
 	//Invoke the build system
-	ollie_token_stream_t stream = parse_dependencies_and_construct_token_stream(options->file_name, FALSE);
+	ollie_token_stream_t stream = parse_dependencies_and_construct_token_stream(options, FALSE);
 
 	//If this fails, we need to leave
 	if(stream.status == STREAM_STATUS_FAILURE){
