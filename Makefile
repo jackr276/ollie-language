@@ -3,6 +3,7 @@ CC = gcc
 CFLAGS = -Wall -Wextra -c -Wimplicit-fallthrough=0
 CFLAGSLINK = -Wall -Wextra
 TEST_SUITE_PATH = ./oc/compiler/test_suites
+BUILD_SYSTEM_PATH = ./oc/compiler/build_system
 LEX_PATH = ./oc/compiler/lexer
 GRAPH_ANALYZER_PATH = ./oc/compiler/graph_analyzer
 STACK_PATH = ./oc/compiler/utils/stack
@@ -84,6 +85,12 @@ lexer.o: $(LEX_PATH)/lexer.c
 
 lexerd.o: $(LEX_PATH)/lexer.c
 	$(CC) -g $(CFLAGS) $(LEX_PATH)/lexer.c -o $(OUT_LOCAL)/lexerd.o
+
+build_system.o: $(BUILD_SYSTEM_PATH)/build_system.c
+	$(CC) $(CFLAGS) $(BUILD_SYSTEM_PATH)/build_system.c $(OUT_LOCAL)/build_system.o
+
+build_systemd.o: $(BUILD_SYSTEM_PATH)/build_system.c
+	$(CC) -g $(CFLAGS) $(BUILD_SYSTEM_PATH)/build_system.c $(OUT_LOCAL)/build_systemd.o
 
 heapstack.o: $(STACK_PATH)/heapstack.c
 	$(CC) $(CFLAGS) $(STACK_PATH)/heapstack.c -o $(OUT_LOCAL)/heapstack.o
@@ -551,6 +558,12 @@ lexer-CI.o: $(LEX_PATH)/lexer.c
 
 lexer-CId.o: $(LEX_PATH)/lexer.c
 	$(CC) $(CFLAGS) -g $(LEX_PATH)/lexer.c -o $(OUT_CI)/lexerd.o
+
+build_system-CI.o: $(BUILD_SYSTEM_PATH)/build_system.c
+	$(CC) $(CFLAGS) $(BUILD_SYSTEM_PATH)/build_system.c $(OUT_CI)/build_system.o
+
+build_system-CId.o: $(BUILD_SYSTEM_PATH)/build_system.c
+	$(CC) -g $(CFLAGS) $(BUILD_SYSTEM_PATH)/build_system.c $(OUT_CI)/build_systemd.o
 
 graph_analyzer-CI.o: $(GRAPH_ANALYZER_PATH)/graph_analyzer.c
 	$(CC) $(CFLAGS) $(GRAPH_ANALYZER_PATH)/graph_analyzer.c -o $(OUT_CI)/graph_analyzer.o
