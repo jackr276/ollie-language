@@ -527,7 +527,7 @@ static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, 
  * dependency files at all. We are only here to skip over this. If we made it to this
  * point, the build system has already handled all of that
  *
- * $using <ident>{, <ident>}*;
+ * $using <str_const>{, <str_constt>}*;
  */
 static u_int8_t validate_and_skip_using_directive(ollie_token_stream_t* stream, u_int32_t* stream_index){
 	//First grab the original token. This should be the using keyword
@@ -542,16 +542,44 @@ static u_int8_t validate_and_skip_using_directive(ollie_token_stream_t* stream, 
 	//Flag that we want to ignore this
 	token->ignore = TRUE;
 
-	//Now we are required to see at least one, but possibly many identifiers separated by commas
-	token = token_array_get_pointer_at(&(stream->token_stream), *stream_index);
-	(*stream_index)++;
-
 	do {
-		
+		//Now we are required to see at least one, but possibly many identifiers separated by commas
+		token = token_array_get_pointer_at(&(stream->token_stream), *stream_index);
+		(*stream_index)++;
+
+		//Immediate fail case if we don't have the appropriate identifier
+		if(token->tok != STR_CONST){
+			sprintf(info_message, "Expected identifier in $using directive but got %s instead", lexitem_to_string(token));
+			return print_and_return_preprocessor_failure(info_message, token->line_num);
+		}
+
+		//Ignore it and refresh the token
+		token->ignore = TRUE;
+
+		//We may be able to see a comma next
+		token = token_array_get_pointer_at(&(stream->token_stream), *stream_index);
+		(*stream_index)++;
+
+		switch(token->tok){
+			//Comma means we expect to see more values
+			case COMMA:
+				token->ignore = TRUE;
+				continue;
+
+			//Once we see this we leave
+			case SEMICOLON:
+				token->ignore = TRUE;
+				break;
+
+			default:
+				sprintf(info_message, "Expected comma or semicolon in $using directive but got %s instead", lexitem_to_string(token));
+				return print_and_return_preprocessor_failure(info_message, token->line_num);
+		}
+
 	} while(TRUE);
 
-
-
+	//If we've survived to down here, then we are good
+	return TRUE;
 }
 
 
