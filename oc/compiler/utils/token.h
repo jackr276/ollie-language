@@ -11,7 +11,7 @@
 #include "dynamic_string/dynamic_string.h"
 
 //Total number of keywords in ollie
-#define KEYWORD_COUNT 63
+#define KEYWORD_COUNT 64
 
 //Forward declare the lexitem struct
 typedef struct lexitem_t lexitem_t;
@@ -149,6 +149,7 @@ typedef enum {
 	PARAMS, //Elaborative parameter keyword
 	PARAMCOUNT, //Get the elaborative param count
 	USING,
+	MODULE,
 	TRUE_CONST,
 	FALSE_CONST,
 	STATIC, //For static variables
