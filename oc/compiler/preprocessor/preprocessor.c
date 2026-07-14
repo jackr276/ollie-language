@@ -522,6 +522,41 @@ static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, 
 
 
 /**
+ * Validate and skip a using directive. Remember that a using directive will be followed
+ * by one or a list of dependency files. It is *not* our job here to validate those
+ * dependency files at all. We are only here to skip over this. If we made it to this
+ * point, the build system has already handled all of that
+ *
+ * $using <ident>{, <ident>}*;
+ */
+static u_int8_t validate_and_skip_using_directive(ollie_token_stream_t* stream, u_int32_t* stream_index){
+	//First grab the original token. This should be the using keyword
+	lexitem_t* token = token_array_get_pointer_at(&(stream->token_stream), *stream_index);
+	(*stream_index)++;
+
+	//This should not happen but just to be safe
+	if(token->tok != USING){
+		return print_and_return_preprocessor_failure("Fatal internal compiler error, exprected $using keyword but did not find it", token->line_num);
+	}
+
+	//Flag that we want to ignore this
+	token->ignore = TRUE;
+
+	//Now we are required to see at least one, but possibly many identifiers separated by commas
+	token = token_array_get_pointer_at(&(stream->token_stream), *stream_index);
+	(*stream_index)++;
+
+	do {
+		
+	} while(TRUE);
+
+
+
+}
+
+
+
+/**
  * Put simply, the consumption pass will run through the entire token
  * stream looking for macros. When it finds a macro, it will flag that section
  * of the token stream to be ignored by future passes(in reality this means
@@ -601,18 +636,22 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 			 * that a using keyword can be fo
 			 */
 			case USING:
-				//TODO HANDLE
-				printf("TODO NOT IMPLEMENTED\n");
-				exit(1);
+				if(validate_and_skip_using_directive(stream, &array_index) == FALSE){
+					return FAILURE;
+				}
+				
+				break;
 
 			/**
 			 * This is entirely useless by the time we get here so we can skip it entirely along
 			 * with the identifier that follows it
 			 */
 			case MODULE:
-				//TODO HANDLE
-				printf("TODO NOT IMPLEMENTED\n");
-				exit(1);
+				if(validate_and_skip_module_directive(stream, &array_index) == FALSE){
+					return FAILURE;
+				}
+
+				break;
 
 			//We haven't seen a macro, but the array index needs to be bumped
 			default:
