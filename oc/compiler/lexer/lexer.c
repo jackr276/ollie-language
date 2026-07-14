@@ -51,7 +51,7 @@ static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, LOOP, IN, FN
 //Direct one to one mapping
 static const char* keyword_array[] = {"if", "else", "do", "while", "for", "loop", "in", "fn", "error", "raise", "raises", "ret", "jump",
 						  "u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "f32", "f64", "char", "define", "enum",
-						  "static", "using", "register", "void", "typesize", "let", "declare", "when", "case", "default", "switch",
+						  "static", "$using", "register", "void", "typesize", "let", "declare", "when", "case", "default", "switch",
 						  "break", "continue", "struct", "handle", "ignore", "as", "alias", "sizeof", "defer", "mut", "asm",
 						  "idle", "pub", "union", "bool", "params", "paramcount", "true", "false", "inline", "$macro", "$endmacro",
 						  "namespace", "OUNIT", "fail_to_compile", "exit_status"};
