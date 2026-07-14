@@ -1014,25 +1014,23 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 			continue;
 		}
 
-		//Go based on what kind of token this is. If we have an identifier, then
-		//that could possibly be a macro for us
-		switch(current_token_pointer->tok){
-			//If we have an identifier, then there is a chance but not a guarantee
-			//that we are performing a macro substitution
-			case IDENT:
-				//Let's see if we have anything here
-				found_macro = lookup_macro(macro_symtab, current_token_pointer->lexeme.string);
+		/**
+		 * Go based on what kind of token this is. If we have an identifier, then
+		 * that could possibly be a macro for us
+		 */
+		if(current_token_pointer->tok == IDENT){
+			//Let's see if we have anything here
+			found_macro = lookup_macro(macro_symtab, current_token_pointer->lexeme.string);
 
-				//We didn't find a macro name match, which is fine - we'll just
-				//treat this like a regular token. We expect that this is the
-				//most common case
-				if(found_macro == NULL){
-					token_array_add(&new_token_array, current_token_pointer);
+			/**
+			 * We didn't find a macro name match, which is fine - we'll just
+			 * treat this like a regular token. We expect that this is the
+			 * most common case
+			 */
+			if(found_macro == NULL){
+				token_array_add(&new_token_array, current_token_pointer);
 
-					//Get out of the case
-					break;
-				}
-
+			} else {
 				//Use the new array and the macro we found to do our substitution
 				u_int8_t substitution_result = perform_macro_substitution(macro_symtab, &new_token_array, old_token_array, &old_token_array_index, found_macro);
 
@@ -1040,16 +1038,10 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 				if(substitution_result == FAILURE){
 					return FAILURE;
 				}
+			}
 
-				break;
-
-			//Not an identifier
-			default:
-				//We know that we aren't ignoring, so just add this to
-				//the array
-				token_array_add(&new_token_array, current_token_pointer);
-
-				break;
+		} else {
+			token_array_add(&new_token_array, current_token_pointer);
 		}
 	}
 
