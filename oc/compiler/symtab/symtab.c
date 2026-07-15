@@ -337,6 +337,46 @@ static inline u_int64_t hash_macro_name(char* name){
 	hash ^= hash >> 33;
 
 	//Cut it down to our keyspace
+	return hash & (MODULE_KEYSPACE - 1);
+}
+
+
+/**
+ * Hash a name before entry/search into the hash table
+ *
+ * FNV-1a 64 bit hash:
+ * 	hash <- FNV_prime
+ *
+ * 	for each hashable value:
+ * 		hash ^= value
+ * 		hash *= FNV_PRIME
+ * 		
+ * 	key % keyspace
+ *
+ * 	return key
+*/
+static inline u_int64_t hash_module_name(char* name){
+	//Char pointer for the name
+	char* cursor = name;
+
+	//The hash we have
+	u_int64_t hash = OFFSET_BASIS;
+
+	//Iterate through the cursor here
+	for(; *cursor != '\0'; cursor++){
+		hash ^= *cursor;
+		hash *= FNV_PRIME;
+	}
+
+	//We will perform avalanching here by shifting, multiplying and shifting. The shifting
+	//itself ensures that the higher order bits effect all of the lower order ones
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_1;
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_2;
+	hash ^= hash >> 33;
+
+	//Cut it down to our keyspace
 	return hash & (MACRO_KEYSPACE - 1);
 }
 
@@ -1249,8 +1289,36 @@ u_int8_t insert_macro(macro_symtab_t* symtab, symtab_macro_record_t* record){
 
 	//Now that we're at the end, we will append our record to the cursor
 	cursor->next = record;
+	record->next = NULL;
 
-	//It should already be NULL, but this doesn't hurt
+	//We did indeed have a collision here
+	return 1;
+}
+
+
+/**
+ * Insert a module into the symtab
+ */
+u_int8_t insert_module(module_symtab_t* symtab, symtab_module_record_t* record){
+	//Grab a cursor to whatever is in the hash's spot
+	symtab_module_record_t* cursor = symtab->records[record->hash];
+
+	//No collision. Just insert and move on
+	if(cursor == NULL){
+		symtab->records[record->hash] = record;
+		//Return 0 - no collision
+		return 0;
+	}
+
+	//Otherwise we have a collision, so we need to drill down
+	//to the end
+	while(cursor != NULL){
+		//Keep advancing it up
+		cursor = cursor->next;
+	}
+
+	//Now that we're at the end, we will append our record to the cursor
+	cursor->next = record;
 	record->next = NULL;
 
 	//We did indeed have a collision here
@@ -1756,6 +1824,33 @@ symtab_macro_record_t* lookup_macro(macro_symtab_t* symtab, char* name){
 	//If we make it all of the way down here, then we have no match, so return NULL
 	return NULL;
 }
+
+
+/**
+ * Lookup a module in the symtab. There is only one lexical scope to lookup
+ * here
+ */
+symtab_module_record_t* lookup_module(module_symtab_t* symtab, dynamic_string_t* name){
+	//Obtain the hash
+	u_int64_t hash = hash_macro_name(name->string);
+
+	//Get the starting record - remember this may not be the actual match
+	symtab_module_record_t* cursor = symtab->records[hash];
+
+	//Crawl through the records that are conjoined
+	while(cursor != NULL){
+		//Only an exact match is accepted
+		if(dynamic_strings_equal(&(cursor->file_name), name) == TRUE){
+			return cursor;
+		}
+
+		cursor = cursor->next;
+	}
+
+	//If we made it to here then we found nothing
+	return NULL;
+}
+
 
 
 /**

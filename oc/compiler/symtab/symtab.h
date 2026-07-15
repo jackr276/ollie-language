@@ -664,7 +664,7 @@ symtab_macro_record_t* lookup_macro(macro_symtab_t* symtab, char* name);
 /**
  * Lookup a module in the symtab
  */
-symtab_module_record_t* lookup_module(module_symtab_t* symtab, char* name);
+symtab_module_record_t* lookup_module(module_symtab_t* symtab, dynamic_string_t* name);
 
 /**
  * Lookup a variable name in the symtab, only one scope

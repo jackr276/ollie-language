@@ -555,7 +555,7 @@ ltest-CI: lexer_test-CI
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/lexer_test
 
 lexer_test-CI: lexer-CI.o build_system-CI.o dependency_graph-CI.o lexer_test-CI.o lexstack-CI.o dynamic_string-CI.o ollie_token_array-CI.o symtab-CI.o
-	$(CC) -o $(OUT_CI)/lexer_test $(OUT_CI)/lexer_test.o $(OUT_CI)/lexer.o $(OUT_CI)/build_system.o $(OUT_CI)/dependency_graph.o $(OUT_CI)/lexstack.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/ollie_token_array.o $(OUT_CI)/symtab-CI.o
+	$(CC) -o $(OUT_CI)/lexer_test $(OUT_CI)/lexer_test.o $(OUT_CI)/lexer.o $(OUT_CI)/build_system.o $(OUT_CI)/dependency_graph.o $(OUT_CI)/lexstack.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/ollie_token_array.o $(OUT_CI)/symtab.o
 
 lexer_test-CI.o: $(TEST_SUITE_PATH)/lexer_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/lexer_test.c -o $(OUT_CI)/lexer_test.o
