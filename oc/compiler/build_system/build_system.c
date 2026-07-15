@@ -7,26 +7,6 @@
 #include "../utils/error_management.h"
 #include <sys/types.h>
 
-/**
- * Basic enum for the build system status
- * That we'll pass around
- */
-typedef enum {
-	BUILD_SYSTEM_STATUS_FAILURE,
-	BUILD_SYSTEM_STATUS_SUCCESS
-} build_system_status_t;
-
-/**
- * Similar to how CFG results work, we will pass around a struct
- * that contains our status and our created build graph nodes
- * as a return value
- */
-typedef struct build_system_results_t build_system_results_t;
-struct build_system_results_t {
-	dependency_graph_node_t* result_node;
-	build_system_status_t status;
-};
-
 //Helper that will let us initialize a wiped out version
 #define INITIALIZE_BLANK_BUILD_SYSTEM_RESULTS {NULL, BUILD_SYSTEM_STATUS_FAILURE}
 
@@ -99,12 +79,19 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_name
 		return results;
 	}
 
+	//TODO PARSE DEPENDENCIES
+
 	//Otherwise we should be good to package this up into a dependency graph node
-	//TODO
+	dependency_graph_node_t* main_dependency_node = dependency_graph_node_alloc(&stream, DEPENDENCY_GRAPH_NODE_TYPE_MAIN);
 
+	//TODO MORE HERE WITH DEPENDENCIES
+	//
+	
 
-
-
+	//Package up and give back our results
+	results.result_node = main_dependency_node;
+	results.status = BUILD_SYSTEM_STATUS_SUCCESS;
+	return results;
 }
 
 
@@ -113,6 +100,9 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_name
  * us parsing dependencies and constructing them into one gigantic, unified token
  * stream. This token stream is what we will use to actually parse and construct
  * the overall CFG
+ *
+ *
+ * TODO RETURN TYPE IS NOT ACCURATE LIKELY
  */
 ollie_token_stream_t parse_dependencies_and_construct_token_stream(compiler_options_t* options, u_int8_t silent_mode){
 	/**
@@ -122,8 +112,8 @@ ollie_token_stream_t parse_dependencies_and_construct_token_stream(compiler_opti
 	 */
 	char* main_file_name = options->file_name;
 
-	//TODO NOT AT ALL WORKING YET
-	ollie_token_stream_t token_stream = tokenize(options->file_name, silent_mode);
+	//Let the helper go out and parse through the main file and its dependencies
+	build_system_results_t results = handle_main_file_tokenization(main_file_name, silent_mode);
 
-	return token_stream;
+	return results.result_node->token_stream;
 }
