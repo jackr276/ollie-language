@@ -6,12 +6,16 @@
 #include "build_system.h"
 #include "../utils/error_management.h"
 #include "../utils/constants.h"
+#include "../symtab/symtab.h"
 #include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
 
 //Helper that will let us initialize a wiped out version
 #define INITIALIZE_BLANK_BUILD_SYSTEM_RESULTS {NULL, BUILD_SYSTEM_STATUS_FAILURE}
+
+//We will maintain an overall module symtab to avoid duplicate searches
+module_symtab_t* module_symtab = NULL;
 
 //Keep track of the error and warning counts
 static u_int32_t num_build_system_errors = 0;
@@ -161,6 +165,9 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_name
  * TODO RETURN TYPE IS NOT ACCURATE LIKELY
  */
 build_system_results_t parse_dependencies_and_construct_token_stream(compiler_options_t* options, u_int8_t silent_mode){
+	//Allocate the module symtab first
+	module_symtab = module_symtab_alloc();
+
 	/**
 	 * The actual main file itself is all that the user provides here. The build system will
 	 * then crawl through the dependencies in the main file and each of those files recursively
@@ -170,6 +177,9 @@ build_system_results_t parse_dependencies_and_construct_token_stream(compiler_op
 
 	//Let the helper go out and parse through the main file and its dependencies
 	build_system_results_t results = handle_main_file_tokenization(main_file_name, silent_mode);
+
+	//Deallocate the module symtab - we no longer need it
+	module_symtab_dealloc(module_symtab);
 
 	return results;
 }

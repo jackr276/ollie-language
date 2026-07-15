@@ -190,6 +190,15 @@ macro_symtab_t* macro_symtab_alloc(){
 
 
 /**
+ * Initialize a symbol table for build system modules
+ */
+module_symtab_t* module_symtab_alloc(){
+	module_symtab_t* symtab = calloc(1, sizeof(module_symtab_t));
+	return symtab;
+}
+
+
+/**
  * Initialize a new lexical scope. This involves making a new sheaf and
  * adding it in
 */
@@ -3052,6 +3061,39 @@ void macro_symtab_dealloc(macro_symtab_t* symtab){
 			if(temp->parameters.internal_array != NULL){
 				token_array_dealloc(&(temp->parameters));
 			}
+
+			//Dealloc
+			free(temp);
+		}
+	}
+
+	//At the very end free the overall control structure
+	free(symtab);
+}
+
+
+/**
+ * Destroy a module symtab
+ */
+void module_symtab_dealloc(module_symtab_t* symtab){
+	//Create temp/cursor for traversal
+	symtab_module_record_t* cursor = NULL;
+	symtab_module_record_t* temp;
+
+	//TODO AS WE GO ON ADD MORE DEALLOCATION IF NEED BE
+
+	//Run through every single macro record
+	for(int32_t i = 0; i < MODULE_KEYSPACE; i++){
+		//Extract it
+		cursor = symtab->records[i];
+
+		//Run through any collision records
+		while(cursor != NULL){
+			//Reassign
+			temp = cursor;
+
+			//Advance it up
+			cursor = cursor->next;
 
 			//Dealloc
 			free(temp);

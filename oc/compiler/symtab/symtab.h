@@ -443,6 +443,11 @@ type_symtab_t* type_symtab_alloc();
 macro_symtab_t* macro_symtab_alloc();
 
 /**
+ * Initialize a symbol table for build system modules
+ */
+module_symtab_t* module_symtab_alloc();
+
+/**
  * Initialize the variable symbol table scope
  */
 void initialize_variable_scope(variable_symtab_t* symtab);
@@ -573,6 +578,11 @@ u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record);
 u_int8_t insert_macro(macro_symtab_t* symtab, symtab_macro_record_t* record);
 
 /**
+ * Insert a module into the symtab
+ */
+u_int8_t insert_module(module_symtab_t* symtab, symtab_module_record_t* record);
+
+/**
  * Insert a label into the symtab
  */
 u_int8_t insert_label(label_symtab_t* label, symtab_label_record_t* label_record);
@@ -650,6 +660,11 @@ symtab_label_record_t* lookup_label(label_symtab_t* label_symtab, char* name);
  * Lookup a macro in the symtab
  */
 symtab_macro_record_t* lookup_macro(macro_symtab_t* symtab, char* name);
+
+/**
+ * Lookup a module in the symtab
+ */
+symtab_module_record_t* lookup_module(module_symtab_t* symtab, char* name);
 
 /**
  * Lookup a variable name in the symtab, only one scope
@@ -775,6 +790,11 @@ void type_symtab_dealloc(type_symtab_t* symtab);
  * Destroy a macro symtab
  */
 void macro_symtab_dealloc(macro_symtab_t* symtab);
+
+/**
+ * Destroy a module symtab
+ */
+void module_symtab_dealloc(module_symtab_t* symtab);
 
 /**
  * Destroy a label table
