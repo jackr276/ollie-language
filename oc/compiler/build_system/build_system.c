@@ -79,6 +79,12 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_name
 		return results;
 	}
 
+	/**
+	 * We will now run through and parse all of the dependencies that this file has. It is of course 
+	 * possible that there are no dependencies, but we must do our check here. We will keep
+	 * parsing the dependencies until we hit the first non-import token
+	 */
+
 	//TODO PARSE DEPENDENCIES
 
 	//Otherwise we should be good to package this up into a dependency graph node
