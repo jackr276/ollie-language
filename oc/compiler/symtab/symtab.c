@@ -1197,6 +1197,27 @@ symtab_macro_record_t* create_macro_record(dynamic_string_t name, u_int32_t line
 
 
 /**
+ * Create a module record for the module table
+ *
+ * NOTE: this creation process will always create a clone of the given file name
+ *
+ * TODO MAY NEED MORE
+ */
+symtab_module_record_t* create_module_record(dynamic_string_t* file_name/*TODO MAY HAVE MORE*/){
+	symtab_module_record_t* record = calloc(1, sizeof(symtab_module_record_t));
+
+	//Record the hash here
+	record->hash = hash_module_name(file_name->string);
+
+	//Create a clone to maintain memory separation & clear ownership
+	record->file_name = clone_dynamic_string(file_name);
+
+	record->next = NULL;
+	return record;
+}
+
+
+/**
  * Create a label record for the label symtab
  *
  * NOTE: The label symtab assumes ownership of the name dynamic string
@@ -3175,8 +3196,6 @@ void module_symtab_dealloc(module_symtab_t* symtab){
 	symtab_module_record_t* cursor = NULL;
 	symtab_module_record_t* temp;
 
-	//TODO AS WE GO ON ADD MORE DEALLOCATION IF NEED BE
-
 	//Run through every single macro record
 	for(int32_t i = 0; i < MODULE_KEYSPACE; i++){
 		//Extract it
@@ -3186,6 +3205,9 @@ void module_symtab_dealloc(module_symtab_t* symtab){
 		while(cursor != NULL){
 			//Reassign
 			temp = cursor;
+
+			//The module symtab owns this so we need to free it
+			dynamic_string_dealloc(&(cursor->file_name));
 
 			//Advance it up
 			cursor = cursor->next;

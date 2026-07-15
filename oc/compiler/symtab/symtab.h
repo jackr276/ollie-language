@@ -551,6 +551,11 @@ symtab_type_record_t* create_type_record(generic_type_t* type);
 symtab_macro_record_t* create_macro_record(dynamic_string_t name, u_int32_t line_number);
 
 /**
+ * Create a module record for the module table
+ */
+symtab_module_record_t* create_module_record(dynamic_string_t* file_name/*TODO MAY HAVE MORE*/);
+
+/**
  * Create a label record for the label symtab
  *
  * NOTE: The label symtab assumes ownership of the name dynamic string

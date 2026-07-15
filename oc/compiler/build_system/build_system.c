@@ -115,6 +115,9 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_name
 	int32_t current_token_index = 0;
 	lexitem_t* lookahead;
 
+	//We will reuse the file name - remember that the module record creator will clone this each time
+	dynamic_string_t file_name = dynamic_string_alloc();
+
 	//Run through the top of the file and process until we're done seeing imports
 	while(TRUE){
 		lexitem_t* lookahead = token_array_get_pointer_at(&(stream.token_stream), current_token_index);
@@ -130,9 +133,7 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_name
 		 * it and determine, through a file search, what the module is that we
 		 * are after here
 		 */
-		dynamic_string_t file_name = dynamic_string_alloc();
-
-		//Let the helper parse through this
+		clear_dynamic_string(&file_name);
 		u_int8_t result = parse_import_statement(&stream, &file_name, &current_token_index);
 		if(result == FAILURE){
 			print_build_system_message(MESSAGE_TYPE_ERROR, "Invalid $import directive found in file. Please review and recompile", main_file_name, 0);
@@ -142,11 +143,10 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_name
 		}
 	}
 
-
+	//Scrap this now that we're done
+	dynamic_string_dealloc(&file_name);
 
 	//TODO MORE HERE WITH DEPENDENCIES
-	//
-	
 
 	//Package up and give back our results
 	results.result_node = main_dependency_node;
