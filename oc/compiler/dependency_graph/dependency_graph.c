@@ -4,3 +4,6 @@
  */
 
 #include "dependency_graph.h"
+
+//Maintain a unique atomically increasing node it
+static u_int32_t current_node_id = 0;

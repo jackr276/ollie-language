@@ -30,9 +30,6 @@ struct build_system_results_t {
 //Helper that will let us initialize a wiped out version
 #define INITIALIZE_BLANK_BUILD_SYSTEM_RESULTS {NULL, BUILD_SYSTEM_STATUS_FAILURE}
 
-//Maintain a unique atomic node it
-static u_int32_t current_node_id = 0;
-
 //Keep track of the error and warning counts
 static u_int32_t num_build_system_errors = 0;
 static u_int32_t num_build_system_warnings = 0;
