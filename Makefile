@@ -12,6 +12,7 @@ ASSEMBLER_PATH = ./oc/compiler/assembler
 SYMTAB_PATH = ./oc/compiler/symtab
 PARSER_PATH = ./oc/compiler/parser
 TYPE_SYSTEM_PATH = ./oc/compiler/type_system
+DEPENDENCY_GRAPH_PATH = ./oc/compiler_dependency_graph
 DATA_DEPENDENCY_GRAPH_PATH = ./oc/compiler/data_dependency_graph
 AST_PATH = ./oc/compiler/ast
 CFG_PATH = ./oc/compiler/cfg
@@ -91,6 +92,12 @@ build_system.o: $(BUILD_SYSTEM_PATH)/build_system.c
 
 build_systemd.o: $(BUILD_SYSTEM_PATH)/build_system.c
 	$(CC) -g $(CFLAGS) $(BUILD_SYSTEM_PATH)/build_system.c -o $(OUT_LOCAL)/build_systemd.o
+
+dependency_graph.o: $(DEPENDENCY_GRAPH_PATH)/dependency_graph.c
+	$(CC) $(CFLAGS) $(DEPENDENCY_GRAPH_PATH)/dependency_graph.c -o $(OUT_LOCAL)/dependency_graph.o
+
+dependency_graphd.o: $(DEPENDENCY_GRAPH_PATH)/dependency_graph.c
+	$(CC) $(CFLAGS) -g $(DEPENDENCY_GRAPH_PATH)/dependency_graph.c -o $(OUT_LOCAL)/dependency_graphd.o
 
 heapstack.o: $(STACK_PATH)/heapstack.c
 	$(CC) $(CFLAGS) $(STACK_PATH)/heapstack.c -o $(OUT_LOCAL)/heapstack.o
@@ -564,6 +571,12 @@ build_system-CI.o: $(BUILD_SYSTEM_PATH)/build_system.c
 
 build_system-CId.o: $(BUILD_SYSTEM_PATH)/build_system.c
 	$(CC) -g $(CFLAGS) $(BUILD_SYSTEM_PATH)/build_system.c -o $(OUT_CI)/build_systemd.o
+
+dependency_graph-CI.o: $(DEPENDENCY_GRAPH_PATH)/dependency_graph.c
+	$(CC) $(CFLAGS) $(DEPENDENCY_GRAPH_PATH)/dependency_graph.c -o $(OUT_LOCAL)/dependency_graph.o
+
+dependency_graph-CId.o: $(DEPENDENCY_GRAPH_PATH)/dependency_graph.c
+	$(CC) $(CFLAGS) -g $(DEPENDENCY_GRAPH_PATH)/dependency_graph.c -o $(OUT_LOCAL)/dependency_graphd.o
 
 graph_analyzer-CI.o: $(GRAPH_ANALYZER_PATH)/graph_analyzer.c
 	$(CC) $(CFLAGS) $(GRAPH_ANALYZER_PATH)/graph_analyzer.c -o $(OUT_CI)/graph_analyzer.o
