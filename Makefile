@@ -51,8 +51,8 @@ ltest: lexer_test
 preproc_test: preprocessor_test
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/preprocessor_test -i -d -f
 
-lexer_test: lexer.o build_system.o symtab.o dependency_graph.o lexer_test.o lexstack.o dynamic_string.o ollie_token_array.o
-	$(CC) -o $(OUT_LOCAL)/lexer_test $(OUT_LOCAL)/lexer_test.o $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/build_system.o $(OUT_LOCAL)/dependency_graph.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/ollie_token_array.o $(OUT_LOCAL)/symtab.o
+lexer_test: lexer.o lexer_test.o lexstack.o dynamic_string.o ollie_token_array.o
+	$(CC) -o $(OUT_LOCAL)/lexer_test $(OUT_LOCAL)/lexer_test.o $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/ollie_token_array.o 
 
 lexer_testd: lexerd.o build_systemd.o dependency_graphd.o lexer_testd.o lexstackd.o dynamic_stringd.o ollie_token_arrayd.o symtabd.o
 	$(CC) -o $(OUT_LOCAL)/lexer_testd $(OUT_LOCAL)/lexer_testd.o $(OUT_LOCAL)/lexerd.o $(OUT_LOCAL)/build_systemd.o $(OUT_LOCAL)/dependency_graphd.o $(OUT_LOCAL)/lexstackd.o $(OUT_LOCAL)/dynamic_stringd.o $(OUT_LOCAL)/ollie_token_arrayd.o $(OUT_LOCAL)/symtabd.o
@@ -554,8 +554,8 @@ interference_graph_test: interference_graph_tester
 ltest-CI: lexer_test-CI
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/lexer_test
 
-lexer_test-CI: lexer-CI.o build_system-CI.o dependency_graph-CI.o lexer_test-CI.o lexstack-CI.o dynamic_string-CI.o ollie_token_array-CI.o symtab-CI.o
-	$(CC) -o $(OUT_CI)/lexer_test $(OUT_CI)/lexer_test.o $(OUT_CI)/lexer.o $(OUT_CI)/build_system.o $(OUT_CI)/dependency_graph.o $(OUT_CI)/lexstack.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/ollie_token_array.o $(OUT_CI)/symtab.o
+lexer_test-CI: lexer-CI.o lexer_test-CI.o lexstack-CI.o dynamic_string-CI.o ollie_token_array-CI.o
+	$(CC) -o $(OUT_CI)/lexer_test $(OUT_CI)/lexer_test.o $(OUT_CI)/lexer.o $(OUT_CI)/lexstack.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/ollie_token_array.o
 
 lexer_test-CI.o: $(TEST_SUITE_PATH)/lexer_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/lexer_test.c -o $(OUT_CI)/lexer_test.o
