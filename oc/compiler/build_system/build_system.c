@@ -40,7 +40,7 @@ static inline void print_build_system_message(error_message_type_t message, char
  * Returns SUCCESS if this worked, FAILURE if not. We will also be populating the pre-allocated "file_to_import" buffer
  * with the full path of our filename for the caller to process
  */
-static u_int8_t parse_import_statement(ollie_token_stream_t* stream, char* file_to_import, int32_t* current_index){
+static u_int8_t parse_import_statement(ollie_token_stream_t* stream, dynamic_string_t* file_name, int32_t* current_index){
 
 	//DUMMY
 	return FAILURE;
@@ -126,11 +126,10 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_name
 		 * it and determine, through a file search, what the module is that we
 		 * are after here
 		 */
-		char file_name[FILENAME_MAX];
-		memset(file_name, 0, FILENAME_MAX);
+		dynamic_string_t file_name = dynamic_string_alloc();
 
 		//Let the helper parse through this
-		u_int8_t result = parse_import_statement(&stream, file_name, &current_token_index);
+		u_int8_t result = parse_import_statement(&stream, &file_name, &current_token_index);
 		if(result == FAILURE){
 			print_build_system_message(MESSAGE_TYPE_ERROR, "Invalid $import directive found in file. Please review and recompile", main_file_name, 0);
 			num_build_system_errors++;

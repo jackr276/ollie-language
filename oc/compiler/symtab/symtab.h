@@ -27,7 +27,10 @@
 #define TYPE_KEYSPACE 256
 
 //The macro keyspace is also one per program
-#define MACRO_KEYSPACE 256 
+#define MACRO_KEYSPACE 1024
+
+//Keyspace for all of our modules
+#define MODULE_KEYSPACE 1024
 
 //There's only one function keyspace per program, so it can be a bit larger
 #define FUNCTION_KEYSPACE 1024 
@@ -43,6 +46,8 @@ typedef struct function_symtab_t function_symtab_t;
 typedef struct type_symtab_t type_symtab_t;
 //A symtab for #macro directives
 typedef struct macro_symtab_t macro_symtab_t;
+//A symtab for all of our modules
+typedef struct module_symtab_t module_symtab_t;
 
 //The sheafs in the variable symtab
 typedef struct symtab_variable_sheaf_t symtab_variable_sheaf_t;
@@ -59,6 +64,8 @@ typedef struct symtab_variable_record_t symtab_variable_record_t;
 typedef struct symtab_type_record_t symtab_type_record_t;
 //The records in a macro symtab
 typedef struct symtab_macro_record_t symtab_macro_record_t;
+//The records inside of our module symtab
+typedef struct symtab_module_record_t symtab_module_record_t;
 
 /**
  * Label tables and label table nodes for GOTO statements
@@ -266,6 +273,18 @@ struct symtab_macro_record_t{
 
 
 /**
+ * This struct represents a specific module record in the build system. This
+ * allows us to avoid duplicate searching of shared modules
+ */
+struct symtab_module_record_t{
+	u_int64_t hash;
+	symtab_module_record_t* next;
+	//TODO DONT KNOW WHAT TO STORE HERE FOR TOKEN STREAM
+	dynamic_string_t file_name;
+};
+
+
+/**
  * This struct represents a specific lexical level of a symtab
  */
 struct symtab_variable_sheaf_t{
@@ -339,6 +358,15 @@ struct type_symtab_t{
 struct macro_symtab_t{
 	//How many records(names) we can have
 	symtab_macro_record_t* records[MACRO_KEYSPACE];
+};
+
+
+/**
+ * This struct represents the module symtab. There is only
+ * one level with a fixed keyspace
+ */
+struct module_symtab_t {
+	symtab_module_record_t* records[MODULE_KEYSPACE];
 };
 
 
