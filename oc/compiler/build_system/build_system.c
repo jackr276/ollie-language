@@ -58,7 +58,7 @@ static inline void print_build_system_message(error_message_type_t message, char
  * TODO VALIDATIONS, ETC
  * 	
  */
-static void handle_file_dependencies_and_tokenization(char* file_name, u_int8_t silent_mode){
+static void handle_dependency_file_tokenization(char* file_name, u_int8_t silent_mode){
 
 	//TODO VOID FOR NOW
 }
@@ -88,6 +88,23 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_name
 		results.status = BUILD_SYSTEM_STATUS_FAILURE;
 		return results;
 	}
+
+	/**
+	 * Let's now verify that there is no $module definition inside of the main file. Remember
+	 * that this is strictly forbidden so if we see it we're out. Since the only valid place
+	 * to see a $module definition is the very first token, we only need to check that
+	 */
+	lexitem_t* first_token = token_array_get_pointer_at(&(stream.token_stream), 0);
+	if(first_token->tok == MODULE){
+		print_build_system_message(MESSAGE_TYPE_ERROR, "The main file may never be defined as a module", main_file_name, 0);
+		num_build_system_errors++;
+		results.status = BUILD_SYSTEM_STATUS_FAILURE; 
+		return results;
+	}
+
+	//Otherwise we should be good to package this up into a dependency graph node
+	//TODO
+
 
 
 
