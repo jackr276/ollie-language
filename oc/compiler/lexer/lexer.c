@@ -42,7 +42,7 @@ static char info[2000];
 
 //Token array, we will index using their enum values
 static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, LOOP, IN, FN, ERROR, RAISE, RAISES, RETURN, JUMP, 
-					U8, I8, U16, I16, U32, I32, U64, I64, F32, F64, CHAR, DEFINE, ENUM, STATIC, USING, MODULE,
+					U8, I8, U16, I16, U32, I32, U64, I64, F32, F64, CHAR, DEFINE, ENUM, STATIC, IMPORT, MODULE,
 					REGISTER, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
 					STRUCT, HANDLE, IGNORE, AS, ALIAS, SIZEOF, DEFER, MUT, ASM, IDLE, PUB, UNION, BOOL,
 				    PARAMS, PARAMCOUNT, TRUE_CONST, FALSE_CONST, INLINE, MACRO, ENDMACRO, NAMESPACE, OUNIT, FAIL_TO_COMPILE,
@@ -50,7 +50,7 @@ static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, LOOP, IN, FN
 
 //Direct one to one mapping
 static const char* keyword_array[] = {"if", "else", "do", "while", "for", "loop", "in", "fn", "error", "raise", "raises", "ret", "jump",
-						  "u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "f32", "f64", "char", "define", "enum", "static", "$using",
+						  "u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "f32", "f64", "char", "define", "enum", "static", "$import",
 						  "$module", "register", "void", "typesize", "let", "declare", "when", "case", "default", "switch",
 						  "break", "continue", "struct", "handle", "ignore", "as", "alias", "sizeof", "defer", "mut", "asm",
 						  "idle", "pub", "union", "bool", "params", "paramcount", "true", "false", "inline", "$macro", "$endmacro",
@@ -113,8 +113,8 @@ char* lexitem_to_string(lexitem_t* lexitem){
 			return "#";
 		case MODULE:
 			return "$module";
-		case USING:
-			return "$using";
+		case IMPORT:
+			return "$import";
 		case L_PAREN:
 			return "(";
 		case R_PAREN:

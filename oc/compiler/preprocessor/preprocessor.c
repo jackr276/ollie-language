@@ -522,21 +522,21 @@ static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, 
 
 
 /**
- * Validate and skip a using directive. Remember that a using directive will be followed
+ * Validate and skip an import directive. Remember that a using directive will be followed
  * by one or a list of dependency files. It is *not* our job here to validate those
  * dependency files at all. We are only here to skip over this. If we made it to this
  * point, the build system has already handled all of that
  *
- * $using <str_const>{, <str_constt>}*;
+ * $import <str_const>{, <str_constt>}*;
  */
-static u_int8_t validate_and_skip_using_directive(ollie_token_stream_t* stream, u_int32_t* stream_index){
+static u_int8_t validate_and_skip_import_directive(ollie_token_stream_t* stream, u_int32_t* stream_index){
 	//First grab the original token. This should be the using keyword
 	lexitem_t* token = token_array_get_pointer_at(&(stream->token_stream), *stream_index);
 	(*stream_index)++;
 
 	//This should not happen but just to be safe
-	if(token->tok != USING){
-		return print_and_return_preprocessor_failure("Fatal internal compiler error, exprected $using keyword but did not find it", token->line_num);
+	if(token->tok != IMPORT){
+		return print_and_return_preprocessor_failure("Fatal internal compiler error, exprected $import keyword but did not find it", token->line_num);
 	}
 
 	//Flag that we want to ignore this
@@ -567,7 +567,7 @@ static u_int8_t validate_and_skip_using_directive(ollie_token_stream_t* stream, 
 			token->ignore = TRUE;
 			break;
 		} else {
-			sprintf(info_message, "Expected comma or semicolon in $using directive but got %s instead", lexitem_to_string(token));
+			sprintf(info_message, "Expected comma or semicolon in $import directive but got %s instead", lexitem_to_string(token));
 			return print_and_return_preprocessor_failure(info_message, token->line_num);
 		}
 
@@ -704,11 +704,11 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 				break;
 
 			/**
-			 * By the time we get here, the using keyword does not mean anything to us. Remember
-			 * that a using keyword can be fo
+			 * By the time we get here, the import keyword does not mean anything to us, we just need to
+			 * validate and skip it
 			 */
-			case USING:
-				if(validate_and_skip_using_directive(stream, &array_index) == FALSE){
+			case IMPORT:
+				if(validate_and_skip_import_directive(stream, &array_index) == FALSE){
 					return FAILURE;
 				}
 

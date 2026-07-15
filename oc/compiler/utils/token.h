@@ -148,7 +148,7 @@ typedef enum {
 	IGNORE, //For swallowing errors
 	PARAMS, //Elaborative parameter keyword
 	PARAMCOUNT, //Get the elaborative param count
-	USING,
+	IMPORT,
 	MODULE,
 	TRUE_CONST,
 	FALSE_CONST,

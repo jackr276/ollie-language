@@ -4,7 +4,7 @@
  */
 
 //The using macro declares that we want to pull in the test_dependency module
-$using "test_dependency";
+$import "test_dependency";
 
  pub fn main() -> i32 {
  	OUNIT: [exit_status = 9]
