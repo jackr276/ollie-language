@@ -5,6 +5,7 @@
 
 #include "build_system.h"
 #include "../utils/error_management.h"
+#include "../utils/constants.h"
 #include <sys/types.h>
 
 //Helper that will let us initialize a wiped out version
@@ -79,16 +80,35 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_name
 		return results;
 	}
 
+	//Otherwise we should be good to package this up into a dependency graph node
+	dependency_graph_node_t* main_dependency_node = dependency_graph_node_alloc(&stream, DEPENDENCY_GRAPH_NODE_TYPE_MAIN);
+
 	/**
 	 * We will now run through and parse all of the dependencies that this file has. It is of course 
 	 * possible that there are no dependencies, but we must do our check here. We will keep
 	 * parsing the dependencies until we hit the first non-import token
 	 */
+	int32_t current_token_index = 0;
+	lexitem_t* lookahead;
 
-	//TODO PARSE DEPENDENCIES
+	//Run through the top of the file and process until we're done seeing imports
+	while(TRUE){
+		lexitem_t* lookahead = token_array_get_pointer_at(&(stream.token_stream), current_token_index);
+		current_token_index++;
 
-	//Otherwise we should be good to package this up into a dependency graph node
-	dependency_graph_node_t* main_dependency_node = dependency_graph_node_alloc(&stream, DEPENDENCY_GRAPH_NODE_TYPE_MAIN);
+		/**
+		 * Terminal case - no import token means that we are done
+		 */
+		if(lookahead->tok != IMPORT){
+			break;
+		}
+
+		//Otherwise we have seen an import token so we need to process more
+		//TODO
+
+	}
+
+
 
 	//TODO MORE HERE WITH DEPENDENCIES
 	//
