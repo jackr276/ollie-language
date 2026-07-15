@@ -630,6 +630,10 @@ static u_int8_t validate_and_skip_module_directive(ollie_token_stream_t* stream,
  * inside of a struct for later use. The consumption pass does not have anything
  * to do with macro replacement. This will come after in the replacement
  * pass
+ *
+ * IMPORTANT - for "import" and "module" statements, we require that these always
+ * be at the top of the file. If we were to see an import statement somewhere other
+ * than the top of the file, we will fail out. 
  */
 static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macro_symtab_t* macro_symtab, u_int32_t* num_macros, u_int32_t* num_OUNIT_directives){
 	//Standard holder for the result of each macro consumption
@@ -637,6 +641,9 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 
 	//Keep track of the current array index
 	u_int32_t array_index = 0;
+
+	//Initially we are at the top of the file - we stay here until we see the first thing that isn't "import" or "module"
+	u_int8_t in_top_of_file = TRUE;
 
 	//Loop through the entire structure
 	while(array_index < stream->token_stream.current_index){
@@ -652,6 +659,9 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 		switch(token->tok){
 			//We are seeing the beginning of a macro
 			case MACRO:
+				//No longer at the top
+				in_top_of_file = FALSE;
+
 				/**
 				 * Now we will invoke the helper to parse this entire token
 				 * stream(until we see the ENDMACRO directive)
@@ -684,6 +694,9 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 			 * here
 			 */
 			case OUNIT:
+				//No longer at the top
+				in_top_of_file = FALSE;
+
 				//We've seen another OUNIT directive
 				(*num_OUNIT_directives)++;
 
@@ -702,6 +715,14 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 			 * validate and skip it
 			 */
 			case IMPORT:
+				/**
+				 * IMPORTANT NOTE: if we are no longer at the top of the file, we may not have an import statement here
+				 */
+				if(in_top_of_file == FALSE){
+					return print_and_return_preprocessor_failure("$import statements must be after the optional module declaration but before any other code in the ollie file", token->line_num);
+				}
+
+				//Pass to the helper and let it handle - this also does error printing
 				if(validate_and_skip_import_directive(stream, &array_index) == FALSE){
 					return FAILURE;
 				}
@@ -732,6 +753,9 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 
 			//We haven't seen a macro, but the array index needs to be bumped
 			default:
+				//No longer at the top
+				in_top_of_file = FALSE;
+
 				array_index++;
 				break;
 		}
