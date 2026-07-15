@@ -4,11 +4,8 @@
  */
 
 #include "build_system.h"
-#include "../utils/dynamic_array/dynamic_array.h"
+#include "../utils/error_management.h"
 #include <sys/types.h>
-
-//Maintain a unique atomic node it
-static u_int32_t current_node_id = 0;
 
 /**
  * Basic enum for the build system status
@@ -25,6 +22,32 @@ typedef enum {
  * as a return value
  */
 typedef struct build_system_results_t build_system_results_t;
+struct build_system_results_t {
+	build_graph_node_t* result_node;
+	build_system_status_t status;
+};
+
+//Helper that will let us initialize a wiped out version
+#define INITIALIZE_BLANK_BUILD_SYSTEM_RESULTS {NULL, BUILD_SYSTEM_STATUS_FAILURE}
+
+//Maintain a unique atomic node it
+static u_int32_t current_node_id = 0;
+
+//Keep track of the error and warning counts
+static u_int32_t num_build_system_errors = 0;
+static u_int32_t num_build_system_warnings = 0;
+
+
+/**
+ * A generic printer for any build system errors that we may encounter
+ */
+static inline void print_build_system_message(error_message_type_t message, char* info, char* file_name, u_int32_t line_number){
+	//Different types to print out
+	static const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
+
+	fprintf(stdout, "\n[FILE: %s] --> [LINE %d | OLLIE BUILD SYSTEM %s]: %s\n", file_name, line_number, type[message], info);
+}
+
 
 /**
  * For each file, we must:
@@ -48,7 +71,10 @@ static void handle_file_dependencies_and_tokenization(char* file_name, u_int8_t 
  * The main file is a special case because it may *not* be a module. We will need to
  * validate that the user is not attempting to make this file into a module
  */
-static void handle_main_file_tokenization(char* main_file_name, u_int8_t silent_mode){
+static build_system_results_t handle_main_file_tokenization(char* main_file_name, u_int8_t silent_mode){
+	//Create and initialize our results
+	build_system_results_t results = INITIALIZE_BLANK_BUILD_SYSTEM_RESULTS;
+
 	//Let's first tokenize the main file
 	ollie_token_stream_t stream = tokenize(main_file_name, silent_mode);
 
@@ -57,7 +83,10 @@ static void handle_main_file_tokenization(char* main_file_name, u_int8_t silent_
 	 * We fail out here and don't even bother returning anything
 	 */
 	if(stream.status == STREAM_STATUS_FAILURE){
-
+		print_build_system_message(MESSAGE_TYPE_ERROR, "Tokenzining failed. Please remedy the error and recompile", main_file_name, 0);
+		num_build_system_errors++;
+		results.status = BUILD_SYSTEM_STATUS_FAILURE;
+		return results;
 	}
 
 
