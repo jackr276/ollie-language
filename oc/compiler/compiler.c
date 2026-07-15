@@ -300,7 +300,7 @@ static u_int8_t compile(compiler_options_t* options){
 	 * This unified token stream approach allows us to only deal with the build system
 	 * once at the start of compilation, even when we have many many dependencies
 	 */
-	ollie_token_stream_t token_stream = parse_dependencies_and_construct_token_stream(options, FALSE);
+	build_system_results_t build_system_results = parse_dependencies_and_construct_token_stream(options, FALSE);
 
 	//
 	//
@@ -314,8 +314,8 @@ static u_int8_t compile(compiler_options_t* options){
 	//
 
 	//If it failed, we need to leave immediately
-	if(token_stream.status == STREAM_STATUS_FAILURE){
-		fprintf(stdout, "\n\n[FILE: %s]: Tokenizing/build system failed. Please remedy the error and recompile\n\n", options->file_name);
+	if(build_system_results.status == BUILD_SYSTEM_STATUS_FAILURE){
+		fprintf(stdout, "\n\n[FILE: %s]: Tokenizing/build system failed. Please remedy the errors and recompile\n\n", options->file_name);
 		num_errors++;
 
 		//Timer end
@@ -353,7 +353,7 @@ static u_int8_t compile(compiler_options_t* options){
 	 * Now we cache the token stream reference inside of the options. The parser will reference this for
 	 * all of its operations
 	 */
-	options->token_stream = &token_stream;
+	options->token_stream = &(build_system_results.result_node->token_stream);
 
 	/**
 	 * Let the preprocessor handle everything to do with macros. Note that this does have the potential

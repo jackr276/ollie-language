@@ -104,7 +104,7 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_name
  *
  * TODO RETURN TYPE IS NOT ACCURATE LIKELY
  */
-ollie_token_stream_t parse_dependencies_and_construct_token_stream(compiler_options_t* options, u_int8_t silent_mode){
+build_system_results_t parse_dependencies_and_construct_token_stream(compiler_options_t* options, u_int8_t silent_mode){
 	/**
 	 * The actual main file itself is all that the user provides here. The build system will
 	 * then crawl through the dependencies in the main file and each of those files recursively
@@ -115,5 +115,5 @@ ollie_token_stream_t parse_dependencies_and_construct_token_stream(compiler_opti
 	//Let the helper go out and parse through the main file and its dependencies
 	build_system_results_t results = handle_main_file_tokenization(main_file_name, silent_mode);
 
-	return results.result_node->token_stream;
+	return results;
 }

@@ -107,15 +107,16 @@ int main(int argc, char** argv){
 	clock_t begin = clock();
 
 	//Invoke the build system to get our token array
-	ollie_token_stream_t stream = parse_dependencies_and_construct_token_stream(options, FALSE);
+	build_system_results_t build_results = parse_dependencies_and_construct_token_stream(options, FALSE);
 
 	//Tokenizing failed, error out
-	if(stream.status == STREAM_STATUS_FAILURE){
+	if(build_results.status == BUILD_SYSTEM_STATUS_FAILURE){
 		printf("TOKENIZING FAILED\n");
 		printf("==================================== END  ================================================\n");
 	}
 
 	//Store it inside of the token stream
+	ollie_token_stream_t stream = build_results.result_node->token_stream;
 	options->token_stream = &stream;
 
 	//Print out the pre-preprocssing token stream

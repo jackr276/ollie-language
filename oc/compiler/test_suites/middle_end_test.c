@@ -106,17 +106,17 @@ int main(int argc, char** argv){
 	clock_t begin = clock();
 
 	//Invoke the tokenizer and build system handler
-	ollie_token_stream_t stream = parse_dependencies_and_construct_token_stream(options, FALSE);
+	build_system_results_t build_results = parse_dependencies_and_construct_token_stream(options, FALSE);
 
 	//If this fails, we need to leave
-	if(stream.status == STREAM_STATUS_FAILURE){
+	if(build_results.status == BUILD_SYSTEM_STATUS_FAILURE){
 		print_parse_message(MESSAGE_TYPE_ERROR, "Tokenizing Failed", 0);
 		//0 for test runs
 		exit(0);
 	}
 	
 	//Store it inside of the token stream
-	options->token_stream = &stream;
+	options->token_stream = &(build_results.result_node->token_stream);
 
 	//We now need to preprocess
 	preprocessor_results_t results = preprocess(options, options->token_stream);
