@@ -41,7 +41,27 @@ static inline void print_build_system_message(error_message_type_t message, char
 }
 
 //TODO
-static inline u_int8_t does_file_match_module(){
+static inline u_int8_t does_file_match_module(char* file_name, dynamic_string_t* module_name, u_int8_t silent_mode){
+	//We only need the first two tokens for this initial search
+	lexitem_t tokens[2];
+
+	//Attempt to extract the first 2 tokens
+	u_int8_t success = get_first_2_tokens(tokens, file_name, silent_mode);
+
+	/**
+	 * We immediately exit the compiler if this happens - means that somehow
+	 * somewhere a dependency file is corrupted
+	 */
+	if(success == FAILURE){
+		fprintf(stderr, "Fatal internal compiler error: the file %s could not be tokenized. It is likely that you have a corrupted dependency file", file_name);
+		exit(1);
+	}
+
+	//Is this even a module file at all? If not just leave
+	if(tokens[0].tok != MODULE){
+		return FAILURE;
+	}
+
 
 
 	//DUMMY

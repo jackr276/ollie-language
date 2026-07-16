@@ -2846,6 +2846,10 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream, u_in
  * doing a quick search
  */
 u_int8_t get_first_2_tokens(lexitem_t tokens[2], char* current_file_name, u_int8_t silent_mode){
+	//Ensure that initially these are total blanks
+	tokens[0].tok = BLANK;
+	tokens[1].tok = BLANK;
+
 	//Store the file name for any error printing
 	file_name = current_file_name;
 
