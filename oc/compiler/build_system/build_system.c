@@ -36,6 +36,16 @@ static inline void print_build_system_message(error_message_type_t message, char
 }
 
 
+static inline u_int8_t search_for_module(char* initial_directory, char* module_name, dynamic_string_t* file_to_import){
+	//TODO INITIAL SYMTAB LOOKUP
+
+
+	return FAILURE;
+}
+
+
+
+
 /**
  * Handle the parsing of an import statement. Note that there are two different things that we
  * can see for an import statement:
@@ -59,10 +69,42 @@ static u_int8_t parse_import_statement(ollie_token_stream_t* stream, char* curre
 	 * bad and will lead us to fail out
 	 */
 	switch(lookahead->tok){
+		/**
+		 * A string constant means that we are going to look for the file
+		 * in the local "./" directory and any subdirectory of this current directory
+		 */
 		case STR_CONST:
+			/**
+			 * Let the helper go through and search our local directory for this module. If we can't
+			 * find it, then we have an issue and we throw an error
+			 */
+			if(search_for_module("./", lookahead->lexeme.string, file_to_import) == FAILURE){
+				sprintf(build_system_info, "Module \"%s\" could not be found anywhere under the local directory", lookahead->lexeme.string);
+				print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
+				num_build_system_errors++;
+				return FAILURE;
+			}
+
+			//TODO OTHERWISE FOUND IT
+			
 			break;
 
+		/**
+		 * An identifier wrapped in angle brackets means that we are going to look for the file in
+		 * the /usr/ollie/lib directory and any subdirectories therein
+		 */
 		case L_THAN:
+			//Refresh the lookahead token
+			lookahead = token_array_get_pointer_at(&(stream->token_stream), *current_index);
+			(*current_index)++;
+
+			/**
+			 * This will be an identifier, not a string constant
+			 */
+			if(lookahead->tok != IDENT){
+
+			}
+
 			break;
 
 		default:
@@ -142,7 +184,7 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_name
 	lexitem_t* lookahead;
 
 	//We will reuse the file name - remember that the module record creator will clone this each time
-	dynamic_string_t file_name = dynamic_string_alloc();
+	dynamic_string_t dependency_file_name = dynamic_string_alloc();
 
 	//Run through the top of the file and process until we're done seeing imports
 	while(TRUE){
@@ -159,8 +201,8 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_name
 		 * it and determine, through a file search, what the module is that we
 		 * are after here
 		 */
-		clear_dynamic_string(&file_name);
-		u_int8_t result = parse_import_statement(&stream, &file_name, &current_token_index);
+		clear_dynamic_string(&dependency_file_name);
+		u_int8_t result = parse_import_statement(&stream, main_file_name, &dependency_file_name, &current_token_index);
 		if(result == FAILURE){
 			print_build_system_message(MESSAGE_TYPE_ERROR, "Invalid $import directive found in file. Please review and recompile", main_file_name, 0);
 			num_build_system_errors++;
@@ -170,7 +212,7 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_name
 	}
 
 	//Scrap this now that we're done
-	dynamic_string_dealloc(&file_name);
+	dynamic_string_dealloc(&dependency_file_name);
 
 	//TODO MORE HERE WITH DEPENDENCIES
 
