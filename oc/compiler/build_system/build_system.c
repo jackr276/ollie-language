@@ -59,11 +59,17 @@ static inline dependency_graph_node_t* find_module(const char* initial_directory
 	symtab_module_record_t* found_module = lookup_module(module_symtab, module_name);
 
 	/**
-	 * If
+	 * If we were able to find it in the symbol table give, back the associated dependency
+	 * graph node that already exists for this given module
 	 */
 	if(found_module != NULL){
-		return found_module;
+		return found_module->dependency_graph_node;
 	}
+
+	/**
+	 * Otherwise we did not find it, so we are going to have to search
+	 * for it inside of the given initial directory
+	 */
 
 
 	return NULL;
@@ -249,8 +255,18 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_name
 		return results;
 	}
 
+	/**
+	 * Give the main dependency node a name that would never be accepted
+	 * by the regular module declaration to avoid collisions
+	 */
+	dynamic_string_t main_dependency_node_name = dynamic_string_alloc();
+	dynamic_string_set(&main_dependency_node_name, "^^MAIN_DEPENDENCY_GRAPH_NODE^^");
+
 	//Otherwise we should be good to package this up into a dependency graph node
-	dependency_graph_node_t* main_dependency_node = dependency_graph_node_alloc(&stream, DEPENDENCY_GRAPH_NODE_TYPE_MAIN);
+	dependency_graph_node_t* main_dependency_node = dependency_graph_node_alloc(&main_dependency_node_name, main_file_name, &stream, DEPENDENCY_GRAPH_NODE_TYPE_MAIN);
+
+	//Insert this into the symtab for completeness
+	insert_module(module_symtab, create_module_record(main_dependency_node));
 
 	/**
 	 * We will now run through and parse all of the dependencies that this file has. It is of course 

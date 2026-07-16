@@ -1208,8 +1208,8 @@ symtab_macro_record_t* create_macro_record(dynamic_string_t name, u_int32_t line
 symtab_module_record_t* create_module_record(dependency_graph_node_t* dependency_graph_node){
 	symtab_module_record_t* record = calloc(1, sizeof(symtab_module_record_t));
 
-	//Get the hash from the name in the dependency graph
-	record->hash = hash_module_name(dependency_graph_node->file_name.string);
+	//Get the hash from the module name in the dependency graph
+	record->hash = hash_module_name(dependency_graph_node->module_name.string);
 
 	//Store the dependency graph node
 	record->dependency_graph_node = dependency_graph_node;
@@ -1853,9 +1853,9 @@ symtab_macro_record_t* lookup_macro(macro_symtab_t* symtab, char* name){
  * Lookup a module in the symtab. There is only one lexical scope to lookup
  * here
  */
-symtab_module_record_t* lookup_module(module_symtab_t* symtab, dynamic_string_t* name){
+symtab_module_record_t* lookup_module(module_symtab_t* symtab, dynamic_string_t* module_name){
 	//Obtain the hash
-	u_int64_t hash = hash_macro_name(name->string);
+	u_int64_t hash = hash_module_name(module_name->string);
 
 	//Get the starting record - remember this may not be the actual match
 	symtab_module_record_t* cursor = symtab->records[hash];
@@ -1863,7 +1863,7 @@ symtab_module_record_t* lookup_module(module_symtab_t* symtab, dynamic_string_t*
 	//Crawl through the records that are conjoined
 	while(cursor != NULL){
 		//Only an exact match is accepted
-		if(dynamic_strings_equal(&(cursor->file_name), name) == TRUE){
+		if(dynamic_strings_equal(&(cursor->dependency_graph_node->module_name), module_name) == TRUE){
 			return cursor;
 		}
 
@@ -3208,8 +3208,8 @@ void module_symtab_dealloc(module_symtab_t* symtab){
 			//Reassign
 			temp = cursor;
 
-			//The module symtab owns this so we need to free it
-			dynamic_string_dealloc(&(cursor->file_name));
+			//Let the helper deallocate the dependency graph node
+			dependency_graph_node_dealloc(temp->dependency_graph_node);
 
 			//Advance it up
 			cursor = cursor->next;

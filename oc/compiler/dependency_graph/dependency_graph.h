@@ -34,14 +34,14 @@ struct dependency_graph_node_t {
 	//The type of node this is
 	dependency_node_type_t type;
 	//Less important - the name of the actaul file
-	dynamic_string_t file_name;
+	char file_name[FILENAME_MAX];
 };
 
 /**
  * Allocate a dependency graph node on the heap. All dependency
  * graph nodes will be heap allocated
  */
-dependency_graph_node_t* dependency_graph_node_alloc(dynamic_string_t* module_name, dynamic_string_t* file_name, ollie_token_stream_t* stream, dependency_node_type_t node_type);
+dependency_graph_node_t* dependency_graph_node_alloc(dynamic_string_t* module_name, char* file_name, ollie_token_stream_t* stream, dependency_node_type_t node_type);
 
 /**
  * Deallocate the given dependency graph node

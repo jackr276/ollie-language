@@ -7,6 +7,8 @@
  */
 
 #include "dependency_graph.h"
+#include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 
 //Maintain a unique atomically increasing node it
@@ -24,7 +26,7 @@ static inline int32_t get_next_node_id(){
  * Allocate a dependency graph node on the heap. All dependency
  * graph nodes will be heap allocated
  */
-dependency_graph_node_t* dependency_graph_node_alloc(dynamic_string_t* module_name, dynamic_string_t* file_name, ollie_token_stream_t* stream, dependency_node_type_t node_type){
+dependency_graph_node_t* dependency_graph_node_alloc(dynamic_string_t* module_name, char* file_name, ollie_token_stream_t* stream, dependency_node_type_t node_type){
 	dependency_graph_node_t* node = calloc(1, sizeof(dependency_graph_node_t));
 
 	//Populate the unique identifier
@@ -35,10 +37,10 @@ dependency_graph_node_t* dependency_graph_node_alloc(dynamic_string_t* module_na
 	node->token_stream = *stream;
 
 	//Copy over the file name and the module name
-	node->file_name = clone_dynamic_string(file_name);
 	node->module_name = clone_dynamic_string(module_name);
 
-	//TODO DEPENDS ON AND DEPENDED ON BY
+	//Copy the filename over here 
+	strncpy(node->file_name, file_name, FILENAME_MAX);
 
 	//Give this back once done
 	return node;
@@ -53,7 +55,6 @@ void dependency_graph_node_dealloc(dependency_graph_node_t* node){
 	token_array_dealloc(&(node->token_stream.token_stream));
 
 	//Now destroy the file & module names
-	dynamic_string_dealloc(&(node->file_name));
 	dynamic_string_dealloc(&(node->module_name));
 
 	//Finally we can free the overall node itself(all nodes are heap allocated)
