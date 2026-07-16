@@ -36,7 +36,7 @@ static inline void print_build_system_message(error_message_type_t message, char
 }
 
 
-static inline u_int8_t search_for_module(char* initial_directory, char* module_name, dynamic_string_t* file_to_import){
+static inline u_int8_t search_for_module(const char* initial_directory, char* module_name, dynamic_string_t* file_to_import){
 	//TODO INITIAL SYMTAB LOOKUP
 
 
@@ -99,11 +99,39 @@ static u_int8_t parse_import_statement(ollie_token_stream_t* stream, char* curre
 			(*current_index)++;
 
 			/**
-			 * This will be an identifier, not a string constant
+			 * If we don't have an identifier then we fail out
 			 */
 			if(lookahead->tok != IDENT){
-
+				sprintf(build_system_info, "Expected identifier after $import keyword but saw %s instead", lexitem_to_string(lookahead));
+				print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
+				num_build_system_errors++;
+				return FAILURE;
 			}
+
+			//Before we waste time searching, let's make sure that the closing > is there
+			lookahead = token_array_get_pointer_at(&(stream->token_stream), *current_index);
+			(*current_index)++;
+
+			//Didn't find it so we fail out
+			if(lookahead->tok != G_THAN){
+				sprintf(build_system_info, "Expected > after module name but saw %s instead", lexitem_to_string(lookahead));
+				print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
+				num_build_system_errors++;
+				return FAILURE;
+			}
+
+			/**
+			 * Now let the helper go through and search our local directory for this module. If we can't
+			 * find it, then we have an issue and we throw an error
+			 */
+			if(search_for_module(OLLIE_LIBRARY_DIRECTORY, lookahead->lexeme.string, file_to_import) == FAILURE){
+				sprintf(build_system_info, "Module \"%s\" could not be found anywhere under the local directory", lookahead->lexeme.string);
+				print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
+				num_build_system_errors++;
+				return FAILURE;
+			}
+
+			//TODO OTHERWISE FOUND IT
 
 			break;
 
@@ -113,6 +141,19 @@ static u_int8_t parse_import_statement(ollie_token_stream_t* stream, char* curre
 			num_build_system_errors++;
 			return FAILURE;
 	}
+
+	//Let's look for the final semicolon here
+	lookahead = token_array_get_pointer_at(&(stream->token_stream), *current_index);
+	(*current_index)++;
+
+	//If we don't have it then fail out
+	if(lookahead->tok != SEMICOLON){
+		print_build_system_message(MESSAGE_TYPE_ERROR, "Semicolon expected after $import statement", current_file_name, lookahead->line_num);
+		num_build_system_errors++;
+		return FAILURE;
+	}
+
+
 
 	//DUMMY
 	return FAILURE;

@@ -9,7 +9,7 @@
 #define OLLIE_COMPILER_CONSTANTS_H
 
 //Ollie's general library must always be located here
-#define OLLIE_LIBRARY_LOCAL = /usr/lib/ollie
+static const char* OLLIE_LIBRARY_DIRECTORY = "/usr/lib/ollie/";
 
 #define TRUE 1
 #define FALSE 0
