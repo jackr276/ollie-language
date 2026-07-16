@@ -324,6 +324,9 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_name
  *
  *
  * TODO RETURN TYPE IS NOT ACCURATE LIKELY
+ *
+ * NOTE: we can *not* deallocate the dependency graph when we do this because we
+ * need all of the info contained within for the rest of compilation
  */
 build_system_results_t parse_dependencies_and_construct_token_stream(compiler_options_t* options, u_int8_t silent_mode){
 	//Allocate the module symtab first
@@ -338,9 +341,6 @@ build_system_results_t parse_dependencies_and_construct_token_stream(compiler_op
 
 	//Let the helper go out and parse through the main file and its dependencies
 	build_system_results_t results = handle_main_file_tokenization(main_file_name, silent_mode);
-
-	//Deallocate the module symtab - we no longer need it
-	module_symtab_dealloc(module_symtab);
 
 	return results;
 }

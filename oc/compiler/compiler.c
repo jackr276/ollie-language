@@ -11,7 +11,6 @@
 #include <time.h>
 #include "ast/ast.h"
 #include "build_system/build_system.h"
-#include "lexer/lexer.h"
 #include "parser/parser.h"
 #include "preprocessor/preprocessor.h"
 #include "symtab/symtab.h"
