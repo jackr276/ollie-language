@@ -1,6 +1,9 @@
 /**
  * Author: Jack Robbins
  * This C file contains the definitions for the APIs defined in the header file of the same name
+ *
+ * NOTE: there is a 1-to-1 relationship between dependency graph nodes and modules. Every module
+ * has its own dependency graph node
  */
 
 #include "dependency_graph.h"

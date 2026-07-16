@@ -275,6 +275,8 @@ struct symtab_macro_record_t{
 /**
  * This struct represents a specific module record in the build system. This
  * allows us to avoid duplicate searching of shared modules
+ *
+ * TODO NEED TO ADD THE DEPENDENCY GRAPH NODE IN THIS
  */
 struct symtab_module_record_t{
 	u_int64_t hash;

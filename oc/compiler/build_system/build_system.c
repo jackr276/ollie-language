@@ -39,9 +39,19 @@ static inline void print_build_system_message(error_message_type_t message, char
 }
 
 
-//TODO EFFICIENTLY TOKENIZE ONLY THE FIRST 3 TOKENS IN OUR SEARCH
-
-static inline u_int8_t search_for_module(const char* initial_directory, dynamic_string_t* module_name, dynamic_string_t* file_to_import){
+/**
+ * Search for a module in the appropriate directory.
+ *
+ * Before we even open a file, we will first search in the symbol table itself for a module. If we find it 
+ * in the symbol table, we will return what the symbol table gave us
+ *
+ * Otherwise, we will recursively search the intial directory and all subdirectories for any "*.ol" files 
+ * whose second token matches the name we are after. We only ever tokenize the first 2 tokens in our search
+ * for efficiency's sake. If we do not find it, then we fail out. If we do find it, then we will create and
+ * insert the record into the module symtab for future go arounds. We will also fully tokenize the module and give
+ * it a proper dependency graph node
+ */
+static inline dependency_graph_node_t* find_module(const char* initial_directory, dynamic_string_t* module_name, dynamic_string_t* file_to_import){
 	/**
 	 * First step in our search - hit the module symtab and see if we can find anything in
 	 * there. If we can, we save ourselves the trouble of searching the file system
@@ -49,13 +59,14 @@ static inline u_int8_t search_for_module(const char* initial_directory, dynamic_
 	symtab_module_record_t* found_module = lookup_module(module_symtab, module_name);
 
 	//TODO MORE WITH THIS - but for now we'll just declare success
+	//
+	//TODO NEED TO UPDATE THE DEPENDENCY GRAPH AND SYMTAB TO SUPPORT
 	if(found_module != NULL){
-		printf("FOUND IN SYMTAB\n\n");
-		return SUCCESS;
+		return NULL;
 	}
 
 
-	return FAILURE;
+	return NULL;
 }
 
 
@@ -73,11 +84,16 @@ static inline u_int8_t search_for_module(const char* initial_directory, dynamic_
  * with the full path of our filename for the caller to process
  *
  * NOTE: by the time that we get here we have already seen the "$import" token
+ *
+ * TODO WHAT ARE WE DOING WITH THIS FILE TO IMPORT???
  */
 static u_int8_t parse_import_statement(ollie_token_stream_t* stream, char* current_file_name, dynamic_string_t* file_to_import, int32_t* current_index){
 	//Get the next value in the stream
 	lexitem_t* lookahead = token_array_get_pointer_at(&(stream->token_stream), *current_index);
 	(*current_index)++;
+
+	//The found dependency
+	dependency_graph_node_t* found_module_dependency = NULL;
 
 	/**
 	 * We can see either "file_name" or <file_name> here. Anything else is
@@ -93,7 +109,10 @@ static u_int8_t parse_import_statement(ollie_token_stream_t* stream, char* curre
 			 * Let the helper go through and search our local directory for this module. If we can't
 			 * find it, then we have an issue and we throw an error
 			 */
-			if(search_for_module("./", &(lookahead->lexeme), file_to_import) == FAILURE){
+			found_module_dependency = find_module("./", &(lookahead->lexeme), file_to_import);
+
+			//Fail out if we don't have it
+			if(found_module_dependency == NULL){
 				sprintf(build_system_info, "Module \"%s\" could not be found anywhere under the local directory", lookahead->lexeme.string);
 				print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
 				num_build_system_errors++;
@@ -139,7 +158,9 @@ static u_int8_t parse_import_statement(ollie_token_stream_t* stream, char* curre
 			 * Now let the helper go through and search our local directory for this module. If we can't
 			 * find it, then we have an issue and we throw an error
 			 */
-			if(search_for_module(OLLIE_LIBRARY_DIRECTORY, &(lookahead->lexeme), file_to_import) == FAILURE){
+			found_module_dependency = find_module(OLLIE_LIBRARY_DIRECTORY, &(lookahead->lexeme), file_to_import);
+
+			if(found_module_dependency == NULL){
 				sprintf(build_system_info, "Module \"%s\" could not be found anywhere under the local directory", lookahead->lexeme.string);
 				print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
 				num_build_system_errors++;
