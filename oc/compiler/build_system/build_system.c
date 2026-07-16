@@ -42,6 +42,10 @@ static inline void print_build_system_message(error_message_type_t message, char
 
 //TODO
 static inline u_int8_t does_file_match_module(){
+
+
+	//DUMMY
+	return FAILURE;
 }
 
 
@@ -53,6 +57,8 @@ static inline u_int8_t does_file_match_module(){
  * as well
  */
 static u_int8_t traverse_and_search_for_module_rec(const char* path_name, dynamic_string_t* module_name){
+	printf("CALLED\n\n");
+
 	//Status struct
 	struct stat status;
 
@@ -78,7 +84,7 @@ static u_int8_t traverse_and_search_for_module_rec(const char* path_name, dynami
 		 * this file. Anything else we ignore it and move on
 		 */
 		if(file_extension != NULL && strcmp(file_extension, "ol") == 0){
-
+			//TODO
 		}
 
 	/**
@@ -86,11 +92,35 @@ static u_int8_t traverse_and_search_for_module_rec(const char* path_name, dynami
 	 * this directory and traverse it to see if we can find anything in there
 	 */
 	} else if(S_ISDIR(status.st_mode)) {
+		//Open the directory up first
+		DIR* directory = opendir(path_name);
 
+		//If we couldn't open it then fail out
+		if(directory == NULL){
+			sprintf(stderr, "Fatal internal build system error - invalid directory %s detected", path_name);
+			exit(1);
+		}
+
+		/**
+		 * So long as we have directory entries to read, we will 
+		 * recursively invoke this function
+		 */
+		struct dirent* directory_entry;
+		while((directory_entry = readdir(directory)) != NULL){
+			//Avoid reading ".." or "." - we would infinite loop if we did
+			if(directory_entry->d_name[0] == '.'){
+				continue;
+			}
+
+			//TODO RECURSIVE CALL
+			//
+			//TODO EXIT CONDITION
+
+		}
 	} 
-	
 
-
+	//TODO DUMMY
+	return FAILURE;
 }
 
 
@@ -126,6 +156,7 @@ static inline dependency_graph_node_t* find_module(const char* initial_directory
 	 * for it inside of the given initial directory using a recursive
 	 * directory search
 	 */
+	traverse_and_search_for_module_rec(initial_directory, module_name);
 
 
 	return NULL;
