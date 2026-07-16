@@ -577,7 +577,7 @@ static u_int8_t validate_and_skip_import_directive(ollie_token_stream_t* stream,
  * that has already been done by the time we get here. Instead, we need to just validate the syntax
  * and flag it to be ignored by the replacement pass
  *
- * $module <str_const>;
+ * $module <ident>;
  */
 static u_int8_t validate_and_skip_module_directive(ollie_token_stream_t* stream, u_int32_t* stream_index){
 	//First grab the original token. This should be the using keyword
@@ -597,7 +597,7 @@ static u_int8_t validate_and_skip_module_directive(ollie_token_stream_t* stream,
 	(*stream_index)++;
 
 	//Immediate fail out if we haven't seen it
-	if(token->tok != STR_CONST){
+	if(token->tok != IDENT){
 		sprintf(info_message, "Expected identifier in $module directive but got %s instead\n", lexitem_to_string(token));
 		return print_and_return_preprocessor_failure(info_message, token->line_num);
 	}

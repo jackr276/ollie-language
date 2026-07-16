@@ -4,7 +4,7 @@
  */
 
 //The module macro declares this entire file as a module
-$module "test_dependency";
+$module test_dependency;
 
 
 pub fn add(x:i32, y:i32) -> i32 {

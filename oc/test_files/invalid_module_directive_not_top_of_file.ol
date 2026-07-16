@@ -9,7 +9,7 @@
  }
 
 //BAD - may only ever be at the very top
-$module "my_module";
+$module my_module;
 
 pub fn main() -> i32 {
 	OUNIT: [fail_to_compile]

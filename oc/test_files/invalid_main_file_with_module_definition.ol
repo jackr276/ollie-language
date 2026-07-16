@@ -5,7 +5,7 @@
 
 
 //Invalid because we'll be passing this file in with -f, so it can't be a module
-$module "invalid_module";
+$module invalid_module;
 
 
  pub fn main() -> i32 {
