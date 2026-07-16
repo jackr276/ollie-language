@@ -10,6 +10,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
+#include <sys/stat.h>
+#include <dirent.h>
 
 //Ollie's general library must always be located here
 static const char* OLLIE_LIBRARY_DIRECTORY = "/usr/lib/ollie/";
@@ -36,6 +38,59 @@ static inline void print_build_system_message(error_message_type_t message, char
 	static const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
 
 	fprintf(stdout, "\n[FILE: %s] --> [LINE %d | OLLIE BUILD SYSTEM %s]: %s\n", file_name, line_number, type[message], info);
+}
+
+//TODO
+static inline u_int8_t does_file_match_module(){
+}
+
+
+
+/**
+ * Traverse a directory and recursively search for a module by tokenizing
+ * just the first two tokens in each regular *.ol file that we find. If
+ * we come across a directory, we will recursively search the directory
+ * as well
+ */
+static u_int8_t traverse_and_search_for_module_rec(const char* path_name, dynamic_string_t* module_name){
+	//Status struct
+	struct stat status;
+
+	//Get the status of the path
+	int32_t path_status = stat(path_name, &status);
+
+	//This really should never happen but we'll check anyways
+	if(path_status == -1){
+		sprintf(stderr, "Fatal internal build system error - invalid path name %s detected", path_name);
+		exit(1);
+	}
+
+	/**
+	 * First option - we have a regular file. We only care about regular files
+	 * *if* they are .ol files. If they're not we ignore them
+	 */
+	if(S_ISREG(status.st_mode)){
+		//Get the file extension off of this
+		char* file_extension = strchr(path_name, '.');
+
+		/**
+		 * If we have a file extension that is *.ol, we will search
+		 * this file. Anything else we ignore it and move on
+		 */
+		if(file_extension != NULL && strcmp(file_extension, "ol") == 0){
+
+		}
+
+	/**
+	 * Second option - we have a directory(other than . or ..). We'll need to go into 
+	 * this directory and traverse it to see if we can find anything in there
+	 */
+	} else if(S_ISDIR(status.st_mode)) {
+
+	} 
+	
+
+
 }
 
 
@@ -68,14 +123,13 @@ static inline dependency_graph_node_t* find_module(const char* initial_directory
 
 	/**
 	 * Otherwise we did not find it, so we are going to have to search
-	 * for it inside of the given initial directory
+	 * for it inside of the given initial directory using a recursive
+	 * directory search
 	 */
 
 
 	return NULL;
 }
-
-
 
 
 /**
