@@ -30,8 +30,11 @@ int main(int argc, char** argv){
 	for(int32_t i = 1; i < argc; i++){
 		printf("=============== LEXER TEST FOR FILE %s =================\n\n", argv[i]);
 
+		//Extract the file name
+		char* file_name = argv[i];
+
 		//Let the tokenizer/build system do all of the work
-		ollie_token_stream_t token_stream = tokenize(argv[i], FALSE);
+		ollie_token_stream_t token_stream = tokenize(file_name, FALSE);
 
 		//If we failed, we move on to the next file
 		if(token_stream.status == STREAM_STATUS_FAILURE){
@@ -82,11 +85,20 @@ int main(int argc, char** argv){
 		printf("%d: ", token_number);
 		print_token(&l);
 
-		//Let's see if we can now "Reconsume" the tokens starting at a given position
-		printf("=============== DONE ====================\n");
+		printf("============ CONSUMING FIRST 2 TEST =======================\n");
 
-		//Print the last one
-		print_token(&l);
+		//Try grabbing out the first 2
+		lexitem_t first_2[2];
+		get_first_2_tokens(first_2, file_name, FALSE);
+
+		//Print these 
+		printf("FIRST TOKEN:");
+		print_token(&(first_2[0]));
+
+		printf("SECOND TOKEN:");
+		print_token(&(first_2[1]));
+
+		printf("=============== DONE ====================\n");
 
 		//Destroy the entire array
 		destroy_token_stream(token_stream_pointer);

@@ -54,8 +54,8 @@ preproc_test: preprocessor_test
 lexer_test: lexer.o lexer_test.o lexstack.o dynamic_string.o ollie_token_array.o
 	$(CC) -o $(OUT_LOCAL)/lexer_test $(OUT_LOCAL)/lexer_test.o $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/ollie_token_array.o 
 
-lexer_testd: lexerd.o build_systemd.o dependency_graphd.o lexer_testd.o lexstackd.o dynamic_stringd.o ollie_token_arrayd.o symtabd.o
-	$(CC) -o $(OUT_LOCAL)/lexer_testd $(OUT_LOCAL)/lexer_testd.o $(OUT_LOCAL)/lexerd.o $(OUT_LOCAL)/build_systemd.o $(OUT_LOCAL)/dependency_graphd.o $(OUT_LOCAL)/lexstackd.o $(OUT_LOCAL)/dynamic_stringd.o $(OUT_LOCAL)/ollie_token_arrayd.o $(OUT_LOCAL)/symtabd.o
+lexer_testd: lexerd.o lexer_testd.o lexstackd.o dynamic_stringd.o ollie_token_arrayd.o
+	$(CC) -o $(OUT_LOCAL)/lexer_testd $(OUT_LOCAL)/lexer_testd.o $(OUT_LOCAL)/lexerd.o $(OUT_LOCAL)/lexstackd.o $(OUT_LOCAL)/dynamic_stringd.o $(OUT_LOCAL)/ollie_token_arrayd.o
 
 lexer_test.o: $(TEST_SUITE_PATH)/lexer_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/lexer_test.c -o $(OUT_LOCAL)/lexer_test.o

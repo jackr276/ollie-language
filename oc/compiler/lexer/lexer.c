@@ -2860,13 +2860,14 @@ u_int8_t get_first_2_tokens(lexitem_t tokens[2], char* current_file_name, u_int8
 		return FAILURE;
 	}
 
-	//TODO FIX ME
+	//Let the helper go in and tokenize the first 2 tokens
+	u_int8_t result = tokenize_first_2(fl, tokens, silent_mode);
 
 	//Once we're done, we close the file
 	fclose(fl);
 
-	//If we get here then it worked
-	return SUCCESS;
+	//Return whatever result we got
+	return result;
 }
 
 
