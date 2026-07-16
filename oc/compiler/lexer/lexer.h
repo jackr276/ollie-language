@@ -48,11 +48,20 @@ struct ollie_token_stream_t {
 
 
 /**
+ * For efficient searching in our build system, we provide a utility that will only grab
+ * the first 2 tokens. This is because all module declarations are required to be at the
+ * very top of the file, and we know that each module declaration itself is:
+ *
+ * $module module_name;
+ *
+ * So if we're only looking for module names, we only really need to look at the first 2 if we're
+ * doing a quick search
+ */
+u_int8_t get_first_2_tokens(lexitem_t tokens[2], char* current_file_name, u_int8_t silent_mode);
+
+/**
  * Tokenzie an entire file and return a token
  * stream item that the parser can use as it wishes
- *
- * The tokenizer assumes that the fl file pointer
- * is 100% valid
  *
  * If we are running in silent mode, tokenizer errors will not appear
  * on stdout

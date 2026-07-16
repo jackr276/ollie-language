@@ -676,10 +676,12 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream, u_in
 	lex_item.line_num = 0;
 	INITIALIZE_NULL_DYNAMIC_STRING(lex_item.lexeme);
 
-	//We will need this numeric lexeme for any number we encounter.
-	//We will be reusing it, so it's declared up here. It is important
-	//to note that this dynamic string *will never* leave this function. It
-	//will never be passed along as a pointer to anything else
+	/**
+	 * We will need this numeric lexeme for any number we encounter.
+	 * We will be reusing it, so it's declared up here. It is important
+	 * to note that this dynamic string *will never* leave this function. It
+	 * will never be passed along as a pointer to anything else
+	 */
 	dynamic_string_t numeric_lexeme = dynamic_string_alloc();
 
 	//For eventual use down the road. We will not allocate here because this
@@ -1698,6 +1700,40 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream, u_in
 	}
 
 	return SUCCESS;
+}
+
+
+/**
+ * For efficient searching in our build system, we provide a utility that will only grab
+ * the first 2 tokens. This is because all module declarations are required to be at the
+ * very top of the file, and we know that each module declaration itself is:
+ *
+ * $module module_name;
+ *
+ * So if we're only looking for module names, we only really need to look at the first 2 if we're
+ * doing a quick search
+ */
+u_int8_t get_first_2_tokens(lexitem_t tokens[2], char* current_file_name, u_int8_t silent_mode){
+	//Store the file name for any error printing
+	file_name = current_file_name;
+
+	//Attempt to open the file
+	FILE* fl = fopen(current_file_name, "r");
+
+	//If we can't open, it's an autofailure
+	if(fl == NULL){
+		sprintf(info, "Failed to open file %s", file_name);
+		//Silent mode always false here
+		print_lexer_error(info, 0, FALSE);
+		return FAILURE;
+	}
+
+	//Consume all of the tokens here using the helper
+	u_int8_t result = generate_all_tokens(fl, &token_stream, silent_mode);
+
+	//Once we're done, we close the file
+	fclose(fl);
+
 }
 
 
