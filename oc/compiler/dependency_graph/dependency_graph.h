@@ -27,22 +27,21 @@ typedef enum {
 struct dependency_graph_node_t {
 	//The token stream for the file in question
 	ollie_token_stream_t token_stream;
-	//TODO MAY UPDATE AS NEEDS ARISE
-	dynamic_array_t depends_on;
-	dynamic_array_t depended_on_by;
+	//The module name that we have
+	dynamic_string_t module_name;
 	//Unique node ID
 	int32_t node_id;
 	//The type of node this is
 	dependency_node_type_t type;
-	//Name of the file that this node came from
-	char* file_name;
+	//Less important - the name of the actaul file
+	dynamic_string_t file_name;
 };
 
 /**
  * Allocate a dependency graph node on the heap. All dependency
  * graph nodes will be heap allocated
  */
-dependency_graph_node_t* dependency_graph_node_alloc(ollie_token_stream_t* stream, dependency_node_type_t node_type);
+dependency_graph_node_t* dependency_graph_node_alloc(dynamic_string_t* module_name, dynamic_string_t* file_name, ollie_token_stream_t* stream, dependency_node_type_t node_type);
 
 /**
  * Deallocate the given dependency graph node

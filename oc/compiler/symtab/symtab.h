@@ -16,6 +16,7 @@
 #include "../utils/dynamic_array/dynamic_array.h"
 #include "../utils/constants.h"
 #include "../utils/visibility.h"
+#include "../dependency_graph/dependency_graph.h"
 //Every function record has one of these
 #include "../stack_data_area/stack_data_area.h"
 
@@ -275,14 +276,14 @@ struct symtab_macro_record_t{
 /**
  * This struct represents a specific module record in the build system. This
  * allows us to avoid duplicate searching of shared modules
- *
- * TODO NEED TO ADD THE DEPENDENCY GRAPH NODE IN THIS
  */
 struct symtab_module_record_t{
+	//And the hash of the file name
 	u_int64_t hash;
+	//The next pointer
 	symtab_module_record_t* next;
-	//TODO DONT KNOW WHAT TO STORE HERE FOR TOKEN STREAM
-	dynamic_string_t file_name;
+	//Store the dependency graph node that's associated here
+	dependency_graph_node_t* dependency_graph_node;
 };
 
 
@@ -555,7 +556,7 @@ symtab_macro_record_t* create_macro_record(dynamic_string_t name, u_int32_t line
 /**
  * Create a module record for the module table
  */
-symtab_module_record_t* create_module_record(dynamic_string_t* file_name/*TODO MAY HAVE MORE*/);
+symtab_module_record_t* create_module_record(dependency_graph_node_t* dependency_graph_node);
 
 /**
  * Create a label record for the label symtab

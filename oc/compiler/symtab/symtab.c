@@ -1199,18 +1199,20 @@ symtab_macro_record_t* create_macro_record(dynamic_string_t name, u_int32_t line
 /**
  * Create a module record for the module table
  *
- * NOTE: this creation process will always create a clone of the given file name
+ * The module itself will contain a dependency graph node that corresponds
+ * to the file name. The file name itself is stored once inside of the
+ * dependency graph node already
  *
- * TODO MAY NEED MORE
+ * NOTE: this creation process will always create a clone of the given file name
  */
-symtab_module_record_t* create_module_record(dynamic_string_t* file_name/*TODO MAY HAVE MORE*/){
+symtab_module_record_t* create_module_record(dependency_graph_node_t* dependency_graph_node){
 	symtab_module_record_t* record = calloc(1, sizeof(symtab_module_record_t));
 
-	//Record the hash here
-	record->hash = hash_module_name(file_name->string);
+	//Get the hash from the name in the dependency graph
+	record->hash = hash_module_name(dependency_graph_node->file_name.string);
 
-	//Create a clone to maintain memory separation & clear ownership
-	record->file_name = clone_dynamic_string(file_name);
+	//Store the dependency graph node
+	record->dependency_graph_node = dependency_graph_node;
 
 	record->next = NULL;
 	return record;

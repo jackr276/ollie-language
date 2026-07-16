@@ -58,11 +58,11 @@ static inline dependency_graph_node_t* find_module(const char* initial_directory
 	 */
 	symtab_module_record_t* found_module = lookup_module(module_symtab, module_name);
 
-	//TODO MORE WITH THIS - but for now we'll just declare success
-	//
-	//TODO NEED TO UPDATE THE DEPENDENCY GRAPH AND SYMTAB TO SUPPORT
+	/**
+	 * If
+	 */
 	if(found_module != NULL){
-		return NULL;
+		return found_module;
 	}
 
 
@@ -85,7 +85,7 @@ static inline dependency_graph_node_t* find_module(const char* initial_directory
  *
  * NOTE: by the time that we get here we have already seen the "$import" token
  *
- * TODO WHAT ARE WE DOING WITH THIS FILE TO IMPORT???
+ * TODO WHAT ARE WE DOING WITH THIS FILE TO IMPORT??? - we need to return a dependency graph node
  */
 static u_int8_t parse_import_statement(ollie_token_stream_t* stream, char* current_file_name, dynamic_string_t* file_to_import, int32_t* current_index){
 	//Get the next value in the stream
