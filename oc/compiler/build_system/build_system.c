@@ -67,7 +67,7 @@ static u_int8_t traverse_and_search_for_module_rec(const char* path_name, dynami
 
 	//This really should never happen but we'll check anyways
 	if(path_status == -1){
-		sprintf(stderr, "Fatal internal build system error - invalid path name %s detected", path_name);
+		fprintf(stderr, "Fatal internal build system error - invalid path name %s detected", path_name);
 		exit(1);
 	}
 
@@ -97,7 +97,7 @@ static u_int8_t traverse_and_search_for_module_rec(const char* path_name, dynami
 
 		//If we couldn't open it then fail out
 		if(directory == NULL){
-			sprintf(stderr, "Fatal internal build system error - invalid directory %s detected", path_name);
+			fprintf(stderr, "Fatal internal build system error - invalid directory %s detected", path_name);
 			exit(1);
 		}
 
