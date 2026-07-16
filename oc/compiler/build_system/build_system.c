@@ -36,8 +36,20 @@ static inline void print_build_system_message(error_message_type_t message, char
 }
 
 
-static inline u_int8_t search_for_module(const char* initial_directory, char* module_name, dynamic_string_t* file_to_import){
-	//TODO INITIAL SYMTAB LOOKUP
+//TODO EFFICIENTLY TOKENIZE ONLY THE FIRST 3 TOKENS IN OUR SEARCH
+
+static inline u_int8_t search_for_module(const char* initial_directory, dynamic_string_t* module_name, dynamic_string_t* file_to_import){
+	/**
+	 * First step in our search - hit the module symtab and see if we can find anything in
+	 * there. If we can, we save ourselves the trouble of searching the file system
+	 */
+	symtab_module_record_t* found_module = lookup_module(module_symtab, module_name);
+
+	//TODO MORE WITH THIS - but for now we'll just declare success
+	if(found_module != NULL){
+		printf("FOUND IN SYMTAB\n\n");
+		return SUCCESS;
+	}
 
 
 	return FAILURE;
@@ -78,7 +90,7 @@ static u_int8_t parse_import_statement(ollie_token_stream_t* stream, char* curre
 			 * Let the helper go through and search our local directory for this module. If we can't
 			 * find it, then we have an issue and we throw an error
 			 */
-			if(search_for_module("./", lookahead->lexeme.string, file_to_import) == FAILURE){
+			if(search_for_module("./", &(lookahead->lexeme), file_to_import) == FAILURE){
 				sprintf(build_system_info, "Module \"%s\" could not be found anywhere under the local directory", lookahead->lexeme.string);
 				print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
 				num_build_system_errors++;
@@ -124,7 +136,7 @@ static u_int8_t parse_import_statement(ollie_token_stream_t* stream, char* curre
 			 * Now let the helper go through and search our local directory for this module. If we can't
 			 * find it, then we have an issue and we throw an error
 			 */
-			if(search_for_module(OLLIE_LIBRARY_DIRECTORY, lookahead->lexeme.string, file_to_import) == FAILURE){
+			if(search_for_module(OLLIE_LIBRARY_DIRECTORY, &(lookahead->lexeme), file_to_import) == FAILURE){
 				sprintf(build_system_info, "Module \"%s\" could not be found anywhere under the local directory", lookahead->lexeme.string);
 				print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
 				num_build_system_errors++;
