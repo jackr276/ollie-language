@@ -17,6 +17,9 @@
 //We will maintain an overall module symtab to avoid duplicate searches
 module_symtab_t* module_symtab = NULL;
 
+//Static string buffer for any error messages that we print
+static char build_system_info[ERROR_SIZE];
+
 //Keep track of the error and warning counts
 static u_int32_t num_build_system_errors = 0;
 static u_int32_t num_build_system_warnings = 0;
@@ -43,8 +46,31 @@ static inline void print_build_system_message(error_message_type_t message, char
  *
  * Returns SUCCESS if this worked, FAILURE if not. We will also be populating the pre-allocated "file_to_import" buffer
  * with the full path of our filename for the caller to process
+ *
+ * NOTE: by the time that we get here we have already seen the "$import" token
  */
-static u_int8_t parse_import_statement(ollie_token_stream_t* stream, dynamic_string_t* file_name, int32_t* current_index){
+static u_int8_t parse_import_statement(ollie_token_stream_t* stream, char* current_file_name, dynamic_string_t* file_to_import, int32_t* current_index){
+	//Get the next value in the stream
+	lexitem_t* lookahead = token_array_get_pointer_at(&(stream->token_stream), *current_index);
+	(*current_index)++;
+
+	/**
+	 * We can see either "file_name" or <file_name> here. Anything else is
+	 * bad and will lead us to fail out
+	 */
+	switch(lookahead->tok){
+		case STR_CONST:
+			break;
+
+		case L_THAN:
+			break;
+
+		default:
+			sprintf(build_system_info, "Expected \"file_name\" or <file_name> after $import keyword but saw %s instead", lexitem_to_string(lookahead));
+			print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
+			num_build_system_errors++;
+			return FAILURE;
+	}
 
 	//DUMMY
 	return FAILURE;
