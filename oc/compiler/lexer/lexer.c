@@ -534,7 +534,7 @@ static inline void add_lexitem_to_stream(ollie_token_stream_t* stream, lexitem_t
  *
  * This function will also add said value into the stream itself
  */
-static inline void add_identifier_or_keyword_to_stream(ollie_token_stream_t* stream, dynamic_string_t lexeme, u_int32_t line_number){
+static inline void add_identifier_or_keyword_to_stream(ollie_token_stream_t* stream, dynamic_string_t* lexeme, u_int32_t line_number){
 	//Stack allocate
 	lexitem_t lex_item;
 
@@ -548,7 +548,7 @@ static inline void add_identifier_or_keyword_to_stream(ollie_token_stream_t* str
 
 	//Let's see if we have a keyword here
 	for(u_int32_t i = 0; i < KEYWORD_COUNT; i++){
-		if(strcmp(keyword_array[i], lexeme.string) == 0){
+		if(strcmp(keyword_array[i], lexeme->string) == 0){
 			//For true/false, we can convert them into the kind of constant we want off the bat
 			switch(tok_array[i]){
 				case TRUE_CONST:
@@ -577,7 +577,7 @@ static inline void add_identifier_or_keyword_to_stream(ollie_token_stream_t* str
 					//We can get out of here
 					lex_item.tok = tok_array[i];
 					//Store the lexeme in here
-					lex_item.lexeme = lexeme;
+					lex_item.lexeme = *lexeme;
 
 					//Add it into the stream
 					add_lexitem_to_stream(stream, lex_item);
@@ -591,7 +591,7 @@ static inline void add_identifier_or_keyword_to_stream(ollie_token_stream_t* str
 	//Set the type here
 	lex_item.tok = IDENT;
 	//Store the lexeme in here
-	lex_item.lexeme = lexeme;
+	lex_item.lexeme = *lexeme;
 
 	//Add it into the stream
 	add_lexitem_to_stream(stream, lex_item);
@@ -601,6 +601,80 @@ static inline void add_identifier_or_keyword_to_stream(ollie_token_stream_t* str
 }
 
 
+/**
+ * Determines if an identifier is a keyword or some user-written identifier
+ *
+ * This function will also add said value into the token array itself
+ */
+static inline void add_identifier_or_keyword_to_token_array(lexitem_t tokens[2], dynamic_string_t* lexeme, int32_t* current_index, u_int32_t line_number){
+	//Stack allocate
+	lexitem_t lex_item;
+
+	//By default we don't want to ignore
+	lex_item.ignore = FALSE;
+
+	//Assign our line number;
+	lex_item.line_num = line_number;
+	//Wipe this out too
+	lex_item.constant_values.signed_long_value = 0;
+
+	//Let's see if we have a keyword here
+	for(u_int32_t i = 0; i < KEYWORD_COUNT; i++){
+		if(strcmp(keyword_array[i], lexeme->string) == 0){
+			//For true/false, we can convert them into the kind of constant we want off the bat
+			switch(tok_array[i]){
+				case TRUE_CONST:
+					lex_item.tok = BYTE_CONST_FORCE_U;
+					//Set the byte value
+					lex_item.constant_values.unsigned_byte_value = 1;
+
+					//Add to the token array
+					tokens[*current_index] = lex_item;
+					(*current_index)++;
+
+					//And leave
+					return;
+				
+				case FALSE_CONST:
+					lex_item.tok = BYTE_CONST_FORCE_U;
+					//Set the byte value
+					lex_item.constant_values.unsigned_byte_value = 0;
+
+					//Add to the token array
+					tokens[*current_index] = lex_item;
+					(*current_index)++;
+
+					//And leave
+					return;
+
+				default:
+					//We can get out of here
+					lex_item.tok = tok_array[i];
+					//Store the lexeme in here
+					lex_item.lexeme = *lexeme;
+
+					//Add to the token array
+					tokens[*current_index] = lex_item;
+					(*current_index)++;
+
+					//And leave
+					return;
+			}
+		}
+	}
+	
+	//Set the type here
+	lex_item.tok = IDENT;
+	//Store the lexeme in here
+	lex_item.lexeme = *lexeme;
+
+	//Add to the token array
+	tokens[*current_index] = lex_item;
+	(*current_index)++;
+
+	//And leave
+	return;
+}
 
 
 /**
@@ -1350,7 +1424,7 @@ static u_int8_t tokenize_first_2(FILE* fl, lexitem_t tokens[2], u_int8_t silent_
 				} else {
 					PUT_BACK_CHAR(fl);
 					//Let the helper do the work and add to the stream
-					add_identifier_or_keyword_to_stream(stream, lexeme, line_number);
+					add_identifier_or_keyword_to_token_array(tokens, &lexeme, &current_token_index, line_number);
 
 					//IMPORTANT - reset the state here
 					current_state = IN_START;
@@ -2395,7 +2469,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream, u_in
 				} else {
 					PUT_BACK_CHAR(fl);
 					//Let the helper do the work and add to the stream
-					add_identifier_or_keyword_to_stream(stream, lexeme, line_number);
+					add_identifier_or_keyword_to_stream(stream, &lexeme, line_number);
 
 					//IMPORTANT - reset the state here
 					current_state = IN_START;
@@ -2786,10 +2860,13 @@ u_int8_t get_first_2_tokens(lexitem_t tokens[2], char* current_file_name, u_int8
 		return FAILURE;
 	}
 
+	//TODO FIX ME
 
 	//Once we're done, we close the file
 	fclose(fl);
 
+	//If we get here then it worked
+	return SUCCESS;
 }
 
 

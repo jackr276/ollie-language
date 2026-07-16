@@ -8,9 +8,6 @@
 #ifndef OLLIE_COMPILER_CONSTANTS_H
 #define OLLIE_COMPILER_CONSTANTS_H
 
-//Ollie's general library must always be located here
-static const char* OLLIE_LIBRARY_DIRECTORY = "/usr/lib/ollie/";
-
 #define TRUE 1
 #define FALSE 0
 

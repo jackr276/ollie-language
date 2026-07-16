@@ -11,6 +11,9 @@
 #include <string.h>
 #include <sys/types.h>
 
+//Ollie's general library must always be located here
+static const char* OLLIE_LIBRARY_DIRECTORY = "/usr/lib/ollie/";
+
 //Helper that will let us initialize a wiped out version
 #define INITIALIZE_BLANK_BUILD_SYSTEM_RESULTS {NULL, BUILD_SYSTEM_STATUS_FAILURE}
 
