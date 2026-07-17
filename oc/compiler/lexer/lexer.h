@@ -57,7 +57,7 @@ struct ollie_token_stream_t {
  * So if we're only looking for module names, we only really need to look at the first 2 if we're
  * doing a quick search
  */
-u_int8_t get_first_2_tokens(lexitem_t tokens[2], char* current_file_name, u_int8_t silent_mode);
+u_int8_t get_first_2_tokens(ollie_token_stream_t* stream, char* current_file_name, u_int8_t silent_mode);
 
 /**
  * Tokenzie an entire file and return a token
