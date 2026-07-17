@@ -25,6 +25,9 @@ module_symtab_t* module_symtab = NULL;
 //Static string buffer for any error messages that we print
 static char build_system_info[ERROR_SIZE];
 
+//Declare a reusable token stream for file seraching to avoid constant reallocating
+static ollie_token_stream_t reusable_file_searching_stream;
+
 //Keep track of the error and warning counts
 static u_int32_t num_build_system_errors = 0;
 static u_int32_t num_build_system_warnings = 0;
@@ -42,23 +45,24 @@ static inline void print_build_system_message(error_message_type_t message, char
 
 //TODO
 static inline u_int8_t does_file_match_module(char* file_name, dynamic_string_t* module_name, u_int8_t silent_mode){
-	//We only need the first two tokens for this initial search
-	lexitem_t tokens[2];
+	//We have a reusable token stream - all we need to do to use it is reset it
+	reset_token_stream(&reusable_file_searching_stream);
 
 	//Attempt to extract the first 2 tokens
-	u_int8_t success = get_first_2_tokens(tokens, file_name, silent_mode);
+	u_int8_t success = get_first_2_tokens(&reusable_file_searching_stream, file_name, silent_mode);
 
 	/**
 	 * We immediately exit the compiler if this happens - means that somehow
 	 * somewhere a dependency file is corrupted
 	 */
-	if(success == FAILURE){
+	if(success == FAILURE || reusable_file_searching_stream.status == STREAM_STATUS_FAILURE){
 		fprintf(stderr, "Fatal internal compiler error: the file %s could not be tokenized. It is likely that you have a corrupted dependency file", file_name);
 		exit(1);
 	}
 
-	//Is this even a module file at all? If not just leave
-	if(tokens[0].tok != MODULE){
+	//Get the first token. If it's not the $module directive, we can leave now
+	lexitem_t* cursor = token_array_get_pointer_at(&(reusable_file_searching_stream.token_stream), 0);
+	if(cursor->tok != MODULE){
 		return FAILURE;
 	}
 
@@ -437,6 +441,9 @@ build_system_results_t parse_dependencies_and_construct_token_stream(compiler_op
 	//Allocate the module symtab first
 	module_symtab = module_symtab_alloc();
 
+	//We'll need this for searching files with the first 2 tokens methodology
+	reusable_file_searching_stream = token_stream_alloc();
+
 	/**
 	 * The actual main file itself is all that the user provides here. The build system will
 	 * then crawl through the dependencies in the main file and each of those files recursively
@@ -446,6 +453,9 @@ build_system_results_t parse_dependencies_and_construct_token_stream(compiler_op
 
 	//Let the helper go out and parse through the main file and its dependencies
 	build_system_results_t results = handle_main_file_tokenization(main_file_name, silent_mode);
+
+	//Destroy the reusable file searcher stream now that we're done
+	destroy_token_stream(&reusable_file_searching_stream);	
 
 	return results;
 }

@@ -74,6 +74,11 @@ ollie_token_stream_t tokenize(char* current_file_name, u_int8_t silent_mode);
 ollie_token_stream_t token_stream_alloc();
 
 /**
+ * Reset the token stream back to its defaults
+ */
+void reset_token_stream(ollie_token_stream_t* stream);
+
+/**
  * Deallocate the entire token stream
  */
 void destroy_token_stream(ollie_token_stream_t* stream);

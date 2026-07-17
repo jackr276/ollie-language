@@ -1901,6 +1901,19 @@ ollie_token_stream_t token_stream_alloc(){
 
 
 /**
+ * Reset the token stream back to its defaults
+ */
+void reset_token_stream(ollie_token_stream_t* stream){
+	//Clear the array out first
+	clear_token_array(&(stream->token_stream));
+
+	//Now wipe out the token pointer and status
+	stream->token_pointer = 0;
+	stream->status = STREAM_STATUS_FAILURE;
+}
+
+
+/**
  * Deallocate the entire token stream. In reality this
  * just means freeing the array
  */

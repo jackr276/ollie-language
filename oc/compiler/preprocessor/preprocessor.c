@@ -44,7 +44,7 @@ static u_int8_t print_irs = FALSE;
 static lex_stack_t* paren_grouping_stack;
 
 //Predeclaration in case it's needed in non-linear order
-static inline u_int8_t perform_macro_substitution(macro_symtab_t* macro_symtab, ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro);
+static inline u_int8_t perform_macro_substitution(macro_symtab_t* macro_symtab, ollie_token_array_t* target_array, ollie_token_array_t* old_array, int32_t* old_token_array_index, symtab_macro_record_t* macro);
 
 
 /**
@@ -106,7 +106,7 @@ static inline ollie_token_t pop_token_and_update_nesting_level(lex_stack_t* pare
  * Simple helper that just wraps the token_array_get_pointer_at and takes care of the index bumping
  * for us
  */
-static inline lexitem_t* get_next_token_pointer(ollie_token_array_t* array, u_int32_t* index){
+static inline lexitem_t* get_next_token_pointer(ollie_token_array_t* array, int32_t* index){
 	//Extract the token pointer
 	lexitem_t* token_pointer = token_array_get_pointer_at(array, *index);
 
@@ -124,7 +124,7 @@ static inline lexitem_t* get_next_token_pointer(ollie_token_array_t* array, u_in
 /**
  * "Push back" a token by decrementing the index, and return the prior token
  */
-static inline lexitem_t* push_back_token_pointer(ollie_token_array_t* array, u_int32_t* index){
+static inline lexitem_t* push_back_token_pointer(ollie_token_array_t* array, int32_t* index){
 	//Decrement it
 	(*index)--;
 
@@ -145,7 +145,7 @@ static inline lexitem_t* push_back_token_pointer(ollie_token_array_t* array, u_i
  *
  * NOTE: By the time we get here, we have already seen the opening L_PAREN
  */
-static inline u_int8_t process_macro_parameter(symtab_macro_record_t* macro, ollie_token_array_t* token_array, u_int32_t* index){
+static inline u_int8_t process_macro_parameter(symtab_macro_record_t* macro, ollie_token_array_t* token_array, int32_t* index){
 	//Get the next token
 	lexitem_t* lookahead = get_next_token_pointer(token_array, index);
 
@@ -170,7 +170,7 @@ static inline u_int8_t process_macro_parameter(symtab_macro_record_t* macro, oll
 
 	//If we make it here then we know that we got a valid ident token as a parameter, but we don't know if it's a duplicate
 	//or not. We will check now
-	for(u_int32_t i = 0; i < macro->parameters.current_index; i++){
+	for(int32_t i = 0; i < macro->parameters.current_index; i++){
 		//Extract the macro token
 		lexitem_t* token = token_array_get_pointer_at(&(macro->parameters), i);
 
@@ -196,7 +196,7 @@ static inline u_int8_t process_macro_parameter(symtab_macro_record_t* macro, oll
  * returns in a success state, the index will be pointing to the token after the ENDMACRO
  * token
  */
-static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macro_symtab, u_int32_t* index) {
+static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macro_symtab, int32_t* index) {
 	//The macro parameter count(set to 0 at first)
 	u_int32_t macro_parameter_count = 0;
 
@@ -409,7 +409,7 @@ finalize_macro:
  * NOTE: by the time we get here we have already seen the OUNIT token but we have not properly
  * consumed it. We will do that here
  */
-static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, u_int32_t* stream_index){
+static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, int32_t* stream_index){
 	//Extract the token at the given index
 	lexitem_t* token = get_next_token_pointer(&(stream->token_stream), stream_index);
 
@@ -529,7 +529,7 @@ static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, 
  *
  * $import <str_const>;
  */
-static u_int8_t validate_and_skip_import_directive(ollie_token_stream_t* stream, u_int32_t* stream_index){
+static u_int8_t validate_and_skip_import_directive(ollie_token_stream_t* stream, int32_t* stream_index){
 	//First grab the original token. This should be the using keyword
 	lexitem_t* token = token_array_get_pointer_at(&(stream->token_stream), *stream_index);
 	(*stream_index)++;
@@ -579,7 +579,7 @@ static u_int8_t validate_and_skip_import_directive(ollie_token_stream_t* stream,
  *
  * $module <ident>;
  */
-static u_int8_t validate_and_skip_module_directive(ollie_token_stream_t* stream, u_int32_t* stream_index){
+static u_int8_t validate_and_skip_module_directive(ollie_token_stream_t* stream, int32_t* stream_index){
 	//First grab the original token. This should be the using keyword
 	lexitem_t* token = token_array_get_pointer_at(&(stream->token_stream), *stream_index);
 	(*stream_index)++;
@@ -640,7 +640,7 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 	u_int8_t result;
 
 	//Keep track of the current array index
-	u_int32_t array_index = 0;
+	int32_t array_index = 0;
 
 	//Initially we are at the top of the file - we stay here until we see the first thing that isn't "import" or "module"
 	u_int8_t in_top_of_file = TRUE;
@@ -779,7 +779,7 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
  * NOTE: by the time we are in here, the grouping stack will be at nesting level 1 because we've already seen the open paren. To avoid
  * improperly exiting, we will not exit if we see a comma/closing paren unless we are at nesting level 1
  */
-static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symtab, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, ollie_token_array_t* target_array, u_int32_t* nesting_level){
+static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symtab, ollie_token_array_t* old_array, int32_t* old_token_array_index, ollie_token_array_t* target_array, u_int32_t* nesting_level){
 	//Allocate the target array
 	*target_array = token_array_alloc_initial_size(PARAM_SUB_ARRAY_INIT_SIZE);
 
@@ -927,7 +927,7 @@ static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symt
  * This expanded version will be created and stored in a token array, then that array will be copy-pasted in place of 
  * the macro call site above
  */
-static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab, ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro){
+static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab, ollie_token_array_t* target_array, ollie_token_array_t* old_array, int32_t* old_token_array_index, symtab_macro_record_t* macro){
 	//Store how many parameters this macro has
 	const u_int32_t parameter_count = macro->parameters.current_index;
 
@@ -1057,7 +1057,7 @@ parameter_list_end:
 	 * the macro. We will run through all of the macro's tokens, and use the built up parameter token arrays
 	 * to replace the appropriate parameters whenever we see them
 	 */
-	for(u_int32_t i = 0; i < macro->tokens.current_index; i++){
+	for(int32_t i = 0; i < macro->tokens.current_index; i++){
 		//Grab the pointer to this token
 		lexitem_t* token_pointer = token_array_get_pointer_at(&(macro->tokens), i);
 
@@ -1071,7 +1071,7 @@ parameter_list_end:
 			ollie_token_array_t param_replacement = parameter_subsitutions[token_pointer->constant_values.parameter_number];
 
 			//Run through the entire array and add it in
-			for(u_int32_t j = 0; j < param_replacement.current_index; j++){
+			for(int32_t j = 0; j < param_replacement.current_index; j++){
 				//Extract it
 				lexitem_t* param_token = token_array_get_pointer_at(&param_replacement, j);
 
@@ -1099,9 +1099,8 @@ parameter_list_end:
  * when we know that there are no parameters
  */
 static inline u_int8_t perform_non_parameterized_substitution(ollie_token_array_t* target_array, symtab_macro_record_t* macro){
-	//Run through all of the tokens in this macro, and splice them over into
-	//the target macro
-	for(u_int32_t i = 0; i < macro->tokens.current_index; i++){
+	//Run through all of the tokens in this macro, and splice them over into the target macro
+	for(int32_t i = 0; i < macro->tokens.current_index; i++){
 		//Get a a pointer to this token
 		lexitem_t* token_pointer = token_array_get_pointer_at(&(macro->tokens), i);
 
@@ -1120,7 +1119,7 @@ static inline u_int8_t perform_non_parameterized_substitution(ollie_token_array_
  *
  * NOTE: By the time that we get here, we've already seen the macro name and know that this macro does in fact exist
  */
-static inline u_int8_t perform_macro_substitution(macro_symtab_t* macro_symtab, ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro){
+static inline u_int8_t perform_macro_substitution(macro_symtab_t* macro_symtab, ollie_token_array_t* target_array, ollie_token_array_t* old_array, int32_t* old_token_array_index, symtab_macro_record_t* macro){
 	//Does this macro have parameters? If it does not, we are going to perform a regular pass
 	if(macro->parameters.current_index == 0){
 		return perform_non_parameterized_substitution(target_array, macro);
@@ -1153,7 +1152,7 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 	ollie_token_array_t new_token_array = token_array_alloc();
 
 	//The index into the old token array
-	u_int32_t old_token_array_index = 0;
+	int32_t old_token_array_index = 0;
 
 	//So long as we're within the acceptable bounds of the array
 	while(old_token_array_index < old_token_array->current_index){
