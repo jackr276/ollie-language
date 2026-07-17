@@ -88,15 +88,15 @@ int main(int argc, char** argv){
 		printf("============ CONSUMING FIRST 2 TEST =======================\n");
 
 		//Try grabbing out the first 2
-		lexitem_t first_2[2];
-		get_first_2_tokens(first_2, file_name, FALSE);
+		ollie_token_stream_t first_2 = token_stream_alloc();
+		get_first_2_tokens(&first_2, file_name, FALSE);
 
 		//Print these 
 		printf("FIRST TOKEN:");
-		print_token(&(first_2[0]));
+		print_token(token_array_get_pointer_at(&(first_2.token_stream), 0));
 
 		printf("SECOND TOKEN:");
-		print_token(&(first_2[1]));
+		print_token(token_array_get_pointer_at(&(first_2.token_stream), 1));
 
 		printf("=============== DONE ====================\n");
 

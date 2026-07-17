@@ -690,7 +690,7 @@ void reset_stream_to_given_index(ollie_token_stream_t* stream, u_int32_t reconsu
  */
 lexitem_t get_next_token(ollie_token_stream_t* stream, u_int32_t* parser_line_number){
 	//Grab the current token index
-	u_int32_t token_index = stream->token_pointer;
+	int32_t token_index = stream->token_pointer;
 
 	//Safe to read here
 	if(token_index < stream->token_stream.current_index){
@@ -1876,12 +1876,27 @@ ollie_token_stream_t tokenize(char* current_file_name, u_int8_t silent_mode){
 void print_token_array(ollie_token_array_t* array){
 	printf("========== Token Array =============\n");
 
-	for(u_int32_t i = 0; i < array->current_index; i++){
+	for(int32_t i = 0; i < array->current_index; i++){
 		lexitem_t* item = token_array_get_pointer_at(array, i);
 		printf("%d.] %s\n", i, lexitem_to_string(item));
 	}
 
 	printf("========== Token Array =============\n");
+}
+
+
+/**
+ * Allocate a token stream struct on the stack and return by copy
+ */
+ollie_token_stream_t token_stream_alloc(){
+	ollie_token_stream_t stream;
+
+	//The underlying token array itself also needs allocation
+	stream.token_stream = token_array_alloc();
+	stream.token_pointer = 0;
+	stream.status = STREAM_STATUS_FAILURE;
+
+	return stream;
 }
 
 

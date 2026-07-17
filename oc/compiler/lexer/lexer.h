@@ -69,6 +69,11 @@ u_int8_t get_first_2_tokens(ollie_token_stream_t* stream, char* current_file_nam
 ollie_token_stream_t tokenize(char* current_file_name, u_int8_t silent_mode);
 
 /**
+ * Allocate a token stream struct on the stack and return by copy
+ */
+ollie_token_stream_t token_stream_alloc();
+
+/**
  * Deallocate the entire token stream
  */
 void destroy_token_stream(ollie_token_stream_t* stream);
