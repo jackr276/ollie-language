@@ -109,6 +109,21 @@ static inline char* get_file_extension(char* file){
 }
 
 
+/**
+ * Parse a fully qualified file name to get the directory. If
+ * no '/' is ever found, we return "." as the directory name
+ */
+static inline char* get_directory(char* file){
+	//Get the length to know where the end is
+	int32_t length = strlen(file);
+
+	//TODO NOT DONE
+
+	//We didn't find the / - so give back "." as the directory
+	return ".";
+}
+
+
 
 /**
  * Traverse a directory and recursively search for a module by tokenizing
@@ -116,9 +131,10 @@ static inline char* get_file_extension(char* file){
  * we come across a directory, we will recursively search the directory
  * as well
  *
- * TODO NEED A WAY OF GIVING BACK THE FILE
+ * If we do find the file, we will place it inside of the "dependency_file" string
+ * that is passed in preallocated and return success
  */
-static u_int8_t traverse_and_search_for_module_rec(char* path_name, dynamic_string_t* module_name, u_int8_t silent_mode){
+static u_int8_t traverse_and_search_for_module_rec(char* dependency_file, char* path_name, dynamic_string_t* module_name, u_int8_t silent_mode){
 	//Storage for new file paths
 	char new_path[FILENAME_MAX];
 
@@ -147,7 +163,14 @@ static u_int8_t traverse_and_search_for_module_rec(char* path_name, dynamic_stri
 		 * this file. Anything else we ignore it and move on
 		 */
 		if(file_extension != NULL && strcmp(file_extension, ".ol") == 0){
-			return does_file_match_module(path_name, module_name, silent_mode);
+			//If they do match, we need to copy the path name into the dependency_file buffer
+			if(does_file_match_module(path_name, module_name, silent_mode) == TRUE){
+				strncpy(dependency_file, path_name, FILENAME_MAX);
+				return SUCCESS;
+
+			} else {
+				return FAILURE;
+			}
 
 		//Not a .ol file, we won't even bother searching
 		} else {
@@ -183,12 +206,10 @@ static u_int8_t traverse_and_search_for_module_rec(char* path_name, dynamic_stri
 			snprintf(new_path, FILENAME_MAX, "%s/%s", path_name, directory_entry->d_name);
 
 			//Recursively call into here to do this
-			u_int8_t result = traverse_and_search_for_module_rec(new_path, module_name, silent_mode);
+			u_int8_t result = traverse_and_search_for_module_rec(dependency_file, new_path, module_name, silent_mode);
 
 			//If we found it - we will not go on any further - just exit out now - we do not need to go farther
 			if(result == SUCCESS){
-				printf("MODULE %s FOUND IN FILE %s\n", module_name->string, new_path);
-
 				return SUCCESS;
 			}
 		}
@@ -211,7 +232,7 @@ static u_int8_t traverse_and_search_for_module_rec(char* path_name, dynamic_stri
  * insert the record into the module symtab for future go arounds. We will also fully tokenize the module and give
  * it a proper dependency graph node
  */
-static inline dependency_graph_node_t* find_module(char* initial_directory, dynamic_string_t* module_name, dynamic_string_t* file_to_import, u_int8_t silent_mode){
+static inline dependency_graph_node_t* find_module(char* initial_directory, dynamic_string_t* module_name, u_int8_t silent_mode){
 	/**
 	 * First step in our search - hit the module symtab and see if we can find anything in
 	 * there. If we can, we save ourselves the trouble of searching the file system
@@ -231,7 +252,15 @@ static inline dependency_graph_node_t* find_module(char* initial_directory, dyna
 	 * for it inside of the given initial directory using a recursive
 	 * directory search
 	 */
-	traverse_and_search_for_module_rec(initial_directory, module_name, silent_mode);
+	char depedency_file[FILENAME_MAX];
+	u_int8_t found = traverse_and_search_for_module_rec(depedency_file, initial_directory, module_name, silent_mode);
+
+	//Could not find it so get out
+	if(found == FALSE){
+		return NULL;
+	}
+
+	printf("DEPENDENCY %s IS IN FILE %s\n\n", module_name->string, depedency_file);
 
 
 	return NULL;
@@ -253,7 +282,7 @@ static inline dependency_graph_node_t* find_module(char* initial_directory, dyna
  *
  * TODO WHAT ARE WE DOING WITH THIS FILE TO IMPORT??? - we need to return a dependency graph node
  */
-static u_int8_t parse_import_statement(ollie_token_stream_t* stream, char* current_file_name, dynamic_string_t* file_to_import, int32_t* current_index, u_int8_t silent_mode){
+static dependency_graph_node_t* parse_import_statement_and_get_dependency(ollie_token_stream_t* stream, char* main_file_directory, char* current_file_name, int32_t* current_index, u_int8_t silent_mode){
 	//Get the next value in the stream
 	lexitem_t* lookahead = token_array_get_pointer_at(&(stream->token_stream), *current_index);
 	(*current_index)++;
@@ -275,9 +304,7 @@ static u_int8_t parse_import_statement(ollie_token_stream_t* stream, char* curre
 			 * Let the helper go through and search our local directory for this module. If we can't
 			 * find it, then we have an issue and we throw an error
 			 */
-
-			//TODO BAD - WE SHOULD BE SEARCHING IN THE DIRECTORY OF THE MAIN FILE NOT IN "."
-			found_module_dependency = find_module(".", &(lookahead->lexeme), file_to_import, silent_mode);
+			found_module_dependency = find_module(main_file_directory, &(lookahead->lexeme), silent_mode);
 
 			//Fail out if we don't have it
 			if(found_module_dependency == NULL){
@@ -326,7 +353,7 @@ static u_int8_t parse_import_statement(ollie_token_stream_t* stream, char* curre
 			 * Now let the helper go through and search our local directory for this module. If we can't
 			 * find it, then we have an issue and we throw an error
 			 */
-			found_module_dependency = find_module(OLLIE_LIBRARY_DIRECTORY, &(lookahead->lexeme), file_to_import, silent_mode);
+			found_module_dependency = find_module(OLLIE_LIBRARY_DIRECTORY, &(lookahead->lexeme), silent_mode);
 
 			if(found_module_dependency == NULL){
 				sprintf(build_system_info, "Module \"%s\" could not be found anywhere under the local directory", lookahead->lexeme.string);
@@ -393,6 +420,9 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_name
 	//Let's first tokenize the main file
 	ollie_token_stream_t stream = tokenize(main_file_name, silent_mode);
 
+	//Get the directory of the main file only - this is what we search under
+	char* main_file_directory = get_directory(main_file_name);
+
 	/**
 	 * If tokenizing failed there's no point in going further.
 	 * We fail out here and don't even bother returning anything
@@ -438,9 +468,6 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_name
 	int32_t current_token_index = 0;
 	lexitem_t* lookahead;
 
-	//We will reuse the file name - remember that the module record creator will clone this each time
-	dynamic_string_t dependency_file_name = dynamic_string_alloc();
-
 	//Run through the top of the file and process until we're done seeing imports
 	while(TRUE){
 		lexitem_t* lookahead = token_array_get_pointer_at(&(stream.token_stream), current_token_index);
@@ -452,22 +479,17 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_name
 		}
 
 		/**
-		 * Otherwise we have seen an import statement. We will need to parse
-		 * it and determine, through a file search, what the module is that we
-		 * are after here
+		 * Let the helper find and possible create the dependency graph node from our
+		 * import statement
 		 */
-		clear_dynamic_string(&dependency_file_name);
-		u_int8_t result = parse_import_statement(&stream, main_file_name, &dependency_file_name, &current_token_index, silent_mode);
-		if(result == FAILURE){
+		dependency_graph_node_t* dependency = parse_import_statement_and_get_dependency(&stream, main_file_directory, main_file_name, &current_token_index, silent_mode);
+		if(dependency == NULL){
 			print_build_system_message(MESSAGE_TYPE_ERROR, "Invalid $import directive found in file. Please review and recompile", main_file_name, 0);
 			num_build_system_errors++;
 			results.status = BUILD_SYSTEM_STATUS_FAILURE; 
 			return results;
 		}
 	}
-
-	//Scrap this now that we're done
-	dynamic_string_dealloc(&dependency_file_name);
 
 	//TODO MORE HERE WITH DEPENDENCIES
 
