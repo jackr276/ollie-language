@@ -79,7 +79,6 @@ static inline u_int8_t does_file_match_module(char* file_name, dynamic_string_t*
 		return FAILURE;
 	}
 
-
 	//Now all that's left is to see if these match up
 	return (dynamic_strings_equal(&(cursor->lexeme), module_name) == TRUE) ? SUCCESS : FAILURE;
 }
@@ -180,7 +179,6 @@ static u_int8_t traverse_and_search_for_module_rec(char* path_name, dynamic_stri
 				continue;
 			}
 
-			printf("SEARCHING %s\n", path_name);
 			//Construct the new filename path here for our directory/file
 			snprintf(new_path, FILENAME_MAX, "%s/%s", path_name, directory_entry->d_name);
 

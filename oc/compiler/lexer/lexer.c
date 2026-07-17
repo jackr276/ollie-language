@@ -1821,6 +1821,13 @@ u_int8_t get_first_2_tokens(ollie_token_stream_t* stream, char* current_file_nam
 	//Once we're done, we close the file
 	fclose(fl);
 
+	//Set the stream status here
+	if(result == SUCCESS){
+		stream->status = STREAM_STATUS_SUCCESS;
+	} else {
+		stream->status = STREAM_STATUS_FAILURE;
+	}
+
 	//Return whatever result we got
 	return result;
 }
