@@ -730,8 +730,11 @@ void push_back_token(ollie_token_stream_t* stream, u_int32_t* parser_line_number
  * Generate all of the ollie tokens and store them in the stream. When
  * this function returns, we will either have a good stream with everything
  * needed in it or a stream in an error state
+ *
+ * The stop_after parameter will allow us to stop searcing after we've seen a certain number
+ * of tokens. The caller may pass in -1 in order to say that we want to go all the way
  */
-static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream, u_int8_t silent_mode){
+static u_int8_t generate_tokens(FILE* fl, ollie_token_stream_t* stream, int32_t stop_after, u_int8_t silent_mode){
 	//Start the line number off at 1
 	u_int32_t line_number = 1;
 
@@ -760,8 +763,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream, u_in
 	 */
 	dynamic_string_t numeric_lexeme = dynamic_string_alloc();
 
-	//For eventual use down the road. We will not allocate here because this
-	//is not always needed
+	//For eventual use down the road. We will not allocate here because this is not always needed
 	dynamic_string_t lexeme;
 
 	//Have we seen a hex? Assume no by default
@@ -769,6 +771,16 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream, u_in
 
 	//We'll run through character by character until we hit EOF
 	while((ch = GET_NEXT_CHAR(fl)) != EOF){
+		/**
+		 * If we have a request to stop after a certain number of tokens
+		 * and our current index now equals that stop after amount(remember
+		 * 0 based for the index vs. 1 based) - we can break out
+		 * and leave the loop
+		 */
+		if(stop_after > 0 && stream->token_stream.current_index == stop_after){
+			break;
+		}
+
 		switch(current_state){
 			case IN_START:
 				//Reset the seen_hex flag since we're now in the start state
@@ -1763,8 +1775,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream, u_in
 		}
 	}
 
-	//Once we get down here, it is safe for us to free the numeric lexeme because we do not
-	//need it anymore
+	//Once we get down here, it is safe for us to free the numeric lexeme because we do not need it anymore
 	dynamic_string_dealloc(&numeric_lexeme);
 
 	//Return this token
@@ -1805,7 +1816,7 @@ u_int8_t get_first_2_tokens(ollie_token_stream_t* stream, char* current_file_nam
 	}
 
 	//Let the helper go in and tokenize the first 2 tokens
-	u_int8_t result = tokenize_first_2(fl, tokens, silent_mode);
+	u_int8_t result = generate_tokens(fl, stream, 2, silent_mode);
 
 	//Once we're done, we close the file
 	fclose(fl);
@@ -1846,8 +1857,8 @@ ollie_token_stream_t tokenize(char* current_file_name, u_int8_t silent_mode){
 		return token_stream;
 	}
 
-	//Consume all of the tokens here using the helper
-	u_int8_t result = generate_all_tokens(fl, &token_stream, silent_mode);
+	//Consume all of the tokens here using the helper - pass in -1 to do everything
+	u_int8_t result = generate_tokens(fl, &token_stream, -1, silent_mode);
 
 	//Once we're done, we close the file
 	fclose(fl);
