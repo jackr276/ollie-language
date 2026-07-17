@@ -112,15 +112,30 @@ static inline char* get_file_extension(char* file){
 /**
  * Parse a fully qualified file name to get the directory. If
  * no '/' is ever found, we return "." as the directory name
+ *
+ * The directory name is populated into the directory_buffer
  */
-static inline char* get_directory(char* file){
+static inline void get_directory(char* directory_buffer, char* full_file_name){
 	//Get the length to know where the end is
-	int32_t length = strlen(file);
+	int32_t length = strlen(full_file_name);
+	int32_t end_index = length - 1;
 
-	//TODO NOT DONE
+	//Keep going so long as we don't hit the end
+	while(end_index > 0){
+		/**
+		 * Exit case - we have the first instance of a '/' so
+		 * we will get the entire name up to but not including the slash
+		 */
+		if(full_file_name[end_index] == '/'){
+			snprintf(directory_buffer, end_index + 1, "%s", full_file_name);
+			return;
+		}
+
+		end_index--;
+	}
 
 	//We didn't find the / - so give back "." as the directory
-	return ".";
+	sprintf(directory_buffer, "%s", ".");
 }
 
 
@@ -185,6 +200,8 @@ static u_int8_t traverse_and_search_for_module_rec(char* dependency_file, char* 
 		//Open the directory up first
 		DIR* directory = opendir(path_name);
 
+		printf("SEARCHING DIRECTORY %s\n", path_name);
+
 		//If we couldn't open it then fail out
 		if(directory == NULL){
 			fprintf(stderr, "Fatal internal build system error - invalid directory %s detected", path_name);
@@ -210,9 +227,14 @@ static u_int8_t traverse_and_search_for_module_rec(char* dependency_file, char* 
 
 			//If we found it - we will not go on any further - just exit out now - we do not need to go farther
 			if(result == SUCCESS){
+				//Close before leaving
+				closedir(directory);
 				return SUCCESS;
 			}
 		}
+
+		//If we do make it here make sure we close the directory
+		closedir(directory);
 	} 
 
 	//If we've made it all the way to here, then we found nothing
@@ -413,15 +435,12 @@ static void handle_dependency_file_tokenization(char* file_name, u_int8_t silent
  * The main file is a special case because it may *not* be a module. We will need to
  * validate that the user is not attempting to make this file into a module
  */
-static build_system_results_t handle_main_file_tokenization(char* main_file_name, u_int8_t silent_mode){
+static build_system_results_t handle_main_file_tokenization(char* main_file_directory, char* main_file_name, u_int8_t silent_mode){
 	//Create and initialize our results
 	build_system_results_t results = INITIALIZE_BLANK_BUILD_SYSTEM_RESULTS;
 
 	//Let's first tokenize the main file
 	ollie_token_stream_t stream = tokenize(main_file_name, silent_mode);
-
-	//Get the directory of the main file only - this is what we search under
-	char* main_file_directory = get_directory(main_file_name);
 
 	/**
 	 * If tokenizing failed there's no point in going further.
@@ -526,10 +545,11 @@ build_system_results_t parse_dependencies_and_construct_token_stream(compiler_op
 	 */
 	char* main_file_name = options->file_name;
 
-	//TODO EXTRACT MAIN FILE NAME's DIRECTORY
+	char main_file_directory[FILENAME_MAX];
+	get_directory(main_file_directory, main_file_name);
 
 	//Let the helper go out and parse through the main file and its dependencies
-	build_system_results_t results = handle_main_file_tokenization(main_file_name, silent_mode);
+	build_system_results_t results = handle_main_file_tokenization(main_file_directory, main_file_name, silent_mode);
 
 	//Destroy the reusable file searcher stream now that we're done
 	destroy_token_stream(&reusable_file_searching_stream);	
