@@ -14,7 +14,7 @@
 #include <dirent.h>
 
 //Ollie's general library must always be located here
-static char* OLLIE_LIBRARY_DIRECTORY = "/usr/lib/ollie/";
+static char* OLLIE_LIBRARY_DIRECTORY = "/usr/lib/ollie";
 
 //Helper that will let us initialize a wiped out version
 #define INITIALIZE_BLANK_BUILD_SYSTEM_RESULTS {NULL, BUILD_SYSTEM_STATUS_FAILURE}
@@ -79,9 +79,36 @@ static inline u_int8_t does_file_match_module(char* file_name, dynamic_string_t*
 		return FAILURE;
 	}
 
+
 	//Now all that's left is to see if these match up
 	return (dynamic_strings_equal(&(cursor->lexeme), module_name) == TRUE) ? SUCCESS : FAILURE;
 }
+
+
+/**
+ * Get the file extension of the given filename string. Returns NULL
+ * if no "." can be found
+ */
+static inline char* get_file_extension(char* file){
+	//Get the end to start at
+	int32_t length = strlen(file);
+
+	//The end index that we have
+	int32_t end_index = length - 1;
+
+	//Work our way backwards until we see a dot
+	while(end_index > 0){
+		if(file[end_index] == '.'){
+			return file + end_index;
+		}
+
+		end_index--;
+	}
+
+	//If we got to here then we found nothing
+	return NULL;
+}
+
 
 
 /**
@@ -89,8 +116,13 @@ static inline u_int8_t does_file_match_module(char* file_name, dynamic_string_t*
  * just the first two tokens in each regular *.ol file that we find. If
  * we come across a directory, we will recursively search the directory
  * as well
+ *
+ * TODO NEED A WAY OF GIVING BACK THE FILE
  */
 static u_int8_t traverse_and_search_for_module_rec(char* path_name, dynamic_string_t* module_name, u_int8_t silent_mode){
+	//Storage for new file paths
+	char new_path[FILENAME_MAX];
+
 	//Status struct
 	struct stat status;
 
@@ -109,13 +141,13 @@ static u_int8_t traverse_and_search_for_module_rec(char* path_name, dynamic_stri
 	 */
 	if(S_ISREG(status.st_mode)){
 		//Get the file extension off of this
-		char* file_extension = strchr(path_name, '.');
+		char* file_extension = get_file_extension(path_name);
 
 		/**
 		 * If we have a file extension that is *.ol, we will search
 		 * this file. Anything else we ignore it and move on
 		 */
-		if(file_extension != NULL && strcmp(file_extension, "ol") == 0){
+		if(file_extension != NULL && strcmp(file_extension, ".ol") == 0){
 			return does_file_match_module(path_name, module_name, silent_mode);
 
 		//Not a .ol file, we won't even bother searching
@@ -148,10 +180,19 @@ static u_int8_t traverse_and_search_for_module_rec(char* path_name, dynamic_stri
 				continue;
 			}
 
-			//TODO RECURSIVE CALL
-			//
-			//TODO EXIT CONDITION
+			printf("SEARCHING %s\n", path_name);
+			//Construct the new filename path here for our directory/file
+			snprintf(new_path, FILENAME_MAX, "%s/%s", path_name, directory_entry->d_name);
 
+			//Recursively call into here to do this
+			u_int8_t result = traverse_and_search_for_module_rec(new_path, module_name, silent_mode);
+
+			//If we found it - we will not go on any further - just exit out now - we do not need to go farther
+			if(result == SUCCESS){
+				printf("MODULE %s FOUND IN FILE %s\n", module_name->string, new_path);
+
+				return SUCCESS;
+			}
 		}
 	} 
 
@@ -236,7 +277,9 @@ static u_int8_t parse_import_statement(ollie_token_stream_t* stream, char* curre
 			 * Let the helper go through and search our local directory for this module. If we can't
 			 * find it, then we have an issue and we throw an error
 			 */
-			found_module_dependency = find_module("./", &(lookahead->lexeme), file_to_import, silent_mode);
+
+			//TODO BAD - WE SHOULD BE SEARCHING IN THE DIRECTORY OF THE MAIN FILE NOT IN "."
+			found_module_dependency = find_module(".", &(lookahead->lexeme), file_to_import, silent_mode);
 
 			//Fail out if we don't have it
 			if(found_module_dependency == NULL){
@@ -462,6 +505,8 @@ build_system_results_t parse_dependencies_and_construct_token_stream(compiler_op
 	 * until all dependencies are exhausted. We return *one* unified token stream in the end
 	 */
 	char* main_file_name = options->file_name;
+
+	//TODO EXTRACT MAIN FILE NAME's DIRECTORY
 
 	//Let the helper go out and parse through the main file and its dependencies
 	build_system_results_t results = handle_main_file_tokenization(main_file_name, silent_mode);
