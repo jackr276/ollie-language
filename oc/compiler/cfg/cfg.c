@@ -6424,6 +6424,24 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 
 
 /**
+ * Insert the temporary assignment for an unsequenced operation before operand2
+ * is evaluated. This helper will return the newly created temp var that comes
+ * from this
+ */
+static inline three_addr_var_t* insert_temporary_assignment_for_unsequenced_operation(three_addr_var_t* op1, instruction_t* last_before_op2_eval){
+	//Emit the temp var
+	three_addr_var_t* op1_temp = emit_temp_var(op1->type); 
+
+	//Emit and place this right after the last instruction before op2 starts being evaluated
+	instruction_t* temp_assignment = emit_assignment_instruction(op1_temp, op1);
+	insert_instruction_after_given(temp_assignment, last_before_op2_eval);
+
+	//Give back the new temp var
+	return op1_temp;
+}
+
+
+/**
  * Emit the abstract machine code needed for a binary expression. The lowest possible
  * thing that we could have here is a unary expression. If we have that, we just emit the
  * unary expression
@@ -6511,8 +6529,17 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 			op1 = unpack_result_package(&left_side, current_block);
 			op2 = unpack_result_package(&right_side, current_block);
 
+			/**
+			 * If these two variables are identical, we will need to
+			 * emit a temporary assignment for the first operand *before*
+			 * the second operand is being emitted so that we can guarantee
+			 * left-to-right assignment order. This only matters *if*
+			 * the two variables are exactly identical.
+			 * 	An example may be:
+			 * 		x = x + (x = 2)
+			 */
 			if(variables_equal_no_ssa(op1, op2) == TRUE){
-				printf("HANDLE UNSEQUENCED\n");
+				op1 = insert_temporary_assignment_for_unsequenced_operation(op1, last_instruction_before_second_operand);
 			}
 
 			/**
@@ -6577,8 +6604,17 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 				assignee->comes_from_fp_comparison = TRUE;
 			}
 
+			/**
+			 * If these two variables are identical, we will need to
+			 * emit a temporary assignment for the first operand *before*
+			 * the second operand is being emitted so that we can guarantee
+			 * left-to-right assignment order. This only matters *if*
+			 * the two variables are exactly identical.
+			 * 	An example may be:
+			 * 		x = x + (x = 2)
+			 */
 			if(variables_equal_no_ssa(op1, op2) == TRUE){
-				printf("HANDLE UNSEQUENCED\n");
+				op1 = insert_temporary_assignment_for_unsequenced_operation(op1, last_instruction_before_second_operand);
 			}
 
 			break;
@@ -6612,8 +6648,17 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 					break;
 			}
 
+			/**
+			 * If these two variables are identical, we will need to
+			 * emit a temporary assignment for the first operand *before*
+			 * the second operand is being emitted so that we can guarantee
+			 * left-to-right assignment order. This only matters *if*
+			 * the two variables are exactly identical.
+			 * 	An example may be:
+			 * 		x = x + (x = 2)
+			 */
 			if(variables_equal_no_ssa(op1, op2) == TRUE){
-				printf("HANDLE UNSEQUENCED\n");
+				op1 = insert_temporary_assignment_for_unsequenced_operation(op1, last_instruction_before_second_operand);
 			}
 
 			break;
