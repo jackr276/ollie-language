@@ -213,7 +213,7 @@ static inline three_addr_var_t* unpack_result_package(cfg_result_package_t* resu
  * This overload of the regular unpacker will always perform a temporary assignment. This is
  * used for binary expressions where we want to preserve execution ordre
  */
-static inline three_addr_var_t* unpack_result_package_with_temp_assingment(cfg_result_package_t* result_package, basic_block_t* block){
+static inline three_addr_var_t* unpack_result_package_with_temp_assignment(cfg_result_package_t* result_package, basic_block_t* block){
 	//The variable that we will always end up returning
 	three_addr_var_t* variable_value;
 	three_addr_const_t* constant_value;
@@ -6476,8 +6476,13 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	cfg_result_package_t left_side = emit_binary_expression(current_block, expression_cursor);
 
 	//Advance it and update the block pointer
-	expression_cursor = expression_cursor->next_sibling;
 	current_block = left_side.final_block;
+
+	//Save the last instruction before the second operand is emitted
+	instruction_t* last_instruction_before_second_operand = current_block->exit_statement;
+
+	//Bump this up to the right operand
+	expression_cursor = expression_cursor->next_sibling;
 
 	//Then the right
 	cfg_result_package_t right_side = emit_binary_expression(current_block, expression_cursor);
@@ -6506,6 +6511,10 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 			op1 = unpack_result_package(&left_side, current_block);
 			op2 = unpack_result_package(&right_side, current_block);
 
+			if(variables_equal_no_ssa(op1, op2) == TRUE){
+				printf("HANDLE UNSEQUENCED\n");
+			}
+
 			/**
 			 * IMPORTANT - for operations like these, our final result type is always a boolean. However,
 			 * for the actual operation, we may have floats, ints, etc. To stop this from causing problems,
@@ -6528,7 +6537,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 		case DOUBLE_EQUALS:
 		case NOT_EQUALS:
 			/**
-			 * Always unpack op1 - in all reality it shouldn't be a constant but just to be safe we will
+			 * Always unpack op1 - it should never be a constant but we want to be safe
 			 */
 			op1 = unpack_result_package(&left_side, current_block);
 
@@ -6568,13 +6577,16 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 				assignee->comes_from_fp_comparison = TRUE;
 			}
 
+			if(variables_equal_no_ssa(op1, op2) == TRUE){
+				printf("HANDLE UNSEQUENCED\n");
+			}
+
 			break;
 
 		//Otherwise default rules are in effect
 		default:
 			/**
-			 * We always unpack op1. In reality it should not be a constant but we will do this
-			 * just to be sure
+			 * Always unpack op1 - it should never be a constant but we want to be safe
 			 */
 			op1 = unpack_result_package(&left_side, current_block);
 
@@ -6598,6 +6610,10 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 				case CFG_RESULT_TYPE_VAR:
 					op2 = right_side.result_value.result_var;
 					break;
+			}
+
+			if(variables_equal_no_ssa(op1, op2) == TRUE){
+				printf("HANDLE UNSEQUENCED\n");
 			}
 
 			break;
