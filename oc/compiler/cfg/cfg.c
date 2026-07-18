@@ -6428,13 +6428,24 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
  * is evaluated. This helper will return the newly created temp var that comes
  * from this
  */
-static inline three_addr_var_t* insert_temporary_assignment_for_unsequenced_operation(three_addr_var_t* op1, instruction_t* last_before_op2_eval){
+static inline three_addr_var_t* insert_temporary_assignment_for_unsequenced_operation(three_addr_var_t* op1, instruction_t* last_before_op2_eval, basic_block_t* current_block){
+
 	//Emit the temp var
 	three_addr_var_t* op1_temp = emit_temp_var(op1->type); 
 
 	//Emit and place this right after the last instruction before op2 starts being evaluated
 	instruction_t* temp_assignment = emit_assignment_instruction(op1_temp, op1);
-	insert_instruction_after_given(temp_assignment, last_before_op2_eval);
+
+	/**
+	 * If the last instruction before we evaluate op2 is NULL, then we will just add this
+	 * in as the very first instruction in the block. Otherwise we insert it after the previous
+	 * final instruction
+	 */
+	if(last_before_op2_eval != NULL){
+		insert_instruction_after_given(temp_assignment, last_before_op2_eval);
+	} else {
+		add_statement(current_block, temp_assignment);
+	}
 
 	//Give back the new temp var
 	return op1_temp;
@@ -6539,7 +6550,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 			 * 		x = x + (x = 2)
 			 */
 			if(variables_equal_no_ssa(op1, op2) == TRUE){
-				op1 = insert_temporary_assignment_for_unsequenced_operation(op1, last_instruction_before_second_operand);
+				op1 = insert_temporary_assignment_for_unsequenced_operation(op1, last_instruction_before_second_operand, current_block);
 			}
 
 			/**
@@ -6614,7 +6625,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 			 * 		x = x + (x = 2)
 			 */
 			if(variables_equal_no_ssa(op1, op2) == TRUE){
-				op1 = insert_temporary_assignment_for_unsequenced_operation(op1, last_instruction_before_second_operand);
+				op1 = insert_temporary_assignment_for_unsequenced_operation(op1, last_instruction_before_second_operand, current_block);
 			}
 
 			break;
@@ -6658,7 +6669,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 			 * 		x = x + (x = 2)
 			 */
 			if(variables_equal_no_ssa(op1, op2) == TRUE){
-				op1 = insert_temporary_assignment_for_unsequenced_operation(op1, last_instruction_before_second_operand);
+				op1 = insert_temporary_assignment_for_unsequenced_operation(op1, last_instruction_before_second_operand, current_block);
 			}
 
 			break;
