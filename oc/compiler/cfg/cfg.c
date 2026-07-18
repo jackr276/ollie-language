@@ -170,6 +170,7 @@ static inline void visit_static_declare_statement(generic_ast_node_t* node);
 static inline void handle_raise_statement(basic_block_t* basic_block, generic_ast_node_t* node);
 static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, branch_type_t branch_type, three_addr_var_t* conditional_result);
 
+
 /**
  * Unpack a result package. We assume that if this function is being called that the caller
  * wants us to unpack the constant if we are able to.
@@ -183,6 +184,52 @@ static inline three_addr_var_t* unpack_result_package(cfg_result_package_t* resu
 		//Variable - just give it back
 		case CFG_RESULT_TYPE_VAR:
 			returned_variable = result_package->result_value.result_var;
+			break;
+
+		//Constant - unpack with an assignment and give the temp var back
+		case CFG_RESULT_TYPE_CONST:
+			constant_value = result_package->result_value.result_const;
+
+			//Emit the assignment
+			instruction_t* const_assignment = emit_assignment_with_const_instruction(emit_temp_var(constant_value->type), constant_value);
+
+			//Throw it into the block
+			add_statement(block, const_assignment);
+
+			//This is the variable that we end up returning
+			returned_variable = const_assignment->operands.oir.assignee;
+			break;
+	}
+
+	//Give back the returned variable in the end
+	return returned_variable;
+}
+
+
+/**
+ * Unpack a result package. We assume that if this function is being called that the caller
+ * wants us to unpack the constant if we are able to.
+ *
+ * This overload of the regular unpacker will always perform a temporary assignment. This is
+ * used for binary expressions where we want to preserve execution ordre
+ */
+static inline three_addr_var_t* unpack_result_package_with_temp_assingment(cfg_result_package_t* result_package, basic_block_t* block){
+	//The variable that we will always end up returning
+	three_addr_var_t* variable_value;
+	three_addr_const_t* constant_value;
+	three_addr_var_t* returned_variable;
+
+	switch(result_package->type){
+		//Unpack by performing a temporary assignment
+		case CFG_RESULT_TYPE_VAR:
+			variable_value = result_package->result_value.result_var;
+
+			//Emit the assignment into the block
+			instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(variable_value->type), variable_value);
+			add_statement(block, temp_assignment);
+
+			//We will return the temp
+			returned_variable = temp_assignment->operands.oir.assignee;
 			break;
 
 		//Constant - unpack with an assignment and give the temp var back
