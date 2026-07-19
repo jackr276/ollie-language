@@ -3,6 +3,9 @@
  * This file defines the Ollie build system used for dependency management in Ollie
  */
 
+
+//TODO FULL DOCUMENTATION OF OUR STRATEGY HERE IS NEEDED
+
 #include "build_system.h"
 #include "../utils/error_management.h"
 #include "../utils/constants.h"
@@ -283,7 +286,7 @@ static inline dependency_graph_node_t* get_dependency_subtree_from_import_statem
 			found_module_dependency = find_or_create_module(main_file_directory, current_file_name, &(lookahead->lexeme), silent_mode);
 
 			//Fail out if we don't have it
-			//TODO BAD
+			//TODO BAD - NEEDS MORE DETAIL
 			if(found_module_dependency == NULL){
 				sprintf(build_system_info, "Module \"%s\" could not be found anywhere under the local directory", lookahead->lexeme.string);
 				print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
@@ -331,6 +334,7 @@ static inline dependency_graph_node_t* get_dependency_subtree_from_import_statem
 			found_module_dependency = find_or_create_module(OLLIE_LIBRARY_DIRECTORY, current_file_name, &(lookahead->lexeme), silent_mode);
 
 			//TODO BAD
+			//TODO BAD - NEEDS MORE DETAIL
 			if(found_module_dependency == NULL){
 				sprintf(build_system_info, "Module \"%s\" could not be found anywhere under the local directory", lookahead->lexeme.string);
 				print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
@@ -604,7 +608,11 @@ static dependency_graph_node_t* handle_main_file_tokenization(char* main_file_di
 
 
 /**
+ * MOVE THIS DOCUMENTATION UP MORE
+ *
+ *
  * Cycle detection/reverse compilation order DFS builder
+ *
  *
  * algorithm visit(node n):
  * 	switch n->state:
@@ -632,63 +640,6 @@ static dependency_graph_node_t* handle_main_file_tokenization(char* main_file_di
  * This allows us to build the compilation order and detect cycles all in one pass of
  * the dependency graph
  */
-static u_int8_t visit_node(dependency_graph_node_t* node, dynamic_array_t* reverse_compilation_order){
-	switch(node->visitation_status){
-		/**
-		 * We've already fully processed this one, so we don't need
-		 * to do anything else
-		 */
-		case DEPENDENCY_NODE_FULLY_PROCESSED:
-			return TRUE;
-
-		/**
-		 * If we somehow come to visit a node that is already in progress, this means
-		 * that we have a circular dependency with a node that is already in progress
-		 */
-		case DEPENDENCY_NODE_IN_PROGRESS:
-			sprintf(build_system_info, "Circular dependency detected in file for module %s", node->module_name.string); 
-			print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, node->file_name, 0);
-			return FAILURE;
-
-		/**
-		 * We haven't explored this path yet so we'll need to explore it now by breaking
-		 * out into our main processing logic
-		 */
-		case DEPENDENCY_NODE_UNVISITED:
-			break;
-	}
-
-	//Flag that this is in progress
-	node->visitation_status = DEPENDENCY_NODE_IN_PROGRESS;
-
-	//Run through all nodes that this depends on and check them
-	for(int32_t i = 0; i < node->depends_on.current_index; i++){
-		dependency_graph_node_t* depends_on = dynamic_array_get_at(&(node->depends_on), i);
-
-		printf("%s DEPENDS ON %s\n", node->module_name.string, depends_on->module_name.string);
-
-		//If this fails, then we're done. The build is invalid and we fail out
-		if(visit_node(depends_on, reverse_compilation_order) == FAILURE){
-			sprintf(build_system_info, "The dependency %s in file %s for module %s in file %s has been found to be ciruclar. Please remedy and recompile",
-										depends_on->module_name.string,
-										depends_on->file_name,
-										node->module_name.string,
-										node->file_name);
-			print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, node->file_name, 0);
-			num_build_system_errors++;
-			return FAILURE;
-		}
-	}
-
-	/**
-	 * If we made it here then this worked. We will push this onto the compilation order,
-	 * mark it as fully processed
-	 */
-	node->visitation_status = DEPENDENCY_NODE_FULLY_PROCESSED;
-	dynamic_array_add(reverse_compilation_order, node);
-	return SUCCESS;
-}
-
 
 
 /**
@@ -702,10 +653,12 @@ static inline u_int8_t get_reverse_compilation_order_and_check_for_cycles(depend
 	 * Invoke the recursive traversal on the main node. If it works then great,
 	 * otherwise we had a cycle and we print the appropriate error
 	 */
-	if(visit_node(root, reverse_compilation_order) == FAILURE){
-		print_build_system_message(MESSAGE_TYPE_ERROR, "Circular dependency detected. Please remedy this and recompile", main_file_name, 0);
-		return FAILURE;
-	}
+
+	//TODO DEPRECATE
+	//if(visit_node(root, reverse_compilation_order) == FAILURE){
+	//	print_build_system_message(MESSAGE_TYPE_ERROR, "Circular dependency detected. Please remedy this and recompile", main_file_name, 0);
+		//return FAILURE;
+	//}
 
 	//Otherwise it worked so we return success
 	return SUCCESS;
