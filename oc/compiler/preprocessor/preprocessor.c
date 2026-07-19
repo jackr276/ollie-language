@@ -557,6 +557,7 @@ static u_int8_t validate_and_skip_import_directive(ollie_token_stream_t* stream,
 
 	//Now we need to see a semicolon
 	token = token_array_get_pointer_at(&(stream->token_stream), *stream_index);
+	(*stream_index)++;
 
 	//If it's not a semicolon we fail out
 	if(token->tok != SEMICOLON){
