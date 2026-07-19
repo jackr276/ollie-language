@@ -298,24 +298,22 @@ static inline dependency_graph_node_t* find_module(char* initial_directory, dyna
 		sprintf(build_system_info, "The dependency %s was found in file %s has failed to tokenize. Please review and recompile.", 
 		  							module_name->string,
 		  							dependency_file);
-
 		print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, dependency_file, 0);
 		num_build_system_errors++;
 		return NULL;
 	}
 
+	//TODO THIS IS ACTUALLY WRONG! It should be in the dependency file tokenizer
 
-	dependency_graph_node_t* new_node = dependency_graph_node_alloc(module_name, dependency_file, *stream, dependency_node_type_t node_type)
+	//Create the new dependency node now that we know we've got a good stream
+	dependency_graph_node_t* new_node = dependency_graph_node_alloc(module_name, dependency_file, &new_token_stream, DEPENDENCY_GRAPH_NODE_TYPE_DEPENDENCY);
 
+	//And then create and insert a new module based on the new node
+	symtab_module_record_t* new_module = create_module_record(new_node);
+	insert_module(module_symtab, new_module);
 
-
-	symtab_module_record_t* new_module = create_module_record(jk);
-
-
-	printf("DEPENDENCY %s IS IN FILE %s\n\n", module_name->string, depedency_file);
-
-
-	return NULL;
+	//Give this back so that it can be added to the graph
+	return new_node; 
 }
 
 
@@ -326,6 +324,9 @@ static inline dependency_graph_node_t* find_module(char* initial_directory, dyna
  * 		for local imports
  * 	2.) import <value>; <- angle bracktes tell the compiler to look in the system library "/usr/lib/ollie/" for the
  * 		given module
+ *
+ * This helper returns a fully formed, ready-to-use dependency graph node with the file dependency if we were
+ * able to find it
  *
  * NOTE: by the time that we get here we have already seen the "$import" token
  */
@@ -358,10 +359,8 @@ static dependency_graph_node_t* parse_import_statement_and_get_dependency(ollie_
 				sprintf(build_system_info, "Module \"%s\" could not be found anywhere under the local directory", lookahead->lexeme.string);
 				print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
 				num_build_system_errors++;
-				return FAILURE;
+				return NULL;
 			}
-
-			//TODO OTHERWISE FOUND IT
 			
 			break;
 
@@ -381,7 +380,7 @@ static dependency_graph_node_t* parse_import_statement_and_get_dependency(ollie_
 				sprintf(build_system_info, "Expected identifier after $import keyword but saw %s instead", lexitem_to_string(lookahead));
 				print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
 				num_build_system_errors++;
-				return FAILURE;
+				return NULL;
 			}
 
 			//Before we waste time searching, let's make sure that the closing > is there
@@ -393,7 +392,7 @@ static dependency_graph_node_t* parse_import_statement_and_get_dependency(ollie_
 				sprintf(build_system_info, "Expected > after module name but saw %s instead", lexitem_to_string(lookahead));
 				print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
 				num_build_system_errors++;
-				return FAILURE;
+				return NULL;
 			}
 
 			/**
@@ -406,10 +405,8 @@ static dependency_graph_node_t* parse_import_statement_and_get_dependency(ollie_
 				sprintf(build_system_info, "Module \"%s\" could not be found anywhere under the local directory", lookahead->lexeme.string);
 				print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
 				num_build_system_errors++;
-				return FAILURE;
+				return NULL;
 			}
-
-			//TODO OTHERWISE FOUND IT
 
 			break;
 
@@ -417,7 +414,7 @@ static dependency_graph_node_t* parse_import_statement_and_get_dependency(ollie_
 			sprintf(build_system_info, "Expected \"file_name\" or <file_name> after $import keyword but saw %s instead", lexitem_to_string(lookahead));
 			print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
 			num_build_system_errors++;
-			return FAILURE;
+			return NULL;
 	}
 
 	//Let's look for the final semicolon here
@@ -428,13 +425,11 @@ static dependency_graph_node_t* parse_import_statement_and_get_dependency(ollie_
 	if(lookahead->tok != SEMICOLON){
 		print_build_system_message(MESSAGE_TYPE_ERROR, "Semicolon expected after $import statement", current_file_name, lookahead->line_num);
 		num_build_system_errors++;
-		return FAILURE;
+		return NULL;
 	}
 
-
-
-	//DUMMY
-	return FAILURE;
+	//Give back the actual node that we found
+	return found_module_dependency;
 }
 
 
@@ -458,7 +453,8 @@ static void handle_dependency_file_tokenization(char* file_name, u_int8_t silent
  * to the ollie compiler
  *
  * The main file is a special case because it may *not* be a module. We will need to
- * validate that the user is not attempting to make this file into a module
+ * validate that the user is not attempting to make this file into a module. If we
+ * find that they are attempting that, we will have to fail out
  */
 static build_system_results_t handle_main_file_tokenization(char* main_file_directory, char* main_file_name, u_int8_t silent_mode){
 	//Create and initialize our results
@@ -510,7 +506,6 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_dire
 	 * parsing the dependencies until we hit the first non-import token
 	 */
 	int32_t current_token_index = 0;
-	lexitem_t* lookahead;
 
 	//Run through the top of the file and process until we're done seeing imports
 	while(TRUE){
@@ -533,9 +528,9 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_dire
 			results.status = BUILD_SYSTEM_STATUS_FAILURE; 
 			return results;
 		}
-	}
 
-	//TODO MORE HERE WITH DEPENDENCIES
+		//TODO ADD THE DEPENDENCY
+	}
 
 	//Package up and give back our results
 	results.result_node = main_dependency_node;
