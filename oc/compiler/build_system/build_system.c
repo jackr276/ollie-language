@@ -22,6 +22,9 @@ static char* OLLIE_LIBRARY_DIRECTORY = "/usr/lib/ollie";
 //We will maintain an overall module symtab to avoid duplicate searches
 module_symtab_t* module_symtab = NULL;
 
+//Track the reverse compilation order here
+static dynamic_array_t reverse_compilation_order;
+
 //Static string buffer for any error messages that we print
 static char build_system_info[ERROR_SIZE * 5];
 
@@ -32,7 +35,7 @@ static ollie_token_stream_t reusable_file_searching_stream;
 static u_int32_t num_build_system_errors = 0;
 
 //Predeclare for recursive calls
-static dependency_graph_node_t* find_or_create_module(char* initial_directory, dynamic_string_t* module_name, u_int8_t silent_mode);
+static dependency_graph_node_t* find_or_create_module(char* initial_directory, char* current_file_name, dynamic_string_t* module_name, u_int8_t silent_mode);
 
 /**
  * A generic printer for any build system errors that we may encounter
@@ -277,9 +280,10 @@ static inline dependency_graph_node_t* get_dependency_subtree_from_import_statem
 			 * Let the helper go through and search our local directory for this module. If we can't
 			 * find it, then we have an issue and we throw an error
 			 */
-			found_module_dependency = find_or_create_module(main_file_directory, &(lookahead->lexeme), silent_mode);
+			found_module_dependency = find_or_create_module(main_file_directory, current_file_name, &(lookahead->lexeme), silent_mode);
 
 			//Fail out if we don't have it
+			//TODO BAD
 			if(found_module_dependency == NULL){
 				sprintf(build_system_info, "Module \"%s\" could not be found anywhere under the local directory", lookahead->lexeme.string);
 				print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
@@ -324,8 +328,9 @@ static inline dependency_graph_node_t* get_dependency_subtree_from_import_statem
 			 * Now let the helper go through and search our local directory for this module. If we can't
 			 * find it, then we have an issue and we throw an error
 			 */
-			found_module_dependency = find_or_create_module(OLLIE_LIBRARY_DIRECTORY, &(lookahead->lexeme), silent_mode);
+			found_module_dependency = find_or_create_module(OLLIE_LIBRARY_DIRECTORY, current_file_name, &(lookahead->lexeme), silent_mode);
 
+			//TODO BAD
 			if(found_module_dependency == NULL){
 				sprintf(build_system_info, "Module \"%s\" could not be found anywhere under the local directory", lookahead->lexeme.string);
 				print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
@@ -374,7 +379,7 @@ static inline dependency_graph_node_t* get_dependency_subtree_from_import_statem
  * NOTE: if we are in fact creating a module here for the first time, it is the responsibility of this
  * file itself to parse any further import statements that we have in here
  */
-static dependency_graph_node_t* find_or_create_module(char* initial_directory, dynamic_string_t* module_name, u_int8_t silent_mode){
+static dependency_graph_node_t* find_or_create_module(char* initial_directory, char* current_file_name, dynamic_string_t* module_name, u_int8_t silent_mode){
 	/**
 	 * Step 1: hit the module symtab and see if we can find anything in
 	 * there. If we can, we save ourselves the trouble of searching the file system
@@ -386,6 +391,20 @@ static dependency_graph_node_t* find_or_create_module(char* initial_directory, d
 	 * graph node that already exists for this given module
 	 */
 	if(found_module != NULL){
+		/**
+		 * If this is currently in progress, it means that we have a circular dependency and need to fail out
+		 */
+		if(found_module->dependency_graph_node->visitation_status == DEPENDENCY_NODE_IN_PROGRESS){
+			sprintf(build_system_info, "The dependency %s in file %s for file %s has been found to be ciruclar. Please remedy and recompile",
+		   								found_module->dependency_graph_node->module_name.string,
+		   								found_module->dependency_graph_node->file_name,
+										current_file_name);
+			print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, found_module->dependency_graph_node->file_name, 0);
+			num_build_system_errors++;
+			return NULL;
+		}
+
+
 		return found_module->dependency_graph_node;
 	}
 
@@ -427,6 +446,13 @@ static dependency_graph_node_t* find_or_create_module(char* initial_directory, d
 	//Create the new dependency node now that we know we've got a good stream
 	dependency_graph_node_t* new_node = dependency_graph_node_alloc(module_name, dependency_file, &new_token_stream, DEPENDENCY_GRAPH_NODE_TYPE_DEPENDENCY);
 
+	//Add this onto the symtab for future lookups to find
+	symtab_module_record_t* new_module = create_module_record(new_node);
+	insert_module(module_symtab, new_module);
+
+	//Flag that it is currently in progress
+	new_node->visitation_status = DEPENDENCY_NODE_IN_PROGRESS;
+
 	/**
 	 * Step 4: now that we've tokenized the entire thing, we will need to go through
 	 * and determine if this file itself has any imports for furhter dependencies. If
@@ -440,7 +466,6 @@ static dependency_graph_node_t* find_or_create_module(char* initial_directory, d
 
 	//Run through the top of the file and process until we're done seeing imports
 	while(TRUE){
-		printf("HERE ENTRY\n");
 		lexitem_t* lookahead = token_array_get_pointer_at(&(new_token_stream.token_stream), current_token_index);
 		current_token_index++;
 
@@ -448,8 +473,6 @@ static dependency_graph_node_t* find_or_create_module(char* initial_directory, d
 		if(lookahead->tok != IMPORT){
 			break;
 		}
-
-		printf("HERE\n\n\n\n");
 
 		/**
 		 * Let the helper find and possible create the dependency graph node from our
@@ -471,9 +494,9 @@ static dependency_graph_node_t* find_or_create_module(char* initial_directory, d
 		add_dependency(new_node, dependency);
 	}
 
-	//And then create and insert a new module based on the new node
-	symtab_module_record_t* new_module = create_module_record(new_node);
-	insert_module(module_symtab, new_module);
+	//Flag that it's now done and add it to the compilation order
+	dynamic_array_add(&reverse_compilation_order, new_node);
+	new_node->visitation_status = DEPENDENCY_NODE_FULLY_PROCESSED;
 
 	//Give this back so that it can be added to the graph
 	return new_node; 
@@ -528,6 +551,9 @@ static dependency_graph_node_t* handle_main_file_tokenization(char* main_file_di
 	//Otherwise we should be good to package this up into a dependency graph node
 	dependency_graph_node_t* main_dependency_node = dependency_graph_node_alloc(&main_dependency_node_name, main_file_name, &stream, DEPENDENCY_GRAPH_NODE_TYPE_MAIN);
 
+	//Flag that this is in progress
+	main_dependency_node->visitation_status = DEPENDENCY_NODE_IN_PROGRESS;
+
 	//Insert this into the symtab for completeness
 	insert_module(module_symtab, create_module_record(main_dependency_node));
 
@@ -567,6 +593,10 @@ static dependency_graph_node_t* handle_main_file_tokenization(char* main_file_di
 		 */
 		add_dependency(main_dependency_node, dependency);
 	}
+
+	//Once we're all the way done, add this onto the reverse compilation order and flag that we're finished
+	main_dependency_node->visitation_status = DEPENDENCY_NODE_FULLY_PROCESSED;
+	dynamic_array_add(&reverse_compilation_order, main_dependency_node);
 
 	//Give back the main dependency node
 	return main_dependency_node;
@@ -695,6 +725,9 @@ build_system_results_t parse_dependencies_and_construct_token_stream(compiler_op
 	//First we'll need some blank results to get started
 	build_system_results_t results = INITIALIZE_BLANK_BUILD_SYSTEM_RESULTS;
 
+	//Pre-allocate the reverse compilation order here, we will populate it as we go
+	reverse_compilation_order = dynamic_array_alloc();
+
 	//Allocate the module symtab first
 	module_symtab = module_symtab_alloc();
 
@@ -725,7 +758,6 @@ build_system_results_t parse_dependencies_and_construct_token_stream(compiler_op
 		return results;
 	}
 
-	dynamic_array_t reverse_compilation_order = dynamic_array_alloc();
 	u_int8_t cycle_detection_result = get_reverse_compilation_order_and_check_for_cycles(main_node, main_file_name, &reverse_compilation_order);
 
 	//If we have no main node, that means that we've failed here so return a failure
