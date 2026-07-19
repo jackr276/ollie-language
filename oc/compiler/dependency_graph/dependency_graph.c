@@ -23,10 +23,31 @@ static inline int32_t get_next_node_id(){
 
 
 /**
+ * Create the overall control structure for a dependency graph
+ */
+dependency_graph_t dependency_graph_alloc(){
+	dependency_graph_t graph;
+
+	//Allocate the nodes themselves
+	graph.nodes = dynamic_array_alloc();
+
+	//These will be created later on
+	graph.adjacency_matrix = NULL;
+	graph.transitive_closure = NULL;
+
+	//Initially we've got nothing in here
+	graph.num_nodes = 0;
+
+	//Give back the stack-allocated graph
+	return graph;
+}
+
+
+/**
  * Allocate a dependency graph node on the heap. All dependency
  * graph nodes will be heap allocated
  */
-dependency_graph_node_t* dependency_graph_node_alloc(dynamic_string_t* module_name, char* file_name, ollie_token_stream_t* stream, dependency_node_type_t node_type){
+dependency_graph_node_t* dependency_graph_node_alloc(dependency_graph_t* graph, dynamic_string_t* module_name, char* file_name, ollie_token_stream_t* stream, dependency_node_type_t node_type){
 	dependency_graph_node_t* node = calloc(1, sizeof(dependency_graph_node_t));
 
 	//Populate the unique identifier
@@ -41,6 +62,12 @@ dependency_graph_node_t* dependency_graph_node_alloc(dynamic_string_t* module_na
 
 	//Copy the filename over here 
 	strncpy(node->file_name, file_name, FILENAME_MAX);
+
+	//Add this into the dependency graph as a whole
+	dynamic_array_add(&(graph->nodes), node);
+
+	//Bump up the node count
+	(graph->num_nodes)++;
 
 	//Give this back once done
 	return node;
@@ -74,6 +101,17 @@ void add_dependency(dependency_graph_node_t* dependant, dependency_graph_node_t*
 
 
 /**
+ * Create an adjacency matrix from the dependency graph. This is going to make it easier
+ * for us to compute the transitive closure to check for circular dependencies
+ */
+u_int8_t* get_adjacency_matrix_from_dependency_graph(dependency_graph_node_t* root){
+	//TODO
+
+}
+
+
+
+/**
  * Deallocate the given dependency graph node
  */
 void dependency_graph_node_dealloc(dependency_graph_node_t* node){
@@ -89,4 +127,17 @@ void dependency_graph_node_dealloc(dependency_graph_node_t* node){
 
 	//Finally we can free the overall node itself(all nodes are heap allocated)
 	free(node);
+}
+
+
+/**
+ * Deallocate the overall dependency graph
+ */
+void dependency_graph_dealloc(dependency_graph_t* graph){
+	//Free the node array
+	dynamic_array_dealloc(&(graph->nodes));
+
+	//And destory these now that they're not needed
+	free(graph->transitive_closure);
+	free(graph->adjacency_matrix);
 }

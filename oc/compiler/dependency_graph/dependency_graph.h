@@ -8,7 +8,9 @@
 
 #include "../utils/dynamic_array/dynamic_array.h"
 #include "../lexer/lexer.h"
+#include <sys/types.h>
 
+typedef struct dependency_graph_t dependency_graph_t;
 typedef struct dependency_graph_node_t dependency_graph_node_t;
 
 /**
@@ -18,6 +20,20 @@ typedef enum {
 	DEPENDENCY_GRAPH_NODE_TYPE_MAIN,
 	DEPENDENCY_GRAPH_NODE_TYPE_DEPENDENCY,
 } dependency_node_type_t;
+
+
+/**
+ * Define a graph itself. The graph
+ * is made up of the nodes that it has, 
+ * an adjacency matrix, and a transitive closure
+ */
+struct dependency_graph_t {
+	dynamic_array_t nodes;
+	u_int8_t* adjacency_matrix;
+	u_int8_t* transitive_closure;
+	int32_t num_nodes;
+};
+
 
 /**
  * Define a node for our build graph. Every file will get
@@ -42,10 +58,15 @@ struct dependency_graph_node_t {
 };
 
 /**
+ * Create the overall control structure for a dependency graph
+ */
+dependency_graph_t dependency_graph_alloc();
+
+/**
  * Allocate a dependency graph node on the heap. All dependency
  * graph nodes will be heap allocated
  */
-dependency_graph_node_t* dependency_graph_node_alloc(dynamic_string_t* module_name, char* file_name, ollie_token_stream_t* stream, dependency_node_type_t node_type);
+dependency_graph_node_t* dependency_graph_node_alloc(dependency_graph_t* graph, dynamic_string_t* module_name, char* file_name, ollie_token_stream_t* stream, dependency_node_type_t node_type);
 
 /**
  * Add a dependency relationship between dependant and depends_on
@@ -53,8 +74,19 @@ dependency_graph_node_t* dependency_graph_node_alloc(dynamic_string_t* module_na
 void add_dependency(dependency_graph_node_t* dependant, dependency_graph_node_t* depends_on);
 
 /**
+ * Create an adjacency matrix from the dependency graph. This is going to make it easier
+ * for us to compute the transitive closure to check for circular dependencies
+ */
+u_int8_t* get_adjacency_matrix_from_dependency_graph(dependency_graph_node_t* root);
+
+/**
  * Deallocate the given dependency graph node
  */
 void dependency_graph_node_dealloc(dependency_graph_node_t* node);
+
+/**
+ * Deallocate the overall dependency graph
+ */
+void dependency_graph_dealloc(dependency_graph_t* graph);
 
 #endif /* DEPENDENCY_GRAPH_H */
