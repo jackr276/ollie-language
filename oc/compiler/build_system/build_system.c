@@ -33,7 +33,7 @@ static u_int32_t num_build_system_errors = 0;
 static u_int32_t num_build_system_warnings = 0;
 
 //Predeclare for recursive calls
-static dependency_graph_node_t* get_dependency_node_from_import_statement(ollie_token_stream_t* stream, char* main_file_directory, char* current_file_name, int32_t* current_index, u_int8_t silent_mode);
+static dependency_graph_node_t* find_or_create_module(char* initial_directory, dynamic_string_t* module_name, u_int8_t silent_mode);
 
 /**
  * A generic printer for any build system errors that we may encounter
@@ -244,95 +244,6 @@ static u_int8_t traverse_and_search_for_module_rec(char* dependency_file, char* 
 
 
 /**
- * Search for a module in the appropriate directory.
- *
- * Before we even open a file, we will first search in the symbol table itself for a module. If we find it 
- * in the symbol table, we will return what the symbol table gave us
- *
- * Otherwise, we will recursively search the intial directory and all subdirectories for any "*.ol" files 
- * whose second token matches the name we are after. We only ever tokenize the first 2 tokens in our search
- * for efficiency's sake. If we do not find it, then we fail out. If we do find it, then we will create and
- * insert the record into the module symtab for future go arounds. We will also fully tokenize the module and give
- * it a proper dependency graph node
- *
- *
- * NOTE: if we are in fact creating a module here for the first time, it is the responsibility of this
- * file itself to parse any further import statements that we have in here
- */
-static inline dependency_graph_node_t* find_or_create_module(char* initial_directory, dynamic_string_t* module_name, u_int8_t silent_mode){
-	/**
-	 * Step 1: hit the module symtab and see if we can find anything in
-	 * there. If we can, we save ourselves the trouble of searching the file system
-	 */
-	symtab_module_record_t* found_module = lookup_module(module_symtab, module_name);
-
-	/**
-	 * If we were able to find it in the symbol table give, back the associated dependency
-	 * graph node that already exists for this given module
-	 */
-	if(found_module != NULL){
-		return found_module->dependency_graph_node;
-	}
-
-	/**
-	 * Step 2: Otherwise we did not find it, so we are going to have to search
-	 * for it inside of the given initial directory using a recursive
-	 * directory search. If this fails, we did not find the module so the
-	 * entire thing is wrong and we fail out
-	 */
-	char dependency_file[FILENAME_MAX];
-	u_int8_t found = traverse_and_search_for_module_rec(dependency_file, initial_directory, module_name, silent_mode);
-
-	//Could not find it so get out
-	if(found == FALSE){
-		return NULL;
-	}
-
-	/**
-	 * Step 3: Now that we've found something, we'll need to create a dependency graph node for the 
-	 * next go around. In order to do this, we're going to need to fully tokenize the entire
-	 * thing. If this tokenizing fails we will return a different failure
-	 */
-	ollie_token_stream_t new_token_stream = tokenize(dependency_file, silent_mode);
-
-	/**
-	 * Remember that our original tokenization pass only did the first 2 tokens, so it's
-	 * possible that we could actually fail to tokenize here. If we do then we will
-	 * declare that we found the dependency but there's some issue with it
-	 */
-	if(new_token_stream.status == STREAM_STATUS_FAILURE){
-		sprintf(build_system_info, "The dependency %s was found in file %s has failed to tokenize. Please review and recompile.", 
-		  							module_name->string,
-		  							dependency_file);
-		print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, dependency_file, 0);
-		num_build_system_errors++;
-		return NULL;
-	}
-
-	//Create the new dependency node now that we know we've got a good stream
-	dependency_graph_node_t* new_node = dependency_graph_node_alloc(module_name, dependency_file, &new_token_stream, DEPENDENCY_GRAPH_NODE_TYPE_DEPENDENCY);
-
-	/**
-	 * Step 4: now that we've tokenized the entire thing, we will need to go through
-	 * and determine if this file itself has any imports for furhter dependencies. If
-	 * it does, we'll have to recursively go through and pull all of those in as well
-	 */
-
-
-
-	//TODO THIS IS ACTUALLY WRONG! It should be in the dependency file tokenizer
-
-
-	//And then create and insert a new module based on the new node
-	symtab_module_record_t* new_module = create_module_record(new_node);
-	insert_module(module_symtab, new_module);
-
-	//Give this back so that it can be added to the graph
-	return new_node; 
-}
-
-
-/**
  * Handle the parsing of an import statement. Note that there are two different things that we
  * can see for an import statement:
  * 	1.) import "value"; <- double quotes tell the compiler to look in the ./value path. This is used
@@ -345,7 +256,7 @@ static inline dependency_graph_node_t* find_or_create_module(char* initial_direc
  *
  * NOTE: by the time that we get here we have already seen the "$import" token
  */
-static dependency_graph_node_t* get_dependency_node_from_import_statement(ollie_token_stream_t* stream, char* main_file_directory, char* current_file_name, int32_t* current_index, u_int8_t silent_mode){
+static inline dependency_graph_node_t* get_dependency_node_from_import_statement(ollie_token_stream_t* stream, char* main_file_directory, char* current_file_name, int32_t* current_index, u_int8_t silent_mode){
 	//Get the next value in the stream
 	lexitem_t* lookahead = token_array_get_pointer_at(&(stream->token_stream), *current_index);
 	(*current_index)++;
@@ -445,6 +356,121 @@ static dependency_graph_node_t* get_dependency_node_from_import_statement(ollie_
 
 	//Give back the actual node that we found
 	return found_module_dependency;
+}
+
+
+/**
+ * Search for a module in the appropriate directory.
+ *
+ * Before we even open a file, we will first search in the symbol table itself for a module. If we find it 
+ * in the symbol table, we will return what the symbol table gave us
+ *
+ * Otherwise, we will recursively search the intial directory and all subdirectories for any "*.ol" files 
+ * whose second token matches the name we are after. We only ever tokenize the first 2 tokens in our search
+ * for efficiency's sake. If we do not find it, then we fail out. If we do find it, then we will create and
+ * insert the record into the module symtab for future go arounds. We will also fully tokenize the module and give
+ * it a proper dependency graph node
+ *
+ *
+ * NOTE: if we are in fact creating a module here for the first time, it is the responsibility of this
+ * file itself to parse any further import statements that we have in here
+ */
+static dependency_graph_node_t* find_or_create_module(char* initial_directory, dynamic_string_t* module_name, u_int8_t silent_mode){
+	/**
+	 * Step 1: hit the module symtab and see if we can find anything in
+	 * there. If we can, we save ourselves the trouble of searching the file system
+	 */
+	symtab_module_record_t* found_module = lookup_module(module_symtab, module_name);
+
+	/**
+	 * If we were able to find it in the symbol table give, back the associated dependency
+	 * graph node that already exists for this given module
+	 */
+	if(found_module != NULL){
+		return found_module->dependency_graph_node;
+	}
+
+	/**
+	 * Step 2: Otherwise we did not find it, so we are going to have to search
+	 * for it inside of the given initial directory using a recursive
+	 * directory search. If this fails, we did not find the module so the
+	 * entire thing is wrong and we fail out
+	 */
+	char dependency_file[FILENAME_MAX];
+	u_int8_t found = traverse_and_search_for_module_rec(dependency_file, initial_directory, module_name, silent_mode);
+
+	//Could not find it so get out
+	if(found == FALSE){
+		return NULL;
+	}
+
+	/**
+	 * Step 3: Now that we've found something, we'll need to create a dependency graph node for the 
+	 * next go around. In order to do this, we're going to need to fully tokenize the entire
+	 * thing. If this tokenizing fails we will return a different failure
+	 */
+	ollie_token_stream_t new_token_stream = tokenize(dependency_file, silent_mode);
+
+	/**
+	 * Remember that our original tokenization pass only did the first 2 tokens, so it's
+	 * possible that we could actually fail to tokenize here. If we do then we will
+	 * declare that we found the dependency but there's some issue with it
+	 */
+	if(new_token_stream.status == STREAM_STATUS_FAILURE){
+		sprintf(build_system_info, "The dependency %s was found in file %s has failed to tokenize. Please review and recompile.", 
+		  							module_name->string,
+		  							dependency_file);
+		print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, dependency_file, 0);
+		num_build_system_errors++;
+		return NULL;
+	}
+
+	//Create the new dependency node now that we know we've got a good stream
+	dependency_graph_node_t* new_node = dependency_graph_node_alloc(module_name, dependency_file, &new_token_stream, DEPENDENCY_GRAPH_NODE_TYPE_DEPENDENCY);
+
+	/**
+	 * Step 4: now that we've tokenized the entire thing, we will need to go through
+	 * and determine if this file itself has any imports for furhter dependencies. If
+	 * it does, we'll have to recursively go through and pull all of those in as well
+	 */
+	int32_t current_token_index = 0;
+
+	//Run through the top of the file and process until we're done seeing imports
+	while(TRUE){
+		lexitem_t* lookahead = token_array_get_pointer_at(&(new_token_stream.token_stream), current_token_index);
+		current_token_index++;
+
+		//Terminal case here - we're done looking anymore
+		if(lookahead->tok != IMPORT){
+			break;
+		}
+
+		/**
+		 * Let the helper find and possible create the dependency graph node from our
+		 * import statement. If this succeeds, it means that the direct import
+		 * itself *and* all indirect imports worked, so in a sense this not only gives
+		 * back a single dependency node but the root of a dependency tree
+		 */
+		dependency_graph_node_t* dependency = get_dependency_node_from_import_statement(&new_token_stream, initial_directory, dependency_file, &current_token_index, silent_mode);
+		if(dependency == NULL){
+			print_build_system_message(MESSAGE_TYPE_ERROR, "Invalid $import directive found in file. Please review and recompile", dependency_file, lookahead->line_num);
+			num_build_system_errors++;
+			return NULL;
+		}
+
+		/**
+		 * Create the relationship in the graph that
+		 * the main node(dependant) depends on the dependancy
+		 */
+		add_dependency(new_node, dependency);
+	}
+
+	//And then create and insert a new module based on the new node
+	symtab_module_record_t* new_module = create_module_record(new_node);
+	insert_module(module_symtab, new_module);
+
+	//Give this back so that it can be added to the graph
+	return new_node; 
 }
 
 
