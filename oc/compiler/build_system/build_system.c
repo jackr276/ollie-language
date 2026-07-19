@@ -45,46 +45,6 @@ static inline void print_build_system_message(error_message_type_t message, char
 
 
 /**
- * Search the first 2 tokens of the given file to determine if it does or does not match
- * the given module name. If it does, return SUCCESS, otherwise, return FAILURE. This 
- * function makes use of a global reusable file searching stream to avoid excessive
- * allocations/reallocations. On a large project, we may be searching 1000s of files at
- * this stage so being efficient is important
- */
-static inline u_int8_t does_file_match_module(char* file_name, dynamic_string_t* module_name, u_int8_t silent_mode){
-	//We have a reusable token stream - all we need to do to use it is reset it
-	reset_token_stream(&reusable_file_searching_stream);
-
-	//Attempt to extract the first 2 tokens
-	u_int8_t success = get_first_2_tokens(&reusable_file_searching_stream, file_name, silent_mode);
-
-	/**
-	 * We immediately exit the compiler if this happens - means that somehow
-	 * somewhere a dependency file is corrupted
-	 */
-	if(success == FAILURE || reusable_file_searching_stream.status == STREAM_STATUS_FAILURE){
-		fprintf(stderr, "Fatal internal compiler error: the file %s could not be tokenized. It is likely that you have a corrupted dependency file", file_name);
-		exit(1);
-	}
-
-	//Get the first token. If it's not the $module directive, we can leave now
-	lexitem_t* cursor = token_array_get_pointer_at(&(reusable_file_searching_stream.token_stream), 0);
-	if(cursor->tok != MODULE){
-		return FAILURE;
-	}
-
-	//Now get the second token. Again if it's not an identifier we can leave
-	cursor = token_array_get_pointer_at(&(reusable_file_searching_stream.token_stream), 1);
-	if(cursor->tok != IDENT){
-		return FAILURE;
-	}
-
-	//Now all that's left is to see if these match up
-	return (dynamic_strings_equal(&(cursor->lexeme), module_name) == TRUE) ? SUCCESS : FAILURE;
-}
-
-
-/**
  * Get the file extension of the given filename string. Returns NULL
  * if no "." can be found
  */
@@ -139,6 +99,45 @@ static inline void get_directory(char* directory_buffer, char* full_file_name){
 }
 
 
+/**
+ * Search the first 2 tokens of the given file to determine if it does or does not match
+ * the given module name. If it does, return SUCCESS, otherwise, return FAILURE. This 
+ * function makes use of a global reusable file searching stream to avoid excessive
+ * allocations/reallocations. On a large project, we may be searching 1000s of files at
+ * this stage so being efficient is important
+ */
+static inline u_int8_t does_file_define_module(char* file_name, dynamic_string_t* module_name, u_int8_t silent_mode){
+	//We have a reusable token stream - all we need to do to use it is reset it
+	reset_token_stream(&reusable_file_searching_stream);
+
+	//Attempt to extract the first 2 tokens
+	u_int8_t success = get_first_2_tokens(&reusable_file_searching_stream, file_name, silent_mode);
+
+	/**
+	 * We immediately exit the compiler if this happens - means that somehow
+	 * somewhere a dependency file is corrupted
+	 */
+	if(success == FAILURE || reusable_file_searching_stream.status == STREAM_STATUS_FAILURE){
+		fprintf(stderr, "Fatal internal compiler error: the file %s could not be tokenized. It is likely that you have a corrupted dependency file", file_name);
+		exit(1);
+	}
+
+	//Get the first token. If it's not the $module directive, we can leave now
+	lexitem_t* cursor = token_array_get_pointer_at(&(reusable_file_searching_stream.token_stream), 0);
+	if(cursor->tok != MODULE){
+		return FAILURE;
+	}
+
+	//Now get the second token. Again if it's not an identifier we can leave
+	cursor = token_array_get_pointer_at(&(reusable_file_searching_stream.token_stream), 1);
+	if(cursor->tok != IDENT){
+		return FAILURE;
+	}
+
+	//Now all that's left is to see if these match up
+	return (dynamic_strings_equal(&(cursor->lexeme), module_name) == TRUE) ? SUCCESS : FAILURE;
+}
+
 
 /**
  * Traverse a directory and recursively search for a module by tokenizing
@@ -179,7 +178,7 @@ static u_int8_t traverse_and_search_for_module_rec(char* dependency_file, char* 
 		 */
 		if(file_extension != NULL && strcmp(file_extension, ".ol") == 0){
 			//If they do match, we need to copy the path name into the dependency_file buffer
-			if(does_file_match_module(path_name, module_name, silent_mode) == TRUE){
+			if(does_file_define_module(path_name, module_name, silent_mode) == TRUE){
 				strncpy(dependency_file, path_name, FILENAME_MAX);
 				return SUCCESS;
 
@@ -434,6 +433,11 @@ static dependency_graph_node_t* parse_import_statement_and_get_dependency(ollie_
 
 
 /**
+ * For every single dependency file that we have, we need to read that dependency file
+ * to go out and find it's dependencies. The main file is the only type that gets special
+ * treatment. All of its dependencies, and then all of their dependencies, so on and so forth,
+ * will be handled by this helper
+ *
  * For each file, we must:
  * 	1.) Perform the tokenization for that file only
  * 	2.) Parse the header values and determine if there are dependencies
