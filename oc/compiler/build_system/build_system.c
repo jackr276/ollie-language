@@ -431,11 +431,16 @@ static dependency_graph_node_t* find_or_create_module(char* initial_directory, d
 	 * Step 4: now that we've tokenized the entire thing, we will need to go through
 	 * and determine if this file itself has any imports for furhter dependencies. If
 	 * it does, we'll have to recursively go through and pull all of those in as well
+	 *
+	 * REMEMBER: we need to start at the third token index because the first 3
+	 * values are going to be $module <ident>;, so we don't want to try and
+	 * reprocess those
 	 */
-	int32_t current_token_index = 0;
+	int32_t current_token_index = 3;
 
 	//Run through the top of the file and process until we're done seeing imports
 	while(TRUE){
+		printf("HERE ENTRY\n");
 		lexitem_t* lookahead = token_array_get_pointer_at(&(new_token_stream.token_stream), current_token_index);
 		current_token_index++;
 
@@ -443,6 +448,8 @@ static dependency_graph_node_t* find_or_create_module(char* initial_directory, d
 		if(lookahead->tok != IMPORT){
 			break;
 		}
+
+		printf("HERE\n\n\n\n");
 
 		/**
 		 * Let the helper find and possible create the dependency graph node from our
