@@ -3,9 +3,6 @@
  * This file defines the Ollie build system used for dependency management in Ollie
  */
 
-
-//TODO FULL DOCUMENTATION OF OUR STRATEGY HERE IS NEEDED
-
 #include "build_system.h"
 #include "../utils/error_management.h"
 #include "../utils/constants.h"
@@ -418,9 +415,41 @@ static inline dependency_graph_node_t* get_dependency_subtree_from_import_statem
  * insert the record into the module symtab for future go arounds. We will also fully tokenize the module and give
  * it a proper dependency graph node
  *
- *
  * NOTE: if we are in fact creating a module here for the first time, it is the responsibility of this
  * file itself to parse any further import statements that we have in here
+ *
+ * NOTE: This helper also handles all cyclical dependency checking and recursively creates the build
+ * order
+ *
+ * algorithm find_or_create_module(module name):
+ *  found <- lookup module in symtab
+ *  if found is not NULL:
+ *  	if found is IN_PROGRESS:
+ *  		we have a circular dependency - fail out
+ *  	return the found node
+ *
+ *  traverse for the module in all subdirectories
+ *  if not found:
+ *  	fail out
+ *
+ *  tokenzie the entire file
+ *  if tokenizing fails:
+ *  	fail out
+ *
+ * 	create a dependency graph node for the file and flag it as IN_PROGRESS
+ * 	add dependency graph as a module in the symtab
+ *
+ * 	for each import statement in the file:
+ * 		if find_or_create_module fails(imported module) fails:
+ * 			fail out
+ * 		add the imported module as a dependency of this one
+ *
+ * 	flag the node as COMPLETED
+ * 	push the node onto the reverse build order list
+ * 	return the node
+ *
+ * This algorithm does 3 things at once: it handles all of our import statements, does all circular dependency detection,
+ * and constructs our reverse build order for use by the next step in compilation
  */
 static import_results_t find_or_create_module(char* initial_directory, char* current_file_name, dynamic_string_t* module_name, u_int8_t silent_mode){
 	//Initialize our import results
@@ -438,7 +467,9 @@ static import_results_t find_or_create_module(char* initial_directory, char* cur
 	 */
 	if(found_module != NULL){
 		/**
-		 * If this is currently in progress, it means that we have a circular dependency and need to fail out
+		 * If this is currently in progress, it means that we have a circular dependency and need to fail out. The
+		 * node being in progress means that somewhere up the chain, this node is already being processed which makes
+		 * this circular
 		 */
 		if(found_module->dependency_graph_node->visitation_status == DEPENDENCY_NODE_IN_PROGRESS){
 			sprintf(build_system_info, "The dependency %s in file %s for file %s has been found to be ciruclar. Please remedy and recompile",
@@ -501,7 +532,7 @@ static import_results_t find_or_create_module(char* initial_directory, char* cur
 	symtab_module_record_t* new_module = create_module_record(new_node);
 	insert_module(module_symtab, new_module);
 
-	//Flag that it is currently in progress
+	//Flag that it is currently in progress for later circular dependency detection
 	new_node->visitation_status = DEPENDENCY_NODE_IN_PROGRESS;
 
 	/**
@@ -655,41 +686,6 @@ static dependency_graph_node_t* handle_main_file_tokenization(char* main_file_di
 	//Give back the main dependency node
 	return main_dependency_node;
 }
-
-
-/**
- * MOVE THIS DOCUMENTATION UP MORE
- *
- *
- * Cycle detection/reverse compilation order DFS builder
- *
- *
- * algorithm visit(node n):
- * 	switch n->state:
- * 		case DONE:
- * 			return TRUE
- *
- * 		case PROCESSING:
- * 			print_cycle_error
- * 			return FALSE
- *
- * 		case UNVISITED:
- * 			break;
- *
- * 	n->state = processing
- *
- * 	for each node m that n depends on:
- * 		if visit(m) is FAILURE:
- * 			return FAILURE
- *
- * 	n->state = DONE
- * 	push n onto the reverse compilation order
- *
- * 	return TRUE
- *
- * This allows us to build the compilation order and detect cycles all in one pass of
- * the dependency graph
- */
 
 
 /**
