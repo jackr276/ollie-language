@@ -30,7 +30,6 @@ static ollie_token_stream_t reusable_file_searching_stream;
 
 //Keep track of the error and warning counts
 static u_int32_t num_build_system_errors = 0;
-static u_int32_t num_build_system_warnings = 0;
 
 //Predeclare for recursive calls
 static dependency_graph_node_t* find_or_create_module(char* initial_directory, dynamic_string_t* module_name, u_int8_t silent_mode);
@@ -256,7 +255,7 @@ static u_int8_t traverse_and_search_for_module_rec(char* dependency_file, char* 
  *
  * NOTE: by the time that we get here we have already seen the "$import" token
  */
-static inline dependency_graph_node_t* get_dependency_node_from_import_statement(ollie_token_stream_t* stream, char* main_file_directory, char* current_file_name, int32_t* current_index, u_int8_t silent_mode){
+static inline dependency_graph_node_t* get_dependency_subtree_from_import_statement(ollie_token_stream_t* stream, char* main_file_directory, char* current_file_name, int32_t* current_index, u_int8_t silent_mode){
 	//Get the next value in the stream
 	lexitem_t* lookahead = token_array_get_pointer_at(&(stream->token_stream), *current_index);
 	(*current_index)++;
@@ -451,7 +450,7 @@ static dependency_graph_node_t* find_or_create_module(char* initial_directory, d
 		 * itself *and* all indirect imports worked, so in a sense this not only gives
 		 * back a single dependency node but the root of a dependency tree
 		 */
-		dependency_graph_node_t* dependency = get_dependency_node_from_import_statement(&new_token_stream, initial_directory, dependency_file, &current_token_index, silent_mode);
+		dependency_graph_node_t* dependency = get_dependency_subtree_from_import_statement(&new_token_stream, initial_directory, dependency_file, &current_token_index, silent_mode);
 		if(dependency == NULL){
 			print_build_system_message(MESSAGE_TYPE_ERROR, "Invalid $import directive found in file. Please review and recompile", dependency_file, lookahead->line_num);
 			num_build_system_errors++;
@@ -548,12 +547,12 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_dire
 		}
 
 		/**
-		 * Let the helper find and possible create the dependency graph node from our
+		 * Let the helper find and create the dependency graph node from our
 		 * import statement. If this succeeds, it means that the direct import
 		 * itself *and* all indirect imports worked, so in a sense this not only gives
 		 * back a single dependency node but the root of a dependency tree
 		 */
-		dependency_graph_node_t* dependency = get_dependency_node_from_import_statement(&stream, main_file_directory, main_file_name, &current_token_index, silent_mode);
+		dependency_graph_node_t* dependency = get_dependency_subtree_from_import_statement(&stream, main_file_directory, main_file_name, &current_token_index, silent_mode);
 		if(dependency == NULL){
 			print_build_system_message(MESSAGE_TYPE_ERROR, "Invalid $import directive found in file. Please review and recompile", main_file_name, 0);
 			num_build_system_errors++;
@@ -581,9 +580,6 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_dire
  * stream. This token stream is what we will use to actually parse and construct
  * the overall CFG
  *
- *
- * TODO RETURN TYPE IS NOT ACCURATE LIKELY
- *
  * NOTE: we can *not* deallocate the dependency graph when we do this because we
  * need all of the info contained within for the rest of compilation
  */
@@ -607,8 +603,12 @@ build_system_results_t parse_dependencies_and_construct_token_stream(compiler_op
 	//Let the helper go out and parse through the main file and its dependencies
 	build_system_results_t results = handle_main_file_tokenization(main_file_directory, main_file_name, silent_mode);
 
+	//Copy over how many errors we have in the end
+	results.num_errors = num_build_system_errors;
+
 	//Destroy the reusable file searcher stream now that we're done
 	destroy_token_stream(&reusable_file_searching_stream);	
 
+	//All we need to give back is the main file through this
 	return results;
 }

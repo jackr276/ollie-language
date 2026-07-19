@@ -29,6 +29,7 @@ typedef struct build_system_results_t build_system_results_t;
 struct build_system_results_t {
 	dependency_graph_node_t* result_node;
 	build_system_status_t status;
+	int32_t num_errors;
 };
 
 
