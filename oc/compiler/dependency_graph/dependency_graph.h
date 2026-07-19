@@ -10,7 +10,6 @@
 #include "../lexer/lexer.h"
 #include <sys/types.h>
 
-typedef struct dependency_graph_t dependency_graph_t;
 typedef struct dependency_graph_node_t dependency_graph_node_t;
 
 /**
@@ -23,16 +22,14 @@ typedef enum {
 
 
 /**
- * Define a graph itself. The graph
- * is made up of the nodes that it has, 
- * an adjacency matrix, and a transitive closure
+ * For our visitation of these nodes - we'll
+ * maintain states like this
  */
-struct dependency_graph_t {
-	dynamic_array_t nodes;
-	u_int8_t* adjacency_matrix;
-	u_int8_t* transitive_closure;
-	int32_t num_nodes;
-};
+typedef enum {
+	NOT_VISITED,
+	IN_PROGRESS,
+	FULLY_PROCESSED
+} dependency_node_visitation_status_t;
 
 
 /**
@@ -53,20 +50,17 @@ struct dependency_graph_node_t {
 	int32_t node_id;
 	//The type of node this is
 	dependency_node_type_t type;
+	//What is our visitation status
+	dependency_node_visitation_status_t visitation_status;
 	//Less important - the name of the actaul file
 	char file_name[FILENAME_MAX];
 };
 
 /**
- * Create the overall control structure for a dependency graph
- */
-dependency_graph_t dependency_graph_alloc();
-
-/**
  * Allocate a dependency graph node on the heap. All dependency
  * graph nodes will be heap allocated
  */
-dependency_graph_node_t* dependency_graph_node_alloc(dependency_graph_t* graph, dynamic_string_t* module_name, char* file_name, ollie_token_stream_t* stream, dependency_node_type_t node_type);
+dependency_graph_node_t* dependency_graph_node_alloc(dynamic_string_t* module_name, char* file_name, ollie_token_stream_t* stream, dependency_node_type_t node_type);
 
 /**
  * Add a dependency relationship between dependant and depends_on
@@ -74,19 +68,16 @@ dependency_graph_node_t* dependency_graph_node_alloc(dependency_graph_t* graph, 
 void add_dependency(dependency_graph_node_t* dependant, dependency_graph_node_t* depends_on);
 
 /**
- * Create an adjacency matrix from the dependency graph. This is going to make it easier
- * for us to compute the transitive closure to check for circular dependencies
+ * Run through the dependency graph to check for cycles and return a valid compilation
+ * order in reverse. This compilation order is what will be used by the parser. The parser
+ * will just need to take this compilation order and traverse it backwards in order to
+ * make this all work
  */
-u_int8_t* get_adjacency_matrix_from_dependency_graph(dependency_graph_node_t* root);
+dynamic_array_t get_reverse_ompilation_order_and_check_for_cycles(dependency_graph_node_t* root);
 
 /**
  * Deallocate the given dependency graph node
  */
 void dependency_graph_node_dealloc(dependency_graph_node_t* node);
-
-/**
- * Deallocate the overall dependency graph
- */
-void dependency_graph_dealloc(dependency_graph_t* graph);
 
 #endif /* DEPENDENCY_GRAPH_H */

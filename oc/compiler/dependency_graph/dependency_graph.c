@@ -23,31 +23,10 @@ static inline int32_t get_next_node_id(){
 
 
 /**
- * Create the overall control structure for a dependency graph
- */
-dependency_graph_t dependency_graph_alloc(){
-	dependency_graph_t graph;
-
-	//Allocate the nodes themselves
-	graph.nodes = dynamic_array_alloc();
-
-	//These will be created later on
-	graph.adjacency_matrix = NULL;
-	graph.transitive_closure = NULL;
-
-	//Initially we've got nothing in here
-	graph.num_nodes = 0;
-
-	//Give back the stack-allocated graph
-	return graph;
-}
-
-
-/**
  * Allocate a dependency graph node on the heap. All dependency
  * graph nodes will be heap allocated
  */
-dependency_graph_node_t* dependency_graph_node_alloc(dependency_graph_t* graph, dynamic_string_t* module_name, char* file_name, ollie_token_stream_t* stream, dependency_node_type_t node_type){
+dependency_graph_node_t* dependency_graph_node_alloc(dynamic_string_t* module_name, char* file_name, ollie_token_stream_t* stream, dependency_node_type_t node_type){
 	dependency_graph_node_t* node = calloc(1, sizeof(dependency_graph_node_t));
 
 	//Populate the unique identifier
@@ -63,11 +42,8 @@ dependency_graph_node_t* dependency_graph_node_alloc(dependency_graph_t* graph, 
 	//Copy the filename over here 
 	strncpy(node->file_name, file_name, FILENAME_MAX);
 
-	//Add this into the dependency graph as a whole
-	dynamic_array_add(&(graph->nodes), node);
-
-	//Bump up the node count
-	(graph->num_nodes)++;
+	//By default we're all unvisited
+	node->visitation_status = NOT_VISITED;
 
 	//Give this back once done
 	return node;
@@ -101,14 +77,17 @@ void add_dependency(dependency_graph_node_t* dependant, dependency_graph_node_t*
 
 
 /**
- * Create an adjacency matrix from the dependency graph. This is going to make it easier
- * for us to compute the transitive closure to check for circular dependencies
+ * Run through the dependency graph to check for cycles and return a valid compilation
+ * order. This compilation order is what will be used by the parser
  */
-u_int8_t* get_adjacency_matrix_from_dependency_graph(dependency_graph_node_t* root){
-	//TODO
+dynamic_array_t get_reverse_ompilation_order_and_check_for_cycles(dependency_graph_node_t* root){
+	//Create the reverse compilation order
+	dynamic_array_t reverse_compilation_order = dynamic_array_alloc();
 
+
+	//And give it back
+	return reverse_compilation_order;
 }
-
 
 
 /**
@@ -127,17 +106,4 @@ void dependency_graph_node_dealloc(dependency_graph_node_t* node){
 
 	//Finally we can free the overall node itself(all nodes are heap allocated)
 	free(node);
-}
-
-
-/**
- * Deallocate the overall dependency graph
- */
-void dependency_graph_dealloc(dependency_graph_t* graph){
-	//Free the node array
-	dynamic_array_dealloc(&(graph->nodes));
-
-	//And destory these now that they're not needed
-	free(graph->transitive_closure);
-	free(graph->adjacency_matrix);
 }
