@@ -8250,6 +8250,53 @@ generic_ast_node_t* duplicate_node(generic_ast_node_t* node, side_type_t side){
 
 
 /**
+ * Does the subtree starting at "root" contain at any point an assignment(definition) of the
+ * symtab variable passed in?
+ */
+u_int8_t does_subtree_define_variable(generic_ast_node_t* root, symtab_variable_record_t* variable){
+	//Define a generic cursor for use in traversal
+	generic_ast_node_t* cursor;
+
+	//For each of these node types, there is a chance that we are assigning something
+	switch(root->ast_node_type){
+		case AST_NODE_TYPE_UNARY_EXPR:
+			break;
+
+		case AST_NODE_TYPE_POSTFIX_EXPR:
+			break;
+
+		case AST_NODE_TYPE_ASNMNT_EXPR:
+			break;
+
+		/**
+		 * Let statement is an assignment so we'll 
+		 * see if our variable matches the one we're
+		 * after
+		 */
+		case AST_NODE_TYPE_LET_STMT:
+			if(variable == root->variable){
+				return TRUE;
+			}
+
+			return FALSE;
+
+		/**
+		 * This is our recursive case
+		 *
+		 * TODO
+		 */
+		case AST_NODE_TYPE_BINARY_EXPR:
+			if(does_subtree_define_variable(root->first_child, ))
+			
+		//Default case is a no - so don't bother with this
+		default:
+			return FALSE;
+	}
+
+}
+
+
+/**
  * Simple function that handles all of the hard work for node allocation for us. The user gives us the pointer
  * that they want to use. It is assumed that the user already knows the proper type and takes appropriate action based
  * on that
