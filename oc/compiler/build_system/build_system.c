@@ -46,7 +46,7 @@ struct import_results_t {
 static module_symtab_t* module_symtab = NULL;
 
 //Track the reverse compilation order here
-static dynamic_array_t reverse_compilation_order;
+static dynamic_array_t compilation_order;
 
 //Static string buffer for any error messages that we print
 static char build_system_info[ERROR_SIZE * 5];
@@ -68,6 +68,21 @@ static inline void print_build_system_message(error_message_type_t message, char
 	static const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
 
 	fprintf(stdout, "\n[FILE: %s] --> [LINE %d | OLLIE BUILD SYSTEM %s]: %s\n", file_name, line_number, type[message], info);
+}
+
+
+/**
+ * Debug helper to print the build order
+ */
+static inline void print_build_order(){
+	printf("\n================== BUILD ORDER =================\n");
+
+	for(int32_t i = 0; i < compilation_order.current_index; i++){
+		dependency_graph_node_t* node = dynamic_array_get_at(&compilation_order, i);
+		printf("%d: %s\n", i + 1, node->file_name);
+	}
+
+	printf("================== BUILD ORDER =================\n\n");
 }
 
 
@@ -292,9 +307,6 @@ static inline dependency_graph_node_t* get_dependency_subtree_from_import_statem
 	//Generic result holder
 	import_results_t results;
 
-	//The found dependency
-	dependency_graph_node_t* found_module_dependency = NULL;
-
 	/**
 	 * We can see either "file_name" or <file_name> here. Anything else is
 	 * bad and will lead us to fail out
@@ -399,7 +411,7 @@ static inline dependency_graph_node_t* get_dependency_subtree_from_import_statem
 	}
 
 	//Give back the actual node that we found
-	return found_module_dependency;
+	return results.result_node;
 }
 
 
@@ -578,7 +590,7 @@ static import_results_t find_or_create_module(char* initial_directory, char* cur
 	}
 
 	//Flag that it's now done and add it to the compilation order
-	dynamic_array_add(&reverse_compilation_order, new_node);
+	dynamic_array_add(&compilation_order, new_node);
 	new_node->visitation_status = DEPENDENCY_NODE_FULLY_PROCESSED;
 
 	//Give this back so that it can be added to the graph
@@ -681,7 +693,7 @@ static dependency_graph_node_t* handle_main_file_tokenization(char* main_file_di
 
 	//Once we're all the way done, add this onto the reverse compilation order and flag that we're finished
 	main_dependency_node->visitation_status = DEPENDENCY_NODE_FULLY_PROCESSED;
-	dynamic_array_add(&reverse_compilation_order, main_dependency_node);
+	dynamic_array_add(&compilation_order, main_dependency_node);
 
 	//Give back the main dependency node
 	return main_dependency_node;
@@ -702,7 +714,7 @@ build_system_results_t parse_dependencies_and_construct_token_stream(compiler_op
 	build_system_results_t results = INITIALIZE_BLANK_BUILD_SYSTEM_RESULTS;
 
 	//Pre-allocate the reverse compilation order here, we will populate it as we go
-	reverse_compilation_order = dynamic_array_alloc();
+	compilation_order = dynamic_array_alloc();
 
 	//Allocate the module symtab first
 	module_symtab = module_symtab_alloc();
@@ -733,6 +745,14 @@ build_system_results_t parse_dependencies_and_construct_token_stream(compiler_op
 		results.num_errors = num_build_system_errors;
 		return results;
 	}
+
+	/**
+	 * If we have debugging enabled display the entire build order
+	 */
+	if(options->enable_debug_printing == TRUE){
+		print_build_order();
+	}
+
 
 	//Give back our compilation order through here
 	//TODO WILL NEED FIXING
