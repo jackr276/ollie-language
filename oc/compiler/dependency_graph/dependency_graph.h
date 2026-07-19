@@ -45,8 +45,6 @@ struct dependency_graph_node_t {
 	dynamic_string_t module_name;
 	//What does this node itself depend on
 	dynamic_array_t depends_on;
-	//Who are we depended on by
-	dynamic_array_t depended_on_by;
 	//Unique node ID
 	int32_t node_id;
 	//The type of node this is

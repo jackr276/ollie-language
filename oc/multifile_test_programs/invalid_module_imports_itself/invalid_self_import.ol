@@ -9,7 +9,6 @@ $module invalid_self_reference;
 //BAD - cannot be doing this
 $import "invalid_self_reference";
 
-
 pub fn dummy() -> i32 {
 	ret 0;
 }

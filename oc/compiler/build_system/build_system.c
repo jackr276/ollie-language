@@ -628,6 +628,8 @@ static u_int8_t visit_node(dependency_graph_node_t* node, dynamic_array_t* rever
 	for(int32_t i = 0; i < node->depends_on.current_index; i++){
 		dependency_graph_node_t* depends_on = dynamic_array_get_at(&(node->depends_on), i);
 
+		printf("%s DEPENDS ON %s\n", node->module_name.string, depends_on->module_name.string);
+
 		//If this fails, then we're done. The build is invalid and we fail out
 		if(visit_node(depends_on, reverse_compilation_order) == FAILURE){
 			sprintf(build_system_info, "The dependency %s in file %s for module %s in file %s has been found to be ciruclar. Please remedy and recompile",
@@ -663,7 +665,7 @@ static inline u_int8_t get_reverse_compilation_order_and_check_for_cycles(depend
 	 * Invoke the recursive traversal on the main node. If it works then great,
 	 * otherwise we had a cycle and we print the appropriate error
 	 */
-	if(visit_node(root, reverse_compilation_order) == SUCCESS){
+	if(visit_node(root, reverse_compilation_order) == FAILURE){
 		print_build_system_message(MESSAGE_TYPE_ERROR, "Circular dependency detected. Please remedy this and recompile", main_file_name, 0);
 		return FAILURE;
 	}
