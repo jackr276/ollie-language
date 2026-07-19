@@ -8297,7 +8297,7 @@ u_int8_t does_subtree_define_variable(generic_ast_node_t* root, symtab_variable_
 
 			//Otherwise check the right child - whatever this returns is it
 			cursor = cursor->next_sibling;
-			return does_subtree_define_variable(cursor, variable) == TRUE;
+			return does_subtree_define_variable(cursor, variable);
 			
 		//Default case is a no - so don't bother with this
 		default:
