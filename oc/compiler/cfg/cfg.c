@@ -6495,19 +6495,17 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 		return generate_pointer_arithmetic_for_binary_operation(basic_block, logical_or_expr);
 	}
 
-
-	//TODO instead of what we're currently doing with the op1/op2's, we should
-	//see if the left and right operations read/right from the same variable.
-	//If they do then we'll need to resolve the conflict. Look at the chatgpt output
-	//to see an example
 	/**
 	 * Keep track of the cursor here. We will traverse in order
 	 * and emit the left and right hand sides of the expression first
 	 */
 	generic_ast_node_t* expression_cursor = logical_or_expr->first_child;
+	
+	//This is the left expression - hang onto it for later
+	generic_ast_node_t* left_expression = logical_or_expr->first_child;
 
 	//Left first
-	cfg_result_package_t left_side = emit_binary_expression(current_block, expression_cursor);
+	cfg_result_package_t left_side = emit_binary_expression(current_block, left_expression);
 
 	//Advance it and update the block pointer
 	current_block = left_side.final_block;
@@ -6518,8 +6516,11 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	//Bump this up to the right operand
 	expression_cursor = expression_cursor->next_sibling;
 
+	//This is the right expression - hang onto it for later
+	generic_ast_node_t* right_expression = expression_cursor;
+
 	//Then the right
-	cfg_result_package_t right_side = emit_binary_expression(current_block, expression_cursor);
+	cfg_result_package_t right_side = emit_binary_expression(current_block, right_expression);
 	//Update the block pointer
 	current_block = right_side.final_block;
 
@@ -6653,6 +6654,11 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	if(variables_equal_no_ssa(op1, op2) == TRUE){
 		op1 = insert_temporary_assignment_for_unsequenced_operation(op1, last_instruction_before_second_operand, current_block);
 	}
+
+	//TODO instead of what we're currently doing with the op1/op2's, we should
+	//see if the left and right operations read/right from the same variable.
+	//If they do then we'll need to resolve the conflict. Look at the chatgpt output
+	//to see an example
 
 	//Here's the final statement
 	instruction_t* binary_operation;
