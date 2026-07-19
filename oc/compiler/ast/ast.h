@@ -203,6 +203,12 @@ generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee, side_type_
 generic_ast_node_t* duplicate_node(generic_ast_node_t* node, side_type_t side);
 
 /**
+ * Does the subtree starting at "root" contain at any point an assignment(definition) of the
+ * symtab variable passed in?
+ */
+u_int8_t does_subtree_define_variable(generic_ast_node_t* root, symtab_variable_record_t* variable);
+
+/**
  * A helper function that will appropriately add a child node into the parent
  */
 void add_child_node(generic_ast_node_t* parent, generic_ast_node_t* child);

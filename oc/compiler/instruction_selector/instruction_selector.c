@@ -4746,6 +4746,41 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
+
+	/**
+	 * -------------------------- Simplifying op1 temp assignments ----------------------------------
+	 * If we have a binary operation that is preceeded directly by a temp assignment, and that temp
+	 * assignment matches the first operand, we can replace the first operand with the value from
+	 * that temp assignment. This only happens when there is no gap between the two instructions,
+	 * because it means that said temp assignment has no effect and can be removed
+	 *
+	 * t3 <- x_0
+	 * y <- t3 + x_1 
+	 *
+	 * can become
+	 * y <- x_0 + x_1 
+	 */
+	if(window->instruction2 != NULL
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
+		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.operand1) == TRUE
+		&& window->instruction1->cannot_be_combined == FALSE){
+
+		//Just replace and bump the use count
+		window->instruction2->operands.oir.operand1 = window->instruction1->operands.oir.operand1;
+		window->instruction2->operands.oir.operand1->use_count++;
+
+		/**
+		 * Flag that this is changed. We do not need to bother deleting the assignment
+		 * because there will be a mark and sweep pass after this that will
+		 * pick up and delete the assignment after we're done here
+		 */
+		reconstruct_window(window, window->instruction2);
+		changed = TRUE;
+	}
+
+
 	/**
 	 * --------------------- Simplifying binary operations with non-constants ----------------------
 	 * If we have binary operations that are non-constant, there is still a chance that we're able

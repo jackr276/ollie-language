@@ -170,6 +170,7 @@ static inline void visit_static_declare_statement(generic_ast_node_t* node);
 static inline void handle_raise_statement(basic_block_t* basic_block, generic_ast_node_t* node);
 static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, branch_type_t branch_type, three_addr_var_t* conditional_result);
 
+
 /**
  * Unpack a result package. We assume that if this function is being called that the caller
  * wants us to unpack the constant if we are able to.
@@ -183,6 +184,52 @@ static inline three_addr_var_t* unpack_result_package(cfg_result_package_t* resu
 		//Variable - just give it back
 		case CFG_RESULT_TYPE_VAR:
 			returned_variable = result_package->result_value.result_var;
+			break;
+
+		//Constant - unpack with an assignment and give the temp var back
+		case CFG_RESULT_TYPE_CONST:
+			constant_value = result_package->result_value.result_const;
+
+			//Emit the assignment
+			instruction_t* const_assignment = emit_assignment_with_const_instruction(emit_temp_var(constant_value->type), constant_value);
+
+			//Throw it into the block
+			add_statement(block, const_assignment);
+
+			//This is the variable that we end up returning
+			returned_variable = const_assignment->operands.oir.assignee;
+			break;
+	}
+
+	//Give back the returned variable in the end
+	return returned_variable;
+}
+
+
+/**
+ * Unpack a result package. We assume that if this function is being called that the caller
+ * wants us to unpack the constant if we are able to.
+ *
+ * This overload of the regular unpacker will always perform a temporary assignment. This is
+ * used for binary expressions where we want to preserve execution ordre
+ */
+static inline three_addr_var_t* unpack_result_package_with_temp_assignment(cfg_result_package_t* result_package, basic_block_t* block){
+	//The variable that we will always end up returning
+	three_addr_var_t* variable_value;
+	three_addr_const_t* constant_value;
+	three_addr_var_t* returned_variable;
+
+	switch(result_package->type){
+		//Unpack by performing a temporary assignment
+		case CFG_RESULT_TYPE_VAR:
+			variable_value = result_package->result_value.result_var;
+
+			//Emit the assignment into the block
+			instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(variable_value->type), variable_value);
+			add_statement(block, temp_assignment);
+
+			//We will return the temp
+			returned_variable = temp_assignment->operands.oir.assignee;
 			break;
 
 		//Constant - unpack with an assignment and give the temp var back
@@ -6377,6 +6424,35 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 
 
 /**
+ * Insert the temporary assignment for an unsequenced operation before operand2
+ * is evaluated. This helper will return the newly created temp var that comes
+ * from this
+ */
+static inline three_addr_var_t* insert_temporary_assignment_for_unsequenced_operation(three_addr_var_t* op1, instruction_t* last_before_op2_eval, basic_block_t* current_block){
+
+	//Emit the temp var
+	three_addr_var_t* op1_temp = emit_temp_var(op1->type); 
+
+	//Emit and place this right after the last instruction before op2 starts being evaluated
+	instruction_t* temp_assignment = emit_assignment_instruction(op1_temp, op1);
+
+	/**
+	 * If the last instruction before we evaluate op2 is NULL, then we will just add this
+	 * in as the very first instruction in the block. Otherwise we insert it after the previous
+	 * final instruction
+	 */
+	if(last_before_op2_eval != NULL){
+		insert_instruction_after_given(temp_assignment, last_before_op2_eval);
+	} else {
+		add_statement(current_block, temp_assignment);
+	}
+
+	//Give back the new temp var
+	return op1_temp;
+}
+
+
+/**
  * Emit the abstract machine code needed for a binary expression. The lowest possible
  * thing that we could have here is a unary expression. If we have that, we just emit the
  * unary expression
@@ -6424,16 +6500,27 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	 * and emit the left and right hand sides of the expression first
 	 */
 	generic_ast_node_t* expression_cursor = logical_or_expr->first_child;
+	
+	//This is the left expression - hang onto it for later
+	generic_ast_node_t* left_expression = logical_or_expr->first_child;
 
 	//Left first
-	cfg_result_package_t left_side = emit_binary_expression(current_block, expression_cursor);
+	cfg_result_package_t left_side = emit_binary_expression(current_block, left_expression);
 
 	//Advance it and update the block pointer
-	expression_cursor = expression_cursor->next_sibling;
 	current_block = left_side.final_block;
 
+	//Save the last instruction before the second operand is emitted
+	instruction_t* last_instruction_before_second_operand = current_block->exit_statement;
+
+	//Bump this up to the right operand
+	expression_cursor = expression_cursor->next_sibling;
+
+	//This is the right expression - hang onto it for later
+	generic_ast_node_t* right_expression = expression_cursor;
+
 	//Then the right
-	cfg_result_package_t right_side = emit_binary_expression(current_block, expression_cursor);
+	cfg_result_package_t right_side = emit_binary_expression(current_block, right_expression);
 	//Update the block pointer
 	current_block = right_side.final_block;
 
@@ -6481,7 +6568,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 		case DOUBLE_EQUALS:
 		case NOT_EQUALS:
 			/**
-			 * Always unpack op1 - in all reality it shouldn't be a constant but just to be safe we will
+			 * Always unpack op1 - it should never be a constant but we want to be safe
 			 */
 			op1 = unpack_result_package(&left_side, current_block);
 
@@ -6526,8 +6613,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 		//Otherwise default rules are in effect
 		default:
 			/**
-			 * We always unpack op1. In reality it should not be a constant but we will do this
-			 * just to be sure
+			 * Always unpack op1 - it should never be a constant but we want to be safe
 			 */
 			op1 = unpack_result_package(&left_side, current_block);
 
@@ -6554,6 +6640,25 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 			}
 
 			break;
+	}
+
+	/**
+	 * If the right subtree assigns to this variable before we get the chance to use it, we'll need
+	 * to preserve the original value of the variable from the left expression by emitting a temporary
+	 * assignment right before the second expression is emitted
+	 *
+	 *	x = x + (x = 2)
+	 *	
+	 *	Will become:
+	 *
+	 *	t0 <- x_0
+	 *	x_1 <- 2
+	 *	x_3 <- t0 + x_1
+	 *
+	 * This preserves the intent of the unsequenced operation and guarantees execution order from left-to-right
+	 */
+	if(op1->variable_type != VARIABLE_TYPE_TEMP && does_subtree_define_variable(right_expression, op1->linked_var) == TRUE){
+		op1 = insert_temporary_assignment_for_unsequenced_operation(op1, last_instruction_before_second_operand, current_block);
 	}
 
 	//Here's the final statement
