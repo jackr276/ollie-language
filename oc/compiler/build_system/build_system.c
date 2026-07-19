@@ -17,7 +17,7 @@
 static char* OLLIE_LIBRARY_DIRECTORY = "/usr/lib/ollie";
 
 //Helper that will let us initialize a wiped out version
-#define INITIALIZE_BLANK_BUILD_SYSTEM_RESULTS {NULL, BUILD_SYSTEM_STATUS_FAILURE}
+#define INITIALIZE_BLANK_BUILD_SYSTEM_RESULTS {{NULL, 0, 0}, NULL, BUILD_SYSTEM_STATUS_FAILURE, 0}
 
 //We will maintain an overall module symtab to avoid duplicate searches
 module_symtab_t* module_symtab = NULL;
@@ -485,10 +485,7 @@ static dependency_graph_node_t* find_or_create_module(char* initial_directory, d
  * As we go through the imports of the main file, we will also be tokenizing and handling
  * the imports of those dependency files themselves
  */
-static build_system_results_t handle_main_file_tokenization(char* main_file_directory, char* main_file_name, u_int8_t silent_mode){
-	//Create and initialize our results
-	build_system_results_t results = INITIALIZE_BLANK_BUILD_SYSTEM_RESULTS;
-
+static dependency_graph_node_t* handle_main_file_tokenization(char* main_file_directory, char* main_file_name, u_int8_t silent_mode){
 	//Let's first tokenize the main file
 	ollie_token_stream_t stream = tokenize(main_file_name, silent_mode);
 
@@ -499,8 +496,7 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_dire
 	if(stream.status == STREAM_STATUS_FAILURE){
 		print_build_system_message(MESSAGE_TYPE_ERROR, "Tokenzining failed. Please remedy the error and recompile", main_file_name, 0);
 		num_build_system_errors++;
-		results.status = BUILD_SYSTEM_STATUS_FAILURE;
-		return results;
+		return NULL;
 	}
 
 	/**
@@ -512,8 +508,7 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_dire
 	if(first_token->tok == MODULE){
 		print_build_system_message(MESSAGE_TYPE_ERROR, "The main file may never be defined as a module", main_file_name, 0);
 		num_build_system_errors++;
-		results.status = BUILD_SYSTEM_STATUS_FAILURE; 
-		return results;
+		return NULL;
 	}
 
 	/**
@@ -556,8 +551,7 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_dire
 		if(dependency == NULL){
 			print_build_system_message(MESSAGE_TYPE_ERROR, "Invalid $import directive found in file. Please review and recompile", main_file_name, 0);
 			num_build_system_errors++;
-			results.status = BUILD_SYSTEM_STATUS_FAILURE; 
-			return results;
+			return NULL;
 		}
 
 		/**
@@ -567,10 +561,8 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_dire
 		add_dependency(main_dependency_node, dependency);
 	}
 
-	//Package up and give back our results
-	results.result_node = main_dependency_node;
-	results.status = BUILD_SYSTEM_STATUS_SUCCESS;
-	return results;
+	//Give back the main dependency node
+	return main_dependency_node;
 }
 
 
@@ -584,6 +576,9 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_dire
  * need all of the info contained within for the rest of compilation
  */
 build_system_results_t parse_dependencies_and_construct_token_stream(compiler_options_t* options, u_int8_t silent_mode){
+	//First we'll need some blank results to get started
+	build_system_results_t results = INITIALIZE_BLANK_BUILD_SYSTEM_RESULTS;
+
 	//Allocate the module symtab first
 	module_symtab = module_symtab_alloc();
 
@@ -597,18 +592,26 @@ build_system_results_t parse_dependencies_and_construct_token_stream(compiler_op
 	 */
 	char* main_file_name = options->file_name;
 
+	//Grab the main file directory that all "" imports are searched for under
 	char main_file_directory[FILENAME_MAX];
 	get_directory(main_file_directory, main_file_name);
 
 	//Let the helper go out and parse through the main file and its dependencies
-	build_system_results_t results = handle_main_file_tokenization(main_file_directory, main_file_name, silent_mode);
-
-	//Copy over how many errors we have in the end
-	results.num_errors = num_build_system_errors;
+	dependency_graph_node_t* main_node = handle_main_file_tokenization(main_file_directory, main_file_name, silent_mode);
 
 	//Destroy the reusable file searcher stream now that we're done
 	destroy_token_stream(&reusable_file_searching_stream);	
 
-	//All we need to give back is the main file through this
+	//If we have no main node, that means that we've failed here so return a failure
+	if(main_node == NULL){
+		results.status = BUILD_SYSTEM_STATUS_FAILURE;
+		results.num_errors = num_build_system_errors;
+		return results;
+	}
+
+	//Give back our compilation order through here
+	//TODO WILL NEED FIXING
+	results.result_node = main_node;
+	results.status = BUILD_SYSTEM_STATUS_SUCCESS;
 	return results;
 }
