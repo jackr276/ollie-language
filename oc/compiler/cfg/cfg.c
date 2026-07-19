@@ -6648,23 +6648,18 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	 * assignment right before the second expression is emitted
 	 *
 	 *	x = x + (x = 2)
+	 *	
+	 *	Will become:
+	 *
+	 *	t0 <- x_0
+	 *	x_1 <- 2
+	 *	x_3 <- t0 + x_1
+	 *
+	 * This preserves the intent of the unsequenced operation and guarantees execution order from left-to-right
 	 */
 	if(op1->variable_type != VARIABLE_TYPE_TEMP && does_subtree_define_variable(right_expression, op1->linked_var) == TRUE){
 		op1 = insert_temporary_assignment_for_unsequenced_operation(op1, last_instruction_before_second_operand, current_block);
 	}
-
-	/**
-	 * If these two variables are identical, we will need to
-	 * emit a temporary assignment for the first operand *before*
-	 * the second operand is being emitted so that we can guarantee
-	 * left-to-right assignment order. This only matters *if*
-	 * the two variables are exactly identical.
-	 * 	An example may be:
-	 * 		x = x + (x = 2)
-	 */
-	//if(variables_equal_no_ssa(op1, op2) == TRUE){
-	//	op1 = insert_temporary_assignment_for_unsequenced_operation(op1, last_instruction_before_second_operand, current_block);
-	//}
 
 	//Here's the final statement
 	instruction_t* binary_operation;
