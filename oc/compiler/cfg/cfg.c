@@ -6644,12 +6644,13 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 	/**
 	 * If the right subtree assigns to this variable before we get the chance to use it, we'll need
-	 * to preserve the original value of the variable byt 
+	 * to preserve the original value of the variable from the left expression by emitting a temporary
+	 * assignment right before the second expression is emitted
 	 *
 	 *	x = x + (x = 2)
 	 */
 	if(op1->variable_type != VARIABLE_TYPE_TEMP && does_subtree_define_variable(right_expression, op1->linked_var) == TRUE){
-		printf("HERE\n");
+		op1 = insert_temporary_assignment_for_unsequenced_operation(op1, last_instruction_before_second_operand, current_block);
 	}
 
 	/**
@@ -6661,9 +6662,9 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	 * 	An example may be:
 	 * 		x = x + (x = 2)
 	 */
-	if(variables_equal_no_ssa(op1, op2) == TRUE){
-		op1 = insert_temporary_assignment_for_unsequenced_operation(op1, last_instruction_before_second_operand, current_block);
-	}
+	//if(variables_equal_no_ssa(op1, op2) == TRUE){
+	//	op1 = insert_temporary_assignment_for_unsequenced_operation(op1, last_instruction_before_second_operand, current_block);
+	//}
 
 	//Here's the final statement
 	instruction_t* binary_operation;
