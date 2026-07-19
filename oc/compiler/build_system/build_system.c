@@ -32,6 +32,8 @@ static ollie_token_stream_t reusable_file_searching_stream;
 static u_int32_t num_build_system_errors = 0;
 static u_int32_t num_build_system_warnings = 0;
 
+//Predeclare for recursive calls
+static dependency_graph_node_t* get_dependency_node_from_import_statement(ollie_token_stream_t* stream, char* main_file_directory, char* current_file_name, int32_t* current_index, u_int8_t silent_mode);
 
 /**
  * A generic printer for any build system errors that we may encounter
@@ -253,10 +255,13 @@ static u_int8_t traverse_and_search_for_module_rec(char* dependency_file, char* 
  * insert the record into the module symtab for future go arounds. We will also fully tokenize the module and give
  * it a proper dependency graph node
  *
+ *
+ * NOTE: if we are in fact creating a module here for the first time, it is the responsibility of this
+ * file itself to parse any further import statements that we have in here
  */
 static inline dependency_graph_node_t* find_or_create_module(char* initial_directory, dynamic_string_t* module_name, u_int8_t silent_mode){
 	/**
-	 * First step in our search - hit the module symtab and see if we can find anything in
+	 * Step 1: hit the module symtab and see if we can find anything in
 	 * there. If we can, we save ourselves the trouble of searching the file system
 	 */
 	symtab_module_record_t* found_module = lookup_module(module_symtab, module_name);
@@ -270,9 +275,10 @@ static inline dependency_graph_node_t* find_or_create_module(char* initial_direc
 	}
 
 	/**
-	 * Otherwise we did not find it, so we are going to have to search
+	 * Step 2: Otherwise we did not find it, so we are going to have to search
 	 * for it inside of the given initial directory using a recursive
-	 * directory search
+	 * directory search. If this fails, we did not find the module so the
+	 * entire thing is wrong and we fail out
 	 */
 	char dependency_file[FILENAME_MAX];
 	u_int8_t found = traverse_and_search_for_module_rec(dependency_file, initial_directory, module_name, silent_mode);
@@ -283,7 +289,7 @@ static inline dependency_graph_node_t* find_or_create_module(char* initial_direc
 	}
 
 	/**
-	 * Now that we've found something, we'll need to create a dependency graph node for the 
+	 * Step 3: Now that we've found something, we'll need to create a dependency graph node for the 
 	 * next go around. In order to do this, we're going to need to fully tokenize the entire
 	 * thing. If this tokenizing fails we will return a different failure
 	 */
@@ -303,10 +309,19 @@ static inline dependency_graph_node_t* find_or_create_module(char* initial_direc
 		return NULL;
 	}
 
-	//TODO THIS IS ACTUALLY WRONG! It should be in the dependency file tokenizer
-
 	//Create the new dependency node now that we know we've got a good stream
 	dependency_graph_node_t* new_node = dependency_graph_node_alloc(module_name, dependency_file, &new_token_stream, DEPENDENCY_GRAPH_NODE_TYPE_DEPENDENCY);
+
+	/**
+	 * Step 4: now that we've tokenized the entire thing, we will need to go through
+	 * and determine if this file itself has any imports for furhter dependencies. If
+	 * it does, we'll have to recursively go through and pull all of those in as well
+	 */
+
+
+
+	//TODO THIS IS ACTUALLY WRONG! It should be in the dependency file tokenizer
+
 
 	//And then create and insert a new module based on the new node
 	symtab_module_record_t* new_module = create_module_record(new_node);
@@ -520,7 +535,11 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_dire
 			return results;
 		}
 
-		//TODO ADD THE DEPENDENCY
+		/**
+		 * Create the relationship in the graph that
+		 * the main node(dependant) depends on the dependancy
+		 */
+		add_dependency(main_dependency_node, dependency);
 	}
 
 	//Package up and give back our results
