@@ -19,11 +19,33 @@
 //Ollie's general library must always be located here
 static char* OLLIE_LIBRARY_DIRECTORY = "/usr/lib/ollie";
 
+/**
+ * Different import status types for different
+ * errors
+ */
+typedef enum {
+	IMPORT_STATUS_SUCCESS,
+	IMPORT_STATUS_NOT_FOUND,
+	IMPORT_STATUS_TOKENIZATION_FAILURE,
+	IMPORT_STATUS_CYCLICAL_DEPENDENCY
+} import_status_t;
+
+/**
+ * The import results struct contains the dependency
+ * node itself as well as any failure info if we 
+ * have it
+ */
+typedef struct import_results_t import_results_t;
+struct import_results_t {
+	dependency_graph_node_t* result_node;
+	import_status_t import_status;
+};
+
 //Helper that will let us initialize a wiped out version
 #define INITIALIZE_BLANK_BUILD_SYSTEM_RESULTS {{NULL, 0, 0}, NULL, BUILD_SYSTEM_STATUS_FAILURE, 0}
 
 //We will maintain an overall module symtab to avoid duplicate searches
-module_symtab_t* module_symtab = NULL;
+static module_symtab_t* module_symtab = NULL;
 
 //Track the reverse compilation order here
 static dynamic_array_t reverse_compilation_order;
@@ -38,7 +60,7 @@ static ollie_token_stream_t reusable_file_searching_stream;
 static u_int32_t num_build_system_errors = 0;
 
 //Predeclare for recursive calls
-static dependency_graph_node_t* find_or_create_module(char* initial_directory, char* current_file_name, dynamic_string_t* module_name, u_int8_t silent_mode);
+static import_results_t find_or_create_module(char* initial_directory, char* current_file_name, dynamic_string_t* module_name, u_int8_t silent_mode);
 
 /**
  * A generic printer for any build system errors that we may encounter
@@ -266,6 +288,12 @@ static inline dependency_graph_node_t* get_dependency_subtree_from_import_statem
 	lexitem_t* lookahead = token_array_get_pointer_at(&(stream->token_stream), *current_index);
 	(*current_index)++;
 
+	//What directory are we searching - this differs based on the type of import status
+	char* directory_to_search = NULL;
+	
+	//Generic result holder
+	import_results_t results;
+
 	//The found dependency
 	dependency_graph_node_t* found_module_dependency = NULL;
 
@@ -283,17 +311,7 @@ static inline dependency_graph_node_t* get_dependency_subtree_from_import_statem
 			 * Let the helper go through and search our local directory for this module. If we can't
 			 * find it, then we have an issue and we throw an error
 			 */
-			found_module_dependency = find_or_create_module(main_file_directory, current_file_name, &(lookahead->lexeme), silent_mode);
-
-			//Fail out if we don't have it
-			//TODO BAD - NEEDS MORE DETAIL
-			if(found_module_dependency == NULL){
-				sprintf(build_system_info, "Module \"%s\" could not be found anywhere under the local directory", lookahead->lexeme.string);
-				print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
-				num_build_system_errors++;
-				return NULL;
-			}
-			
+			results = find_or_create_module(main_file_directory, current_file_name, &(lookahead->lexeme), silent_mode);
 			break;
 
 		/**
@@ -331,17 +349,7 @@ static inline dependency_graph_node_t* get_dependency_subtree_from_import_statem
 			 * Now let the helper go through and search our local directory for this module. If we can't
 			 * find it, then we have an issue and we throw an error
 			 */
-			found_module_dependency = find_or_create_module(OLLIE_LIBRARY_DIRECTORY, current_file_name, &(lookahead->lexeme), silent_mode);
-
-			//TODO BAD
-			//TODO BAD - NEEDS MORE DETAIL
-			if(found_module_dependency == NULL){
-				sprintf(build_system_info, "Module \"%s\" could not be found anywhere under the local directory", lookahead->lexeme.string);
-				print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
-				num_build_system_errors++;
-				return NULL;
-			}
-
+			results = find_or_create_module(OLLIE_LIBRARY_DIRECTORY, current_file_name, &(lookahead->lexeme), silent_mode);
 			break;
 
 		default:
@@ -350,6 +358,18 @@ static inline dependency_graph_node_t* get_dependency_subtree_from_import_statem
 			num_build_system_errors++;
 			return NULL;
 	}
+
+	//TODO HANDLE IMPORT REUSLTS
+
+	//TODO BAD
+	//TODO BAD - NEEDS MORE DETAIL
+	if(found_module_dependency == NULL){
+		sprintf(build_system_info, "Module \"%s\" could not be found anywhere under the local directory", lookahead->lexeme.string);
+		print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
+		num_build_system_errors++;
+		return NULL;
+	}
+
 
 	//Let's look for the final semicolon here
 	lookahead = token_array_get_pointer_at(&(stream->token_stream), *current_index);
@@ -383,7 +403,7 @@ static inline dependency_graph_node_t* get_dependency_subtree_from_import_statem
  * NOTE: if we are in fact creating a module here for the first time, it is the responsibility of this
  * file itself to parse any further import statements that we have in here
  */
-static dependency_graph_node_t* find_or_create_module(char* initial_directory, char* current_file_name, dynamic_string_t* module_name, u_int8_t silent_mode){
+static import_results_t find_or_create_module(char* initial_directory, char* current_file_name, dynamic_string_t* module_name, u_int8_t silent_mode){
 	/**
 	 * Step 1: hit the module symtab and see if we can find anything in
 	 * there. If we can, we save ourselves the trouble of searching the file system
