@@ -252,8 +252,9 @@ static u_int8_t traverse_and_search_for_module_rec(char* dependency_file, char* 
  * for efficiency's sake. If we do not find it, then we fail out. If we do find it, then we will create and
  * insert the record into the module symtab for future go arounds. We will also fully tokenize the module and give
  * it a proper dependency graph node
+ *
  */
-static inline dependency_graph_node_t* find_module(char* initial_directory, dynamic_string_t* module_name, u_int8_t silent_mode){
+static inline dependency_graph_node_t* find_or_create_module(char* initial_directory, dynamic_string_t* module_name, u_int8_t silent_mode){
 	/**
 	 * First step in our search - hit the module symtab and see if we can find anything in
 	 * there. If we can, we save ourselves the trouble of searching the file system
@@ -329,7 +330,7 @@ static inline dependency_graph_node_t* find_module(char* initial_directory, dyna
  *
  * NOTE: by the time that we get here we have already seen the "$import" token
  */
-static dependency_graph_node_t* parse_import_statement_and_get_dependency(ollie_token_stream_t* stream, char* main_file_directory, char* current_file_name, int32_t* current_index, u_int8_t silent_mode){
+static dependency_graph_node_t* get_dependency_node_from_import_statement(ollie_token_stream_t* stream, char* main_file_directory, char* current_file_name, int32_t* current_index, u_int8_t silent_mode){
 	//Get the next value in the stream
 	lexitem_t* lookahead = token_array_get_pointer_at(&(stream->token_stream), *current_index);
 	(*current_index)++;
@@ -351,7 +352,7 @@ static dependency_graph_node_t* parse_import_statement_and_get_dependency(ollie_
 			 * Let the helper go through and search our local directory for this module. If we can't
 			 * find it, then we have an issue and we throw an error
 			 */
-			found_module_dependency = find_module(main_file_directory, &(lookahead->lexeme), silent_mode);
+			found_module_dependency = find_or_create_module(main_file_directory, &(lookahead->lexeme), silent_mode);
 
 			//Fail out if we don't have it
 			if(found_module_dependency == NULL){
@@ -398,7 +399,7 @@ static dependency_graph_node_t* parse_import_statement_and_get_dependency(ollie_
 			 * Now let the helper go through and search our local directory for this module. If we can't
 			 * find it, then we have an issue and we throw an error
 			 */
-			found_module_dependency = find_module(OLLIE_LIBRARY_DIRECTORY, &(lookahead->lexeme), silent_mode);
+			found_module_dependency = find_or_create_module(OLLIE_LIBRARY_DIRECTORY, &(lookahead->lexeme), silent_mode);
 
 			if(found_module_dependency == NULL){
 				sprintf(build_system_info, "Module \"%s\" could not be found anywhere under the local directory", lookahead->lexeme.string);
@@ -433,32 +434,16 @@ static dependency_graph_node_t* parse_import_statement_and_get_dependency(ollie_
 
 
 /**
- * For every single dependency file that we have, we need to read that dependency file
- * to go out and find it's dependencies. The main file is the only type that gets special
- * treatment. All of its dependencies, and then all of their dependencies, so on and so forth,
- * will be handled by this helper
- *
- * For each file, we must:
- * 	1.) Perform the tokenization for that file only
- * 	2.) Parse the header values and determine if there are dependencies
- * 	3.) Construct a build dependency graph node containing this file name and its token stream
- * 	4.) For each dependency, perform this same process on it
- * TODO VALIDATIONS, ETC
- * 	
- */
-static void handle_dependency_file_tokenization(char* file_name, u_int8_t silent_mode){
-
-	//TODO VOID FOR NOW
-}
-
-
-/**
  * The main file in ollie is the file that the user has passed in via the -f option
- * to the ollie compiler
+ * to the ollie compiler. This is the only file that a user should have to directly
+ * reference when compiling
  *
  * The main file is a special case because it may *not* be a module. We will need to
  * validate that the user is not attempting to make this file into a module. If we
  * find that they are attempting that, we will have to fail out
+ *
+ * As we go through the imports of the main file, we will also be tokenizing and handling
+ * the imports of those dependency files themselves
  */
 static build_system_results_t handle_main_file_tokenization(char* main_file_directory, char* main_file_name, u_int8_t silent_mode){
 	//Create and initialize our results
@@ -523,9 +508,11 @@ static build_system_results_t handle_main_file_tokenization(char* main_file_dire
 
 		/**
 		 * Let the helper find and possible create the dependency graph node from our
-		 * import statement
+		 * import statement. If this succeeds, it means that the direct import
+		 * itself *and* all indirect imports worked, so in a sense this not only gives
+		 * back a single dependency node but the root of a dependency tree
 		 */
-		dependency_graph_node_t* dependency = parse_import_statement_and_get_dependency(&stream, main_file_directory, main_file_name, &current_token_index, silent_mode);
+		dependency_graph_node_t* dependency = get_dependency_node_from_import_statement(&stream, main_file_directory, main_file_name, &current_token_index, silent_mode);
 		if(dependency == NULL){
 			print_build_system_message(MESSAGE_TYPE_ERROR, "Invalid $import directive found in file. Please review and recompile", main_file_name, 0);
 			num_build_system_errors++;
