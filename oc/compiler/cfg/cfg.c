@@ -6546,23 +6546,6 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 			op2 = unpack_result_package(&right_side, current_block);
 
 			/**
-			 * If these two variables are identical, we will need to
-			 * emit a temporary assignment for the first operand *before*
-			 * the second operand is being emitted so that we can guarantee
-			 * left-to-right assignment order. This only matters *if*
-			 * the two variables are exactly identical.
-			 * 	An example may be:
-			 * 		x = x + (x = 2)
-			 *
-			 *
-			 * TODO THE PROBLEM WITH THIS IS THAT IT FALLS APART FOR LARGER EXPRESSION
-			 * CHAINS
-			 */
-			if(variables_equal_no_ssa(op1, op2) == TRUE){
-				op1 = insert_temporary_assignment_for_unsequenced_operation(op1, last_instruction_before_second_operand, current_block);
-			}
-
-			/**
 			 * IMPORTANT - for operations like these, our final result type is always a boolean. However,
 			 * for the actual operation, we may have floats, ints, etc. To stop this from causing problems,
 			 * we will just use the type off of op1 for our final result type here inside of the instruction
@@ -6624,22 +6607,6 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 				assignee->comes_from_fp_comparison = TRUE;
 			}
 
-			/**
-			 * If these two variables are identical, we will need to
-			 * emit a temporary assignment for the first operand *before*
-			 * the second operand is being emitted so that we can guarantee
-			 * left-to-right assignment order. This only matters *if*
-			 * the two variables are exactly identical.
-			 * 	An example may be:
-			 * 		x = x + (x = 2)
-			 *
-			 * TODO THE PROBLEM WITH THIS IS THAT IT FALLS APART FOR LARGER EXPRESSION
-			 * CHAINS
-			 */
-			if(variables_equal_no_ssa(op1, op2) == TRUE){
-				op1 = insert_temporary_assignment_for_unsequenced_operation(op1, last_instruction_before_second_operand, current_block);
-			}
-
 			break;
 
 		//Otherwise default rules are in effect
@@ -6671,23 +6638,20 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 					break;
 			}
 
-			/**
-			 * If these two variables are identical, we will need to
-			 * emit a temporary assignment for the first operand *before*
-			 * the second operand is being emitted so that we can guarantee
-			 * left-to-right assignment order. This only matters *if*
-			 * the two variables are exactly identical.
-			 * 	An example may be:
-			 * 		x = x + (x = 2)
-			 *
-			 * TODO THE PROBLEM WITH THIS IS THAT IT FALLS APART FOR LARGER EXPRESSION
-			 * CHAINS
-			 */
-			if(variables_equal_no_ssa(op1, op2) == TRUE){
-				op1 = insert_temporary_assignment_for_unsequenced_operation(op1, last_instruction_before_second_operand, current_block);
-			}
-
 			break;
+	}
+
+	/**
+	 * If these two variables are identical, we will need to
+	 * emit a temporary assignment for the first operand *before*
+	 * the second operand is being emitted so that we can guarantee
+	 * left-to-right assignment order. This only matters *if*
+	 * the two variables are exactly identical.
+	 * 	An example may be:
+	 * 		x = x + (x = 2)
+	 */
+	if(variables_equal_no_ssa(op1, op2) == TRUE){
+		op1 = insert_temporary_assignment_for_unsequenced_operation(op1, last_instruction_before_second_operand, current_block);
 	}
 
 	//Here's the final statement
