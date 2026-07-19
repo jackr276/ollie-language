@@ -27,7 +27,8 @@ typedef enum {
 	IMPORT_STATUS_SUCCESS,
 	IMPORT_STATUS_NOT_FOUND,
 	IMPORT_STATUS_TOKENIZATION_FAILURE,
-	IMPORT_STATUS_CIRCULAR_DEPENDENCY
+	IMPORT_STATUS_CIRCULAR_DEPENDENCY,
+	IMPORT_STATUS_PASS_THROUGH_FAILURE,
 } import_status_t;
 
 /**
@@ -367,7 +368,7 @@ static inline dependency_graph_node_t* get_dependency_subtree_from_import_statem
 			break;
 
 		case IMPORT_STATUS_NOT_FOUND:
-			sprintf(build_system_info, "Module \"%s\" could not be found anywhere under the director %s", lookahead->lexeme.string, directory_to_search);
+			sprintf(build_system_info, "Module \"%s\" could not be found anywhere under the directory %s", lookahead->lexeme.string, directory_to_search);
 			print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
 			num_build_system_errors++;
 			return NULL;
@@ -382,6 +383,10 @@ static inline dependency_graph_node_t* get_dependency_subtree_from_import_statem
 			sprintf(build_system_info, "Module \"%s\" was found to have an invalid circular dependency", lookahead->lexeme.string);
 			print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
 			num_build_system_errors++;
+			return NULL;
+
+		//Just a pass through failure so don't print anything more
+		case IMPORT_STATUS_PASS_THROUGH_FAILURE:
 			return NULL;
 	}
 
@@ -442,11 +447,14 @@ static import_results_t find_or_create_module(char* initial_directory, char* cur
 										current_file_name);
 			print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, found_module->dependency_graph_node->file_name, 0);
 			num_build_system_errors++;
-			return NULL;
+			results.import_status = IMPORT_STATUS_CIRCULAR_DEPENDENCY;
+			return results;
 		}
 
-
-		return found_module->dependency_graph_node;
+		//Otherwise we can pacakge up and return like so
+		results.import_status = IMPORT_STATUS_SUCCESS;
+		results.result_node = found_module->dependency_graph_node;
+		return results;
 	}
 
 	/**
@@ -460,7 +468,8 @@ static import_results_t find_or_create_module(char* initial_directory, char* cur
 
 	//Could not find it so get out
 	if(found == FALSE){
-		return NULL;
+		results.import_status = IMPORT_STATUS_NOT_FOUND;
+		return results;
 	}
 
 	/**
@@ -481,7 +490,8 @@ static import_results_t find_or_create_module(char* initial_directory, char* cur
 		  							dependency_file);
 		print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, dependency_file, 0);
 		num_build_system_errors++;
-		return NULL;
+		results.import_status = IMPORT_STATUS_TOKENIZATION_FAILURE;
+		return results;
 	}
 
 	//Create the new dependency node now that we know we've got a good stream
@@ -525,7 +535,8 @@ static import_results_t find_or_create_module(char* initial_directory, char* cur
 		if(dependency == NULL){
 			print_build_system_message(MESSAGE_TYPE_ERROR, "Invalid $import directive found in file. Please review and recompile", dependency_file, lookahead->line_num);
 			num_build_system_errors++;
-			return NULL;
+			results.import_status = IMPORT_STATUS_PASS_THROUGH_FAILURE;
+			return results;
 		}
 
 		/**
@@ -540,7 +551,9 @@ static import_results_t find_or_create_module(char* initial_directory, char* cur
 	new_node->visitation_status = DEPENDENCY_NODE_FULLY_PROCESSED;
 
 	//Give this back so that it can be added to the graph
-	return new_node; 
+	results.result_node = new_node;
+	results.import_status = IMPORT_STATUS_SUCCESS;
+	return results; 
 }
 
 
@@ -623,7 +636,7 @@ static dependency_graph_node_t* handle_main_file_tokenization(char* main_file_di
 		 */
 		dependency_graph_node_t* dependency = get_dependency_subtree_from_import_statement(&stream, main_file_directory, main_file_name, &current_token_index, silent_mode);
 		if(dependency == NULL){
-			print_build_system_message(MESSAGE_TYPE_ERROR, "Invalid $import directive found in file. Please review and recompile", main_file_name, 0);
+			print_build_system_message(MESSAGE_TYPE_ERROR, "Invalid $import directive found in main file. Please review and recompile", main_file_name, 0);
 			num_build_system_errors++;
 			return NULL;
 		}
