@@ -23,7 +23,7 @@ static char* OLLIE_LIBRARY_DIRECTORY = "/usr/lib/ollie";
 module_symtab_t* module_symtab = NULL;
 
 //Static string buffer for any error messages that we print
-static char build_system_info[ERROR_SIZE];
+static char build_system_info[ERROR_SIZE * 5];
 
 //Declare a reusable token stream for file seraching to avoid constant reallocating
 static ollie_token_stream_t reusable_file_searching_stream;
@@ -274,13 +274,43 @@ static inline dependency_graph_node_t* find_module(char* initial_directory, dyna
 	 * for it inside of the given initial directory using a recursive
 	 * directory search
 	 */
-	char depedency_file[FILENAME_MAX];
-	u_int8_t found = traverse_and_search_for_module_rec(depedency_file, initial_directory, module_name, silent_mode);
+	char dependency_file[FILENAME_MAX];
+	u_int8_t found = traverse_and_search_for_module_rec(dependency_file, initial_directory, module_name, silent_mode);
 
 	//Could not find it so get out
 	if(found == FALSE){
 		return NULL;
 	}
+
+	/**
+	 * Now that we've found something, we'll need to create a dependency graph node for the 
+	 * next go around. In order to do this, we're going to need to fully tokenize the entire
+	 * thing. If this tokenizing fails we will return a different failure
+	 */
+	ollie_token_stream_t new_token_stream = tokenize(dependency_file, silent_mode);
+
+	/**
+	 * Remember that our original tokenization pass only did the first 2 tokens, so it's
+	 * possible that we could actually fail to tokenize here. If we do then we will
+	 * declare that we found the dependency but there's some issue with it
+	 */
+	if(new_token_stream.status == STREAM_STATUS_FAILURE){
+		sprintf(build_system_info, "The dependency %s was found in file %s has failed to tokenize. Please review and recompile.", 
+		  							module_name->string,
+		  							dependency_file);
+
+		print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, dependency_file, 0);
+		num_build_system_errors++;
+		return NULL;
+	}
+
+
+	dependency_graph_node_t* new_node = dependency_graph_node_alloc(module_name, dependency_file, *stream, dependency_node_type_t node_type)
+
+
+
+	symtab_module_record_t* new_module = create_module_record(jk);
+
 
 	printf("DEPENDENCY %s IS IN FILE %s\n\n", module_name->string, depedency_file);
 
@@ -297,12 +327,7 @@ static inline dependency_graph_node_t* find_module(char* initial_directory, dyna
  * 	2.) import <value>; <- angle bracktes tell the compiler to look in the system library "/usr/lib/ollie/" for the
  * 		given module
  *
- * Returns SUCCESS if this worked, FAILURE if not. We will also be populating the pre-allocated "file_to_import" buffer
- * with the full path of our filename for the caller to process
- *
  * NOTE: by the time that we get here we have already seen the "$import" token
- *
- * TODO WHAT ARE WE DOING WITH THIS FILE TO IMPORT??? - we need to return a dependency graph node
  */
 static dependency_graph_node_t* parse_import_statement_and_get_dependency(ollie_token_stream_t* stream, char* main_file_directory, char* current_file_name, int32_t* current_index, u_int8_t silent_mode){
 	//Get the next value in the stream
