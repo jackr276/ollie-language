@@ -11,6 +11,7 @@
 #include <sys/types.h>
 
 typedef struct dependency_graph_node_t dependency_graph_node_t;
+typedef struct dependency_results_t dedendency_results_t;
 
 /**
  * Is the given node the main node or is it a dependency
@@ -66,14 +67,6 @@ dependency_graph_node_t* dependency_graph_node_alloc(dynamic_string_t* module_na
  * Add a dependency relationship between dependant and depends_on
  */
 void add_dependency(dependency_graph_node_t* dependant, dependency_graph_node_t* depends_on);
-
-/**
- * Run through the dependency graph to check for cycles and return a valid compilation
- * order in reverse. This compilation order is what will be used by the parser. The parser
- * will just need to take this compilation order and traverse it backwards in order to
- * make this all work
- */
-dynamic_array_t get_reverse_ompilation_order_and_check_for_cycles(dependency_graph_node_t* root);
 
 /**
  * Deallocate the given dependency graph node

@@ -77,20 +77,6 @@ void add_dependency(dependency_graph_node_t* dependant, dependency_graph_node_t*
 
 
 /**
- * Run through the dependency graph to check for cycles and return a valid compilation
- * order. This compilation order is what will be used by the parser
- */
-dynamic_array_t get_reverse_ompilation_order_and_check_for_cycles(dependency_graph_node_t* root){
-	//Create the reverse compilation order
-	dynamic_array_t reverse_compilation_order = dynamic_array_alloc();
-
-
-	//And give it back
-	return reverse_compilation_order;
-}
-
-
-/**
  * Deallocate the given dependency graph node
  */
 void dependency_graph_node_dealloc(dependency_graph_node_t* node){

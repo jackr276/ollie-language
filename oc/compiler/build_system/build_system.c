@@ -567,6 +567,61 @@ static dependency_graph_node_t* handle_main_file_tokenization(char* main_file_di
 
 
 /**
+ * Cycle detection/reverse compilation order DFS builder
+ *
+ * algorithm visit(node n):
+ * 	switch n->state:
+ * 		case DONE:
+ * 			return TRUE
+ *
+ * 		case PROCESSING:
+ * 			print_cycle_error
+ * 			return FALSE
+ *
+ * 		case UNVISITED:
+ * 			break;
+ *
+ * 	n->state = processing
+ *
+ * 	for each node m that n depends on:
+ * 		if visit(m) is FAILURE:
+ * 			return FAILURE
+ *
+ * 	n->state = DONE
+ *
+ * 	return TRUE
+ *
+ * This allows us to build the compilation order and detect cycles all in one pass of
+ * the dependency graph
+ */
+static u_int8_t visit_node(dependency_graph_node_t* node, dynamic_array_t* reverse_compilation_order){
+
+}
+
+
+
+/**
+ * Run through the dependency graph to check for cycles and return a valid compilation
+ * order. This compilation order is what will be used by the parser just in reverse. We will
+ * populate it into a dynamic array if possible, and return SUCCESS if it worked and FAILURE
+ * if we found a circular dependency
+ */
+static inline u_int8_t get_reverse_compilation_order_and_check_for_cycles(dependency_graph_node_t* root, char* main_file_name, dynamic_array_t* reverse_compilation_order){
+	/**
+	 * Invoke the recursive traversal on the main node. If it works then great,
+	 * otherwise we had a cycle and we print the appropriate error
+	 */
+	if(visit_node(root, reverse_compilation_order) == SUCCESS){
+		print_build_system_message(MESSAGE_TYPE_ERROR, "Circular dependency detected. Please remedy this and recompile", main_file_name, 0);
+		return FAILURE;
+	}
+
+	//Otherwise it worked so we return success
+	return SUCCESS;
+}
+
+
+/**
  * The main and only entry point to the build system revolves around
  * us parsing dependencies and constructing them into one gigantic, unified token
  * stream. This token stream is what we will use to actually parse and construct
@@ -608,6 +663,10 @@ build_system_results_t parse_dependencies_and_construct_token_stream(compiler_op
 		results.num_errors = num_build_system_errors;
 		return results;
 	}
+
+	dynamic_array_t reverse_compilation_order = dynamic_array_alloc();
+	u_int8_t cycle_detection_result = get_reverse_compilation_order_and_check_for_cycles(main_node, &reverse_compilation_order);
+
 
 	//Give back our compilation order through here
 	//TODO WILL NEED FIXING
