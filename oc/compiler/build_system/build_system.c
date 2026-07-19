@@ -27,7 +27,7 @@ typedef enum {
 	IMPORT_STATUS_SUCCESS,
 	IMPORT_STATUS_NOT_FOUND,
 	IMPORT_STATUS_TOKENIZATION_FAILURE,
-	IMPORT_STATUS_CYCLICAL_DEPENDENCY
+	IMPORT_STATUS_CIRCULAR_DEPENDENCY
 } import_status_t;
 
 /**
@@ -311,7 +311,7 @@ static inline dependency_graph_node_t* get_dependency_subtree_from_import_statem
 			 * Let the helper go through and search our local directory for this module. If we can't
 			 * find it, then we have an issue and we throw an error
 			 */
-			results = find_or_create_module(main_file_directory, current_file_name, &(lookahead->lexeme), silent_mode);
+			directory_to_search = main_file_directory;
 			break;
 
 		/**
@@ -345,11 +345,8 @@ static inline dependency_graph_node_t* get_dependency_subtree_from_import_statem
 				return NULL;
 			}
 
-			/**
-			 * Now let the helper go through and search our local directory for this module. If we can't
-			 * find it, then we have an issue and we throw an error
-			 */
-			results = find_or_create_module(OLLIE_LIBRARY_DIRECTORY, current_file_name, &(lookahead->lexeme), silent_mode);
+			//Flag that we want to search in the ollie standard library
+			directory_to_search = OLLIE_LIBRARY_DIRECTORY;
 			break;
 
 		default:
@@ -359,17 +356,34 @@ static inline dependency_graph_node_t* get_dependency_subtree_from_import_statem
 			return NULL;
 	}
 
-	//TODO HANDLE IMPORT REUSLTS
+	/**
+	 * Now that we know where to look we'll make the actual call. Based on what comes back we'll
+	 * have a certain error message to display
+	 */
+	results = find_or_create_module(directory_to_search, current_file_name, &(lookahead->lexeme), silent_mode);
 
-	//TODO BAD
-	//TODO BAD - NEEDS MORE DETAIL
-	if(found_module_dependency == NULL){
-		sprintf(build_system_info, "Module \"%s\" could not be found anywhere under the local directory", lookahead->lexeme.string);
-		print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
-		num_build_system_errors++;
-		return NULL;
+	switch(results.import_status){
+		case IMPORT_STATUS_SUCCESS:
+			break;
+
+		case IMPORT_STATUS_NOT_FOUND:
+			sprintf(build_system_info, "Module \"%s\" could not be found anywhere under the director %s", lookahead->lexeme.string, directory_to_search);
+			print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
+			num_build_system_errors++;
+			return NULL;
+
+		case IMPORT_STATUS_TOKENIZATION_FAILURE:
+			sprintf(build_system_info, "Module \"%s\" was found in but failed to tokenize", lookahead->lexeme.string);
+			print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
+			num_build_system_errors++;
+			return NULL;
+
+		case IMPORT_STATUS_CIRCULAR_DEPENDENCY:
+			sprintf(build_system_info, "Module \"%s\" was found to have an invalid circular dependency", lookahead->lexeme.string);
+			print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, current_file_name, lookahead->line_num);
+			num_build_system_errors++;
+			return NULL;
 	}
-
 
 	//Let's look for the final semicolon here
 	lookahead = token_array_get_pointer_at(&(stream->token_stream), *current_index);
@@ -404,6 +418,9 @@ static inline dependency_graph_node_t* get_dependency_subtree_from_import_statem
  * file itself to parse any further import statements that we have in here
  */
 static import_results_t find_or_create_module(char* initial_directory, char* current_file_name, dynamic_string_t* module_name, u_int8_t silent_mode){
+	//Initialize our import results
+	import_results_t results = {NULL, IMPORT_STATUS_NOT_FOUND};
+
 	/**
 	 * Step 1: hit the module symtab and see if we can find anything in
 	 * there. If we can, we save ourselves the trouble of searching the file system
@@ -663,29 +680,6 @@ static dependency_graph_node_t* handle_main_file_tokenization(char* main_file_di
 
 
 /**
- * Run through the dependency graph to check for cycles and return a valid compilation
- * order. This compilation order is what will be used by the parser just in reverse. We will
- * populate it into a dynamic array if possible, and return SUCCESS if it worked and FAILURE
- * if we found a circular dependency
- */
-static inline u_int8_t get_reverse_compilation_order_and_check_for_cycles(dependency_graph_node_t* root, char* main_file_name, dynamic_array_t* reverse_compilation_order){
-	/**
-	 * Invoke the recursive traversal on the main node. If it works then great,
-	 * otherwise we had a cycle and we print the appropriate error
-	 */
-
-	//TODO DEPRECATE
-	//if(visit_node(root, reverse_compilation_order) == FAILURE){
-	//	print_build_system_message(MESSAGE_TYPE_ERROR, "Circular dependency detected. Please remedy this and recompile", main_file_name, 0);
-		//return FAILURE;
-	//}
-
-	//Otherwise it worked so we return success
-	return SUCCESS;
-}
-
-
-/**
  * The main and only entry point to the build system revolves around
  * us parsing dependencies and constructing them into one gigantic, unified token
  * stream. This token stream is what we will use to actually parse and construct
@@ -726,15 +720,6 @@ build_system_results_t parse_dependencies_and_construct_token_stream(compiler_op
 
 	//If we have no main node, that means that we've failed here so return a failure
 	if(main_node == NULL){
-		results.status = BUILD_SYSTEM_STATUS_FAILURE;
-		results.num_errors = num_build_system_errors;
-		return results;
-	}
-
-	u_int8_t cycle_detection_result = get_reverse_compilation_order_and_check_for_cycles(main_node, main_file_name, &reverse_compilation_order);
-
-	//If we have no main node, that means that we've failed here so return a failure
-	if(cycle_detection_result == FAILURE){
 		results.status = BUILD_SYSTEM_STATUS_FAILURE;
 		results.num_errors = num_build_system_errors;
 		return results;
