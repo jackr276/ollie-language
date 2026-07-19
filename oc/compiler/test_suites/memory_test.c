@@ -229,8 +229,8 @@ int main(int argc, char** argv){
 	 * queue with what we need
 	 */
 	while((directory_entry = readdir(directory)) != NULL){
-		//If we see '.' or '..' bail out
-		if(directory_entry->d_name[0] == '.'){
+		//If it's not a regular file we don't want it(i.e. directories)
+		if(directory_entry->d_type != DT_REG){
 			continue;
 		}
 

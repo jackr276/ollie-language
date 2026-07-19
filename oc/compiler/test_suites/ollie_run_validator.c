@@ -808,8 +808,11 @@ int main(int argc, char** argv) {
 
 	//So long as we have directory entries to read
 	while((directory_entry = readdir(directory)) != NULL){
-		//If we see "." or ".." we leave
-		if(directory_entry->d_name[0] == '.'){
+		/**
+		 * If it's not a regular file we do not want to try and
+		 * compile it
+		 */
+		if(directory_entry->d_type != DT_REG){
 			continue;
 		}
 

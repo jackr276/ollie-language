@@ -41,15 +41,15 @@ OUT_CI = $$RUNNER_TEMP
 PROGS = lexer_test symtab_test parser_test oc
 
 # Input and output arrays
-inputs := $(shell find $(TEST_FILE_DIR) -type f -name "*.ol" | sort)
+inputs := $(shell find $(TEST_FILE_DIR) -maxdepth 1 -type f -name "*.ol" | sort)
 
 all: $(PROGS)
 
 ltest: lexer_test
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/lexer_test
+	find $(TEST_FILE_DIR) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_LOCAL)/lexer_test
 
 preproc_test: preprocessor_test
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/preprocessor_test -i -d -f
+	find $(TEST_FILE_DIR) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_LOCAL)/preprocessor_test -i -d -f
 
 lexer_test: lexer.o lexer_test.o lexstack.o dynamic_string.o ollie_token_array.o
 	$(CC) -o $(OUT_LOCAL)/lexer_test $(OUT_LOCAL)/lexer_test.o $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/ollie_token_array.o 
@@ -454,32 +454,32 @@ test_data_area: stack_data_area_test
 	$(OUT_LOCAL)/stack_data_area_test -f ./oc/test_files/data_area_test_input.ol
 
 ptest: parser_test
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/parser_test -i -d -f
+	find $(TEST_FILE_DIR) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_LOCAL)/parser_test -i -d -f
 	
 ptest-debug: parser_test_debug
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/parser_test_debug -i -d -f
+	find $(TEST_FILE_DIR) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_LOCAL)/parser_test_debug -i -d -f
 
 test_priority_queues: priority_queue_test
 	$(OUT_LOCAL)/priority_queue_test
 
 front_test: front_end_test
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/front_end_test -i -t -d -f
+	find $(TEST_FILE_DIR) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_LOCAL)/front_end_test -i -t -d -f
 
 # No timed output
 front_test_non_timed: front_end_test
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/front_end_test -i -d -f
+	find $(TEST_FILE_DIR) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_LOCAL)/front_end_test -i -d -f
 
 middle_test: middle_end_test
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/middle_end_test -i -d -t -f
+	find $(TEST_FILE_DIR) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_LOCAL)/middle_end_test -i -d -t -f
 
 middle_test_non_timed: middle_end_test
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/middle_end_test -i -d -f
+	find $(TEST_FILE_DIR) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_LOCAL)/middle_end_test -i -d -f
 
 selector_test: instruction_selector_test
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/instruction_selector_test -i -d -t -f 
+	find $(TEST_FILE_DIR) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_LOCAL)/instruction_selector_test -i -d -t -f 
 
 selector_test_non_timed: instruction_selector_test
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/instruction_selector_test -i -d -f
+	find $(TEST_FILE_DIR) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_LOCAL)/instruction_selector_test -i -d -f
 
 string_test: dynamic_string_test
 	$(OUT_LOCAL)/dynamic_string_test
@@ -552,7 +552,7 @@ interference_graph_test: interference_graph_tester
 ######################################################################## CI VERSIONS #############################################################################
 
 ltest-CI: lexer_test-CI
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/lexer_test
+	find $(TEST_FILE_DIR) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_CI)/lexer_test
 
 lexer_test-CI: lexer-CI.o lexer_test-CI.o lexstack-CI.o dynamic_string-CI.o ollie_token_array-CI.o
 	$(CC) -o $(OUT_CI)/lexer_test $(OUT_CI)/lexer_test.o $(OUT_CI)/lexer.o $(OUT_CI)/lexstack.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/ollie_token_array.o
@@ -873,7 +873,7 @@ stest-CI: symtab_test-CI
 	$(OUT_CI)/symtab_test
 
 preproc_test-CI: preprocessor_test-CI
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/preprocessor_test -i -d -f
+	find $(TEST_FILE_DIR) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_CI)/preprocessor_test -i -d -f
 
 priority_queue_test-CI: priority_queue_test-CI.o max_priority_queue-CI.o min_priority_queue-CI.o
 	$(CC) -o $(OUT_CI)/priority_queue_test $(OUT_CI)/priority_queue_test.o $(OUT_CI)/max_priority_queue.o $(OUT_CI)/min_priority_queue.o
@@ -882,19 +882,19 @@ test_data_area-CI: stack_data_area_test-CI
 	$(OUT_CI)/stack_data_area_test -f ./oc/test_files/data_area_test_input.ol
 
 ptest-CI: parser_test-CI
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/parser_test -i -d -f
+	find $(TEST_FILE_DIR) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_CI)/parser_test -i -d -f
 
 test_priority_queues-CI: priority_queue_test-CI
 	$(OUT_CI)/priority_queue_test
 
 front_test-CI: front_end_test-CI
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/front_end_test -i -d -f
+	find $(TEST_FILE_DIR) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_CI)/front_end_test -i -d -f
 
 middle_test-CI: middle_end_test-CI
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/middle_end_test -i -d -f
+	find $(TEST_FILE_DIR) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_CI)/middle_end_test -i -d -f
 
 selector_test-CI: instruction_selector_test-CI
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/instruction_selector_test -i -d -f
+	find $(TEST_FILE_DIR) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_CI)/instruction_selector_test -i -d -f
 
 ollie_run_validation-CI: ollie_run_validator-CI oc-CI
 	$(OUT_CI)/ollie_run_validator 4 $(TEST_FILE_DIR) $(OUT_CI)
@@ -904,10 +904,10 @@ memory_check-CI: oc_debug-CI memory_checker-CI
 	$(OUT_CI)/memory_checker 1 4 $(TEST_FILE_DIR)
 
 compiler_test-CI: oc-CI
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/oc -s -t -@ -i -d -f
+	find $(TEST_FILE_DIR) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_CI)/oc -s -t -@ -i -d -f
 
 compiler_test-non-timed-CI: oc-CI
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/oc -s -@ -i -d -f
+	find $(TEST_FILE_DIR) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_CI)/oc -s -@ -i -d -f
 
 array_test-CI: dynamic_array_test-CI
 	$(OUT_CI)/dynamic_array_test
