@@ -4755,13 +4755,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * because it means that said temp assignment has no effect and can be removed
 	 *
 	 * t3 <- x_0
-	 * y <- t3 + 2
+	 * y <- t3 + x_1 
 	 *
 	 * can become
-	 * y <- x_0 + 2
+	 * y <- x_0 + x_1 
 	 */
 	if(window->instruction2 != NULL
-		&& (window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_STMT || window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT)
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.operand1) == TRUE

@@ -5,12 +5,12 @@
 
 pub fn main() -> i32 {
 	let x:mut i32 = 5;
-	let y:i32 = 7;
-	let z:i32 = 4;
+	let y:mut i32 = 7;
+	let z:mut i32 = 4;
 
-	//Should become x = 5 + 7 * 4 = 5 + 28 = 33
-	x += y * z;
+	//Should become x = 5 + 8 * 5 = 5 + 40 = 45
+	x += (y = 8) * (z = 5);
 
-	OUNIT: [exit_status = 33]
+	OUNIT: [exit_status = 45]
 	ret x;
 }
