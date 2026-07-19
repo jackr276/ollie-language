@@ -6495,6 +6495,11 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 		return generate_pointer_arithmetic_for_binary_operation(basic_block, logical_or_expr);
 	}
 
+
+	//TODO instead of what we're currently doing with the op1/op2's, we should
+	//see if the left and right operations read/right from the same variable.
+	//If they do then we'll need to resolve the conflict. Look at the chatgpt output
+	//to see an example
 	/**
 	 * Keep track of the cursor here. We will traverse in order
 	 * and emit the left and right hand sides of the expression first
@@ -6548,6 +6553,10 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 			 * the two variables are exactly identical.
 			 * 	An example may be:
 			 * 		x = x + (x = 2)
+			 *
+			 *
+			 * TODO THE PROBLEM WITH THIS IS THAT IT FALLS APART FOR LARGER EXPRESSION
+			 * CHAINS
 			 */
 			if(variables_equal_no_ssa(op1, op2) == TRUE){
 				op1 = insert_temporary_assignment_for_unsequenced_operation(op1, last_instruction_before_second_operand, current_block);
@@ -6623,6 +6632,9 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 			 * the two variables are exactly identical.
 			 * 	An example may be:
 			 * 		x = x + (x = 2)
+			 *
+			 * TODO THE PROBLEM WITH THIS IS THAT IT FALLS APART FOR LARGER EXPRESSION
+			 * CHAINS
 			 */
 			if(variables_equal_no_ssa(op1, op2) == TRUE){
 				op1 = insert_temporary_assignment_for_unsequenced_operation(op1, last_instruction_before_second_operand, current_block);
@@ -6667,6 +6679,9 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 			 * the two variables are exactly identical.
 			 * 	An example may be:
 			 * 		x = x + (x = 2)
+			 *
+			 * TODO THE PROBLEM WITH THIS IS THAT IT FALLS APART FOR LARGER EXPRESSION
+			 * CHAINS
 			 */
 			if(variables_equal_no_ssa(op1, op2) == TRUE){
 				op1 = insert_temporary_assignment_for_unsequenced_operation(op1, last_instruction_before_second_operand, current_block);
