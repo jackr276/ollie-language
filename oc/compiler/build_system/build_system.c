@@ -588,6 +588,7 @@ static dependency_graph_node_t* handle_main_file_tokenization(char* main_file_di
  * 			return FAILURE
  *
  * 	n->state = DONE
+ * 	push n onto the reverse compilation order
  *
  * 	return TRUE
  *
@@ -595,7 +596,58 @@ static dependency_graph_node_t* handle_main_file_tokenization(char* main_file_di
  * the dependency graph
  */
 static u_int8_t visit_node(dependency_graph_node_t* node, dynamic_array_t* reverse_compilation_order){
+	switch(node->visitation_status){
+		/**
+		 * We've already fully processed this one, so we don't need
+		 * to do anything else
+		 */
+		case DEPENDENCY_NODE_FULLY_PROCESSED:
+			return TRUE;
 
+		/**
+		 * If we somehow come to visit a node that is already in progress, this means
+		 * that we have a circular dependency with a node that is already in progress
+		 */
+		case DEPENDENCY_NODE_IN_PROGRESS:
+			sprintf(build_system_info, "Circular dependency detected in file for module %s", node->module_name.string); 
+			print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, node->file_name, 0);
+			return FAILURE;
+
+		/**
+		 * We haven't explored this path yet so we'll need to explore it now by breaking
+		 * out into our main processing logic
+		 */
+		case DEPENDENCY_NODE_UNVISITED:
+			break;
+	}
+
+	//Flag that this is in progress
+	node->visitation_status = DEPENDENCY_NODE_IN_PROGRESS;
+
+	//Run through all nodes that this depends on and check them
+	for(int32_t i = 0; i < node->depends_on.current_index; i++){
+		dependency_graph_node_t* depends_on = dynamic_array_get_at(&(node->depends_on), i);
+
+		//If this fails, then we're done. The build is invalid and we fail out
+		if(visit_node(depends_on, reverse_compilation_order) == FAILURE){
+			sprintf(build_system_info, "The dependency %s in file %s for module %s in file %s has been found to be ciruclar. Please remedy and recompile",
+										depends_on->module_name.string,
+										depends_on->file_name,
+										node->module_name.string,
+										node->file_name);
+			print_build_system_message(MESSAGE_TYPE_ERROR, build_system_info, node->file_name, 0);
+			num_build_system_errors++;
+			return FAILURE;
+		}
+	}
+
+	/**
+	 * If we made it here then this worked. We will push this onto the compilation order,
+	 * mark it as fully processed
+	 */
+	node->visitation_status = DEPENDENCY_NODE_FULLY_PROCESSED;
+	dynamic_array_add(reverse_compilation_order, node);
+	return SUCCESS;
 }
 
 
@@ -665,8 +717,14 @@ build_system_results_t parse_dependencies_and_construct_token_stream(compiler_op
 	}
 
 	dynamic_array_t reverse_compilation_order = dynamic_array_alloc();
-	u_int8_t cycle_detection_result = get_reverse_compilation_order_and_check_for_cycles(main_node, &reverse_compilation_order);
+	u_int8_t cycle_detection_result = get_reverse_compilation_order_and_check_for_cycles(main_node, main_file_name, &reverse_compilation_order);
 
+	//If we have no main node, that means that we've failed here so return a failure
+	if(cycle_detection_result == FAILURE){
+		results.status = BUILD_SYSTEM_STATUS_FAILURE;
+		results.num_errors = num_build_system_errors;
+		return results;
+	}
 
 	//Give back our compilation order through here
 	//TODO WILL NEED FIXING

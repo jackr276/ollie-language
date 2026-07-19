@@ -27,9 +27,9 @@ typedef enum {
  * maintain states like this
  */
 typedef enum {
-	NOT_VISITED,
-	IN_PROGRESS,
-	FULLY_PROCESSED
+	DEPENDENCY_NODE_UNVISITED,
+	DEPENDENCY_NODE_IN_PROGRESS,
+	DEPENDENCY_NODE_FULLY_PROCESSED
 } dependency_node_visitation_status_t;
 
 
