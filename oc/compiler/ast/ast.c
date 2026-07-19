@@ -8259,34 +8259,45 @@ u_int8_t does_subtree_define_variable(generic_ast_node_t* root, symtab_variable_
 
 	//For each of these node types, there is a chance that we are assigning something
 	switch(root->ast_node_type){
+		/**
+		 * These are a sneakier case of equality because they're not explicit assignments. But this
+		 * is a case where we are overwriting an old value so we'll need to check it
+		 */
 		case AST_NODE_TYPE_UNARY_EXPR:
-			break;
-
 		case AST_NODE_TYPE_POSTFIX_EXPR:
-			break;
+			//It has to be one of these operators - if it's not then leave
+			if(root->unary_operator != PLUSPLUS && root->unary_operator != MINUSMINUS){
+				return FALSE;
+			}
 
-		case AST_NODE_TYPE_ASNMNT_EXPR:
-			break;
+			return variable == root->variable ? TRUE : FALSE;
 
 		/**
-		 * Let statement is an assignment so we'll 
-		 * see if our variable matches the one we're
-		 * after
+		 * An assignment/let expression is
+		 * an assignment so we'll see if the
+		 * variable matches up. If it does
+		 * we're good here
 		 */
+		case AST_NODE_TYPE_ASNMNT_EXPR:
 		case AST_NODE_TYPE_LET_STMT:
-			if(variable == root->variable){
+			return variable == root->variable ? TRUE : FALSE;
+
+		/**
+		 * This is our recursive case, we'll first explore the left
+		 * hand side and then the right hand side afterwards. If
+		 * either of them assign the variable then we get out
+		 */
+		case AST_NODE_TYPE_BINARY_EXPR:
+			cursor = root->first_child;
+
+			//If this worked then get out
+			if(does_subtree_define_variable(cursor, variable) == TRUE){
 				return TRUE;
 			}
 
-			return FALSE;
-
-		/**
-		 * This is our recursive case
-		 *
-		 * TODO
-		 */
-		case AST_NODE_TYPE_BINARY_EXPR:
-			if(does_subtree_define_variable(root->first_child, ))
+			//Otherwise check the right child - whatever this returns is it
+			cursor = cursor->next_sibling;
+			return does_subtree_define_variable(cursor, variable) == TRUE;
 			
 		//Default case is a no - so don't bother with this
 		default:
