@@ -48,11 +48,41 @@ dependency_graph_node_t* dependency_graph_node_alloc(dynamic_string_t* module_na
 
 
 /**
+ * Add a dependency relationship between dependant and depends_on
+ */
+void add_dependency(dependency_graph_node_t* dependant, dependency_graph_node_t* depends_on){
+	/**
+	 * Our dependant will have a new dependency, so allocate
+	 * the array if we don't have it already
+	 */
+	if(dependant->depends_on.internal_array == NULL){
+		dependant->depends_on = dynamic_array_alloc();
+	}
+
+	/**
+	 * Our depends_on will have a new depended_on_by, so allocate
+	 * the array if we don't have it already
+	 */
+	if(depends_on->depended_on_by.internal_array == NULL){
+		depends_on->depended_on_by = dynamic_array_alloc();
+	}
+
+	//Add the relationship in now
+	dynamic_array_add(&(depends_on->depended_on_by), dependant);
+	dynamic_array_add(&(dependant->depends_on), depends_on);
+}
+
+
+/**
  * Deallocate the given dependency graph node
  */
 void dependency_graph_node_dealloc(dependency_graph_node_t* node){
 	//Deallocate the token stream
 	token_array_dealloc(&(node->token_stream.token_stream));
+
+	//Deallocate these two if they do in fact exist(the rule will check)
+	dynamic_array_dealloc(&(node->depends_on));
+	dynamic_array_dealloc(&(node->depended_on_by));
 
 	//Now destroy the file & module names
 	dynamic_string_dealloc(&(node->module_name));

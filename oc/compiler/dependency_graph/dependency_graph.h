@@ -29,6 +29,10 @@ struct dependency_graph_node_t {
 	ollie_token_stream_t token_stream;
 	//The module name that we have
 	dynamic_string_t module_name;
+	//What does this node itself depend on
+	dynamic_array_t depends_on;
+	//Who are we depended on by
+	dynamic_array_t depended_on_by;
 	//Unique node ID
 	int32_t node_id;
 	//The type of node this is
@@ -42,6 +46,11 @@ struct dependency_graph_node_t {
  * graph nodes will be heap allocated
  */
 dependency_graph_node_t* dependency_graph_node_alloc(dynamic_string_t* module_name, char* file_name, ollie_token_stream_t* stream, dependency_node_type_t node_type);
+
+/**
+ * Add a dependency relationship between dependant and depends_on
+ */
+void add_dependency(dependency_graph_node_t* dependant, dependency_graph_node_t* depends_on);
 
 /**
  * Deallocate the given dependency graph node
