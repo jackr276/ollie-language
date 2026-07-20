@@ -89,7 +89,8 @@ static dynamic_array_t invalid_ounit_configuration_files;
 
 //Holders for our output and test file directories
 static char* output_directory;
-static char* test_file_dir;
+static char* single_file_tests_dir;
+static char* multi_file_tests_dir;
 
 /**
  * Our current thread parameter structure only contains
@@ -754,6 +755,18 @@ static inline void print_fail_to_compile_validation_summary(){
 }
 
 
+static inline void handle_single_file_tests(){
+
+}
+
+
+static inline void handle_multi_file_tests(){
+
+}
+
+
+
+
 /**
  * Entry point. This will perform our setup and call into
  * our threads. We expect that the directory to be used
@@ -768,8 +781,8 @@ int main(int argc, char** argv) {
 	 * Find the test file directory. It will have been passed in as a command line argument. If 
 	 * it wasn't fail out
 	 */
-	if(argc < 4){
-		fprintf(stdout, "Fatal error: please pass in an executable, a test directory and an output directory as a command line argument\n");
+	if(argc < 5){
+		fprintf(stdout, "Fatal error: please pass in an executable, a test directory for singular tests, a test directory for multifile tests, and an output directory as a command line argument\n");
 		exit(1);
 	}
 
@@ -777,12 +790,19 @@ int main(int argc, char** argv) {
 	int32_t thread_count = atoi(argv[1]);
 
 	//Extract it and open it
-	test_file_dir = argv[2];
-	DIR* directory = opendir(test_file_dir);
+	single_file_tests_dir = argv[2];
+	multi_file_tests_dir = argv[3];
 
-	//Check that we got it
-	if(directory == NULL){
-		fprintf(stdout, "Fatal error: failed to open directory %s\n", test_file_dir);
+	//Try to open this and verify that it does in fact open
+	DIR* single_file_tests_directory = opendir(single_file_tests_dir);
+	if(single_file_tests_directory == NULL){
+		fprintf(stdout, "Fatal error: failed to open directory %s\n", single_file_tests_dir);
+		exit(1);
+	}
+
+	DIR* multi_file_tests_directory = opendir(multi_file_tests_dir);
+	if(multi_file_tests_directory == NULL){
+		fprintf(stdout, "Fatal error: failed to open directory %s\n", multi_file_tests_dir);
 		exit(1);
 	}
 
@@ -791,7 +811,7 @@ int main(int argc, char** argv) {
 	 * /oc/out/, for actual runs on the github runner it should be 
 	 * $$RUNNER_TEMP
 	 */
-	output_directory = argv[3];
+	output_directory = argv[4];
 
 	//Allocate all dynamic arrays now
 	test_files = dynamic_array_alloc_initial_size(DEFAULT_ARRAY_SIZE);
@@ -825,6 +845,8 @@ int main(int argc, char** argv) {
 		//Add this to the array of all test files
 		dynamic_array_add(&test_files, test_file);
 	}
+
+	//TODO CLOSE ALL DIRECTORIES
 
 	//Extract this for result printing
 	test_file_count = test_files.current_index;
