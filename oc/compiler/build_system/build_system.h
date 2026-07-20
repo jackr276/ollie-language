@@ -27,7 +27,7 @@ typedef enum {
  */
 typedef struct build_system_results_t build_system_results_t;
 struct build_system_results_t {
-	dynamic_array_t reverse_compilation_order;
+	dynamic_array_t compilation_order;
 	dependency_graph_node_t* result_node;
 	build_system_status_t status;
 	int32_t num_errors;

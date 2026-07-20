@@ -31,7 +31,7 @@ typedef enum {
 /**
  * The import results struct contains the dependency
  * node itself as well as any failure info if we 
- * have it
+ * have it. 
  */
 typedef struct import_results_t import_results_t;
 struct import_results_t {
@@ -753,9 +753,11 @@ build_system_results_t parse_dependencies_and_construct_token_stream(compiler_op
 		print_build_order();
 	}
 
-
-	//Give back our compilation order through here
-	//TODO WILL NEED FIXING
+	/**
+	 * Package up and give back the compilation order
+	 * and the main node
+	 */
+	results.compilation_order = compilation_order;
 	results.result_node = main_node;
 	results.status = BUILD_SYSTEM_STATUS_SUCCESS;
 	return results;
