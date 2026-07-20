@@ -1212,38 +1212,16 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 // ======================================================== Replacement Pass ========================================================================================
 
 /**
- * Entry point to the entire preprocessor is here. The preprocessor
- * will traverse the token stream and make replacements as it sees
- * fit with defined macros
+ * Run through the provided build order and preprocess each file in that given order. The replacements
+ * should happen inplace so we will not need to add or remove anything from the build order itself
  */
-preprocessor_results_t preprocess(compiler_options_t* options){
-	//Store the preprocessor results
-	preprocessor_results_t results;
-
-	//Initially assume everything worked. This will be flipped if need be
-	results.status = PREPROCESSOR_SUCCESS;
-
-	//Extract the build order for convenience
-	dynamic_array_t* build_order = &(options->build_order);
-
-	//Store whether or not we want to print any debug logs
-	print_irs = options->print_irs;
-
-	//Allocate the global lex stack for use in both the consumption and replacement passes
-	lex_stack_t stack = lex_stack_alloc();
-
-	//This just holds a pointer to it
-	paren_grouping_stack = &stack;
-
-	//Keep trace of how many macros/directives we've seen
+static inline u_int8_t preprocess_all_files_in_order(compiler_options_t* options, macro_symtab_t* macro_symtab){
+	//Count of how many macros/directives we've seen
 	u_int32_t num_macros = 0;
 	u_int32_t num_ounit_directives = 0;
 
-	/**
-	 * Step 0: we need a customized macro symtab for ease of lookup. This symtab
-	 * will allow us to store everything we need we near O(1) access
-	 */
-	macro_symtab_t* macro_symtab = macro_symtab_alloc();
+	//Extract the build order for convenience
+	dynamic_array_t* build_order = &(options->build_order);
 
 	/**
 	 * We'll need to run through every token stream inside of the build 
@@ -1267,16 +1245,16 @@ preprocessor_results_t preprocess(compiler_options_t* options){
 		//If we failed here then there's no point in going further
 		if(consumption_pass_result == FAILURE){
 			print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable/invalid macros and/or build system directives macros detected. Please rememdy the errors and recompile", current_line_number);
-			results.status = PREPROCESSOR_FAILURE;
-			goto finalizer;
+			preprocessor_error_count++;
+			return FAILURE;
 		}
 
 		/**
 		 * If we found no macros/OUNITS at all, then we do not need to do anything with a replacement
-		 * pass. This would just be wasteful. Instead, we will just go right to the end
+		 * pass. This would just be wasteful. Instead, we will just continue onto the next file
 		 */
 		if(num_macros == 0 && num_ounit_directives == 0){
-			goto finalizer;
+			continue;
 		}
 
 		/**
@@ -1290,11 +1268,49 @@ preprocessor_results_t preprocess(compiler_options_t* options){
 		//This is very rare but if it does happen we will note it
 		if(replacement_pass_result == FAILURE){
 			print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable/invalid macros and/or build system directives macros detected. Please rememdy the errors and recompile", current_line_number);
-			results.status = PREPROCESSOR_FAILURE;
+			preprocessor_error_count++;
+			return FAILURE;
 		}
 	}
 
-finalizer:
+	//If we make it to here then this all worked
+	return SUCCESS;
+}
+
+
+/**
+ * Entry point to the entire preprocessor is here. The preprocessor
+ * will traverse the token stream and make replacements as it sees
+ * fit with defined macros
+ */
+preprocessor_results_t preprocess(compiler_options_t* options){
+	//Store the preprocessor results
+	preprocessor_results_t results;
+
+	//Store whether or not we want to print any debug logs
+	print_irs = options->print_irs;
+
+	//Allocate the global lex stack for use in both the consumption and replacement passes
+	lex_stack_t stack = lex_stack_alloc();
+
+	//This just holds a pointer to it
+	paren_grouping_stack = &stack;
+
+	/**
+	 * We need a customized macro symtab for ease of lookup. This symtab
+	 * will allow us to store everything we need we near O(1) access
+	 */
+	macro_symtab_t* macro_symtab = macro_symtab_alloc();
+
+	/**
+	 * Let the helper run through and preprocess all of our files in order. 
+	 * We get back either success or failure which determines our end result
+	 */
+	u_int8_t result = preprocess_all_files_in_order(options, macro_symtab);
+
+	//Save what our result ended up as
+	results.status = result == SUCCESS ? PREPROCESSOR_SUCCESS : PREPROCESSOR_FAILURE;
+
 	//Package with this the errors & warnings
 	results.error_count = preprocessor_error_count;
 	results.warning_count = preprocessor_warning_count;
