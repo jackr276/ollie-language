@@ -709,7 +709,7 @@ static dependency_graph_node_t* handle_main_file_tokenization(char* main_file_di
  * NOTE: we can *not* deallocate the dependency graph when we do this because we
  * need all of the info contained within for the rest of compilation
  */
-build_system_results_t parse_dependencies_and_construct_token_stream(compiler_options_t* options, u_int8_t silent_mode){
+build_system_results_t construct_build_order(compiler_options_t* options, u_int8_t silent_mode){
 	//First we'll need some blank results to get started
 	build_system_results_t results = INITIALIZE_BLANK_BUILD_SYSTEM_RESULTS;
 

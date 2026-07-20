@@ -106,8 +106,10 @@ int main(int argc, char** argv){
 	//Start the timer
 	clock_t begin = clock();
 
-	//Invoke the build system to get our token array
-	build_system_results_t build_results = parse_dependencies_and_construct_token_stream(options, FALSE);
+	//Invoke the build system to get our full build order
+	build_system_results_t build_results = construct_build_order(options, FALSE);
+	//Store the build order in here
+	options->build_order = build_results.compilation_order;
 
 	//Tokenizing failed, error out
 	if(build_results.status == BUILD_SYSTEM_STATUS_FAILURE){
