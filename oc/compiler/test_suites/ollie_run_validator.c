@@ -755,13 +755,50 @@ static inline void print_fail_to_compile_validation_summary(){
 }
 
 
-static inline void handle_single_file_tests(){
+/**
+ * This helper will run the OUNIT tester for all of our single file tests in
+ * the single file test directory. 
+ *
+ * NOTE: this helper will close the directory when done
+ */
+static inline void get_all_single_file_tests(DIR* single_file_tests_directory){
+	//Directory entry
+	struct dirent* directory_entry;
 
+	//So long as we have directory entries to read
+	while((directory_entry = readdir(single_file_tests_directory)) != NULL){
+		/**
+		 * If it's not a regular file we do not want to try and
+		 * compile it
+		 */
+		if(directory_entry->d_type != DT_REG){
+			continue;
+		}
+
+		//Otherwise let's allocate the string for this
+		char* test_file = calloc(LINUX_MAX_FILE_NAME_LENGTH, sizeof(char));
+
+		//Copy the directory name over to this
+		strncpy(test_file, directory_entry->d_name, LINUX_MAX_FILE_NAME_LENGTH * sizeof(char));
+		
+		//Add this to the array of all test files
+		dynamic_array_add(&test_files, test_file);
+	}
+
+	//Close this out once we're done
+	closedir(single_file_tests_directory);
 }
 
 
-static inline void handle_multi_file_tests(){
+/**
+ * This helper will run the OUNIT tester for all of our multi file tests
+ * in the multi-file test directory
+ *
+ * NOTE: this helper will close the directory when done
+ */
+static inline void handle_multi_file_tests(DIR* multi_file_tests_directory){
 
+	closedir(multi_file_tests_directory);
 }
 
 
@@ -786,25 +823,16 @@ int main(int argc, char** argv) {
 		exit(1);
 	}
 
-	//Get the thread count - very rough - I'm not really concerned about user-friendliness with this
+	/**
+	 * Step 1: Extract all of our given parameters. They are as follows:
+	 * argv[1] = thread count
+	 * argv[2] = single file tests directory
+	 * argv[3] = multi file tests directory
+	 * argv[4] = output directory
+	 */
 	int32_t thread_count = atoi(argv[1]);
-
-	//Extract it and open it
-	single_file_tests_dir = argv[2];
-	multi_file_tests_dir = argv[3];
-
-	//Try to open this and verify that it does in fact open
-	DIR* single_file_tests_directory = opendir(single_file_tests_dir);
-	if(single_file_tests_directory == NULL){
-		fprintf(stdout, "Fatal error: failed to open directory %s\n", single_file_tests_dir);
-		exit(1);
-	}
-
-	DIR* multi_file_tests_directory = opendir(multi_file_tests_dir);
-	if(multi_file_tests_directory == NULL){
-		fprintf(stdout, "Fatal error: failed to open directory %s\n", multi_file_tests_dir);
-		exit(1);
-	}
+	char* single_file_tests_dir = argv[2];
+	char* multi_file_tests_dir = argv[3];
 
 	/**
 	 * Store the actual output directory. For local runs this should be
@@ -813,7 +841,24 @@ int main(int argc, char** argv) {
 	 */
 	output_directory = argv[4];
 
-	//Allocate all dynamic arrays now
+	//Try to open this and verify that it does in open
+	DIR* single_file_tests_directory = opendir(single_file_tests_dir);
+	if(single_file_tests_directory == NULL){
+		fprintf(stdout, "Fatal error: failed to open the provided single file test directory %s\n", single_file_tests_dir);
+		exit(1);
+	}
+
+	//Next try to open this and verify that it does open
+	DIR* multi_file_tests_directory = opendir(multi_file_tests_dir);
+	if(multi_file_tests_directory == NULL){
+		fprintf(stdout, "Fatal error: failed to open the provided multi-file test directory %s\n", multi_file_tests_dir);
+		exit(1);
+	}
+
+	/**
+	 * Step 2: now we can prepare all of the structures that we'll need to do this. These arrays will
+	 * be reused for the single & multi-file tests
+	 */
 	test_files = dynamic_array_alloc_initial_size(DEFAULT_ARRAY_SIZE);
 	failed_exit_status_validation_files = dynamic_array_alloc_initial_size(DEFAULT_ARRAY_SIZE);
 	failed_to_compile_exit_status_validation_files = dynamic_array_alloc_initial_size(DEFAULT_ARRAY_SIZE);	
@@ -823,30 +868,6 @@ int main(int argc, char** argv) {
 	//Start the clock as we begin our run
 	clock_t start_time = clock();
 
-	//Directory entry
-	struct dirent* directory_entry;
-
-	//So long as we have directory entries to read
-	while((directory_entry = readdir(directory)) != NULL){
-		/**
-		 * If it's not a regular file we do not want to try and
-		 * compile it
-		 */
-		if(directory_entry->d_type != DT_REG){
-			continue;
-		}
-
-		//Otherwise let's allocate the string for this
-		char* test_file = calloc(LINUX_MAX_FILE_NAME_LENGTH, sizeof(char));
-
-		//Copy the directory name over to this
-		strncpy(test_file, directory_entry->d_name, LINUX_MAX_FILE_NAME_LENGTH * sizeof(char));
-		
-		//Add this to the array of all test files
-		dynamic_array_add(&test_files, test_file);
-	}
-
-	//TODO CLOSE ALL DIRECTORIES
 
 	//Extract this for result printing
 	test_file_count = test_files.current_index;
