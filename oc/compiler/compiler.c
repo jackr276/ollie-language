@@ -343,7 +343,7 @@ static u_int8_t compile(compiler_options_t* options){
 	 * Let the preprocessor handle everything to do with macros. Note that this does have the potential
 	 * to fail
 	 */
-	preprocessor_results_t preprocessor_results = preprocess(options, optionsream);
+	preprocessor_results_t preprocessor_results = preprocess(options);
 
 	//Update the warnings/errors if there are any
 	num_errors += preprocessor_results.error_count;
@@ -383,7 +383,6 @@ static u_int8_t compile(compiler_options_t* options){
 	}
 
 	//Now we'll parse the whole thing
-	//results = parse(fl, dependencies.file_name);
 	front_end_results_package_t* results = parse(options);
 
 	//Increment these while we're here

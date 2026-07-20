@@ -1223,8 +1223,8 @@ preprocessor_results_t preprocess(compiler_options_t* options){
 	//Initially assume everything worked. This will be flipped if need be
 	results.status = PREPROCESSOR_SUCCESS;
 
-	//Store the file name up top globally
-	current_file_name = options->file_name;
+	//Extract the build order for convenience
+	dynamic_array_t* build_order = &(options->build_order);
 
 	//Store whether or not we want to print any debug logs
 	print_irs = options->print_irs;
@@ -1246,41 +1246,52 @@ preprocessor_results_t preprocess(compiler_options_t* options){
 	macro_symtab_t* macro_symtab = macro_symtab_alloc();
 
 	/**
-	 * Step 1: perform the initial consumption pass on the token stream. This pass has 2
-	 * purposes. First, it will consume all of the macros in our initial token stream and parse
-	 * them into usable ollie_macro_t definitions. Second, it will flag all of the tokens that are
-	 * involved in that macro as "ignorable". This will cause the second replacement pass to ignore
-	 * those tokens when we go through the stream again, avoiding reconsumption
-	*/
-	u_int8_t consumption_pass_result = macro_consumption_pass(stream, macro_symtab, &num_macros, &num_ounit_directives);
-
-	//If we failed here then there's no point in going further
-	if(consumption_pass_result == FAILURE){
-		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable/invalid macros and/or build system directives macros detected. Please rememdy the errors and recompile", current_line_number);
-		results.status = PREPROCESSOR_FAILURE;
-		goto finalizer;
-	}
-
-	/**
-	 * If we found no macros/OUNITS at all, then we do not need to do anything with a replacement
-	 * pass. This would just be wasteful. Instead, we will just go right to the end
+	 * We'll need to run through every token stream inside of the build 
+	 * order and perform our consumption/replacement passes. If at any point
+	 * one of them fails we fail the entire things
 	 */
-	if(num_macros == 0 && num_ounit_directives == 0){
-		goto finalizer;
-	}
+	for(int32_t i = 0; i < build_order->current_index; i++){
+		//Grab the dependency node out and some of the info that we'll need
+		dependency_graph_node_t* dependency_node = dynamic_array_get_at(build_order, i);
+		current_file_name = dependency_node->file_name;
 
-	/**
-	 * Step 2: if we did find macros, then we need to perform a replacement pass. The replacement
-	 * pass will do 2 things. First, it will replace all of the macro calls with their appropriate token streams and second, it
-	 * will remove all of the macros/macro calls from the token stream. The replacement pass will under the covers
-	 * create a secondary token stream object that will replace the original one, which will be deallocated
-	 */
-	u_int8_t replacement_pass_result = macro_replacement_pass(stream, macro_symtab);
+		/**
+		 * Step 1: perform the initial consumption pass on the token stream. This pass has 2
+		 * purposes. First, it will consume all of the macros in our initial token stream and parse
+		 * them into usable ollie_macro_t definitions. Second, it will flag all of the tokens that are
+		 * involved in that macro as "ignorable". This will cause the second replacement pass to ignore
+		 * those tokens when we go through the stream again, avoiding reconsumption
+		*/
+		u_int8_t consumption_pass_result = macro_consumption_pass(&(dependency_node->token_stream), macro_symtab, &num_macros, &num_ounit_directives);
 
-	//This is very rare but if it does happen we will note it
-	if(replacement_pass_result == FAILURE){
-		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable/invalid macros and/or build system directives macros detected. Please rememdy the errors and recompile", current_line_number);
-		results.status = PREPROCESSOR_FAILURE;
+		//If we failed here then there's no point in going further
+		if(consumption_pass_result == FAILURE){
+			print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable/invalid macros and/or build system directives macros detected. Please rememdy the errors and recompile", current_line_number);
+			results.status = PREPROCESSOR_FAILURE;
+			goto finalizer;
+		}
+
+		/**
+		 * If we found no macros/OUNITS at all, then we do not need to do anything with a replacement
+		 * pass. This would just be wasteful. Instead, we will just go right to the end
+		 */
+		if(num_macros == 0 && num_ounit_directives == 0){
+			goto finalizer;
+		}
+
+		/**
+		 * Step 2: if we did find macros, then we need to perform a replacement pass. The replacement
+		 * pass will do 2 things. First, it will replace all of the macro calls with their appropriate token streams and second, it
+		 * will remove all of the macros/macro calls from the token stream. The replacement pass will under the covers
+		 * create a secondary token stream object that will replace the original one, which will be deallocated
+		 */
+		u_int8_t replacement_pass_result = macro_replacement_pass(&(dependency_node->token_stream), macro_symtab);
+
+		//This is very rare but if it does happen we will note it
+		if(replacement_pass_result == FAILURE){
+			print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable/invalid macros and/or build system directives macros detected. Please rememdy the errors and recompile", current_line_number);
+			results.status = PREPROCESSOR_FAILURE;
+		}
 	}
 
 finalizer:
