@@ -353,26 +353,59 @@ static ounit_type_t is_test_OUNIT_compatible(ollie_token_stream_t* stream, test_
 
 
 /**
+ * We will construct the output file name from the fully qualified file name
+ * by replacing every single "/" with a "_". This guarantees a unique file name 
+ * every time. This helper assumes that the output file name buffer has already
+ * been allocated
+ */
+static inline void construct_output_file_name_from_full_path(char* output_file_name, const char* file_name){
+	//Start copying from 0
+	int32_t current_copy_index = 0;
+
+	//Keep going so long as it's true
+	while(TRUE){
+		//What character are we copying
+		char to_copy = file_name[current_copy_index];
+
+		switch(to_copy){
+			//Replace all slashes with _
+			case '/':
+				output_file_name[current_copy_index] = '_';
+				break;
+
+			//If we have a dot we've hit the file name
+			case '.':
+				goto loop_end;
+
+			//Default is just to copy this character over
+			default:
+				output_file_name[current_copy_index] = to_copy;
+				break;
+		}
+
+		//Bump this up
+		current_copy_index++;
+	}
+
+	//At the very end append the .test onto it
+loop_end:
+	strcat(output_file_name, ".test");
+}
+
+
+/**
  * Exit status validation requires both the compilation and execution of a given program. This 
  * helper does those steps in that order. This is a thread safe helper, locking is used to
  * maintain thread safety around the compiler as it is not inherently thread safe
- *
- * TODO MAKE THIS PASS IN THE FULLY QUALIFIED FILE NAME
  */
 static inline void handle_exit_status_validation(u_int32_t thread_id, char* file_name, u_int32_t* thread_error_count, test_parameters_t* parameters){
 	//All needed string buffers
-	char output_file_name[1000];
-	char fully_qualified_file_name[1000];
-	char command_buffer[3000];
-	char run_command_buffer[2000];
+	char output_file_name[FILENAME_MAX];
+	char command_buffer[10000];
+	char run_command_buffer[10000];
 
-	//TODO HELPER TO GET THE END FILE NAME
-
-	//Generate the *.test file name for the compiled file
-	sprintf(output_file_name, "%s.test", file_name);
-
-	//Construct the fully qualified file name
-	sprintf(fully_qualified_file_name, "%s%s", test_file_dir, file_name);
+	//The output file name itself will come from the fully qualified file name
+	construct_output_file_name_from_full_path(output_file_name, file_name);
 
 	//Save that this was eligible to be run
 	pthread_mutex_lock(&stdout_mutex);
@@ -383,7 +416,7 @@ static inline void handle_exit_status_validation(u_int32_t thread_id, char* file
 	 * Otherwise it is compatible so we will begin our testing
 	 * here by first compiling the actual item
 	 */
-	sprintf(command_buffer, "%s/oc -f %s%s -o %s > /dev/null 2>&1", output_directory, test_file_dir, file_name, output_file_name);
+	sprintf(command_buffer, "%s/oc -f %s -o %s > /dev/null 2>&1", output_directory, file_name, output_file_name);
 
 	/**
 	 * Run the compilation command. The compiler relies on a shared temporary output file, so we 
@@ -472,22 +505,22 @@ static inline void handle_exit_status_validation(u_int32_t thread_id, char* file
  */
 static inline void handle_fail_to_compile_validation(u_int32_t thread_id, char* file_name, u_int32_t* thread_error_count){
 	//All needed string buffers
-	char output_file_name[1000];
-	char command_buffer[3000];
+	char output_file_name[FILENAME_MAX];
+	char command_buffer[10000];
 
 	//Save that this was eligible to be run
 	pthread_mutex_lock(&stdout_mutex);
 	number_of_fail_to_compile_validation_files++;
 	pthread_mutex_unlock(&stdout_mutex);
 
-	//Generate the *.test file name for the compiled file
-	sprintf(output_file_name, "%s.test", file_name);
+	//The output file name itself will come from the fully qualified file name
+	construct_output_file_name_from_full_path(output_file_name, file_name);
 
 	/**
 	 * Use the @ flag to avoid directing this into an output file. We should
 	 * just see it fail to compile
 	 */
-	sprintf(command_buffer, "%s/oc -f %s%s -o %s > /dev/null 2>&1", output_directory, test_file_dir, file_name, output_file_name);
+	sprintf(command_buffer, "%s/oc -f %s -o %s > /dev/null 2>&1", output_directory, file_name, output_file_name);
 
 	/**
 	 * Run the compilation command. The compiler relies on a shared temporary output file, so we 
@@ -552,8 +585,6 @@ static inline void handle_fail_to_compile_validation(u_int32_t thread_id, char* 
 void* worker(void* thread_parameters) {
 	//Test parameters that certain test types require
 	test_parameters_t test_parameters;
-	//Storage for the full file name
-	char fully_qualified_file_name[1000];
 
 	//Extract our thread ID
 	u_int32_t thread_id = ((thread_parameters_t*)(thread_parameters))->thread_number;
@@ -589,9 +620,6 @@ void* worker(void* thread_parameters) {
 			break;
 		}
 
-		//Construct the fully qualified file name
-		sprintf(fully_qualified_file_name, "%s%s", test_file_dir, file_name);
-
 		/**
 		 * We need to tokenize the file to get to any OUNIT directives
 		 *
@@ -601,7 +629,7 @@ void* worker(void* thread_parameters) {
 		 * We have silent mode turned on for this
 		 */
 		pthread_mutex_lock(&lexer_mutex);
-		ollie_token_stream_t token_stream = tokenize(fully_qualified_file_name, TRUE);
+		ollie_token_stream_t token_stream = tokenize(file_name, TRUE);
 		pthread_mutex_unlock(&lexer_mutex);
 
 		/**
@@ -787,7 +815,7 @@ static inline void get_all_single_file_tests(char* directory_name){
 		char* test_file = calloc(FILENAME_MAX, sizeof(char));
 
 		//Print the fully qualified name into here
-		snprintf(test_file, FILENAME_MAX, "%s/%s", directory_name, directory_entry->d_name);
+		snprintf(test_file, FILENAME_MAX, "%s%s", directory_name, directory_entry->d_name);
 		
 		//Add this to the array of all test files
 		dynamic_array_add(&test_files, test_file);
@@ -868,8 +896,6 @@ int main(int argc, char** argv) {
 	//Extract all of the tsets
 	get_all_single_file_tests(single_file_tests_dir);
 	get_all_multi_file_tests(multi_file_tests_dir);
-
-
 
 	//Extract this for result printing
 	test_file_count = test_files.current_index;
