@@ -117,21 +117,21 @@ int main(int argc, char** argv){
 		exit(0);
 	}
 
-	//Store it inside of the token stream
-	ollie_token_stream_t stream = build_results.result_node->token_stream;
-	options->token_stream = &stream;
-
 	//Print out the pre-preprocssing token stream
 	printf("============================= BEFORE PREPROCESSOR =====================================\n");
 
-	for(u_int32_t i = 0; i < stream.token_stream.current_index; i++){
-		printf("%d: %s\n", i, lexitem_to_string(token_array_get_pointer_at(&(stream.token_stream), i)));
+	for(int32_t i = 0; i < options->build_order.current_index; i++){
+		dependency_graph_node_t* dependency = dynamic_array_get_at(&(options->build_order), i);
+
+		for(int32_t j  = 0; j  < dependency->token_stream.token_stream.current_index; j++){
+			printf("%d: %s\n", j, lexitem_to_string(token_array_get_pointer_at(&(dependency->token_stream.token_stream), j)));
+		}
 	}
 
 	printf("============================= BEFORE PREPROCESSOR =====================================\n");
 
 	//We now need to preprocess
-	preprocessor_results_t results = preprocess(options, options->token_stream);
+	preprocessor_results_t results = preprocess(options);
 	
 	//This did not work, get out
 	if(results.status == PREPROCESSOR_FAILURE){
@@ -142,8 +142,12 @@ int main(int argc, char** argv){
 	//Print out the post-preprocssing token stream
 	printf("============================= AFTER PREPROCESSOR =====================================\n");
 
-	for(u_int32_t i = 0; i < stream.token_stream.current_index; i++){
-		printf("%d: %s\n", i, lexitem_to_string(token_array_get_pointer_at(&(stream.token_stream), i)));
+	for(int32_t i = 0; i < options->build_order.current_index; i++){
+		dependency_graph_node_t* dependency = dynamic_array_get_at(&(options->build_order), i);
+
+		for(int32_t j  = 0; j  < dependency->token_stream.token_stream.current_index; j++){
+			printf("%d: %s\n", j, lexitem_to_string(token_array_get_pointer_at(&(dependency->token_stream.token_stream), j)));
+		}
 	}
 
 	printf("============================= AFTER PREPROCESSOR =====================================\n");
