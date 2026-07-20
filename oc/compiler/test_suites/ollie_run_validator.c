@@ -34,8 +34,6 @@
 
 //Default file array size to avoid excessive resizing
 #define DEFAULT_ARRAY_SIZE 1000
-//Max file name size on linux
-#define LINUX_MAX_FILE_NAME_LENGTH 300
 //The maximum console output value in UNIX
 #define MAX_EXIT_STATUS_VALUE 255
 
@@ -89,8 +87,6 @@ static dynamic_array_t invalid_ounit_configuration_files;
 
 //Holders for our output and test file directories
 static char* output_directory;
-static char* single_file_tests_dir;
-static char* multi_file_tests_dir;
 
 /**
  * Our current thread parameter structure only contains
@@ -360,6 +356,8 @@ static ounit_type_t is_test_OUNIT_compatible(ollie_token_stream_t* stream, test_
  * Exit status validation requires both the compilation and execution of a given program. This 
  * helper does those steps in that order. This is a thread safe helper, locking is used to
  * maintain thread safety around the compiler as it is not inherently thread safe
+ *
+ * TODO MAKE THIS PASS IN THE FULLY QUALIFIED FILE NAME
  */
 static inline void handle_exit_status_validation(u_int32_t thread_id, char* file_name, u_int32_t* thread_error_count, test_parameters_t* parameters){
 	//All needed string buffers
@@ -367,6 +365,8 @@ static inline void handle_exit_status_validation(u_int32_t thread_id, char* file
 	char fully_qualified_file_name[1000];
 	char command_buffer[3000];
 	char run_command_buffer[2000];
+
+	//TODO HELPER TO GET THE END FILE NAME
 
 	//Generate the *.test file name for the compiled file
 	sprintf(output_file_name, "%s.test", file_name);
@@ -757,11 +757,19 @@ static inline void print_fail_to_compile_validation_summary(){
 
 /**
  * This helper will run the OUNIT tester for all of our single file tests in
- * the single file test directory. 
+ * the single file test directory. We will be storing fully qualified names
+ * in here
  *
  * NOTE: this helper will close the directory when done
  */
-static inline void get_all_single_file_tests(DIR* single_file_tests_directory){
+static inline void get_all_single_file_tests(char* directory_name){
+	//Try to open this and verify that it does in open
+	DIR* single_file_tests_directory = opendir(directory_name);
+	if(single_file_tests_directory == NULL){
+		fprintf(stdout, "Fatal error: failed to open the provided single file test directory %s\n", directory_name);
+		exit(1);
+	}
+
 	//Directory entry
 	struct dirent* directory_entry;
 
@@ -776,10 +784,10 @@ static inline void get_all_single_file_tests(DIR* single_file_tests_directory){
 		}
 
 		//Otherwise let's allocate the string for this
-		char* test_file = calloc(LINUX_MAX_FILE_NAME_LENGTH, sizeof(char));
+		char* test_file = calloc(FILENAME_MAX, sizeof(char));
 
-		//Copy the directory name over to this
-		strncpy(test_file, directory_entry->d_name, LINUX_MAX_FILE_NAME_LENGTH * sizeof(char));
+		//Print the fully qualified name into here
+		snprintf(test_file, FILENAME_MAX, "%s/%s", directory_name, directory_entry->d_name);
 		
 		//Add this to the array of all test files
 		dynamic_array_add(&test_files, test_file);
@@ -792,11 +800,20 @@ static inline void get_all_single_file_tests(DIR* single_file_tests_directory){
 
 /**
  * This helper will run the OUNIT tester for all of our multi file tests
- * in the multi-file test directory
+ * in the multi-file test directory. We will be storing fully qualified
+ * names in here to maintain distinction, since all files that we are after
+ * are called "main.ol"
  *
  * NOTE: this helper will close the directory when done
  */
-static inline void handle_multi_file_tests(DIR* multi_file_tests_directory){
+static inline void get_all_multi_file_tests(char* directory_name){
+	//Next try to open this and verify that it does open
+	DIR* multi_file_tests_directory = opendir(directory_name);
+	if(multi_file_tests_directory == NULL){
+		fprintf(stdout, "Fatal error: failed to open the provided multi-file test directory %s\n", directory_name);
+		exit(1);
+	}
+
 
 	closedir(multi_file_tests_directory);
 }
@@ -833,27 +850,7 @@ int main(int argc, char** argv) {
 	int32_t thread_count = atoi(argv[1]);
 	char* single_file_tests_dir = argv[2];
 	char* multi_file_tests_dir = argv[3];
-
-	/**
-	 * Store the actual output directory. For local runs this should be
-	 * /oc/out/, for actual runs on the github runner it should be 
-	 * $$RUNNER_TEMP
-	 */
 	output_directory = argv[4];
-
-	//Try to open this and verify that it does in open
-	DIR* single_file_tests_directory = opendir(single_file_tests_dir);
-	if(single_file_tests_directory == NULL){
-		fprintf(stdout, "Fatal error: failed to open the provided single file test directory %s\n", single_file_tests_dir);
-		exit(1);
-	}
-
-	//Next try to open this and verify that it does open
-	DIR* multi_file_tests_directory = opendir(multi_file_tests_dir);
-	if(multi_file_tests_directory == NULL){
-		fprintf(stdout, "Fatal error: failed to open the provided multi-file test directory %s\n", multi_file_tests_dir);
-		exit(1);
-	}
 
 	/**
 	 * Step 2: now we can prepare all of the structures that we'll need to do this. These arrays will
@@ -867,6 +864,11 @@ int main(int argc, char** argv) {
 
 	//Start the clock as we begin our run
 	clock_t start_time = clock();
+
+	//Extract all of the tsets
+	get_all_single_file_tests(single_file_tests_dir);
+	get_all_multi_file_tests(multi_file_tests_dir);
+
 
 
 	//Extract this for result printing
