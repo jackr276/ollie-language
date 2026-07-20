@@ -42,11 +42,6 @@ struct front_end_results_package_t{
 
 
 /**
- * For printing formatted parser errors
- */
-void print_parse_message(error_message_type_t message_type, char* info, u_int32_t line_num);
-
-/**
  * Parse the entirety of the file. Returns 0 if successful
  *
  * NOTE: the parser will destroy the given token stream once done

@@ -142,7 +142,7 @@ static inline symtab_type_record_t* parse_pointer_type(symtab_type_record_t* cur
 /**
  * Simply prints a parse message in a nice formatted way
 */
-void print_parse_message(error_message_type_t message_type, char* info, u_int32_t line_num){
+static void print_parse_message(error_message_type_t message_type, char* info, u_int32_t line_num){
 	//Now print it
 	const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
 
@@ -14377,8 +14377,7 @@ static generic_ast_node_t* declaration_partition(ollie_token_stream_t* token_str
  *
  * BNF Rule: <program>::= {<declaration-partition>}*
  */
-static generic_ast_node_t* program(ollie_token_stream_t* token_stream){
-	//Freeze the line number
+static generic_ast_node_t* program(dynamic_array_t* build_order){
 	lexitem_t lookahead;
 
 	//If prog is null we make it here
@@ -14387,28 +14386,42 @@ static generic_ast_node_t* program(ollie_token_stream_t* token_stream){
 		prog = ast_node_alloc(AST_NODE_TYPE_PROG, SIDE_TYPE_LEFT);
 	}
 
-	//As long as we aren't done
-	while((lookahead = get_next_token(token_stream, &parser_line_num)).tok != DONE){
-		//Put the token back
-		push_back_token(token_stream, &parser_line_num);
+	/**
+	 * Now we need to run through every token stream in the designated build order
+	 * that was given to us by the build system. For each dependency node in
+	 * the build order, we will run through its prepared token stream and parse.
+	 * If at any point parsing fails for one node, the whole things fails
+	 */
+	for(int32_t i = 0; i < build_order->current_index; i++){
+		//Extract the dependency and its associated token stream
+		dependency_graph_node_t* dependency = dynamic_array_get_at(build_order, i);
+		ollie_token_stream_t* token_stream = &(dependency->token_stream);
 
-		//Call declaration partition
-		generic_ast_node_t* current = declaration_partition(token_stream);
+		//Update our current file name to be accurate
+		current_file_name = dependency->file_name;
 
-		//If it was NULL, we had a define or alias statement or implicit function declaration, so we'll move along
-		if(current == NULL){
-			continue;
+		//As long as we aren't done
+		while((lookahead = get_next_token(token_stream, &parser_line_num)).tok != DONE){
+			//Put the token back
+			push_back_token(token_stream, &parser_line_num);
+
+			//Call declaration partition
+			generic_ast_node_t* current = declaration_partition(token_stream);
+
+			//If it was NULL, we had a define or alias statement or implicit function declaration, so we'll move along
+			if(current == NULL){
+				continue;
+			}
+
+			//It failed, we'll bail right out if this is the case
+			if(current->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+				//Just return the erroneous node
+				return current;
+			}
+			
+			//Otherwise, we'll add this as a child of the root
+			add_child_node(prog, current);
 		}
-
-		//It failed, we'll bail right out if this is the case
-		if(current->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			//Just return the erroneous node
-			return current;
-		}
-		
-		//Otherwise, we'll add this as a child of the root
-		add_child_node(prog, current);
-		//And then we'll keep right along
 	}
 
 	//Line number is 0
@@ -14667,8 +14680,8 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	//Initialize our results package here
 	front_end_results_package_t* results = calloc(1, sizeof(front_end_results_package_t));
 
-	//Extract the token stream from the compiler options
-	ollie_token_stream_t* token_stream = options->token_stream;
+	//Extract the build order that we need to follow
+	dynamic_array_t* build_order = &(options->build_order);
 
 	//Initialize the AST system as well
 	initialize_ast_system();
@@ -14736,7 +14749,7 @@ front_end_results_package_t* parse(compiler_options_t* options){
 
 	//Global entry/run point, will give us a tree with
 	//the root being here
-	prog = program(token_stream);
+	prog = program(build_order);
 
 	//We'll only perform these tests if we want debug printing enabled
 	if(prog->ast_node_type != AST_NODE_TYPE_ERR_NODE){
@@ -14789,9 +14802,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	lex_stack_dealloc(&assignment_grouping_stack);
 	nesting_stack_dealloc(&nesting_stack);
 	heap_queue_dealloc(&namespace_bfs_queue);
-
-	//Once we're done, destroy the token stream
-	destroy_token_stream(token_stream);
 
 	//We're done with the errors too
 	dynamic_set_dealloc(&errors_raised_by_current_function);
