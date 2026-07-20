@@ -305,7 +305,7 @@ static u_int8_t compile(compiler_options_t* options){
 
 	//If it failed, we need to leave immediately
 	if(build_system_results.status == BUILD_SYSTEM_STATUS_FAILURE){
-		fprintf(stdout, "\n\n[FILE: %s]: Tokenizing/build system failed. Please remedy the errors and recompile\n\n", options->file_name);
+		fprintf(stdout, "\n[FILE: %s]: Tokenizing/build system failed. Please remedy the errors and recompile\n\n", options->file_name);
 		num_errors++;
 
 		//Timer end

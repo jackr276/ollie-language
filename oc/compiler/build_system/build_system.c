@@ -241,8 +241,6 @@ static u_int8_t traverse_and_search_for_module_rec(char* dependency_file, char* 
 		//Open the directory up first
 		DIR* directory = opendir(path_name);
 
-		printf("SEARCHING DIRECTORY %s\n", path_name);
-
 		//If we couldn't open it then fail out
 		if(directory == NULL){
 			fprintf(stderr, "Fatal internal build system error - invalid directory %s detected", path_name);
@@ -679,7 +677,7 @@ static dependency_graph_node_t* handle_main_file_tokenization(char* main_file_di
 		 */
 		dependency_graph_node_t* dependency = get_dependency_subtree_from_import_statement(&stream, main_file_directory, main_file_name, &current_token_index, silent_mode);
 		if(dependency == NULL){
-			print_build_system_message(MESSAGE_TYPE_ERROR, "Invalid $import directive found in main file. Please review and recompile", main_file_name, 0);
+			print_build_system_message(MESSAGE_TYPE_ERROR, "A main file dependency has been found in error. Please review the compiler output to resolve.", main_file_name, 0);
 			num_build_system_errors++;
 			return NULL;
 		}
