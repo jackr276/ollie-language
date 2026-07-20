@@ -366,6 +366,13 @@ static inline void construct_output_file_name_from_full_path(char* output_file_n
 	int32_t source_index = 0;
 	int32_t dest_index = 0;
 
+	/**
+	 * Skip over a leading ./ so that we don't include it in the final product
+	 */
+	if(file_name[source_index] == '.' && file_name[source_index + 1] == '/'){
+		source_index += 2;
+	}
+
 	//Keep going so long as it's true
 	while(TRUE){
 		//What character are we copying
@@ -382,17 +389,18 @@ static inline void construct_output_file_name_from_full_path(char* output_file_n
 				output_file_name[dest_index] = '_';
 				break;
 
-			//If we have a dot we've hit the file name
+			/**
+			 * A dot is likely the filename. If it is a .ol file name, then we'll concatenate
+			 * the .test to it and leave. Otherwise this is an error
+			 */
 			case '.':
-				//If it's the ./ ski pover it
-				if(file_name[source_index + 1] == '/'){
-					//Only bump the source index
-					source_index += 2;
-					continue;
+				if(file_name[source_index + 1] == 'o' && file_name[source_index + 2] == 'l'){
+					strcat(output_file_name, ".test");
+					return;
 
-				//Otherwise breakout
 				} else {
-					goto loop_end;
+					fprintf(stderr, "Fatal internal compiler error: . detected in string %s before the ending .ol", file_name);
+					exit(1);
 				}
 
 			//Default is just to copy this character over
@@ -405,10 +413,6 @@ static inline void construct_output_file_name_from_full_path(char* output_file_n
 		source_index++;
 		dest_index++;
 	}
-
-	//At the very end append the .test onto it
-loop_end:
-	strcat(output_file_name, ".test");
 }
 
 
