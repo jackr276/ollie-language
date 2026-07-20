@@ -359,32 +359,51 @@ static ounit_type_t is_test_OUNIT_compatible(ollie_token_stream_t* stream, test_
  * been allocated
  */
 static inline void construct_output_file_name_from_full_path(char* output_file_name, const char* file_name){
+	//Wipe the whole thing out
+	memset(output_file_name, 0, FILENAME_MAX);
+
 	//Start copying from 0
-	int32_t current_copy_index = 0;
+	int32_t source_index = 0;
+	int32_t dest_index = 0;
 
 	//Keep going so long as it's true
 	while(TRUE){
 		//What character are we copying
-		char to_copy = file_name[current_copy_index];
+		char to_copy = file_name[source_index];
 
 		switch(to_copy){
+			//This should not happen
+			case '\0':
+				fprintf(stderr, "Fatal internal compiler error: end of string hit without seeing .ol for file %s", file_name);
+				exit(1);
+
 			//Replace all slashes with _
 			case '/':
-				output_file_name[current_copy_index] = '_';
+				output_file_name[dest_index] = '_';
 				break;
 
 			//If we have a dot we've hit the file name
 			case '.':
-				goto loop_end;
+				//If it's the ./ ski pover it
+				if(file_name[source_index + 1] == '/'){
+					//Only bump the source index
+					source_index += 2;
+					continue;
+
+				//Otherwise breakout
+				} else {
+					goto loop_end;
+				}
 
 			//Default is just to copy this character over
 			default:
-				output_file_name[current_copy_index] = to_copy;
+				output_file_name[dest_index] = to_copy;
 				break;
 		}
 
-		//Bump this up
-		current_copy_index++;
+		//Bump these both up
+		source_index++;
+		dest_index++;
 	}
 
 	//At the very end append the .test onto it
