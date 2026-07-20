@@ -298,7 +298,7 @@ static u_int8_t compile(compiler_options_t* options){
 	 * of build system nodes that each have their own independent token streams which we will
 	 * need to string together in the later nodes
 	 */
-	build_system_results_t build_system_results = parse_dependencies_and_construct_token_stream(options, FALSE);
+	build_system_results_t build_system_results = construct_build_order(options, FALSE);
 
 	//Save the compilation order here
 	options->build_order = build_system_results.compilation_order;
