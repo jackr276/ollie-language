@@ -108,23 +108,23 @@ int main(int argc, char** argv){
 	clock_t begin = clock();
 
 	//Let the build system construct the entire token stream
-	build_system_results_t build_results = parse_dependencies_and_construct_token_stream(options, FALSE);
+	build_system_results_t build_results = construct_build_order(options, FALSE);
 
 	//If this fails, we need to leave
 	if(build_results.status == BUILD_SYSTEM_STATUS_FAILURE){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Tokenizing Failed", 0);
+		printf("Tokenizing Failed\n");
 		exit(0);
 	}
 
 	//Store it inside of the token stream
-	options->token_stream = &(build_results.result_node->token_stream);
+	options->build_order = build_results.compilation_order;
 
 	//We now need to preprocess
-	preprocessor_results_t results = preprocess(options, options->token_stream);
+	preprocessor_results_t results = preprocess(options);
 
 	//If we failed then bail out
 	if(results.status == PREPROCESSOR_FAILURE){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Preprocessing Failed", 0);
+		printf("Preprocessing Failed\n");
 		//0 for test runs
 		exit(0);
 	}
