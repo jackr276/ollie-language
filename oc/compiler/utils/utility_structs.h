@@ -9,6 +9,7 @@
 
 #include <sys/types.h>
 #include "../lexer/lexer.h"
+#include "../utils/dynamic_array/dynamic_array.h"
 #include "compiler_output_type.h"
 
 //Compiler option type
@@ -23,7 +24,7 @@ typedef struct module_times_t module_times_t;
  */
 struct compiler_options_t {
 	//The token stream to read from
-	ollie_token_stream_t* token_stream;
+	dynamic_array_t build_order;
 	//The name of the file(-f)
 	char* file_name;
 	//The name of the output file(-o )

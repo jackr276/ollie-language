@@ -294,23 +294,14 @@ static u_int8_t compile(compiler_options_t* options){
 	}
 
 	/**
-	 * Step 1: run the build system first. The build system will return one large
-	 * token stream with all of the tokens arranged in a proper order for compilation. 
-	 * This unified token stream approach allows us to only deal with the build system
-	 * once at the start of compilation, even when we have many many dependencies
+	 * Step 1: run the build system first. The build system will give back a dynamic array
+	 * of build system nodes that each have their own independent token streams which we will
+	 * need to string together in the later nodes
 	 */
 	build_system_results_t build_system_results = parse_dependencies_and_construct_token_stream(options, FALSE);
 
-	//
-	//
-	//
-	//TODO REFACTOR WITH MORE DOCUMENTATION
-	//
-	//
-	//
-	//
-	//
-	//
+	//Save the compilation order here
+	options->build_order = build_system_results.compilation_order;
 
 	//If it failed, we need to leave immediately
 	if(build_system_results.status == BUILD_SYSTEM_STATUS_FAILURE){
@@ -349,16 +340,10 @@ static u_int8_t compile(compiler_options_t* options){
 	}
 
 	/**
-	 * Now we cache the token stream reference inside of the options. The parser will reference this for
-	 * all of its operations
-	 */
-	options->token_stream = &(build_system_results.result_node->token_stream);
-
-	/**
 	 * Let the preprocessor handle everything to do with macros. Note that this does have the potential
 	 * to fail
 	 */
-	preprocessor_results_t preprocessor_results = preprocess(options, options->token_stream);
+	preprocessor_results_t preprocessor_results = preprocess(options, optionsream);
 
 	//Update the warnings/errors if there are any
 	num_errors += preprocessor_results.error_count;

@@ -1216,13 +1216,9 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
  * will traverse the token stream and make replacements as it sees
  * fit with defined macros
  */
-preprocessor_results_t preprocess(compiler_options_t* options, ollie_token_stream_t* stream){
+preprocessor_results_t preprocess(compiler_options_t* options){
 	//Store the preprocessor results
 	preprocessor_results_t results;
-
-	//The stream is always the original stream. This is done more so for code
-	//flow reasons. We don't expect to actually be modifying this
-	results.stream = stream;
 
 	//Initially assume everything worked. This will be flipped if need be
 	results.status = PREPROCESSOR_SUCCESS;
@@ -1286,7 +1282,6 @@ preprocessor_results_t preprocess(compiler_options_t* options, ollie_token_strea
 		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable/invalid macros and/or build system directives macros detected. Please rememdy the errors and recompile", current_line_number);
 		results.status = PREPROCESSOR_FAILURE;
 	}
-	
 
 finalizer:
 	//Package with this the errors & warnings
