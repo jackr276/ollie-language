@@ -4147,6 +4147,9 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
  * not allow truncating assignment
  */
 static inline u_int8_t are_types_castable(generic_type_t* casting_to_type, generic_type_t* being_casted_type){
+	//For use in enum figuring
+	generic_type_t* underlying_enum_type;
+
 	/**
 	 * You can never cast a "void" to anything
 	 */
@@ -4164,7 +4167,9 @@ static inline u_int8_t are_types_castable(generic_type_t* casting_to_type, gener
 	}
 
 	/**
-	 * Based on what we're casting to we will do validations
+	 * Based on what we're casting to we will do validations. Remember that
+	 * we've already screened out all of the void types by the time we've gotten
+	 * to here so we won't need to worry about those at all
 	 */
 	switch(casting_to_type->type_class){
 		/**
@@ -4188,7 +4193,7 @@ static inline u_int8_t are_types_castable(generic_type_t* casting_to_type, gener
 		case TYPE_CLASS_ENUMERATED:
 			//If it's not basic we cannot go further
 			if(being_casted_type->type_class != TYPE_CLASS_BASIC){
-				sprintf(info, "Type %s may not be cast to enumerated type %s. Only integers may be cast to enum types\n",
+				sprintf(info, "Type %s may not be cast to enumerated type %s. Only integers may be cast to enum types",
 								being_casted_type->type_name.string,
 								casting_to_type->type_name.string);
 				return print_and_return_failure(info, parser_line_num);
@@ -4205,7 +4210,7 @@ static inline u_int8_t are_types_castable(generic_type_t* casting_to_type, gener
 				case F32:
 				case F64:
 				case VOID:
-					sprintf(info, "Type %s may not be cast to enumerated type %s. Only integers may be cast to enum types\n",
+					sprintf(info, "Type %s may not be cast to enumerated type %s. Only integers may be cast to enum types",
 									being_casted_type->type_name.string,
 									casting_to_type->type_name.string);
 					return print_and_return_failure(info, parser_line_num);
@@ -4239,13 +4244,53 @@ static inline u_int8_t are_types_castable(generic_type_t* casting_to_type, gener
 			//Should be unreachable - keep the C compiler happy
 			return FALSE;
 
+		/**
+		 * We are able to cast enums, pointers, and other basic types to basic types. Ollie
+		 * permits truncating casts for integer-to-integer casting
+		 */
 		case TYPE_CLASS_BASIC:
+			switch(being_casted_type->type_class){
+				/**
+				 * An enum can be cast to any other basic
+				 * type just fine. We do not care about type sizes at
+				 * all
+				 */
+				case TYPE_CLASS_ENUMERATED:
+					//Extract the underlying type
+					underlying_enum_type = being_casted_type->internal_values.enum_integer_type;
 
+					/**
+					 * If the enum type itself is larger than what it's being cast to,
+					 * we will send an info message that this may result in data loss
+					 */
+					if(underlying_enum_type->type_size > casting_to_type->type_size){
+						sprintf(info, "Casting from type %s to type %s may result in data loss from truncation",
+										being_casted_type->type_name.string,
+										casting_to_type->type_name.string);
+						print_parse_message(MESSAGE_TYPE_INFO, info, parser_line_num);
+					}
 
+					return TRUE;
 
+				/**
+				 * 
+				 */
+				case TYPE_CLASS_BASIC:
 
+				/**
+				 *
+				 */
+				case TYPE_CLASS_POINTER:
 
-
+				/**
+				 * Everything else may not be cast to a basic type
+				 */
+				default:
+					sprintf(info, "Type %s may not be cast to type %s",
+									being_casted_type->type_name.string,
+									casting_to_type->type_name.string);
+					return print_and_return_failure(info, parser_line_num);
+			}
 
 		//We should never get here - just to be safe
 		default:
