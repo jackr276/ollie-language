@@ -30,8 +30,6 @@ typedef struct preprocessor_results_t preprocessor_results_t;
  * token stream, and macros processed
  */
 struct preprocessor_results_t {
-	//The token stream
-	ollie_token_stream_t* stream;
 	//The number of errors
 	u_int32_t error_count;
 	//The number of warnings
@@ -48,6 +46,6 @@ struct preprocessor_results_t {
  * will traverse the token stream and make replacements as it sees
  * fit with defined macros
  */
-preprocessor_results_t preprocess(compiler_options_t* options, ollie_token_stream_t* stream);
+preprocessor_results_t preprocess(compiler_options_t* options);
 
 #endif /* PREPROCESSOR_H */

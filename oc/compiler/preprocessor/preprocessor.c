@@ -44,7 +44,7 @@ static u_int8_t print_irs = FALSE;
 static lex_stack_t* paren_grouping_stack;
 
 //Predeclaration in case it's needed in non-linear order
-static inline u_int8_t perform_macro_substitution(macro_symtab_t* macro_symtab, ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro);
+static inline u_int8_t perform_macro_substitution(macro_symtab_t* macro_symtab, ollie_token_array_t* target_array, ollie_token_array_t* old_array, int32_t* old_token_array_index, symtab_macro_record_t* macro);
 
 
 /**
@@ -106,7 +106,7 @@ static inline ollie_token_t pop_token_and_update_nesting_level(lex_stack_t* pare
  * Simple helper that just wraps the token_array_get_pointer_at and takes care of the index bumping
  * for us
  */
-static inline lexitem_t* get_next_token_pointer(ollie_token_array_t* array, u_int32_t* index){
+static inline lexitem_t* get_next_token_pointer(ollie_token_array_t* array, int32_t* index){
 	//Extract the token pointer
 	lexitem_t* token_pointer = token_array_get_pointer_at(array, *index);
 
@@ -124,7 +124,7 @@ static inline lexitem_t* get_next_token_pointer(ollie_token_array_t* array, u_in
 /**
  * "Push back" a token by decrementing the index, and return the prior token
  */
-static inline lexitem_t* push_back_token_pointer(ollie_token_array_t* array, u_int32_t* index){
+static inline lexitem_t* push_back_token_pointer(ollie_token_array_t* array, int32_t* index){
 	//Decrement it
 	(*index)--;
 
@@ -145,7 +145,7 @@ static inline lexitem_t* push_back_token_pointer(ollie_token_array_t* array, u_i
  *
  * NOTE: By the time we get here, we have already seen the opening L_PAREN
  */
-static inline u_int8_t process_macro_parameter(symtab_macro_record_t* macro, ollie_token_array_t* token_array, u_int32_t* index){
+static inline u_int8_t process_macro_parameter(symtab_macro_record_t* macro, ollie_token_array_t* token_array, int32_t* index){
 	//Get the next token
 	lexitem_t* lookahead = get_next_token_pointer(token_array, index);
 
@@ -170,7 +170,7 @@ static inline u_int8_t process_macro_parameter(symtab_macro_record_t* macro, oll
 
 	//If we make it here then we know that we got a valid ident token as a parameter, but we don't know if it's a duplicate
 	//or not. We will check now
-	for(u_int32_t i = 0; i < macro->parameters.current_index; i++){
+	for(int32_t i = 0; i < macro->parameters.current_index; i++){
 		//Extract the macro token
 		lexitem_t* token = token_array_get_pointer_at(&(macro->parameters), i);
 
@@ -196,7 +196,7 @@ static inline u_int8_t process_macro_parameter(symtab_macro_record_t* macro, oll
  * returns in a success state, the index will be pointing to the token after the ENDMACRO
  * token
  */
-static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macro_symtab, u_int32_t* index) {
+static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macro_symtab, int32_t* index) {
 	//The macro parameter count(set to 0 at first)
 	u_int32_t macro_parameter_count = 0;
 
@@ -409,7 +409,7 @@ finalize_macro:
  * NOTE: by the time we get here we have already seen the OUNIT token but we have not properly
  * consumed it. We will do that here
  */
-static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, u_int32_t* stream_index){
+static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, int32_t* stream_index){
 	//Extract the token at the given index
 	lexitem_t* token = get_next_token_pointer(&(stream->token_stream), stream_index);
 
@@ -522,6 +522,108 @@ static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, 
 
 
 /**
+ * Validate and skip an import directive. Remember that a using directive will be followed
+ * by one dependency file. It is *not* our job here to validate those
+ * dependency files at all. We are only here to skip over this. If we made it to this
+ * point, the build system has already handled all of that
+ *
+ * $import <str_const>;
+ */
+static u_int8_t validate_and_skip_import_directive(ollie_token_stream_t* stream, int32_t* stream_index){
+	//First grab the original token. This should be the using keyword
+	lexitem_t* token = token_array_get_pointer_at(&(stream->token_stream), *stream_index);
+	(*stream_index)++;
+
+	//This should not happen but just to be safe
+	if(token->tok != IMPORT){
+		return print_and_return_preprocessor_failure("Fatal internal compiler error, exprected $import keyword but did not find it", token->line_num);
+	}
+
+	//Flag that we want to ignore this
+	token->ignore = TRUE;
+
+	//Now we are required to see at least one, but possibly many identifiers separated by commas
+	token = token_array_get_pointer_at(&(stream->token_stream), *stream_index);
+	(*stream_index)++;
+
+	//Immediate fail case if we don't have the appropriate identifier
+	if(token->tok != STR_CONST){
+		sprintf(info_message, "Expected identifier in $using directive but got %s instead", lexitem_to_string(token));
+		return print_and_return_preprocessor_failure(info_message, token->line_num);
+	}
+
+	//Ignore it and refresh the token
+	token->ignore = TRUE;
+
+	//Now we need to see a semicolon
+	token = token_array_get_pointer_at(&(stream->token_stream), *stream_index);
+	(*stream_index)++;
+
+	//If it's not a semicolon we fail out
+	if(token->tok != SEMICOLON){
+		sprintf(info_message, "Expected semicolon after $import directive but got %s instead", lexitem_to_string(token));
+		return print_and_return_preprocessor_failure(info_message, token->line_num);
+	}
+
+	//Flag that this token needs to be ignored
+	token->ignore = TRUE;
+
+	//If we've survived to down here, then we are good
+	return TRUE;
+}
+
+
+/**
+ * Validate and skip over a module directive. It is *not* our job to validate the module itself,
+ * that has already been done by the time we get here. Instead, we need to just validate the syntax
+ * and flag it to be ignored by the replacement pass
+ *
+ * $module <ident>;
+ */
+static u_int8_t validate_and_skip_module_directive(ollie_token_stream_t* stream, int32_t* stream_index){
+	//First grab the original token. This should be the using keyword
+	lexitem_t* token = token_array_get_pointer_at(&(stream->token_stream), *stream_index);
+	(*stream_index)++;
+
+	//This should not happen but just to be safe
+	if(token->tok != MODULE){
+		return print_and_return_preprocessor_failure("Fatal internal compiler error, expected $module keyword but did not find it", token->line_num);
+	}
+
+	//Flag that we want to ignore this
+	token->ignore = TRUE;
+
+	//Now we need to see a string constant
+	token = token_array_get_pointer_at(&(stream->token_stream), *stream_index);
+	(*stream_index)++;
+
+	//Immediate fail out if we haven't seen it
+	if(token->tok != IDENT){
+		sprintf(info_message, "Expected identifier in $module directive but got %s instead\n", lexitem_to_string(token));
+		return print_and_return_preprocessor_failure(info_message, token->line_num);
+	}
+
+	//Flag that we need to ignore it
+	token->ignore = TRUE;
+
+	//We now need to see a semicolon
+	token = token_array_get_pointer_at(&(stream->token_stream), *stream_index);
+	(*stream_index)++;
+
+	//Immediate fail out if it's not here
+	if(token->tok != SEMICOLON){
+		return print_and_return_preprocessor_failure("Semicolon expected after $module directive", token->line_num);
+	}
+
+	//Flag down here for us to ignore it
+	token->ignore = TRUE;
+
+	//If we do get here then we have a success
+	return TRUE;
+}
+
+
+/**
  * Put simply, the consumption pass will run through the entire token
  * stream looking for macros. When it finds a macro, it will flag that section
  * of the token stream to be ignored by future passes(in reality this means
@@ -529,13 +631,20 @@ static u_int8_t validate_and_skip_ounit_directive(ollie_token_stream_t* stream, 
  * inside of a struct for later use. The consumption pass does not have anything
  * to do with macro replacement. This will come after in the replacement
  * pass
+ *
+ * IMPORTANT - for "import" and "module" statements, we require that these always
+ * be at the top of the file. If we were to see an import statement somewhere other
+ * than the top of the file, we will fail out. 
  */
 static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macro_symtab_t* macro_symtab, u_int32_t* num_macros, u_int32_t* num_OUNIT_directives){
 	//Standard holder for the result of each macro consumption
 	u_int8_t result;
 
 	//Keep track of the current array index
-	u_int32_t array_index = 0;
+	int32_t array_index = 0;
+
+	//Initially we are at the top of the file - we stay here until we see the first thing that isn't "import" or "module"
+	u_int8_t in_top_of_file = TRUE;
 
 	//Loop through the entire structure
 	while(array_index < stream->token_stream.current_index){
@@ -551,6 +660,9 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 		switch(token->tok){
 			//We are seeing the beginning of a macro
 			case MACRO:
+				//No longer at the top
+				in_top_of_file = FALSE;
+
 				/**
 				 * Now we will invoke the helper to parse this entire token
 				 * stream(until we see the ENDMACRO directive)
@@ -583,6 +695,9 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 			 * here
 			 */
 			case OUNIT:
+				//No longer at the top
+				in_top_of_file = FALSE;
+
 				//We've seen another OUNIT directive
 				(*num_OUNIT_directives)++;
 
@@ -596,8 +711,52 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 
 				break;
 
+			/**
+			 * By the time we get here, the import keyword does not mean anything to us, we just need to
+			 * validate and skip it
+			 */
+			case IMPORT:
+				/**
+				 * IMPORTANT NOTE: if we are no longer at the top of the file, we may not have an import statement here
+				 */
+				if(in_top_of_file == FALSE){
+					return print_and_return_preprocessor_failure("$import statements must be after the optional module declaration but before any other code in the ollie file", token->line_num);
+				}
+
+				//Pass to the helper and let it handle - this also does error printing
+				if(validate_and_skip_import_directive(stream, &array_index) == FALSE){
+					return FAILURE;
+				}
+
+				(*num_macros)++;
+				break;
+
+			/**
+			 * This is entirely useless by the time we get here so we can skip it entirely along
+			 * with the identifier that follows it
+			 */
+			case MODULE:
+				/**
+				 * We may never, *ever*, see a module directive anywhere besides the very top
+				 * of the file(i.e. the very very first token). If we do, it is completely wrong
+				 * and causes an immediate failure
+				 */
+				if(array_index != 0){
+					return print_and_return_preprocessor_failure("The $module declaration directive must be the very first non-comment line in a file. There may only be one $module declaration per file", token->line_num);
+				}
+
+				if(validate_and_skip_module_directive(stream, &array_index) == FALSE){
+					return FAILURE;
+				}
+
+				(*num_macros)++;
+				break;
+
 			//We haven't seen a macro, but the array index needs to be bumped
 			default:
+				//No longer at the top
+				in_top_of_file = FALSE;
+
 				array_index++;
 				break;
 		}
@@ -621,7 +780,7 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
  * NOTE: by the time we are in here, the grouping stack will be at nesting level 1 because we've already seen the open paren. To avoid
  * improperly exiting, we will not exit if we see a comma/closing paren unless we are at nesting level 1
  */
-static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symtab, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, ollie_token_array_t* target_array, u_int32_t* nesting_level){
+static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symtab, ollie_token_array_t* old_array, int32_t* old_token_array_index, ollie_token_array_t* target_array, u_int32_t* nesting_level){
 	//Allocate the target array
 	*target_array = token_array_alloc_initial_size(PARAM_SUB_ARRAY_INIT_SIZE);
 
@@ -720,7 +879,6 @@ static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symt
 				}
 
 				break;
-				
 
 			//If we get this it means we've run off of the end of file. This is a big error and an immediate fail case
 			case DONE:
@@ -770,7 +928,7 @@ static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symt
  * This expanded version will be created and stored in a token array, then that array will be copy-pasted in place of 
  * the macro call site above
  */
-static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab, ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro){
+static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab, ollie_token_array_t* target_array, ollie_token_array_t* old_array, int32_t* old_token_array_index, symtab_macro_record_t* macro){
 	//Store how many parameters this macro has
 	const u_int32_t parameter_count = macro->parameters.current_index;
 
@@ -900,7 +1058,7 @@ parameter_list_end:
 	 * the macro. We will run through all of the macro's tokens, and use the built up parameter token arrays
 	 * to replace the appropriate parameters whenever we see them
 	 */
-	for(u_int32_t i = 0; i < macro->tokens.current_index; i++){
+	for(int32_t i = 0; i < macro->tokens.current_index; i++){
 		//Grab the pointer to this token
 		lexitem_t* token_pointer = token_array_get_pointer_at(&(macro->tokens), i);
 
@@ -914,7 +1072,7 @@ parameter_list_end:
 			ollie_token_array_t param_replacement = parameter_subsitutions[token_pointer->constant_values.parameter_number];
 
 			//Run through the entire array and add it in
-			for(u_int32_t j = 0; j < param_replacement.current_index; j++){
+			for(int32_t j = 0; j < param_replacement.current_index; j++){
 				//Extract it
 				lexitem_t* param_token = token_array_get_pointer_at(&param_replacement, j);
 
@@ -942,9 +1100,8 @@ parameter_list_end:
  * when we know that there are no parameters
  */
 static inline u_int8_t perform_non_parameterized_substitution(ollie_token_array_t* target_array, symtab_macro_record_t* macro){
-	//Run through all of the tokens in this macro, and splice them over into
-	//the target macro
-	for(u_int32_t i = 0; i < macro->tokens.current_index; i++){
+	//Run through all of the tokens in this macro, and splice them over into the target macro
+	for(int32_t i = 0; i < macro->tokens.current_index; i++){
 		//Get a a pointer to this token
 		lexitem_t* token_pointer = token_array_get_pointer_at(&(macro->tokens), i);
 
@@ -963,7 +1120,7 @@ static inline u_int8_t perform_non_parameterized_substitution(ollie_token_array_
  *
  * NOTE: By the time that we get here, we've already seen the macro name and know that this macro does in fact exist
  */
-static inline u_int8_t perform_macro_substitution(macro_symtab_t* macro_symtab, ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro){
+static inline u_int8_t perform_macro_substitution(macro_symtab_t* macro_symtab, ollie_token_array_t* target_array, ollie_token_array_t* old_array, int32_t* old_token_array_index, symtab_macro_record_t* macro){
 	//Does this macro have parameters? If it does not, we are going to perform a regular pass
 	if(macro->parameters.current_index == 0){
 		return perform_non_parameterized_substitution(target_array, macro);
@@ -996,7 +1153,7 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 	ollie_token_array_t new_token_array = token_array_alloc();
 
 	//The index into the old token array
-	u_int32_t old_token_array_index = 0;
+	int32_t old_token_array_index = 0;
 
 	//So long as we're within the acceptable bounds of the array
 	while(old_token_array_index < old_token_array->current_index){
@@ -1014,25 +1171,23 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 			continue;
 		}
 
-		//Go based on what kind of token this is. If we have an identifier, then
-		//that could possibly be a macro for us
-		switch(current_token_pointer->tok){
-			//If we have an identifier, then there is a chance but not a guarantee
-			//that we are performing a macro substitution
-			case IDENT:
-				//Let's see if we have anything here
-				found_macro = lookup_macro(macro_symtab, current_token_pointer->lexeme.string);
+		/**
+		 * Go based on what kind of token this is. If we have an identifier, then
+		 * that could possibly be a macro for us
+		 */
+		if(current_token_pointer->tok == IDENT){
+			//Let's see if we have anything here
+			found_macro = lookup_macro(macro_symtab, current_token_pointer->lexeme.string);
 
-				//We didn't find a macro name match, which is fine - we'll just
-				//treat this like a regular token. We expect that this is the
-				//most common case
-				if(found_macro == NULL){
-					token_array_add(&new_token_array, current_token_pointer);
+			/**
+			 * We didn't find a macro name match, which is fine - we'll just
+			 * treat this like a regular token. We expect that this is the
+			 * most common case
+			 */
+			if(found_macro == NULL){
+				token_array_add(&new_token_array, current_token_pointer);
 
-					//Get out of the case
-					break;
-				}
-
+			} else {
 				//Use the new array and the macro we found to do our substitution
 				u_int8_t substitution_result = perform_macro_substitution(macro_symtab, &new_token_array, old_token_array, &old_token_array_index, found_macro);
 
@@ -1040,16 +1195,10 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 				if(substitution_result == FAILURE){
 					return FAILURE;
 				}
+			}
 
-				break;
-
-			//Not an identifier
-			default:
-				//We know that we aren't ignoring, so just add this to
-				//the array
-				token_array_add(&new_token_array, current_token_pointer);
-
-				break;
+		} else {
+			token_array_add(&new_token_array, current_token_pointer);
 		}
 	}
 
@@ -1063,23 +1212,80 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 // ======================================================== Replacement Pass ========================================================================================
 
 /**
+ * Run through the provided build order and preprocess each file in that given order. The replacements
+ * should happen inplace so we will not need to add or remove anything from the build order itself
+ */
+static inline u_int8_t preprocess_all_files_in_order(compiler_options_t* options, macro_symtab_t* macro_symtab){
+	//Count of how many macros/directives we've seen
+	u_int32_t num_macros = 0;
+	u_int32_t num_ounit_directives = 0;
+
+	//Extract the build order for convenience
+	dynamic_array_t* build_order = &(options->build_order);
+
+	/**
+	 * We'll need to run through every token stream inside of the build 
+	 * order and perform our consumption/replacement passes. If at any point
+	 * one of them fails we fail the entire things
+	 */
+	for(int32_t i = 0; i < build_order->current_index; i++){
+		//Grab the dependency node out and some of the info that we'll need
+		dependency_graph_node_t* dependency_node = dynamic_array_get_at(build_order, i);
+		current_file_name = dependency_node->file_name;
+
+		/**
+		 * Step 1: perform the initial consumption pass on the token stream. This pass has 2
+		 * purposes. First, it will consume all of the macros in our initial token stream and parse
+		 * them into usable ollie_macro_t definitions. Second, it will flag all of the tokens that are
+		 * involved in that macro as "ignorable". This will cause the second replacement pass to ignore
+		 * those tokens when we go through the stream again, avoiding reconsumption
+		*/
+		u_int8_t consumption_pass_result = macro_consumption_pass(&(dependency_node->token_stream), macro_symtab, &num_macros, &num_ounit_directives);
+
+		//If we failed here then there's no point in going further
+		if(consumption_pass_result == FAILURE){
+			print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable/invalid macros and/or build system directives macros detected. Please rememdy the errors and recompile", current_line_number);
+			preprocessor_error_count++;
+			return FAILURE;
+		}
+
+		/**
+		 * If we found no macros/OUNITS at all, then we do not need to do anything with a replacement
+		 * pass. This would just be wasteful. Instead, we will just continue onto the next file
+		 */
+		if(num_macros == 0 && num_ounit_directives == 0){
+			continue;
+		}
+
+		/**
+		 * Step 2: if we did find macros, then we need to perform a replacement pass. The replacement
+		 * pass will do 2 things. First, it will replace all of the macro calls with their appropriate token streams and second, it
+		 * will remove all of the macros/macro calls from the token stream. The replacement pass will under the covers
+		 * create a secondary token stream object that will replace the original one, which will be deallocated
+		 */
+		u_int8_t replacement_pass_result = macro_replacement_pass(&(dependency_node->token_stream), macro_symtab);
+
+		//This is very rare but if it does happen we will note it
+		if(replacement_pass_result == FAILURE){
+			print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable/invalid macros and/or build system directives macros detected. Please rememdy the errors and recompile", current_line_number);
+			preprocessor_error_count++;
+			return FAILURE;
+		}
+	}
+
+	//If we make it to here then this all worked
+	return SUCCESS;
+}
+
+
+/**
  * Entry point to the entire preprocessor is here. The preprocessor
  * will traverse the token stream and make replacements as it sees
  * fit with defined macros
  */
-preprocessor_results_t preprocess(compiler_options_t* options, ollie_token_stream_t* stream){
+preprocessor_results_t preprocess(compiler_options_t* options){
 	//Store the preprocessor results
 	preprocessor_results_t results;
-
-	//The stream is always the original stream. This is done more so for code
-	//flow reasons. We don't expect to actually be modifying this
-	results.stream = stream;
-
-	//Initially assume everything worked. This will be flipped if need be
-	results.status = PREPROCESSOR_SUCCESS;
-
-	//Store the file name up top globally
-	current_file_name = options->file_name;
 
 	//Store whether or not we want to print any debug logs
 	print_irs = options->print_irs;
@@ -1090,58 +1296,21 @@ preprocessor_results_t preprocess(compiler_options_t* options, ollie_token_strea
 	//This just holds a pointer to it
 	paren_grouping_stack = &stack;
 
-	//Keep trace of how many macros/directives we've seen
-	u_int32_t num_macros = 0;
-	u_int32_t num_ounit_directives = 0;
-
 	/**
-	 * Step 0: we need a customized macro symtab for ease of lookup. This symtab
+	 * We need a customized macro symtab for ease of lookup. This symtab
 	 * will allow us to store everything we need we near O(1) access
 	 */
 	macro_symtab_t* macro_symtab = macro_symtab_alloc();
 
 	/**
-	 * Step 1: perform the initial consumption pass on the token stream. This pass has 2
-	 * purposes. First, it will consume all of the macros in our initial token stream and parse
-	 * them into usable ollie_macro_t definitions. Second, it will flag all of the tokens that are
-	 * involved in that macro as "ignorable". This will cause the second replacement pass to ignore
-	 * those tokens when we go through the stream again, avoiding reconsumption
-	*/
-	u_int8_t consumption_pass_result = macro_consumption_pass(stream, macro_symtab, &num_macros, &num_ounit_directives);
-
-	//If we failed here then there's no point in going further
-	if(consumption_pass_result == FAILURE){
-		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable/invalid macros detected. Please rememdy the errors and recompile", current_line_number);
-		//Note a failure
-		results.status = PREPROCESSOR_FAILURE;
-		goto finalizer;
-	}
-
-	/**
-	 * If we found no macros/OUNITS at all, then we do not need to do anything with a replacement
-	 * pass. This would just be wasteful. Instead, we will just go right to the end
+	 * Let the helper run through and preprocess all of our files in order. 
+	 * We get back either success or failure which determines our end result
 	 */
-	if(num_macros == 0 && num_ounit_directives == 0){
-		goto finalizer;
-	}
+	u_int8_t result = preprocess_all_files_in_order(options, macro_symtab);
 
-	/**
-	 * Step 2: if we did find macros, then we need to perform a replacement pass. The replacement
-	 * pass will do 2 things. First, it will replace all of the macro calls with their appropriate token streams and second, it
-	 * will remove all of the macros/macro calls from the token stream. The replacement pass will under the covers
-	 * create a secondary token stream object that will replace the original one, which will be deallocated
-	 */
-	u_int8_t replacement_pass_result = macro_replacement_pass(stream, macro_symtab);
+	//Save what our result ended up as
+	results.status = result == SUCCESS ? PREPROCESSOR_SUCCESS : PREPROCESSOR_FAILURE;
 
-	//This is very rare but if it does happen we will note it
-	if(replacement_pass_result == FAILURE){
-		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable/invalid macros detected. Please rememdy the errors and recompile", current_line_number);
-		//Note a failure
-		results.status = PREPROCESSOR_FAILURE;
-	}
-	
-
-finalizer:
 	//Package with this the errors & warnings
 	results.error_count = preprocessor_error_count;
 	results.warning_count = preprocessor_warning_count;

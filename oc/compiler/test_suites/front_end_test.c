@@ -10,17 +10,26 @@
 #include <sys/types.h>
 #include <time.h>
 
-//Link to the parser
+#include "../build_system/build_system.h"
 #include "../parser/parser.h"
-//Link to the preprocessor
 #include "../preprocessor/preprocessor.h"
-//Link to cfg
 #include "../cfg/cfg.h"
 #include "../utils/constants.h"
 
-
 u_int32_t num_warnings;
 u_int32_t num_errors;
+
+
+/**
+ * Simply prints a parse message in a nice formatted way
+*/
+static void print_console_message(error_message_type_t message_type, char* info, u_int32_t line_num){
+	//Now print it
+	const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
+
+	//Print this out on a single line
+	fprintf(stdout, "\n[LINE %d | COMPILER %s]: %s\n", line_num, type[message_type], info);
+}
 
 
 /**
@@ -107,25 +116,25 @@ int main(int argc, char** argv){
 	//Start the timer
 	clock_t begin = clock();
 
-	//Invoke the tokenizer
-	ollie_token_stream_t stream = tokenize(options->file_name, FALSE);
+	//Let the build system construct our token stream
+	build_system_results_t build_system_results = construct_build_order(options, FALSE);
 
 	//If this fails, we need to leave
-	if(stream.status == STREAM_STATUS_FAILURE){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Tokenizing Failed", 0);
+	if(build_system_results.status == BUILD_SYSTEM_STATUS_FAILURE){
+		print_console_message(MESSAGE_TYPE_ERROR, "Tokenizing Failed", 0);
 		//0 for test runs
 		exit(0);
 	}
 	
 	//Store it inside of the token stream
-	options->token_stream = &stream;
+	options->build_order = build_system_results.compilation_order;
 
 	//We now need to preprocess
-	preprocessor_results_t results = preprocess(options, options->token_stream);
+	preprocessor_results_t results = preprocess(options);
 
 	//If we failed then bail out
 	if(results.status == PREPROCESSOR_FAILURE){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Preprocessing Failed", 0);
+		print_console_message(MESSAGE_TYPE_ERROR, "Preprocessing Failed", 0);
 		//0 for test runs
 		exit(0);
 	}

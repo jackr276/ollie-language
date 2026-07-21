@@ -13,6 +13,7 @@
 
 //Link to the preprocessor
 #include "../preprocessor/preprocessor.h"
+#include "../build_system/build_system.h"
 #include "../utils/constants.h"
 #include "../utils/utility_structs.h"
 
@@ -105,29 +106,34 @@ int main(int argc, char** argv){
 	//Start the timer
 	clock_t begin = clock();
 
-	//Invoke the tokenizer
-	ollie_token_stream_t stream = tokenize(options->file_name, FALSE);
+	//Invoke the build system to get our full build order
+	build_system_results_t build_results = construct_build_order(options, FALSE);
+	//Store the build order in here
+	options->build_order = build_results.compilation_order;
 
 	//Tokenizing failed, error out
-	if(stream.status == STREAM_STATUS_FAILURE){
+	if(build_results.status == BUILD_SYSTEM_STATUS_FAILURE){
 		printf("TOKENIZING FAILED\n");
 		printf("==================================== END  ================================================\n");
+		//0 for test runs - it's fine to have this fail sometimes
+		exit(0);
 	}
-
-	//Store it inside of the token stream
-	options->token_stream = &stream;
 
 	//Print out the pre-preprocssing token stream
 	printf("============================= BEFORE PREPROCESSOR =====================================\n");
 
-	for(u_int32_t i = 0; i < stream.token_stream.current_index; i++){
-		printf("%d: %s\n", i, lexitem_to_string(token_array_get_pointer_at(&(stream.token_stream), i)));
+	for(int32_t i = 0; i < options->build_order.current_index; i++){
+		dependency_graph_node_t* dependency = dynamic_array_get_at(&(options->build_order), i);
+
+		for(int32_t j  = 0; j  < dependency->token_stream.token_stream.current_index; j++){
+			printf("%d: %s\n", j, lexitem_to_string(token_array_get_pointer_at(&(dependency->token_stream.token_stream), j)));
+		}
 	}
 
 	printf("============================= BEFORE PREPROCESSOR =====================================\n");
 
 	//We now need to preprocess
-	preprocessor_results_t results = preprocess(options, options->token_stream);
+	preprocessor_results_t results = preprocess(options);
 	
 	//This did not work, get out
 	if(results.status == PREPROCESSOR_FAILURE){
@@ -138,8 +144,12 @@ int main(int argc, char** argv){
 	//Print out the post-preprocssing token stream
 	printf("============================= AFTER PREPROCESSOR =====================================\n");
 
-	for(u_int32_t i = 0; i < stream.token_stream.current_index; i++){
-		printf("%d: %s\n", i, lexitem_to_string(token_array_get_pointer_at(&(stream.token_stream), i)));
+	for(int32_t i = 0; i < options->build_order.current_index; i++){
+		dependency_graph_node_t* dependency = dynamic_array_get_at(&(options->build_order), i);
+
+		for(int32_t j  = 0; j  < dependency->token_stream.token_stream.current_index; j++){
+			printf("%d: %s\n", j, lexitem_to_string(token_array_get_pointer_at(&(dependency->token_stream.token_stream), j)));
+		}
 	}
 
 	printf("============================= AFTER PREPROCESSOR =====================================\n");

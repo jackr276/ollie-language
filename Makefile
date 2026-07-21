@@ -3,6 +3,7 @@ CC = gcc
 CFLAGS = -Wall -Wextra -c -Wimplicit-fallthrough=0
 CFLAGSLINK = -Wall -Wextra
 TEST_SUITE_PATH = ./oc/compiler/test_suites
+BUILD_SYSTEM_PATH = ./oc/compiler/build_system
 LEX_PATH = ./oc/compiler/lexer
 GRAPH_ANALYZER_PATH = ./oc/compiler/graph_analyzer
 STACK_PATH = ./oc/compiler/utils/stack
@@ -11,6 +12,7 @@ ASSEMBLER_PATH = ./oc/compiler/assembler
 SYMTAB_PATH = ./oc/compiler/symtab
 PARSER_PATH = ./oc/compiler/parser
 TYPE_SYSTEM_PATH = ./oc/compiler/type_system
+DEPENDENCY_GRAPH_PATH = ./oc/compiler/dependency_graph
 DATA_DEPENDENCY_GRAPH_PATH = ./oc/compiler/data_dependency_graph
 AST_PATH = ./oc/compiler/ast
 CFG_PATH = ./oc/compiler/cfg
@@ -18,7 +20,6 @@ LOCAL_CONSTANT_PATH = ./oc/compiler/local_constant
 OPTIMIZER_PATH = ./oc/compiler/optimizer
 PREPROC_PATH = ./oc/compiler/preprocessor
 POSTPROCESSOR_PATH = ./oc/compiler/postprocessor
-DEPENDENCY_TREE_PATH = ./oc/compiler/dependency_tree
 DYNAMIC_ARRAY_PATH = ./oc/compiler/utils/dynamic_array
 DYNAMIC_INTEGER_ARRAY_PATH = ./oc/compiler/utils/dynamic_integer_array
 PARAMETER_RESULT_ARRAY_PATH = ./oc/compiler/utils/parameter_result_array
@@ -33,25 +34,26 @@ REGISTER_ALLOCATOR_PATH = ./oc/compiler/register_allocator
 INTERFERENCE_GRAPH_PATH = ./oc/compiler/interference_graph
 JUMP_TABLE_PATH = ./oc/compiler/jump_table
 QUEUE_PATH = ./oc/compiler/utils/queue
-TEST_FILE_DIR = ./oc/test_files/
+SINGLE_FILE_TEST_DIRECTORY = ./oc/test_files/
+MULTI_FILE_TEST_DIRECTORY = ./oc/multifile_test_programs/
 OUTPUTTED_ASSEMBLY_DIR = ./oc/generated_assembly/
 OUT_LOCAL = ./oc/out
 OUT_CI = $$RUNNER_TEMP
 PROGS = lexer_test symtab_test parser_test oc
 
 # Input and output arrays
-inputs := $(shell find $(TEST_FILE_DIR) -type f -name "*.ol" | sort)
+inputs := $(shell find $(SINGLE_FILE_TEST_DIRECTORY) -maxdepth 1 -type f -name "*.ol" | sort)
 
 all: $(PROGS)
 
 ltest: lexer_test
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/lexer_test
+	find $(SINGLE_FILE_TEST_DIRECTORY) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_LOCAL)/lexer_test
 
 preproc_test: preprocessor_test
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/preprocessor_test -i -d -f
+	find $(SINGLE_FILE_TEST_DIRECTORY) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_LOCAL)/preprocessor_test -i -d -f
 
 lexer_test: lexer.o lexer_test.o lexstack.o dynamic_string.o ollie_token_array.o
-	$(CC) -o $(OUT_LOCAL)/lexer_test $(OUT_LOCAL)/lexer_test.o $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/ollie_token_array.o
+	$(CC) -o $(OUT_LOCAL)/lexer_test $(OUT_LOCAL)/lexer_test.o $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/ollie_token_array.o 
 
 lexer_testd: lexerd.o lexer_testd.o lexstackd.o dynamic_stringd.o ollie_token_arrayd.o
 	$(CC) -o $(OUT_LOCAL)/lexer_testd $(OUT_LOCAL)/lexer_testd.o $(OUT_LOCAL)/lexerd.o $(OUT_LOCAL)/lexstackd.o $(OUT_LOCAL)/dynamic_stringd.o $(OUT_LOCAL)/ollie_token_arrayd.o
@@ -62,11 +64,11 @@ lexer_test.o: $(TEST_SUITE_PATH)/lexer_test.c
 lexer_testd.o: $(TEST_SUITE_PATH)/lexer_test.c
 	$(CC) -g $(CFLAGS) $(TEST_SUITE_PATH)/lexer_test.c -o $(OUT_LOCAL)/lexer_testd.o
 
-preprocessor_test: preprocessor_test.o preprocessor.o symtab.o lexer.o type_system.o lexstack.o lightstack.o stack_data_area.o dynamic_array.o dynamic_integer_array.o heap_queue.o heapstack.o jump_table.o dynamic_string.o nesting_stack.o min_priority_queue.o dynamic_set.o ollie_token_array.o
-	$(CC) -o $(OUT_LOCAL)/preprocessor_test $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/preprocessor_test.o $(OUT_LOCAL)/preprocessor.o $(OUT_LOCAL)/symtab.o $(OUT_LOCAL)/type_system.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/lightstack.o $(OUT_LOCAL)/stack_data_area.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/dynamic_integer_array.o $(OUT_LOCAL)/heap_queue.o $(OUT_LOCAL)/heapstack.o $(OUT_LOCAL)/jump_table.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/nesting_stack.o $(OUT_LOCAL)/min_priority_queue.o $(OUT_LOCAL)/dynamic_set.o $(OUT_LOCAL)/ollie_token_array.o
+preprocessor_test: preprocessor_test.o preprocessor.o symtab.o lexer.o build_system.o dependency_graph.o type_system.o lexstack.o lightstack.o stack_data_area.o dynamic_array.o dynamic_integer_array.o heap_queue.o heapstack.o jump_table.o dynamic_string.o nesting_stack.o min_priority_queue.o dynamic_set.o ollie_token_array.o
+	$(CC) -o $(OUT_LOCAL)/preprocessor_test $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/build_system.o $(OUT_LOCAL)/dependency_graph.o $(OUT_LOCAL)/preprocessor_test.o $(OUT_LOCAL)/preprocessor.o $(OUT_LOCAL)/symtab.o $(OUT_LOCAL)/type_system.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/lightstack.o $(OUT_LOCAL)/stack_data_area.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/dynamic_integer_array.o $(OUT_LOCAL)/heap_queue.o $(OUT_LOCAL)/heapstack.o $(OUT_LOCAL)/jump_table.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/nesting_stack.o $(OUT_LOCAL)/min_priority_queue.o $(OUT_LOCAL)/dynamic_set.o $(OUT_LOCAL)/ollie_token_array.o
 
-preprocessor_testd: preprocessor_testd.o preprocessord.o symtabd.o lexerd.o type_systemd.o lexstackd.o lightstackd.o stack_data_aread.o dynamic_arrayd.o dynamic_integer_arrayd.o heap_queued.o heapstackd.o jump_tabled.o dynamic_stringd.o nesting_stackd.o min_priority_queued.o dynamic_setd.o ollie_token_arrayd.o
-	$(CC) -o $(OUT_LOCAL)/preprocessor_testd $(OUT_LOCAL)/lexerd.o $(OUT_LOCAL)/preprocessor_testd.o $(OUT_LOCAL)/preprocessord.o $(OUT_LOCAL)/symtabd.o $(OUT_LOCAL)/type_systemd.o $(OUT_LOCAL)/lexstackd.o $(OUT_LOCAL)/lightstackd.o $(OUT_LOCAL)/stack_data_aread.o $(OUT_LOCAL)/dynamic_arrayd.o $(OUT_LOCAL)/dynamic_integer_arrayd.o $(OUT_LOCAL)/heap_queued.o $(OUT_LOCAL)/heapstackd.o $(OUT_LOCAL)/jump_tabled.o $(OUT_LOCAL)/dynamic_stringd.o $(OUT_LOCAL)/nesting_stackd.o $(OUT_LOCAL)/min_priority_queued.o $(OUT_LOCAL)/dynamic_setd.o $(OUT_LOCAL)/ollie_token_arrayd.o
+preprocessor_testd: preprocessor_testd.o preprocessord.o symtabd.o lexerd.o build_systemd.o dependency_graphd.o type_systemd.o lexstackd.o lightstackd.o stack_data_aread.o dynamic_arrayd.o dynamic_integer_arrayd.o heap_queued.o heapstackd.o jump_tabled.o dynamic_stringd.o nesting_stackd.o min_priority_queued.o dynamic_setd.o ollie_token_arrayd.o
+	$(CC) -o $(OUT_LOCAL)/preprocessor_testd $(OUT_LOCAL)/lexerd.o $(OUT_LOCAL)/build_systemd.o $(OUT_LOCAL)/dependency_graphd.o $(OUT_LOCAL)/preprocessor_testd.o $(OUT_LOCAL)/preprocessord.o $(OUT_LOCAL)/symtabd.o $(OUT_LOCAL)/type_systemd.o $(OUT_LOCAL)/lexstackd.o $(OUT_LOCAL)/lightstackd.o $(OUT_LOCAL)/stack_data_aread.o $(OUT_LOCAL)/dynamic_arrayd.o $(OUT_LOCAL)/dynamic_integer_arrayd.o $(OUT_LOCAL)/heap_queued.o $(OUT_LOCAL)/heapstackd.o $(OUT_LOCAL)/jump_tabled.o $(OUT_LOCAL)/dynamic_stringd.o $(OUT_LOCAL)/nesting_stackd.o $(OUT_LOCAL)/min_priority_queued.o $(OUT_LOCAL)/dynamic_setd.o $(OUT_LOCAL)/ollie_token_arrayd.o
 
 preprocessor_test.o: $(TEST_SUITE_PATH)/preprocessor_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/preprocessor_test.c -o $(OUT_LOCAL)/preprocessor_test.o
@@ -85,6 +87,18 @@ lexer.o: $(LEX_PATH)/lexer.c
 
 lexerd.o: $(LEX_PATH)/lexer.c
 	$(CC) -g $(CFLAGS) $(LEX_PATH)/lexer.c -o $(OUT_LOCAL)/lexerd.o
+
+build_system.o: $(BUILD_SYSTEM_PATH)/build_system.c
+	$(CC) $(CFLAGS) $(BUILD_SYSTEM_PATH)/build_system.c -o $(OUT_LOCAL)/build_system.o
+
+build_systemd.o: $(BUILD_SYSTEM_PATH)/build_system.c
+	$(CC) -g $(CFLAGS) $(BUILD_SYSTEM_PATH)/build_system.c -o $(OUT_LOCAL)/build_systemd.o
+
+dependency_graph.o: $(DEPENDENCY_GRAPH_PATH)/dependency_graph.c
+	$(CC) $(CFLAGS) $(DEPENDENCY_GRAPH_PATH)/dependency_graph.c -o $(OUT_LOCAL)/dependency_graph.o
+
+dependency_graphd.o: $(DEPENDENCY_GRAPH_PATH)/dependency_graph.c
+	$(CC) $(CFLAGS) -g $(DEPENDENCY_GRAPH_PATH)/dependency_graph.c -o $(OUT_LOCAL)/dependency_graphd.o
 
 heapstack.o: $(STACK_PATH)/heapstack.c
 	$(CC) $(CFLAGS) $(STACK_PATH)/heapstack.c -o $(OUT_LOCAL)/heapstack.o
@@ -193,12 +207,6 @@ postprocessor.o: $(POSTPROCESSOR_PATH)/postprocessor.c
 
 postprocessord.o: $(POSTPROCESSOR_PATH)/postprocessor.c
 	$(CC) $(CFLAGS) -g $(POSTPROCESSOR_PATH)/postprocessor.c -o $(OUT_LOCAL)/postprocessord.o
-
-dependency_tree.o: $(DEPENDENCY_TREE_PATH)/dependency_tree.c
-	$(CC) $(CFLAGS) $(DEPENDENCY_TREE_PATH)/dependency_tree.c -o $(OUT_LOCAL)/dependency_tree.o
-
-dependency_treed.o: $(DEPENDENCY_TREE_PATH)/dependency_tree.c
-	$(CC) $(CFLAGS) -g $(DEPENDENCY_TREE_PATH)/dependency_tree.c -o $(OUT_LOCAL)/dependency_treed.o
 
 stack_data_area.o: $(STACK_DATA_AREA_PATH)/stack_data_area.c
 	$(CC) $(CFLAGS) $(STACK_DATA_AREA_PATH)/stack_data_area.c -o $(OUT_LOCAL)/stack_data_area.o
@@ -386,56 +394,56 @@ instruction_selector_testd.o: $(TEST_SUITE_PATH)/instruction_selector_test.c
 middle_end_testd.o: $(TEST_SUITE_PATH)/middle_end_test.c
 	$(CC) $(CFLAGS) -g -o $(OUT_LOCAL)/middle_end_testd.o $(TEST_SUITE_PATH)/middle_end_test.c
 
-parser_test: parser.o lexer.o parser_test.o symtab.o lexstack.o heapstack.o type_system.o ast.o heap_queue.o lightstack.o dynamic_array.o dynamic_integer_array.o stack_data_area.o instruction.o dynamic_string.o nesting_stack.o min_priority_queue.o dynamic_set.o ollie_token_array.o preprocessor.o
-	$(CC) -o $(OUT_LOCAL)/parser_test $(OUT_LOCAL)/parser_test.o $(OUT_LOCAL)/parser.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/heapstack.o $(OUT_LOCAL)/symtab.o $(OUT_LOCAL)/type_system.o $(OUT_LOCAL)/ast.o $(OUT_LOCAL)/heap_queue.o $(OUT_LOCAL)/lightstack.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/dynamic_integer_array.o $(OUT_LOCAL)/stack_data_area.o $(OUT_LOCAL)/instruction.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/nesting_stack.o $(OUT_LOCAL)/min_priority_queue.o $(OUT_LOCAL)/dynamic_set.o $(OUT_LOCAL)/ollie_token_array.o $(OUT_LOCAL)/preprocessor.o
+parser_test: parser.o lexer.o build_system.o dependency_graph.o parser_test.o symtab.o lexstack.o heapstack.o type_system.o ast.o heap_queue.o lightstack.o dynamic_array.o dynamic_integer_array.o stack_data_area.o instruction.o dynamic_string.o nesting_stack.o min_priority_queue.o dynamic_set.o ollie_token_array.o preprocessor.o
+	$(CC) -o $(OUT_LOCAL)/parser_test $(OUT_LOCAL)/parser_test.o $(OUT_LOCAL)/parser.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/build_system.o $(OUT_LOCAL)/dependency_graph.o $(OUT_LOCAL)/heapstack.o $(OUT_LOCAL)/symtab.o $(OUT_LOCAL)/type_system.o $(OUT_LOCAL)/ast.o $(OUT_LOCAL)/heap_queue.o $(OUT_LOCAL)/lightstack.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/dynamic_integer_array.o $(OUT_LOCAL)/stack_data_area.o $(OUT_LOCAL)/instruction.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/nesting_stack.o $(OUT_LOCAL)/min_priority_queue.o $(OUT_LOCAL)/dynamic_set.o $(OUT_LOCAL)/ollie_token_array.o $(OUT_LOCAL)/preprocessor.o
 
-parser_test_debug: parserd.o lexerd.o parser_testd.o symtabd.o lexstack.o heapstackd.o type_systemd.o astd.o heap_queued.o lightstackd.o dynamic_arrayd.o dynamic_integer_arrayd.o stack_data_aread.o instructiond.o dynamic_stringd.o nesting_stackd.o min_priority_queued.o dynamic_setd.o ollie_token_arrayd.o preprocessord.o
-	$(CC) -g -o $(OUT_LOCAL)/parser_test_debug $(OUT_LOCAL)/parser_testd.o $(OUT_LOCAL)/parserd.o $(OUT_LOCAL)/lexstackd.o $(OUT_LOCAL)/lexerd.o $(OUT_LOCAL)/heapstackd.o $(OUT_LOCAL)/symtabd.o $(OUT_LOCAL)/type_systemd.o $(OUT_LOCAL)/astd.o $(OUT_LOCAL)/heap_queued.o $(OUT_LOCAL)/lightstackd.o $(OUT_LOCAL)/dynamic_arrayd.o $(OUT_LOCAL)/dynamic_integer_arrayd.o $(OUT_LOCAL)/stack_data_aread.o $(OUT_LOCAL)/instructiond.o $(OUT_LOCAL)/dynamic_stringd.o $(OUT_LOCAL)/nesting_stackd.o $(OUT_LOCAL)/min_priority_queued.o $(OUT_LOCAL)/dynamic_setd.o $(OUT_LOCAL)/ollie_token_arrayd.o $(OUT_LOCAL)/preprocessord.o
+parser_test_debug: parserd.o lexerd.o build_systemd.o dependency_graphd.o parser_testd.o symtabd.o lexstack.o heapstackd.o type_systemd.o astd.o heap_queued.o lightstackd.o dynamic_arrayd.o dynamic_integer_arrayd.o stack_data_aread.o instructiond.o dynamic_stringd.o nesting_stackd.o min_priority_queued.o dynamic_setd.o ollie_token_arrayd.o preprocessord.o
+	$(CC) -g -o $(OUT_LOCAL)/parser_test_debug $(OUT_LOCAL)/parser_testd.o $(OUT_LOCAL)/parserd.o $(OUT_LOCAL)/lexstackd.o $(OUT_LOCAL)/lexerd.o $(OUT_LOCAL)/build_systemd.o $(OUT_LOCAL)/dependency_graphd.o $(OUT_LOCAL)/heapstackd.o $(OUT_LOCAL)/symtabd.o $(OUT_LOCAL)/type_systemd.o $(OUT_LOCAL)/astd.o $(OUT_LOCAL)/heap_queued.o $(OUT_LOCAL)/lightstackd.o $(OUT_LOCAL)/dynamic_arrayd.o $(OUT_LOCAL)/dynamic_integer_arrayd.o $(OUT_LOCAL)/stack_data_aread.o $(OUT_LOCAL)/instructiond.o $(OUT_LOCAL)/dynamic_stringd.o $(OUT_LOCAL)/nesting_stackd.o $(OUT_LOCAL)/min_priority_queued.o $(OUT_LOCAL)/dynamic_setd.o $(OUT_LOCAL)/ollie_token_arrayd.o $(OUT_LOCAL)/preprocessord.o
 
-symtab_test: symtab.o symtab_test.o lexer.o type_system.o lexstack.o lightstack.o stack_data_area.o dynamic_array.o dynamic_integer_array.o heap_queue.o heapstack.o jump_table.o dynamic_string.o nesting_stack.o min_priority_queue.o dynamic_set.o ollie_token_array.o
-	$(CC) -o $(OUT_LOCAL)/symtab_test $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/symtab_test.o $(OUT_LOCAL)/symtab.o $(OUT_LOCAL)/type_system.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/lightstack.o $(OUT_LOCAL)/stack_data_area.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/dynamic_integer_array.o $(OUT_LOCAL)/heap_queue.o $(OUT_LOCAL)/heapstack.o $(OUT_LOCAL)/jump_table.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/nesting_stack.o $(OUT_LOCAL)/min_priority_queue.o $(OUT_LOCAL)/dynamic_set.o $(OUT_LOCAL)/ollie_token_array.o
+symtab_test: symtab.o symtab_test.o lexer.o build_system.o dependency_graph.o type_system.o lexstack.o lightstack.o stack_data_area.o dynamic_array.o dynamic_integer_array.o heap_queue.o heapstack.o jump_table.o dynamic_string.o nesting_stack.o min_priority_queue.o dynamic_set.o ollie_token_array.o
+	$(CC) -o $(OUT_LOCAL)/symtab_test $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/build_system.o $(OUT_LOCAL)/dependency_graph.o $(OUT_LOCAL)/symtab_test.o $(OUT_LOCAL)/symtab.o $(OUT_LOCAL)/type_system.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/lightstack.o $(OUT_LOCAL)/stack_data_area.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/dynamic_integer_array.o $(OUT_LOCAL)/heap_queue.o $(OUT_LOCAL)/heapstack.o $(OUT_LOCAL)/jump_table.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/nesting_stack.o $(OUT_LOCAL)/min_priority_queue.o $(OUT_LOCAL)/dynamic_set.o $(OUT_LOCAL)/ollie_token_array.o
 
-symtab_testd: symtabd.o symtab_testd.o lexerd.o type_systemd.o lexstackd.o lightstackd.o stack_data_aread.o instructiond.o dynamic_arrayd.o dynamic_integer_arrayd.o dynamic_stringd.o nesting_stackd.o min_priority_queued.o dynamic_setd.o ollie_token_arrayd.o
-	$(CC) -o $(OUT_LOCAL)/symtab_testd $(OUT_LOCAL)/lexerd.o $(OUT_LOCAL)/symtab_testd.o $(OUT_LOCAL)/symtabd.o $(OUT_LOCAL)/type_systemd.o $(OUT_LOCAL)/lexstackd.o $(OUT_LOCAL)/lightstackd.o $(OUT_LOCAL)/stack_data_aread.o $(OUT_LOCAL)/instructiond.o $(OUT_LOCAL)/dynamic_arrayd.o $(OUT_LOCAL)/dynamic_integer_arrayd.o $(OUT_LOCAL)/dynamic_stringd.o $(OUT_LOCAL)/nesting_stackd.o $(OUT_LOCAL)/min_priority_queued.o $(OUT_LOCAL)/dynamic_setd.o $(OUT_LOCAL)/ollie_token_arrayd.o
+symtab_testd: symtabd.o symtab_testd.o lexerd.o build_systemd.o dependency_graphd.o type_systemd.o lexstackd.o lightstackd.o stack_data_aread.o instructiond.o dynamic_arrayd.o dynamic_integer_arrayd.o dynamic_stringd.o nesting_stackd.o min_priority_queued.o dynamic_setd.o ollie_token_arrayd.o
+	$(CC) -o $(OUT_LOCAL)/symtab_testd $(OUT_LOCAL)/lexerd.o $(OUT_LOCAL)/build_systemd.o $(OUT_LOCAL)/dependency_graphd.o $(OUT_LOCAL)/symtab_testd.o $(OUT_LOCAL)/symtabd.o $(OUT_LOCAL)/type_systemd.o $(OUT_LOCAL)/lexstackd.o $(OUT_LOCAL)/lightstackd.o $(OUT_LOCAL)/stack_data_aread.o $(OUT_LOCAL)/instructiond.o $(OUT_LOCAL)/dynamic_arrayd.o $(OUT_LOCAL)/dynamic_integer_arrayd.o $(OUT_LOCAL)/dynamic_stringd.o $(OUT_LOCAL)/nesting_stackd.o $(OUT_LOCAL)/min_priority_queued.o $(OUT_LOCAL)/dynamic_setd.o $(OUT_LOCAL)/ollie_token_arrayd.o
 
-stack_data_area_test: stack_data_area_test.o type_system.o lexstack.o lightstack.o symtab.o lexer.o instruction.o stack_data_area.o dynamic_array.o dynamic_integer_array.o ast.o cfg.o parser.o heap_queue.o heapstack.o jump_table.o dynamic_string.o nesting_stack.o min_priority_queue.o dynamic_set.o ollie_token_array.o preprocessor.o local_constant.o parameter_result_array.o graph_analyzer.o
-	$(CC) -o $(OUT_LOCAL)/stack_data_area_test $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/stack_data_area_test.o $(OUT_LOCAL)/symtab.o $(OUT_LOCAL)/type_system.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/lightstack.o $(OUT_LOCAL)/stack_data_area.o $(OUT_LOCAL)/instruction.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/dynamic_integer_array.o $(OUT_LOCAL)/ast.o $(OUT_LOCAL)/cfg.o $(OUT_LOCAL)/parser.o $(OUT_LOCAL)/heap_queue.o $(OUT_LOCAL)/heapstack.o $(OUT_LOCAL)/jump_table.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/nesting_stack.o $(OUT_LOCAL)/min_priority_queue.o $(OUT_LOCAL)/dynamic_set.o $(OUT_LOCAL)/ollie_token_array.o $(OUT_LOCAL)/preprocessor.o $(OUT_LOCAL)/local_constant.o $(OUT_LOCAL)/parameter_result_array.o $(OUT_LOCAL)/graph_analyzer.o
+stack_data_area_test: stack_data_area_test.o type_system.o lexstack.o lightstack.o symtab.o lexer.o build_system.o dependency_graph.o instruction.o stack_data_area.o dynamic_array.o dynamic_integer_array.o ast.o cfg.o parser.o heap_queue.o heapstack.o jump_table.o dynamic_string.o nesting_stack.o min_priority_queue.o dynamic_set.o ollie_token_array.o preprocessor.o local_constant.o parameter_result_array.o graph_analyzer.o
+	$(CC) -o $(OUT_LOCAL)/stack_data_area_test $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/build_system.o $(OUT_LOCAL)/dependency_graph.o $(OUT_LOCAL)/stack_data_area_test.o $(OUT_LOCAL)/symtab.o $(OUT_LOCAL)/type_system.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/lightstack.o $(OUT_LOCAL)/stack_data_area.o $(OUT_LOCAL)/instruction.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/dynamic_integer_array.o $(OUT_LOCAL)/ast.o $(OUT_LOCAL)/cfg.o $(OUT_LOCAL)/parser.o $(OUT_LOCAL)/heap_queue.o $(OUT_LOCAL)/heapstack.o $(OUT_LOCAL)/jump_table.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/nesting_stack.o $(OUT_LOCAL)/min_priority_queue.o $(OUT_LOCAL)/dynamic_set.o $(OUT_LOCAL)/ollie_token_array.o $(OUT_LOCAL)/preprocessor.o $(OUT_LOCAL)/local_constant.o $(OUT_LOCAL)/parameter_result_array.o $(OUT_LOCAL)/graph_analyzer.o
 	
-stack_data_area_testd: stack_data_area_testd.o type_systemd.o lexstackd.o lightstackd.o symtabd.o lexerd.o instructiond.o stack_data_aread.o dynamic_arrayd.o dynamic_integer_arrayd.o astd.o cfgd.o parserd.o heap_queued.o heapstackd.o jump_tabled.o dynamic_stringd.o nesting_stackd.o min_priority_queue.o dynamic_setd.o ollie_token_arrayd.o preprocessord.o local_constantd.o parameter_result_arrayd.o graph_analyzerd.o
-	$(CC) -o $(OUT_LOCAL)/stack_data_area_testd $(OUT_LOCAL)/lexerd.o $(OUT_LOCAL)/stack_data_area_testd.o $(OUT_LOCAL)/symtabd.o $(OUT_LOCAL)/type_systemd.o $(OUT_LOCAL)/lexstackd.o $(OUT_LOCAL)/lightstackd.o $(OUT_LOCAL)/instructiond.o $(OUT_LOCAL)/stack_data_aread.o $(OUT_LOCAL)/dynamic_arrayd.o $(OUT_LOCAL)/dynamic_integer_arrayd.o $(OUT_LOCAL)/astd.o $(OUT_LOCAL)/cfgd.o $(OUT_LOCAL)/parserd.o $(OUT_LOCAL)/heap_queued.o $(OUT_LOCAL)/heapstackd.o $(OUT_LOCAL)/jump_tabled.o $(OUT_LOCAL)/dynamic_stringd.o $(OUT_LOCAL)/nesting_stackd.o $(OUT_LOCAL)/min_priority_queued.o $(OUT_LOCAL)/dynamic_setd.o $(OUT_LOCAL)/ollie_token_arrayd.o $(OUT_LOCAL)/preprocessord.o $(OUT_LOCAL)/local_constantd.o $(OUT_LOCAL)/parameter_result_arrayd.o $(OUT_LOCAL)/graph_analyzerd.o
+stack_data_area_testd: stack_data_area_testd.o type_systemd.o lexstackd.o lightstackd.o symtabd.o lexerd.o build_systemd.o dependency_graphd.o instructiond.o stack_data_aread.o dynamic_arrayd.o dynamic_integer_arrayd.o astd.o cfgd.o parserd.o heap_queued.o heapstackd.o jump_tabled.o dynamic_stringd.o nesting_stackd.o min_priority_queue.o dynamic_setd.o ollie_token_arrayd.o preprocessord.o local_constantd.o parameter_result_arrayd.o graph_analyzerd.o
+	$(CC) -o $(OUT_LOCAL)/stack_data_area_testd $(OUT_LOCAL)/lexerd.o $(OUT_LOCAL)/build_systemd.o $(OUT_LOCAL)/dependency_graphd.o $(OUT_LOCAL)/stack_data_area_testd.o $(OUT_LOCAL)/symtabd.o $(OUT_LOCAL)/type_systemd.o $(OUT_LOCAL)/lexstackd.o $(OUT_LOCAL)/lightstackd.o $(OUT_LOCAL)/instructiond.o $(OUT_LOCAL)/stack_data_aread.o $(OUT_LOCAL)/dynamic_arrayd.o $(OUT_LOCAL)/dynamic_integer_arrayd.o $(OUT_LOCAL)/astd.o $(OUT_LOCAL)/cfgd.o $(OUT_LOCAL)/parserd.o $(OUT_LOCAL)/heap_queued.o $(OUT_LOCAL)/heapstackd.o $(OUT_LOCAL)/jump_tabled.o $(OUT_LOCAL)/dynamic_stringd.o $(OUT_LOCAL)/nesting_stackd.o $(OUT_LOCAL)/min_priority_queued.o $(OUT_LOCAL)/dynamic_setd.o $(OUT_LOCAL)/ollie_token_arrayd.o $(OUT_LOCAL)/preprocessord.o $(OUT_LOCAL)/local_constantd.o $(OUT_LOCAL)/parameter_result_arrayd.o $(OUT_LOCAL)/graph_analyzerd.o
 
-interference_graph_tester: parser.o lexer.o symtab.o heapstack.o type_system.o ast.o cfg.o lexstack.o instruction.o heap_queue.o dynamic_array.o dynamic_integer_array.o lightstack.o optimizer.o instruction_selector.o jump_table.o stack_data_area.o interference_graph.o interference_graph_test.o dynamic_string.o nesting_stack.o min_priority_queue.o dynamic_set.o ollie_token_array.o preprocessor.o local_constant.o parameter_result_array.o value_numbering_table.o graph_analyzer.o
-	$(CC) -o $(OUT_LOCAL)/interference_graph_test $(OUT_LOCAL)/interference_graph_test.o $(OUT_LOCAL)/parser.o $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/heapstack.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/symtab.o $(OUT_LOCAL)/type_system.o $(OUT_LOCAL)/ast.o $(OUT_LOCAL)/cfg.o $(OUT_LOCAL)/instruction.o $(OUT_LOCAL)/heap_queue.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/dynamic_integer_array.o $(OUT_LOCAL)/lightstack.o $(OUT_LOCAL)/optimizer.o $(OUT_LOCAL)/instruction_selector.o $(OUT_LOCAL)/jump_table.o $(OUT_LOCAL)/stack_data_area.o $(OUT_LOCAL)/interference_graph.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/nesting_stack.o $(OUT_LOCAL)/min_priority_queue.o $(OUT_LOCAL)/dynamic_set.o $(OUT_LOCAL)/ollie_token_array.o $(OUT_LOCAL)/preprocessor.o $(OUT_LOCAL)/local_constant.o $(OUT_LOCAL)/parameter_result_array.o $(OUT_LOCAL)/value_numbering_table.o $(OUT_LOCAL)/graph_analyzer.o
+interference_graph_tester: parser.o lexer.o build_system.o dependency_graph.o symtab.o heapstack.o type_system.o ast.o cfg.o lexstack.o instruction.o heap_queue.o dynamic_array.o dynamic_integer_array.o lightstack.o optimizer.o instruction_selector.o jump_table.o stack_data_area.o interference_graph.o interference_graph_test.o dynamic_string.o nesting_stack.o min_priority_queue.o dynamic_set.o ollie_token_array.o preprocessor.o local_constant.o parameter_result_array.o value_numbering_table.o graph_analyzer.o
+	$(CC) -o $(OUT_LOCAL)/interference_graph_test $(OUT_LOCAL)/interference_graph_test.o $(OUT_LOCAL)/parser.o $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/build_system.o $(OUT_LOCAL)/dependency_graph.o $(OUT_LOCAL)/heapstack.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/symtab.o $(OUT_LOCAL)/type_system.o $(OUT_LOCAL)/ast.o $(OUT_LOCAL)/cfg.o $(OUT_LOCAL)/instruction.o $(OUT_LOCAL)/heap_queue.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/dynamic_integer_array.o $(OUT_LOCAL)/lightstack.o $(OUT_LOCAL)/optimizer.o $(OUT_LOCAL)/instruction_selector.o $(OUT_LOCAL)/jump_table.o $(OUT_LOCAL)/stack_data_area.o $(OUT_LOCAL)/interference_graph.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/nesting_stack.o $(OUT_LOCAL)/min_priority_queue.o $(OUT_LOCAL)/dynamic_set.o $(OUT_LOCAL)/ollie_token_array.o $(OUT_LOCAL)/preprocessor.o $(OUT_LOCAL)/local_constant.o $(OUT_LOCAL)/parameter_result_array.o $(OUT_LOCAL)/value_numbering_table.o $(OUT_LOCAL)/graph_analyzer.o
 
-front_end_test: front_end_test.o parser.o lexer.o symtab.o heapstack.o type_system.o ast.o cfg.o lexstack.o instruction.o heap_queue.o preprocessor.o dependency_tree.o dynamic_array.o dynamic_integer_array.o lightstack.o jump_table.o stack_data_area.o dynamic_string.o nesting_stack.o min_priority_queue.o dynamic_set.o ollie_token_array.o local_constant.o parameter_result_array.o graph_analyzer.o
-	$(CC) -o $(OUT_LOCAL)/front_end_test $(OUT_LOCAL)/front_end_test.o $(OUT_LOCAL)/parser.o $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/heapstack.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/symtab.o $(OUT_LOCAL)/type_system.o $(OUT_LOCAL)/ast.o $(OUT_LOCAL)/cfg.o  $(OUT_LOCAL)/instruction.o $(OUT_LOCAL)/heap_queue.o $(OUT_LOCAL)/preprocessor.o $(OUT_LOCAL)/dependency_tree.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/dynamic_integer_array.o $(OUT_LOCAL)/lightstack.o $(OUT_LOCAL)/jump_table.o $(OUT_LOCAL)/stack_data_area.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/nesting_stack.o $(OUT_LOCAL)/min_priority_queue.o $(OUT_LOCAL)/dynamic_set.o $(OUT_LOCAL)/ollie_token_array.o $(OUT_LOCAL)/local_constant.o $(OUT_LOCAL)/parameter_result_array.o $(OUT_LOCAL)/graph_analyzer.o
+front_end_test: front_end_test.o parser.o lexer.o build_system.o dependency_graph.o symtab.o heapstack.o type_system.o ast.o cfg.o lexstack.o instruction.o heap_queue.o preprocessor.o dynamic_array.o dynamic_integer_array.o lightstack.o jump_table.o stack_data_area.o dynamic_string.o nesting_stack.o min_priority_queue.o dynamic_set.o ollie_token_array.o local_constant.o parameter_result_array.o graph_analyzer.o
+	$(CC) -o $(OUT_LOCAL)/front_end_test $(OUT_LOCAL)/front_end_test.o $(OUT_LOCAL)/parser.o $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/build_system.o $(OUT_LOCAL)/dependency_graph.o $(OUT_LOCAL)/heapstack.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/symtab.o $(OUT_LOCAL)/type_system.o $(OUT_LOCAL)/ast.o $(OUT_LOCAL)/cfg.o  $(OUT_LOCAL)/instruction.o $(OUT_LOCAL)/heap_queue.o $(OUT_LOCAL)/preprocessor.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/dynamic_integer_array.o $(OUT_LOCAL)/lightstack.o $(OUT_LOCAL)/jump_table.o $(OUT_LOCAL)/stack_data_area.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/nesting_stack.o $(OUT_LOCAL)/min_priority_queue.o $(OUT_LOCAL)/dynamic_set.o $(OUT_LOCAL)/ollie_token_array.o $(OUT_LOCAL)/local_constant.o $(OUT_LOCAL)/parameter_result_array.o $(OUT_LOCAL)/graph_analyzer.o
 
-front_end_testd: front_end_testd.o parser.o lexer.o symtab.o heapstack.o type_system.o ast.o cfg.o lexstack.o instructiond.o heap_queue.o dependency_treed.o dynamic_array.o dynamic_integer_array.o lightstack.o jump_tabled.o stack_data_aread.o dynamic_stringd.o nesting_stackd.o min_priority_queued.o dynamic_setd.o ollie_token_arrayd.o preprocessord.o local_constantd.o parameter_result_arrayd.o graph_analyzerd.o
-	$(CC) -o $(OUT_LOCAL)/front_end_testd $(OUT_LOCAL)/front_end_test.o $(OUT_LOCAL)/parser.o $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/heapstack.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/symtab.o $(OUT_LOCAL)/type_system.o $(OUT_LOCAL)/ast.o $(OUT_LOCAL)/cfg.o  $(OUT_LOCAL)/instructiond.o $(OUT_LOCAL)/heap_queue.o $(OUT_LOCAL)/preprocessord.o $(OUT_LOCAL)/dependency_treed.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/dynamic_integer_array.o $(OUT_LOCAL)/lightstack.o $(OUT_LOCAL)/jump_tabled.o $(OUT_LOCAL)/stack_data_aread.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/nesting_stackd.o $(OUT_LOCAL)/min_priority_queued.o $(OUT_LOCAL)/dynamic_setd.o $(OUT_LOCAL)/ollie_token_arrayd.o $(OUT_LOCAL)/local_constantd.o $(OUT_LOCAL)/parameter_result_arrayd.o $(OUT_LOCAL)/graph_analyzerd.o
+front_end_testd: front_end_testd.o parser.o lexer.o build_system.o dependency_graph.o symtab.o heapstack.o type_system.o ast.o cfg.o lexstack.o instructiond.o heap_queue.o dynamic_array.o dynamic_integer_array.o lightstack.o jump_tabled.o stack_data_aread.o dynamic_stringd.o nesting_stackd.o min_priority_queued.o dynamic_setd.o ollie_token_arrayd.o preprocessord.o local_constantd.o parameter_result_arrayd.o graph_analyzerd.o
+	$(CC) -o $(OUT_LOCAL)/front_end_testd $(OUT_LOCAL)/front_end_test.o $(OUT_LOCAL)/parser.o $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/build_system.o $(OUT_LOCAL)/dependency_graph.o $(OUT_LOCAL)/heapstack.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/symtab.o $(OUT_LOCAL)/type_system.o $(OUT_LOCAL)/ast.o $(OUT_LOCAL)/cfg.o  $(OUT_LOCAL)/instructiond.o $(OUT_LOCAL)/heap_queue.o $(OUT_LOCAL)/preprocessord.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/dynamic_integer_array.o $(OUT_LOCAL)/lightstack.o $(OUT_LOCAL)/jump_tabled.o $(OUT_LOCAL)/stack_data_aread.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/nesting_stackd.o $(OUT_LOCAL)/min_priority_queued.o $(OUT_LOCAL)/dynamic_setd.o $(OUT_LOCAL)/ollie_token_arrayd.o $(OUT_LOCAL)/local_constantd.o $(OUT_LOCAL)/parameter_result_arrayd.o $(OUT_LOCAL)/graph_analyzerd.o
 
-middle_end_test: middle_end_test.o parser.o lexer.o symtab.o heapstack.o type_system.o ast.o cfg.o lexstack.o instruction.o heap_queue.o preprocessor.o dependency_tree.o dynamic_array.o dynamic_integer_array.o lightstack.o jump_table.o optimizer.o stack_data_area.o dynamic_string.o nesting_stack.o min_priority_queue.o dynamic_set.o ollie_token_array.o preprocessor.o local_constant.o parameter_result_array.o value_numbering_table.o data_dependency_graph.o graph_analyzer.o
-	$(CC) -o $(OUT_LOCAL)/middle_end_test $(OUT_LOCAL)/middle_end_test.o $(OUT_LOCAL)/parser.o $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/heapstack.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/symtab.o $(OUT_LOCAL)/type_system.o $(OUT_LOCAL)/ast.o $(OUT_LOCAL)/cfg.o $(OUT_LOCAL)/instruction.o $(OUT_LOCAL)/heap_queue.o $(OUT_LOCAL)/preprocessor.o $(OUT_LOCAL)/dependency_tree.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/dynamic_integer_array.o $(OUT_LOCAL)/lightstack.o $(OUT_LOCAL)/optimizer.o $(OUT_LOCAL)/jump_table.o $(OUT_LOCAL)/stack_data_area.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/nesting_stack.o $(OUT_LOCAL)/min_priority_queue.o $(OUT_LOCAL)/dynamic_set.o $(OUT_LOCAL)/ollie_token_array.o $(OUT_LOCAL)/local_constant.o $(OUT_LOCAL)/parameter_result_array.o $(OUT_LOCAL)/value_numbering_table.o $(OUT_LOCAL)/data_dependency_graph.o $(OUT_LOCAL)/graph_analyzer.o
+middle_end_test: middle_end_test.o parser.o lexer.o build_system.o dependency_graph.o symtab.o heapstack.o type_system.o ast.o cfg.o lexstack.o instruction.o heap_queue.o preprocessor.o dynamic_array.o dynamic_integer_array.o lightstack.o jump_table.o optimizer.o stack_data_area.o dynamic_string.o nesting_stack.o min_priority_queue.o dynamic_set.o ollie_token_array.o preprocessor.o local_constant.o parameter_result_array.o value_numbering_table.o data_dependency_graph.o graph_analyzer.o
+	$(CC) -o $(OUT_LOCAL)/middle_end_test $(OUT_LOCAL)/middle_end_test.o $(OUT_LOCAL)/parser.o $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/build_system.o $(OUT_LOCAL)/dependency_graph.o $(OUT_LOCAL)/heapstack.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/symtab.o $(OUT_LOCAL)/type_system.o $(OUT_LOCAL)/ast.o $(OUT_LOCAL)/cfg.o $(OUT_LOCAL)/instruction.o $(OUT_LOCAL)/heap_queue.o $(OUT_LOCAL)/preprocessor.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/dynamic_integer_array.o $(OUT_LOCAL)/lightstack.o $(OUT_LOCAL)/optimizer.o $(OUT_LOCAL)/jump_table.o $(OUT_LOCAL)/stack_data_area.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/nesting_stack.o $(OUT_LOCAL)/min_priority_queue.o $(OUT_LOCAL)/dynamic_set.o $(OUT_LOCAL)/ollie_token_array.o $(OUT_LOCAL)/local_constant.o $(OUT_LOCAL)/parameter_result_array.o $(OUT_LOCAL)/value_numbering_table.o $(OUT_LOCAL)/data_dependency_graph.o $(OUT_LOCAL)/graph_analyzer.o
 
-middle_end_testd: middle_end_testd.o parserd.o lexerd.o symtabd.o heapstackd.o type_systemd.o astd.o cfgd.o lexstackd.o instructiond.o heap_queued.o preprocessord.o dependency_treed.o dynamic_arrayd.o dynamic_integer_arrayd.o lightstackd.o jump_tabled.o optimizerd.o stack_data_aread.o dynamic_stringd.o nesting_stackd.o min_priority_queued.o dynamic_setd.o ollie_token_arrayd.o preprocessord.o local_constantd.o parameter_result_arrayd.o value_numbering_tabled.o data_dependency_graphd.o graph_analyzerd.o
-	$(CC) -o $(OUT_LOCAL)/middle_end_testd $(OUT_LOCAL)/middle_end_testd.o $(OUT_LOCAL)/parserd.o $(OUT_LOCAL)/lexerd.o $(OUT_LOCAL)/heapstackd.o $(OUT_LOCAL)/lexstackd.o $(OUT_LOCAL)/symtabd.o $(OUT_LOCAL)/type_systemd.o $(OUT_LOCAL)/astd.o $(OUT_LOCAL)/cfgd.o $(OUT_LOCAL)/instructiond.o $(OUT_LOCAL)/heap_queued.o $(OUT_LOCAL)/preprocessord.o $(OUT_LOCAL)/dependency_treed.o $(OUT_LOCAL)/dynamic_arrayd.o $(OUT_LOCAL)/dynamic_integer_arrayd.o $(OUT_LOCAL)/lightstackd.o $(OUT_LOCAL)/optimizerd.o $(OUT_LOCAL)/jump_tabled.o $(OUT_LOCAL)/stack_data_aread.o $(OUT_LOCAL)/dynamic_stringd.o $(OUT_LOCAL)/nesting_stackd.o $(OUT_LOCAL)/min_priority_queued.o $(OUT_LOCAL)/dynamic_setd.o $(OUT_LOCAL)/ollie_token_arrayd.o $(OUT_LOCAL)/local_constantd.o $(OUT_LOCAL)/parameter_result_arrayd.o $(OUT_LOCAL)/value_numbering_tabled.o $(OUT_LOCAL)/data_dependency_graphd.o $(OUT_LOCAL)/graph_analyzerd.o
+middle_end_testd: middle_end_testd.o parserd.o lexerd.o build_systemd.o dependency_graphd.o symtabd.o heapstackd.o type_systemd.o astd.o cfgd.o lexstackd.o instructiond.o heap_queued.o preprocessord.o dynamic_arrayd.o dynamic_integer_arrayd.o lightstackd.o jump_tabled.o optimizerd.o stack_data_aread.o dynamic_stringd.o nesting_stackd.o min_priority_queued.o dynamic_setd.o ollie_token_arrayd.o preprocessord.o local_constantd.o parameter_result_arrayd.o value_numbering_tabled.o data_dependency_graphd.o graph_analyzerd.o
+	$(CC) -o $(OUT_LOCAL)/middle_end_testd $(OUT_LOCAL)/middle_end_testd.o $(OUT_LOCAL)/parserd.o $(OUT_LOCAL)/lexerd.o $(OUT_LOCAL)/build_systemd.o $(OUT_LOCAL)/dependency_graphd.o $(OUT_LOCAL)/heapstackd.o $(OUT_LOCAL)/lexstackd.o $(OUT_LOCAL)/symtabd.o $(OUT_LOCAL)/type_systemd.o $(OUT_LOCAL)/astd.o $(OUT_LOCAL)/cfgd.o $(OUT_LOCAL)/instructiond.o $(OUT_LOCAL)/heap_queued.o $(OUT_LOCAL)/preprocessord.o $(OUT_LOCAL)/dynamic_arrayd.o $(OUT_LOCAL)/dynamic_integer_arrayd.o $(OUT_LOCAL)/lightstackd.o $(OUT_LOCAL)/optimizerd.o $(OUT_LOCAL)/jump_tabled.o $(OUT_LOCAL)/stack_data_aread.o $(OUT_LOCAL)/dynamic_stringd.o $(OUT_LOCAL)/nesting_stackd.o $(OUT_LOCAL)/min_priority_queued.o $(OUT_LOCAL)/dynamic_setd.o $(OUT_LOCAL)/ollie_token_arrayd.o $(OUT_LOCAL)/local_constantd.o $(OUT_LOCAL)/parameter_result_arrayd.o $(OUT_LOCAL)/value_numbering_tabled.o $(OUT_LOCAL)/data_dependency_graphd.o $(OUT_LOCAL)/graph_analyzerd.o
 
-instruction_selector_test: parser.o lexer.o symtab.o heapstack.o type_system.o ast.o cfg.o lexstack.o instruction.o heap_queue.o preprocessor.o dependency_tree.o dynamic_array.o dynamic_integer_array.o lightstack.o jump_table.o optimizer.o stack_data_area.o dynamic_string.o nesting_stack.o instruction_selector.o instruction_selector_test.o min_priority_queue.o dynamic_set.o ollie_token_array.o local_constant.o parameter_result_array.o value_numbering_table.o data_dependency_graph.o graph_analyzer.o
-	$(CC) -o $(OUT_LOCAL)/instruction_selector_test $(OUT_LOCAL)/parser.o $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/heapstack.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/symtab.o $(OUT_LOCAL)/type_system.o $(OUT_LOCAL)/ast.o $(OUT_LOCAL)/cfg.o $(OUT_LOCAL)/instruction.o $(OUT_LOCAL)/heap_queue.o $(OUT_LOCAL)/preprocessor.o $(OUT_LOCAL)/dependency_tree.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/dynamic_integer_array.o $(OUT_LOCAL)/lightstack.o $(OUT_LOCAL)/optimizer.o $(OUT_LOCAL)/jump_table.o $(OUT_LOCAL)/stack_data_area.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/nesting_stack.o $(OUT_LOCAL)/instruction_selector.o $(OUT_LOCAL)/instruction_selector_test.o $(OUT_LOCAL)/min_priority_queue.o $(OUT_LOCAL)/dynamic_set.o $(OUT_LOCAL)/ollie_token_array.o $(OUT_LOCAL)/local_constant.o $(OUT_LOCAL)/parameter_result_array.o $(OUT_LOCAL)/value_numbering_table.o $(OUT_LOCAL)/data_dependency_graph.o $(OUT_LOCAL)/graph_analyzer.o
+instruction_selector_test: parser.o lexer.o build_system.o dependency_graph.o symtab.o heapstack.o type_system.o ast.o cfg.o lexstack.o instruction.o heap_queue.o preprocessor.o dynamic_array.o dynamic_integer_array.o lightstack.o jump_table.o optimizer.o stack_data_area.o dynamic_string.o nesting_stack.o instruction_selector.o instruction_selector_test.o min_priority_queue.o dynamic_set.o ollie_token_array.o local_constant.o parameter_result_array.o value_numbering_table.o data_dependency_graph.o graph_analyzer.o
+	$(CC) -o $(OUT_LOCAL)/instruction_selector_test $(OUT_LOCAL)/parser.o $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/build_system.o $(OUT_LOCAL)/dependency_graph.o $(OUT_LOCAL)/heapstack.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/symtab.o $(OUT_LOCAL)/type_system.o $(OUT_LOCAL)/ast.o $(OUT_LOCAL)/cfg.o $(OUT_LOCAL)/instruction.o $(OUT_LOCAL)/heap_queue.o $(OUT_LOCAL)/preprocessor.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/dynamic_integer_array.o $(OUT_LOCAL)/lightstack.o $(OUT_LOCAL)/optimizer.o $(OUT_LOCAL)/jump_table.o $(OUT_LOCAL)/stack_data_area.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/nesting_stack.o $(OUT_LOCAL)/instruction_selector.o $(OUT_LOCAL)/instruction_selector_test.o $(OUT_LOCAL)/min_priority_queue.o $(OUT_LOCAL)/dynamic_set.o $(OUT_LOCAL)/ollie_token_array.o $(OUT_LOCAL)/local_constant.o $(OUT_LOCAL)/parameter_result_array.o $(OUT_LOCAL)/value_numbering_table.o $(OUT_LOCAL)/data_dependency_graph.o $(OUT_LOCAL)/graph_analyzer.o
 
-instruction_selector_testd: parserd.o lexerd.o symtabd.o heapstackd.o type_systemd.o astd.o cfgd.o lexstackd.o instructiond.o heap_queued.o preprocessord.o dependency_treed.o dynamic_arrayd.o dynamic_integer_arrayd.o lightstackd.o jump_tabled.o optimizerd.o stack_data_aread.o dynamic_stringd.o nesting_stackd.o instruction_selectord.o instruction_selector_testd.o min_priority_queued.o dynamic_setd.o ollie_token_arrayd.o local_constantd.o parameter_result_arrayd.o value_numbering_tabled.o data_dependency_graphd.o graph_analyzerd.o
-	$(CC) -o $(OUT_LOCAL)/instruction_selector_testd $(OUT_LOCAL)/parserd.o $(OUT_LOCAL)/lexerd.o $(OUT_LOCAL)/heapstackd.o $(OUT_LOCAL)/lexstackd.o $(OUT_LOCAL)/symtabd.o $(OUT_LOCAL)/type_systemd.o $(OUT_LOCAL)/astd.o $(OUT_LOCAL)/cfgd.o $(OUT_LOCAL)/instructiond.o $(OUT_LOCAL)/heap_queued.o $(OUT_LOCAL)/dependency_treed.o $(OUT_LOCAL)/dynamic_arrayd.o $(OUT_LOCAL)/dynamic_integer_arrayd.o $(OUT_LOCAL)/lightstackd.o $(OUT_LOCAL)/optimizerd.o $(OUT_LOCAL)/jump_tabled.o $(OUT_LOCAL)/stack_data_aread.o $(OUT_LOCAL)/dynamic_stringd.o $(OUT_LOCAL)/nesting_stackd.o $(OUT_LOCAL)/instruction_selectord.o $(OUT_LOCAL)/instruction_selector_testd.o $(OUT_LOCAL)/min_priority_queued.o $(OUT_LOCAL)/dynamic_setd.o $(OUT_LOCAL)/ollie_token_arrayd.o $(OUT_LOCAL)/preprocessord.o $(OUT_LOCAL)/local_constantd.o $(OUT_LOCAL)/parameter_result_arrayd.o $(OUT_LOCAL)/value_numbering_tabled.o $(OUT_LOCAL)/data_dependency_graphd.o $(OUT_LOCAL)/graph_analyzerd.o
+instruction_selector_testd: parserd.o lexerd.o build_systemd.o dependency_graphd.o symtabd.o heapstackd.o type_systemd.o astd.o cfgd.o lexstackd.o instructiond.o heap_queued.o preprocessord.o dynamic_arrayd.o dynamic_integer_arrayd.o lightstackd.o jump_tabled.o optimizerd.o stack_data_aread.o dynamic_stringd.o nesting_stackd.o instruction_selectord.o instruction_selector_testd.o min_priority_queued.o dynamic_setd.o ollie_token_arrayd.o local_constantd.o parameter_result_arrayd.o value_numbering_tabled.o data_dependency_graphd.o graph_analyzerd.o
+	$(CC) -o $(OUT_LOCAL)/instruction_selector_testd $(OUT_LOCAL)/parserd.o $(OUT_LOCAL)/lexerd.o $(OUT_LOCAL)/build_systemd.o $(OUT_LOCAL)/dependency_graphd.o $(OUT_LOCAL)/heapstackd.o $(OUT_LOCAL)/lexstackd.o $(OUT_LOCAL)/symtabd.o $(OUT_LOCAL)/type_systemd.o $(OUT_LOCAL)/astd.o $(OUT_LOCAL)/cfgd.o $(OUT_LOCAL)/instructiond.o $(OUT_LOCAL)/heap_queued.o $(OUT_LOCAL)/dynamic_arrayd.o $(OUT_LOCAL)/dynamic_integer_arrayd.o $(OUT_LOCAL)/lightstackd.o $(OUT_LOCAL)/optimizerd.o $(OUT_LOCAL)/jump_tabled.o $(OUT_LOCAL)/stack_data_aread.o $(OUT_LOCAL)/dynamic_stringd.o $(OUT_LOCAL)/nesting_stackd.o $(OUT_LOCAL)/instruction_selectord.o $(OUT_LOCAL)/instruction_selector_testd.o $(OUT_LOCAL)/min_priority_queued.o $(OUT_LOCAL)/dynamic_setd.o $(OUT_LOCAL)/ollie_token_arrayd.o $(OUT_LOCAL)/preprocessord.o $(OUT_LOCAL)/local_constantd.o $(OUT_LOCAL)/parameter_result_arrayd.o $(OUT_LOCAL)/value_numbering_tabled.o $(OUT_LOCAL)/data_dependency_graphd.o $(OUT_LOCAL)/graph_analyzerd.o
 
-oc: compiler.o parser.o lexer.o symtab.o heapstack.o type_system.o ast.o cfg.o lexstack.o instruction.o heap_queue.o preprocessor.o dependency_tree.o dynamic_array.o dynamic_integer_array.o lightstack.o optimizer.o instruction_selector.o jump_table.o stack_data_area.o register_allocator.o instruction_scheduler.o interference_graph.o assembler.o dynamic_string.o nesting_stack.o postprocessor.o data_dependency_graph.o max_priority_queue.o min_priority_queue.o dynamic_set.o ollie_token_array.o local_constant.o parameter_result_array.o value_numbering_table.o graph_analyzer.o
-	$(CC) -o $(OUT_LOCAL)/oc $(OUT_LOCAL)/compiler.o $(OUT_LOCAL)/parser.o $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/heapstack.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/symtab.o $(OUT_LOCAL)/type_system.o $(OUT_LOCAL)/ast.o $(OUT_LOCAL)/cfg.o $(OUT_LOCAL)/instruction.o $(OUT_LOCAL)/heap_queue.o $(OUT_LOCAL)/preprocessor.o $(OUT_LOCAL)/dependency_tree.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/dynamic_integer_array.o $(OUT_LOCAL)/lightstack.o $(OUT_LOCAL)/optimizer.o $(OUT_LOCAL)/instruction_selector.o $(OUT_LOCAL)/jump_table.o $(OUT_LOCAL)/stack_data_area.o $(OUT_LOCAL)/register_allocator.o $(OUT_LOCAL)/instruction_scheduler.o $(OUT_LOCAL)/interference_graph.o $(OUT_LOCAL)/assembler.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/nesting_stack.o $(OUT_LOCAL)/postprocessor.o $(OUT_LOCAL)/data_dependency_graph.o $(OUT_LOCAL)/max_priority_queue.o $(OUT_LOCAL)/min_priority_queue.o $(OUT_LOCAL)/dynamic_set.o $(OUT_LOCAL)/ollie_token_array.o $(OUT_LOCAL)/local_constant.o $(OUT_LOCAL)/parameter_result_array.o $(OUT_LOCAL)/value_numbering_table.o $(OUT_LOCAL)/graph_analyzer.o
+oc: compiler.o parser.o lexer.o build_system.o dependency_graph.o symtab.o heapstack.o type_system.o ast.o cfg.o lexstack.o instruction.o heap_queue.o preprocessor.o dynamic_array.o dynamic_integer_array.o lightstack.o optimizer.o instruction_selector.o jump_table.o stack_data_area.o register_allocator.o instruction_scheduler.o interference_graph.o assembler.o dynamic_string.o nesting_stack.o postprocessor.o data_dependency_graph.o max_priority_queue.o min_priority_queue.o dynamic_set.o ollie_token_array.o local_constant.o parameter_result_array.o value_numbering_table.o graph_analyzer.o
+	$(CC) -o $(OUT_LOCAL)/oc $(OUT_LOCAL)/compiler.o $(OUT_LOCAL)/parser.o $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/build_system.o $(OUT_LOCAL)/dependency_graph.o $(OUT_LOCAL)/heapstack.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/symtab.o $(OUT_LOCAL)/type_system.o $(OUT_LOCAL)/ast.o $(OUT_LOCAL)/cfg.o $(OUT_LOCAL)/instruction.o $(OUT_LOCAL)/heap_queue.o $(OUT_LOCAL)/preprocessor.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/dynamic_integer_array.o $(OUT_LOCAL)/lightstack.o $(OUT_LOCAL)/optimizer.o $(OUT_LOCAL)/instruction_selector.o $(OUT_LOCAL)/jump_table.o $(OUT_LOCAL)/stack_data_area.o $(OUT_LOCAL)/register_allocator.o $(OUT_LOCAL)/instruction_scheduler.o $(OUT_LOCAL)/interference_graph.o $(OUT_LOCAL)/assembler.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/nesting_stack.o $(OUT_LOCAL)/postprocessor.o $(OUT_LOCAL)/data_dependency_graph.o $(OUT_LOCAL)/max_priority_queue.o $(OUT_LOCAL)/min_priority_queue.o $(OUT_LOCAL)/dynamic_set.o $(OUT_LOCAL)/ollie_token_array.o $(OUT_LOCAL)/local_constant.o $(OUT_LOCAL)/parameter_result_array.o $(OUT_LOCAL)/value_numbering_table.o $(OUT_LOCAL)/graph_analyzer.o
 
-oc_debug: compilerd.o parserd.o lexerd.o symtabd.o heapstackd.o type_systemd.o astd.o cfgd.o lexstackd.o instructiond.o heap_queued.o preprocessord.o dependency_treed.o dynamic_arrayd.o dynamic_integer_arrayd.o lightstackd.o optimizerd.o instruction_selectord.o jump_tabled.o stack_data_aread.o register_allocatord.o instruction_schedulerd.o interference_graphd.o assemblerd.o dynamic_stringd.o nesting_stackd.o postprocessord.o data_dependency_graphd.o max_priority_queued.o min_priority_queued.o dynamic_setd.o ollie_token_arrayd.o local_constantd.o parameter_result_arrayd.o value_numbering_tabled.o graph_analyzerd.o
-	$(CC) -o $(OUT_LOCAL)/ocd $(OUT_LOCAL)/compilerd.o $(OUT_LOCAL)/parserd.o $(OUT_LOCAL)/lexerd.o $(OUT_LOCAL)/heapstackd.o $(OUT_LOCAL)/symtabd.o $(OUT_LOCAL)/lexstackd.o $(OUT_LOCAL)/type_systemd.o $(OUT_LOCAL)/astd.o $(OUT_LOCAL)/cfgd.o $(OUT_LOCAL)/instructiond.o $(OUT_LOCAL)/heap_queued.o $(OUT_LOCAL)/preprocessord.o $(OUT_LOCAL)/dependency_treed.o $(OUT_LOCAL)/dynamic_arrayd.o $(OUT_LOCAL)/dynamic_integer_arrayd.o $(OUT_LOCAL)/lightstackd.o $(OUT_LOCAL)/optimizerd.o $(OUT_LOCAL)/instruction_selectord.o $(OUT_LOCAL)/jump_tabled.o $(OUT_LOCAL)/stack_data_aread.o $(OUT_LOCAL)/register_allocatord.o $(OUT_LOCAL)/instruction_schedulerd.o $(OUT_LOCAL)/interference_graphd.o $(OUT_LOCAL)/assemblerd.o $(OUT_LOCAL)/dynamic_stringd.o $(OUT_LOCAL)/nesting_stackd.o $(OUT_LOCAL)/postprocessord.o $(OUT_LOCAL)/data_dependency_graphd.o $(OUT_LOCAL)/max_priority_queued.o $(OUT_LOCAL)/min_priority_queued.o $(OUT_LOCAL)/dynamic_setd.o $(OUT_LOCAL)/ollie_token_arrayd.o $(OUT_LOCAL)/local_constantd.o $(OUT_LOCAL)/parameter_result_arrayd.o $(OUT_LOCAL)/value_numbering_tabled.o $(OUT_LOCAL)/graph_analyzerd.o
+oc_debug: compilerd.o parserd.o lexerd.o build_systemd.o dependency_graphd.o symtabd.o heapstackd.o type_systemd.o astd.o cfgd.o lexstackd.o instructiond.o heap_queued.o preprocessord.o dynamic_arrayd.o dynamic_integer_arrayd.o lightstackd.o optimizerd.o instruction_selectord.o jump_tabled.o stack_data_aread.o register_allocatord.o instruction_schedulerd.o interference_graphd.o assemblerd.o dynamic_stringd.o nesting_stackd.o postprocessord.o data_dependency_graphd.o max_priority_queued.o min_priority_queued.o dynamic_setd.o ollie_token_arrayd.o local_constantd.o parameter_result_arrayd.o value_numbering_tabled.o graph_analyzerd.o
+	$(CC) -o $(OUT_LOCAL)/ocd $(OUT_LOCAL)/compilerd.o $(OUT_LOCAL)/parserd.o $(OUT_LOCAL)/lexerd.o $(OUT_LOCAL)/build_systemd.o $(OUT_LOCAL)/dependency_graphd.o $(OUT_LOCAL)/heapstackd.o $(OUT_LOCAL)/symtabd.o $(OUT_LOCAL)/lexstackd.o $(OUT_LOCAL)/type_systemd.o $(OUT_LOCAL)/astd.o $(OUT_LOCAL)/cfgd.o $(OUT_LOCAL)/instructiond.o $(OUT_LOCAL)/heap_queued.o $(OUT_LOCAL)/preprocessord.o $(OUT_LOCAL)/dynamic_arrayd.o $(OUT_LOCAL)/dynamic_integer_arrayd.o $(OUT_LOCAL)/lightstackd.o $(OUT_LOCAL)/optimizerd.o $(OUT_LOCAL)/instruction_selectord.o $(OUT_LOCAL)/jump_tabled.o $(OUT_LOCAL)/stack_data_aread.o $(OUT_LOCAL)/register_allocatord.o $(OUT_LOCAL)/instruction_schedulerd.o $(OUT_LOCAL)/interference_graphd.o $(OUT_LOCAL)/assemblerd.o $(OUT_LOCAL)/dynamic_stringd.o $(OUT_LOCAL)/nesting_stackd.o $(OUT_LOCAL)/postprocessord.o $(OUT_LOCAL)/data_dependency_graphd.o $(OUT_LOCAL)/max_priority_queued.o $(OUT_LOCAL)/min_priority_queued.o $(OUT_LOCAL)/dynamic_setd.o $(OUT_LOCAL)/ollie_token_arrayd.o $(OUT_LOCAL)/local_constantd.o $(OUT_LOCAL)/parameter_result_arrayd.o $(OUT_LOCAL)/value_numbering_tabled.o $(OUT_LOCAL)/graph_analyzerd.o
 
 memory_checker: memory_checker.o dynamic_array.o dynamic_integer_array.o
 	$(CC) -pthread -o $(OUT_LOCAL)/memory_checker $(OUT_LOCAL)/memory_checker.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/dynamic_integer_array.o
 
-ollie_run_validator: ollie_run_validator.o dynamic_array.o dynamic_integer_array.o lexer.o dynamic_string.o ollie_token_array.o
-	$(CC) -pthread -o $(OUT_LOCAL)/ollie_run_validator $(OUT_LOCAL)/ollie_run_validator.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/dynamic_integer_array.o $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/ollie_token_array.o
+ollie_run_validator: ollie_run_validator.o dynamic_array.o dynamic_integer_array.o lexer.o dependency_graph.o dynamic_string.o ollie_token_array.o
+	$(CC) -pthread -o $(OUT_LOCAL)/ollie_run_validator $(OUT_LOCAL)/ollie_run_validator.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/dynamic_integer_array.o $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/dependency_graph.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/ollie_token_array.o
 
 stest: symtab_test
 	$(OUT_LOCAL)/symtab_test
@@ -447,32 +455,32 @@ test_data_area: stack_data_area_test
 	$(OUT_LOCAL)/stack_data_area_test -f ./oc/test_files/data_area_test_input.ol
 
 ptest: parser_test
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/parser_test -i -d -f
+	find $(SINGLE_FILE_TEST_DIRECTORY) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_LOCAL)/parser_test -i -d -f
 	
 ptest-debug: parser_test_debug
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/parser_test_debug -i -d -f
+	find $(SINGLE_FILE_TEST_DIRECTORY) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_LOCAL)/parser_test_debug -i -d -f
 
 test_priority_queues: priority_queue_test
 	$(OUT_LOCAL)/priority_queue_test
 
 front_test: front_end_test
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/front_end_test -i -t -d -f
+	find $(SINGLE_FILE_TEST_DIRECTORY) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_LOCAL)/front_end_test -i -t -d -f
 
 # No timed output
 front_test_non_timed: front_end_test
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/front_end_test -i -d -f
+	find $(SINGLE_FILE_TEST_DIRECTORY) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_LOCAL)/front_end_test -i -d -f
 
 middle_test: middle_end_test
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/middle_end_test -i -d -t -f
+	find $(SINGLE_FILE_TEST_DIRECTORY) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_LOCAL)/middle_end_test -i -d -t -f
 
 middle_test_non_timed: middle_end_test
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/middle_end_test -i -d -f
+	find $(SINGLE_FILE_TEST_DIRECTORY) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_LOCAL)/middle_end_test -i -d -f
 
 selector_test: instruction_selector_test
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/instruction_selector_test -i -d -t -f 
+	find $(SINGLE_FILE_TEST_DIRECTORY) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_LOCAL)/instruction_selector_test -i -d -t -f 
 
 selector_test_non_timed: instruction_selector_test
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/instruction_selector_test -i -d -f
+	find $(SINGLE_FILE_TEST_DIRECTORY) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_LOCAL)/instruction_selector_test -i -d -f
 
 string_test: dynamic_string_test
 	$(OUT_LOCAL)/dynamic_string_test
@@ -482,7 +490,7 @@ string_test_debug: dynamic_string_testd
 
 compiler_test: oc
 	@for input in $(inputs); do \
-		output=$$(echo $$input | sed 's|^$(TEST_FILE_DIR)|$(OUTPUTTED_ASSEMBLY_DIR)|' | sed 's|\.ol$$|.s|'); \
+		output=$$(echo $$input | sed 's|^$(SINGLE_FILE_TEST_DIRECTORY)|$(OUTPUTTED_ASSEMBLY_DIR)|' | sed 's|\.ol$$|.s|'); \
 		echo "Running ./oc/out/oc -ditsa -f $$input -o $$output"; \
 		./oc/out/oc -ditsa -f $$input -o $$output; \
 	done
@@ -490,7 +498,7 @@ compiler_test: oc
 # This is for our comparisons - a non-timed test
 compiler_test_non_timed: oc
 	@for input in $(inputs); do \
-		output=$$(echo $$input | sed 's|^$(TEST_FILE_DIR)|$(OUTPUTTED_ASSEMBLY_DIR)|' | sed 's|\.ol$$|.s|'); \
+		output=$$(echo $$input | sed 's|^$(SINGLE_FILE_TEST_DIRECTORY)|$(OUTPUTTED_ASSEMBLY_DIR)|' | sed 's|\.ol$$|.s|'); \
 		echo "Running ./oc/out/oc -disa -f $$input -o $$output"; \
 		./oc/out/oc -disa -f $$input -o $$output; \
 	done
@@ -498,7 +506,7 @@ compiler_test_non_timed: oc
 # This test is both non-timed *and* only prints out register allocations
 compiler_test_allocation_only: oc
 	@for input in $(inputs); do \
-		output=$$(echo $$input | sed 's|^$(TEST_FILE_DIR)|$(OUTPUTTED_ASSEMBLY_DIR)|' | sed 's|\.ol$$|.s|'); \
+		output=$$(echo $$input | sed 's|^$(SINGLE_FILE_TEST_DIRECTORY)|$(OUTPUTTED_ASSEMBLY_DIR)|' | sed 's|\.ol$$|.s|'); \
 		echo "Running ./oc/out/oc -sra -f $$input -o $$output"; \
 		./oc/out/oc -sra -f $$input -o $$output; \
 	done
@@ -506,7 +514,7 @@ compiler_test_allocation_only: oc
 # This one will run a trace by outputting the status code at the end
 trace_compiler_test_allocation_only: oc
 	@for input in $(inputs); do \
-		output=$$(echo $$input | sed 's|^$(TEST_FILE_DIR)|$(OUTPUTTED_ASSEMBLY_DIR)|' | sed 's|\.ol$$|.s|'); \
+		output=$$(echo $$input | sed 's|^$(SINGLE_FILE_TEST_DIRECTORY)|$(OUTPUTTED_ASSEMBLY_DIR)|' | sed 's|\.ol$$|.s|'); \
 		echo "Running ./oc/out/oc -sra -f $$input -o $$output"; \
 		./oc/out/oc -sra -f $$input -o $$output; \
 		status=$$?;\
@@ -518,7 +526,7 @@ trace_compiler_test_allocation_only: oc
 # the results
 performance_test: oc
 	@for input in $(inputs); do \
-		output=$$(echo $$input | sed 's|^$(TEST_FILE_DIR)|$(OUTPUTTED_ASSEMBLY_DIR)|' | sed 's|\.ol$$|.s|'); \
+		output=$$(echo $$input | sed 's|^$(SINGLE_FILE_TEST_DIRECTORY)|$(OUTPUTTED_ASSEMBLY_DIR)|' | sed 's|\.ol$$|.s|'); \
 		echo "Running ./oc/out/oc -ts -f $$input -o $$output"; \
 		./oc/out/oc -tms -f $$input -o $$output; \
 	done
@@ -526,12 +534,12 @@ performance_test: oc
 # A memory check run will use valgrind and run a C test that checks each file individually for memory errors
 # This can be slow but it runs as part of CI
 memory_check: oc_debug memory_checker
-	$(OUT_LOCAL)/memory_checker 0 24 $(TEST_FILE_DIR)
+	$(OUT_LOCAL)/memory_checker 24 $(SINGLE_FILE_TEST_DIRECTORY) $(MULTI_FILE_TEST_DIRECTORY) $(OUT_LOCAL)
 
 # Ollie run validator checks the output of programs that expect a specific output. For more details
 # please see the top comment in the source code itself
 ollie_run_validation: oc ollie_run_validator
-	$(OUT_LOCAL)/ollie_run_validator 24 $(TEST_FILE_DIR) $(OUT_LOCAL)
+	$(OUT_LOCAL)/ollie_run_validator 24 $(SINGLE_FILE_TEST_DIRECTORY) $(MULTI_FILE_TEST_DIRECTORY) $(OUT_LOCAL)
 
 array_test: dynamic_array_test
 	$(OUT_LOCAL)/dynamic_array_test
@@ -545,7 +553,7 @@ interference_graph_test: interference_graph_tester
 ######################################################################## CI VERSIONS #############################################################################
 
 ltest-CI: lexer_test-CI
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/lexer_test
+	find $(SINGLE_FILE_TEST_DIRECTORY) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_CI)/lexer_test
 
 lexer_test-CI: lexer-CI.o lexer_test-CI.o lexstack-CI.o dynamic_string-CI.o ollie_token_array-CI.o
 	$(CC) -o $(OUT_CI)/lexer_test $(OUT_CI)/lexer_test.o $(OUT_CI)/lexer.o $(OUT_CI)/lexstack.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/ollie_token_array.o
@@ -558,6 +566,18 @@ lexer-CI.o: $(LEX_PATH)/lexer.c
 
 lexer-CId.o: $(LEX_PATH)/lexer.c
 	$(CC) $(CFLAGS) -g $(LEX_PATH)/lexer.c -o $(OUT_CI)/lexerd.o
+
+build_system-CI.o: $(BUILD_SYSTEM_PATH)/build_system.c
+	$(CC) $(CFLAGS) $(BUILD_SYSTEM_PATH)/build_system.c -o $(OUT_CI)/build_system.o
+
+build_system-CId.o: $(BUILD_SYSTEM_PATH)/build_system.c
+	$(CC) -g $(CFLAGS) $(BUILD_SYSTEM_PATH)/build_system.c -o $(OUT_CI)/build_systemd.o
+
+dependency_graph-CI.o: $(DEPENDENCY_GRAPH_PATH)/dependency_graph.c
+	$(CC) $(CFLAGS) $(DEPENDENCY_GRAPH_PATH)/dependency_graph.c -o $(OUT_CI)/dependency_graph.o
+
+dependency_graph-CId.o: $(DEPENDENCY_GRAPH_PATH)/dependency_graph.c
+	$(CC) $(CFLAGS) -g $(DEPENDENCY_GRAPH_PATH)/dependency_graph.c -o $(OUT_CI)/dependency_graphd.o
 
 graph_analyzer-CI.o: $(GRAPH_ANALYZER_PATH)/graph_analyzer.c
 	$(CC) $(CFLAGS) $(GRAPH_ANALYZER_PATH)/graph_analyzer.c -o $(OUT_CI)/graph_analyzer.o
@@ -666,12 +686,6 @@ preprocessor-CI.o: $(PREPROC_PATH)/preprocessor.c
 
 preprocessor-CId.o: $(PREPROC_PATH)/preprocessor.c
 	$(CC) $(CFLAGS) -g $(PREPROC_PATH)/preprocessor.c -o $(OUT_CI)/preprocessord.o
-
-dependency_tree-CI.o: $(DEPENDENCY_TREE_PATH)/dependency_tree.c
-	$(CC) $(CFLAGS) $(DEPENDENCY_TREE_PATH)/dependency_tree.c -o $(OUT_CI)/dependency_tree.o
-
-dependency_tree-CId.o: $(DEPENDENCY_TREE_PATH)/dependency_tree.c
-	$(CC) $(CFLAGS) -g $(DEPENDENCY_TREE_PATH)/dependency_tree.c -o $(OUT_CI)/dependency_treed.o
 
 stack_data_area-CI.o: $(STACK_DATA_AREA_PATH)/stack_data_area.c
 	$(CC) $(CFLAGS) $(STACK_DATA_AREA_PATH)/stack_data_area.c -o $(OUT_CI)/stack_data_area.o
@@ -802,14 +816,14 @@ dynamic_set_test-CI: dynamic_set_test-CI.o dynamic_set-CI.o
 parser_test-CI.o: $(TEST_SUITE_PATH)/parser_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/parser_test.c -o $(OUT_CI)/parser_test.o
 
-parser_test-CI: parser-CI.o lexer-CI.o parser_test-CI.o symtab-CI.o lexstack-CI.o heapstack-CI.o type_system-CI.o ast-CI.o heap_queue-CI.o lightstack-CI.o dynamic_array-CI.o dynamic_integer_array-CI.o stack_data_area-CI.o instruction-CI.o dynamic_string-CI.o nesting_stack-CI.o min_priority_queue-CI.o dynamic_set-CI.o ollie_token_array-CI.o preprocessor-CI.o
-	$(CC) -o $(OUT_CI)/parser_test $(OUT_CI)/parser_test.o $(OUT_CI)/parser.o $(OUT_CI)/lexstack.o $(OUT_CI)/lexer.o $(OUT_CI)/heapstack.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/ast.o $(OUT_CI)/heap_queue.o $(OUT_CI)/lightstack.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/dynamic_integer_array.o $(OUT_CI)/stack_data_area.o $(OUT_CI)/instruction.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/nesting_stack.o $(OUT_CI)/min_priority_queue.o $(OUT_CI)/dynamic_set.o $(OUT_CI)/ollie_token_array.o $(OUT_CI)/preprocessor.o
+parser_test-CI: parser-CI.o lexer-CI.o build_system-CI.o dependency_graph-CI.o parser_test-CI.o symtab-CI.o lexstack-CI.o heapstack-CI.o type_system-CI.o ast-CI.o heap_queue-CI.o lightstack-CI.o dynamic_array-CI.o dynamic_integer_array-CI.o stack_data_area-CI.o instruction-CI.o dynamic_string-CI.o nesting_stack-CI.o min_priority_queue-CI.o dynamic_set-CI.o ollie_token_array-CI.o preprocessor-CI.o
+	$(CC) -o $(OUT_CI)/parser_test $(OUT_CI)/parser_test.o $(OUT_CI)/parser.o $(OUT_CI)/lexstack.o $(OUT_CI)/lexer.o $(OUT_CI)/build_system.o $(OUT_CI)/dependency_graph.o $(OUT_CI)/heapstack.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/ast.o $(OUT_CI)/heap_queue.o $(OUT_CI)/lightstack.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/dynamic_integer_array.o $(OUT_CI)/stack_data_area.o $(OUT_CI)/instruction.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/nesting_stack.o $(OUT_CI)/min_priority_queue.o $(OUT_CI)/dynamic_set.o $(OUT_CI)/ollie_token_array.o $(OUT_CI)/preprocessor.o
 
-symtab_test-CI: symtab-CI.o symtab_test-CI.o lexer-CI.o type_system-CI.o lexstack-CI.o lightstack-CI.o stack_data_area-CI.o dynamic_array-CI.o dynamic_integer_array-CI.o heap_queue-CI.o heapstack-CI.o dynamic_string-CI.o nesting_stack-CI.o jump_table-CI.o min_priority_queue-CI.o dynamic_set-CI.o ollie_token_array-CI.o
-	$(CC) -o $(OUT_CI)/symtab_test $(OUT_CI)/lexer.o $(OUT_CI)/symtab_test.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/lexstack.o $(OUT_CI)/lightstack.o $(OUT_CI)/stack_data_area.o  $(OUT_CI)/dynamic_array.o $(OUT_CI)/dynamic_integer_array.o $(OUT_CI)/heap_queue.o $(OUT_CI)/heapstack.o $(OUT_CI)/jump_table.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/nesting_stack.o $(OUT_CI)/min_priority_queue.o $(OUT_CI)/dynamic_set.o $(OUT_CI)/ollie_token_array.o
+symtab_test-CI: symtab-CI.o symtab_test-CI.o lexer-CI.o build_system-CI.o dependency_graph-CI.o type_system-CI.o lexstack-CI.o lightstack-CI.o stack_data_area-CI.o dynamic_array-CI.o dynamic_integer_array-CI.o heap_queue-CI.o heapstack-CI.o dynamic_string-CI.o nesting_stack-CI.o jump_table-CI.o min_priority_queue-CI.o dynamic_set-CI.o ollie_token_array-CI.o
+	$(CC) -o $(OUT_CI)/symtab_test $(OUT_CI)/lexer.o $(OUT_CI)/build_system.o $(OUT_CI)/dependency_graph.o $(OUT_CI)/symtab_test.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/lexstack.o $(OUT_CI)/lightstack.o $(OUT_CI)/stack_data_area.o  $(OUT_CI)/dynamic_array.o $(OUT_CI)/dynamic_integer_array.o $(OUT_CI)/heap_queue.o $(OUT_CI)/heapstack.o $(OUT_CI)/jump_table.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/nesting_stack.o $(OUT_CI)/min_priority_queue.o $(OUT_CI)/dynamic_set.o $(OUT_CI)/ollie_token_array.o
 
-stack_data_area_test-CI: stack_data_area_test-CI.o type_system-CI.o lexstack-CI.o lightstack-CI.o symtab-CI.o lexer-CI.o instruction-CI.o stack_data_area-CI.o dynamic_array-CI.o dynamic_integer_array-CI.o ast-CI.o cfg-CI.o parser-CI.o heap_queue-CI.o heapstack-CI.o jump_table-CI.o dynamic_string-CI.o nesting_stack-CI.o min_priority_queue-CI.o dynamic_set-CI.o ollie_token_array-CI.o preprocessor-CI.o local_constant-CI.o parameter_result_array-CI.o graph_analyzer-CI.o
-	$(CC) -o $(OUT_CI)/stack_data_area_test $(OUT_CI)/lexer.o $(OUT_CI)/stack_data_area_test.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/lexstack.o $(OUT_CI)/lightstack.o $(OUT_CI)/stack_data_area.o $(OUT_CI)/instruction.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/dynamic_integer_array.o $(OUT_CI)/ast.o $(OUT_CI)/cfg.o $(OUT_CI)/parser.o $(OUT_CI)/heap_queue.o $(OUT_CI)/heapstack.o $(OUT_CI)/jump_table.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/nesting_stack.o $(OUT_CI)/min_priority_queue.o $(OUT_CI)/dynamic_set.o $(OUT_CI)/ollie_token_array.o $(OUT_CI)/preprocessor.o $(OUT_CI)/local_constant.o $(OUT_CI)/parameter_result_array.o $(OUT_CI)/graph_analyzer.o
+stack_data_area_test-CI: stack_data_area_test-CI.o type_system-CI.o lexstack-CI.o lightstack-CI.o symtab-CI.o lexer-CI.o build_system-CI.o dependency_graph-CI.o instruction-CI.o stack_data_area-CI.o dynamic_array-CI.o dynamic_integer_array-CI.o ast-CI.o cfg-CI.o parser-CI.o heap_queue-CI.o heapstack-CI.o jump_table-CI.o dynamic_string-CI.o nesting_stack-CI.o min_priority_queue-CI.o dynamic_set-CI.o ollie_token_array-CI.o preprocessor-CI.o local_constant-CI.o parameter_result_array-CI.o graph_analyzer-CI.o
+	$(CC) -o $(OUT_CI)/stack_data_area_test $(OUT_CI)/lexer.o $(OUT_CI)/build_system.o $(OUT_CI)/dependency_graph.o $(OUT_CI)/stack_data_area_test.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/lexstack.o $(OUT_CI)/lightstack.o $(OUT_CI)/stack_data_area.o $(OUT_CI)/instruction.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/dynamic_integer_array.o $(OUT_CI)/ast.o $(OUT_CI)/cfg.o $(OUT_CI)/parser.o $(OUT_CI)/heap_queue.o $(OUT_CI)/heapstack.o $(OUT_CI)/jump_table.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/nesting_stack.o $(OUT_CI)/min_priority_queue.o $(OUT_CI)/dynamic_set.o $(OUT_CI)/ollie_token_array.o $(OUT_CI)/preprocessor.o $(OUT_CI)/local_constant.o $(OUT_CI)/parameter_result_array.o $(OUT_CI)/graph_analyzer.o
 	
 front_end_test-CI.o: $(TEST_SUITE_PATH)/front_end_test.c
 	$(CC) $(CFLAGS) -o $(OUT_CI)/front_end_test.o $(TEST_SUITE_PATH)/front_end_test.c
@@ -826,41 +840,41 @@ memory_checker-CI.o: $(TEST_SUITE_PATH)/memory_test.c
 ollie_run_validator-CI.o: $(TEST_SUITE_PATH)/ollie_run_validator.c
 	$(CC) $(CFLAGS) -pthread -o $(OUT_CI)/ollie_run_validator.o $(TEST_SUITE_PATH)/ollie_run_validator.c
 
-preprocessor_test-CI: preprocessor_test-CI.o preprocessor-CI.o symtab-CI.o lexer-CI.o type_system-CI.o lexstack-CI.o lightstack-CI.o stack_data_area-CI.o dynamic_array-CI.o dynamic_integer_array-CI.o heap_queue-CI.o heapstack-CI.o jump_table-CI.o dynamic_string-CI.o nesting_stack-CI.o min_priority_queue-CI.o dynamic_set-CI.o ollie_token_array-CI.o
-	$(CC) -o $(OUT_CI)/preprocessor_test $(OUT_CI)/lexer.o $(OUT_CI)/preprocessor_test.o $(OUT_CI)/preprocessor.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/lexstack.o $(OUT_CI)/lightstack.o $(OUT_CI)/stack_data_area.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/dynamic_integer_array.o $(OUT_CI)/heap_queue.o $(OUT_CI)/heapstack.o $(OUT_CI)/jump_table.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/nesting_stack.o $(OUT_CI)/min_priority_queue.o $(OUT_CI)/dynamic_set.o $(OUT_CI)/ollie_token_array.o
+preprocessor_test-CI: preprocessor_test-CI.o preprocessor-CI.o symtab-CI.o lexer-CI.o build_system-CI.o dependency_graph-CI.o type_system-CI.o lexstack-CI.o lightstack-CI.o stack_data_area-CI.o dynamic_array-CI.o dynamic_integer_array-CI.o heap_queue-CI.o heapstack-CI.o jump_table-CI.o dynamic_string-CI.o nesting_stack-CI.o min_priority_queue-CI.o dynamic_set-CI.o ollie_token_array-CI.o
+	$(CC) -o $(OUT_CI)/preprocessor_test $(OUT_CI)/lexer.o $(OUT_CI)/build_system.o $(OUT_CI)/dependency_graph.o $(OUT_CI)/preprocessor_test.o $(OUT_CI)/preprocessor.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/lexstack.o $(OUT_CI)/lightstack.o $(OUT_CI)/stack_data_area.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/dynamic_integer_array.o $(OUT_CI)/heap_queue.o $(OUT_CI)/heapstack.o $(OUT_CI)/jump_table.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/nesting_stack.o $(OUT_CI)/min_priority_queue.o $(OUT_CI)/dynamic_set.o $(OUT_CI)/ollie_token_array.o
 
 preprocessor_test-CI.o: $(TEST_SUITE_PATH)/preprocessor_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/preprocessor_test.c -o $(OUT_CI)/preprocessor_test.o
 
-interference_graph_tester-CI: parser-CI.o lexer-CI.o symtab-CI.o heapstack-CI.o type_system-CI.o ast-CI.o cfg-CI.o lexstack-CI.o instruction-CI.o heap_queue-CI.o dynamic_array-CI.o dynamic_integer_array-CI.o lightstack-CI.o optimizer-CI.o instruction_selector-CI.o jump_table-CI.o stack_data_area-CI.o interference_graph-CI.o interference_graph_test-CI.o dynamic_string-CI.o nesting_stack-CI.o min_priority_queue-CI.o dynamic_set-CI.o ollie_token_array-CI.o local_constant-CI.o parameter_result_array-CI.o value_numbering_table-CI.o graph_analyzer-CI.o
-	$(CC) -o $(OUT_CI)/interference_graph_test $(OUT_CI)/interference_graph_test.o $(OUT_CI)/parser.o $(OUT_CI)/lexer.o $(OUT_CI)/heapstack.o $(OUT_CI)/lexstack.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/ast.o $(OUT_CI)/cfg.o $(OUT_CI)/instruction.o $(OUT_CI)/heap_queue.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/dynamic_integer_array.o $(OUT_CI)/lightstack.o $(OUT_CI)/optimizer.o $(OUT_CI)/instruction_selector.o $(OUT_CI)/jump_table.o $(OUT_CI)/stack_data_area.o $(OUT_CI)/interference_graph.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/nesting_stack.o $(OUT_CI)/min_priority_queue.o $(OUT_CI)/dynamic_set.o $(OUT_CI)/ollie_token_array.o $(OUT_CI)/local_constant.o $(OUT_CI)/parameter_result_array.o $(OUT_CI)/value_numbering_table.o $(OUT_CI)/graph_analyzer.o
+interference_graph_tester-CI: parser-CI.o lexer-CI.o build_system-CI.o dependency_graph-CI.o symtab-CI.o heapstack-CI.o type_system-CI.o ast-CI.o cfg-CI.o lexstack-CI.o instruction-CI.o heap_queue-CI.o dynamic_array-CI.o dynamic_integer_array-CI.o lightstack-CI.o optimizer-CI.o instruction_selector-CI.o jump_table-CI.o stack_data_area-CI.o interference_graph-CI.o interference_graph_test-CI.o dynamic_string-CI.o nesting_stack-CI.o min_priority_queue-CI.o dynamic_set-CI.o ollie_token_array-CI.o local_constant-CI.o parameter_result_array-CI.o value_numbering_table-CI.o graph_analyzer-CI.o
+	$(CC) -o $(OUT_CI)/interference_graph_test $(OUT_CI)/interference_graph_test.o $(OUT_CI)/parser.o $(OUT_CI)/lexer.o $(OUT_CI)/build_system.o $(OUT_CI)/dependency_graph.o $(OUT_CI)/heapstack.o $(OUT_CI)/lexstack.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/ast.o $(OUT_CI)/cfg.o $(OUT_CI)/instruction.o $(OUT_CI)/heap_queue.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/dynamic_integer_array.o $(OUT_CI)/lightstack.o $(OUT_CI)/optimizer.o $(OUT_CI)/instruction_selector.o $(OUT_CI)/jump_table.o $(OUT_CI)/stack_data_area.o $(OUT_CI)/interference_graph.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/nesting_stack.o $(OUT_CI)/min_priority_queue.o $(OUT_CI)/dynamic_set.o $(OUT_CI)/ollie_token_array.o $(OUT_CI)/local_constant.o $(OUT_CI)/parameter_result_array.o $(OUT_CI)/value_numbering_table.o $(OUT_CI)/graph_analyzer.o
 
-front_end_test-CI: front_end_test-CI.o parser-CI.o lexer-CI.o symtab-CI.o heapstack-CI.o type_system-CI.o ast-CI.o cfg-CI.o lexstack-CI.o instruction-CI.o heap_queue-CI.o preprocessor-CI.o dependency_tree-CI.o dynamic_array-CI.o dynamic_integer_array-CI.o lightstack-CI.o jump_table-CI.o stack_data_area-CI.o dynamic_string-CI.o nesting_stack-CI.o min_priority_queue-CI.o dynamic_set-CI.o ollie_token_array-CI.o local_constant-CI.o parameter_result_array-CI.o graph_analyzer-CI.o
-	$(CC) -o $(OUT_CI)/front_end_test $(OUT_CI)/front_end_test.o $(OUT_CI)/parser.o $(OUT_CI)/lexer.o $(OUT_CI)/heapstack.o $(OUT_CI)/lexstack.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/ast.o $(OUT_CI)/cfg.o $(OUT_CI)/instruction.o $(OUT_CI)/heap_queue.o $(OUT_CI)/preprocessor.o $(OUT_CI)/dependency_tree.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/dynamic_integer_array.o $(OUT_CI)/lightstack.o $(OUT_CI)/jump_table.o $(OUT_CI)/stack_data_area.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/nesting_stack.o $(OUT_CI)/min_priority_queue.o $(OUT_CI)/dynamic_set.o $(OUT_CI)/ollie_token_array.o $(OUT_CI)/local_constant.o $(OUT_CI)/parameter_result_array.o $(OUT_CI)/graph_analyzer.o
+front_end_test-CI: front_end_test-CI.o parser-CI.o lexer-CI.o build_system-CI.o dependency_graph-CI.o symtab-CI.o heapstack-CI.o type_system-CI.o ast-CI.o cfg-CI.o lexstack-CI.o instruction-CI.o heap_queue-CI.o preprocessor-CI.o dynamic_array-CI.o dynamic_integer_array-CI.o lightstack-CI.o jump_table-CI.o stack_data_area-CI.o dynamic_string-CI.o nesting_stack-CI.o min_priority_queue-CI.o dynamic_set-CI.o ollie_token_array-CI.o local_constant-CI.o parameter_result_array-CI.o graph_analyzer-CI.o
+	$(CC) -o $(OUT_CI)/front_end_test $(OUT_CI)/front_end_test.o $(OUT_CI)/parser.o $(OUT_CI)/lexer.o $(OUT_CI)/build_system.o $(OUT_CI)/dependency_graph.o $(OUT_CI)/heapstack.o $(OUT_CI)/lexstack.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/ast.o $(OUT_CI)/cfg.o $(OUT_CI)/instruction.o $(OUT_CI)/heap_queue.o $(OUT_CI)/preprocessor.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/dynamic_integer_array.o $(OUT_CI)/lightstack.o $(OUT_CI)/jump_table.o $(OUT_CI)/stack_data_area.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/nesting_stack.o $(OUT_CI)/min_priority_queue.o $(OUT_CI)/dynamic_set.o $(OUT_CI)/ollie_token_array.o $(OUT_CI)/local_constant.o $(OUT_CI)/parameter_result_array.o $(OUT_CI)/graph_analyzer.o
 
-middle_end_test-CI: middle_end_test-CI.o parser-CI.o lexer-CI.o symtab-CI.o heapstack-CI.o type_system-CI.o ast-CI.o cfg-CI.o lexstack-CI.o instruction-CI.o heap_queue-CI.o preprocessor-CI.o dependency_tree-CI.o dynamic_array-CI.o dynamic_integer_array-CI.o lightstack-CI.o jump_table-CI.o optimizer-CI.o stack_data_area-CI.o dynamic_string-CI.o nesting_stack-CI.o min_priority_queue-CI.o dynamic_set-CI.o ollie_token_array-CI.o local_constant-CI.o parameter_result_array-CI.o value_numbering_table-CI.o data_dependency_graph-CI.o graph_analyzer-CI.o
-	$(CC) -o $(OUT_CI)/middle_end_test $(OUT_CI)/middle_end_test.o $(OUT_CI)/parser.o $(OUT_CI)/lexer.o $(OUT_CI)/heapstack.o $(OUT_CI)/lexstack.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/ast.o $(OUT_CI)/cfg.o $(OUT_CI)/instruction.o $(OUT_CI)/heap_queue.o $(OUT_CI)/preprocessor.o $(OUT_CI)/dependency_tree.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/dynamic_integer_array.o $(OUT_CI)/lightstack.o $(OUT_CI)/optimizer.o $(OUT_CI)/jump_table.o $(OUT_CI)/stack_data_area.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/nesting_stack.o $(OUT_CI)/min_priority_queue.o $(OUT_CI)/dynamic_set.o $(OUT_CI)/ollie_token_array.o $(OUT_CI)/local_constant.o $(OUT_CI)/parameter_result_array.o $(OUT_CI)/value_numbering_table.o $(OUT_CI)/data_dependency_graph.o $(OUT_CI)/graph_analyzer.o
+middle_end_test-CI: middle_end_test-CI.o parser-CI.o lexer-CI.o build_system-CI.o dependency_graph-CI.o symtab-CI.o heapstack-CI.o type_system-CI.o ast-CI.o cfg-CI.o lexstack-CI.o instruction-CI.o heap_queue-CI.o preprocessor-CI.o dynamic_array-CI.o dynamic_integer_array-CI.o lightstack-CI.o jump_table-CI.o optimizer-CI.o stack_data_area-CI.o dynamic_string-CI.o nesting_stack-CI.o min_priority_queue-CI.o dynamic_set-CI.o ollie_token_array-CI.o local_constant-CI.o parameter_result_array-CI.o value_numbering_table-CI.o data_dependency_graph-CI.o graph_analyzer-CI.o
+	$(CC) -o $(OUT_CI)/middle_end_test $(OUT_CI)/middle_end_test.o $(OUT_CI)/parser.o $(OUT_CI)/lexer.o $(OUT_CI)/build_system.o $(OUT_CI)/dependency_graph.o $(OUT_CI)/heapstack.o $(OUT_CI)/lexstack.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/ast.o $(OUT_CI)/cfg.o $(OUT_CI)/instruction.o $(OUT_CI)/heap_queue.o $(OUT_CI)/preprocessor.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/dynamic_integer_array.o $(OUT_CI)/lightstack.o $(OUT_CI)/optimizer.o $(OUT_CI)/jump_table.o $(OUT_CI)/stack_data_area.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/nesting_stack.o $(OUT_CI)/min_priority_queue.o $(OUT_CI)/dynamic_set.o $(OUT_CI)/ollie_token_array.o $(OUT_CI)/local_constant.o $(OUT_CI)/parameter_result_array.o $(OUT_CI)/value_numbering_table.o $(OUT_CI)/data_dependency_graph.o $(OUT_CI)/graph_analyzer.o
 
-instruction_selector_test-CI: parser-CI.o lexer-CI.o symtab-CI.o heapstack-CI.o type_system-CI.o ast-CI.o cfg-CI.o lexstack-CI.o instruction-CI.o heap_queue-CI.o preprocessor-CI.o dependency_tree-CI.o dynamic_array-CI.o dynamic_integer_array-CI.o lightstack-CI.o jump_table-CI.o optimizer-CI.o stack_data_area-CI.o dynamic_string-CI.o nesting_stack-CI.o instruction_selector-CI.o instruction_selector_test-CI.o min_priority_queue-CI.o dynamic_set-CI.o ollie_token_array-CI.o local_constant-CI.o parameter_result_array-CI.o value_numbering_table-CI.o data_dependency_graph-CI.o graph_analyzer-CI.o
-	$(CC) -o $(OUT_CI)/instruction_selector_test $(OUT_CI)/parser.o $(OUT_CI)/lexer.o $(OUT_CI)/heapstack.o $(OUT_CI)/lexstack.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/ast.o $(OUT_CI)/cfg.o $(OUT_CI)/instruction.o $(OUT_CI)/heap_queue.o $(OUT_CI)/preprocessor.o $(OUT_CI)/dependency_tree.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/dynamic_integer_array.o $(OUT_CI)/lightstack.o $(OUT_CI)/optimizer.o $(OUT_CI)/jump_table.o $(OUT_CI)/stack_data_area.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/nesting_stack.o $(OUT_CI)/instruction_selector.o $(OUT_CI)/instruction_selector_test.o $(OUT_CI)/min_priority_queue.o $(OUT_CI)/dynamic_set.o $(OUT_CI)/ollie_token_array.o $(OUT_CI)/local_constant.o $(OUT_CI)/parameter_result_array.o $(OUT_CI)/value_numbering_table.o $(OUT_CI)/data_dependency_graph.o $(OUT_CI)/graph_analyzer.o
+instruction_selector_test-CI: parser-CI.o lexer-CI.o build_system-CI.o dependency_graph-CI.o symtab-CI.o heapstack-CI.o type_system-CI.o ast-CI.o cfg-CI.o lexstack-CI.o instruction-CI.o heap_queue-CI.o preprocessor-CI.o dynamic_array-CI.o dynamic_integer_array-CI.o lightstack-CI.o jump_table-CI.o optimizer-CI.o stack_data_area-CI.o dynamic_string-CI.o nesting_stack-CI.o instruction_selector-CI.o instruction_selector_test-CI.o min_priority_queue-CI.o dynamic_set-CI.o ollie_token_array-CI.o local_constant-CI.o parameter_result_array-CI.o value_numbering_table-CI.o data_dependency_graph-CI.o graph_analyzer-CI.o
+	$(CC) -o $(OUT_CI)/instruction_selector_test $(OUT_CI)/parser.o $(OUT_CI)/lexer.o $(OUT_CI)/build_system.o $(OUT_CI)/dependency_graph.o $(OUT_CI)/heapstack.o $(OUT_CI)/lexstack.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/ast.o $(OUT_CI)/cfg.o $(OUT_CI)/instruction.o $(OUT_CI)/heap_queue.o $(OUT_CI)/preprocessor.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/dynamic_integer_array.o $(OUT_CI)/lightstack.o $(OUT_CI)/optimizer.o $(OUT_CI)/jump_table.o $(OUT_CI)/stack_data_area.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/nesting_stack.o $(OUT_CI)/instruction_selector.o $(OUT_CI)/instruction_selector_test.o $(OUT_CI)/min_priority_queue.o $(OUT_CI)/dynamic_set.o $(OUT_CI)/ollie_token_array.o $(OUT_CI)/local_constant.o $(OUT_CI)/parameter_result_array.o $(OUT_CI)/value_numbering_table.o $(OUT_CI)/data_dependency_graph.o $(OUT_CI)/graph_analyzer.o
 
 memory_checker-CI: memory_checker-CI.o dynamic_array-CI.o dynamic_integer_array-CI.o
 	$(CC) -pthread -o $(OUT_CI)/memory_checker $(OUT_CI)/memory_checker.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/dynamic_integer_array.o
 
-ollie_run_validator-CI: ollie_run_validator-CI.o dynamic_array-CI.o dynamic_integer_array-CI.o lexer-CI.o dynamic_string-CI.o ollie_token_array-CI.o
-		$(CC) -pthread -o $(OUT_CI)/ollie_run_validator $(OUT_CI)/ollie_run_validator.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/dynamic_integer_array.o $(OUT_CI)/lexer.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/ollie_token_array.o
+ollie_run_validator-CI: ollie_run_validator-CI.o dynamic_array-CI.o dynamic_integer_array-CI.o lexer-CI.o dependency_graph-CI.o dynamic_string-CI.o ollie_token_array-CI.o
+		$(CC) -pthread -o $(OUT_CI)/ollie_run_validator $(OUT_CI)/ollie_run_validator.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/dynamic_integer_array.o $(OUT_CI)/lexer.o $(OUT_CI)/dependency_graph.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/ollie_token_array.o
 
-oc-CI: compiler-CI.o parser-CI.o lexer-CI.o symtab-CI.o heapstack-CI.o type_system-CI.o ast-CI.o cfg-CI.o lexstack-CI.o instruction-CI.o heap_queue-CI.o preprocessor-CI.o dependency_tree-CI.o dynamic_array-CI.o dynamic_integer_array-CI.o lightstack-CI.o optimizer-CI.o instruction_selector-CI.o jump_table-CI.o stack_data_area-CI.o register_allocator-CI.o instruction_scheduler-CI.o interference_graph-CI.o assembler-CI.o dynamic_string-CI.o nesting_stack-CI.o postprocessor-CI.o data_dependency_graph-CI.o max_priority_queue-CI.o min_priority_queue-CI.o dynamic_set-CI.o ollie_token_array-CI.o local_constant-CI.o parameter_result_array-CI.o value_numbering_table-CI.o graph_analyzer-CI.o
-	$(CC) -o $(OUT_CI)/oc $(OUT_CI)/compiler.o $(OUT_CI)/parser.o $(OUT_CI)/lexer.o $(OUT_CI)/heapstack.o $(OUT_CI)/lexstack.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/ast.o $(OUT_CI)/cfg.o $(OUT_CI)/instruction.o $(OUT_CI)/heap_queue.o $(OUT_CI)/preprocessor.o $(OUT_CI)/dependency_tree.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/dynamic_integer_array.o $(OUT_CI)/lightstack.o $(OUT_CI)/optimizer.o $(OUT_CI)/instruction_selector.o $(OUT_CI)/jump_table.o $(OUT_CI)/stack_data_area.o $(OUT_CI)/register_allocator.o $(OUT_CI)/instruction_scheduler.o $(OUT_CI)/interference_graph.o $(OUT_CI)/assembler-CI.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/nesting_stack.o $(OUT_CI)/postprocessor.o $(OUT_CI)/data_dependency_graph.o $(OUT_CI)/max_priority_queue.o $(OUT_CI)/min_priority_queue.o $(OUT_CI)/dynamic_set.o $(OUT_CI)/ollie_token_array.o $(OUT_CI)/local_constant.o $(OUT_CI)/parameter_result_array.o $(OUT_CI)/value_numbering_table.o $(OUT_CI)/graph_analyzer.o
+oc-CI: compiler-CI.o parser-CI.o lexer-CI.o build_system-CI.o dependency_graph-CI.o symtab-CI.o heapstack-CI.o type_system-CI.o ast-CI.o cfg-CI.o lexstack-CI.o instruction-CI.o heap_queue-CI.o preprocessor-CI.o dynamic_array-CI.o dynamic_integer_array-CI.o lightstack-CI.o optimizer-CI.o instruction_selector-CI.o jump_table-CI.o stack_data_area-CI.o register_allocator-CI.o instruction_scheduler-CI.o interference_graph-CI.o assembler-CI.o dynamic_string-CI.o nesting_stack-CI.o postprocessor-CI.o data_dependency_graph-CI.o max_priority_queue-CI.o min_priority_queue-CI.o dynamic_set-CI.o ollie_token_array-CI.o local_constant-CI.o parameter_result_array-CI.o value_numbering_table-CI.o graph_analyzer-CI.o
+	$(CC) -o $(OUT_CI)/oc $(OUT_CI)/compiler.o $(OUT_CI)/parser.o $(OUT_CI)/lexer.o $(OUT_CI)/build_system.o $(OUT_CI)/dependency_graph.o $(OUT_CI)/heapstack.o $(OUT_CI)/lexstack.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/ast.o $(OUT_CI)/cfg.o $(OUT_CI)/instruction.o $(OUT_CI)/heap_queue.o $(OUT_CI)/preprocessor.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/dynamic_integer_array.o $(OUT_CI)/lightstack.o $(OUT_CI)/optimizer.o $(OUT_CI)/instruction_selector.o $(OUT_CI)/jump_table.o $(OUT_CI)/stack_data_area.o $(OUT_CI)/register_allocator.o $(OUT_CI)/instruction_scheduler.o $(OUT_CI)/interference_graph.o $(OUT_CI)/assembler-CI.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/nesting_stack.o $(OUT_CI)/postprocessor.o $(OUT_CI)/data_dependency_graph.o $(OUT_CI)/max_priority_queue.o $(OUT_CI)/min_priority_queue.o $(OUT_CI)/dynamic_set.o $(OUT_CI)/ollie_token_array.o $(OUT_CI)/local_constant.o $(OUT_CI)/parameter_result_array.o $(OUT_CI)/value_numbering_table.o $(OUT_CI)/graph_analyzer.o
 
-oc_debug-CI: compiler-CId.o parser-CId.o lexer-CId.o symtab-CId.o heapstack-CId.o type_system-CId.o ast-CId.o cfg-CId.o lexstack-CId.o instruction-CId.o heap_queue-CId.o preprocessor-CId.o dependency_tree-CId.o dynamic_array-CId.o dynamic_integer_array-CId.o lightstack-CId.o optimizer-CId.o instruction_selector-CId.o jump_table-CId.o stack_data_area-CId.o register_allocator-CId.o instruction_scheduler-CId.o interference_graph-CId.o assembler-CId.o dynamic_string-CId.o nesting_stack-CId.o postprocessor-CId.o data_dependency_graph-CId.o max_priority_queue-CId.o min_priority_queue-CId.o dynamic_set-CId.o ollie_token_array-CId.o local_constant-CId.o parameter_result_array-CId.o value_numbering_table-CId.o graph_analyzer-CId.o
-	$(CC) -o $(OUT_CI)/ocd $(OUT_CI)/compilerd.o $(OUT_CI)/parserd.o $(OUT_CI)/lexerd.o $(OUT_CI)/heapstackd.o $(OUT_CI)/lexstackd.o $(OUT_CI)/symtabd.o $(OUT_CI)/type_systemd.o $(OUT_CI)/astd.o $(OUT_CI)/cfgd.o $(OUT_CI)/instructiond.o $(OUT_CI)/heap_queued.o $(OUT_CI)/preprocessord.o $(OUT_CI)/dependency_treed.o $(OUT_CI)/dynamic_arrayd.o $(OUT_CI)/dynamic_integer_arrayd.o $(OUT_CI)/lightstackd.o $(OUT_CI)/optimizerd.o $(OUT_CI)/instruction_selectord.o $(OUT_CI)/jump_tabled.o $(OUT_CI)/stack_data_aread.o $(OUT_CI)/register_allocatord.o $(OUT_CI)/instruction_schedulerd.o $(OUT_CI)/interference_graphd.o $(OUT_CI)/assembler-CId.o $(OUT_CI)/dynamic_stringd.o $(OUT_CI)/nesting_stackd.o $(OUT_CI)/postprocessord.o $(OUT_CI)/data_dependency_graphd.o $(OUT_CI)/max_priority_queued.o $(OUT_CI)/min_priority_queued.o $(OUT_CI)/dynamic_setd.o $(OUT_CI)/ollie_token_arrayd.o $(OUT_CI)/local_constantd.o $(OUT_CI)/parameter_result_arrayd.o $(OUT_CI)/value_numbering_tabled.o $(OUT_CI)/graph_analyzerd.o
+oc_debug-CI: compiler-CId.o parser-CId.o lexer-CId.o build_system-CId.o dependency_graph-CId.o symtab-CId.o heapstack-CId.o type_system-CId.o ast-CId.o cfg-CId.o lexstack-CId.o instruction-CId.o heap_queue-CId.o preprocessor-CId.o dynamic_array-CId.o dynamic_integer_array-CId.o lightstack-CId.o optimizer-CId.o instruction_selector-CId.o jump_table-CId.o stack_data_area-CId.o register_allocator-CId.o instruction_scheduler-CId.o interference_graph-CId.o assembler-CId.o dynamic_string-CId.o nesting_stack-CId.o postprocessor-CId.o data_dependency_graph-CId.o max_priority_queue-CId.o min_priority_queue-CId.o dynamic_set-CId.o ollie_token_array-CId.o local_constant-CId.o parameter_result_array-CId.o value_numbering_table-CId.o graph_analyzer-CId.o
+	$(CC) -o $(OUT_CI)/ocd $(OUT_CI)/compilerd.o $(OUT_CI)/parserd.o $(OUT_CI)/lexerd.o $(OUT_CI)/build_systemd.o $(OUT_CI)/dependency_graphd.o $(OUT_CI)/heapstackd.o $(OUT_CI)/lexstackd.o $(OUT_CI)/symtabd.o $(OUT_CI)/type_systemd.o $(OUT_CI)/astd.o $(OUT_CI)/cfgd.o $(OUT_CI)/instructiond.o $(OUT_CI)/heap_queued.o $(OUT_CI)/preprocessord.o $(OUT_CI)/dynamic_arrayd.o $(OUT_CI)/dynamic_integer_arrayd.o $(OUT_CI)/lightstackd.o $(OUT_CI)/optimizerd.o $(OUT_CI)/instruction_selectord.o $(OUT_CI)/jump_tabled.o $(OUT_CI)/stack_data_aread.o $(OUT_CI)/register_allocatord.o $(OUT_CI)/instruction_schedulerd.o $(OUT_CI)/interference_graphd.o $(OUT_CI)/assembler-CId.o $(OUT_CI)/dynamic_stringd.o $(OUT_CI)/nesting_stackd.o $(OUT_CI)/postprocessord.o $(OUT_CI)/data_dependency_graphd.o $(OUT_CI)/max_priority_queued.o $(OUT_CI)/min_priority_queued.o $(OUT_CI)/dynamic_setd.o $(OUT_CI)/ollie_token_arrayd.o $(OUT_CI)/local_constantd.o $(OUT_CI)/parameter_result_arrayd.o $(OUT_CI)/value_numbering_tabled.o $(OUT_CI)/graph_analyzerd.o
 
 stest-CI: symtab_test-CI
 	$(OUT_CI)/symtab_test
 
 preproc_test-CI: preprocessor_test-CI
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/preprocessor_test -i -d -f
+	find $(SINGLE_FILE_TEST_DIRECTORY) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_CI)/preprocessor_test -i -d -f
 
 priority_queue_test-CI: priority_queue_test-CI.o max_priority_queue-CI.o min_priority_queue-CI.o
 	$(CC) -o $(OUT_CI)/priority_queue_test $(OUT_CI)/priority_queue_test.o $(OUT_CI)/max_priority_queue.o $(OUT_CI)/min_priority_queue.o
@@ -869,32 +883,32 @@ test_data_area-CI: stack_data_area_test-CI
 	$(OUT_CI)/stack_data_area_test -f ./oc/test_files/data_area_test_input.ol
 
 ptest-CI: parser_test-CI
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/parser_test -i -d -f
+	find $(SINGLE_FILE_TEST_DIRECTORY) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_CI)/parser_test -i -d -f
 
 test_priority_queues-CI: priority_queue_test-CI
 	$(OUT_CI)/priority_queue_test
 
 front_test-CI: front_end_test-CI
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/front_end_test -i -d -f
+	find $(SINGLE_FILE_TEST_DIRECTORY) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_CI)/front_end_test -i -d -f
 
 middle_test-CI: middle_end_test-CI
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/middle_end_test -i -d -f
+	find $(SINGLE_FILE_TEST_DIRECTORY) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_CI)/middle_end_test -i -d -f
 
 selector_test-CI: instruction_selector_test-CI
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/instruction_selector_test -i -d -f
+	find $(SINGLE_FILE_TEST_DIRECTORY) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_CI)/instruction_selector_test -i -d -f
 
 ollie_run_validation-CI: ollie_run_validator-CI oc-CI
-	$(OUT_CI)/ollie_run_validator 4 $(TEST_FILE_DIR) $(OUT_CI)
+	$(OUT_CI)/ollie_run_validator 4 $(SINGLE_FILE_TEST_DIRECTORY) $(MULTI_FILE_TEST_DIRECTORY) $(OUT_CI)
 
 # A memory check run will use valgrind and run a C test that checks each file individually for memory errors
 memory_check-CI: oc_debug-CI memory_checker-CI
-	$(OUT_CI)/memory_checker 1 4 $(TEST_FILE_DIR)
+	$(OUT_CI)/memory_checker 4 $(SINGLE_FILE_TEST_DIRECTORY) $(MULTI_FILE_TEST_DIRECTORY) $(OUT_CI)
 
 compiler_test-CI: oc-CI
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/oc -s -t -@ -i -d -f
+	find $(SINGLE_FILE_TEST_DIRECTORY) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_CI)/oc -s -t -@ -i -d -f
 
 compiler_test-non-timed-CI: oc-CI
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/oc -s -@ -i -d -f
+	find $(SINGLE_FILE_TEST_DIRECTORY) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_CI)/oc -s -@ -i -d -f
 
 array_test-CI: dynamic_array_test-CI
 	$(OUT_CI)/dynamic_array_test

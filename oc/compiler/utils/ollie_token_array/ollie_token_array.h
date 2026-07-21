@@ -23,10 +23,10 @@ struct ollie_token_array_t{
 	//The internal token array
 	lexitem_t* internal_array;
 	//The current maximum size
-	u_int32_t current_max_size;
+	int32_t current_max_size;
 	//The current index that we're on - it also happens to be
 	//how many nodes we have
-	u_int32_t current_index;
+	int32_t current_index;
 };
 
 
@@ -89,25 +89,25 @@ void clear_token_array(ollie_token_array_t* array);
  *
  * Returns a copy of the specified element
  */
-lexitem_t token_array_get_at(ollie_token_array_t* array, u_int32_t index);
+lexitem_t token_array_get_at(ollie_token_array_t* array, int32_t index);
 
 /**
  * Get a pointer to an element at a given index. Do not remove the element
  */
-lexitem_t* token_array_get_pointer_at(ollie_token_array_t* array, u_int32_t index);
+lexitem_t* token_array_get_pointer_at(ollie_token_array_t* array, int32_t index);
 
 /**
  * Set an element at a specified index. No check will be performed
  * to see if the element is already there. Dynamic resize
  * will be in effect here
  */
-void token_array_set_at(ollie_token_array_t* array, lexitem_t* lexitem, u_int32_t index);
+void token_array_set_at(ollie_token_array_t* array, lexitem_t* lexitem, int32_t index);
 
 /**
  * Delete an element from the token array at a given index. Returns
  * the element at said index
  */
-lexitem_t token_array_delete_at(ollie_token_array_t* array, u_int32_t index);
+lexitem_t token_array_delete_at(ollie_token_array_t* array, int32_t index);
 
 /**
  * Delete the pointer itself from the dynamic array

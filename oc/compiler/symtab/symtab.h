@@ -16,6 +16,7 @@
 #include "../utils/dynamic_array/dynamic_array.h"
 #include "../utils/constants.h"
 #include "../utils/visibility.h"
+#include "../dependency_graph/dependency_graph.h"
 //Every function record has one of these
 #include "../stack_data_area/stack_data_area.h"
 
@@ -27,7 +28,10 @@
 #define TYPE_KEYSPACE 256
 
 //The macro keyspace is also one per program
-#define MACRO_KEYSPACE 256 
+#define MACRO_KEYSPACE 1024
+
+//Keyspace for all of our modules
+#define MODULE_KEYSPACE 1024
 
 //There's only one function keyspace per program, so it can be a bit larger
 #define FUNCTION_KEYSPACE 1024 
@@ -43,6 +47,8 @@ typedef struct function_symtab_t function_symtab_t;
 typedef struct type_symtab_t type_symtab_t;
 //A symtab for #macro directives
 typedef struct macro_symtab_t macro_symtab_t;
+//A symtab for all of our modules
+typedef struct module_symtab_t module_symtab_t;
 
 //The sheafs in the variable symtab
 typedef struct symtab_variable_sheaf_t symtab_variable_sheaf_t;
@@ -59,6 +65,8 @@ typedef struct symtab_variable_record_t symtab_variable_record_t;
 typedef struct symtab_type_record_t symtab_type_record_t;
 //The records in a macro symtab
 typedef struct symtab_macro_record_t symtab_macro_record_t;
+//The records inside of our module symtab
+typedef struct symtab_module_record_t symtab_module_record_t;
 
 /**
  * Label tables and label table nodes for GOTO statements
@@ -266,6 +274,20 @@ struct symtab_macro_record_t{
 
 
 /**
+ * This struct represents a specific module record in the build system. This
+ * allows us to avoid duplicate searching of shared modules
+ */
+struct symtab_module_record_t{
+	//And the hash of the file name
+	u_int64_t hash;
+	//The next pointer
+	symtab_module_record_t* next;
+	//Store the dependency graph node that's associated here
+	dependency_graph_node_t* dependency_graph_node;
+};
+
+
+/**
  * This struct represents a specific lexical level of a symtab
  */
 struct symtab_variable_sheaf_t{
@@ -343,6 +365,15 @@ struct macro_symtab_t{
 
 
 /**
+ * This struct represents the module symtab. There is only
+ * one level with a fixed keyspace
+ */
+struct module_symtab_t {
+	symtab_module_record_t* records[MODULE_KEYSPACE];
+};
+
+
+/**
  * There is only one namespace for functions, that being the global namespace.
  * As such, there are no "sheafs" like we have for types or variables
  */
@@ -413,6 +444,11 @@ type_symtab_t* type_symtab_alloc();
  * Initialize a symbol table for compiler macros 
  */
 macro_symtab_t* macro_symtab_alloc();
+
+/**
+ * Initialize a symbol table for build system modules
+ */
+module_symtab_t* module_symtab_alloc();
 
 /**
  * Initialize the variable symbol table scope
@@ -518,6 +554,11 @@ symtab_type_record_t* create_type_record(generic_type_t* type);
 symtab_macro_record_t* create_macro_record(dynamic_string_t name, u_int32_t line_number);
 
 /**
+ * Create a module record for the module table
+ */
+symtab_module_record_t* create_module_record(dependency_graph_node_t* dependency_graph_node);
+
+/**
  * Create a label record for the label symtab
  *
  * NOTE: The label symtab assumes ownership of the name dynamic string
@@ -543,6 +584,11 @@ u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record);
  * Insert a macro into the symtab
  */
 u_int8_t insert_macro(macro_symtab_t* symtab, symtab_macro_record_t* record);
+
+/**
+ * Insert a module into the symtab
+ */
+u_int8_t insert_module(module_symtab_t* symtab, symtab_module_record_t* record);
 
 /**
  * Insert a label into the symtab
@@ -622,6 +668,11 @@ symtab_label_record_t* lookup_label(label_symtab_t* label_symtab, char* name);
  * Lookup a macro in the symtab
  */
 symtab_macro_record_t* lookup_macro(macro_symtab_t* symtab, char* name);
+
+/**
+ * Lookup a module in the symtab
+ */
+symtab_module_record_t* lookup_module(module_symtab_t* symtab, dynamic_string_t* name);
 
 /**
  * Lookup a variable name in the symtab, only one scope
@@ -747,6 +798,11 @@ void type_symtab_dealloc(type_symtab_t* symtab);
  * Destroy a macro symtab
  */
 void macro_symtab_dealloc(macro_symtab_t* symtab);
+
+/**
+ * Destroy a module symtab
+ */
+void module_symtab_dealloc(module_symtab_t* symtab);
 
 /**
  * Destroy a label table

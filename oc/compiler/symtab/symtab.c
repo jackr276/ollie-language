@@ -190,6 +190,15 @@ macro_symtab_t* macro_symtab_alloc(){
 
 
 /**
+ * Initialize a symbol table for build system modules
+ */
+module_symtab_t* module_symtab_alloc(){
+	module_symtab_t* symtab = calloc(1, sizeof(module_symtab_t));
+	return symtab;
+}
+
+
+/**
  * Initialize a new lexical scope. This involves making a new sheaf and
  * adding it in
 */
@@ -307,6 +316,46 @@ static inline u_int64_t hash_variable(char* name){
  * 	return key
 */
 static inline u_int64_t hash_macro_name(char* name){
+	//Char pointer for the name
+	char* cursor = name;
+
+	//The hash we have
+	u_int64_t hash = OFFSET_BASIS;
+
+	//Iterate through the cursor here
+	for(; *cursor != '\0'; cursor++){
+		hash ^= *cursor;
+		hash *= FNV_PRIME;
+	}
+
+	//We will perform avalanching here by shifting, multiplying and shifting. The shifting
+	//itself ensures that the higher order bits effect all of the lower order ones
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_1;
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_2;
+	hash ^= hash >> 33;
+
+	//Cut it down to our keyspace
+	return hash & (MODULE_KEYSPACE - 1);
+}
+
+
+/**
+ * Hash a name before entry/search into the hash table
+ *
+ * FNV-1a 64 bit hash:
+ * 	hash <- FNV_prime
+ *
+ * 	for each hashable value:
+ * 		hash ^= value
+ * 		hash *= FNV_PRIME
+ * 		
+ * 	key % keyspace
+ *
+ * 	return key
+*/
+static inline u_int64_t hash_module_name(char* name){
 	//Char pointer for the name
 	char* cursor = name;
 
@@ -1148,6 +1197,29 @@ symtab_macro_record_t* create_macro_record(dynamic_string_t name, u_int32_t line
 
 
 /**
+ * Create a module record for the module table
+ *
+ * The module itself will contain a dependency graph node that corresponds
+ * to the file name. The file name itself is stored once inside of the
+ * dependency graph node already
+ *
+ * NOTE: this creation process will always create a clone of the given file name
+ */
+symtab_module_record_t* create_module_record(dependency_graph_node_t* dependency_graph_node){
+	symtab_module_record_t* record = calloc(1, sizeof(symtab_module_record_t));
+
+	//Get the hash from the module name in the dependency graph
+	record->hash = hash_module_name(dependency_graph_node->module_name.string);
+
+	//Store the dependency graph node
+	record->dependency_graph_node = dependency_graph_node;
+
+	record->next = NULL;
+	return record;
+}
+
+
+/**
  * Create a label record for the label symtab
  *
  * NOTE: The label symtab assumes ownership of the name dynamic string
@@ -1240,8 +1312,36 @@ u_int8_t insert_macro(macro_symtab_t* symtab, symtab_macro_record_t* record){
 
 	//Now that we're at the end, we will append our record to the cursor
 	cursor->next = record;
+	record->next = NULL;
 
-	//It should already be NULL, but this doesn't hurt
+	//We did indeed have a collision here
+	return 1;
+}
+
+
+/**
+ * Insert a module into the symtab
+ */
+u_int8_t insert_module(module_symtab_t* symtab, symtab_module_record_t* record){
+	//Grab a cursor to whatever is in the hash's spot
+	symtab_module_record_t* cursor = symtab->records[record->hash];
+
+	//No collision. Just insert and move on
+	if(cursor == NULL){
+		symtab->records[record->hash] = record;
+		//Return 0 - no collision
+		return 0;
+	}
+
+	//Otherwise we have a collision, so we need to drill down
+	//to the end
+	while(cursor != NULL){
+		//Keep advancing it up
+		cursor = cursor->next;
+	}
+
+	//Now that we're at the end, we will append our record to the cursor
+	cursor->next = record;
 	record->next = NULL;
 
 	//We did indeed have a collision here
@@ -1747,6 +1847,33 @@ symtab_macro_record_t* lookup_macro(macro_symtab_t* symtab, char* name){
 	//If we make it all of the way down here, then we have no match, so return NULL
 	return NULL;
 }
+
+
+/**
+ * Lookup a module in the symtab. There is only one lexical scope to lookup
+ * here
+ */
+symtab_module_record_t* lookup_module(module_symtab_t* symtab, dynamic_string_t* module_name){
+	//Obtain the hash
+	u_int64_t hash = hash_module_name(module_name->string);
+
+	//Get the starting record - remember this may not be the actual match
+	symtab_module_record_t* cursor = symtab->records[hash];
+
+	//Crawl through the records that are conjoined
+	while(cursor != NULL){
+		//Only an exact match is accepted
+		if(dynamic_strings_equal(&(cursor->dependency_graph_node->module_name), module_name) == TRUE){
+			return cursor;
+		}
+
+		cursor = cursor->next;
+	}
+
+	//If we made it to here then we found nothing
+	return NULL;
+}
+
 
 
 /**
@@ -3052,6 +3179,40 @@ void macro_symtab_dealloc(macro_symtab_t* symtab){
 			if(temp->parameters.internal_array != NULL){
 				token_array_dealloc(&(temp->parameters));
 			}
+
+			//Dealloc
+			free(temp);
+		}
+	}
+
+	//At the very end free the overall control structure
+	free(symtab);
+}
+
+
+/**
+ * Destroy a module symtab
+ */
+void module_symtab_dealloc(module_symtab_t* symtab){
+	//Create temp/cursor for traversal
+	symtab_module_record_t* cursor = NULL;
+	symtab_module_record_t* temp;
+
+	//Run through every single macro record
+	for(int32_t i = 0; i < MODULE_KEYSPACE; i++){
+		//Extract it
+		cursor = symtab->records[i];
+
+		//Run through any collision records
+		while(cursor != NULL){
+			//Reassign
+			temp = cursor;
+
+			//Let the helper deallocate the dependency graph node
+			dependency_graph_node_dealloc(temp->dependency_graph_node);
+
+			//Advance it up
+			cursor = cursor->next;
 
 			//Dealloc
 			free(temp);

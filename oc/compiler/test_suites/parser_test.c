@@ -6,10 +6,21 @@
 #include "../parser/parser.h"
 #include "../utils/constants.h"
 #include "../preprocessor/preprocessor.h"
+#include "../build_system/build_system.h"
 #include <unistd.h>
 #include <stdio.h>
 #include <sys/types.h>
 
+/**
+ * Simply prints a parse message in a nice formatted way
+*/
+static inline void print_console_message(error_message_type_t message_type, char* info, u_int32_t line_num){
+	//Now print it
+	const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
+
+	//Print this out on a single line
+	fprintf(stdout, "\n[LINE %d | COMPILER %s]: %s\n", line_num, type[message_type], info);
+}
 
 /**
  * We'll use this helper function to process the compiler flags and return a structure that
@@ -73,30 +84,30 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 
 /**
  * Very simple test runner program
-*/
+ */
 int main(int argc, char** argv){
 	//Grab the options
 	compiler_options_t* options = parse_and_store_options(argc, argv);
 
-	//First things first - run the lexer
-	ollie_token_stream_t token_stream = tokenize(options->file_name, FALSE);
+	//Run the build system to generate one big token stream with all dependencies
+	build_system_results_t build_results = construct_build_order(options, FALSE);
 
 	//If this fails, we need to leave
-	if(token_stream.status == STREAM_STATUS_FAILURE){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Tokenizing Failed", 0);
+	if(build_results.status == BUILD_SYSTEM_STATUS_FAILURE){
+		print_console_message(MESSAGE_TYPE_ERROR, "BUILD SYSTEM FAILED", 0);
 		//0 for test runs
 		exit(0);
 	}
 
 	//Store it and invoke the parser
-	options->token_stream = &token_stream;
+	options->build_order = build_results.compilation_order;
 
 	//We now need to preprocess
-	preprocessor_results_t results = preprocess(options, options->token_stream);
+	preprocessor_results_t results = preprocess(options);
 
 	//If we failed then bail out
 	if(results.status == PREPROCESSOR_FAILURE){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Preprocessing Failed", 0);
+		print_console_message(MESSAGE_TYPE_ERROR, "PREPROCESSING FAILED", 0);
 		//0 for test runs
 		exit(0);
 	}

@@ -42,7 +42,7 @@ static char info[2000];
 
 //Token array, we will index using their enum values
 static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, LOOP, IN, FN, ERROR, RAISE, RAISES, RETURN, JUMP, 
-					U8, I8, U16, I16, U32, I32, U64, I64, F32, F64, CHAR, DEFINE, ENUM, STATIC,
+					U8, I8, U16, I16, U32, I32, U64, I64, F32, F64, CHAR, DEFINE, ENUM, STATIC, IMPORT, MODULE,
 					REGISTER, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
 					STRUCT, HANDLE, IGNORE, AS, ALIAS, SIZEOF, DEFER, MUT, ASM, IDLE, PUB, UNION, BOOL,
 				    PARAMS, PARAMCOUNT, TRUE_CONST, FALSE_CONST, INLINE, MACRO, ENDMACRO, NAMESPACE, OUNIT, FAIL_TO_COMPILE,
@@ -50,8 +50,8 @@ static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, LOOP, IN, FN
 
 //Direct one to one mapping
 static const char* keyword_array[] = {"if", "else", "do", "while", "for", "loop", "in", "fn", "error", "raise", "raises", "ret", "jump",
-						  "u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "f32", "f64", "char", "define", "enum",
-						  "static", "register", "void", "typesize", "let", "declare", "when", "case", "default", "switch",
+						  "u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "f32", "f64", "char", "define", "enum", "static", "$import",
+						  "$module", "register", "void", "typesize", "let", "declare", "when", "case", "default", "switch",
 						  "break", "continue", "struct", "handle", "ignore", "as", "alias", "sizeof", "defer", "mut", "asm",
 						  "idle", "pub", "union", "bool", "params", "paramcount", "true", "false", "inline", "$macro", "$endmacro",
 						  "namespace", "OUNIT", "fail_to_compile", "exit_status"};
@@ -111,6 +111,10 @@ char* lexitem_to_string(lexitem_t* lexitem){
 			return ".";
 		case POUND:
 			return "#";
+		case MODULE:
+			return "$module";
+		case IMPORT:
+			return "$import";
 		case L_PAREN:
 			return "(";
 		case R_PAREN:
@@ -530,7 +534,7 @@ static inline void add_lexitem_to_stream(ollie_token_stream_t* stream, lexitem_t
  *
  * This function will also add said value into the stream itself
  */
-static inline void add_identifier_or_keyword_to_stream(ollie_token_stream_t* stream, dynamic_string_t lexeme, u_int32_t line_number){
+static inline void add_identifier_or_keyword_to_stream(ollie_token_stream_t* stream, dynamic_string_t* lexeme, u_int32_t line_number){
 	//Stack allocate
 	lexitem_t lex_item;
 
@@ -544,7 +548,7 @@ static inline void add_identifier_or_keyword_to_stream(ollie_token_stream_t* str
 
 	//Let's see if we have a keyword here
 	for(u_int32_t i = 0; i < KEYWORD_COUNT; i++){
-		if(strcmp(keyword_array[i], lexeme.string) == 0){
+		if(strcmp(keyword_array[i], lexeme->string) == 0){
 			//For true/false, we can convert them into the kind of constant we want off the bat
 			switch(tok_array[i]){
 				case TRUE_CONST:
@@ -573,7 +577,7 @@ static inline void add_identifier_or_keyword_to_stream(ollie_token_stream_t* str
 					//We can get out of here
 					lex_item.tok = tok_array[i];
 					//Store the lexeme in here
-					lex_item.lexeme = lexeme;
+					lex_item.lexeme = *lexeme;
 
 					//Add it into the stream
 					add_lexitem_to_stream(stream, lex_item);
@@ -587,7 +591,7 @@ static inline void add_identifier_or_keyword_to_stream(ollie_token_stream_t* str
 	//Set the type here
 	lex_item.tok = IDENT;
 	//Store the lexeme in here
-	lex_item.lexeme = lexeme;
+	lex_item.lexeme = *lexeme;
 
 	//Add it into the stream
 	add_lexitem_to_stream(stream, lex_item);
@@ -610,7 +614,7 @@ void reset_stream_to_given_index(ollie_token_stream_t* stream, u_int32_t reconsu
  */
 lexitem_t get_next_token(ollie_token_stream_t* stream, u_int32_t* parser_line_number){
 	//Grab the current token index
-	u_int32_t token_index = stream->token_pointer;
+	int32_t token_index = stream->token_pointer;
 
 	//Safe to read here
 	if(token_index < stream->token_stream.current_index){
@@ -650,8 +654,11 @@ void push_back_token(ollie_token_stream_t* stream, u_int32_t* parser_line_number
  * Generate all of the ollie tokens and store them in the stream. When
  * this function returns, we will either have a good stream with everything
  * needed in it or a stream in an error state
+ *
+ * The stop_after parameter will allow us to stop searcing after we've seen a certain number
+ * of tokens. The caller may pass in -1 in order to say that we want to go all the way
  */
-static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream, u_int8_t silent_mode){
+static u_int8_t generate_tokens(FILE* fl, ollie_token_stream_t* stream, int32_t stop_after, u_int8_t silent_mode){
 	//Start the line number off at 1
 	u_int32_t line_number = 1;
 
@@ -672,14 +679,15 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream, u_in
 	lex_item.line_num = 0;
 	INITIALIZE_NULL_DYNAMIC_STRING(lex_item.lexeme);
 
-	//We will need this numeric lexeme for any number we encounter.
-	//We will be reusing it, so it's declared up here. It is important
-	//to note that this dynamic string *will never* leave this function. It
-	//will never be passed along as a pointer to anything else
+	/**
+	 * We will need this numeric lexeme for any number we encounter.
+	 * We will be reusing it, so it's declared up here. It is important
+	 * to note that this dynamic string *will never* leave this function. It
+	 * will never be passed along as a pointer to anything else
+	 */
 	dynamic_string_t numeric_lexeme = dynamic_string_alloc();
 
-	//For eventual use down the road. We will not allocate here because this
-	//is not always needed
+	//For eventual use down the road. We will not allocate here because this is not always needed
 	dynamic_string_t lexeme;
 
 	//Have we seen a hex? Assume no by default
@@ -687,6 +695,16 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream, u_in
 
 	//We'll run through character by character until we hit EOF
 	while((ch = GET_NEXT_CHAR(fl)) != EOF){
+		/**
+		 * If we have a request to stop after a certain number of tokens
+		 * and our current index now equals that stop after amount(remember
+		 * 0 based for the index vs. 1 based) - we can break out
+		 * and leave the loop
+		 */
+		if(stop_after > 0 && stream->token_stream.current_index == stop_after){
+			break;
+		}
+
 		switch(current_state){
 			case IN_START:
 				//Reset the seen_hex flag since we're now in the start state
@@ -1331,7 +1349,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream, u_in
 				} else {
 					PUT_BACK_CHAR(fl);
 					//Let the helper do the work and add to the stream
-					add_identifier_or_keyword_to_stream(stream, lexeme, line_number);
+					add_identifier_or_keyword_to_stream(stream, &lexeme, line_number);
 
 					//IMPORTANT - reset the state here
 					current_state = IN_START;
@@ -1681,8 +1699,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream, u_in
 		}
 	}
 
-	//Once we get down here, it is safe for us to free the numeric lexeme because we do not
-	//need it anymore
+	//Once we get down here, it is safe for us to free the numeric lexeme because we do not need it anymore
 	dynamic_string_dealloc(&numeric_lexeme);
 
 	//Return this token
@@ -1694,6 +1711,49 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream, u_in
 	}
 
 	return SUCCESS;
+}
+
+
+/**
+ * For efficient searching in our build system, we provide a utility that will only grab
+ * the first 2 tokens. This is because all module declarations are required to be at the
+ * very top of the file, and we know that each module declaration itself is:
+ *
+ * $module module_name;
+ *
+ * So if we're only looking for module names, we only really need to look at the first 2 if we're
+ * doing a quick search
+ */
+u_int8_t get_first_2_tokens(ollie_token_stream_t* stream, char* current_file_name, u_int8_t silent_mode){
+	//Store the file name for any error printing
+	file_name = current_file_name;
+
+	//Attempt to open the file
+	FILE* fl = fopen(current_file_name, "r");
+
+	//If we can't open, it's an autofailure
+	if(fl == NULL){
+		sprintf(info, "Failed to open file %s", file_name);
+		//Silent mode always false here
+		print_lexer_error(info, 0, FALSE);
+		return FAILURE;
+	}
+
+	//Let the helper go in and tokenize the first 2 tokens
+	u_int8_t result = generate_tokens(fl, stream, 2, silent_mode);
+
+	//Once we're done, we close the file
+	fclose(fl);
+
+	//Set the stream status here
+	if(result == SUCCESS){
+		stream->status = STREAM_STATUS_SUCCESS;
+	} else {
+		stream->status = STREAM_STATUS_FAILURE;
+	}
+
+	//Return whatever result we got
+	return result;
 }
 
 
@@ -1728,8 +1788,8 @@ ollie_token_stream_t tokenize(char* current_file_name, u_int8_t silent_mode){
 		return token_stream;
 	}
 
-	//Consume all of the tokens here using the helper
-	u_int8_t result = generate_all_tokens(fl, &token_stream, silent_mode);
+	//Consume all of the tokens here using the helper - pass in -1 to do everything
+	u_int8_t result = generate_tokens(fl, &token_stream, -1, silent_mode);
 
 	//Once we're done, we close the file
 	fclose(fl);
@@ -1747,12 +1807,40 @@ ollie_token_stream_t tokenize(char* current_file_name, u_int8_t silent_mode){
 void print_token_array(ollie_token_array_t* array){
 	printf("========== Token Array =============\n");
 
-	for(u_int32_t i = 0; i < array->current_index; i++){
+	for(int32_t i = 0; i < array->current_index; i++){
 		lexitem_t* item = token_array_get_pointer_at(array, i);
 		printf("%d.] %s\n", i, lexitem_to_string(item));
 	}
 
 	printf("========== Token Array =============\n");
+}
+
+
+/**
+ * Allocate a token stream struct on the stack and return by copy
+ */
+ollie_token_stream_t token_stream_alloc(){
+	ollie_token_stream_t stream;
+
+	//The underlying token array itself also needs allocation
+	stream.token_stream = token_array_alloc();
+	stream.token_pointer = 0;
+	stream.status = STREAM_STATUS_FAILURE;
+
+	return stream;
+}
+
+
+/**
+ * Reset the token stream back to its defaults
+ */
+void reset_token_stream(ollie_token_stream_t* stream){
+	//Clear the array out first
+	clear_token_array(&(stream->token_stream));
+
+	//Now wipe out the token pointer and status
+	stream->token_pointer = 0;
+	stream->status = STREAM_STATUS_FAILURE;
 }
 
 

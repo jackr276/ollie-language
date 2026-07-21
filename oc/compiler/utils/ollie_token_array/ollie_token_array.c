@@ -197,7 +197,7 @@ int32_t token_array_contains(ollie_token_array_t* array, lexitem_t* lexitem){
 	}
 
 	//Run through the entire array
-	for(u_int32_t i = 0; i < array->current_index; i++){
+	for(int32_t i = 0; i < array->current_index; i++){
 		//Get a pointer to the current item
 		lexitem_t* lexitem_ptr = &(array->internal_array[i]);
 
@@ -279,7 +279,7 @@ void clear_token_array(ollie_token_array_t* array){
  *
  * Returns a copy of the specified element
  */
-lexitem_t token_array_get_at(ollie_token_array_t* array, u_int32_t index){
+lexitem_t token_array_get_at(ollie_token_array_t* array, int32_t index){
 	if(array->current_max_size <= index){
 		printf("Fatal internal compiler error: Attempt to get index %d in an array of size %d\n", index, array->current_max_size);
 		exit(1);
@@ -293,7 +293,7 @@ lexitem_t token_array_get_at(ollie_token_array_t* array, u_int32_t index){
 /**
  * Get a pointer to an element at a given index. Do not remove the element
  */
-lexitem_t* token_array_get_pointer_at(ollie_token_array_t* array, u_int32_t index){
+lexitem_t* token_array_get_pointer_at(ollie_token_array_t* array, int32_t index){
 	if(array->current_max_size <= index){
 		printf("Fatal internal compiler error: Attempt to get index %d in an array of size %d\n", index, array->current_max_size);
 		exit(1);
@@ -309,7 +309,7 @@ lexitem_t* token_array_get_pointer_at(ollie_token_array_t* array, u_int32_t inde
  * to see if the element is already there. Dynamic resize
  * will be in effect here
  */
-void token_array_set_at(ollie_token_array_t* array, lexitem_t* lexitem, u_int32_t index){
+void token_array_set_at(ollie_token_array_t* array, lexitem_t* lexitem, int32_t index){
 	//Just for safety's sake
 	if(lexitem == NULL){
 		printf("ERROR: Attempting to insert a NULL pointer into a token array\n");
@@ -331,7 +331,7 @@ void token_array_set_at(ollie_token_array_t* array, lexitem_t* lexitem, u_int32_
  * Delete an element from the token array at a given index. Returns a copy
  * the element at said index
  */
-lexitem_t token_array_delete_at(ollie_token_array_t* array, u_int32_t index){
+lexitem_t token_array_delete_at(ollie_token_array_t* array, int32_t index){
 	//Validations here
 	if(array->current_max_size <= index){
 		printf("ERROR: attempting to delete an element at index %d in an array of size %d\n", index, array->current_max_size);
@@ -342,7 +342,7 @@ lexitem_t token_array_delete_at(ollie_token_array_t* array, u_int32_t index){
 	lexitem_t deleted = array->internal_array[index];
 	
 	//Shift everything over by the list to backfill
-	for(u_int32_t i = index; i < array->current_index - 1; i++){
+	for(int32_t i = index; i < array->current_index - 1; i++){
 		array->internal_array[i] = array->internal_array[i + 1];
 	}
 

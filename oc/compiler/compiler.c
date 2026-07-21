@@ -10,7 +10,7 @@
 #include <stdio.h>
 #include <time.h>
 #include "ast/ast.h"
-#include "lexer/lexer.h"
+#include "build_system/build_system.h"
 #include "parser/parser.h"
 #include "preprocessor/preprocessor.h"
 #include "symtab/symtab.h"
@@ -242,7 +242,7 @@ static void print_summary(compiler_options_t* options, module_times_t* times, u_
 
 	//If we want module specific timing, we'll print out here
 	if(options->module_specific_timing == TRUE){
-		printf("Lexer took: %.8f seconds\n", times->lexer_time);
+		printf("Lexer & Build System took: %.8f seconds\n", times->lexer_time);
 		printf("Preprocessor took: %.8f seconds\n", times->preprocessor_time);
 		printf("Parser took: %.8f seconds\n", times->parser_time);
 		printf("CFG constuctor took: %.8f seconds\n", times->cfg_time);
@@ -293,12 +293,19 @@ static u_int8_t compile(compiler_options_t* options){
 		begin = clock();
 	}
 
-	//Invoke the lexer. This handles all file IO
-	ollie_token_stream_t token_stream = tokenize(options->file_name, FALSE);
+	/**
+	 * Step 1: run the build system first. The build system will give back a dynamic array
+	 * of build system nodes that each have their own independent token streams which we will
+	 * need to string together in the later nodes
+	 */
+	build_system_results_t build_system_results = construct_build_order(options, FALSE);
+
+	//Save the compilation order here
+	options->build_order = build_system_results.compilation_order;
 
 	//If it failed, we need to leave immediately
-	if(token_stream.status == STREAM_STATUS_FAILURE){
-		fprintf(stdout, "\n\n[FILE: %s]: Tokenizing failed. Please remedy the tokenizer error and recompile\n\n", options->file_name);
+	if(build_system_results.status == BUILD_SYSTEM_STATUS_FAILURE){
+		fprintf(stdout, "\n[FILE: %s]: Tokenizing/build system failed. Please remedy the errors and recompile\n\n", options->file_name);
 		num_errors++;
 
 		//Timer end
@@ -333,16 +340,10 @@ static u_int8_t compile(compiler_options_t* options){
 	}
 
 	/**
-	 * Now we cache the token stream reference inside of the options. The parser will reference this for
-	 * all of its operations
-	 */
-	options->token_stream = &token_stream;
-
-	/**
 	 * Let the preprocessor handle everything to do with macros. Note that this does have the potential
 	 * to fail
 	 */
-	preprocessor_results_t preprocessor_results = preprocess(options, options->token_stream);
+	preprocessor_results_t preprocessor_results = preprocess(options);
 
 	//Update the warnings/errors if there are any
 	num_errors += preprocessor_results.error_count;
@@ -382,7 +383,6 @@ static u_int8_t compile(compiler_options_t* options){
 	}
 
 	//Now we'll parse the whole thing
-	//results = parse(fl, dependencies.file_name);
 	front_end_results_package_t* results = parse(options);
 
 	//Increment these while we're here

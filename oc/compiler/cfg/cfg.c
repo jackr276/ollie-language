@@ -170,6 +170,19 @@ static inline void visit_static_declare_statement(generic_ast_node_t* node);
 static inline void handle_raise_statement(basic_block_t* basic_block, generic_ast_node_t* node);
 static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, branch_type_t branch_type, three_addr_var_t* conditional_result);
 
+/**
+ * Simply prints a parse message in a nice formatted way. For the CFG, there
+ * are no parser line numbers
+*/
+static void print_cfg_message(error_message_type_t message_type, char* info, u_int32_t line_number){
+	//Now print it
+	//Mapped by index to the enum values
+	const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
+
+	//Print this out on a single line
+	fprintf(stdout, "\n[LINE %d: COMPILER %s]: %s\n", line_number, type[message_type], info);
+}
+
 
 /**
  * Unpack a result package. We assume that if this function is being called that the caller
@@ -1015,20 +1028,6 @@ static basic_block_t* labeled_block_alloc(symtab_label_record_t* label){
 
 
 /**
- * Simply prints a parse message in a nice formatted way. For the CFG, there
- * are no parser line numbers
-*/
-static inline void print_cfg_message(error_message_type_t message_type, char* info, u_int32_t line_number){
-	//Now print it
-	//Mapped by index to the enum values
-	const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
-
-	//Print this out on a single line
-	fprintf(stdout, "\n[LINE %d: COMPILER %s]: %s\n", line_number, type[message_type], info);
-}
-
-
-/**
  * Print a block our for reading
 */
 void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_selection_t print_df){
@@ -1277,7 +1276,7 @@ static inline void add_phi_statement(basic_block_t* target, instruction_t* phi_s
 void add_statement(basic_block_t* target, instruction_t* statement_node){
 	//Generic fail case
 	if(target == NULL){
-		print_parse_message(MESSAGE_TYPE_ERROR, "NULL BASIC BLOCK FOUND", 0);
+		fprintf(stderr, "Fatal internal compiler error: NULL basic block found");
 		exit(1);
 	}
 
@@ -5458,7 +5457,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 				//This should never occur
 				default:
-					print_parse_message(MESSAGE_TYPE_ERROR, "Fatal internal compiler error. Unrecognized node type for address operation", unary_expression_child->line_number);
+					fprintf(stderr, "Fatal internal compiler error. Unrecognized node type for address operation");
 					exit(0);
 			}
 
@@ -11914,7 +11913,7 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 				|| defined_in_signature->return_type->basic_type_token != VOID)
 				//It's a technically supported use-case to not put a return on main
 				&& is_main_function == FALSE){
-				print_parse_message(MESSAGE_TYPE_WARNING, "Non-void function does not return in all control paths", 0);
+				print_cfg_message(MESSAGE_TYPE_WARNING, "Non-void function does not return in all control paths", 0);
 			}
 
 			//If it's not a void type, we do one thing
@@ -13567,7 +13566,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 
 	// -1 block ID, this means that the whole thing failed
 	if(visit_prog_node(cfg, results->root) == FALSE){
-		print_parse_message(MESSAGE_TYPE_ERROR, "CFG was unable to be constructed", 0);
+		print_cfg_message(MESSAGE_TYPE_ERROR, "CFG was unable to be constructed", 0);
 		(*num_errors_ref)++;
 	}
 
