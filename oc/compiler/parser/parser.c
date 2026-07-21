@@ -4194,8 +4194,50 @@ static inline u_int8_t are_types_castable(generic_type_t* casting_to_type, gener
 				return print_and_return_failure(info, parser_line_num);
 			}
 
-		//TODO
+			/**
+			 * Now that we know we're casting
+			 */
+			switch(being_casted_type->basic_type_token){
+				/**
+				 * We cannot use floating point values to cast this - only integer values
+				 * are allowed
+				 */
+				case F32:
+				case F64:
+				case VOID:
+					sprintf(info, "Type %s may not be cast to enumerated type %s. Only integers may be cast to enum types\n",
+									being_casted_type->type_name.string,
+									casting_to_type->type_name.string);
+					return print_and_return_failure(info, parser_line_num);
 
+				/**
+				 * Integers are valid with an asterisk. There is no guarantee that
+				 * all values possible from an integer type are represented by the enum
+				 * type itself
+				 */
+				case BOOL:
+				case I8:
+				case U8:
+				case I16:
+				case U16:
+				case I32:
+				case U32:
+				case I64:
+				case U64:
+					sprintf(info, "There is no guarantee that all possible values from type %s are expressed in enum %s",
+			 						being_casted_type->type_name.string,
+			 						casting_to_type->type_name.string);
+					print_parse_message(MESSAGE_TYPE_INFO, info, parser_line_num);
+					return TRUE;
+
+				//Some weird error that makes us bomb out
+				default:
+					fprintf(stderr, "Fatal internal compiler error: unrecognized basic type detected in cast expression\n");
+					exit(1);
+			}
+
+			//Should be unreachable - keep the C compiler happy
+			return FALSE;
 
 		case TYPE_CLASS_BASIC:
 
