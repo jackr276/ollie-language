@@ -4126,19 +4126,18 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 
 
 /**
- * A cast expression decays into a unary expression
- *
+ * A cast expression decays into a unary expression. 
+ * 
  * BNF Rule: <cast-expression> ::= <unary-expression> 
  * 						    	| < <type-specifier> > <unary-expression>
  */
 static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, side_type_t side){
-	//The lookahead token
-	lexitem_t lookahead;
-
-	//If we first see an angle bracket, we know that we are truly doing
-	//a cast. If we do not, then this expression is just a pass through for
-	//a unary expression
-	lookahead = get_next_token(token_stream, &parser_line_num);
+	/**
+	 * If we first see an angle bracket, we know that we are truly doing
+	 * a cast. If we do not, then this expression is just a pass through for
+	 * a unary expression
+	 */
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 	
 	//If it's not the <, put the token back and just return the unary expression
 	if(lookahead.tok != L_THAN){
