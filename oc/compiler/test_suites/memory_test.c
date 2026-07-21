@@ -361,6 +361,9 @@ int main(int argc, char** argv){
 	get_all_single_file_tests(single_file_tests_dir);
 	get_all_multi_file_tests(multi_file_tests_dir);
 
+	//Extract how many test files we have
+	total_test_files = test_files.current_index;
+
 	//Display for the user
 	fprintf(stdout, "\n===================================== SETUP ================================\n");
 	fprintf(stdout, "THREADS: %d\n", thread_count);
