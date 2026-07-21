@@ -865,7 +865,43 @@ static inline void get_all_multi_file_tests(char* directory_name){
 		exit(1);
 	}
 
+	//Directory entry
+	struct dirent* directory_entry;
 
+	/**
+	 * Run through all of the directories in the higher level parent 
+	 * directory for multi file tests
+	 */
+	while((directory_entry = readdir(multi_file_tests_directory)) != NULL){
+		/**
+		 * For the higher level, we are looking for
+		 * nested subdirectories
+		 */
+		if(directory_entry->d_type != DT_DIR){
+			continue;
+		}
+
+		//Save the name here
+		char* subdirectory = directory_entry->d_name;
+
+		//Open the subdirectory up for searching
+		DIR* subdir = opendir(subdirectory);
+
+		//Otherwise let's allocate the string for this
+		char* test_file = calloc(FILENAME_MAX, sizeof(char));
+
+		//Print the fully qualified name into here
+		snprintf(test_file, FILENAME_MAX, "%s%s", directory_name, directory_entry->d_name);
+
+		//And then close it out
+		closedir(subdir);
+
+		
+		//Add this to the array of all test files
+		//dynamic_array_add(&test_files, test_file);
+	}
+
+	//Once done close this out
 	closedir(multi_file_tests_directory);
 }
 
