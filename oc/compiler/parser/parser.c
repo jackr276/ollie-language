@@ -4321,6 +4321,9 @@ static inline u_int8_t are_types_castable(generic_type_t* casting_to_type, gener
 					return print_and_return_failure(info, parser_line_num);
 			}
 
+			//Keep the compiler happy - should be unreachable
+			return FALSE;
+
 		/**
 		 * We are able to cast integers, pointers and array types
 		 * into pointers themselves.
@@ -4332,8 +4335,58 @@ static inline u_int8_t are_types_castable(generic_type_t* casting_to_type, gener
 		 * 	2.) You may not cast an immuatble object into a mutable pointer
 		 */
 		case TYPE_CLASS_POINTER:
-			//TODO
-			
+			switch(being_casted_type->type_class){
+				/**
+				 * Any non-float basic type may be turned into a pointer
+				 */
+				case TYPE_CLASS_BASIC:
+					switch(being_casted_type->basic_type_token){
+						case F32:
+						case F64:
+							return print_and_return_failure("Floating point types may not be cast to pointers", parser_line_num);
+
+						default:
+							return TRUE;
+					}
+					
+				/**
+				 * For pointers to be castable to one another, there are a few rules
+				 * to follow:
+				 * 	1.) we may never cast an immutable memory address to a mutable pointer
+				 */
+				case TYPE_CLASS_POINTER:
+					/**
+					 * Illegal mutability violation - going from mutable to non-mutable
+					 * would allow access that should be illegal
+					 */
+					if(being_casted_type->mutability == NOT_MUTABLE && casting_to_type->mutability == MUTABLE){
+						sprintf(info, "Immutable type %s may not be cast to mutable type %s",
+			  							being_casted_type->type_name.string,
+			  							casting_to_type->type_name.string);
+						return print_and_return_failure(info, parser_line_num);
+					}
+
+				case TYPE_CLASS_ARRAY:
+					/**
+					 * Illegal mutability violation - going from mutable to non-mutable
+					 * would allow access that should be illegal
+					 */
+					if(being_casted_type->mutability == NOT_MUTABLE && casting_to_type->mutability == MUTABLE){
+						sprintf(info, "Immutable type %s may not be cast to mutable type %s",
+			  							being_casted_type->type_name.string,
+			  							casting_to_type->type_name.string);
+						return print_and_return_failure(info, parser_line_num);
+					}
+
+				default:
+					sprintf(info, "Type %s may not be cast to type %s",
+									being_casted_type->type_name.string,
+									casting_to_type->type_name.string);
+					return print_and_return_failure(info, parser_line_num);
+			}
+
+			//Keep the compiler happy - should be unreachable
+			return FALSE;
 
 		//We should never get here - just to be safe
 		default:
