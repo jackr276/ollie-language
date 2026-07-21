@@ -4164,26 +4164,52 @@ static inline u_int8_t are_types_castable(generic_type_t* casting_to_type, gener
 	}
 
 	/**
-	 * You can never cast anything to be a struct 
+	 * Based on what we're casting to we will do validations
 	 */
-	if(casting_to_type->type_class == TYPE_CLASS_STRUCT){
-		return print_and_return_failure("No type can be casted to a struct type", parser_line_num);
-	}
+	switch(casting_to_type->type_class){
+		/**
+		 * Basic validations here - we can never cast to these types
+		 */
+		case TYPE_CLASS_UNION:
+			return print_and_return_failure("No type can be casted to a union type", parser_line_num);
+		case TYPE_CLASS_STRUCT:
+			return print_and_return_failure("No type can be casted to a struct type", parser_line_num);
+		case TYPE_CLASS_ARRAY:
+			return print_and_return_failure("No type can be casted to an array type", parser_line_num);
+		case TYPE_CLASS_FUNCTION_SIGNATURE:
+			return print_and_return_failure("No type can be casted to a function type", parser_line_num);
+		case TYPE_CLASS_ERROR:
+			return print_and_return_failure("No type can be casted to an error type", parser_line_num);
 
-	/**
-	 * You can never cast anything to be a union
-	 */
-	if(casting_to_type->type_class == TYPE_CLASS_UNION){
-		return print_and_return_failure("No type can be casted to a union type", parser_line_num);
-	}
+		/**
+		 * We are able to cast from integer types to enumeration values - even if they are truncating. We
+		 * are not able to cast anything else into an enum type
+		 */
+		case TYPE_CLASS_ENUMERATED:
+			//If it's not basic we cannot go further
+			if(being_casted_type->type_class != TYPE_CLASS_BASIC){
+				sprintf(info, "Type %s may not be cast to enumerated type %s. Only integers may be cast to enum types\n",
+								being_casted_type->type_name.string,
+								casting_to_type->type_name.string);
+				return print_and_return_failure(info, parser_line_num);
+			}
 
-	/**
-	 * You can never cast anything to an array
-	 */
-	if(casting_to_type->type_class == TYPE_CLASS_ARRAY){
-		return print_and_return_failure("No type can be casted to an array type", parser_line_num);
-	}
+		//TODO
 
+
+		case TYPE_CLASS_BASIC:
+
+
+
+
+
+
+
+		//We should never get here - just to be safe
+		default:
+			fprintf(stderr, "Fatal internal compiler error: unrecognized type detected in cast expression\n");
+			exit(1);
+	}
 
 	return FALSE;
 }
@@ -4243,11 +4269,20 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 		return being_casted_expression;
 	}
 
-	//No we'll need to determine if we can actually cast here
-	//What we're trying to cast to
+	/**
+	 * Let the helper determine if we are able to cast
+	 * from the source type to the destination type or
+	 * not. If we are not we fail out, but the helper has
+	 * already handled all error printing
+	 */
 	generic_type_t* casting_to_type = dealias_type(type_spec);
-	//What is being casted
-	generic_type_t* being_casted_type = dealias_type(right_hand_unary->inferred_type);
+	generic_type_t* being_casted_type = dealias_type(being_casted_expression->inferred_type);
+	u_int8_t is_castable = are_types_castable(casting_to_type, being_casted_type);
+
+	//Fail out if this is not
+	if(is_castable == FALSE){
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
 
 
 	/**
@@ -4279,11 +4314,11 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 		return print_and_return_error(info, parser_line_num);
 	}
 
-	//These types are now inferenced
-	right_hand_unary->inferred_type = type_spec;
+	//We now overrule the type of what is being casted to the new type
+	being_casted_expression->inferred_type = type_spec;
 
-	//Finally, we're all set to go here, so we can return the root reference
-	return right_hand_unary;
+	//And give back the underlying expression that was cast
+	return being_casted_expression;
 }
 
 
