@@ -891,6 +891,14 @@ static inline void get_all_multi_file_tests(char* directory_name){
 			continue;
 		}
 
+		/**
+		 * We don't want to look at the .. or . directories
+		 * so we'll skip past those
+		 */
+		if(directory_entry->d_name[0] == '.'){
+			continue;
+		}
+
 		//Generate the fully qualified name and use that to open the directory
 		snprintf(fully_qualified_name, FILENAME_MAX, "%s%s", directory_name, directory_entry->d_name);
 		DIR* subdir = opendir(fully_qualified_name);
