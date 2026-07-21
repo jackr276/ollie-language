@@ -111,9 +111,8 @@ void* worker(void* thread_parameters){
 		 * Otherwise, we have a file that we need to validate so we will go ahead and do that now
 		 * First generate our command. We use 2>&1 to write all errors to stdout so that we can grep it
 		 */
-		sprintf(command, "exit $(valgrind %s/ocd -ditsa@ -f %s%s 2>&1 | grep \"SUMMARY\" | sed -n 's/.*ERROR SUMMARY: \\([0-9]\\+\\).*/\\1/p')",
-		  				is_ci_run == 0 ? local_output_path : ci_output_path,
-		  				test_directory_path,
+		sprintf(command, "exit $(valgrind %s/ocd -ditsa@ -f %s 2>&1 | grep \"SUMMARY\" | sed -n 's/.*ERROR SUMMARY: \\([0-9]\\+\\).*/\\1/p')",
+		  				output_directory,
 		  				file_name);
 
 		//Run the command in the system
