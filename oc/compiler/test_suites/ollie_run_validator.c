@@ -864,6 +864,9 @@ static inline void get_all_single_file_tests(char* directory_name){
  * NOTE: this helper will close the directory when done
  */
 static inline void get_all_multi_file_tests(char* directory_name){
+	//The fully qualified name buffer for subdirectories
+	char fully_qualified_name[FILENAME_MAX];
+
 	//Next try to open this and verify that it does open
 	DIR* multi_file_tests_directory = opendir(directory_name);
 	if(multi_file_tests_directory == NULL){
@@ -888,11 +891,15 @@ static inline void get_all_multi_file_tests(char* directory_name){
 			continue;
 		}
 
-		//Save the name here
-		char* subdirectory = directory_entry->d_name;
+		//Generate the fully qualified name and use that to open the directory
+		snprintf(fully_qualified_name, FILENAME_MAX, "%s%s", directory_name, directory_entry->d_name);
+		DIR* subdir = opendir(fully_qualified_name);
 
-		//Open the subdirectory up for searching
-		DIR* subdir = opendir(subdirectory);
+		//If it's NULL then fail out
+		if(subdir == NULL){
+			fprintf(stdout, "Fatal error: failed to open the nested multifile test directory %s\n", fully_qualified_name);
+			exit(1);
+		}
 
 		//Did we find the main file for this subdirectory or not
 		u_int8_t found_main_file_for_subdir = FALSE;
@@ -914,7 +921,7 @@ static inline void get_all_multi_file_tests(char* directory_name){
 			if(strcmp(subdirectory_entry->d_name, "main.ol") == 0){
 				//Allocate and populate the test file string
 				char* test_file = calloc(FILENAME_MAX, sizeof(char));
-				snprintf(test_file, FILENAME_MAX, "%s%s/%s", directory_name, subdirectory, directory_entry->d_name);
+				snprintf(test_file, FILENAME_MAX, "%s/%s", fully_qualified_name, directory_entry->d_name);
 
 				//Add this to the array of all test files
 				dynamic_array_add(&test_files, test_file);
@@ -931,7 +938,7 @@ static inline void get_all_multi_file_tests(char* directory_name){
 		if(found_main_file_for_subdir == FALSE){
 			//Allocate and populate the test file string
 			char* test_file = calloc(FILENAME_MAX, sizeof(char));
-			snprintf(test_file, FILENAME_MAX, "%s%s", directory_name, subdirectory);
+			snprintf(test_file, FILENAME_MAX, "%s", fully_qualified_name);
 
 			//Flag that this directory has an invalid OUNIT config
 			dynamic_array_add(&invalid_ounit_configuration_files, test_file);
