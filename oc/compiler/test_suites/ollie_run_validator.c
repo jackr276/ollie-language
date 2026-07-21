@@ -336,7 +336,7 @@ static inline ounit_type_t parse_OUNIT_test_command(ollie_token_array_t* tokens,
  */
 static ounit_type_t is_test_OUNIT_compatible(ollie_token_stream_t* stream, test_parameters_t* parameters){
 	//Run through and see if we can find the OUNIT token
-	for(u_int32_t i = 0; i < stream->token_stream.current_index; i++){
+	for(int32_t i = 0; i < stream->token_stream.current_index; i++){
 		//Extract the token pointer
 		lexitem_t* lexitem = token_array_get_pointer_at(&(stream->token_stream), i);
 
@@ -855,6 +855,12 @@ static inline void get_all_single_file_tests(char* directory_name){
  * names in here to maintain distinction, since all files that we are after
  * are called "main.ol"
  *
+ * The structure of these is as follows:
+ * 	multifile_test_directory/<subdirectory>/main.ol
+ *
+ * We *only* ever compile files that are called main. This keeps things
+ * simple from the end of this grabber
+ *
  * NOTE: this helper will close the directory when done
  */
 static inline void get_all_multi_file_tests(char* directory_name){
@@ -865,8 +871,9 @@ static inline void get_all_multi_file_tests(char* directory_name){
 		exit(1);
 	}
 
-	//Directory entry
+	//Holders for directory entries
 	struct dirent* directory_entry;
+	struct dirent* subdirectory_entry;
 
 	/**
 	 * Run through all of the directories in the higher level parent 
@@ -887,18 +894,51 @@ static inline void get_all_multi_file_tests(char* directory_name){
 		//Open the subdirectory up for searching
 		DIR* subdir = opendir(subdirectory);
 
-		//Otherwise let's allocate the string for this
-		char* test_file = calloc(FILENAME_MAX, sizeof(char));
+		//Did we find the main file for this subdirectory or not
+		u_int8_t found_main_file_for_subdir = FALSE;
 
-		//Print the fully qualified name into here
-		snprintf(test_file, FILENAME_MAX, "%s%s", directory_name, directory_entry->d_name);
+		/**
+		 * Run through everything in the subdirectory seeing
+		 * if we can find the main file
+		 */
+		while((subdirectory_entry = readdir(subdir)) != NULL){
+			//Only after regular files here
+			if(subdirectory_entry->d_type != DT_REG){
+				continue;
+			}
+
+			/**
+			 * If we find the main file, we will flag it and get out of
+			 * this loop, there is no point in looking any further
+			 */
+			if(strcmp(subdirectory_entry->d_name, "main.ol") == 0){
+				//Allocate and populate the test file string
+				char* test_file = calloc(FILENAME_MAX, sizeof(char));
+				snprintf(test_file, FILENAME_MAX, "%s%s/%s", directory_name, subdirectory, directory_entry->d_name);
+
+				//Add this to the array of all test files
+				dynamic_array_add(&test_files, test_file);
+
+				found_main_file_for_subdir = TRUE;
+				break;
+			}
+		}
+
+		/**
+		 * If we could not find it for this subdirectory, we are going to count
+		 * this as an invalid OUNIT configuration
+		 */
+		if(found_main_file_for_subdir == FALSE){
+			//Allocate and populate the test file string
+			char* test_file = calloc(FILENAME_MAX, sizeof(char));
+			snprintf(test_file, FILENAME_MAX, "%s%s", directory_name, subdirectory);
+
+			//Flag that this directory has an invalid OUNIT config
+			dynamic_array_add(&invalid_ounit_configuration_files, test_file);
+		}
 
 		//And then close it out
 		closedir(subdir);
-
-		
-		//Add this to the array of all test files
-		//dynamic_array_add(&test_files, test_file);
 	}
 
 	//Once done close this out
