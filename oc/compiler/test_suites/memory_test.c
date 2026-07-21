@@ -19,9 +19,6 @@
 #include "../utils/constants.h"
 #include "../utils/dynamic_array/dynamic_array.h"
 
-//Maximum size of a given file name in linux
-#define MAX_FILE_NAME_SIZE 300
-
 //By default we'll allocate 1000 slots for our test file array
 #define DEFAULT_ARRAY_SIZE 1000
 
@@ -31,13 +28,6 @@ pthread_mutex_t file_list_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 //Hold onto the test directory path
 static char* test_directory_path;
-
-//Maintain different paths for our run
-const char* local_output_path = "./oc/out";
-const char* ci_output_path = "$RUNNER_TEMP";
-
-//Is this a CI run or not?
-u_int8_t is_ci_run = 0;
 
 //Total number of errors we have
 u_int32_t total_errors = 0;
@@ -175,6 +165,161 @@ void* worker(void* thread_parameters){
 
 
 /**
+ * This helper will extract all of the valid single file tests from our
+ * single file test directory
+ *
+ * NOTE: this helper will close the directory when done
+ */
+static inline void get_all_single_file_tests(char* directory_name){
+	//Try to open this and verify that it does in open
+	DIR* single_file_tests_directory = opendir(directory_name);
+	if(single_file_tests_directory == NULL){
+		fprintf(stdout, "Fatal error: failed to open the provided single file test directory %s\n", directory_name);
+		exit(1);
+	}
+
+	//Directory entry
+	struct dirent* directory_entry;
+
+	//So long as we have directory entries to read
+	while((directory_entry = readdir(single_file_tests_directory)) != NULL){
+		/**
+		 * If it's not a regular file we do not want to try and
+		 * compile it
+		 */
+		if(directory_entry->d_type != DT_REG){
+			continue;
+		}
+
+		//Otherwise let's allocate the string for this
+		char* test_file = calloc(FILENAME_MAX, sizeof(char));
+
+		//Print the fully qualified name into here
+		snprintf(test_file, FILENAME_MAX, "%s%s", directory_name, directory_entry->d_name);
+		
+		//Add this to the array of all test files
+		dynamic_array_add(&test_files, test_file);
+	}
+
+	//Close this out once we're done
+	closedir(single_file_tests_directory);
+}
+
+
+/**
+ * This helper will run the OUNIT tester for all of our multi file tests
+ * in the multi-file test directory. We will be storing fully qualified
+ * names in here to maintain distinction, since all files that we are after
+ * are called "main.ol"
+ *
+ * The structure of these is as follows:
+ * 	multifile_test_directory/<subdirectory>/main.ol
+ *
+ * We *only* ever compile files that are called main. This keeps things
+ * simple from the end of this grabber
+ *
+ * NOTE: this helper will close the directory when done
+ */
+static inline void get_all_multi_file_tests(char* directory_name){
+	//The fully qualified name buffer for subdirectories
+	char fully_qualified_name[FILENAME_MAX];
+
+	//Next try to open this and verify that it does open
+	DIR* multi_file_tests_directory = opendir(directory_name);
+	if(multi_file_tests_directory == NULL){
+		fprintf(stdout, "Fatal error: failed to open the provided multi-file test directory %s\n", directory_name);
+		exit(1);
+	}
+
+	//Holders for directory entries
+	struct dirent* directory_entry;
+	struct dirent* subdirectory_entry;
+
+	/**
+	 * Run through all of the directories in the higher level parent 
+	 * directory for multi file tests
+	 */
+	while((directory_entry = readdir(multi_file_tests_directory)) != NULL){
+		/**
+		 * For the higher level, we are looking for
+		 * nested subdirectories
+		 */
+		if(directory_entry->d_type != DT_DIR){
+			continue;
+		}
+
+		/**
+		 * We don't want to look at the .. or . directories
+		 * so we'll skip past those
+		 */
+		if(directory_entry->d_name[0] == '.'){
+			continue;
+		}
+
+		//Generate the fully qualified name and use that to open the directory
+		snprintf(fully_qualified_name, FILENAME_MAX, "%s%s", directory_name, directory_entry->d_name);
+		DIR* subdir = opendir(fully_qualified_name);
+
+		//If it's NULL then fail out
+		if(subdir == NULL){
+			fprintf(stdout, "Fatal error: failed to open the nested multifile test directory %s\n", fully_qualified_name);
+			exit(1);
+		}
+
+		//Did we find the main file for this subdirectory or not
+		u_int8_t found_main_file_for_subdir = FALSE;
+
+		/**
+		 * Run through everything in the subdirectory seeing
+		 * if we can find the main file
+		 */
+		while((subdirectory_entry = readdir(subdir)) != NULL){
+			//Only after regular files here
+			if(subdirectory_entry->d_type != DT_REG){
+				continue;
+			}
+
+			/**
+			 * If we find the main file, we will flag it and get out of
+			 * this loop, there is no point in looking any further
+			 */
+			if(strcmp(subdirectory_entry->d_name, "main.ol") == 0){
+				//Allocate and populate the test file string
+				char* test_file = calloc(FILENAME_MAX * 2, sizeof(char));
+				snprintf(test_file, FILENAME_MAX * 2, "%s/%s", fully_qualified_name, subdirectory_entry->d_name);
+
+				//Add this to the array of all test files
+				dynamic_array_add(&test_files, test_file);
+
+				found_main_file_for_subdir = TRUE;
+				break;
+			}
+		}
+
+		/**
+		 * If we could not find it for this subdirectory, we are going to count
+		 * this as an invalid OUNIT configuration
+		 */
+		if(found_main_file_for_subdir == FALSE){
+			//Allocate and populate the test file string
+			char* test_file = calloc(FILENAME_MAX, sizeof(char));
+			snprintf(test_file, FILENAME_MAX, "%s", fully_qualified_name);
+
+			//Fail out for this and let the user deal with it
+			fprintf(stderr, "Invalid multifile test example detected for file %s\n", test_file);
+			exit(1);
+		}
+
+		//And then close it out
+		closedir(subdir);
+	}
+
+	//Once done close this out
+	closedir(multi_file_tests_directory);
+}
+
+
+/**
 * Hook in and run via the main function. We will be relying
 * on make to verify that certain rules are precompiled for us
 */
@@ -188,15 +333,17 @@ int main(int argc, char** argv){
 		exit(1);
 	}
 
-	//Find the test file directory. It will have been passed in as a command line argument. If 
-	//it wasn't fail out
-	if(argc < 4){
-		fprintf(stdout, "Fatal error: please pass in an executable and a test directory as a command line argument\n");
+	/**
+	 * We must have the following passed into us:
+	 * argv[1] - thread_count
+	 * argv[2] - single file test directory
+	 * argv[3] - multi file test directory
+	 * argv[4] - output directory
+	 */
+	if(argc < 5){
+		fprintf(stdout, "Fatal error: please pass in an executable, a test directory for singular tests, a test directory for multifile tests, and an output directory as a command line argument\n");
 		exit(1);
 	}
-
-	//Is this a CI run or not? 0 for no, one for yes
-	is_ci_run = atoi(argv[1]);
 
 	//Get the thread count - very rough - I'm not really concerned about user-friendliness with this
 	int32_t thread_count = atoi(argv[2]);

@@ -865,7 +865,7 @@ static inline void get_all_single_file_tests(char* directory_name){
  */
 static inline void get_all_multi_file_tests(char* directory_name){
 	//The fully qualified name buffer for subdirectories
-	char fully_qualified_name[FILENAME_MAX * 2];
+	char fully_qualified_name[FILENAME_MAX];
 
 	//Next try to open this and verify that it does open
 	DIR* multi_file_tests_directory = opendir(directory_name);
@@ -928,8 +928,8 @@ static inline void get_all_multi_file_tests(char* directory_name){
 			 */
 			if(strcmp(subdirectory_entry->d_name, "main.ol") == 0){
 				//Allocate and populate the test file string
-				char* test_file = calloc(FILENAME_MAX, sizeof(char));
-				snprintf(test_file, FILENAME_MAX, "%s/%s", fully_qualified_name, subdirectory_entry->d_name);
+				char* test_file = calloc(FILENAME_MAX * 2, sizeof(char));
+				snprintf(test_file, FILENAME_MAX * 2, "%s/%s", fully_qualified_name, subdirectory_entry->d_name);
 
 				//Add this to the array of all test files
 				dynamic_array_add(&test_files, test_file);
@@ -959,8 +959,6 @@ static inline void get_all_multi_file_tests(char* directory_name){
 	//Once done close this out
 	closedir(multi_file_tests_directory);
 }
-
-
 
 
 /**
