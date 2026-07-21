@@ -4142,11 +4142,11 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
  * Is it a valid operation to cast from the "being casted type" to the "casting to type"? Returns
  * TRUE or FALSE. This helper also handles all of the error printing associated with casting
  *
- *
  * Casting is not the same as assignment. Ollie allows truncating casts for integer types, but does
  * not allow truncating assignment
  *
- * TODO DO WE NEED SOME KIND OF SPECIAL ASSIGNMENT???
+ * TODO - I think we need some kind of special node that results in an assignment expression being
+ * created for some of these casts
  */
 static inline u_int8_t are_types_castable(generic_type_t* casting_to_type, generic_type_t* being_casted_type){
 	//For use in enum figuring
@@ -4295,9 +4295,21 @@ static inline u_int8_t are_types_castable(generic_type_t* casting_to_type, gener
 					return TRUE;
 
 				/**
-				 *
+				 * We are able to cast from a pointer to a basic type *only* if that
+				 * basic type is an i64/u64 integer
 				 */
 				case TYPE_CLASS_POINTER:
+					switch(casting_to_type->basic_type_token){
+						case I64:
+						case U64:
+							return TRUE;
+							
+						default:
+							return print_and_return_failure("Pointers may only be cast to i64/u64 integer types", parser_line_num);
+					}
+
+					//Keep the compiler happy - should be unreachable
+					return FALSE;
 
 				/**
 				 * Everything else may not be cast to a basic type
@@ -4308,6 +4320,20 @@ static inline u_int8_t are_types_castable(generic_type_t* casting_to_type, gener
 									casting_to_type->type_name.string);
 					return print_and_return_failure(info, parser_line_num);
 			}
+
+		/**
+		 * We are able to cast integers, pointers and array types
+		 * into pointers themselves.
+		 *
+		 * Pointer casting has strict slightly different concerns 
+		 * when compared to regular casting:
+		 * 	1.) If casting an array/pointer to another pointer, the member
+		 * 		types must be assignable
+		 * 	2.) You may not cast an immuatble object into a mutable pointer
+		 */
+		case TYPE_CLASS_POINTER:
+			//TODO
+			
 
 		//We should never get here - just to be safe
 		default:
