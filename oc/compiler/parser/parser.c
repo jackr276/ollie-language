@@ -4145,6 +4145,8 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
  *
  * Casting is not the same as assignment. Ollie allows truncating casts for integer types, but does
  * not allow truncating assignment
+ *
+ * TODO DO WE NEED SOME KIND OF SPECIAL ASSIGNMENT???
  */
 static inline u_int8_t are_types_castable(generic_type_t* casting_to_type, generic_type_t* being_casted_type){
 	//For use in enum figuring
@@ -4273,9 +4275,24 @@ static inline u_int8_t are_types_castable(generic_type_t* casting_to_type, gener
 					return TRUE;
 
 				/**
-				 * 
+				 * We are able to cast basic types to other basic
+				 * types universally(remember that we have already dealt
+				 * with the case of a void type so we don't need to worry
+				 * about that here)
 				 */
 				case TYPE_CLASS_BASIC:
+					/**
+					 * Flag to the user that this may result in data loss
+					 */
+					if(being_casted_type->type_size > casting_to_type->type_size){
+						sprintf(info, "Casting from type %s to type %s may result in data loss from truncation",
+										being_casted_type->type_name.string,
+										casting_to_type->type_name.string);
+						print_parse_message(MESSAGE_TYPE_INFO, info, parser_line_num);
+					}
+
+					//This works
+					return TRUE;
 
 				/**
 				 *
