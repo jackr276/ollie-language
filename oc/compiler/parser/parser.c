@@ -746,6 +746,19 @@ static generic_ast_node_t* print_and_return_error(char* error_message, u_int32_t
 
 
 /**
+ * Print out an error message. This avoids code duplicatoin becuase of how much we do this
+ */
+static inline u_int8_t print_and_return_failure(char* error_message, u_int32_t parser_line_num){
+	//Display the error
+	print_parse_message(MESSAGE_TYPE_ERROR, error_message, parser_line_num);
+	//Increment the number of errors
+	num_errors++;
+	//Print out our failure
+	return FAILURE;
+}
+
+
+/**
  * Handle a constant. There are 4 main types of constant, all handled by this function. A constant
  * is always the child of some parent node. We will always return the reference to the node
  * created here
@@ -4126,6 +4139,57 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 
 
 /**
+ * Is it a valid operation to cast from the "being casted type" to the "casting to type"? Returns
+ * TRUE or FALSE. This helper also handles all of the error printing associated with casting
+ *
+ *
+ * Casting is not the same as assignment. Ollie allows truncating casts for integer types, but does
+ * not allow truncating assignment
+ */
+static inline u_int8_t are_types_castable(generic_type_t* casting_to_type, generic_type_t* being_casted_type){
+	/**
+	 * You can never cast a "void" to anything
+	 */
+	if(IS_VOID_TYPE(being_casted_type) == TRUE){
+		sprintf(info, "Type %s cannot be casted to any other type", being_casted_type->type_name.string);
+		return print_and_return_failure(info, parser_line_num);
+	}
+
+	/**
+	 * Likewise, you can never cast anything to void
+	 */
+	if(IS_VOID_TYPE(casting_to_type) == TRUE){
+		sprintf(info, "Type %s cannot be casted to type %s", being_casted_type->type_name.string, casting_to_type->type_name.string);
+		return print_and_return_failure(info, parser_line_num);
+	}
+
+	/**
+	 * You can never cast anything to be a struct 
+	 */
+	if(casting_to_type->type_class == TYPE_CLASS_STRUCT){
+		return print_and_return_failure("No type can be casted to a struct type", parser_line_num);
+	}
+
+	/**
+	 * You can never cast anything to be a union
+	 */
+	if(casting_to_type->type_class == TYPE_CLASS_UNION){
+		return print_and_return_failure("No type can be casted to a union type", parser_line_num);
+	}
+
+	/**
+	 * You can never cast anything to an array
+	 */
+	if(casting_to_type->type_class == TYPE_CLASS_ARRAY){
+		return print_and_return_failure("No type can be casted to an array type", parser_line_num);
+	}
+
+
+	return FALSE;
+}
+
+
+/**
  * A cast expression decays into a unary expression. 
  * 
  * BNF Rule: <cast-expression> ::= <unary-expression> 
@@ -4171,13 +4235,12 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 		return print_and_return_error("Unmatched angle brackets given to cast statement", parser_line_num);
 	}
 
-	//Now we have to see a valid unary expression. This is our last potential fail case in the chain
-	//The unary expression will handle this for us
-	generic_ast_node_t* right_hand_unary = unary_expression(token_stream, side);
-
-	//If it's an error we'll jump out
-	if(right_hand_unary->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		return right_hand_unary;
+	/**
+	 * Get the expression that we are casting here
+	 */
+	generic_ast_node_t* being_casted_expression = unary_expression(token_stream, side);
+	if(being_casted_expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return being_casted_expression;
 	}
 
 	//No we'll need to determine if we can actually cast here
@@ -4186,32 +4249,6 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 	//What is being casted
 	generic_type_t* being_casted_type = dealias_type(right_hand_unary->inferred_type);
 
-	//You can never cast a "void" to anything
-	if(IS_VOID_TYPE(being_casted_type) == TRUE){
-		sprintf(info, "Type %s cannot be casted to any other type", being_casted_type->type_name.string);
-		return print_and_return_error(info, parser_line_num);
-	}
-
-	//Likewise, you can never cast anything to void
-	if(IS_VOID_TYPE(casting_to_type) == TRUE){
-		sprintf(info, "Type %s cannot be casted to type %s", being_casted_type->type_name.string, casting_to_type->type_name.string);
-		return print_and_return_error(info, parser_line_num);
-	}
-
-	//You can never cast anything to be a struct 
-	if(casting_to_type->type_class == TYPE_CLASS_STRUCT){
-		return print_and_return_error("No type can be casted to a struct type", parser_line_num);
-	}
-
-	//You can never cast anything to be a union 
-	if(casting_to_type->type_class == TYPE_CLASS_UNION){
-		return print_and_return_error("No type can be casted to a union type", parser_line_num);
-	}
-
-	//You can never cast anything to be an array 
-	if(casting_to_type->type_class == TYPE_CLASS_ARRAY){
-		return print_and_return_error("No type can be casted to an array type", parser_line_num);
-	}
 
 	/**
 	 * If the type that is being casted is a memory region, and we are
