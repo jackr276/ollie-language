@@ -26,8 +26,10 @@
 pthread_mutex_t result_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t file_list_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-//Hold onto the test directory path
-static char* test_directory_path;
+/**
+ * What is the desired output directory for us(./oc/out, $$RUNNER_TEMP, etc)
+ */
+static char* output_directory; 
 
 //Total number of errors we have
 u_int32_t total_errors = 0;
@@ -344,63 +346,27 @@ int main(int argc, char** argv){
 		fprintf(stdout, "Fatal error: please pass in an executable, a test directory for singular tests, a test directory for multifile tests, and an output directory as a command line argument\n");
 		exit(1);
 	}
+	int32_t thread_count = atoi(argv[1]);
+	char* single_file_tests_dir = argv[2];
+	char* multi_file_tests_dir = argv[3];
+	output_directory = argv[4];
 
-	//Get the thread count - very rough - I'm not really concerned about user-friendliness with this
-	int32_t thread_count = atoi(argv[2]);
-
-	//Extract it and open it
-	test_directory_path = argv[3];
-	DIR* directory = opendir(test_directory_path);
-
-	//Check that we got it
-	if(directory == NULL){
-		fprintf(stdout, "Fatal error: failed to open directory %s\n", test_directory_path);
-		exit(1);
-	}
+	//We can now start the clock
+	clock_t start_time = clock();
 
 	//Create our two dynamic arrays with initial sizes
 	test_files = dynamic_array_alloc_initial_size(DEFAULT_ARRAY_SIZE);
 	files_in_error = dynamic_array_alloc_initial_size(DEFAULT_ARRAY_SIZE);
 
-	//Start the time
-	clock_t start_time = clock();
-
-	//Run through everything in the given directory
-	struct dirent* directory_entry;
-
-	//Initialize the total test file counts
-	total_test_files = 0;
-
-	/**
-	 * So long as we can keep reading from the directory, we will stuff the
-	 * queue with what we need
-	 */
-	while((directory_entry = readdir(directory)) != NULL){
-		//If it's not a regular file we don't want it(i.e. directories)
-		if(directory_entry->d_type != DT_REG){
-			continue;
-		}
-
-		//Allocate space for the file name
-		char* file_name = calloc(MAX_FILE_NAME_SIZE, sizeof(char));
-
-		//Copy it over
-		strncpy(file_name, directory_entry->d_name, MAX_FILE_NAME_SIZE * sizeof(char));
-
-		//Add this into the dynamic array
-		dynamic_array_add(&test_files, file_name);
-
-		//Increment the test file number
-		total_test_files++;
-	}
-
-	//Close the directory
-	closedir(directory);
+	//Extract all of the tests that we want first
+	get_all_single_file_tests(single_file_tests_dir);
+	get_all_multi_file_tests(multi_file_tests_dir);
 
 	//Display for the user
 	fprintf(stdout, "\n===================================== SETUP ================================\n");
 	fprintf(stdout, "THREADS: %d\n", thread_count);
-	fprintf(stdout, "DIRECTORY: %s\n", test_directory_path);
+	fprintf(stdout, "SINGLE FILE TEST DIRECTORY: %s\n", single_file_tests_dir);
+	fprintf(stdout, "MULTI FILE TEST DIRECTORY: %s\n", multi_file_tests_dir);
 	fprintf(stdout, "Memory Checker will spawn %d threads\n", thread_count);
 	fprintf(stdout, "\n===================================== SETUP ================================\n\n");
 
