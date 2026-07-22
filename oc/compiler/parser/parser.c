@@ -4173,6 +4173,9 @@ static inline castability_results_t print_and_return_not_castable(char* error_me
  * If we have the "consider truncation" flag set to true, we will look to see if our cast requires anything
  * extra to fully work(think f32 to i16, this is a two step process in assembly). If it is, we will return a
  * special result type that will result in the creation of a special AST node for truncation
+ *
+ *
+ * TODO TRUNCATION WARNING/LOGIC IS NOT WORKING CORRECTLY
  */
 static castability_results_t are_types_castable(generic_type_t* casting_to_type, generic_type_t* being_casted_type, u_int8_t consider_truncation){
 	//For use in enum figuring
@@ -4331,7 +4334,7 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 					/**
 					 * Flag to the user that this may result in data loss
 					 */
-					if(consider_truncation == FALSE && being_casted_type->type_size > casting_to_type->type_size){
+					if(consider_truncation == TRUE && being_casted_type->type_size > casting_to_type->type_size){
 						sprintf(info, "Casting from type %s to type %s may result in data loss from truncation",
 										being_casted_type->type_name.string,
 										casting_to_type->type_name.string);
@@ -4588,12 +4591,15 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 	//We only warn about truncation if we aren't dealing with a constant
 	u_int8_t warn_about_truncating = being_casted_expression->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
-	u_int8_t is_castable = are_types_castable(casting_to_type, being_casted_type, warn_about_truncating);
+	//Let the helper retrieve our final castability
+	castability_results_t castability = are_types_castable(casting_to_type, being_casted_type, warn_about_truncating);
 
 	//Fail out if this is not
-	if(is_castable == FALSE){
+	if(castability == NOT_CASTABLE){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
+
+	//TODO EXTRA WORK WITH CASTABILITY
 
 	/**
 	 * Once we get here then we know that our casting is fine. The final
