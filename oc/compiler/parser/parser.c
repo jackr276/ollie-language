@@ -4148,7 +4148,7 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
  * TODO - I think we need some kind of special node that results in an assignment expression being
  * created for some of these casts
  */
-static inline u_int8_t are_types_castable(generic_type_t* casting_to_type, generic_type_t* being_casted_type){
+static u_int8_t are_types_castable(generic_type_t* casting_to_type, generic_type_t* being_casted_type){
 	//For use in enum figuring
 	generic_type_t* underlying_enum_type;
 
@@ -4353,6 +4353,7 @@ static inline u_int8_t are_types_castable(generic_type_t* casting_to_type, gener
 				 * For pointers to be castable to one another, there are a few rules
 				 * to follow:
 				 * 	1.) we may never cast an immutable memory address to a mutable pointer
+				 * 	2.) we may never cast a contiguous memory region to a non-contiguous one, and vice versa
 				 */
 				case TYPE_CLASS_POINTER:
 					/**
@@ -4395,25 +4396,17 @@ static inline u_int8_t are_types_castable(generic_type_t* casting_to_type, gener
 					}
 
 					/**
-					 * If we have pointers that have different underlying sizes, that is invalid. When we go to dereference the larger
-					 * pointer, we are now either reading into/corrupting other memory. For this reason, pointers must point to 
-					 * memory regions of the same physical size
+					 * Now that all of those checks are out of the way, we will recursively check if the underlying
+					 * types are or are not castable to one another
 					 */
-					source_size_bytes = convert_type_size_to_bytes(get_type_size(true_source_type->internal_types.points_to));
-					dest_size_bytes = convert_type_size_to_bytes(get_type_size(destination_type->internal_types.points_to));
+					return are_types_castable(casting_to_type->internal_types.points_to, being_casted_type->internal_types.points_to);
 
-					if(dest_size_bytes != source_size_bytes){
-						return NULL;
-					}
-
-					//If this works, return the destination type
-					if(types_assignable(destination_type->internal_types.points_to, true_source_type->internal_types.points_to) != NULL){
-						return destination_type;
-					}
-
-					return NULL;
-
-
+				/**
+				 * For an array to be castable to a pointer, there are a few rules
+				 * to follow:
+				 * 	1.) we may never cast an immutable memory address to a mutable pointer
+				 * 	2.) we may never cast a contiguous memory region to a non-contiguous one, and vice versa
+				 */
 				case TYPE_CLASS_ARRAY:
 					/**
 					 * Illegal mutability violation - going from mutable to non-mutable
@@ -4426,6 +4419,36 @@ static inline u_int8_t are_types_castable(generic_type_t* casting_to_type, gener
 						return print_and_return_failure(info, parser_line_num);
 					}
 
+					/**
+					 * We are always able to cast to a generic pointer if the user
+					 * wants to
+					 */
+					if(casting_to_type->internal_values.is_void_pointer == TRUE){
+						return TRUE;
+					}
+
+					/**
+					 * If the memory layout type of the source and destination are different, then we cannot
+					 * csat them to eachother because if we were eventually to go and do memory access
+					 * using the [] operator, we would produce entirely different assembly code. Using
+					 * non-contiguous access on a contiguous region is almost certain to cause segfaults
+					 */
+					if(being_casted_type->memory_layout_type != casting_to_type->memory_layout_type){
+						sprintf(info, "Types %s and %s have different memory layout types. Casting one to the other would cause undefined memory access behavior",
+			  							being_casted_type->type_name.string,
+			  							casting_to_type->type_name.string);
+						return print_and_return_failure(info, parser_line_num);
+					}
+
+					/**
+					 * Now that all of those checks are out of the way, we will recursively check if the underlying
+					 * types are or are not castable to one another
+					 */
+					return are_types_castable(casting_to_type->internal_types.points_to, being_casted_type->internal_types.member_type);
+
+				/**
+				 * Everything else we can't cast to a pointer
+				 */
 				default:
 					sprintf(info, "Type %s may not be cast to type %s",
 									being_casted_type->type_name.string,
