@@ -6705,8 +6705,8 @@ static cfg_result_package_t emit_truncating_cast_expression(basic_block_t* basic
 	basic_block_t* current_block = basic_block;
 
 	//Initialize our starting block
-	cfg_result_package_t truncating_result = INITIALIZE_BLANK_CFG_RESULT;
-	truncating_result.starting_block = current_block;
+	cfg_result_package_t truncating_cast_results = INITIALIZE_BLANK_CFG_RESULT;
+	truncating_cast_results.starting_block = current_block;
 
 	//The result type will always come from the parent node itself
 	generic_type_t* result_type = parent_node->inferred_type;
@@ -6726,12 +6726,15 @@ static cfg_result_package_t emit_truncating_cast_expression(basic_block_t* basic
 	three_addr_var_t* lhs_variable = emit_temp_var(result_type);
 	three_addr_var_t* rhs_variable = unpack_result_package(&expression_results, current_block);
 
-	//TODO EMIT TRUNCATING MOVE
+	//Emit and add into the block
+	instruction_t* truncating_move = emit_truncating_assignment_instruction(lhs_variable, rhs_variable);
+	add_statement(current_block, truncating_move);
 
-
-
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
+	//Package this up - it will always be a variable return type
+	truncating_cast_results.final_block = current_block;
+	truncating_cast_results.type = CFG_RESULT_TYPE_VAR;
+	truncating_cast_results.result_value.result_var = lhs_variable;
+	return truncating_cast_results;
 }
 
 

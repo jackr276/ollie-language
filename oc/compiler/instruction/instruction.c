@@ -2499,6 +2499,13 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "\n");
 			break;
 
+		case THREE_ADDR_CODE_TRUNCATING_ASSN_STMT:
+			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <-(TRUNCATE)- ");
+			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+			break;
+
 		/**
 		 * Specialized memory copy statement. This exists for deep
 		 * copies from struct to struct or union to union

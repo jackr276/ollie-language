@@ -14880,7 +14880,7 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		 * we fail out
 		 */
 		default:
-			fprintf(stderr, "Fatal internal compiler error: instruction with code %d reached an unreachable path", instruction->statement_type);
+			fprintf(stderr, "Fatal internal compiler error: instruction with code %d reached an unreachable path\n", instruction->statement_type);
 			exit(1);
 	}
 }
