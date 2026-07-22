@@ -5565,7 +5565,6 @@ instruction_t* emit_binary_operation_with_const_instruction(three_addr_var_t* as
 	stmt->op = op;
 	stmt->operands.oir.constant_operand = op2;
 
-	//Give back the newly allocated statement
 	return stmt;
 }
 
@@ -5584,7 +5583,30 @@ instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_add
 	stmt->operands.oir.assignee = assignee;
 	stmt->operands.oir.operand1 = op1;
 
-	//And that's it, we'll just leave our now
+	return stmt;
+}
+
+
+/**
+ * Emit a statement that only uses two vars of the form var1 <- var2
+ *
+ * This truncating assignment instruction is designed specifically and only
+ * for the truncating cast AST node type
+ *
+ * NOTE: there is no such thing as a constant assignment truncating assignment
+ * expression. The RHS will always be a variable
+ */
+instruction_t* emit_truncating_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1){
+	//First allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Define the class
+	stmt->statement_type = THREE_ADDR_CODE_TRUNCATING_ASSN_STMT;
+
+	//Let's now populate it with values
+	stmt->operands.oir.assignee = assignee;
+	stmt->operands.oir.operand1 = op1;
+
 	return stmt;
 }
 
