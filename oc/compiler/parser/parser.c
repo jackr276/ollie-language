@@ -4488,8 +4488,10 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 	/**
 	 * We will use the types_assignable function to check this. This will also perform any constant
 	 * coercion if need be
+	 *
+	 * TODO WRONG!!!!
 	 */
-	generic_type_t* return_type = is_ast_node_assignable_to_destination_type(casting_to_type, right_hand_unary);
+	generic_type_t* return_type = is_ast_node_assignable_to_destination_type(casting_to_type, being_casted_expression);
 
 	//This is our fail case
 	if(return_type == NULL){
