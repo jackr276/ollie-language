@@ -4366,6 +4366,54 @@ static inline u_int8_t are_types_castable(generic_type_t* casting_to_type, gener
 						return print_and_return_failure(info, parser_line_num);
 					}
 
+					/**
+					 * We are able to cast anything to a void(generic) pointer
+					 */
+					if(casting_to_type->internal_values.is_void_pointer == TRUE){
+						return TRUE;
+					}
+
+					/**
+					 * Likewise we are able to cast a generic pointer to any other
+					 * pointer so long as the mutability is consitent
+					 */
+					if(being_casted_type->internal_values.is_void_pointer == TRUE){
+						return TRUE;
+					}
+
+					/**
+					 * If the memory layout type of the source and destination are different, then we cannot
+					 * csat them to eachother because if we were eventually to go and do memory access
+					 * using the [] operator, we would produce entirely different assembly code. Using
+					 * non-contiguous access on a contiguous region is almost certain to cause segfaults
+					 */
+					if(being_casted_type->memory_layout_type != casting_to_type->memory_layout_type){
+						sprintf(info, "Types %s and %s have different memory layout types. Casting one to the other would cause undefined memory access behavior",
+			  							being_casted_type->type_name.string,
+			  							casting_to_type->type_name.string);
+						return print_and_return_failure(info, parser_line_num);
+					}
+
+					/**
+					 * If we have pointers that have different underlying sizes, that is invalid. When we go to dereference the larger
+					 * pointer, we are now either reading into/corrupting other memory. For this reason, pointers must point to 
+					 * memory regions of the same physical size
+					 */
+					source_size_bytes = convert_type_size_to_bytes(get_type_size(true_source_type->internal_types.points_to));
+					dest_size_bytes = convert_type_size_to_bytes(get_type_size(destination_type->internal_types.points_to));
+
+					if(dest_size_bytes != source_size_bytes){
+						return NULL;
+					}
+
+					//If this works, return the destination type
+					if(types_assignable(destination_type->internal_types.points_to, true_source_type->internal_types.points_to) != NULL){
+						return destination_type;
+					}
+
+					return NULL;
+
+
 				case TYPE_CLASS_ARRAY:
 					/**
 					 * Illegal mutability violation - going from mutable to non-mutable
