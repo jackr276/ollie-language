@@ -4599,21 +4599,34 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
-	//TODO EXTRA WORK WITH CASTABILITY
-
 	/**
-	 * Once we get here then we know that our casting is fine. The final
-	 * type for this expression will be the "casting to type". This
-	 * is what the overall node will carry as we pass it around
-	 */
-	being_casted_expression->inferred_type = casting_to_type;
-
-	/**
+	 * Two divergent paths here:
+	 * 	1.) For non-constants:
+	 * 		a.) Regular, non truncating cast. We do not need to do anything besides change the type
+	 * 		b.) Truncating cast - since this requires extra steps, we need to emit a special truncating 
+	 * 			assignment node that will have special handling when in the instruction selector
+	 * 		
+	 * 	2.) For constants - it does not matter if this is a truncating cast
+	 * 	 	or not. The coerce_constant() helper will take care of all 
+	 * 	 	truncation
+	 *
 	 * If we have a constant, we will now need to coerce this value
 	 * into the type that we just assigned it. The coerce_constant()
 	 * helper does all of this for us
 	 */
-	if(being_casted_expression->ast_node_type == AST_NODE_TYPE_CONSTANT){
+	if(being_casted_expression->ast_node_type != AST_NODE_TYPE_CONSTANT){
+		//TODO DIFFERENT CAST TYPES
+
+
+
+	} else {
+		/**
+		 * Once we get here then we know that our casting is fine. The final
+		 * type for this expression will be the "casting to type". This
+		 * is what the overall node will carry as we pass it around
+		 */
+		being_casted_expression->inferred_type = casting_to_type;
+
 		/**
 		 * If we're not casting to a pointer we're fine. If we are casting
 		 * to a pointer, due to some of the limitations of the coerce_constant()
@@ -4629,6 +4642,7 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 			being_casted_expression->inferred_type = casting_to_type;
 		}
 	}
+
 
 	//And give back the underlying expression that was cast
 	return being_casted_expression;
