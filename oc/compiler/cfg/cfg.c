@@ -6696,6 +6696,17 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 
 /**
+ * Handle a truncating cast expression - this is a specific kind of expression where
+ * we need to assign a larger type(in the only child node) into a smaller type(the parent
+ * node). The underlying type will be processed by the "emit_expression()" rule
+ */
+static cfg_result_package_t emit_truncating_cast_expression(basic_block_t* basic_block, generic_ast_node_t* parent_node){
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
+}
+
+
+/**
  * Handle an assignment expression and all of the required bookkeeping that comes 
  * with it
  */
@@ -6986,7 +6997,10 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 
 		case AST_NODE_TYPE_ASNMNT_EXPR:
 			return emit_assignment_expression(basic_block, expr_node);
-	
+
+		case AST_NODE_TYPE_TRUNCATING_CAST:
+			return emit_truncating_cast_expression(basic_block, expr_node);
+
 		case AST_NODE_TYPE_BINARY_EXPR:
 			return emit_binary_expression(basic_block, expr_node);
 
