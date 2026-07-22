@@ -35,6 +35,18 @@ typedef enum {
 	OLLIE_SWITCH_TYPE_C_STYLE
 } ollie_switch_type_t;
 
+/**
+ * Different kinds of castability:
+ * 	1.) plain invalid, nothing else to do there
+ * 	2.) castable without the need for any kind of extra work
+ * 	3.) castable but we need to perform a truncation, which requires extra steps
+ */
+typedef enum {
+	NOT_CASTABLE,
+	CASTABLE,
+	CASTABLE_WITH_TRUNCATION
+} castability_results_t ;
+
 //Define a generic error array global variable
 char info[ERROR_SIZE * 2];
 
@@ -4145,10 +4157,14 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
  * Casting is not the same as assignment. Ollie allows truncating casts for integer types, but does
  * not allow truncating assignment
  *
+ * If we have the "consider truncation" flag set to true, we will look to see if our cast requires anything
+ * extra to fully work(think f32 to i16, this is a two step process in assembly). If it is, we will return a
+ * special result type that will result in the creation of a special AST node for truncation
+ *
  * TODO - I think we need some kind of special node that results in an assignment expression being
  * created for some of these casts
  */
-static u_int8_t are_types_castable(generic_type_t* casting_to_type, generic_type_t* being_casted_type, u_int8_t warn_about_truncating){
+static castability_results_t are_types_castable(generic_type_t* casting_to_type, generic_type_t* being_casted_type, u_int8_t consider_truncation){
 	//For use in enum figuring
 	generic_type_t* underlying_enum_type;
 
@@ -4265,7 +4281,7 @@ static u_int8_t are_types_castable(generic_type_t* casting_to_type, generic_type
 					 * If the enum type itself is larger than what it's being cast to,
 					 * we will send an info message that this may result in data loss
 					 */
-					if(warn_about_truncating == FALSE && underlying_enum_type->type_size > casting_to_type->type_size){
+					if(warn_about_truncating == TRUE && underlying_enum_type->type_size > casting_to_type->type_size){
 						sprintf(info, "Casting from type %s to type %s may result in data loss from truncation",
 										being_casted_type->type_name.string,
 										casting_to_type->type_name.string);
@@ -4474,6 +4490,9 @@ static u_int8_t are_types_castable(generic_type_t* casting_to_type, generic_type
  * 
  * BNF Rule: <cast-expression> ::= <unary-expression> 
  * 						    	| < <type-specifier> > <unary-expression>
+ *
+ * If a cast expression is going to require a special kind of truncating assignment(think f32 to i16),
+ * then we are going to need a special node that will handle that
  */
 static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, side_type_t side){
 	/**

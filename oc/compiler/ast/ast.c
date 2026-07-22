@@ -34,8 +34,6 @@ void initialize_ast_system(){
  * Do note that the inferred type will always be *the same size or larger* than the given constant type
  * that is already in the system. This is why, as the constant types get larger, the options to coerce to
  * get smaller
- *
- * TODO DOES THIS NEED TO SUPPORT POINTERS?
  */
 void coerce_constant(generic_ast_node_t* constant_node){
 	//We have an inferred type here
