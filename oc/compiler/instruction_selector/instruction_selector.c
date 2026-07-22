@@ -8214,6 +8214,31 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 
 
 /**
+ * Handle an ollie truncating assignment instruction, where the source operand's
+ * size is larger than the destination's size
+ *
+ * We know that the result variable(assignee in this case) is already of the proper
+ * type and is being used by other instructions down the line. As such the very
+ * last assignee in our chain must be that assignee
+ *
+ * NOTE: it is assumed that the truncating cast is always the first instruction
+ * in the window
+ */
+static void handle_truncating_assignment_instruction(instruction_window_t* window){
+	//Extract the instruction that we're after
+	instruction_t* truncating_cast = window->instruction1;
+
+	//Extract these both for convenience
+	three_addr_var_t* destination = truncating_cast->operands.oir.assignee;
+	three_addr_var_t* source = truncating_cast->operands.oir.operand1;
+
+
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
+}
+
+
+/**
  * Emit a movX instruction with a constant
  *
  * This is used for when we need extra moves(after a division/modulus)
@@ -14793,6 +14818,9 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 	switch (instruction->statement_type) {
 		case THREE_ADDR_CODE_ASSN_STMT:
 			handle_register_movement_instruction(instruction);
+			break;
+		case THREE_ADDR_CODE_TRUNCATING_ASSN_STMT:
+			handle_truncating_assignment_instruction(window);
 			break;
 		case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT:
 			handle_conditional_movement_statement(window);
