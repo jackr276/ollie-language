@@ -4148,7 +4148,7 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
  * TODO - I think we need some kind of special node that results in an assignment expression being
  * created for some of these casts
  */
-static u_int8_t are_types_castable(generic_type_t* casting_to_type, generic_type_t* being_casted_type, u_int8_t casting_constant){
+static u_int8_t are_types_castable(generic_type_t* casting_to_type, generic_type_t* being_casted_type, u_int8_t warn_about_truncating){
 	//For use in enum figuring
 	generic_type_t* underlying_enum_type;
 
@@ -4265,7 +4265,7 @@ static u_int8_t are_types_castable(generic_type_t* casting_to_type, generic_type
 					 * If the enum type itself is larger than what it's being cast to,
 					 * we will send an info message that this may result in data loss
 					 */
-					if(casting_constant == FALSE && underlying_enum_type->type_size > casting_to_type->type_size){
+					if(warn_about_truncating == FALSE && underlying_enum_type->type_size > casting_to_type->type_size){
 						sprintf(info, "Casting from type %s to type %s may result in data loss from truncation",
 										being_casted_type->type_name.string,
 										casting_to_type->type_name.string);
@@ -4284,7 +4284,7 @@ static u_int8_t are_types_castable(generic_type_t* casting_to_type, generic_type
 					/**
 					 * Flag to the user that this may result in data loss
 					 */
-					if(casting_constant == FALSE && being_casted_type->type_size > casting_to_type->type_size){
+					if(warn_about_truncating == FALSE && being_casted_type->type_size > casting_to_type->type_size){
 						sprintf(info, "Casting from type %s to type %s may result in data loss from truncation",
 										being_casted_type->type_name.string,
 										casting_to_type->type_name.string);
@@ -4399,7 +4399,7 @@ static u_int8_t are_types_castable(generic_type_t* casting_to_type, generic_type
 					 * Now that all of those checks are out of the way, we will recursively check if the underlying
 					 * types are or are not castable to one another
 					 */
-					return are_types_castable(casting_to_type->internal_types.points_to, being_casted_type->internal_types.points_to, casting_constant);
+					return are_types_castable(casting_to_type->internal_types.points_to, being_casted_type->internal_types.points_to, FALSE);
 
 				/**
 				 * For an array to be castable to a pointer, there are a few rules
@@ -4444,7 +4444,7 @@ static u_int8_t are_types_castable(generic_type_t* casting_to_type, generic_type
 					 * Now that all of those checks are out of the way, we will recursively check if the underlying
 					 * types are or are not castable to one another
 					 */
-					return are_types_castable(casting_to_type->internal_types.points_to, being_casted_type->internal_types.member_type, casting_constant);
+					return are_types_castable(casting_to_type->internal_types.points_to, being_casted_type->internal_types.member_type, FALSE);
 
 				/**
 				 * Everything else we can't cast to a pointer
@@ -4531,8 +4531,11 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 	 */
 	casting_to_type = dealias_type(casting_to_type);
 	generic_type_t* being_casted_type = dealias_type(being_casted_expression->inferred_type);
-	u_int8_t casting_constant = being_casted_expression->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
-	u_int8_t is_castable = are_types_castable(casting_to_type, being_casted_type, casting_constant);
+
+	//We only warn about truncation if we aren't dealing with a constant
+	u_int8_t warn_about_truncating = being_casted_expression->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
+
+	u_int8_t is_castable = are_types_castable(casting_to_type, being_casted_type, warn_about_truncating);
 
 	//Fail out if this is not
 	if(is_castable == FALSE){
@@ -4552,7 +4555,20 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 	 * helper does all of this for us
 	 */
 	if(being_casted_expression->ast_node_type == AST_NODE_TYPE_CONSTANT){
-		coerce_constant(being_casted_expression);
+		/**
+		 * If we're not casting to a pointer we're fine. If we are casting
+		 * to a pointer, due to some of the limitations of the coerce_constant()
+		 * helper, we will treat this as a u64 for the coercion and then
+		 * move it back to a pointer afterwards
+		 */
+		if(casting_to_type->type_class != TYPE_CLASS_POINTER){
+			coerce_constant(being_casted_expression);
+
+		} else {
+			being_casted_expression->inferred_type = immut_u64;
+			coerce_constant(being_casted_expression);
+			being_casted_expression->inferred_type = casting_to_type;
+		}
 	}
 
 	//And give back the underlying expression that was cast
