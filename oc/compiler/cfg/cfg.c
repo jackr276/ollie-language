@@ -6701,6 +6701,35 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
  * node). The underlying type will be processed by the "emit_expression()" rule
  */
 static cfg_result_package_t emit_truncating_cast_expression(basic_block_t* basic_block, generic_ast_node_t* parent_node){
+	//Hang onto the most up to date block
+	basic_block_t* current_block = basic_block;
+
+	//Initialize our starting block
+	cfg_result_package_t truncating_result = INITIALIZE_BLANK_CFG_RESULT;
+	truncating_result.starting_block = current_block;
+
+	//The result type will always come from the parent node itself
+	generic_type_t* result_type = parent_node->inferred_type;
+
+	/**
+	 * The first child is always the underlying expression. We'll need to first
+	 * emit this using the normal channels
+	 */
+	cfg_result_package_t expression_results = emit_expression(current_block, parent_node->first_child);
+	current_block = expression_results.final_block;
+
+	/**
+	 * The LHS variable is of the type provided. The RHS variable
+	 * comes from the expression results. Note that we must always
+	 * unpack this, it may never be a constant
+	 */
+	three_addr_var_t* lhs_variable = emit_temp_var(result_type);
+	three_addr_var_t* rhs_variable = unpack_result_package(&expression_results, current_block);
+
+	//TODO EMIT TRUNCATING MOVE
+
+
+
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
 }
