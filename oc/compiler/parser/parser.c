@@ -4495,10 +4495,10 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 	push_token(&grouping_stack, lookahead);
 
 	//Grab the type specifier
-	generic_type_t* type_spec = type_specifier(token_stream);
+	generic_type_t* casting_to_type = type_specifier(token_stream);
 
 	//If it's an error, we'll print and propagate it up
-	if(type_spec == NULL){
+	if(casting_to_type == NULL){
 		return print_and_return_error("Invalid type specifier given to cast expression", parser_line_num);
 	}
 
@@ -4529,7 +4529,7 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 	 * not. If we are not we fail out, but the helper has
 	 * already handled all error printing
 	 */
-	generic_type_t* casting_to_type = dealias_type(type_spec);
+	casting_to_type = dealias_type(casting_to_type);
 	generic_type_t* being_casted_type = dealias_type(being_casted_expression->inferred_type);
 	u_int8_t is_castable = are_types_castable(casting_to_type, being_casted_type);
 
@@ -4538,40 +4538,21 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
+	/**
+	 * Once we get here then we know that our casting is fine. The final
+	 * type for this expression will be the "casting to type". This
+	 * is what the overall node will carry as we pass it around
+	 */
+	being_casted_expression->inferred_type = casting_to_type;
 
 	/**
-	 * If the type that is being casted is a memory region, and we are
-	 * trying to cast it to a pointer of some kind, we need to be careful about 
-	 * the way in which mutability is handled
+	 * If we have a constant, we will now need to coerce this value
+	 * into the type that we just assigned it. The coerce_constant()
+	 * helper does all of this for us
 	 */
-	if(is_memory_region(being_casted_type) == TRUE
-		&& casting_to_type->type_class == TYPE_CLASS_POINTER){
-
-		//This is an error
-		if(being_casted_type->mutability == NOT_MUTABLE
-			&& casting_to_type->mutability == MUTABLE){
-			//Fail out here
-			sprintf(info, "Attempt to cast an immutable type %s to a mutable pointer type %s is illegal", being_casted_type->type_name.string, casting_to_type->type_name.string);
-			return print_and_return_error(info, parser_line_num);
-		}
+	if(being_casted_expression->ast_node_type == AST_NODE_TYPE_CONSTANT){
+		coerce_constant(being_casted_expression);
 	}
-
-	/**
-	 * We will use the types_assignable function to check this. This will also perform any constant
-	 * coercion if need be
-	 *
-	 * TODO WRONG!!!!
-	 */
-	generic_type_t* return_type = is_ast_node_assignable_to_destination_type(casting_to_type, being_casted_expression);
-
-	//This is our fail case
-	if(return_type == NULL){
-		generate_types_assignable_failure_message(info, being_casted_type, casting_to_type);
-		return print_and_return_error(info, parser_line_num);
-	}
-
-	//We now overrule the type of what is being casted to the new type
-	being_casted_expression->inferred_type = type_spec;
 
 	//And give back the underlying expression that was cast
 	return being_casted_expression;

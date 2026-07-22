@@ -863,7 +863,7 @@ generic_type_t* types_assignable_constant(generic_type_t* destination_type, gene
 /**
  * Are two pointer types compatible? We use the same logic as types assignable does except we completely ignore the mutability
  */
-generic_type_t* pointer_types_compatible_ignore_mutability(generic_type_t* pointer_a, generic_type_t* pointer_b){
+static generic_type_t* pointer_types_compatible_ignore_mutability(generic_type_t* pointer_a, generic_type_t* pointer_b){
 	//If a is a void pointer then just give back whatever b is
 	if(pointer_a->internal_values.is_void_pointer == TRUE){
 		return pointer_b;

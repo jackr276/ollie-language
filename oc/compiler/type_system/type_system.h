@@ -273,11 +273,6 @@ generic_type_t* determine_ternary_compatibility(void* symtab, generic_type_t** a
 generic_type_t* determine_compatibility_and_coerce(void* type_symtab, generic_type_t** a, generic_type_t** b, ollie_token_t op);
 
 /**
- * Are two pointer types compatible? We use the same logic as types assignable does except we completely ignore the mutability
- */
-generic_type_t* pointer_types_compatible_ignore_mutability(generic_type_t* pointer_a, generic_type_t* pointer_b);
-
-/**
  * Are we able to assign something of "source_type" to something on "destination_type"? Returns
  * NULL if we can't
  */
