@@ -10,6 +10,6 @@ pub fn float_to_small_int(x:f32) -> i16 {
 
 
 pub fn main() -> i32 {
-	OUNIT: [console = 3]
+	OUNIT: [exit_status = 3]
 	ret @float_to_small_int(3.33);
 }

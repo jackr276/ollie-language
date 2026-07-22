@@ -4148,7 +4148,7 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
  * TODO - I think we need some kind of special node that results in an assignment expression being
  * created for some of these casts
  */
-static u_int8_t are_types_castable(generic_type_t* casting_to_type, generic_type_t* being_casted_type){
+static u_int8_t are_types_castable(generic_type_t* casting_to_type, generic_type_t* being_casted_type, u_int8_t casting_constant){
 	//For use in enum figuring
 	generic_type_t* underlying_enum_type;
 
@@ -4265,7 +4265,7 @@ static u_int8_t are_types_castable(generic_type_t* casting_to_type, generic_type
 					 * If the enum type itself is larger than what it's being cast to,
 					 * we will send an info message that this may result in data loss
 					 */
-					if(underlying_enum_type->type_size > casting_to_type->type_size){
+					if(casting_constant == FALSE && underlying_enum_type->type_size > casting_to_type->type_size){
 						sprintf(info, "Casting from type %s to type %s may result in data loss from truncation",
 										being_casted_type->type_name.string,
 										casting_to_type->type_name.string);
@@ -4284,7 +4284,7 @@ static u_int8_t are_types_castable(generic_type_t* casting_to_type, generic_type
 					/**
 					 * Flag to the user that this may result in data loss
 					 */
-					if(being_casted_type->type_size > casting_to_type->type_size){
+					if(casting_constant == FALSE && being_casted_type->type_size > casting_to_type->type_size){
 						sprintf(info, "Casting from type %s to type %s may result in data loss from truncation",
 										being_casted_type->type_name.string,
 										casting_to_type->type_name.string);
@@ -4399,7 +4399,7 @@ static u_int8_t are_types_castable(generic_type_t* casting_to_type, generic_type
 					 * Now that all of those checks are out of the way, we will recursively check if the underlying
 					 * types are or are not castable to one another
 					 */
-					return are_types_castable(casting_to_type->internal_types.points_to, being_casted_type->internal_types.points_to);
+					return are_types_castable(casting_to_type->internal_types.points_to, being_casted_type->internal_types.points_to, casting_constant);
 
 				/**
 				 * For an array to be castable to a pointer, there are a few rules
@@ -4444,7 +4444,7 @@ static u_int8_t are_types_castable(generic_type_t* casting_to_type, generic_type
 					 * Now that all of those checks are out of the way, we will recursively check if the underlying
 					 * types are or are not castable to one another
 					 */
-					return are_types_castable(casting_to_type->internal_types.points_to, being_casted_type->internal_types.member_type);
+					return are_types_castable(casting_to_type->internal_types.points_to, being_casted_type->internal_types.member_type, casting_constant);
 
 				/**
 				 * Everything else we can't cast to a pointer
@@ -4531,7 +4531,8 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 	 */
 	casting_to_type = dealias_type(casting_to_type);
 	generic_type_t* being_casted_type = dealias_type(being_casted_expression->inferred_type);
-	u_int8_t is_castable = are_types_castable(casting_to_type, being_casted_type);
+	u_int8_t casting_constant = being_casted_expression->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
+	u_int8_t is_castable = are_types_castable(casting_to_type, being_casted_type, casting_constant);
 
 	//Fail out if this is not
 	if(is_castable == FALSE){
