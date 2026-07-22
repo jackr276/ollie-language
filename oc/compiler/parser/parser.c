@@ -4532,6 +4532,9 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
  * then we are going to need a special node that will handle that
  */
 static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, side_type_t side){
+	//The final node that we return
+	generic_ast_node_t* final_node;
+
 	/**
 	 * If we first see an angle bracket, we know that we are truly doing
 	 * a cast. If we do not, then this expression is just a pass through for
@@ -4615,9 +4618,30 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 	 * helper does all of this for us
 	 */
 	if(being_casted_expression->ast_node_type != AST_NODE_TYPE_CONSTANT){
-		//TODO DIFFERENT CAST TYPES
+		switch(castability){
+			//If it is castable we just change the type
+			case CASTABLE:
+				being_casted_expression->inferred_type = casting_to_type;
+				final_node = being_casted_expression;
+				break;
+				
+			//Castable with truncation requires a special AST node to handle
+			case CASTABLE_WITH_TRUNCATION:
+				//Create the final node and our inferred type
+				final_node = ast_node_alloc(AST_NODE_TYPE_TRUNCATING_CAST, side);
+				
+				//Add in the type and our variable as well
+				final_node->inferred_type = casting_to_type;
+				final_node->variable = being_casted_expression->variable;
 
+				//This is the child of our node
+				add_child_node(final_node, being_casted_expression);
+				break;
 
+			default:
+				fprintf(stderr, "Fatal internal compiler error: invalid castability type detected\n");
+				exit(1);
+		}
 
 	} else {
 		/**
@@ -4641,11 +4665,13 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 			coerce_constant(being_casted_expression);
 			being_casted_expression->inferred_type = casting_to_type;
 		}
+
+		//This is the final node
+		final_node = being_casted_expression;
 	}
 
-
-	//And give back the underlying expression that was cast
-	return being_casted_expression;
+	//Give back whatever we say the final node is
+	return final_node;
 }
 
 
