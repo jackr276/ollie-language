@@ -8232,6 +8232,32 @@ static void handle_truncating_assignment_instruction(instruction_window_t* windo
 	three_addr_var_t* destination = truncating_cast->operands.oir.assignee;
 	three_addr_var_t* source = truncating_cast->operands.oir.operand1;
 
+	//Extract the types as well
+	generic_type_t* destination_type = destination->type;
+	generic_type_t* source_type = source->type;
+
+	/**
+	 * For enum types, we don't want to be using the actaul enum type as it's
+	 * not accurate to the underlying mechanics. Instead we will extract
+	 * the equivalent integer type
+	 */
+	if(destination_type->type_class == TYPE_CLASS_ENUMERATED){
+		destination_type = destination_type->internal_values.enum_integer_type;
+	}
+
+	if(source_type->type_class == TYPE_CLASS_ENUMERATED){
+		source_type = source_type->internal_values.enum_integer_type;
+	}
+
+	/**
+	 * Depending on what we're truncating to/from, we will need to
+	 * perform different steps. Floating point values present larger
+	 * challenges than integers due to the potential need for a multi-step conversion
+	 *
+	 * NOTE: all truncating moves happen between basic types. This assumption
+	 * allows us to use the basic type token here for everything
+	 */
+
 
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
