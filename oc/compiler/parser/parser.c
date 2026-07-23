@@ -166,6 +166,20 @@ static void print_parse_message(error_message_type_t message_type, char* info, u
 	//Now print it
 	static const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
 
+	/**
+	 * IMPORTANT: if debug printing is not enabled, all INFO and
+	 * DEBUG messages are suppressed
+	 */
+	if(enable_debug_printing == FALSE){
+		switch(message_type){
+			case MESSAGE_TYPE_DEBUG:
+			case MESSAGE_TYPE_INFO:
+				return;
+			default:
+				break;
+		}
+	}
+
 	//Get the stripped down file name
 	char* stripped_file_name = extract_file_name_from_fully_qualified_name(current_dependency_node->file_name);
 
