@@ -45,6 +45,15 @@ void coerce_constant(generic_ast_node_t* constant_node){
 		exit(1);
 	}
 
+	//TODO REWRITE ME
+	ollie_token_t basic_type_token = inferred_type->basic_type_token;
+
+
+	if(inferred_type->type_class == TYPE_CLASS_POINTER){
+
+	}
+
+
 	//Go based on the original type
 	switch(constant_node->constant_type){
 		/**

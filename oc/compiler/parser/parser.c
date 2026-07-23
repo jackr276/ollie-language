@@ -361,9 +361,12 @@ static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic
 		/**
 		 * If we have a constant to pointer assignment, for coercion reasons
 		 * treat the pointer as an unsigned 64 bit integer
+		 *
+		 *
+		 * TODO WRONG!!!!!! WE CANNOT DO THIS
 		 */
 		if(destination_type->type_class == TYPE_CLASS_POINTER){
-			destination_type = immut_u64;
+			//destination_type = immut_u64;
 		}
 
 		//Invoke the special helper to determine this
