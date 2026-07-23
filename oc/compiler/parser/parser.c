@@ -60,6 +60,9 @@ static heap_queue_t namespace_bfs_queue;
 //Store the overall current function scope
 static symtab_variable_sheaf_t* top_level_function_variable_scope = NULL;
 
+//Keep hold of the current dependency node that we are on
+dependency_graph_node_t* current_dependency_node;
+
 //Our stack for storing variables, etc
 static lex_stack_t grouping_stack;
 static lex_stack_t assignment_grouping_stack;
@@ -13373,7 +13376,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	}
 
 	//Now that we've survived up to here, we can make the actual record
-	symtab_function_record_t* function_record = create_function_record(&function_name, visibility, is_inlined, raises_errors, parser_line_num);
+	symtab_function_record_t* function_record = create_function_record(&function_name, current_dependency_node, visibility, is_inlined, raises_errors, parser_line_num);
 
 	//Now we need to see an lparen to begin the parameters
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -13702,7 +13705,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-		function_record = create_function_record(&function_name, visibility, is_inlined, raises_errors, parser_line_num);
+		function_record = create_function_record(&function_name, current_dependency_node, visibility, is_inlined, raises_errors, parser_line_num);
 
 		//We'll put the function into the symbol table
 		//since we now know that everything worked
@@ -14394,11 +14397,11 @@ static generic_ast_node_t* program(dynamic_array_t* build_order){
 	 */
 	for(int32_t i = 0; i < build_order->current_index; i++){
 		//Extract the dependency and its associated token stream
-		dependency_graph_node_t* dependency = dynamic_array_get_at(build_order, i);
-		ollie_token_stream_t* token_stream = &(dependency->token_stream);
+		current_dependency_node = dynamic_array_get_at(build_order, i);
+		ollie_token_stream_t* token_stream = &(current_dependency_node->token_stream);
 
 		//Update our current file name to be accurate
-		current_file_name = dependency->file_name;
+		current_file_name = current_dependency_node->file_name;
 
 		//As long as we aren't done
 		while((lookahead = get_next_token(token_stream, &parser_line_num)).tok != DONE){
