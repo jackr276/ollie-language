@@ -78,13 +78,35 @@ static const char* keyword_array[] = {"if", "else", "do", "while", "for", "loop"
 
 
 /**
+ * Take a file that may look like: ./oc/test_files/sample.ol and return sample.ol
+ */
+static inline char* extract_file_name_from_fully_qualified_name(char* fully_qualified_name){
+	int32_t length = strlen(fully_qualified_name);
+
+	//Roll this back until we have the index of the first /
+	int32_t i = length - 1;
+	for(; i >= 0; i--){
+		if(fully_qualified_name[i] == '/'){
+			break;
+		}
+	}
+
+	//Offset into this to get it(+ 1 to get past the /)
+	return fully_qualified_name + i + 1;
+}
+
+
+/**
  * Print a lexer message in a nicely formatted way
  */
 static inline void print_lexer_error(char* info, u_int32_t line_number, u_int8_t silent_mode){
 	//If we're not in silent mode then display
 	if(silent_mode == FALSE){
+		//We want to strip away any leading directory paths from here
+		char* stripped_file_name = extract_file_name_from_fully_qualified_name(file_name);
+
 		//Print this out on a single line
-		fprintf(stdout, "\n[FILE: %s] --> [LINE %d | TOKENIZER ERROR]: %s\n", file_name, line_number, info);
+		fprintf(stdout, "\n[FILE: %s] --> [LINE %d | TOKENIZER ERROR]: %s\n", stripped_file_name, line_number, info);
 	}
 }
 
