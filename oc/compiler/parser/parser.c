@@ -48,7 +48,7 @@ typedef enum {
 } castability_results_t ;
 
 //Define a generic error array global variable
-char info[ERROR_SIZE * 2];
+static char info[ERROR_SIZE * 2];
 
 //The function is reentrant
 //Variable and function symbol tables
@@ -71,6 +71,9 @@ static dynamic_array_t current_function_jump_statements;
 static heap_queue_t namespace_bfs_queue;
 //Store the overall current function scope
 static symtab_variable_sheaf_t* top_level_function_variable_scope = NULL;
+
+//Keep hold of the current dependency node that we are on
+static dependency_graph_node_t* current_dependency_node = NULL;
 
 //Our stack for storing variables, etc
 static lex_stack_t grouping_stack;
@@ -111,9 +114,6 @@ static generic_ast_node_t* deferred_stmts_node = NULL;
 //Are we enabling debug printing? By default no
 static u_int8_t enable_debug_printing = FALSE;
 
-//The current file name
-static char* current_file_name = NULL;
-
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
 static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, side_type_t side);
 //What type are we given?
@@ -151,15 +151,64 @@ static inline symtab_type_record_t* parse_array_type(ollie_token_stream_t* token
 static inline symtab_type_record_t* create_array_type_from_bounds(symtab_type_record_t* base_member_type, lightstack_t* bounds_stack, mutability_type_t mutability);
 static inline symtab_type_record_t* parse_pointer_type(symtab_type_record_t* current_type, mutability_type_t mutability);
 
+
+/**
+ * Take a file that may look like: ./oc/test_files/sample.ol and return sample.ol
+ */
+static inline char* extract_file_name_from_fully_qualified_name(char* fully_qualified_name){
+	int32_t length = strlen(fully_qualified_name);
+
+	//Roll this back until we have the index of the first /
+	int32_t i = length - 1;
+	for(; i >= 0; i--){
+		if(fully_qualified_name[i] == '/'){
+			break;
+		}
+	}
+
+	//Offset into this to get it(+ 1 to get past the /)
+	return fully_qualified_name + i + 1;
+}
+
+
 /**
  * Simply prints a parse message in a nice formatted way
 */
 static void print_parse_message(error_message_type_t message_type, char* info, u_int32_t line_num){
 	//Now print it
-	const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
+	static const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
 
-	//Print this out on a single line
-	fprintf(stdout, "\n[FILE: %s] --> [LINE %d | COMPILER %s]: %s\n", current_file_name, line_num, type[message_type], info);
+	/**
+	 * IMPORTANT: if debug printing is not enabled, all INFO and
+	 * DEBUG messages are suppressed
+	 */
+	if(enable_debug_printing == FALSE){
+		switch(message_type){
+			case MESSAGE_TYPE_DEBUG:
+			case MESSAGE_TYPE_INFO:
+				return;
+			default:
+				break;
+		}
+	}
+
+	//Get the stripped down file name
+	char* stripped_file_name = extract_file_name_from_fully_qualified_name(current_dependency_node->file_name);
+
+	/**
+	 * If we are not dealing with the main dependency, we will not print
+	 * out the current module because it doesn't have one. Otherwise
+	 * we will display the module name
+	 */
+	/**
+	 * If it's the main node print out the file only, otherwise we'll
+	 * also need the module name
+	 */
+	if(current_dependency_node->type != DEPENDENCY_GRAPH_NODE_TYPE_MAIN){
+		fprintf(stdout, "\n[MODULE %s | FILE: %s] --> [LINE %d | COMPILER %s]: %s\n", current_dependency_node->module_name.string, stripped_file_name, line_num, type[message_type], info);
+	} else {
+		fprintf(stdout, "\n[FILE: %s] --> [LINE %d | COMPILER %s]: %s\n", stripped_file_name, line_num, type[message_type], info);
+	}
 }
 
 
@@ -13794,7 +13843,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	}
 
 	//Now that we've survived up to here, we can make the actual record
-	symtab_function_record_t* function_record = create_function_record(&function_name, visibility, is_inlined, raises_errors, parser_line_num);
+	symtab_function_record_t* function_record = create_function_record(&function_name, current_dependency_node, visibility, is_inlined, raises_errors, parser_line_num);
 
 	//Now we need to see an lparen to begin the parameters
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -14123,7 +14172,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-		function_record = create_function_record(&function_name, visibility, is_inlined, raises_errors, parser_line_num);
+		function_record = create_function_record(&function_name, current_dependency_node, visibility, is_inlined, raises_errors, parser_line_num);
 
 		//We'll put the function into the symbol table
 		//since we now know that everything worked
@@ -14815,11 +14864,8 @@ static generic_ast_node_t* program(dynamic_array_t* build_order){
 	 */
 	for(int32_t i = 0; i < build_order->current_index; i++){
 		//Extract the dependency and its associated token stream
-		dependency_graph_node_t* dependency = dynamic_array_get_at(build_order, i);
-		ollie_token_stream_t* token_stream = &(dependency->token_stream);
-
-		//Update our current file name to be accurate
-		current_file_name = dependency->file_name;
+		current_dependency_node = dynamic_array_get_at(build_order, i);
+		ollie_token_stream_t* token_stream = &(current_dependency_node->token_stream);
 
 		//As long as we aren't done
 		while((lookahead = get_next_token(token_stream, &parser_line_num)).tok != DONE){
@@ -15111,8 +15157,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	num_errors = 0;
 	num_warnings = 0;
 
-	//Store the current file name
-	current_file_name = options->file_name;
 	//Store whether or not we want to do any debug printing
 	enable_debug_printing = options->enable_debug_printing;
 

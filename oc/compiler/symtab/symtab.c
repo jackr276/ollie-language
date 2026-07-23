@@ -1040,7 +1040,7 @@ void remediate_return_by_copy_gp_parameter_order(symtab_function_record_t* recor
 /**
  * Dynamically allocate a function record
 */
-symtab_function_record_t* create_function_record(dynamic_string_t* name, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number){
+symtab_function_record_t* create_function_record(dynamic_string_t* name, dependency_graph_node_t* dependency_contained_in, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number){
 	//Allocate it
 	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
 
@@ -1066,6 +1066,9 @@ symtab_function_record_t* create_function_record(dynamic_string_t* name, visibil
 
 	//Allocate the list of all functions that this calls
 	record->called_functions = dynamic_set_alloc();
+
+	//Store what dependency this comes from
+	record->dependency_graph_node = dependency_contained_in;
 
 	//We know that we need to create this immediately
 	record->signature = create_function_pointer_type(visibility, is_inlined, line_number, raises_errors, NOT_MUTABLE);

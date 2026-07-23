@@ -74,6 +74,9 @@ static dynamic_array_t current_function_user_defined_jump_statements;
 //The current stack offset for any given function
 static u_int64_t stack_offset = 0;
 
+//Keep track of the current dependency that we are on
+static dependency_graph_node_t* current_dependency_node = NULL;
+
 //Reusable memory regions for our graph traversals
 static heap_queue_t traversal_queue;
 
@@ -170,17 +173,46 @@ static inline void visit_static_declare_statement(generic_ast_node_t* node);
 static inline void handle_raise_statement(basic_block_t* basic_block, generic_ast_node_t* node);
 static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, branch_type_t branch_type, three_addr_var_t* conditional_result);
 
+
+/**
+ * Take a file that may look like: ./oc/test_files/sample.ol and return sample.ol
+ */
+static inline char* extract_file_name_from_fully_qualified_name(char* fully_qualified_name){
+	int32_t length = strlen(fully_qualified_name);
+
+	//Roll this back until we have the index of the first /
+	int32_t i = length - 1;
+	for(; i >= 0; i--){
+		if(fully_qualified_name[i] == '/'){
+			break;
+		}
+	}
+
+	//Offset into this to get it(+ 1 to get past the /)
+	return fully_qualified_name + i + 1;
+}
+
+
 /**
  * Simply prints a parse message in a nice formatted way. For the CFG, there
  * are no parser line numbers
 */
 static void print_cfg_message(error_message_type_t message_type, char* info, u_int32_t line_number){
-	//Now print it
 	//Mapped by index to the enum values
-	const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
+	static const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
 
-	//Print this out on a single line
-	fprintf(stdout, "\n[LINE %d: COMPILER %s]: %s\n", line_number, type[message_type], info);
+	//Get just the important part of the file name
+	char* file_name = extract_file_name_from_fully_qualified_name(current_dependency_node->file_name);
+
+	/**
+	 * If it's the main node print out the file only, otherwise we'll
+	 * also need the module name
+	 */
+	if(current_dependency_node->type != DEPENDENCY_GRAPH_NODE_TYPE_MAIN){
+		fprintf(stdout, "\n[MODULE %s | FILE: %s] --> [LINE %d | COMPILER %s]: %s\n", current_dependency_node->module_name.string, file_name, line_number, type[message_type], info);
+	} else {
+		fprintf(stdout, "\n[FILE: %s] --> [LINE %d | COMPILER %s]: %s\n", file_name, line_number, type[message_type], info);
+	}
 }
 
 
@@ -11959,7 +11991,7 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 				|| defined_in_signature->return_type->basic_type_token != VOID)
 				//It's a technically supported use-case to not put a return on main
 				&& is_main_function == FALSE){
-				print_cfg_message(MESSAGE_TYPE_WARNING, "Non-void function does not return in all control paths", 0);
+				print_cfg_message(MESSAGE_TYPE_WARNING, "Non-void function does not return in all control paths", function_defined_in->line_number);
 			}
 
 			//If it's not a void type, we do one thing
@@ -12172,6 +12204,9 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_node){
 	//Push the nesting level that we're in
 	push_nesting_level(&nesting_stack, NESTING_FUNCTION);
+
+	//Extract this for any/all printing
+	current_dependency_node = function_node->func_record->dependency_graph_node;
 	
 	//Grab the function record
 	symtab_function_record_t* func_record = function_node->func_record;
