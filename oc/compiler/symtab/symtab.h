@@ -132,6 +132,8 @@ struct symtab_function_record_t{
 	dynamic_set_t called_functions;
 	//Hang onto all user defined labels for this function(may be null)
 	label_symtab_t* user_defined_labels;
+	//What dependency graph node does this function come from?
+	dependency_graph_node_t* dependency_graph_node;
 	//The line number
 	u_int32_t line_number;
 	//A bitmap for all assigned general purpose registers
@@ -518,7 +520,7 @@ void remediate_return_by_copy_gp_parameter_order(symtab_function_record_t* recor
 /**
  * Make a function record
  */
-symtab_function_record_t* create_function_record(dynamic_string_t* name, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number);
+symtab_function_record_t* create_function_record(dynamic_string_t* name, dependency_graph_node_t* dependency_contained_in, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number);
 
 /**
  * Create a namespace record and add it into the symtab. This will create the new namespace as a
