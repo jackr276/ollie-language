@@ -208,10 +208,10 @@ static void print_cfg_message(error_message_type_t message_type, char* info, u_i
 	 * If it's the main node print out the file only, otherwise we'll
 	 * also need the module name
 	 */
-	if(current_dependency_node->type == DEPENDENCY_GRAPH_NODE_TYPE_MAIN){
-		fprintf(stdout, "\n[FILE: %s] --> [LINE %d | COMPILER %s]: %s\n", file_name, line_number, type[message_type], info);
-	} else {
+	if(current_dependency_node->type != DEPENDENCY_GRAPH_NODE_TYPE_MAIN){
 		fprintf(stdout, "\n[MODULE %s | FILE: %s] --> [LINE %d | COMPILER %s]: %s\n", current_dependency_node->module_name.string, file_name, line_number, type[message_type], info);
+	} else {
+		fprintf(stdout, "\n[FILE: %s] --> [LINE %d | COMPILER %s]: %s\n", file_name, line_number, type[message_type], info);
 	}
 }
 
