@@ -173,6 +173,26 @@ static inline void visit_static_declare_statement(generic_ast_node_t* node);
 static inline void handle_raise_statement(basic_block_t* basic_block, generic_ast_node_t* node);
 static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, branch_type_t branch_type, three_addr_var_t* conditional_result);
 
+
+/**
+ * Take a file that may look like: ./oc/test_files/sample.ol and return sample.ol
+ */
+static inline char* extract_file_name_from_fully_qualified_name(char* fully_qualified_name){
+	int32_t length = strlen(fully_qualified_name);
+
+	//Roll this back until we have the index of the first /
+	int32_t i = length - 1;
+	for(; i >= 0; i--){
+		if(fully_qualified_name[i] == '/'){
+			break;
+		}
+	}
+
+	//Offset into this to get it(+ 1 to get past the /)
+	return fully_qualified_name + i + 1;
+}
+
+
 /**
  * Simply prints a parse message in a nice formatted way. For the CFG, there
  * are no parser line numbers
@@ -181,8 +201,11 @@ static void print_cfg_message(error_message_type_t message_type, char* info, u_i
 	//Mapped by index to the enum values
 	static const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
 
+	//Get just the important part of the file name
+	char* file_name = extract_file_name_from_fully_qualified_name(current_dependency_node->file_name);
+
 	//Print this out on a single line
-	fprintf(stdout, "\n[FILE: %s] --> [LINE %d | COMPILER %s]: %s\n", current_dependency_node->file_name, line_number, type[message_type], info);
+	fprintf(stdout, "\n[FILE: %s] --> [LINE %d | COMPILER %s]: %s\n", file_name, line_number, type[message_type], info);
 }
 
 
