@@ -10,10 +10,10 @@
  * What type of message do we have
  */
 typedef enum {
-	MESSAGE_TYPE_WARNING=0,
-	MESSAGE_TYPE_ERROR=1,
-	MESSAGE_TYPE_INFO=2,
-	MESSAGE_TYPE_DEBUG=2,
+	MESSAGE_TYPE_WARNING,
+	MESSAGE_TYPE_ERROR,
+	MESSAGE_TYPE_INFO,
+	MESSAGE_TYPE_DEBUG,
 } error_message_type_t;
 
 #endif /* ERROR_MANAGEMENT_H */

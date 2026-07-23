@@ -60,14 +60,37 @@ static u_int32_t num_build_system_errors = 0;
 //Predeclare for recursive calls
 static import_results_t find_or_create_module(char* initial_directory, char* current_file_name, dynamic_string_t* module_name, u_int8_t silent_mode);
 
+
+/**
+ * Take a file that may look like: ./oc/test_files/sample.ol and return sample.ol
+ */
+static inline char* extract_file_name_from_fully_qualified_name(char* fully_qualified_name){
+	int32_t length = strlen(fully_qualified_name);
+
+	//Roll this back until we have the index of the first /
+	int32_t i = length - 1;
+	for(; i >= 0; i--){
+		if(fully_qualified_name[i] == '/'){
+			break;
+		}
+	}
+
+	//Offset into this to get it(+ 1 to get past the /)
+	return fully_qualified_name + i + 1;
+}
+
+
 /**
  * A generic printer for any build system errors that we may encounter
  */
-static inline void print_build_system_message(error_message_type_t message, char* info, char* file_name, u_int32_t line_number){
+static void print_build_system_message(error_message_type_t message, char* info, char* file_name, u_int32_t line_number){
 	//Different types to print out
 	static const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
 
-	fprintf(stdout, "\n[FILE: %s] --> [LINE %d | OLLIE BUILD SYSTEM %s]: %s\n", file_name, line_number, type[message], info);
+	//Get the stripped down file name from here
+	char* stripped_file_name = extract_file_name_from_fully_qualified_name(file_name);
+
+	fprintf(stdout, "\n[FILE: %s] --> [LINE %d | OLLIE BUILD SYSTEM %s]: %s\n", stripped_file_name, line_number, type[message], info);
 }
 
 

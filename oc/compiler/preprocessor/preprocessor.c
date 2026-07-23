@@ -48,14 +48,36 @@ static inline u_int8_t perform_macro_substitution(macro_symtab_t* macro_symtab, 
 
 
 /**
+ * Take a file that may look like: ./oc/test_files/sample.ol and return sample.ol
+ */
+static inline char* extract_file_name_from_fully_qualified_name(char* fully_qualified_name){
+	int32_t length = strlen(fully_qualified_name);
+
+	//Roll this back until we have the index of the first /
+	int32_t i = length - 1;
+	for(; i >= 0; i--){
+		if(fully_qualified_name[i] == '/'){
+			break;
+		}
+	}
+
+	//Offset into this to get it(+ 1 to get past the /)
+	return fully_qualified_name + i + 1;
+}
+
+
+/**
  * A generic printer for any preprocessor errors that we may encounter
  */
-static inline void print_preprocessor_message(error_message_type_t message, char* info, u_int32_t line_number){
+static void print_preprocessor_message(error_message_type_t message, char* info, u_int32_t line_number){
 	//Now print it
-	const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
+	static const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
+
+	//Extract the stripped file name out
+	char* stripped_file_name = extract_file_name_from_fully_qualified_name(current_file_name);
 
 	//Print this out on a single line
-	fprintf(stdout, "\n[FILE: %s] --> [LINE %d | OLLIE PREPROCESSOR %s]: %s\n", current_file_name, line_number, type[message], info);
+	fprintf(stdout, "\n[FILE: %s] --> [LINE %d | OLLIE PREPROCESSOR %s]: %s\n", stripped_file_name, line_number, type[message], info);
 }
 
 
