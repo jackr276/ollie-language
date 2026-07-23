@@ -74,6 +74,9 @@ static dynamic_array_t current_function_user_defined_jump_statements;
 //The current stack offset for any given function
 static u_int64_t stack_offset = 0;
 
+//Keep track of the current dependency that we are on
+static dependency_graph_node_t* current_dependency_node = NULL;
+
 //Reusable memory regions for our graph traversals
 static heap_queue_t traversal_queue;
 
@@ -175,12 +178,11 @@ static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, 
  * are no parser line numbers
 */
 static void print_cfg_message(error_message_type_t message_type, char* info, u_int32_t line_number){
-	//Now print it
 	//Mapped by index to the enum values
-	const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
+	static const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
 
 	//Print this out on a single line
-	fprintf(stdout, "\n[LINE %d: COMPILER %s]: %s\n", line_number, type[message_type], info);
+	fprintf(stdout, "\n[FILE: %s] --> [LINE %d | COMPILER %s]: %s\n", current_dependency_node->file_name, line_number, type[message_type], info);
 }
 
 
@@ -11913,7 +11915,7 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 				|| defined_in_signature->return_type->basic_type_token != VOID)
 				//It's a technically supported use-case to not put a return on main
 				&& is_main_function == FALSE){
-				print_cfg_message(MESSAGE_TYPE_WARNING, "Non-void function does not return in all control paths", 0);
+				print_cfg_message(MESSAGE_TYPE_WARNING, "Non-void function does not return in all control paths", function_defined_in->line_number);
 			}
 
 			//If it's not a void type, we do one thing
@@ -12126,6 +12128,9 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_node){
 	//Push the nesting level that we're in
 	push_nesting_level(&nesting_stack, NESTING_FUNCTION);
+
+	//Extract this for any/all printing
+	current_dependency_node = function_node->func_record->dependency_graph_node;
 	
 	//Grab the function record
 	symtab_function_record_t* func_record = function_node->func_record;

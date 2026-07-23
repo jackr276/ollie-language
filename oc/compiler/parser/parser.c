@@ -61,7 +61,7 @@ static heap_queue_t namespace_bfs_queue;
 static symtab_variable_sheaf_t* top_level_function_variable_scope = NULL;
 
 //Keep hold of the current dependency node that we are on
-dependency_graph_node_t* current_dependency_node;
+static dependency_graph_node_t* current_dependency_node = NULL;
 
 //Our stack for storing variables, etc
 static lex_stack_t grouping_stack;
@@ -147,7 +147,7 @@ static inline symtab_type_record_t* parse_pointer_type(symtab_type_record_t* cur
 */
 static void print_parse_message(error_message_type_t message_type, char* info, u_int32_t line_num){
 	//Now print it
-	const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
+	static const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
 
 	//Print this out on a single line
 	fprintf(stdout, "\n[FILE: %s] --> [LINE %d | COMPILER %s]: %s\n", current_file_name, line_num, type[message_type], info);
