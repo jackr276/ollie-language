@@ -358,7 +358,10 @@ static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic
 		return types_assignable(destination_type, source_node->inferred_type);
 
 	} else {
-		//Invoke the special helper to determine this
+		/**
+		 * Let types_assignable run. We will need the types to all be original here in order for this
+		 * to work properly
+		 */
 		generic_type_t* result_type = types_assignable_constant(destination_type, source_node->inferred_type);
 
 		//If it failed then just leave now
@@ -380,6 +383,15 @@ static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic
 				return NULL;
 			}
 		} 
+
+		/**
+		 * IMPORTANT - if we have a constant here and the result type is a pointer, we'll want to
+		 * adjust the constant's type to end up as a U64. This is physically equivalent to a pointer
+		 * but has different rules inside of Ollie
+		 */
+		if(result_type->type_class == TYPE_CLASS_POINTER){
+			result_type = immut_u64;
+		}
 
 		//Reassign the constant's type at this point
 		source_node->inferred_type = result_type;
