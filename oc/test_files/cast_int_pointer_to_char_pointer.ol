@@ -18,6 +18,6 @@ pub fn main() -> i32 {
 	let x:i32 = (1 << 31) - 1;
 
 	//Should have all 1's in the end
-	OUNIT:[exit_status = 255]
+	OUNIT: [exit_status = 255]
 	ret @int_ptr_to_char_ptr(&x);
 }
