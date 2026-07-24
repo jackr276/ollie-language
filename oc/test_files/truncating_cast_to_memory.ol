@@ -17,5 +17,5 @@ pub fn main() -> i32 {
 	@truncate_to_memory(&mem_region, x);
 
 	OUNIT: [exit_status = 255]
-	ret *mem_region;
+	ret mem_region;
 }
