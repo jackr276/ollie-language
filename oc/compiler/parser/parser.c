@@ -364,6 +364,9 @@ static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic
 		 *
 		 *
 		 * TODO WRONG!!!!!! WE CANNOT DO THIS
+		 *
+		 *
+		 * TODO DO A TO MEMORY TEST, NOT JUST FROM MEMORY
 		 */
 		if(destination_type->type_class == TYPE_CLASS_POINTER){
 			//destination_type = immut_u64;
