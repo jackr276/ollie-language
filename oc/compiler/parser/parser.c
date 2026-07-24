@@ -2537,8 +2537,8 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 						if(side == SIDE_TYPE_RIGHT 
 							&& is_variable_data_segment_variable(found_var) == FALSE
 							&& found_var->initialized == FALSE){
-							sprintf(info, "Variable %s may be used before initialization", found_var->var_name.string);
-							print_parse_message(MESSAGE_TYPE_INFO, info, parser_line_num);
+							sprintf(info, "Attempt to use variable %s before initialization", found_var->var_name.string);
+							return print_and_return_error(info, parser_line_num);
 						}
 						
 						//We know that this is valid, so we can allocate the identifier

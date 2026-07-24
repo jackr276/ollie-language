@@ -11,7 +11,7 @@ pub fn truncate_to_memory(x:mut i8*, y:i64) -> void {
 
 
 pub fn main() -> i32 {
-	declare mem_region:mut i8;
+	let mem_region:mut i8 = 0;
 	let x:i64 = 500000;
 
 	@truncate_to_memory(&mem_region, x);
