@@ -6728,6 +6728,49 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 
 /**
+ * Handle a truncating cast expression - this is a specific kind of expression where
+ * we need to assign a larger type(in the only child node) into a smaller type(the parent
+ * node). The underlying type will be processed by the "emit_expression()" rule
+ */
+static cfg_result_package_t emit_truncating_cast_expression(basic_block_t* basic_block, generic_ast_node_t* parent_node){
+	//Hang onto the most up to date block
+	basic_block_t* current_block = basic_block;
+
+	//Initialize our starting block
+	cfg_result_package_t truncating_cast_results = INITIALIZE_BLANK_CFG_RESULT;
+	truncating_cast_results.starting_block = current_block;
+
+	//The result type will always come from the parent node itself
+	generic_type_t* result_type = parent_node->inferred_type;
+
+	/**
+	 * The first child is always the underlying expression. We'll need to first
+	 * emit this using the normal channels
+	 */
+	cfg_result_package_t expression_results = emit_expression(current_block, parent_node->first_child);
+	current_block = expression_results.final_block;
+
+	/**
+	 * The LHS variable is of the type provided. The RHS variable
+	 * comes from the expression results. Note that we must always
+	 * unpack this, it may never be a constant
+	 */
+	three_addr_var_t* lhs_variable = emit_temp_var(result_type);
+	three_addr_var_t* rhs_variable = unpack_result_package(&expression_results, current_block);
+
+	//Emit and add into the block
+	instruction_t* truncating_move = emit_truncating_assignment_instruction(lhs_variable, rhs_variable);
+	add_statement(current_block, truncating_move);
+
+	//Package this up - it will always be a variable return type
+	truncating_cast_results.final_block = current_block;
+	truncating_cast_results.type = CFG_RESULT_TYPE_VAR;
+	truncating_cast_results.result_value.result_var = lhs_variable;
+	return truncating_cast_results;
+}
+
+
+/**
  * Handle an assignment expression and all of the required bookkeeping that comes 
  * with it
  */
@@ -7018,7 +7061,10 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 
 		case AST_NODE_TYPE_ASNMNT_EXPR:
 			return emit_assignment_expression(basic_block, expr_node);
-	
+
+		case AST_NODE_TYPE_TRUNCATING_CAST:
+			return emit_truncating_cast_expression(basic_block, expr_node);
+
 		case AST_NODE_TYPE_BINARY_EXPR:
 			return emit_binary_expression(basic_block, expr_node);
 

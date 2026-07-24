@@ -35,6 +35,18 @@ typedef enum {
 	OLLIE_SWITCH_TYPE_C_STYLE
 } ollie_switch_type_t;
 
+/**
+ * Different kinds of castability:
+ * 	1.) plain invalid, nothing else to do there
+ * 	2.) castable without the need for any kind of extra work
+ * 	3.) castable but we need to perform a truncation, which requires extra steps
+ */
+typedef enum {
+	NOT_CASTABLE,
+	CASTABLE,
+	CASTABLE_WITH_TRUNCATION
+} castability_results_t ;
+
 //Define a generic error array global variable
 static char info[ERROR_SIZE * 2];
 
@@ -347,14 +359,9 @@ static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic
 
 	} else {
 		/**
-		 * If we have a constant to pointer assignment, for coercion reasons
-		 * treat the pointer as an unsigned 64 bit integer
+		 * Let types_assignable run. We will need the types to all be original here in order for this
+		 * to work properly
 		 */
-		if(destination_type->type_class == TYPE_CLASS_POINTER){
-			destination_type = immut_u64;
-		}
-
-		//Invoke the special helper to determine this
 		generic_type_t* result_type = types_assignable_constant(destination_type, source_node->inferred_type);
 
 		//If it failed then just leave now
@@ -376,6 +383,15 @@ static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic
 				return NULL;
 			}
 		} 
+
+		/**
+		 * IMPORTANT - if we have a constant here and the result type is a pointer, we'll want to
+		 * adjust the constant's type to end up as a U64. This is physically equivalent to a pointer
+		 * but has different rules inside of Ollie
+		 */
+		if(result_type->type_class == TYPE_CLASS_POINTER){
+			result_type = immut_u64;
+		}
 
 		//Reassign the constant's type at this point
 		source_node->inferred_type = result_type;
@@ -791,6 +807,19 @@ static generic_ast_node_t* print_and_return_error(char* error_message, u_int32_t
 	num_errors++;
 	//Allocate and return an error node
 	return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+}
+
+
+/**
+ * Print out an error message. This avoids code duplicatoin becuase of how much we do this
+ */
+static inline u_int8_t print_and_return_failure(char* error_message, u_int32_t parser_line_num){
+	//Display the error
+	print_parse_message(MESSAGE_TYPE_ERROR, error_message, parser_line_num);
+	//Increment the number of errors
+	num_errors++;
+	//Print out our failure
+	return FAILURE;
 }
 
 
@@ -4175,19 +4204,393 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 
 
 /**
- * A cast expression decays into a unary expression
+ * Print out an error message. This avoids code duplicatoin becuase of how much we do this
+ */
+static inline castability_results_t print_and_return_not_castable(char* error_message, u_int32_t parser_line_num){
+	//Display the error
+	print_parse_message(MESSAGE_TYPE_ERROR, error_message, parser_line_num);
+	//Increment the number of errors
+	num_errors++;
+
+	return NOT_CASTABLE;
+}
+
+
+/**
+ * Is it a valid operation to cast from the "being casted type" to the "casting to type"? Returns
+ * TRUE or FALSE. This helper also handles all of the error printing associated with casting
  *
+ * Casting is not the same as assignment. Ollie allows truncating casts for integer types, but does
+ * not allow truncating assignment
+ *
+ * If we have the "consider truncation" flag set to true, we will look to see if our cast requires anything
+ * extra to fully work(think f32 to i16, this is a two step process in assembly). If it is, we will return a
+ * special result type that will result in the creation of a special AST node for truncation
+ */
+static castability_results_t are_types_castable(generic_type_t* casting_to_type, generic_type_t* being_casted_type, u_int8_t consider_truncation){
+	//For use in enum figuring
+	generic_type_t* underlying_enum_type;
+
+	/**
+	 * You can never cast a "void" to anything
+	 */
+	if(IS_VOID_TYPE(being_casted_type) == TRUE){
+		sprintf(info, "Type %s cannot be casted to any other type", being_casted_type->type_name.string);
+		return print_and_return_not_castable(info, parser_line_num);
+	}
+
+	/**
+	 * Likewise, you can never cast anything to void
+	 */
+	if(IS_VOID_TYPE(casting_to_type) == TRUE){
+		sprintf(info, "Type %s cannot be casted to type %s", being_casted_type->type_name.string, casting_to_type->type_name.string);
+		return print_and_return_not_castable(info, parser_line_num);
+	}
+
+	/**
+	 * Based on what we're casting to we will do validations. Remember that
+	 * we've already screened out all of the void types by the time we've gotten
+	 * to here so we won't need to worry about those at all
+	 */
+	switch(casting_to_type->type_class){
+		/**
+		 * Basic validations here - we can never cast to these types
+		 */
+		case TYPE_CLASS_UNION:
+			return print_and_return_not_castable("No type can be casted to a union type", parser_line_num);
+		case TYPE_CLASS_STRUCT:
+			return print_and_return_not_castable("No type can be casted to a struct type", parser_line_num);
+		case TYPE_CLASS_ARRAY:
+			return print_and_return_not_castable("No type can be casted to an array type", parser_line_num);
+		case TYPE_CLASS_FUNCTION_SIGNATURE:
+			return print_and_return_not_castable("No type can be casted to a function type", parser_line_num);
+		case TYPE_CLASS_ERROR:
+			return print_and_return_not_castable("No type can be casted to an error type", parser_line_num);
+
+		/**
+		 * We are able to cast from integer types to enumeration values - even if they are truncating. We
+		 * are not able to cast anything else into an enum type
+		 */
+		case TYPE_CLASS_ENUMERATED:
+			//Extract the underlying type
+			underlying_enum_type = casting_to_type->internal_values.enum_integer_type;
+
+			//If it's not basic we cannot go further
+			if(being_casted_type->type_class != TYPE_CLASS_BASIC){
+				sprintf(info, "Type %s may not be cast to enumerated type %s. Only integers may be cast to enum types",
+								being_casted_type->type_name.string,
+								casting_to_type->type_name.string);
+				return print_and_return_not_castable(info, parser_line_num);
+			}
+
+			/**
+			 * Now that we know we're casting
+			 */
+			switch(being_casted_type->basic_type_token){
+				/**
+				 * We cannot use floating point values to cast this - only integer values
+				 * are allowed
+				 */
+				case F32:
+				case F64:
+				case VOID:
+					sprintf(info, "Type %s may not be cast to enumerated type %s. Only integers may be cast to enum types",
+									being_casted_type->type_name.string,
+									casting_to_type->type_name.string);
+					return print_and_return_not_castable(info, parser_line_num);
+
+				/**
+				 * Integers are valid with an asterisk. There is no guarantee that
+				 * all values possible from an integer type are represented by the enum
+				 * type itself
+				 */
+				case BOOL:
+				case I8:
+				case U8:
+				case I16:
+				case U16:
+				case I32:
+				case U32:
+				case I64:
+				case U64:
+					sprintf(info, "There is no guarantee that all possible values from type %s are expressed in enum %s",
+			 						being_casted_type->type_name.string,
+			 						casting_to_type->type_name.string);
+					print_parse_message(MESSAGE_TYPE_INFO, info, parser_line_num);
+
+					/**
+					 * If we are casting from a larger type to a smaller underlying enum type, we will
+					 * need to perform truncation
+					 */
+					if(consider_truncation == TRUE && underlying_enum_type->type_size < casting_to_type->type_size){
+						sprintf(info, "Casting from type %s to type %s may result in data loss from truncation",
+										being_casted_type->type_name.string,
+										casting_to_type->type_name.string);
+						print_parse_message(MESSAGE_TYPE_INFO, info, parser_line_num);
+
+						//Flag that this does work, but we need to truncate it first
+						return CASTABLE_WITH_TRUNCATION;
+					}
+
+					return CASTABLE;
+
+				//Some weird error that makes us bomb out
+				default:
+					fprintf(stderr, "Fatal internal compiler error: unrecognized basic type detected in cast expression\n");
+					exit(1);
+			}
+
+			//Should be unreachable - keep the C compiler happy
+			return FALSE;
+
+		/**
+		 * We are able to cast enums, pointers, and other basic types to basic types. Ollie
+		 * permits truncating casts for integer-to-integer casting
+		 */
+		case TYPE_CLASS_BASIC:
+			switch(being_casted_type->type_class){
+				/**
+				 * An enum can be cast to any other basic
+				 * type just fine. We do not care about type sizes at
+				 * all
+				 */
+				case TYPE_CLASS_ENUMERATED:
+					//Extract the underlying type
+					underlying_enum_type = being_casted_type->internal_values.enum_integer_type;
+
+					/**
+					 * If the enum type itself is larger than what it's being cast to,
+					 * we will send an info message that this may result in data loss
+					 */
+					if(consider_truncation == TRUE && underlying_enum_type->type_size > casting_to_type->type_size){
+						sprintf(info, "Casting from type %s to type %s may result in data loss from truncation",
+										being_casted_type->type_name.string,
+										casting_to_type->type_name.string);
+						print_parse_message(MESSAGE_TYPE_INFO, info, parser_line_num);
+
+						//Flag that this does work, but we need to truncate it first
+						return CASTABLE_WITH_TRUNCATION;
+					}
+
+					return CASTABLE;
+
+				/**
+				 * We are able to cast basic types to other basic
+				 * types universally(remember that we have already dealt
+				 * with the case of a void type so we don't need to worry
+				 * about that here)
+				 */
+				case TYPE_CLASS_BASIC:
+					/**
+					 * Flag to the user that this may result in data loss
+					 */
+					if(consider_truncation == TRUE && being_casted_type->type_size > casting_to_type->type_size){
+						sprintf(info, "Casting from type %s to type %s may result in data loss from truncation",
+										being_casted_type->type_name.string,
+										casting_to_type->type_name.string);
+						print_parse_message(MESSAGE_TYPE_INFO, info, parser_line_num);
+
+						//Flag that this does work, but we need to truncate it first
+						return CASTABLE_WITH_TRUNCATION;
+					}
+
+					//This works
+					return CASTABLE;
+
+				/**
+				 * We are able to cast from a pointer to a basic type *only* if that
+				 * basic type is an i64/u64 integer
+				 */
+				case TYPE_CLASS_POINTER:
+					switch(casting_to_type->basic_type_token){
+						case I64:
+						case U64:
+							return CASTABLE;
+							
+						default:
+							return print_and_return_failure("Pointers may only be cast to i64/u64 integer types", parser_line_num);
+					}
+
+					//Keep the compiler happy - should be unreachable
+					return NOT_CASTABLE;
+
+				/**
+				 * Everything else may not be cast to a basic type
+				 */
+				default:
+					sprintf(info, "Type %s may not be cast to type %s",
+									being_casted_type->type_name.string,
+									casting_to_type->type_name.string);
+					return print_and_return_not_castable(info, parser_line_num);
+			}
+
+			//Keep the compiler happy - should be unreachable
+			return NOT_CASTABLE;
+
+		/**
+		 * We are able to cast integers, pointers and array types
+		 * into pointers themselves.
+		 *
+		 * Pointer casting has strict slightly different concerns 
+		 * when compared to regular casting:
+		 * 	1.) If casting an array/pointer to another pointer, the member
+		 * 		types must be assignable
+		 * 	2.) You may not cast an immuatble object into a mutable pointer
+		 */
+		case TYPE_CLASS_POINTER:
+			switch(being_casted_type->type_class){
+				/**
+				 * Any non-float basic type may be turned into a pointer
+				 */
+				case TYPE_CLASS_BASIC:
+					switch(being_casted_type->basic_type_token){
+						case F32:
+						case F64:
+							return print_and_return_failure("Floating point types may not be cast to pointers", parser_line_num);
+
+						default:
+							return CASTABLE;
+					}
+					
+				/**
+				 * For pointers to be castable to one another, there are a few rules
+				 * to follow:
+				 * 	1.) we may never cast an immutable memory address to a mutable pointer
+				 * 	2.) we may never cast a contiguous memory region to a non-contiguous one, and vice versa
+				 */
+				case TYPE_CLASS_POINTER:
+					/**
+					 * Illegal mutability violation - going from mutable to non-mutable
+					 * would allow access that should be illegal
+					 */
+					if(being_casted_type->mutability == NOT_MUTABLE && casting_to_type->mutability == MUTABLE){
+						sprintf(info, "Immutable type %s may not be cast to mutable type %s",
+			  							being_casted_type->type_name.string,
+			  							casting_to_type->type_name.string);
+						return print_and_return_not_castable(info, parser_line_num);
+					}
+
+					/**
+					 * We are able to cast anything to a void(generic) pointer
+					 */
+					if(casting_to_type->internal_values.is_void_pointer == TRUE){
+						return CASTABLE;
+					}
+
+					/**
+					 * Likewise we are able to cast a generic pointer to any other
+					 * pointer so long as the mutability is consitent
+					 */
+					if(being_casted_type->internal_values.is_void_pointer == TRUE){
+						return CASTABLE;
+					}
+
+					/**
+					 * If the memory layout type of the source and destination are different, then we cannot
+					 * csat them to eachother because if we were eventually to go and do memory access
+					 * using the [] operator, we would produce entirely different assembly code. Using
+					 * non-contiguous access on a contiguous region is almost certain to cause segfaults
+					 */
+					if(being_casted_type->memory_layout_type != casting_to_type->memory_layout_type){
+						sprintf(info, "Types %s and %s have different memory layout types. Casting one to the other would cause undefined memory access behavior",
+			  							being_casted_type->type_name.string,
+			  							casting_to_type->type_name.string);
+						return print_and_return_not_castable(info, parser_line_num);
+					}
+
+					/**
+					 * Now that all of those checks are out of the way, we will recursively check if the underlying
+					 * types are or are not castable to one another
+					 */
+					return are_types_castable(casting_to_type->internal_types.points_to, being_casted_type->internal_types.points_to, FALSE);
+
+				/**
+				 * For an array to be castable to a pointer, there are a few rules
+				 * to follow:
+				 * 	1.) we may never cast an immutable memory address to a mutable pointer
+				 * 	2.) we may never cast a contiguous memory region to a non-contiguous one, and vice versa
+				 */
+				case TYPE_CLASS_ARRAY:
+					/**
+					 * Illegal mutability violation - going from mutable to non-mutable
+					 * would allow access that should be illegal
+					 */
+					if(being_casted_type->mutability == NOT_MUTABLE && casting_to_type->mutability == MUTABLE){
+						sprintf(info, "Immutable type %s may not be cast to mutable type %s",
+			  							being_casted_type->type_name.string,
+			  							casting_to_type->type_name.string);
+						return print_and_return_failure(info, parser_line_num);
+					}
+
+					/**
+					 * We are always able to cast to a generic pointer if the user
+					 * wants to
+					 */
+					if(casting_to_type->internal_values.is_void_pointer == TRUE){
+						return TRUE;
+					}
+
+					/**
+					 * If the memory layout type of the source and destination are different, then we cannot
+					 * csat them to eachother because if we were eventually to go and do memory access
+					 * using the [] operator, we would produce entirely different assembly code. Using
+					 * non-contiguous access on a contiguous region is almost certain to cause segfaults
+					 */
+					if(being_casted_type->memory_layout_type != casting_to_type->memory_layout_type){
+						sprintf(info, "Types %s and %s have different memory layout types. Casting one to the other would cause undefined memory access behavior",
+			  							being_casted_type->type_name.string,
+			  							casting_to_type->type_name.string);
+						return print_and_return_not_castable(info, parser_line_num);
+					}
+
+					/**
+					 * Now that all of those checks are out of the way, we will recursively check if the underlying
+					 * types are or are not castable to one another
+					 */
+					return are_types_castable(casting_to_type->internal_types.points_to, being_casted_type->internal_types.member_type, FALSE);
+
+				/**
+				 * Everything else we can't cast to a pointer
+				 */
+				default:
+					sprintf(info, "Type %s may not be cast to type %s",
+									being_casted_type->type_name.string,
+									casting_to_type->type_name.string);
+					return print_and_return_not_castable(info, parser_line_num);
+			}
+
+			//Keep the compiler happy - should be unreachable
+			return NOT_CASTABLE;
+
+		//We should never get here - just to be safe
+		default:
+			fprintf(stderr, "Fatal internal compiler error: unrecognized type detected in cast expression\n");
+			exit(1);
+	}
+
+	return NOT_CASTABLE;
+}
+
+
+/**
+ * A cast expression decays into a unary expression. 
+ * 
  * BNF Rule: <cast-expression> ::= <unary-expression> 
  * 						    	| < <type-specifier> > <unary-expression>
+ *
+ * If a cast expression is going to require a special kind of truncating assignment(think f32 to i16),
+ * then we are going to need a special node that will handle that
  */
 static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, side_type_t side){
-	//The lookahead token
-	lexitem_t lookahead;
+	//The final node that we return
+	generic_ast_node_t* final_node;
 
-	//If we first see an angle bracket, we know that we are truly doing
-	//a cast. If we do not, then this expression is just a pass through for
-	//a unary expression
-	lookahead = get_next_token(token_stream, &parser_line_num);
+	/**
+	 * If we first see an angle bracket, we know that we are truly doing
+	 * a cast. If we do not, then this expression is just a pass through for
+	 * a unary expression
+	 */
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 	
 	//If it's not the <, put the token back and just return the unary expression
 	if(lookahead.tok != L_THAN){
@@ -4201,10 +4604,10 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 	push_token(&grouping_stack, lookahead);
 
 	//Grab the type specifier
-	generic_type_t* type_spec = type_specifier(token_stream);
+	generic_type_t* casting_to_type = type_specifier(token_stream);
 
 	//If it's an error, we'll print and propagate it up
-	if(type_spec == NULL){
+	if(casting_to_type == NULL){
 		return print_and_return_error("Invalid type specifier given to cast expression", parser_line_num);
 	}
 
@@ -4221,82 +4624,104 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 		return print_and_return_error("Unmatched angle brackets given to cast statement", parser_line_num);
 	}
 
-	//Now we have to see a valid unary expression. This is our last potential fail case in the chain
-	//The unary expression will handle this for us
-	generic_ast_node_t* right_hand_unary = unary_expression(token_stream, side);
-
-	//If it's an error we'll jump out
-	if(right_hand_unary->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		return right_hand_unary;
-	}
-
-	//No we'll need to determine if we can actually cast here
-	//What we're trying to cast to
-	generic_type_t* casting_to_type = dealias_type(type_spec);
-	//What is being casted
-	generic_type_t* being_casted_type = dealias_type(right_hand_unary->inferred_type);
-
-	//You can never cast a "void" to anything
-	if(IS_VOID_TYPE(being_casted_type) == TRUE){
-		sprintf(info, "Type %s cannot be casted to any other type", being_casted_type->type_name.string);
-		return print_and_return_error(info, parser_line_num);
-	}
-
-	//Likewise, you can never cast anything to void
-	if(IS_VOID_TYPE(casting_to_type) == TRUE){
-		sprintf(info, "Type %s cannot be casted to type %s", being_casted_type->type_name.string, casting_to_type->type_name.string);
-		return print_and_return_error(info, parser_line_num);
-	}
-
-	//You can never cast anything to be a struct 
-	if(casting_to_type->type_class == TYPE_CLASS_STRUCT){
-		return print_and_return_error("No type can be casted to a struct type", parser_line_num);
-	}
-
-	//You can never cast anything to be a union 
-	if(casting_to_type->type_class == TYPE_CLASS_UNION){
-		return print_and_return_error("No type can be casted to a union type", parser_line_num);
-	}
-
-	//You can never cast anything to be an array 
-	if(casting_to_type->type_class == TYPE_CLASS_ARRAY){
-		return print_and_return_error("No type can be casted to an array type", parser_line_num);
+	/**
+	 * Get the expression that we are casting here
+	 */
+	generic_ast_node_t* being_casted_expression = unary_expression(token_stream, side);
+	if(being_casted_expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return being_casted_expression;
 	}
 
 	/**
-	 * If the type that is being casted is a memory region, and we are
-	 * trying to cast it to a pointer of some kind, we need to be careful about 
-	 * the way in which mutability is handled
+	 * Let the helper determine if we are able to cast
+	 * from the source type to the destination type or
+	 * not. If we are not we fail out, but the helper has
+	 * already handled all error printing
 	 */
-	if(is_memory_region(being_casted_type) == TRUE
-		&& casting_to_type->type_class == TYPE_CLASS_POINTER){
+	casting_to_type = dealias_type(casting_to_type);
+	generic_type_t* being_casted_type = dealias_type(being_casted_expression->inferred_type);
 
-		//This is an error
-		if(being_casted_type->mutability == NOT_MUTABLE
-			&& casting_to_type->mutability == MUTABLE){
-			//Fail out here
-			sprintf(info, "Attempt to cast an immutable type %s to a mutable pointer type %s is illegal", being_casted_type->type_name.string, casting_to_type->type_name.string);
-			return print_and_return_error(info, parser_line_num);
+	//We only warn about truncation if we aren't dealing with a constant
+	u_int8_t warn_about_truncating = being_casted_expression->ast_node_type == AST_NODE_TYPE_CONSTANT ? FALSE : TRUE;
+
+	//Let the helper retrieve our final castability
+	castability_results_t castability = are_types_castable(casting_to_type, being_casted_type, warn_about_truncating);
+
+	//Fail out if this is not
+	if(castability == NOT_CASTABLE){
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	/**
+	 * Two divergent paths here:
+	 * 	1.) For non-constants:
+	 * 		a.) Regular, non truncating cast. We do not need to do anything besides change the type
+	 * 		b.) Truncating cast - since this requires extra steps, we need to emit a special truncating 
+	 * 			assignment node that will have special handling when in the instruction selector
+	 * 		
+	 * 	2.) For constants - it does not matter if this is a truncating cast
+	 * 	 	or not. The coerce_constant() helper will take care of all 
+	 * 	 	truncation
+	 *
+	 * If we have a constant, we will now need to coerce this value
+	 * into the type that we just assigned it. The coerce_constant()
+	 * helper does all of this for us
+	 */
+	if(being_casted_expression->ast_node_type != AST_NODE_TYPE_CONSTANT){
+		switch(castability){
+			//If it is castable we just change the type
+			case CASTABLE:
+				being_casted_expression->inferred_type = casting_to_type;
+				final_node = being_casted_expression;
+				break;
+				
+			//Castable with truncation requires a special AST node to handle
+			case CASTABLE_WITH_TRUNCATION:
+				//Create the final node and our inferred type
+				final_node = ast_node_alloc(AST_NODE_TYPE_TRUNCATING_CAST, side);
+				
+				//Add in the type and our variable as well
+				final_node->inferred_type = casting_to_type;
+				final_node->variable = being_casted_expression->variable;
+
+				//This is the child of our node
+				add_child_node(final_node, being_casted_expression);
+				break;
+
+			default:
+				fprintf(stderr, "Fatal internal compiler error: invalid castability type detected\n");
+				exit(1);
 		}
+
+	} else {
+		/**
+		 * Once we get here then we know that our casting is fine. The final
+		 * type for this expression will be the "casting to type". This
+		 * is what the overall node will carry as we pass it around
+		 */
+		being_casted_expression->inferred_type = casting_to_type;
+
+		/**
+		 * If we're not casting to a pointer we're fine. If we are casting
+		 * to a pointer, due to some of the limitations of the coerce_constant()
+		 * helper, we will treat this as a u64 for the coercion and then
+		 * move it back to a pointer afterwards
+		 */
+		if(casting_to_type->type_class != TYPE_CLASS_POINTER){
+			coerce_constant(being_casted_expression);
+
+		} else {
+			being_casted_expression->inferred_type = immut_u64;
+			coerce_constant(being_casted_expression);
+			being_casted_expression->inferred_type = casting_to_type;
+		}
+
+		//This is the final node
+		final_node = being_casted_expression;
 	}
 
-	/**
-	 * We will use the types_assignable function to check this. This will also perform any constant
-	 * coercion if need be
-	 */
-	generic_type_t* return_type = is_ast_node_assignable_to_destination_type(casting_to_type, right_hand_unary);
-
-	//This is our fail case
-	if(return_type == NULL){
-		generate_types_assignable_failure_message(info, being_casted_type, casting_to_type);
-		return print_and_return_error(info, parser_line_num);
-	}
-
-	//These types are now inferenced
-	right_hand_unary->inferred_type = type_spec;
-
-	//Finally, we're all set to go here, so we can return the root reference
-	return right_hand_unary;
+	//Give back whatever we say the final node is
+	return final_node;
 }
 
 

@@ -219,7 +219,7 @@ static inline ounit_type_t parse_exit_status_OUNIT_directive(ollie_token_array_t
 	 * We'll have this fail. We don't want to let the developer waste
 	 * time confused as to why this isn't working
 	 */
-	if(parameters->expected_exit_status >= MAX_EXIT_STATUS_VALUE){
+	if(parameters->expected_exit_status > MAX_EXIT_STATUS_VALUE){
 		pthread_mutex_lock(&stdout_mutex);
 		fprintf(stdout, "The OUNIT expected return value of %d is higher than the maximum UNIX return value of %d. Please remediate your test\n",
 		  		parameters->expected_exit_status,

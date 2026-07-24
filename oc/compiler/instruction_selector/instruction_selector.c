@@ -8214,6 +8214,57 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 
 
 /**
+ * Handle an ollie truncating assignment instruction, where the source operand's
+ * size is larger than the destination's size
+ *
+ * We know that the result variable(assignee in this case) is already of the proper
+ * type and is being used by other instructions down the line. As such the very
+ * last assignee in our chain must be that assignee
+ *
+ * NOTE: it is assumed that the truncating cast is always the first instruction
+ * in the window
+ */
+static void handle_truncating_assignment_instruction(instruction_window_t* window){
+	//Extract the instruction that we're after
+	instruction_t* truncating_cast = window->instruction1;
+
+	//Extract these both for convenience
+	three_addr_var_t* destination = truncating_cast->operands.oir.assignee;
+	three_addr_var_t* source = truncating_cast->operands.oir.operand1;
+
+	//Extract the types as well
+	generic_type_t* destination_type = destination->type;
+	generic_type_t* source_type = source->type;
+
+	/**
+	 * For enum types, we don't want to be using the actaul enum type as it's
+	 * not accurate to the underlying mechanics. Instead we will extract
+	 * the equivalent integer type
+	 */
+	if(destination_type->type_class == TYPE_CLASS_ENUMERATED){
+		destination_type = destination_type->internal_values.enum_integer_type;
+	}
+
+	if(source_type->type_class == TYPE_CLASS_ENUMERATED){
+		source_type = source_type->internal_values.enum_integer_type;
+	}
+
+	/**
+	 * Depending on what we're truncating to/from, we will need to
+	 * perform different steps. Floating point values present larger
+	 * challenges than integers due to the potential need for a multi-step conversion
+	 *
+	 * NOTE: all truncating moves happen between basic types. This assumption
+	 * allows us to use the basic type token here for everything
+	 */
+
+
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
+}
+
+
+/**
  * Emit a movX instruction with a constant
  *
  * This is used for when we need extra moves(after a division/modulus)
@@ -14794,6 +14845,9 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		case THREE_ADDR_CODE_ASSN_STMT:
 			handle_register_movement_instruction(instruction);
 			break;
+		case THREE_ADDR_CODE_TRUNCATING_ASSN_STMT:
+			handle_truncating_assignment_instruction(window);
+			break;
 		case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT:
 			handle_conditional_movement_statement(window);
 			break;
@@ -14880,7 +14934,7 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		 * we fail out
 		 */
 		default:
-			fprintf(stderr, "Fatal internal compiler error: instruction with code %d reached an unreachable path", instruction->statement_type);
+			fprintf(stderr, "Fatal internal compiler error: instruction with code %d reached an unreachable path\n", instruction->statement_type);
 			exit(1);
 	}
 }
