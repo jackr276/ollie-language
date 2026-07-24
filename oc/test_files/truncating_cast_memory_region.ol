@@ -9,6 +9,8 @@ pub fn truncate_from_memory(x:f64*) -> i8 {
 
 
 pub fn main() -> i32 {
+	let x:f64 = 4.44d;
+
 	OUNIT: [exit_status = 4]
-	ret @truncate_from_memory(4.44d);
+	ret @truncate_from_memory(&x);
 }
