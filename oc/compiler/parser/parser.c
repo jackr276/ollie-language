@@ -284,8 +284,21 @@ static inline u_int8_t does_enum_contain_integer_member(generic_type_t* enum_typ
  * 	Case 4: both are constant -> use both types
  *
  * This rule returning NULL indicates that types were not compatible
+ *
+ * For constant types, we need to perform type/storage
+ * rememediation on the internal constant values based on 
+ * what the return type is. We will do this now. Remember
+ * that the inferred types of the constant nodes have already
+ * been manipulated by the type coercer above
+ *
+ * One slight caveat is that, for pointer arithmetic, we don't
+ * want to coerce the constant into a pointer. Instead, we'll
+ * make the constant an i64
  */
 static inline generic_type_t* determine_type_compatability_for_expression(type_symtab_t* symtab, generic_ast_node_t* left_hand_node, generic_ast_node_t* right_hand_node, ollie_token_t operator){
+	//Holder for our return type helper
+	generic_type_t* return_type;
+
 	//Get out whether or not these are both constants
 	u_int8_t left_is_constant = left_hand_node->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 	u_int8_t right_is_constant = right_hand_node->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
@@ -316,10 +329,16 @@ static inline generic_type_t* determine_type_compatability_for_expression(type_s
 				right_hand_node->inferred_type = immut_i64;
 			}
 
-			coerce_constant(right_hand_node);
+			//Get back the result of our actual compatibility checker
+			return_type = determine_compatability_and_coerce(symtab, &(left_hand_node->inferred_type), &(right_hand_node->inferred_type), operator);
 
-			//Give back the result of our actual compatibility checker
-			return determine_compatability_and_coerce(symtab, &(left_hand_node->inferred_type), &(right_hand_node->inferred_type), operator);
+			//If it worked then we can coerce now
+			if(return_type != NULL){
+				coerce_constant(right_hand_node);
+			}
+
+			//Give back our final type
+			return return_type;
 		}
 
 	/**
@@ -342,17 +361,33 @@ static inline generic_type_t* determine_type_compatability_for_expression(type_s
 				left_hand_node->inferred_type = immut_i64;
 			}
 
-			coerce_constant(left_hand_node);
+			//Get back the result of our actual compatibility checker
+			return_type = determine_compatability_and_coerce(symtab, &(left_hand_node->inferred_type), &(right_hand_node->inferred_type), operator);
 
-			//Give back the result of our actual compatibility checker
-			return determine_compatability_and_coerce(symtab, &(left_hand_node->inferred_type), &(right_hand_node->inferred_type), operator);
+			//If it worked then we can coerce now
+			if(return_type != NULL){
+				coerce_constant(left_hand_node);
+			}
+
+			//Give back our final type
+			return return_type;
 
 		/**
 		 * Case 4: both values here are constants. We have no choice but
-		 * to use the rule now
+		 * to use the rule now. We will perform all constant coercion internally to this helper
 		 */
 		} else {
-			return determine_compatability_and_coerce(symtab, &(left_hand_node->inferred_type), &(right_hand_node->inferred_type), operator);
+			//Get our return type out
+			return_type = determine_compatability_and_coerce(symtab, &(left_hand_node->inferred_type), &(right_hand_node->inferred_type), operator);
+
+			//If it worked then we can coerce now
+			if(return_type != NULL){
+				coerce_constant(left_hand_node);
+				coerce_constant(right_hand_node);
+			}
+
+			//Give back whatever we got
+			return return_type;
 		}
 	}
 }
@@ -5141,39 +5176,6 @@ static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_strea
 		if(return_type == NULL){
 			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
-		}
-
-		/**
-		 * For constant types, we need to perform type/storage
-		 * rememediation on the internal constant values based on 
-		 * what the return type is. We will do this now. Remember
-		 * that the inferred types of the constant nodes have already
-		 * been manipulated by the type coercer above
-		 *
-		 * One slight caveat is that, for pointer arithmetic, we don't
-		 * want to coerce the constant into a pointer. Instead, we'll
-		 * make the constant an i64
-		 *
-		 * This is a unique case where we leave type coercion rules up
-		 * to the actual rule itself. For other binary expressions we will
-		 * not do this
-		 *
-		 * TODO MAYBE WE CAN GET RID OF THIS?
-		 */
-		if(temp_holder_is_constant == TRUE){
-			if(return_type->type_class != TYPE_CLASS_BASIC){
-				temp_holder->inferred_type = immut_i64;
-			}
-
-			coerce_constant(temp_holder);
-		}
-
-		if(right_child_is_constant == TRUE){
-			if(return_type->type_class != TYPE_CLASS_BASIC){
-				right_child->inferred_type = immut_i64;
-			}
-
-			coerce_constant(right_child);
 		}
 
 		/**
