@@ -3213,7 +3213,7 @@ loop_end:
 		 * Determine type compatibility and perform coercions. We can only perform coercions on the left hand duplicate, because we
 		 * don't want to mess with the actual type of the variable
 		 */
-		final_type = determine_compatibility_and_coerce(type_symtab, &(left_hand_duplicate->inferred_type), &(expr->inferred_type), binary_op);
+		final_type = determine_compatability_and_coerce(type_symtab, &(left_hand_duplicate->inferred_type), &(expr->inferred_type), binary_op);
 
 		//If this fails, that means that we have an invalid operation
 		if(final_type == NULL){
@@ -4808,7 +4808,7 @@ static generic_ast_node_t* multiplicative_expression(ollie_token_stream_t* token
 		}
 
 		//Use the type compatibility function to determine compatibility and apply necessary coercions
-		return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
+		return_type = determine_compatability_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
 		//If this fails, that means that we have an invalid operation
 		if(return_type == NULL){
@@ -5043,7 +5043,7 @@ static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_strea
 		}
 
 		//Use the type compatibility function to determine compatibility and apply necessary coercions
-		return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
+		return_type = determine_compatability_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
 		/**
 		 * It is invalid to ever attempt addition to/subtraction from a void pointer
@@ -5258,7 +5258,7 @@ static generic_ast_node_t* shift_expression(ollie_token_stream_t* token_stream, 
 			}
 
 			//The return type is always the left child's type
-			return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
+			return_type = determine_compatability_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
 			//If this fails, that means that we have an invalid operation
 			if(return_type == NULL){
@@ -5420,7 +5420,7 @@ static generic_ast_node_t* relational_expression(ollie_token_stream_t* token_str
 			}
 
 			//The return type is always the left child's type
-			return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
+			return_type = determine_compatability_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
 			//If this fails, that means that we have an invalid operation
 			if(return_type == NULL){
@@ -5575,7 +5575,7 @@ static generic_ast_node_t* equality_expression(ollie_token_stream_t* token_strea
 		}
 
 		//Get the return type and perform any needed coercions
-		return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
+		return_type = determine_compatability_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
 		//If this fails, that means that we have an invalid operation
 		if(sub_tree_root->inferred_type == NULL){
@@ -5731,7 +5731,7 @@ static generic_ast_node_t* and_expression(ollie_token_stream_t* token_stream, si
 		right_child_is_constant = right_child->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
 		//Apply the compatibility and coercion layer
-		generic_type_t* final_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), SINGLE_AND);
+		generic_type_t* final_type = determine_compatability_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), SINGLE_AND);
 
 		//If this fails, that means that we have an invalid operation
 		if(final_type == NULL){
@@ -5876,7 +5876,7 @@ static generic_ast_node_t* exclusive_or_expression(ollie_token_stream_t* token_s
 		right_child_is_constant = right_child->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
 		//Apply the compatibility and coercion layer
-		generic_type_t* final_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), CARROT);
+		generic_type_t* final_type = determine_compatability_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), CARROT);
 
 		//If this fails, that means that we have an invalid operation
 		if(final_type == NULL){
@@ -6024,7 +6024,7 @@ static generic_ast_node_t* inclusive_or_expression(ollie_token_stream_t* token_s
 		is_right_child_constant = right_child->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
 		//Apply the compatibility and coercion layer
-		generic_type_t* final_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), CARROT);
+		generic_type_t* final_type = determine_compatability_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), CARROT);
 
 		//If this fails, that means that we have an invalid operation
 		if(final_type == NULL){
@@ -6175,7 +6175,7 @@ static generic_ast_node_t* logical_and_expression(ollie_token_stream_t* token_st
 		right_child_is_constant = right_child->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
 		//Use the type compatibility function to determine compatibility and apply necessary coercions
-		generic_type_t* return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), DOUBLE_AND);
+		generic_type_t* return_type = determine_compatability_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), DOUBLE_AND);
 
 		//If this fails, that means that we have an invalid operation
 		if(return_type == NULL){
@@ -6325,7 +6325,7 @@ static generic_ast_node_t* logical_or_expression(ollie_token_stream_t* token_str
 		}
 
 		//Use the type compatibility function to determine compatibility and apply necessary coercions
-		generic_type_t* return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), DOUBLE_OR);
+		generic_type_t* return_type = determine_compatability_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), DOUBLE_OR);
 
 		//If this fails, that means that we have an invalid operation
 		if(return_type == NULL){

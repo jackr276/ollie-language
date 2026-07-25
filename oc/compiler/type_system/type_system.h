@@ -270,7 +270,7 @@ generic_type_t* determine_ternary_compatibility(void* symtab, generic_type_t** a
  * Determine the compatibility of two types and coerce appropraitely. The double pointer
  * reference exists so that this method may transform types as appropriate
  */
-generic_type_t* determine_compatibility_and_coerce(void* type_symtab, generic_type_t** a, generic_type_t** b, ollie_token_t op);
+generic_type_t* determine_compatability_and_coerce(void* type_symtab, generic_type_t** a, generic_type_t** b, ollie_token_t op);
 
 /**
  * Are we able to assign something of "source_type" to something on "destination_type"? Returns

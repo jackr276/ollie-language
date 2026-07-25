@@ -1256,7 +1256,7 @@ generic_type_t* determine_ternary_compatibility(void* symtab, generic_type_t** a
  * always dominate. This means that the integer value will itself be converted into a floating point value 
  * for the duration of the operation
  */
-generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t** a, generic_type_t** b, ollie_token_t op){
+generic_type_t* determine_compatability_and_coerce(void* symtab, generic_type_t** a, generic_type_t** b, ollie_token_t op){
 	//For convenience
 	symtab = (type_symtab_t*)symtab;
 
