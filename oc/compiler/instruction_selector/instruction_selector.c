@@ -8416,9 +8416,32 @@ static void handle_truncating_assignment_instruction(instruction_window_t* windo
 
 
 		case F64:
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(1);
+			/**
+			 * Case 3(part 1): Larger float -Truncate-> smaller integer/smaller float
+			 *
+			 * This is specifically handling for the F64 case. We know that whatever we're
+			 * trying to fit this into is less than 8 bytes. For the case of an f32, we use
+			 * the cvtsd2ss instruction. In any other case, we use the cvttsd2sil to first convert
+			 * to an i32, and then do more from there as needed following the other procedures
+			 * in case 1
+			 */
+			switch(destination_type->basic_type_token){
+				case CHAR:
+				case BOOL:
+				case I8:
+				case U8:
+				case I16:
+				case U16:
 
+				case I32:
+				case U32:
+
+				case F32:
+				
+				default:
+					fprintf(stderr, "Fatal internal compiler error: invalid destination type for truncating cast detected\n");
+					exit(1);
+			}
 
 		default:
 			fprintf(stderr, "Fatal internal compiler error: invalid source type for truncating cast detected\n");
