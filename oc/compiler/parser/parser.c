@@ -3347,7 +3347,7 @@ loop_end:
 		 * Determine type compatibility and perform coercions. We can only perform coercions on the left hand duplicate, because we
 		 * don't want to mess with the actual type of the variable
 		 */
-		final_type = determine_compatability_and_coerce(type_symtab, &(left_hand_duplicate->inferred_type), &(expr->inferred_type), binary_op);
+		final_type = determine_type_compatability_for_expression(type_symtab, left_hand_duplicate, expr, binary_op);
 
 		//If this fails, that means that we have an invalid operation
 		if(final_type == NULL){
@@ -5354,22 +5354,12 @@ static generic_ast_node_t* shift_expression(ollie_token_stream_t* token_stream, 
 			}
 
 			//The return type is always the left child's type
-			return_type = determine_compatability_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
+			return_type = determine_type_compatability_for_expression(type_symtab, temp_holder, right_child, op.tok);
 
 			//If this fails, that means that we have an invalid operation
 			if(return_type == NULL){
 				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
 				return print_and_return_error(info, parser_line_num);
-			}
-
-			//If the temp holder is a constant, perform any needed coercions here
-			if(temp_holder_is_constant == TRUE){
-				coerce_constant(temp_holder);
-			}
-
-			//Same for the right child
-			if(right_child_is_constant == TRUE){
-				coerce_constant(right_child);
 			}
 
 			//If they are both constants, we will skip any extra allocations and just do
