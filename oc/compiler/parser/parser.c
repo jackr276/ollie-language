@@ -5516,23 +5516,12 @@ static generic_ast_node_t* relational_expression(ollie_token_stream_t* token_str
 			}
 
 			//The return type is always the left child's type
-			return_type = determine_compatability_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
+			return_type = determine_type_compatability_for_expression(type_symtab, temp_holder, right_child, op.tok);
 
 			//If this fails, that means that we have an invalid operation
 			if(return_type == NULL){
 				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
 				return print_and_return_error(info, parser_line_num);
-			}
-
-			//Now that we know we've done valid type coercion, perform any constant coercion
-			//that is needed here
-			if(temp_holder_is_constant == TRUE){
-				coerce_constant(temp_holder);
-			}
-
-			//And same for the right child
-			if(right_child_is_constant == TRUE){
-				coerce_constant(right_child);
 			}
 
 			//If these are both constants, we can skip the entire allocation
@@ -5671,22 +5660,12 @@ static generic_ast_node_t* equality_expression(ollie_token_stream_t* token_strea
 		}
 
 		//Get the return type and perform any needed coercions
-		return_type = determine_compatability_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
+		return_type = determine_type_compatability_for_expression(type_symtab, temp_holder, right_child, op.tok);
 
 		//If this fails, that means that we have an invalid operation
 		if(sub_tree_root->inferred_type == NULL){
 			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
-		}
-
-		//If either of these are constants, we will invoke the constant coercer here
-		if(temp_holder_is_constant == TRUE){
-			coerce_constant(temp_holder);
-		}
-
-		//Same for the right child
-		if(right_child_is_constant == TRUE){
-			coerce_constant(right_child);
 		}
 
 		//If these are both constants, then we can invoke the appropriate simplifier
@@ -5827,22 +5806,12 @@ static generic_ast_node_t* and_expression(ollie_token_stream_t* token_stream, si
 		right_child_is_constant = right_child->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
 		//Apply the compatibility and coercion layer
-		generic_type_t* final_type = determine_compatability_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), SINGLE_AND);
+		generic_type_t* final_type = determine_type_compatability_for_expression(type_symtab, temp_holder, right_child, SINGLE_AND);
 
 		//If this fails, that means that we have an invalid operation
 		if(final_type == NULL){
 			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, "&");
 			return print_and_return_error(info, parser_line_num);
-		}
-
-		//If the temp holder is a constant, perform coercion
-		if(temp_holder_is_constant == TRUE){
-			coerce_constant(temp_holder);
-		}
-
-		//Same for the right child
-		if(right_child_is_constant == TRUE){
-			coerce_constant(right_child);
 		}
 
 		//If these are both constants, we can invoke the simplifier here
@@ -5972,22 +5941,12 @@ static generic_ast_node_t* exclusive_or_expression(ollie_token_stream_t* token_s
 		right_child_is_constant = right_child->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
 		//Apply the compatibility and coercion layer
-		generic_type_t* final_type = determine_compatability_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), CARROT);
+		generic_type_t* final_type = determine_type_compatability_for_expression(type_symtab, temp_holder, right_child, CARROT);
 
 		//If this fails, that means that we have an invalid operation
 		if(final_type == NULL){
 			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, "^");
 			return print_and_return_error(info, parser_line_num);
-		}
-
-		//If it's constant, invoke the constant coercer
-		if(temp_holder_is_constant == TRUE){
-			coerce_constant(temp_holder);
-		}
-
-		//Same for the right child
-		if(right_child_is_constant == TRUE){
-			coerce_constant(right_child);
 		}
 
 		//If they are both constants, then we should invoke the helper to do this on the spot
