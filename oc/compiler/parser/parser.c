@@ -275,6 +275,41 @@ static inline u_int8_t does_enum_contain_integer_member(generic_type_t* enum_typ
 
 
 /**
+ * Determine the type compatibilty for an expression and coerce as needed. This rule takes into accoutn
+ * whether or not the left hand and right hand node are constants
+ *
+ * 	Case 1: neither are constant -> use both types
+ * 	Case 2: left is constant, right is not -> defer the constant to the right's type
+ * 	Case 3: right is contant, left is not -> defer the constant to the left's type
+ * 	Case 4: both are constant -> use both types
+ *
+ * This rule returning NULL indicates that types were not compatible
+ */
+static inline generic_type_t* determine_type_compatability_for_expression(type_symtab_t* symtab, generic_ast_node_t* left_hand_node, generic_ast_node_t* right_hand_node, ollie_token_t operator){
+	//Get out whether or not these are both constants
+	u_int8_t left_is_constant = left_hand_node->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
+	u_int8_t right_is_constant = right_hand_node->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
+
+
+	/**
+	 * First divergence - left is not a constant
+	 */
+	if(left_is_constant == FALSE){
+
+
+	/**
+	 * Left is a constant
+	 */
+	} else {
+
+	}
+
+
+	return NULL;
+}
+
+
+/**
  * Propogate the dereference needed flag down recursively until we hit a postfix
  * expression(our "root" in this case) or nothing. This is important because we cannot
  * be dereferencing if we need to perform a copy assignment
@@ -5069,6 +5104,10 @@ static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_strea
 		 * One slight caveat is that, for pointer arithmetic, we don't
 		 * want to coerce the constant into a pointer. Instead, we'll
 		 * make the constant an i64
+		 *
+		 * This is a unique case where we leave type coercion rules up
+		 * to the actual rule itself. For other binary expressions we will
+		 * not do this
 		 */
 		if(temp_holder_is_constant == TRUE){
 			if(return_type->type_class != TYPE_CLASS_BASIC){
