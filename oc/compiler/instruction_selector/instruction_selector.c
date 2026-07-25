@@ -8343,8 +8343,23 @@ static void handle_truncating_assignment_instruction(instruction_window_t* windo
 					return;
 				}
 
-				case F32:
-				case F64:
+				/**
+				 * Case 2: Larger Integer -Truncate-> Smaller Float
+				 *
+				 * The only real case that we would have for this is going from an I64
+				 * down to an F32. I64 -> F64 is a standard non-truncating conversion
+				 * that we do not need to worry about
+				 *
+				 * f32_var <-truncate- i64_var
+				 *
+				 * We will use the ctsi2ssq(convert scalar integer(quad word) to scalar single precision float)
+				 * assembly instruction to do this
+				 */
+				case F32: {
+					instruction_t* clear_instruction = emit_sse_register_clear_instruction();
+
+				}
+
 					printf("TODO NOT IMPLEMENTED\n");
 					exit(1);
 

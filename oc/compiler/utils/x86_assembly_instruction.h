@@ -221,9 +221,9 @@ typedef enum{
 	CVTSS2SD, //Convert scalar f32 to scalar f64
 	CVTSD2SS, //Convert scalar f64 to scalar f32
 	CVTTSD2SIL, //Convert scalar f64 to i32 with truncation
-	CVTTSD2SIQ, //Convert scalar f64 to i64 with truncation
-	CVTTSS2SIL, //Convert scalar f32 to i32 with truncation
-	CVTTSS2SIQ, //Convert scalar f32 to i64 with truncation
+	CVTTSD2SIQ, //Convert scalar f64 to i64
+	CVTTSS2SIL, //Convert scalar f32 to i32
+	CVTTSS2SIQ, //Convert scalar f32 to i64
 	CVTSI2SSL, //Convert scalar i32 to f32	
 	CVTSI2SSQ, //Convert scalar i64 to f32
 	CVTSI2SDL, //Convert scalar i32 to f64	
