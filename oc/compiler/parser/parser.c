@@ -306,8 +306,16 @@ static inline generic_type_t* determine_type_compatability_for_expression(type_s
 		 * the helper to catch any special cases
 		 */
 		} else {
-			//Assign over and coerce
-			right_hand_node->inferred_type = left_hand_node->inferred_type;
+			/**
+			 * If we have a memory region we can't just defer to it for a constant. Instead,
+			 * we'll need to make our constant into an i64
+			 */
+			if(is_memory_address_type(left_hand_node->inferred_type) == FALSE){
+				right_hand_node->inferred_type = left_hand_node->inferred_type;
+			} else {
+				right_hand_node->inferred_type = immut_i64;
+			}
+
 			coerce_constant(right_hand_node);
 
 			//Give back the result of our actual compatibility checker
@@ -324,8 +332,16 @@ static inline generic_type_t* determine_type_compatability_for_expression(type_s
 		 * cases
 		 */
 		if(right_is_constant == FALSE){
-			//Assign over and coerce
-			left_hand_node->inferred_type = right_hand_node->inferred_type;
+			/**
+			 * If we have a memory region we can't just defer to it for a constant. Instead,
+			 * we'll need to make our constant into an i64
+			 */
+			if(is_memory_address_type(right_hand_node->inferred_type) == FALSE){
+				left_hand_node->inferred_type = right_hand_node->inferred_type;
+			} else {
+				left_hand_node->inferred_type = immut_i64;
+			}
+
 			coerce_constant(left_hand_node);
 
 			//Give back the result of our actual compatibility checker
@@ -5111,7 +5127,7 @@ static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_strea
 		}
 
 		//Use the type compatibility function to determine compatibility and apply necessary coercions
-		return_type = determine_compatability_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
+		return_type = determine_type_compatability_for_expression(type_symtab, temp_holder, right_child, op.tok);
 
 		/**
 		 * It is invalid to ever attempt addition to/subtraction from a void pointer
@@ -5141,6 +5157,8 @@ static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_strea
 		 * This is a unique case where we leave type coercion rules up
 		 * to the actual rule itself. For other binary expressions we will
 		 * not do this
+		 *
+		 * TODO MAYBE WE CAN GET RID OF THIS?
 		 */
 		if(temp_holder_is_constant == TRUE){
 			if(return_type->type_class != TYPE_CLASS_BASIC){
