@@ -279,8 +279,8 @@ static inline u_int8_t does_enum_contain_integer_member(generic_type_t* enum_typ
  * whether or not the left hand and right hand node are constants
  *
  * 	Case 1: neither are constant -> use both types
- * 	Case 2: left is constant, right is not -> defer the constant to the right's type
- * 	Case 3: right is contant, left is not -> defer the constant to the left's type
+ * 	Case 2: right is contant, left is not -> defer the constant to the left's type
+ * 	Case 3: left is constant, right is not -> defer the constant to the right's type
  * 	Case 4: both are constant -> use both types
  *
  * This rule returning NULL indicates that types were not compatible
@@ -290,22 +290,55 @@ static inline generic_type_t* determine_type_compatability_for_expression(type_s
 	u_int8_t left_is_constant = left_hand_node->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 	u_int8_t right_is_constant = right_hand_node->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
-
 	/**
 	 * First divergence - left is not a constant
 	 */
 	if(left_is_constant == FALSE){
+		/**
+		 * Case 1: neither are constants -> use both types and give back whatever they have
+		 */
+		if(right_is_constant == FALSE){
+			return determine_compatability_and_coerce(symtab, &(left_hand_node->inferred_type), &(right_hand_node->inferred_type), operator);
 
+		/**
+		 * Case 2: left is not a constant but the right is. In this case, we'll
+		 * want to defer to the left's type. We will still run it through
+		 * the helper to catch any special cases
+		 */
+		} else {
+			//Assign over and coerce
+			right_hand_node->inferred_type = left_hand_node->inferred_type;
+			coerce_constant(right_hand_node);
+
+			//Give back the result of our actual compatibility checker
+			return determine_compatability_and_coerce(symtab, &(left_hand_node->inferred_type), &(right_hand_node->inferred_type), operator);
+		}
 
 	/**
 	 * Left is a constant
 	 */
 	} else {
+		/**
+		 * Case 3: the left is a constant but the right is not. We are going to default to
+		 * the right's type. We will still run it through the helper to catch any special
+		 * cases
+		 */
+		if(right_is_constant == FALSE){
+			//Assign over and coerce
+			left_hand_node->inferred_type = right_hand_node->inferred_type;
+			coerce_constant(left_hand_node);
 
+			//Give back the result of our actual compatibility checker
+			return determine_compatability_and_coerce(symtab, &(left_hand_node->inferred_type), &(right_hand_node->inferred_type), operator);
+
+		/**
+		 * Case 4: both values here are constants. We have no choice but
+		 * to use the rule now
+		 */
+		} else {
+			return determine_compatability_and_coerce(symtab, &(left_hand_node->inferred_type), &(right_hand_node->inferred_type), operator);
+		}
 	}
-
-
-	return NULL;
 }
 
 
