@@ -197,6 +197,42 @@ static inline u_int8_t is_instruction_binary_operation(instruction_t* instructio
 
 
 /**
+ * Is a basic type an integer type? We will use the basic type token to determine this
+ */
+static inline u_int8_t is_basic_type_integer_type(generic_type_t* type){
+	switch(type->basic_type_token){
+		case BOOL:
+		case CHAR:
+		case I8:
+		case U8:
+		case U16:
+		case I16:
+		case I32:
+		case U32:
+		case I64:
+		case U64:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * If a basic type a floating point type? We will use the basic type token to determine this
+ */
+static inline u_int8_t is_basic_type_float_type(generic_type_t* type){
+	switch(type->basic_type_token){
+		case F32:
+		case F64:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Does the given addressing mode make use of the address mulitplier field? This quick helper
  * will let us find out
  */
@@ -8257,6 +8293,7 @@ static void handle_truncating_assignment_instruction(instruction_window_t* windo
 	 * NOTE: all truncating moves happen between basic types. This assumption
 	 * allows us to use the basic type token here for everything
 	 */
+
 
 
 	printf("TODO NOT IMPLEMENTED\n");
