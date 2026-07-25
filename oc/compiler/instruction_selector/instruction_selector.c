@@ -8356,12 +8356,19 @@ static void handle_truncating_assignment_instruction(instruction_window_t* windo
 				 * assembly instruction to do this
 				 */
 				case F32: {
-					instruction_t* clear_instruction = emit_sse_register_clear_instruction();
+					//We first need an SSE register clear(PXOR_CLEAR) instruction for the destination
+					instruction_t* clear_instruction = emit_sse_register_clear_instruction(destination);
+					insert_instruction_before_given(clear_instruction, truncating_cast);
 
+					//Now we will convert the truncating cast into a ctsi2ssq instruction
+					truncating_cast->operands.x86.destination_register = destination;
+					truncating_cast->operands.x86.source_register1 = source;
+					truncating_cast->instruction_type = CVTSI2SSQ;
+
+					//Rebuild around the truncating cast and get out
+					reconstruct_window(window, truncating_cast);
+					return;
 				}
-
-					printf("TODO NOT IMPLEMENTED\n");
-					exit(1);
 
 				default:
 					fprintf(stderr, "Fatal internal compiler error: invalid destination type for truncating cast detected\n");
