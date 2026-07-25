@@ -8293,6 +8293,45 @@ static void handle_truncating_assignment_instruction(instruction_window_t* windo
 	 * NOTE: all truncating moves happen between basic types. This assumption
 	 * allows us to use the basic type token here for everything
 	 */
+	if(is_basic_type_integer_type(source_type) == TRUE){
+		/**
+		 * Case 1: Larger Integer -Truncate-> Small Integer
+		 *
+		 * In this case all we need to do is emit a regular assignment
+		 * with a clone of the destination of the right size. Then
+		 * the destination of the smaller size can be used as is
+		 */
+		if(is_basic_type_integer_type(destination_type)){
+			//Clone it
+			three_addr_var_t* destination_clone = emit_var_copy(destination);
+
+			//Give it the the type that we already have
+			destination_clone->type = source_type;
+			destination_clone->variable_size = get_type_size(source_type);
+
+			/**
+			 * Let the helper emit our regular register movement
+			 */
+			instruction_t* regular_movement = emit_register_movement_instruction_directly(destination_clone, source);
+
+			//Insert this before the truncating cast and then scrap the truncating cast
+			insert_instruction_before_given(regular_movement, truncating_cast);
+			delete_statement(truncating_cast);
+
+			//Rebuild our window around the new instruction and get out
+			reconstruct_window(window, regular_movement);
+			return;
+		}
+
+
+	} else if(is_basic_type_float_type(source_type) == TRUE){
+
+
+	//Some weird error here
+	} else {
+		fprintf(stderr, "Fatal internal compiler error: unrecognized basic type detected\n");
+		exit(1);
+	}
 
 
 
