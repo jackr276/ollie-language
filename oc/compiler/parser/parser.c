@@ -275,6 +275,21 @@ static inline u_int8_t does_enum_contain_integer_member(generic_type_t* enum_typ
 
 
 /**
+ * Does this type require a conversion to an i64 if it's a constant
+ * inside of some kind of arithmetic operation
+ */
+static inline u_int8_t does_type_require_i64_conversion(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_POINTER:
+		case TYPE_CLASS_ARRAY:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Determine the type compatibilty for an expression and coerce as needed. This rule takes into accoutn
  * whether or not the left hand and right hand node are constants
  *
@@ -323,7 +338,7 @@ static inline generic_type_t* determine_type_compatability_for_expression(type_s
 			 * If we have a memory region we can't just defer to it for a constant. Instead,
 			 * we'll need to make our constant into an i64
 			 */
-			if(is_memory_address_type(left_hand_node->inferred_type) == FALSE){
+			if(does_type_require_i64_conversion(left_hand_node->inferred_type) == FALSE){
 				right_hand_node->inferred_type = left_hand_node->inferred_type;
 			} else {
 				right_hand_node->inferred_type = immut_i64;
@@ -355,7 +370,7 @@ static inline generic_type_t* determine_type_compatability_for_expression(type_s
 			 * If we have a memory region we can't just defer to it for a constant. Instead,
 			 * we'll need to make our constant into an i64
 			 */
-			if(is_memory_address_type(right_hand_node->inferred_type) == FALSE){
+			if(does_type_require_i64_conversion(right_hand_node->inferred_type) == FALSE){
 				left_hand_node->inferred_type = right_hand_node->inferred_type;
 			} else {
 				left_hand_node->inferred_type = immut_i64;
