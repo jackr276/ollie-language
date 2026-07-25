@@ -8352,7 +8352,7 @@ static void handle_truncating_assignment_instruction(instruction_window_t* windo
 				 *
 				 * f32_var <-truncate- i64_var
 				 *
-				 * We will use the ctsi2ssq(convert scalar integer(quad word) to scalar single precision float)
+				 * We will use the cvtsi2ssq(convert scalar integer(quad word) to scalar single precision float)
 				 * assembly instruction to do this
 				 */
 				case F32: {
@@ -8376,6 +8376,45 @@ static void handle_truncating_assignment_instruction(instruction_window_t* windo
 			}
 
 		case F32:
+			/**
+			 * Case 3(part 1): Larger float -Truncate-> smaller integer
+			 *
+			 * This specifically is the handling for the F32 case. We know that whatever
+			 * value we end up with on the other side must be less than 4 bytes
+			 *
+			 * small_int_var <-truncate- f32_var
+			 *
+			 * We will use the cvttss2sil to first convert this to an i32. We will then perform
+			 * the procedure from case 1 to get that i32 into the smaller integer that we want
+			 */
+			switch(destination_type->basic_type_token){
+				case CHAR:
+				case BOOL:
+				case I8:
+				case U8:
+				case I16:
+				case U16: {
+					//First create a copy of our destination that is an i32 type
+					three_addr_var_t* temporary_copy = emit_var_copy(destination);
+					temporary_copy->type = i32;
+					temporary_copy->variable_size = get_type_size(i32);
+
+					//Reuse the truncating cast instruction for efficiency
+					truncating_cast->operands.x86.destination_register = temporary_copy;
+					truncating_cast->operands.x86.source_register1 = source;
+					truncating_cast->instruction_type = CVTTSS2SIL;
+
+					//Rebuild teh window and get out
+					reconstruct_window(window, truncating_cast);
+					return;
+				}
+
+				default:
+					fprintf(stderr, "Fatal internal compiler error: invalid destination type for truncating cast detected\n");
+					exit(1);
+			}
+
+
 		case F64:
 			printf("TODO NOT IMPLEMENTED\n");
 			exit(1);
