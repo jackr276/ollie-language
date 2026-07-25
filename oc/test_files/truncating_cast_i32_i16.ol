@@ -7,7 +7,7 @@
 
 
 pub fn takes_i16(x:i16) -> i16 {
-	ret (x & (0x8000)) >> 16;
+	ret (<u16>x & (0x8000)) >> (typesize(i16) * 8 - 1);
 }
 
 
