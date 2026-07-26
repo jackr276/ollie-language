@@ -8404,7 +8404,7 @@ static void handle_truncating_assignment_instruction(instruction_window_t* windo
 					truncating_cast->operands.x86.source_register1 = source;
 					truncating_cast->instruction_type = CVTTSS2SIL;
 
-					//Rebuild teh window and get out
+					//Rebuild the window and get out
 					reconstruct_window(window, truncating_cast);
 					return;
 				}
@@ -8431,7 +8431,21 @@ static void handle_truncating_assignment_instruction(instruction_window_t* windo
 				case I8:
 				case U8:
 				case I16:
-				case U16:
+				case U16: {
+					//First create a copy that is i32 sized
+					three_addr_var_t* temporary_copy = emit_var_copy(destination);
+					temporary_copy->type = i32;
+					temporary_copy->variable_size = get_type_size(i32);
+
+					//Reuse the truncating cast instruction as a CVTTSD2SIL
+					truncating_cast->operands.x86.destination_register = temporary_copy;
+					truncating_cast->operands.x86.source_register1 = source;
+					truncating_cast->instruction_type = CVTTSD2SIL;
+
+					//Rebuild the window around the truncating cast
+					reconstruct_window(window, truncating_cast);
+					return;
+				}
 
 				case I32:
 				case U32:
