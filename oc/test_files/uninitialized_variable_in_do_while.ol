@@ -16,5 +16,6 @@ fn uninitialized_in_do_while_loop(arg:mut i32) -> void {
 
 //Dummy
 pub fn main() -> i32 {
+	OUNIT: [fail_to_compile]
 	ret 0;
 }

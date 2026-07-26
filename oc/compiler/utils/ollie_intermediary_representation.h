@@ -95,6 +95,8 @@ typedef enum {
 	THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT,
 	//Regular two address assignment
 	THREE_ADDR_CODE_ASSN_STMT,
+	//A truncating assignment statement specifically flags this for the selector
+	THREE_ADDR_CODE_TRUNCATING_ASSN_STMT,
 	//Assigning a constant to a variable
 	THREE_ADDR_CODE_ASSN_CONST_STMT,
 	//A return statement

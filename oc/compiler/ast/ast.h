@@ -53,6 +53,7 @@ typedef enum ast_node_type_t{
 	AST_NODE_TYPE_ARRAY_ACCESSOR,
 	AST_NODE_TYPE_FUNCTION_CALL,
 	AST_NODE_TYPE_INDIRECT_FUNCTION_CALL, //An indirect call, for function pointers
+	AST_NODE_TYPE_TRUNCATING_CAST, //Truncating cast required
 	AST_NODE_TYPE_CASE_STMT,
 	AST_NODE_TYPE_C_STYLE_CASE_STMT, //With fallthrough
 	AST_NODE_TYPE_DEFAULT_STMT,

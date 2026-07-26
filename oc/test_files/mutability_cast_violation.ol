@@ -17,5 +17,6 @@ pub fn main() -> i32 {
 	//Should fail - attempt to do a mutable cast
 	@tester(<mut i32*>x);
 	
+	OUNIT: [fail_to_compile]
 	ret 0;
 }

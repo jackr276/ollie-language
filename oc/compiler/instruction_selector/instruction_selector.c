@@ -197,6 +197,42 @@ static inline u_int8_t is_instruction_binary_operation(instruction_t* instructio
 
 
 /**
+ * Is a basic type an integer type? We will use the basic type token to determine this
+ */
+static inline u_int8_t is_basic_type_integer_type(generic_type_t* type){
+	switch(type->basic_type_token){
+		case BOOL:
+		case CHAR:
+		case I8:
+		case U8:
+		case U16:
+		case I16:
+		case I32:
+		case U32:
+		case I64:
+		case U64:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * If a basic type a floating point type? We will use the basic type token to determine this
+ */
+static inline u_int8_t is_basic_type_float_type(generic_type_t* type){
+	switch(type->basic_type_token){
+		case F32:
+		case F64:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Does the given addressing mode make use of the address mulitplier field? This quick helper
  * will let us find out
  */
@@ -8214,6 +8250,248 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 
 
 /**
+ * Handle an ollie truncating assignment instruction, where the source operand's
+ * size is larger than the destination's size
+ *
+ * We know that the result variable(assignee in this case) is already of the proper
+ * type and is being used by other instructions down the line. As such the very
+ * last assignee in our chain must be that assignee
+ *
+ * NOTE: it is assumed that the truncating cast is always the first instruction
+ * in the window
+ */
+static void handle_truncating_assignment_instruction(instruction_window_t* window){
+	//Extract the instruction that we're after
+	instruction_t* truncating_cast = window->instruction1;
+
+	//Extract these both for convenience
+	three_addr_var_t* destination = truncating_cast->operands.oir.assignee;
+	three_addr_var_t* source = truncating_cast->operands.oir.operand1;
+
+	//Extract the types as well
+	generic_type_t* destination_type = destination->type;
+	generic_type_t* source_type = source->type;
+
+	/**
+	 * For enum types, we don't want to be using the actaul enum type as it's
+	 * not accurate to the underlying mechanics. Instead we will extract
+	 * the equivalent integer type
+	 */
+	if(destination_type->type_class == TYPE_CLASS_ENUMERATED){
+		destination_type = destination_type->internal_values.enum_integer_type;
+	}
+
+	if(source_type->type_class == TYPE_CLASS_ENUMERATED){
+		source_type = source_type->internal_values.enum_integer_type;
+	}
+
+	/**
+	 * Depending on what we're truncating to/from, we will need to
+	 * perform different steps. Floating point values present larger
+	 * challenges than integers due to the potential need for a multi-step conversion
+	 *
+	 * NOTE: all truncating moves happen between basic types. This assumption
+	 * allows us to use the basic type token here for everything
+	 */
+	switch(source_type->basic_type_token){
+		case BOOL:
+		case CHAR:
+		case I8:
+		case U8:
+		case U16:
+		case I16:
+		case I32:
+		case U32:
+		case I64:
+		case U64:
+			switch(destination_type->basic_type_token){
+				/**
+				 * Case 1: Larger Integer -Truncate-> Small Integer
+				 *
+				 * In this case all we need to do is emit a regular assignment
+				 * with a clone of the destination of the right size. Then
+				 * the destination of the smaller size can be used as is
+				 */
+				case BOOL:
+				case CHAR:
+				case I8:
+				case U8:
+				case U16:
+				case I16:
+				case I32:
+				case U32:
+				case I64:
+				case U64: {
+					//clone it
+					three_addr_var_t* destination_clone = emit_var_copy(destination);
+
+					//give it the the type that we already have
+					destination_clone->type = source_type;
+					destination_clone->variable_size = get_type_size(source_type);
+
+					/**
+					 * let the helper emit our regular register movement
+					 */
+					instruction_t* regular_movement = emit_register_movement_instruction_directly(destination_clone, source);
+
+					//insert this before the truncating cast and then scrap the truncating cast
+					insert_instruction_before_given(regular_movement, truncating_cast);
+					delete_statement(truncating_cast);
+
+					//rebuild our window around the new instruction and get out
+					reconstruct_window(window, regular_movement);
+					return;
+				}
+
+				/**
+				 * Case 2: Larger Integer -Truncate-> Smaller Float
+				 *
+				 * The only real case that we would have for this is going from an I64
+				 * down to an F32. I64 -> F64 is a standard non-truncating conversion
+				 * that we do not need to worry about
+				 *
+				 * f32_var <-truncate- i64_var
+				 *
+				 * We will use the cvtsi2ssq(convert scalar integer(quad word) to scalar single precision float)
+				 * assembly instruction to do this
+				 */
+				case F32: {
+					//We first need an SSE register clear(PXOR_CLEAR) instruction for the destination
+					instruction_t* clear_instruction = emit_sse_register_clear_instruction(destination);
+					insert_instruction_before_given(clear_instruction, truncating_cast);
+
+					//Now we will convert the truncating cast into a ctsi2ssq instruction
+					truncating_cast->operands.x86.destination_register = destination;
+					truncating_cast->operands.x86.source_register1 = source;
+					truncating_cast->instruction_type = CVTSI2SSQ;
+
+					//Rebuild around the truncating cast and get out
+					reconstruct_window(window, truncating_cast);
+					return;
+				}
+
+				default:
+					fprintf(stderr, "Fatal internal compiler error: invalid destination type for truncating cast detected\n");
+					exit(1);
+			}
+
+		case F32:
+			/**
+			 * Case 3(part 1): Larger float -Truncate-> smaller integer
+			 *
+			 * This specifically is the handling for the F32 case. We know that whatever
+			 * value we end up with on the other side must be less than 4 bytes
+			 *
+			 * small_int_var <-truncate- f32_var
+			 *
+			 * We will use the cvttss2sil to first convert this to an i32. We will then perform
+			 * the procedure from case 1 to get that i32 into the smaller integer that we want
+			 */
+			switch(destination_type->basic_type_token){
+				case CHAR:
+				case BOOL:
+				case I8:
+				case U8:
+				case I16:
+				case U16: {
+					//First create a copy of our destination that is an i32 type
+					three_addr_var_t* destination_clone = emit_var_copy(destination);
+					destination_clone->type = i32;
+					destination_clone->variable_size = get_type_size(i32);
+
+					//Reuse the truncating cast instruction for efficiency
+					truncating_cast->operands.x86.destination_register = destination_clone;
+					truncating_cast->operands.x86.source_register1 = source;
+					truncating_cast->instruction_type = CVTTSS2SIL;
+
+					//Rebuild the window and get out
+					reconstruct_window(window, truncating_cast);
+					return;
+				}
+
+				default:
+					fprintf(stderr, "Fatal internal compiler error: invalid destination type for truncating cast detected\n");
+					exit(1);
+			}
+
+
+		case F64:
+			/**
+			 * Case 3(part 1): Larger float -Truncate-> smaller integer/smaller float
+			 *
+			 * This is specifically handling for the F64 case. We know that whatever we're
+			 * trying to fit this into is less than 8 bytes. For the case of an f32, we use
+			 * the cvtsd2ss instruction. In any other case, we use the cvttsd2sil to first convert
+			 * to an i32, and then do more from there as needed following the other procedures
+			 * in case 1
+			 */
+			switch(destination_type->basic_type_token){
+				case CHAR:
+				case BOOL:
+				case I8:
+				case U8:
+				case I16:
+				case U16: {
+					//First create a copy that is i32 sized
+					three_addr_var_t* destination_clone = emit_var_copy(destination);
+					destination_clone->type = i32;
+					destination_clone->variable_size = get_type_size(i32);
+
+					//Reuse the truncating cast instruction as a CVTTSD2SIL
+					truncating_cast->operands.x86.destination_register = destination_clone;
+					truncating_cast->operands.x86.source_register1 = source;
+					truncating_cast->instruction_type = CVTTSD2SIL;
+
+					//Rebuild the window around the truncating cast
+					reconstruct_window(window, truncating_cast);
+					return;
+				}
+
+				/**
+				 * For 32 bit integers, x86 provides the CVTTSD2SIL instruction already
+				 * so this is actually supported fully at a hardware level. We will not 
+				 * need to make a dummy destination or anything
+				 */
+				case I32:
+				case U32: {
+					//Reuse the truncating cast instruction as a CVTTSD2SIL
+					truncating_cast->operands.x86.destination_register = destination;
+					truncating_cast->operands.x86.source_register1 = source;
+					truncating_cast->instruction_type = CVTTSD2SIL;
+
+					//Rebuild the window around the truncating cast
+					reconstruct_window(window, truncating_cast);
+					return;
+				}
+
+				/**
+				 * For an F64 to F32, we can use the built in CVTSD2SS to go from single
+				 * precision to double precision
+				 */
+				case F32: {
+					//Reuse the truncating cast instruction as a CVTSD2SS 
+					truncating_cast->operands.x86.destination_register = destination;
+					truncating_cast->operands.x86.source_register1 = source;
+					truncating_cast->instruction_type = CVTSD2SS;
+
+					//Rebuild the window around the truncating cast
+					reconstruct_window(window, truncating_cast);
+					return;
+				}
+				
+				default:
+					fprintf(stderr, "Fatal internal compiler error: invalid destination type for truncating cast detected\n");
+					exit(1);
+			}
+
+		default:
+			fprintf(stderr, "Fatal internal compiler error: invalid source type for truncating cast detected\n");
+			exit(1);
+	}
+}
+
+
+/**
  * Emit a movX instruction with a constant
  *
  * This is used for when we need extra moves(after a division/modulus)
@@ -14794,6 +15072,9 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		case THREE_ADDR_CODE_ASSN_STMT:
 			handle_register_movement_instruction(instruction);
 			break;
+		case THREE_ADDR_CODE_TRUNCATING_ASSN_STMT:
+			handle_truncating_assignment_instruction(window);
+			break;
 		case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT:
 			handle_conditional_movement_statement(window);
 			break;
@@ -14880,7 +15161,7 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		 * we fail out
 		 */
 		default:
-			fprintf(stderr, "Fatal internal compiler error: instruction with code %d reached an unreachable path", instruction->statement_type);
+			fprintf(stderr, "Fatal internal compiler error: instruction with code %d reached an unreachable path\n", instruction->statement_type);
 			exit(1);
 	}
 }

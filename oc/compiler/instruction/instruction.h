@@ -714,6 +714,14 @@ instruction_t* emit_binary_operation_with_const_instruction(three_addr_var_t* as
 instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1);
 
 /**
+ * Emit a statement that only uses two vars of the form var1 <- var2
+ *
+ * This truncating assignment instruction is designed specifically and only
+ * for the truncating cast AST node type
+ */
+instruction_t* emit_truncating_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1);
+
+/**
  * Emit a conditional movement statement. Unlike regular moves, we will also need to provide the conditional and conditional movement type for this
  */
 instruction_t* emit_conditional_movement_statement(three_addr_var_t* assignee, three_addr_var_t* if_assignee, three_addr_var_t* else_assignee, three_addr_var_t* conditional, conditional_movement_type_t movement_type);
