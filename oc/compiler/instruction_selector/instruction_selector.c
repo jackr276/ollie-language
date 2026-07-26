@@ -8395,12 +8395,12 @@ static void handle_truncating_assignment_instruction(instruction_window_t* windo
 				case I16:
 				case U16: {
 					//First create a copy of our destination that is an i32 type
-					three_addr_var_t* temporary_copy = emit_var_copy(destination);
-					temporary_copy->type = i32;
-					temporary_copy->variable_size = get_type_size(i32);
+					three_addr_var_t* destination_clone = emit_var_copy(destination);
+					destination_clone->type = i32;
+					destination_clone->variable_size = get_type_size(i32);
 
 					//Reuse the truncating cast instruction for efficiency
-					truncating_cast->operands.x86.destination_register = temporary_copy;
+					truncating_cast->operands.x86.destination_register = destination_clone;
 					truncating_cast->operands.x86.source_register1 = source;
 					truncating_cast->instruction_type = CVTTSS2SIL;
 
@@ -8433,12 +8433,12 @@ static void handle_truncating_assignment_instruction(instruction_window_t* windo
 				case I16:
 				case U16: {
 					//First create a copy that is i32 sized
-					three_addr_var_t* temporary_copy = emit_var_copy(destination);
-					temporary_copy->type = i32;
-					temporary_copy->variable_size = get_type_size(i32);
+					three_addr_var_t* destination_clone = emit_var_copy(destination);
+					destination_clone->type = i32;
+					destination_clone->variable_size = get_type_size(i32);
 
 					//Reuse the truncating cast instruction as a CVTTSD2SIL
-					truncating_cast->operands.x86.destination_register = temporary_copy;
+					truncating_cast->operands.x86.destination_register = destination_clone;
 					truncating_cast->operands.x86.source_register1 = source;
 					truncating_cast->instruction_type = CVTTSD2SIL;
 
@@ -8447,8 +8447,22 @@ static void handle_truncating_assignment_instruction(instruction_window_t* windo
 					return;
 				}
 
+				/**
+				 * For 32 bit integers, x86 provides the CVTTSD2SIL instruction already
+				 * so this is actually supported fully at a hardware level. We will not 
+				 * need to make a dummy destination or anything
+				 */
 				case I32:
-				case U32:
+				case U32: {
+					//Reuse the truncating cast instruction as a CVTTSD2SIL
+					truncating_cast->operands.x86.destination_register = destination;
+					truncating_cast->operands.x86.source_register1 = source;
+					truncating_cast->instruction_type = CVTTSD2SIL;
+
+					//Rebuild the window around the truncating cast
+					reconstruct_window(window, truncating_cast);
+					return;
+				}
 
 				case F32:
 				
