@@ -8464,7 +8464,20 @@ static void handle_truncating_assignment_instruction(instruction_window_t* windo
 					return;
 				}
 
-				case F32:
+				/**
+				 * For an F64 to F32, we can use the built in CVTSD2SS to go from single
+				 * precision to double precision
+				 */
+				case F32: {
+					//Reuse the truncating cast instruction as a CVTSD2SS 
+					truncating_cast->operands.x86.destination_register = destination;
+					truncating_cast->operands.x86.source_register1 = source;
+					truncating_cast->instruction_type = CVTSD2SS;
+
+					//Rebuild the window around the truncating cast
+					reconstruct_window(window, truncating_cast);
+					return;
+				}
 				
 				default:
 					fprintf(stderr, "Fatal internal compiler error: invalid destination type for truncating cast detected\n");
