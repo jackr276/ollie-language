@@ -161,6 +161,31 @@ int main(int argc, char** argv){
 	//Now we'll invoke the cfg builder
 	cfg_t* cfg = build_cfg(parse_results, &num_errors, &num_warnings);
 
+	/**
+	 * We could not construct the CFG so we need to exit out here
+	 */
+	if(cfg->result == CFG_RESULT_FAILURE){
+		//Timer end
+		clock_t end = clock();
+
+		//Calculate the final time
+		time_spent = (double)(end - begin)/CLOCKS_PER_SEC;
+
+		char info[2000];
+		if(time_execution == TRUE){
+			sprintf(info, "CFG construction failed with %d errors and %d warnings in %.8f seconds", parse_results->num_errors, parse_results->num_warnings, time_spent);
+		} else {
+			sprintf(info, "CFG construction with %d errors and %d warnings", parse_results->num_errors, parse_results->num_warnings);
+		}
+
+		printf("\n===================== Ollie Compiler Summary ==========================\n");
+		printf("Lexer processed %d lines\n", parse_results->lines_processed);
+		printf("%s\n", info);
+		printf("=======================================================================\n\n");
+		//Jump to the end, we're done here
+		goto final_printout;
+	}
+
 	//Once we build the CFG, we'll pass this along to the optimizer
 	cfg = optimize(cfg);
 
