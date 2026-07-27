@@ -48,6 +48,17 @@ typedef enum{
 
 
 /**
+ * What result do we have from this CFG? This will
+ * determine if/how callers continue to process
+ */
+typedef enum {
+	CFG_RESULT_FAILURE,
+	CFG_RESULT_WARN,
+	CFG_RESULT_SUCCESS,
+} cfg_construction_result_type_t;
+
+
+/**
  * We have a basic CFG structure that holds these references to making freeing
  */
 struct cfg_t{
@@ -79,6 +90,8 @@ struct cfg_t{
 	dynamic_array_t global_variables;
 	//Hang onto the block id
 	u_int32_t block_id;
+	//Result of the construction
+	cfg_construction_result_type_t result;
 };
 
 

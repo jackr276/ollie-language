@@ -13648,6 +13648,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	// -1 block ID, this means that the whole thing failed
 	if(visit_prog_node(cfg, results->root) == FALSE){
 		print_cfg_message(MESSAGE_TYPE_ERROR, "CFG was unable to be constructed", 0);
+		cfg->result = CFG_RESULT_FAILURE;
 		(*num_errors_ref)++;
 	}
 
@@ -13666,6 +13667,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	heap_stack_dealloc(&continue_stack);	
 	nesting_stack_dealloc(&nesting_stack);
 
-	//Give back the reference
+	//Give back the reference with success passed along
+	cfg->result = CFG_RESULT_SUCCESS;
 	return cfg;
 }
