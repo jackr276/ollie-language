@@ -2667,6 +2667,8 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 						/**
 						 * If this is the right hand side and our variable is not initialized,
 						 * this is invalid as we are trying to use before initialization
+						 *
+						 * TODO WRONG
 						 */
 						if(side == SIDE_TYPE_RIGHT 
 							&& is_variable_data_segment_variable(found_var) == FALSE
@@ -3056,7 +3058,6 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 		 * through and update our mutability/initialization. This counts as mutation
 		 * and initialization
 		 */
-		assignee->initialized = TRUE;
 		assignee->mutated = TRUE;
 	}
 
@@ -8361,9 +8362,6 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 		//Store the line number
 		member_record->line_number = parser_line_num;
 
-		//By virtue of being an enum, this has been initialized 
-		member_record->initialized = TRUE;
-
 		//Now we can insert this into the symtab
 		insert_variable(variable_symtab, member_record);
 
@@ -12227,10 +12225,6 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 			declaration_node->inferred_type = declared_var->type_defined_as;
 			//Store the line number
 			declaration_node->line_number = current_line;
-
-			//Since this is a memory region, it counts as being initialized by default
-			declared_var->initialized = TRUE;
-
 			break;
 
 		//Otherwise just leave
@@ -12260,9 +12254,6 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 				//Store the line number
 				declaration_node->line_number = current_line;
 			}
-
-			//Since this is not a memory region, is does not count as being initialized
-			declared_var->initialized = FALSE;
 
 			break;
 	}
@@ -12798,8 +12789,6 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 
 	//Store the type
 	declared_var->type_defined_as = type_spec;
-	//It was initialized
-	declared_var->initialized = TRUE;
 	//It was "letted" 
 	declared_var->declare_or_let = 1;
 	//Save the line num
@@ -13277,8 +13266,6 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 
 	//It is a function parameter
 	param_record->membership = FUNCTION_PARAMETER;
-	//We assume that it was initialized
-	param_record->initialized = TRUE;
 	//Add the line number
 	param_record->line_number = parser_line_num;
 	//Store the type as well, very important
