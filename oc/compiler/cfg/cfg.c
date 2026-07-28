@@ -1965,7 +1965,32 @@ static inline u_int8_t does_variable_dynamic_array_contain_symtab_variable(dynam
  * therefore be an error
  */
 static inline void insert_undef_value_assignment(cfg_t* cfg, variable_symtab_t* symtab){
+	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+		//Get the function that we are going to be after
+		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
+		symtab_function_record_t* function = function_entry->function_defined_in;
 
+		/**
+		 * Now for the symtab, we will run through every variable
+		 * in here and pick out the ones that are assigned in the current
+		 * function that we are looking at here
+		 */
+		for(int32_t i = 0; i < symtab->sheafs.current_index; i++){
+			//TODO ADD FUNCTION DEFINED IN FOR EACH SHEAF
+
+			symtab_variable_sheaf_t* sheaf = dynamic_array_get_at(&(symtab->sheafs), i);
+
+			//Run through the variable keyspace in the sheaf
+			for(int32_t i = 0; i < VARIABLE_KEYSPACE; i++){
+				//Extract our value(remember about how these get chained)
+				symtab_variable_record_t* cursor = sheaf->records[i];
+
+				while(cursor != NULL){
+
+				}
+			}
+		}
+	}
 }
 
 
