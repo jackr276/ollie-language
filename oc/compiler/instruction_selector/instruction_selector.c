@@ -15154,6 +15154,14 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
 			handle_indirect_jump(window);
 			break;
+		/**
+		 * These statements should *always* be removed by the optimizer. If
+		 * they have not been something in the compiler is wrong and we hard
+		 * fail
+		 */
+		case THREE_ADDR_CODE_INITIALIZE_TO_UNDEF:
+			fprintf(stderr, "Fatal internal compiler error: Intialization to undefined instruction survived to the instruction selector\n");
+			exit(1);
 
 		/**
 		 * If we get here then we're encountering something that we've never seen

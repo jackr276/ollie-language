@@ -1964,7 +1964,7 @@ static inline u_int8_t does_variable_dynamic_array_contain_symtab_variable(dynam
  * know that any use of _0 will be a use-before-intialization, and will
  * therefore be an error
  */
-static inline void insert_undef_value_assignment(cfg_t* cfg, variable_symtab_t* symtab){
+static inline void insert_starting_value_assignment(cfg_t* cfg, variable_symtab_t* symtab){
 	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Get the function that we are going to be after
 		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
@@ -1976,8 +1976,6 @@ static inline void insert_undef_value_assignment(cfg_t* cfg, variable_symtab_t* 
 		 * function that we are looking at here
 		 */
 		for(int32_t i = 0; i < symtab->sheafs.current_index; i++){
-			//TODO ADD FUNCTION DEFINED IN FOR EACH SHEAF
-
 			symtab_variable_sheaf_t* sheaf = dynamic_array_get_at(&(symtab->sheafs), i);
 
 			//Run through the variable keyspace in the sheaf
@@ -1985,10 +1983,15 @@ static inline void insert_undef_value_assignment(cfg_t* cfg, variable_symtab_t* 
 				//Extract our value(remember about how these get chained)
 				symtab_variable_record_t* cursor = sheaf->records[i];
 
+				//Iterate through each layer of our keyspace
 				while(cursor != NULL){
+					//Emit the three address representation
+					three_addr_var_t* starting_variable = emit_var(cursor);
+
+					//N
+
 
 					cursor = cursor->next;
-
 				}
 			}
 		}
@@ -13606,7 +13609,7 @@ static void mangle_static_variable_names(dynamic_array_t* global_variables){
  * phi functions and then by renaming all eligible variables
  */
 static inline void ssa_generator(cfg_t* cfg, variable_symtab_t* variables){
-	insert_undef_value_assignment(cfg, variables);
+	insert_starting_value_assignment(cfg, variables);
 	insert_phi_functions(variables);
 	rename_all_variables(cfg);
 }
