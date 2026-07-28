@@ -5,7 +5,7 @@
 
 fn uninitialized_in_for_loop(arg:mut i32) -> void {
 	//Declare but do not initialize
-	declare c:i32;
+	declare c:mut i32;
 
 	for(let i:mut i16 = 3; i < arg; i++) {
 		//Should fail - C is never initialized
