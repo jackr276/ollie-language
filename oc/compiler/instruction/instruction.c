@@ -2904,11 +2904,6 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			print_variable(stdout, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, ">\n");
 			break;
-		
-		case THREE_ADDR_CODE_INITIALIZE_TO_UNDEF:
-			print_variable(stdout, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
-			fprintf(fl, " <- UNDEF\n");
-			break;
 
 		default:
 			printf("UNKNOWN TYPE\n");
@@ -5594,20 +5589,6 @@ instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_add
 	//Let's now populate it with values
 	stmt->operands.oir.assignee = assignee;
 	stmt->operands.oir.operand1 = op1;
-
-	return stmt;
-}
-
-
-/**
- * Emit an undefined initialization statement
- */
-instruction_t* emit_undefined_initialization_statement(three_addr_var_t* assignee){
-	//First allocate it
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	stmt->statement_type = THREE_ADDR_CODE_INITIALIZE_TO_UNDEF;
-	stmt->operands.oir.assignee = assignee;
 
 	return stmt;
 }

@@ -141,8 +141,6 @@ typedef enum {
 	THREE_ADDR_CODE_MEMORY_COPY_STATEMENT,
 	//Specialized offset statement for elaborative params
 	THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET,
-	//A specialized undefined intiailization instruction for SSA analysis
-	THREE_ADDR_CODE_INITIALIZE_TO_UNDEF,
 } instruction_stmt_type_t;
 
 #endif /* OLLIE_INTERMEDIARY_REPRESENTATION_H */

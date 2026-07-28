@@ -172,6 +172,7 @@ static void visit_static_let_statement(generic_ast_node_t* node);
 static inline void visit_static_declare_statement(generic_ast_node_t* node);
 static inline void handle_raise_statement(basic_block_t* basic_block, generic_ast_node_t* node);
 static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, branch_type_t branch_type, three_addr_var_t* conditional_result);
+static inline void lhs_new_name_direct(symtab_variable_record_t* variable);
 
 
 /**
@@ -1990,15 +1991,15 @@ static inline u_int8_t is_variable_undefined_initialization_eligible(symtab_vari
  * inside of each given function. This will become our "_0" value and we will
  * know that any use of _0 will be a use-before-intialization, and will
  * therefore be an error
+ *
+ * We will not do this with actual statements. Instead we will use the lhs_new_name_direct
+ * helper to emit the intial value for each given value
  */
-static inline void insert_starting_value_assignment(cfg_t* cfg, variable_symtab_t* symtab){
+static inline void emit_synthetic_initializations(cfg_t* cfg, variable_symtab_t* symtab){
 	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Get the function that we are going to be after
 		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 		symtab_function_record_t* function = function_entry->function_defined_in;
-
-		//We'll need to hold onto this for when we insert our undefined initialization statements
-		instruction_t* leading_function_statement = function_entry->leader_statement;
 
 		/**
 		 * Now for the symtab, we will run through every variable
@@ -2023,28 +2024,11 @@ static inline void insert_starting_value_assignment(cfg_t* cfg, variable_symtab_
 
 				//Iterate through each layer of this record index
 				while(cursor != NULL){
-					//Get the eligibility first and store it
-					cursor->is_undefined_initialization_eligible = is_variable_undefined_initialization_eligible(cursor);
-
-					//If it's not then we won't bother doing any of this
-					if(cursor->is_undefined_initialization_eligible == FALSE){
-						cursor = cursor->next;
-						continue;
-					}
+					//Emit the LHS new name directly here
+					lhs_new_name_direct(cursor);
 
 					//Emit the three address representation
 					three_addr_var_t* starting_variable = emit_var(cursor);
-
-					//Emit and add the undefined variable initialization statement to the front of the function
-					instruction_t* undefined_variable_initialization = emit_undefined_initialization_statement(starting_variable);
-
-					//Account for all possibilities with the null check
-					if(leading_function_statement != NULL){
-						insert_instruction_before_given(undefined_variable_initialization, leading_function_statement);
-					} else {
-						add_statement(function_entry, undefined_variable_initialization);
-						leading_function_statement = undefined_variable_initialization;
-					}
 
 					//This counts as a defined variable for this block
 					add_variable_to_def_set(starting_variable, function_entry);
@@ -13668,7 +13652,7 @@ static void mangle_static_variable_names(dynamic_array_t* global_variables){
  * phi functions and then by renaming all eligible variables
  */
 static inline void ssa_generator(cfg_t* cfg, variable_symtab_t* variables){
-	insert_starting_value_assignment(cfg, variables);
+	emit_synthetic_initializations(cfg, variables);
 	insert_phi_functions(variables);
 	rename_all_variables(cfg);
 }
