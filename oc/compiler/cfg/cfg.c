@@ -1994,48 +1994,50 @@ static inline u_int8_t is_variable_undefined_initialization_eligible(symtab_vari
  *
  * We will not do this with actual statements. Instead we will use the lhs_new_name_direct
  * helper to emit the intial value for each given value
+ *
+ * This so-called "poison" initialization will let us know that, if we get to a point
+ * where an _0 variable is being used, that variable is being used in an unitialized
+ * way
  */
-static inline void emit_synthetic_initializations(cfg_t* cfg, variable_symtab_t* symtab){
-	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
-		//Get the function that we are going to be after
-		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
-		symtab_function_record_t* function = function_entry->function_defined_in;
+static inline void emit_synthetic_initializations(variable_symtab_t* symtab){
+	/**
+	 * Now for the symtab, we will run through every variable
+	 * in here and pick out the ones that are assigned in the current
+	 * function that we are looking at here
+	 */
+	for(int32_t i = 0; i < symtab->sheafs.current_index; i++){
+		symtab_variable_sheaf_t* sheaf = dynamic_array_get_at(&(symtab->sheafs), i);
 
-		/**
-		 * Now for the symtab, we will run through every variable
-		 * in here and pick out the ones that are assigned in the current
-		 * function that we are looking at here
-		 */
-		for(int32_t i = 0; i < symtab->sheafs.current_index; i++){
-			symtab_variable_sheaf_t* sheaf = dynamic_array_get_at(&(symtab->sheafs), i);
+		//Run through the variable keyspace in the sheaf
+		for(int32_t i = 0; i < VARIABLE_KEYSPACE; i++){
+			//Extract our value(remember about how these get chained)
+			symtab_variable_record_t* cursor = sheaf->records[i];
 
-			/**
-			 * Save ourselves some cycles here by skipping all
-			 * sheafs that do not come from our given function
-			 */
-			if(sheaf->function_contained_in != function){
-				continue;
-			}
-
-			//Run through the variable keyspace in the sheaf
-			for(int32_t i = 0; i < VARIABLE_KEYSPACE; i++){
-				//Extract our value(remember about how these get chained)
-				symtab_variable_record_t* cursor = sheaf->records[i];
-
-				//Iterate through each layer of this record index
-				while(cursor != NULL){
-					//Emit the LHS new name directly here
-					lhs_new_name_direct(cursor);
-
-					//Emit the three address representation
-					three_addr_var_t* starting_variable = emit_var(cursor);
-
-					//This counts as a defined variable for this block
-					add_variable_to_def_set(starting_variable, function_entry);
-
-					//Bump up to the next record(remember they can be chained)
+			//Iterate through each layer of this record index
+			while(cursor != NULL){
+				/**
+				 * IMPORTANT - some variables are completely ineligible. If 
+				 * we don't bar for this here we will get null pointer exceptions
+				 */
+				if(is_symtab_variable_ssa_eligible(cursor) == FALSE){
 					cursor = cursor->next;
+					continue;
 				}
+
+				//Emit the LHS new name directly here
+				lhs_new_name_direct(cursor);
+
+				//Emit the three address representation
+				three_addr_var_t* starting_variable = emit_var(cursor);
+
+				/**
+				 * This counts as a definition for this variable inside of our
+				 * given function's entry block
+				 */
+				add_variable_to_def_set(starting_variable, cursor->function_declared_in->function_entry_block);
+
+				//Bump up to the next record(remember they can be chained)
+				cursor = cursor->next;
 			}
 		}
 	}
@@ -12314,6 +12316,9 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	//Store this in the entry block
 	function_starting_block->function_defined_in = func_record;
 
+	//We need to store the function entry block inside of the record for later use
+	func_record->function_entry_block = function_starting_block;
+
 	//These will always be direct successors here
 	function_starting_block->direct_successor = function_exit_block;
 
@@ -13655,7 +13660,7 @@ static void mangle_static_variable_names(dynamic_array_t* global_variables){
  * TODO DOCUMENT COMPLETELY
  */
 static inline void ssa_generator(cfg_t* cfg, variable_symtab_t* variables){
-	emit_synthetic_initializations(cfg, variables);
+	emit_synthetic_initializations(variables);
 	insert_phi_functions(variables);
 	rename_all_variables(cfg);
 }

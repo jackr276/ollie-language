@@ -134,6 +134,8 @@ struct symtab_function_record_t{
 	label_symtab_t* user_defined_labels;
 	//What dependency graph node does this function come from?
 	dependency_graph_node_t* dependency_graph_node;
+	//Maintain a reference to the entry block
+	void* function_entry_block;
 	//The line number
 	u_int32_t line_number;
 	//A bitmap for all assigned general purpose registers
