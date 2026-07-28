@@ -13650,6 +13650,9 @@ static void mangle_static_variable_names(dynamic_array_t* global_variables){
 /**
  * Perform all SSA generation in the CFG by first inserting all needed
  * phi functions and then by renaming all eligible variables
+ *
+ *
+ * TODO DOCUMENT COMPLETELY
  */
 static inline void ssa_generator(cfg_t* cfg, variable_symtab_t* variables){
 	emit_synthetic_initializations(cfg, variables);
