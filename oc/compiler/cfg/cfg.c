@@ -13683,6 +13683,55 @@ static inline void convert_cfg_to_ssa_form(cfg_t* cfg, variable_symtab_t* variab
 
 
 /**
+ * 
+ */
+static u_int8_t perform_definite_assignment_analysis_for_block(basic_block_t* block){
+	//Grab a leader statement out
+	instruction_t* cursor = block->leader_statement;
+
+	while(cursor != NULL){
+		//TODO
+
+		cursor = cursor->next_statement;
+	}
+
+	for(int32_t i = 0; i < block->dominator_children.current_index; i++){
+		basic_block_t* child = dynamic_array_get_at(&(block->dominator_children), i);
+
+		perform_definite_assignment_analysis_for_block(block);
+		
+	}
+
+
+	//TODO DUMMY
+	return TRUE;
+}
+
+
+/**
+ * Perform the Ollie analyzer's version of definite assignment analysis. 
+ *
+ * This will include:
+ * 	1.) Uninitialized/potentially uninitialized variable detection
+ * 	2.) Unneccessary mutability detection
+ *
+ * TODO DOC
+ */
+static inline u_int8_t perform_definite_assignment_analysis(cfg_t* cfg, variable_symtab_t* variables){
+	//Run through all functions
+	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+		//Use the function entry to seed the search
+		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
+
+	}
+
+
+	//TODO DUMMY
+	return TRUE;
+}
+
+
+/**
  * Build a cfg from the ground up
 */
 cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_int32_t* num_warnings){
@@ -13765,6 +13814,14 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	 * Call out to do all SSA generation
 	 */
 	convert_cfg_to_ssa_form(cfg, results->variable_symtab);
+
+	/**
+	 * Now we will perform all mutation & uninitialized variable
+	 * detection checks. 
+	 *
+	 * NOTE: this is a potential fail point for the CFG
+	 */
+	u_int8_t definite_assignment_analysis_result = perform_definite_assignment_analysis(cfg, results->variable_symtab);
 
 	//TODO CHECKS
 
