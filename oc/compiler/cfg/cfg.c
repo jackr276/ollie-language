@@ -1970,6 +1970,9 @@ static inline void insert_starting_value_assignment(cfg_t* cfg, variable_symtab_
 		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 		symtab_function_record_t* function = function_entry->function_defined_in;
 
+		//We'll need to hold onto this for when we insert our undefined initialization statements
+		instruction_t* leading_function_statement = function_entry->leader_statement;
+
 		/**
 		 * Now for the symtab, we will run through every variable
 		 * in here and pick out the ones that are assigned in the current
@@ -1977,6 +1980,14 @@ static inline void insert_starting_value_assignment(cfg_t* cfg, variable_symtab_
 		 */
 		for(int32_t i = 0; i < symtab->sheafs.current_index; i++){
 			symtab_variable_sheaf_t* sheaf = dynamic_array_get_at(&(symtab->sheafs), i);
+
+			/**
+			 * Save ourselves some cycles here by skipping all
+			 * sheafs that do not come from our given function
+			 */
+			if(sheaf->function_contained_in != function){
+				continue;
+			}
 
 			//Run through the variable keyspace in the sheaf
 			for(int32_t i = 0; i < VARIABLE_KEYSPACE; i++){
@@ -1988,8 +1999,16 @@ static inline void insert_starting_value_assignment(cfg_t* cfg, variable_symtab_
 					//Emit the three address representation
 					three_addr_var_t* starting_variable = emit_var(cursor);
 
-					//N
+					//Emit and add the undefined variable initialization statement to the front of the function
+					instruction_t* undefined_variable_initialization = emit_undefined_initialization_statement(starting_variable);
 
+					//Account for all possibilities with the null check
+					if(leading_function_statement != NULL){
+						insert_instruction_before_given(undefined_variable_initialization, leading_function_statement);
+					} else {
+						add_statement(function_entry, undefined_variable_initialization);
+						leading_function_statement = undefined_variable_initialization;
+					}
 
 					cursor = cursor->next;
 				}

@@ -2908,9 +2908,10 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		case THREE_ADDR_CODE_INITIALIZE_TO_UNDEF:
 			print_variable(stdout, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- UNDEF\n");
+			break;
 
 		default:
-			printf("UNKNOWN TYPE");
+			printf("UNKNOWN TYPE\n");
 			break;
 	}
 }
