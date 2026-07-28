@@ -1987,6 +1987,8 @@ static inline void insert_undef_value_assignment(cfg_t* cfg, variable_symtab_t* 
 
 				while(cursor != NULL){
 
+					cursor = cursor->next;
+
 				}
 			}
 		}

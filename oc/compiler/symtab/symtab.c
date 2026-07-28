@@ -199,10 +199,10 @@ module_symtab_t* module_symtab_alloc(){
 
 
 /**
- * Initialize a new lexical scope. This involves making a new sheaf and
- * adding it in
+ * Initialize the variable symbol table scope. It is possible that the function
+ * we are contained in would be NULL for the global variable scope
 */
-void initialize_variable_scope(variable_symtab_t* symtab){
+void initialize_variable_scope(variable_symtab_t* symtab, symtab_function_record_t* function_defined_in){
 	//Allocate the current sheaf
 	symtab_variable_sheaf_t* current = (symtab_variable_sheaf_t*)calloc(1, sizeof(symtab_variable_sheaf_t));
 
@@ -211,6 +211,9 @@ void initialize_variable_scope(variable_symtab_t* symtab){
 
 	//Get the unique ID for this lexical scpoe
 	current->lexical_scope_id = increment_and_get_variable_lexical_scope();
+
+	//What function are we in for this sheaf?
+	current->function_contained_in = function_defined_in;
 
 	//Now we'll link back to the previous one level
 	current->previous_level = symtab->current;

@@ -10750,7 +10750,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	}
 
 	//We will declare a new lexical scope here
-	initialize_variable_scope(variable_symtab);
+	initialize_variable_scope(variable_symtab, current_function);
 	initialize_type_scope(type_symtab);
 
 	//Push to stack for later matching
@@ -11193,7 +11193,7 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 	 * Important note: The parenthesized area of a for statement represents a new lexical scope
 	 * for variables. As such, we will initialize a new variable scope when we get here
 	 */
-	initialize_variable_scope(variable_symtab);
+	initialize_variable_scope(variable_symtab, current_function);
 	
 	//Let's see if we've got anything. Invoke the expression statement rule here
 	generic_ast_node_t* statement_chain = expression_statement(token_stream);
@@ -11340,7 +11340,7 @@ static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream
 
 	//Variable scope is configurable based on a function param
 	if(new_variable_scope_required == TRUE){
-		initialize_variable_scope(variable_symtab);
+		initialize_variable_scope(variable_symtab, current_function);
 	}
 
 	//Now we can keep going until we see a closing curly
@@ -14205,7 +14205,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 * so that we include the function parameters in it. We need to remember to close
 	 * this once we leave
 	 */
-	initialize_variable_scope(variable_symtab);
+	initialize_variable_scope(variable_symtab, function_record);
 
 	/**
 	 * IMPORTANT: we need to hang onto this overarching function scope
@@ -15134,8 +15134,8 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	//For the type and variable symtabs, their scope needs to be initialized before
 	//anything else happens
 	
-	//Initialize the variable scope
-	initialize_variable_scope(variable_symtab);
+	//Initialize the variable scope. The function contained in is NULL for this one
+	initialize_variable_scope(variable_symtab, NULL);
 	//Global variable scope here
 	initialize_type_scope(type_symtab);
 	//Functions only have one scope, need no initialization
