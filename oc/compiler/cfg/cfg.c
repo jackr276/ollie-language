@@ -12904,6 +12904,11 @@ static inline void visit_static_declare_statement(generic_ast_node_t* node){
  * has to be allocated and placed onto the stack
  */
 static void visit_declaration_statement(generic_ast_node_t* node){
+
+	//TODO IDEA : we should have some kind of synthetic declaration statement for this
+	//that will just be scrapped *IF* this is a memory region. Becuase we are dealing with
+	//stack vars all of these are inherently initialized
+
 	//Create a stack region for this variable
 	node->variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
 }
