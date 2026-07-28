@@ -15243,8 +15243,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 
 		//Check for any unused functions
 		check_for_unused_functions(function_symtab, &num_warnings);
-		//Check for any bad variable declarations
-		check_for_var_errors(variable_symtab, &num_warnings);
 
 		/**
 		 * One final thing that we need to do. Functions inside of namespaces

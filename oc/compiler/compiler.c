@@ -425,6 +425,33 @@ static u_int8_t compile(compiler_options_t* options){
 	//Now we'll build the cfg using our results
 	cfg_t* cfg = build_cfg(results, &num_errors, &num_warnings);
 
+	/**
+	 * If we have a CFG failure, we need to fail out here and not process
+	 * any further
+	 */
+	if(cfg->result == CFG_RESULT_FAILURE){
+		//Timer end
+		end = clock();
+
+		//Crude time calculation
+		times.total_time = (double)(end - begin) / CLOCKS_PER_SEC;
+
+		//Print summary with a failure here
+		if(options->show_summary == TRUE){
+			print_summary(options, &times, results->lines_processed, FALSE);
+		}
+
+		/**
+		 * If this is a test run, we will return 0 because we don't want to show a makefile error. If it 
+		 * is not, we'll return 1 to show the error
+		 */
+		if(options->output_type != OUTPUT_TYPE_NO_OUTPUT){
+			return 1;
+		} else {
+			return 0;
+		}
+	}
+
 	//If we're doing debug printing, then we'll print this
 	if(options->print_irs == TRUE){
 		printf("============================================= BEFORE OPTIMIZATION =======================================\n");
