@@ -13653,15 +13653,31 @@ static void mangle_static_variable_names(dynamic_array_t* global_variables){
 
 
 /**
- * Perform all SSA generation in the CFG by first inserting all needed
- * phi functions and then by renaming all eligible variables
- *
- *
- * TODO DOCUMENT COMPLETELY
+ * This pass will do everything needed to convert the CFG into SSA(static single assignment) form.
+ * As a reminder, static single assignment form is an IR form where every variable is assigned
+ * only once
  */
-static inline void ssa_generator(cfg_t* cfg, variable_symtab_t* variables){
+static inline void convert_cfg_to_ssa_form(cfg_t* cfg, variable_symtab_t* variables){
+	/**
+	 * Step 1: We will do a synthetic initialization with a poison value so that
+	 * <var_name>_0(0th generation) marks an uninitialized variable. This will be useful
+	 * for us down the road when we do uninitialized variable usage checking and mutation
+	 * checking
+	 */
 	emit_synthetic_initializations(variables);
+
+	/**
+	 * Step 2: Insert join nodes(phi functions) at blocks where different definitions
+	 * of variables meet. These join nodes form the basis of the SSA renaming and also
+	 * will be used for our uninitialized variable detection
+	 */
 	insert_phi_functions(variables);
+
+	/**
+	 * Step 3: Rename all variables into SSA using the standard algorithm. SSA form is heavily
+	 * relied on by the uninitialized variable/mutation checker and by the optimizer down the
+	 * road
+	 */
 	rename_all_variables(cfg);
 }
 
@@ -13748,7 +13764,9 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	/**
 	 * Call out to do all SSA generation
 	 */
-	ssa_generator(cfg, results->variable_symtab);
+	convert_cfg_to_ssa_form(cfg, results->variable_symtab);
+
+	//TODO CHECKS
 
 	//Once we get here, we're done with these two stacks
 	heap_stack_dealloc(&break_stack);	

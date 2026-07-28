@@ -223,8 +223,6 @@ struct symtab_variable_record_t{
 	u_int8_t stack_variable;
 	//Is this a function parameter that is passed via stack?
 	u_int8_t passed_by_stack;
-	//Is this variable eligible for undefined intialization?
-	u_int8_t is_undefined_initialization_eligible;
 	//Was it declared or letted
 	u_int8_t declare_or_let; /* 0 = declare, 1 = let */
 	//What's the visibility of this(only used for global variables)
