@@ -12634,9 +12634,6 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 	 */
 	global_variable_t* global_variable = create_global_variable(node->variable, NULL);
 
-	//This has been initialized already
-	global_variable->variable->initialized = TRUE;
-
 	//Figure out what this decays into
 	global_variable->is_relative = does_type_decay_to_char_pointer(node->variable->type_defined_as);
 
@@ -12712,9 +12709,6 @@ static void visit_static_let_statement(generic_ast_node_t* node){
 	 * here so that it's automatically initialized to 0
 	 */
 	global_variable_t* static_variable = create_global_variable(node->variable, NULL);
-
-	//This has been initialized already
-	static_variable->variable->initialized = TRUE;
 
 	//Figure out what this decays into
 	static_variable->is_relative = does_type_decay_to_char_pointer(node->variable->type_defined_as);
