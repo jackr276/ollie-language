@@ -1641,8 +1641,6 @@ static inline void add_variable_to_def_set(three_addr_var_t* variable, basic_blo
 }
 
 
-
-
 /**
  * Compute the USE and DEF sets for every single block inside of a function
  *
@@ -1958,6 +1956,35 @@ static inline u_int8_t does_variable_dynamic_array_contain_symtab_variable(dynam
 
 
 /**
+ * Is a given variable eligible for undefined initialization in the SSA constructor?
+ *
+ * This is eligible for variables that are *not* memory regions and are strictly local
+ * variables. For example function parameters are always assumed assigned and therefore exempt
+ *
+ * Static and global variables are also completely exempt from this because they're assumed to
+ * be in-memory from the start
+ */
+static inline u_int8_t is_variable_undefined_initialization_eligible(symtab_variable_record_t* variable){
+	switch(variable->membership){
+		case STATIC_VARIABLE:
+		case GLOBAL_VARIABLE:
+			return FALSE;
+		default:
+			break;
+	}
+
+	switch(variable->type_defined_as->type_class){
+		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_UNION:
+			return FALSE;
+		default:
+			return TRUE;
+	}
+}
+
+
+/**
  * In order to perform definite assignment analysis, we will need to insert
  * initial "undef" assignments for every SSA eligible variable that exists
  * inside of each given function. This will become our "_0" value and we will
@@ -1994,8 +2021,17 @@ static inline void insert_starting_value_assignment(cfg_t* cfg, variable_symtab_
 				//Extract our value(remember about how these get chained)
 				symtab_variable_record_t* cursor = sheaf->records[i];
 
-				//Iterate through each layer of our keyspace
+				//Iterate through each layer of this record index
 				while(cursor != NULL){
+					//Get the eligibility first and store it
+					cursor->is_undefined_initialization_eligible = is_variable_undefined_initialization_eligible(cursor);
+
+					//If it's not then we won't bother doing any of this
+					if(cursor->is_undefined_initialization_eligible == FALSE){
+						cursor = cursor->next;
+						continue;
+					}
+
 					//Emit the three address representation
 					three_addr_var_t* starting_variable = emit_var(cursor);
 
@@ -2010,6 +2046,10 @@ static inline void insert_starting_value_assignment(cfg_t* cfg, variable_symtab_
 						leading_function_statement = undefined_variable_initialization;
 					}
 
+					//This counts as a defined variable for this block
+					add_variable_to_def_set(starting_variable, function_entry);
+
+					//Bump up to the next record(remember they can be chained)
 					cursor = cursor->next;
 				}
 			}
