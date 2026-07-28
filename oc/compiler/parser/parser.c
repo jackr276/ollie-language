@@ -2664,19 +2664,6 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 				if(found_var != NULL){
 					//Most common case - not an enum
 					if(found_var->membership != ENUM_MEMBER){
-						/**
-						 * If this is the right hand side and our variable is not initialized,
-						 * this is invalid as we are trying to use before initialization
-						 *
-						 * TODO WRONG
-						 */
-						if(side == SIDE_TYPE_RIGHT 
-							&& is_variable_data_segment_variable(found_var) == FALSE
-							&& found_var->initialized == FALSE){
-							sprintf(info, "Attempt to use variable %s before initialization", found_var->var_name.string);
-							return print_and_return_error(info, parser_line_num);
-						}
-						
 						//We know that this is valid, so we can allocate the identifier
 						generic_ast_node_t* ident_node = ast_node_alloc(AST_NODE_TYPE_IDENTIFIER, side);
 
@@ -2984,11 +2971,6 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//If we have a variable, then this is definitely a mutation
-		if(left_hand_expression_tree->variable != NULL){
-			left_hand_expression_tree->variable->mutated = TRUE;
-		}
-
 	/**
 	 * If we are ending in an array accessor, we would see a tree structure like:
 	 * 			<postifx-node>
@@ -3008,11 +2990,6 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 				sprintf(info, "Attempt to mutate an immutable memory reference type \"%s\"", first_child->inferred_type->type_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
-		}
-
-		//If we have a variable, then this is definitely a mutation
-		if(left_hand_expression_tree->variable != NULL){
-			left_hand_expression_tree->variable->mutated = TRUE;
 		}
 
 	/**
@@ -3038,11 +3015,6 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 			}
 		}
 
-		//If we have a variable, then this is definitely a mutation
-		if(left_hand_expression_tree->variable != NULL){
-			left_hand_expression_tree->variable->mutated = TRUE;
-		}
-
 	} else {
 		//This is the case where we have a plain variable assignment
 		if(can_variable_be_assigned_to(assignee) == FALSE){
@@ -3052,13 +3024,6 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 			num_errors++;
 			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
-
-		/**
-		 * Since we are not doing any kind of memory access here, now we can go
-		 * through and update our mutability/initialization. This counts as mutation
-		 * and initialization
-		 */
-		assignee->mutated = TRUE;
 	}
 
 	//Just give this back as a flag that we're fine
@@ -3774,9 +3739,6 @@ static generic_ast_node_t* postoperation(generic_type_t* current_type, generic_a
 			sprintf(info, "Attempt to mutate immutable variable \"%s\"", parent_node->variable->var_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
-
-		//This was assigned to
-		parent_node->variable->mutated = TRUE;
 	}
 
 	//Otherwise let's allocate this
@@ -4268,9 +4230,6 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 					sprintf(info, "Attempt to mutate immutable variable \"%s\"", cast_expr->variable->var_name.string);
 					return print_and_return_error(info, parser_line_num);
 				}
-
-				//This is a mutation
-				cast_expr->variable->mutated = TRUE;
 			}
 
 			//Force this to be an rvalue for the cfg constructor

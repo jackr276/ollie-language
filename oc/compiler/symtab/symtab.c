@@ -2828,7 +2828,6 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnin
 /**
  * If a variable is declared as "mut"(mutable) but is never assigned to throughout it's
  * entire lifetime, that mut keyword is not needed
- */
 void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 	//For any/all error printing
 	char info[1000];
@@ -2900,6 +2899,7 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 	//Destroy the queue
 	min_priority_queue_dealloc(&queue);
 }
+*/
 
 
 /**

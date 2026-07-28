@@ -214,10 +214,6 @@ struct symtab_variable_record_t{
 	 * This is what really matters to us in the register allocator
 	 */
 	u_int16_t class_relative_function_parameter_order;
-	//Was it initialized?
-	u_int8_t initialized;
-	//Has this been mutated
-	u_int8_t mutated;
 	//What type structure or language concept does this variable belong to?
 	variable_membership_t membership;
 	//Where does this variable get stored? By default we assume register, so
