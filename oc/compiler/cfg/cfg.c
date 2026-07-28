@@ -1958,6 +1958,18 @@ static inline u_int8_t does_variable_dynamic_array_contain_symtab_variable(dynam
 
 
 /**
+ * In order to perform definite assignment analysis, we will need to insert
+ * initial "undef" assignments for every SSA eligible variable that exists
+ * inside of each given function. This will become our "_0" value and we will
+ * know that any use of _0 will be a use-before-intialization, and will
+ * therefore be an error
+ */
+static inline void insert_undef_value_assignment(cfg_t* cfg, variable_symtab_t* symtab){
+
+}
+
+
+/**
  * if(x0 == 0){
  * 	x1 = 2;
  * } else {
@@ -13567,6 +13579,7 @@ static void mangle_static_variable_names(dynamic_array_t* global_variables){
  * phi functions and then by renaming all eligible variables
  */
 static inline void ssa_generator(cfg_t* cfg, variable_symtab_t* variables){
+	insert_undef_value_assignment(cfg, variables);
 	insert_phi_functions(variables);
 	rename_all_variables(cfg);
 }
