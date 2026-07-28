@@ -714,6 +714,11 @@ instruction_t* emit_binary_operation_with_const_instruction(three_addr_var_t* as
 instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1);
 
 /**
+ * Emit an undefined initialization statement
+ */
+instruction_t* emit_undefined_initialization_statement(three_addr_var_t* assignee);
+
+/**
  * Emit a statement that only uses two vars of the form var1 <- var2
  *
  * This truncating assignment instruction is designed specifically and only
