@@ -1003,6 +1003,8 @@ static inline void basic_type_signedness_coercion(type_symtab_t* symtab, generic
 
 /**
  * Apply standard coercion rules for basic types
+ *
+ * TODO IS THIS RIGHT???????
  */
 static inline void basic_type_widening_type_coercion(generic_type_t** a, generic_type_t** b){
 	//Whomever has the largest size wins
@@ -3029,7 +3031,7 @@ generic_type_t* get_operand_type_for_logical_operation(void* symtab, generic_typ
 
 /**
  * Compute the operand type for a relational operation. We perform floating point
- * coercion here.
+ * and signedness coercion here.
  */
 generic_type_t* get_operand_type_for_relational_operation(void* symtab, generic_type_t* type_a, generic_type_t* type_b){
 	type_symtab_t* type_corrected_symtab = symtab;
@@ -3073,14 +3075,18 @@ generic_type_t* get_operand_type_for_relational_operation(void* symtab, generic_
 		}
 
 	/**
-	 * Case 4: no floats - largest wins
+	 * Case 4: no floats - largest wins. We will also be performing
+	 * signedness coercion
 	 */
 	} else {
-		if(type_a->type_size > type_b->type_size){
-			return type_a;
-		} else {
-			return type_b;
-		}
+		//First widen it
+		basic_type_widening_type_coercion(&type_a, &type_b);
+
+		//Now do the signedness coercion
+		basic_type_signedness_coercion(symtab, &type_a, &type_b);
+
+		//Give back whatever we ended up with
+		return type_a;
 	}
 }
 
