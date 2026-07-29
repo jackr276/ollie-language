@@ -2971,7 +2971,7 @@ void add_return_type_to_signature(function_type_t* signature, generic_type_t* re
 
 /**
  * Compute the operand type for a logical and/or operation. We perform floating point
- * coercion here. j
+ * coercion here.
  */
 generic_type_t* get_operand_type_for_logical_operation(void* symtab, generic_type_t* type_a, generic_type_t* type_b){
 	type_symtab_t* type_corrected_symtab = symtab;
@@ -3029,7 +3029,7 @@ generic_type_t* get_operand_type_for_logical_operation(void* symtab, generic_typ
 
 /**
  * Compute the operand type for a relational operation. We perform floating point
- * coercion here. j
+ * coercion here.
  */
 generic_type_t* get_operand_type_for_relational_operation(void* symtab, generic_type_t* type_a, generic_type_t* type_b){
 	type_symtab_t* type_corrected_symtab = symtab;

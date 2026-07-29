@@ -391,9 +391,9 @@ static inline generic_type_t* get_destination_type_for_binary_operation_instruct
 			case DOUBLE_EQUALS:
 			case NOT_EQUALS:
 				if(instruction->operands.oir.operand2 != NULL){
-					destination_type = get_operand_type_for_logical_operation(cfg_reference->type_symtab, 
-															   					instruction->operands.oir.operand1->type,
-															   					instruction->operands.oir.operand2->type);
+					destination_type = get_operand_type_for_relational_operation(cfg_reference->type_symtab, 
+															   					 instruction->operands.oir.operand1->type,
+															   					 instruction->operands.oir.operand2->type);
 				} else {
 					destination_type = instruction->operands.oir.operand1->type;
 				}
