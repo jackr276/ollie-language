@@ -2993,6 +2993,8 @@ generic_type_t* get_operand_type_for_logical_operation(void* symtab, generic_typ
 
 	/**
 	 * Case 1: both floats - largest one wins
+	 *
+	 * TODO WHOLE FLOW SHOULD BE REWORKED - too much comparison here
 	 */
 	if(typea_is_float == TRUE && typeb_is_float == TRUE){
 		if(type_a->type_size > type_b->type_size){
@@ -3026,14 +3028,17 @@ generic_type_t* get_operand_type_for_logical_operation(void* symtab, generic_typ
 		}
 
 	/**
-	 * Case 4: no floats - largest wins
+	 * Case 4: no floats - largest wins. We will be doing basic type widening coercion
 	 */
 	} else {
-		if(type_a->type_size > type_b->type_size){
-			return type_a;
-		} else {
-			return type_b;
-		}
+		//First widen it
+		basic_type_widening_type_coercion(&type_a, &type_b);
+
+		//Now do the signedness coercion
+		basic_type_signedness_coercion(symtab, &type_a, &type_b);
+
+		//Give back whatever we ended up with
+		return type_a;
 	}
 }
 
@@ -3051,6 +3056,9 @@ generic_type_t* get_operand_type_for_relational_operation(void* symtab, generic_
 
 	/**
 	 * Case 1: both floats - largest one wins
+	 *
+	 *
+	 * TODO WHOLE FLOW SHOULD BE REWORKED - too much comparison here
 	 */
 	if(typea_is_float == TRUE && typeb_is_float == TRUE){
 		if(type_a->type_size > type_b->type_size){
