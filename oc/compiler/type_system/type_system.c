@@ -1005,6 +1005,8 @@ static inline void basic_type_signedness_coercion(type_symtab_t* symtab, generic
  * Apply standard coercion rules for basic types
  *
  * TODO IS THIS RIGHT???????
+ *
+ * I don't think that this is at all correct
  */
 static inline void basic_type_widening_type_coercion(generic_type_t** a, generic_type_t** b){
 	//Whomever has the largest size wins
@@ -1015,6 +1017,13 @@ static inline void basic_type_widening_type_coercion(generic_type_t** a, generic
 		//Set a to equal b
 		*a = *b;
 	}
+}
+
+
+//TODO - we need to actually scale up the types appropriately. We cannot just blindly assign
+//stuff over
+static inline void basic_type_widening_type_coercion_v2(generic_type_t** a, generic_type_t** b){
+
 }
 
 
