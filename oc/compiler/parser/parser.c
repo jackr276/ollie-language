@@ -5526,7 +5526,8 @@ static generic_ast_node_t* relational_expression(ollie_token_stream_t* token_str
 			 * a comparison operation we will want to warn the user if they are comparing
 			 * between signed/unsigned integer types
 			 */
-			if(is_integer_type(left_hand_type) == TRUE && is_integer_type(right_hand_type) == TRUE){
+			if(temp_holder_is_constant == FALSE && right_child_is_constant == FALSE
+				&& is_integer_type(left_hand_type) == TRUE && is_integer_type(right_hand_type) == TRUE){
 				/**
 				 * Type signage mismatch. This is *not* an error or illegal, but it is 
 				 * a foot-gun and we want to warn about this. There are legitimate

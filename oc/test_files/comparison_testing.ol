@@ -7,5 +7,6 @@ pub fn main() -> i32 {
 	let i:u32 = 2;
 	let j:i32 = 3;
 
+	OUNIT: [exit_status = 0]
 	ret j < i;
 }
