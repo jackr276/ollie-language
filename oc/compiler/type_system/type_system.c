@@ -1037,11 +1037,15 @@ static inline void widen_basic_type_to_given_size(type_symtab_t* symtab, generic
 	switch((*type)->basic_type_token){
 		case F32:
 		case F64:
+			classification = WIDEN_FLOAT;
+			break;
 
 		case I8:
 		case I16:
 		case I32:
 		case I64:
+			classification = WIDEN_SIGNED;
+			break;
 
 		case CHAR:
 		case BOOL:
@@ -1049,14 +1053,86 @@ static inline void widen_basic_type_to_given_size(type_symtab_t* symtab, generic
 		case U16:
 		case U32:
 		case U64:
+			classification = WIDEN_UNSIGNED;
+			break;
 
 		default:
 			fprintf(stderr, "Fatal internal compiler error. Invalid basic type given to type widener\n");
 			exit(1);
 	}
 
+	/**
+	 * Now based on the general class of type that we got, we will widen as we
+	 * see fit here
+	 */
+	switch(classification){
+		case WIDEN_FLOAT:
+			switch(target_size){
+				//Do nothing, all floats are at least 4 bytes large
+				case 4:
+					break;
 
+				case 8:
+					*type = lookup_type_name_only(symtab, "f64", (*type)->mutability)->type;
+					break;
 
+				default:
+					fprintf(stderr, "Fatal internal compiler error. Invalid widen to size of %d given for float\n", target_size);
+					exit(1);
+			}
+
+			break;
+
+		case WIDEN_SIGNED:
+			switch(target_size){
+				//Do nothing - all ints are at least 1 byte large
+				case 1:
+					break;
+				
+				case 2:
+					*type = lookup_type_name_only(symtab, "i16", (*type)->mutability)->type;
+					break;
+
+				case 4:
+					*type = lookup_type_name_only(symtab, "i32", (*type)->mutability)->type;
+					break;
+
+				case 8:
+					*type = lookup_type_name_only(symtab, "i64", (*type)->mutability)->type;
+					break;
+
+				default:
+					fprintf(stderr, "Fatal internal compiler error. Invalid widen to size of %d given for signed integer\n", target_size);
+					exit(1);
+			}
+
+			break;
+
+		case WIDEN_UNSIGNED:
+			switch(target_size){
+				//Do nothing - all ints are at least 1 byte large
+				case 1:
+					break;
+				
+				case 2:
+					*type = lookup_type_name_only(symtab, "u16", (*type)->mutability)->type;
+					break;
+
+				case 4:
+					*type = lookup_type_name_only(symtab, "u32", (*type)->mutability)->type;
+					break;
+
+				case 8:
+					*type = lookup_type_name_only(symtab, "u64", (*type)->mutability)->type;
+					break;
+
+				default:
+					fprintf(stderr, "Fatal internal compiler error. Invalid widen to size of %d given for unsigned integer\n", target_size);
+					exit(1);
+			}
+
+			break;
+	}
 }
 
 
