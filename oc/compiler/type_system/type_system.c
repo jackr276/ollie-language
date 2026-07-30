@@ -3096,11 +3096,11 @@ generic_type_t* get_operand_type_for_logical_operation(void* symtab, generic_typ
 	 * Extract out enum types now and use their underlying
 	 * integer type instead
 	 */
-	if(a->type_class == TYPE_CLASS_ELABORATIVE){
+	if(a->type_class == TYPE_CLASS_ENUMERATED){
 		a = a->internal_values.enum_integer_type;
 	}
 
-	if(b->type_class == TYPE_CLASS_ELABORATIVE){
+	if(b->type_class == TYPE_CLASS_ENUMERATED){
 		b = b->internal_values.enum_integer_type;
 	}
 
@@ -3130,24 +3130,20 @@ generic_type_t* get_operand_type_for_relational_operation(void* symtab, generic_
 	 * Extract out enum types now and use their underlying
 	 * integer type instead
 	 */
-	if(a->type_class == TYPE_CLASS_ELABORATIVE){
-		printf("HERE\n");
+	if(a->type_class == TYPE_CLASS_ENUMERATED){
 		a = a->internal_values.enum_integer_type;
 	}
 
-	if(b->type_class == TYPE_CLASS_ELABORATIVE){
-		printf("HERE1\n");
+	if(b->type_class == TYPE_CLASS_ENUMERATED){
 		b = b->internal_values.enum_integer_type;
 	}
 
 	//Perform any floating point coercion first
 	handle_floating_point_coercion(symtab, &a, &b);
 
-		printf("HERE2\n");
 	//Widen it
 	basic_type_widening_type_coercion(symtab, &a, &b);
 
-		printf("HERE3\n");
 	//Now do the signedness coercion
 	basic_type_signedness_coercion(symtab, &a, &b);
 
