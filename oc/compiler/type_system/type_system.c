@@ -1013,8 +1013,6 @@ static inline void widen_basic_type_to_given_size(type_symtab_t* symtab, generic
 		WIDEN_FLOAT,
 	} widening_type_t;
 
-	printf("TYPE IS %s\n", (*type)->type_name.string);
-
 	//Let's first determine what general classication of type this is
 	widening_type_t classification;
 	switch((*type)->basic_type_token){
@@ -3091,11 +3089,46 @@ void add_return_type_to_signature(function_type_t* signature, generic_type_t* re
  * coercion here.
  */
 generic_type_t* get_operand_type_for_logical_operation(void* symtab, generic_type_t* type_a, generic_type_t* type_b){
-	type_symtab_t* type_corrected_symtab = symtab;
+	/**
+	 * Extract out enum types now and use their underlying
+	 * integer type instead
+	 */
+	if(type_a->type_class == TYPE_CLASS_ELABORATIVE){
+		type_a = type_a->internal_values.enum_integer_type;
+	}
+
+	if(type_b->type_class == TYPE_CLASS_ELABORATIVE){
+		type_b = type_b->internal_values.enum_integer_type;
+	}
+
 
 	//Are these floats or not?
 	u_int8_t typea_is_float = IS_FLOATING_POINT(type_a);
 	u_int8_t typeb_is_float = IS_FLOATING_POINT(type_b);
+
+	/**
+	 * Cases 1 and 2 - type_a is not a float in both cases(most common)
+	 */
+	if(typea_is_float == FALSE){
+		/**
+		 * Case 1: type_a and type_b are both not floating point values
+		 */
+		if(typeb_is_float == FALSE){
+
+		} else {
+
+		}
+
+	/**
+	 * Cases 3 and 4 - type_a is a float in both cases(less common)
+	 */
+	} else {
+		if(typeb_is_float == FALSE){
+
+		} else {
+
+		}
+	}
 
 	/**
 	 * Case 1: both floats - largest one wins
