@@ -1020,9 +1020,34 @@ static inline void basic_type_widening_type_coercion(generic_type_t** a, generic
 }
 
 
-//TODO - we need to actually scale up the types appropriately. We cannot just blindly assign
-//stuff over
-static inline void basic_type_widening_type_coercion_v2(generic_type_t** a, generic_type_t** b){
+/**
+ * Widen the given type to the target size. We will not change the variety of our type(i.e. no signed changes,
+ * no float to int or vice versa), we will only widen the size
+ */
+static inline void widen_basic_type_to_given_size(type_symtab_t* symtab, generic_type_t** type, int32_t target_size){
+
+}
+
+
+
+/**
+ * Apply standard widening coercion for basic types. All that this does is expand the 
+ * existing type class based on the overall largest size. For example, if we have an i8 and a u32,
+ * we would expand the i8 to an i32(no signedness change)
+ */
+static inline void basic_type_widening_type_coercion_v2(type_symtab_t* symtab, generic_type_t** a, generic_type_t** b){
+	//Extract these for convenience
+	int32_t a_type_size = (*a)->type_size;
+	int32_t b_type_size = (*b)->type_size;
+
+	//What size are we widening too? This is always the largest of the two
+	int32_t widen_to_size;
+	if(a_type_size > b_type_size){
+		widen_to_size = a_type_size;
+	} else {
+		widen_to_size = b_type_size;
+	}
+
 
 }
 
