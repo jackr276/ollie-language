@@ -2045,6 +2045,28 @@ static inline void emit_synthetic_initializations(variable_symtab_t* symtab){
 
 
 /**
+ * Emit a phi function for a given variable. Once emitted, these statements are compiler exclusive,
+ * but they are needed for our optimization
+ */
+static instruction_t* emit_phi_function(symtab_variable_record_t* variable){
+	//First we allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//We'll just store the assignee here, no need for anything else
+	stmt->operands.oir.assignee = emit_var(variable);
+
+	//Create our parameter array
+	stmt->parameters = dynamic_array_alloc();
+
+	//Note what kind of node this is
+	stmt->statement_type = THREE_ADDR_CODE_PHI_FUNC;
+
+	//And give the statement back
+	return stmt;
+}
+
+
+/**
  * if(x0 == 0){
  * 	x1 = 2;
  * } else {
@@ -13927,7 +13949,8 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	 */
 	u_int8_t definite_assignment_analysis_result = perform_definite_assignment_analysis(cfg, results->variable_symtab);
 
-	//TODO CHECKS
+	//Update the result based on what our definite assignment analysis gave
+	cfg->result = definite_assignment_analysis_result == SUCCESS ? CFG_RESULT_SUCCESS : CFG_RESULT_FAILURE;
 
 	//Once we get here, we're done with these two stacks
 	heap_stack_dealloc(&break_stack);	
@@ -13935,6 +13958,5 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	nesting_stack_dealloc(&nesting_stack);
 
 	//Give back the reference with success passed along
-	cfg->result = CFG_RESULT_SUCCESS;
 	return cfg;
 }
