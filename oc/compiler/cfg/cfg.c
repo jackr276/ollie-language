@@ -13390,6 +13390,10 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 	//a base address for an array
 	three_addr_var_t* assignee;
 
+	if(node->variable->stack_variable == TRUE){
+		printf("HERE\n\n\n");
+	}
+
 	//Based on what type we have, we'll need to do some special intialization
 	switch(type->type_class){
 		/**
@@ -13399,6 +13403,9 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_UNION:
+			//TODO basic initialization instruction here - we may also need to do this if the variable
+			//is a stack variable of any kind
+
 			//Create a stack region for this variable and store it in the associated region
 			node->variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
 
@@ -13691,25 +13698,43 @@ static inline void convert_cfg_to_ssa_form(cfg_t* cfg, variable_symtab_t* variab
  * 
  */
 static u_int8_t perform_definite_assignment_analysis_for_block(basic_block_t* block){
+	//Assume success off the bat
+	u_int8_t result = SUCCESS;
+
 	//Grab a leader statement out
 	instruction_t* cursor = block->leader_statement;
 
+	/**
+	 * Go through every single statement and analyze every
+	 * variable within. If any of the statements is using
+	 * a _0 version, that counts as a use-before-initialize
+	 * and it is an error. If we have a phi-function that
+	 * has a _0 parameter, that is "maybe" use before initialize
+	 * and it is still an error
+	 */
 	while(cursor != NULL){
-		//TODO
+		//TODO actual analysis
 
 		cursor = cursor->next_statement;
 	}
 
+	/**
+	 * For all dominator children of this block, go through and perform the
+	 * definite assignment analysis
+	 */
 	for(int32_t i = 0; i < block->dominator_children.current_index; i++){
 		basic_block_t* child = dynamic_array_get_at(&(block->dominator_children), i);
 
-		perform_definite_assignment_analysis_for_block(block);
-		
+		/**
+		 * If anything in this child fails, our overall result is failure. We will
+		 * keep going to scan everything though
+		 */
+		if(perform_definite_assignment_analysis_for_block(child) == FALSE){
+			result = FAILURE;
+		}
 	}
 
-
-	//TODO DUMMY
-	return TRUE;
+	return result;
 }
 
 
@@ -13721,18 +13746,30 @@ static u_int8_t perform_definite_assignment_analysis_for_block(basic_block_t* bl
  * 	2.) Unneccessary mutability detection
  *
  * TODO DOC
+ *
+ * We will scan all functions at once. If one function fails, we will still keep going to analyze
+ * the rest of the program. However, one function failing does mean that the entire program fails
+ * to compile in the end
  */
 static inline u_int8_t perform_definite_assignment_analysis(cfg_t* cfg, variable_symtab_t* variables){
+	//Assume success off the bat
+	u_int8_t result = SUCCESS;
+
 	//Run through all functions
 	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Use the function entry to seed the search
 		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
+		/**
+		 * Call into the recursive analyzer. If we have a failure, then the entire thing
+		 * goes into failure, but we will keep scanning to get all errors in at once
+		 */
+		if(perform_definite_assignment_analysis_for_block(function_entry) == FAILURE){
+			result = FAILURE;
+		}
 	}
 
-
-	//TODO DUMMY
-	return TRUE;
+	return result;
 }
 
 
