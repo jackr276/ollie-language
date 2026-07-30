@@ -3229,6 +3229,37 @@ void add_parameter_to_function_type(generic_type_t* function_type, generic_type_
 
 
 /**
+ * Determine if a type is an integer or not
+ */
+u_int8_t is_integer_type(generic_type_t* type){
+	//We must have a basic type for it to be signed
+	if(type->type_class != TYPE_CLASS_BASIC){
+		//By default everything else(addresses, etc) is not signed
+		return FALSE;
+	}
+
+	//If we get here there's a chance it could be signed
+	ollie_token_t basic_type_token = type->basic_type_token;
+
+	switch(basic_type_token){
+		case CHAR:
+		case BOOL:
+		case I8:
+		case U8:
+		case I16:
+		case U16:
+		case I32:
+		case U32:
+		case I64:
+		case U64:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Is a type signed?
  */
 u_int8_t is_type_signed(generic_type_t* type){
