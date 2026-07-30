@@ -13695,6 +13695,58 @@ static inline void convert_cfg_to_ssa_form(cfg_t* cfg, variable_symtab_t* variab
 
 
 /**
+ */
+static inline u_int8_t does_instruction_comply_with_definite_assignment(instruction_t* instruction){
+	//By default assume TRUE(1)
+	u_int8_t overall_result = TRUE;
+
+	/**
+	 * Regular non-phi function handling involves us checking every
+	 * single variable to see if we have any "_0" variables in use.
+	 * "_0" is our canary SSA value that represents an uninitialzed
+	 * variable
+	 */
+	if(instruction->statement_type != THREE_ADDR_CODE_PHI_FUNC){
+
+	/**
+	 * Phi-functions have special handling
+	 *
+	 * TODO
+	 */
+	} else {
+		/**
+		 * Run through all of the parameters - all it takes is for one
+		 *
+		 * declare x:mut i32;
+		 *
+		 * if(<cond>){
+		 * 		x = 3;
+		 * } 
+		 *
+		 * ret x; <--- x may be used uninitialized here
+		 *
+		 */
+		for(int32_t i = 0; i < instruction->parameters.current_index; i++){
+			three_addr_var_t* parameter = dynamic_array_get_at(&(instruction->parameters), i);
+
+			if(parameter->ssa_generation == 0){
+				//TODO WE'LL need to hunt and see if the assignee
+				//is ever used later in the function here
+			}
+		}
+
+	}
+
+	u_int8_t op1_result;
+	u_int8_t op2_result;
+	u_int8_t address_op1_result;
+	u_int8_t address_op2_result;
+
+	return overall_result;
+}
+
+
+/**
  * 
  */
 static u_int8_t perform_definite_assignment_analysis_for_block(basic_block_t* block){
@@ -13711,9 +13763,19 @@ static u_int8_t perform_definite_assignment_analysis_for_block(basic_block_t* bl
 	 * and it is an error. If we have a phi-function that
 	 * has a _0 parameter, that is "maybe" use before initialize
 	 * and it is still an error
+	 *
+	 * NOTE: we do *NOT* check anything to do with the so-called "rip_offset_var". This 
+	 * is not a variable in the true sense so it's not worth it to mess around with it
 	 */
 	while(cursor != NULL){
-		//TODO actual analysis
+		/**
+		 * Any one instruction failing definite assignment means that the whole
+		 * thing fails. We will process all instructions to get a full picture of the
+		 * errors though
+		 */
+		if(does_instruction_comply_with_definite_assignment(cursor) == FALSE){
+			result = FALSE;
+		}
 
 		cursor = cursor->next_statement;
 	}
