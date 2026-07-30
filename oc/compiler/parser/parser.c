@@ -2600,8 +2600,8 @@ static generic_ast_node_t* paramcount_statement(ollie_token_stream_t* token_stre
 	//Let's now allocate the final node and give it back
 	generic_ast_node_t* paramcount_node = ast_node_alloc(AST_NODE_TYPE_PARAMCOUNT_STMT, SIDE_TYPE_RIGHT);
 
-	//The type is always a u32
-	paramcount_node->inferred_type = immut_u32;
+	//The type is always an i32
+	paramcount_node->inferred_type = immut_i32;
 	paramcount_node->line_number = parser_line_num;
 
 	//Store the paramcount variable here - we will need this for down the road
@@ -5399,6 +5399,9 @@ static generic_ast_node_t* relational_expression(ollie_token_stream_t* token_str
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//Holders for our left and right types
+	generic_type_t* left_hand_type;
+	generic_type_t* right_hand_type;
 	//The return type
 	generic_type_t* return_type;
 	//Track whether temp and right child collapsed to constants
@@ -5465,6 +5468,10 @@ static generic_ast_node_t* relational_expression(ollie_token_stream_t* token_str
 				return print_and_return_error(info, parser_line_num);
 			}
 
+			//Cache the types before comparison
+			left_hand_type = temp_holder->inferred_type;
+			right_hand_type = right_child->inferred_type;
+
 			//The return type is always the left child's type
 			return_type = determine_type_compatability_for_expression(type_symtab, temp_holder, right_child, op.tok);
 
@@ -5472,6 +5479,28 @@ static generic_ast_node_t* relational_expression(ollie_token_stream_t* token_str
 			if(return_type == NULL){
 				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
 				return print_and_return_error(info, parser_line_num);
+			}
+
+			/**
+			 * Once we know that the types are in fact compatable, since we are performing
+			 * a comparison operation we will want to warn the user if they are comparing
+			 * between signed/unsigned integer types
+			 */
+			if(temp_holder_is_constant == FALSE && right_child_is_constant == FALSE
+				&& is_integer_type(left_hand_type) == TRUE && is_integer_type(right_hand_type) == TRUE){
+				/**
+				 * Type signage mismatch. This is *not* an error or illegal, but it is 
+				 * a foot-gun and we want to warn about this. There are legitimate
+				 * cases where you may want to do this but they are rare
+				 */
+				if(is_type_signed(left_hand_type) != is_type_signed(right_hand_type)){
+					sprintf(info, "Comparison(%s) between types %s and %s has a signedness mismatch and may produce unexpected behavior",
+			 						operator_token_to_string(op.tok),
+			 						left_hand_type->type_name.string,
+			 						right_hand_type->type_name.string);
+					num_warnings++;
+					print_parse_message(MESSAGE_TYPE_WARNING, info, parser_line_num);
+				}
 			}
 
 			//If these are both constants, we can skip the entire allocation
@@ -5548,6 +5577,9 @@ static generic_ast_node_t* equality_expression(ollie_token_stream_t* token_strea
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//Holders for our left and right types
+	generic_type_t* left_hand_type;
+	generic_type_t* right_hand_type;
 	//Holder for the return type
 	generic_type_t* return_type;
 	//Flags for whether or not both of these is constant
@@ -5608,6 +5640,10 @@ static generic_ast_node_t* equality_expression(ollie_token_stream_t* token_strea
 			sprintf(info, "Type %s is invalid for operator %s", right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
+		
+		//Cache these before we go on
+		left_hand_type = temp_holder->inferred_type;
+		right_hand_type = right_child->inferred_type;
 
 		//Get the return type and perform any needed coercions
 		return_type = determine_type_compatability_for_expression(type_symtab, temp_holder, right_child, op.tok);
@@ -5616,6 +5652,28 @@ static generic_ast_node_t* equality_expression(ollie_token_stream_t* token_strea
 		if(sub_tree_root->inferred_type == NULL){
 			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
+		}
+
+		/**
+		 * Once we know that the types are in fact compatable, since we are performing
+		 * a comparison operation we will want to warn the user if they are comparing
+		 * between signed/unsigned integer types
+		 */
+		if(temp_holder_is_constant == FALSE && right_child_is_constant == FALSE
+			&& is_integer_type(left_hand_type) == TRUE && is_integer_type(right_hand_type) == TRUE){
+			/**
+			 * Type signage mismatch. This is *not* an error or illegal, but it is 
+			 * a foot-gun and we want to warn about this. There are legitimate
+			 * cases where you may want to do this but they are rare
+			 */
+			if(is_type_signed(left_hand_type) != is_type_signed(right_hand_type)){
+				sprintf(info, "Comparison(%s) between types %s and %s has a signedness mismatch and may produce unexpected behavior",
+								operator_token_to_string(op.tok),
+								left_hand_type->type_name.string,
+								right_hand_type->type_name.string);
+				num_warnings++;
+				print_parse_message(MESSAGE_TYPE_WARNING, info, parser_line_num);
+			}
 		}
 
 		//If these are both constants, then we can invoke the appropriate simplifier
@@ -8490,9 +8548,9 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 	}
 
 	//Now, based on our largest value, we need to determine the bit-width needed for this
-	//field. Does it need to be stored internally as a u8, u16, u32, or u64?
+	//field. Does it need to be stored internally as a i8, i16, i32, or i64?
 	//This will *always* be the immutable version of the type
-	generic_type_t* type_needed = determine_required_minimum_unsigned_integer_type_size(largest_value);
+	generic_type_t* type_needed = determine_required_minimum_signed_integer_type_size(largest_value);
 
 	//Store this in the enum
 	mutable_enum_type->internal_values.enum_integer_type = type_needed;

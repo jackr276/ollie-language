@@ -6176,7 +6176,7 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 		add_statement(current_block, comparison_instruction);
 
 		//Get the operand type base don the two types provided
-		operand_type = get_operand_type_for_logical_operation(type_symtab, conditional_expression_variable->type, in_constant_variable->type);
+		operand_type = get_operand_type_for_relational_operation(type_symtab, conditional_expression_variable->type, in_constant_variable->type);
 
 	} else {
 		//Unpack it first
@@ -6186,7 +6186,7 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 		add_statement(current_block, comparison_instruction);
 
 		//Get the operand type base don the two types provided
-		operand_type = get_operand_type_for_logical_operation(type_symtab, conditional_expression_variable->type, in_constant->type);
+		operand_type = get_operand_type_for_relational_operation(type_symtab, conditional_expression_variable->type, in_constant->type);
 	}
 
 	/**
@@ -6232,7 +6232,7 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 			add_statement(current_block, comparison_instruction);
 
 			//Get the operand type base don the two types provided
-			operand_type = get_operand_type_for_logical_operation(type_symtab, conditional_expression_variable->type, in_constant_variable->type);
+			operand_type = get_operand_type_for_relational_operation(type_symtab, conditional_expression_variable->type, in_constant_variable->type);
 
 		} else {
 			//Unpack it first
@@ -6242,7 +6242,7 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 			add_statement(current_block, comparison_instruction);
 
 			//Get the operand type base don the two types provided
-			operand_type = get_operand_type_for_logical_operation(type_symtab, conditional_expression_variable->type, in_constant->type);
+			operand_type = get_operand_type_for_relational_operation(type_symtab, conditional_expression_variable->type, in_constant->type);
 		}
 
 		/**

@@ -19,7 +19,7 @@ fn tester(param:my_enum_type) -> i32{
 	let x:mut i32 = 32;
 
 	//Test the type system's ability to deal with this
-	switch(param - 3y){
+	switch(param - 3){
 		case TYPE_ONE -> {
 			x = 32;
 		}
@@ -46,5 +46,7 @@ fn tester(param:my_enum_type) -> i32{
 
 
 pub fn main() -> i32{
-	@tester(TYPE_ONE);
+	//This should hit the default case and actually give us 10
+	OUNIT: [exit_status = 10]
+	ret @tester(TYPE_ONE);
 }
