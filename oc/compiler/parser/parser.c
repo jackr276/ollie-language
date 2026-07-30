@@ -5617,6 +5617,9 @@ static generic_ast_node_t* equality_expression(ollie_token_stream_t* token_strea
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//Holders for our left and right types
+	generic_type_t* left_hand_type;
+	generic_type_t* right_hand_type;
 	//Holder for the return type
 	generic_type_t* return_type;
 	//Flags for whether or not both of these is constant
@@ -5677,6 +5680,10 @@ static generic_ast_node_t* equality_expression(ollie_token_stream_t* token_strea
 			sprintf(info, "Type %s is invalid for operator %s", right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
+		
+		//Cache these before we go on
+		left_hand_type = temp_holder->inferred_type;
+		right_hand_type = right_child->inferred_type;
 
 		//Get the return type and perform any needed coercions
 		return_type = determine_type_compatability_for_expression(type_symtab, temp_holder, right_child, op.tok);
@@ -5685,6 +5692,28 @@ static generic_ast_node_t* equality_expression(ollie_token_stream_t* token_strea
 		if(sub_tree_root->inferred_type == NULL){
 			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
+		}
+
+		/**
+		 * Once we know that the types are in fact compatable, since we are performing
+		 * a comparison operation we will want to warn the user if they are comparing
+		 * between signed/unsigned integer types
+		 */
+		if(temp_holder_is_constant == FALSE && right_child_is_constant == FALSE
+			&& is_integer_type(left_hand_type) == TRUE && is_integer_type(right_hand_type) == TRUE){
+			/**
+			 * Type signage mismatch. This is *not* an error or illegal, but it is 
+			 * a foot-gun and we want to warn about this. There are legitimate
+			 * cases where you may want to do this but they are rare
+			 */
+			if(is_type_signed(left_hand_type) != is_type_signed(right_hand_type)){
+				sprintf(info, "Comparison(%s) between types %s and %s has a signedness mismatch and may produce unexpected behavior",
+								operator_token_to_string(op.tok),
+								left_hand_type->type_name.string,
+								right_hand_type->type_name.string);
+				num_warnings++;
+				print_parse_message(MESSAGE_TYPE_WARNING, info, parser_line_num);
+			}
 		}
 
 		//If these are both constants, then we can invoke the appropriate simplifier
