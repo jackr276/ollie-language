@@ -8591,9 +8591,9 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 	}
 
 	//Now, based on our largest value, we need to determine the bit-width needed for this
-	//field. Does it need to be stored internally as a u8, u16, u32, or u64?
+	//field. Does it need to be stored internally as a i8, i16, i32, or i64?
 	//This will *always* be the immutable version of the type
-	generic_type_t* type_needed = determine_required_minimum_unsigned_integer_type_size(largest_value);
+	generic_type_t* type_needed = determine_required_minimum_signed_integer_type_size(largest_value);
 
 	//Store this in the enum
 	mutable_enum_type->internal_values.enum_integer_type = type_needed;
