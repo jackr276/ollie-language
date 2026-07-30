@@ -1025,9 +1025,39 @@ static inline void basic_type_widening_type_coercion(generic_type_t** a, generic
  * no float to int or vice versa), we will only widen the size
  */
 static inline void widen_basic_type_to_given_size(type_symtab_t* symtab, generic_type_t** type, int32_t target_size){
+	//Just to help us stay organized
+	typedef enum {
+		WIDEN_SIGNED,
+		WIDEN_UNSIGNED,
+		WIDEN_FLOAT,
+	} widening_type_t;
+
+	//Let's first determine what general classication of type this is
+	widening_type_t classification;
+	switch((*type)->basic_type_token){
+		case F32:
+		case F64:
+
+		case I8:
+		case I16:
+		case I32:
+		case I64:
+
+		case CHAR:
+		case BOOL:
+		case U8:
+		case U16:
+		case U32:
+		case U64:
+
+		default:
+			fprintf(stderr, "Fatal internal compiler error. Invalid basic type given to type widener\n");
+			exit(1);
+	}
+
+
 
 }
-
 
 
 /**
@@ -1048,7 +1078,9 @@ static inline void basic_type_widening_type_coercion_v2(type_symtab_t* symtab, g
 		widen_to_size = b_type_size;
 	}
 
-
+	//Let the helper perform the widening that is needed
+	widen_basic_type_to_given_size(symtab, a, widen_to_size);
+	widen_basic_type_to_given_size(symtab, b, widen_to_size);
 }
 
 
