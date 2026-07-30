@@ -1002,25 +1002,6 @@ static inline void basic_type_signedness_coercion(type_symtab_t* symtab, generic
 
 
 /**
- * Apply standard coercion rules for basic types
- *
- * TODO IS THIS RIGHT???????
- *
- * I don't think that this is at all correct
- */
-static inline void basic_type_widening_type_coercion(generic_type_t** a, generic_type_t** b){
-	//Whomever has the largest size wins
-	if((*a)->type_size > (*b)->type_size){
-		//Set b to equal a
-		*b = *a;
-	} else if((*a)->type_size < (*b)->type_size){
-		//Set a to equal b
-		*a = *b;
-	}
-}
-
-
-/**
  * Widen the given type to the target size. We will not change the variety of our type(i.e. no signed changes,
  * no float to int or vice versa), we will only widen the size
  */
@@ -1141,7 +1122,7 @@ static inline void widen_basic_type_to_given_size(type_symtab_t* symtab, generic
  * existing type class based on the overall largest size. For example, if we have an i8 and a u32,
  * we would expand the i8 to an i32(no signedness change)
  */
-static inline void basic_type_widening_type_coercion_v2(type_symtab_t* symtab, generic_type_t** a, generic_type_t** b){
+static inline void basic_type_widening_type_coercion(type_symtab_t* symtab, generic_type_t** a, generic_type_t** b){
 	//Extract these for convenience
 	int32_t a_type_size = (*a)->type_size;
 	int32_t b_type_size = (*b)->type_size;
@@ -1380,7 +1361,7 @@ generic_type_t* determine_ternary_compatibility(void* symtab, generic_type_t** a
 	basic_type_signedness_coercion(symtab, a, b);
 
 	//We already know that we only have basic types here. We can apply the standard widening conversion
-	basic_type_widening_type_coercion(a, b);
+	basic_type_widening_type_coercion(symtab, a, b);
 
 	//We'll return a final comparison type of bool 
 	return *a;
@@ -1551,7 +1532,7 @@ generic_type_t* determine_compatability_and_coerce(void* symtab, generic_type_t*
 
 			//We already know that these are basic types only here. We can
 			//apply the standard widening type coercion
-			basic_type_widening_type_coercion(a, b);
+			basic_type_widening_type_coercion(symtab, a, b);
 
 			//Give back a
 			return *a;
@@ -1635,7 +1616,7 @@ generic_type_t* determine_compatability_and_coerce(void* symtab, generic_type_t*
 
 			//We already know that these are basic types only here. We can
 			//apply the standard widening type coercion
-			basic_type_widening_type_coercion(a, b);
+			basic_type_widening_type_coercion(symtab, a, b);
 
 			//Give back a
 			return lookup_type_name_only(symtab, "bool", (*a)->mutability)->type;
@@ -1658,7 +1639,7 @@ generic_type_t* determine_compatability_and_coerce(void* symtab, generic_type_t*
 
 			//We already know that these are basic types only here. We can
 			//apply the standard widening type coercion
-			basic_type_widening_type_coercion(a, b);
+			basic_type_widening_type_coercion(symtab, a, b);
 		
 			//Give this back once down
 			return *a;
@@ -1679,7 +1660,7 @@ generic_type_t* determine_compatability_and_coerce(void* symtab, generic_type_t*
 
 			//We already know that we only have basic types here. We can apply
 			//the standard widening conversion
-			basic_type_widening_type_coercion(a, b);
+			basic_type_widening_type_coercion(symtab, a, b);
 
 			//We'll give back *a once we're finished
 			return *a;
@@ -1757,7 +1738,7 @@ generic_type_t* determine_compatability_and_coerce(void* symtab, generic_type_t*
 
 			//We already know that we only have basic types here. We can apply
 			//the standard widening conversion
-			basic_type_widening_type_coercion(a, b);
+			basic_type_widening_type_coercion(symtab, a, b);
 
 			//We need to use either a bool or an i8 if they're signed. Internally,
 			//these are treated the same
@@ -3165,7 +3146,7 @@ generic_type_t* get_operand_type_for_logical_operation(void* symtab, generic_typ
 	 */
 	} else {
 		//First widen it
-		basic_type_widening_type_coercion(&type_a, &type_b);
+		basic_type_widening_type_coercion(symtab, &type_a, &type_b);
 
 		//Now do the signedness coercion
 		basic_type_signedness_coercion(symtab, &type_a, &type_b);
@@ -3230,7 +3211,7 @@ generic_type_t* get_operand_type_for_relational_operation(void* symtab, generic_
 	 */
 	} else {
 		//First widen it
-		basic_type_widening_type_coercion(&type_a, &type_b);
+		basic_type_widening_type_coercion(symtab, &type_a, &type_b);
 
 		//Now do the signedness coercion
 		basic_type_signedness_coercion(symtab, &type_a, &type_b);
