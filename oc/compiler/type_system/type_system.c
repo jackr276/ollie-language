@@ -3089,29 +3089,32 @@ void add_return_type_to_signature(function_type_t* signature, generic_type_t* re
  * coercion here.
  */
 generic_type_t* get_operand_type_for_logical_operation(void* symtab, generic_type_t* type_a, generic_type_t* type_b){
+	generic_type_t* a = type_a;
+	generic_type_t* b = type_b;
+
 	/**
 	 * Extract out enum types now and use their underlying
 	 * integer type instead
 	 */
-	if(type_a->type_class == TYPE_CLASS_ELABORATIVE){
-		type_a = type_a->internal_values.enum_integer_type;
+	if(a->type_class == TYPE_CLASS_ELABORATIVE){
+		a = a->internal_values.enum_integer_type;
 	}
 
-	if(type_b->type_class == TYPE_CLASS_ELABORATIVE){
-		type_b = type_b->internal_values.enum_integer_type;
+	if(b->type_class == TYPE_CLASS_ELABORATIVE){
+		b = b->internal_values.enum_integer_type;
 	}
 
 	//Perform any floating point coercion first
-	handle_floating_point_coercion(symtab, &type_a, &type_b);
+	handle_floating_point_coercion(symtab, &a, &b);
 
 	//Widen it
-	basic_type_widening_type_coercion(symtab, &type_a, &type_b);
+	basic_type_widening_type_coercion(symtab, &a, &b);
 
 	//Now do the signedness coercion
-	basic_type_signedness_coercion(symtab, &type_a, &type_b);
+	basic_type_signedness_coercion(symtab, &a, &b);
 
 	//Give back whatever we got
-	return type_a;
+	return a;
 }
 
 
@@ -3120,63 +3123,36 @@ generic_type_t* get_operand_type_for_logical_operation(void* symtab, generic_typ
  * and signedness coercion here.
  */
 generic_type_t* get_operand_type_for_relational_operation(void* symtab, generic_type_t* type_a, generic_type_t* type_b){
-	type_symtab_t* type_corrected_symtab = symtab;
-
-	//Are these floats or not?
-	u_int8_t typea_is_float = IS_FLOATING_POINT(type_a);
-	u_int8_t typeb_is_float = IS_FLOATING_POINT(type_b);
+	generic_type_t* a = type_a;
+	generic_type_t* b = type_b;
 
 	/**
-	 * Case 1: both floats - largest one wins
-	 *
-	 *
-	 * TODO WHOLE FLOW SHOULD BE REWORKED - too much comparison here
+	 * Extract out enum types now and use their underlying
+	 * integer type instead
 	 */
-	if(typea_is_float == TRUE && typeb_is_float == TRUE){
-		if(type_a->type_size > type_b->type_size){
-			return type_a;
-		} else {
-			return type_b;
-		}
-
-	/**
-	 * Case 2: type_a is a float, b is not
-	 */
-	} else if(typea_is_float == TRUE && typeb_is_float == FALSE){
-		//If type_a is large enough, just use that
-		if(type_a->type_size >= type_b->type_size){
-			return type_a;
-		//Otherwise just force an f64
-		} else {
-			return lookup_type_name_only(type_corrected_symtab, "f64", NOT_MUTABLE)->type;
-		}
-
-	/**
-	 * Case 3: type_b is a float, a is not
-	 */
-	} else if(typea_is_float == FALSE && typeb_is_float == TRUE){
-		//If type_b is large enough, just use that
-		if(type_b->type_size >= type_a->type_size){
-			return type_b;
-		//Otherwise just force an f64
-		} else {
-			return lookup_type_name_only(type_corrected_symtab, "f64", NOT_MUTABLE)->type;
-		}
-
-	/**
-	 * Case 4: no floats - largest wins. We will also be performing
-	 * signedness coercion
-	 */
-	} else {
-		//First widen it
-		basic_type_widening_type_coercion(symtab, &type_a, &type_b);
-
-		//Now do the signedness coercion
-		basic_type_signedness_coercion(symtab, &type_a, &type_b);
-
-		//Give back whatever we ended up with
-		return type_a;
+	if(a->type_class == TYPE_CLASS_ELABORATIVE){
+		printf("HERE\n");
+		a = a->internal_values.enum_integer_type;
 	}
+
+	if(b->type_class == TYPE_CLASS_ELABORATIVE){
+		printf("HERE1\n");
+		b = b->internal_values.enum_integer_type;
+	}
+
+	//Perform any floating point coercion first
+	handle_floating_point_coercion(symtab, &a, &b);
+
+		printf("HERE2\n");
+	//Widen it
+	basic_type_widening_type_coercion(symtab, &a, &b);
+
+		printf("HERE3\n");
+	//Now do the signedness coercion
+	basic_type_signedness_coercion(symtab, &a, &b);
+
+	//Give back whatever we got
+	return a;
 }
 
 
