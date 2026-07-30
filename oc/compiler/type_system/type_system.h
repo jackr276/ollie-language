@@ -470,6 +470,11 @@ generic_type_t* dereference_type(generic_type_t* pointer_type);
 variable_size_t get_type_size(generic_type_t* type);
 
 /**
+ * Determine if a type is an integer or not
+ */
+u_int8_t is_integer_type(generic_type_t* type);
+
+/**
  * Is a type signed?
  */
 u_int8_t is_type_signed(generic_type_t* type);

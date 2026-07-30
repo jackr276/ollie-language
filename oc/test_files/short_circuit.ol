@@ -13,7 +13,7 @@ fn really_long_function(arg:mut i32) -> i32 {
 }
 
 pub fn main(arg:i32, argv:char**) -> i32{
-	let x:mut u32 = 232;
+	let x:mut i32 = 232;
 
 	defer {
 		x = x + 3;

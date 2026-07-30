@@ -1002,17 +1002,142 @@ static inline void basic_type_signedness_coercion(type_symtab_t* symtab, generic
 
 
 /**
- * Apply standard coercion rules for basic types
+ * Widen the given type to the target size. We will not change the variety of our type(i.e. no signed changes,
+ * no float to int or vice versa), we will only widen the size
  */
-static inline void basic_type_widening_type_coercion(generic_type_t** a, generic_type_t** b){
-	//Whomever has the largest size wins
-	if((*a)->type_size > (*b)->type_size){
-		//Set b to equal a
-		*b = *a;
-	} else if((*a)->type_size < (*b)->type_size){
-		//Set a to equal b
-		*a = *b;
+static inline void widen_basic_type_to_given_size(type_symtab_t* symtab, generic_type_t** type, int32_t target_size){
+	//Just to help us stay organized
+	typedef enum {
+		WIDEN_SIGNED,
+		WIDEN_UNSIGNED,
+		WIDEN_FLOAT,
+	} widening_type_t;
+
+	//Let's first determine what general classication of type this is
+	widening_type_t classification;
+	switch((*type)->basic_type_token){
+		case F32:
+		case F64:
+			classification = WIDEN_FLOAT;
+			break;
+
+		case I8:
+		case I16:
+		case I32:
+		case I64:
+			classification = WIDEN_SIGNED;
+			break;
+
+		case CHAR:
+		case BOOL:
+		case U8:
+		case U16:
+		case U32:
+		case U64:
+			classification = WIDEN_UNSIGNED;
+			break;
+
+		default:
+			fprintf(stderr, "Fatal internal compiler error. Invalid basic type given to type widener\n");
+			exit(1);
 	}
+
+	/**
+	 * Now based on the general class of type that we got, we will widen as we
+	 * see fit here
+	 */
+	switch(classification){
+		case WIDEN_FLOAT:
+			switch(target_size){
+				//Do nothing, all floats are at least 4 bytes large
+				case 4:
+					break;
+
+				case 8:
+					*type = lookup_type_name_only(symtab, "f64", (*type)->mutability)->type;
+					break;
+
+				default:
+					fprintf(stderr, "Fatal internal compiler error. Invalid widen to size of %d given for float\n", target_size);
+					exit(1);
+			}
+
+			break;
+
+		case WIDEN_SIGNED:
+			switch(target_size){
+				//Do nothing - all ints are at least 1 byte large
+				case 1:
+					break;
+				
+				case 2:
+					*type = lookup_type_name_only(symtab, "i16", (*type)->mutability)->type;
+					break;
+
+				case 4:
+					*type = lookup_type_name_only(symtab, "i32", (*type)->mutability)->type;
+					break;
+
+				case 8:
+					*type = lookup_type_name_only(symtab, "i64", (*type)->mutability)->type;
+					break;
+
+				default:
+					fprintf(stderr, "Fatal internal compiler error. Invalid widen to size of %d given for signed integer\n", target_size);
+					exit(1);
+			}
+
+			break;
+
+		case WIDEN_UNSIGNED:
+			switch(target_size){
+				//Do nothing - all ints are at least 1 byte large
+				case 1:
+					break;
+				
+				case 2:
+					*type = lookup_type_name_only(symtab, "u16", (*type)->mutability)->type;
+					break;
+
+				case 4:
+					*type = lookup_type_name_only(symtab, "u32", (*type)->mutability)->type;
+					break;
+
+				case 8:
+					*type = lookup_type_name_only(symtab, "u64", (*type)->mutability)->type;
+					break;
+
+				default:
+					fprintf(stderr, "Fatal internal compiler error. Invalid widen to size of %d given for unsigned integer\n", target_size);
+					exit(1);
+			}
+
+			break;
+	}
+}
+
+
+/**
+ * Apply standard widening coercion for basic types. All that this does is expand the 
+ * existing type class based on the overall largest size. For example, if we have an i8 and a u32,
+ * we would expand the i8 to an i32(no signedness change)
+ */
+static inline void basic_type_widening_type_coercion(type_symtab_t* symtab, generic_type_t** a, generic_type_t** b){
+	//Extract these for convenience
+	int32_t a_type_size = (*a)->type_size;
+	int32_t b_type_size = (*b)->type_size;
+
+	//What size are we widening too? This is always the largest of the two
+	int32_t widen_to_size;
+	if(a_type_size > b_type_size){
+		widen_to_size = a_type_size;
+	} else {
+		widen_to_size = b_type_size;
+	}
+
+	//Let the helper perform the widening that is needed
+	widen_basic_type_to_given_size(symtab, a, widen_to_size);
+	widen_basic_type_to_given_size(symtab, b, widen_to_size);
 }
 
 
@@ -1236,7 +1361,7 @@ generic_type_t* determine_ternary_compatibility(void* symtab, generic_type_t** a
 	basic_type_signedness_coercion(symtab, a, b);
 
 	//We already know that we only have basic types here. We can apply the standard widening conversion
-	basic_type_widening_type_coercion(a, b);
+	basic_type_widening_type_coercion(symtab, a, b);
 
 	//We'll return a final comparison type of bool 
 	return *a;
@@ -1264,26 +1389,16 @@ generic_type_t* determine_compatability_and_coerce(void* symtab, generic_type_t*
 	*a = dealias_type(*a);
 	*b = dealias_type(*b);
 
-	//Special treatment based on a's type class
-	switch((*a)->type_class){
-		//Dereference the enum int type
-		case TYPE_CLASS_ENUMERATED:
-			*a = (*a)->internal_values.enum_integer_type;
-			break;
-		//Do nothing
-		default:
-			break;
+	/**
+	 * If a or b are enumerated types we will just go right
+	 * to their underlying integer types
+	 */
+	if((*a)->type_class == TYPE_CLASS_ENUMERATED){
+		*a = (*a)->internal_values.enum_integer_type;
 	}
 
-	//Special treatment based on b's type class
-	switch((*b)->type_class){
-		//Dereference the enum int type
-		case TYPE_CLASS_ENUMERATED:
-			*b = (*b)->internal_values.enum_integer_type;
-			break;
-		//Do nothing
-		default:
-			break;
+	if((*b)->type_class == TYPE_CLASS_ENUMERATED){
+		*b = (*b)->internal_values.enum_integer_type;
 	}
 	
 	/**
@@ -1407,7 +1522,7 @@ generic_type_t* determine_compatability_and_coerce(void* symtab, generic_type_t*
 
 			//We already know that these are basic types only here. We can
 			//apply the standard widening type coercion
-			basic_type_widening_type_coercion(a, b);
+			basic_type_widening_type_coercion(symtab, a, b);
 
 			//Give back a
 			return *a;
@@ -1491,7 +1606,7 @@ generic_type_t* determine_compatability_and_coerce(void* symtab, generic_type_t*
 
 			//We already know that these are basic types only here. We can
 			//apply the standard widening type coercion
-			basic_type_widening_type_coercion(a, b);
+			basic_type_widening_type_coercion(symtab, a, b);
 
 			//Give back a
 			return lookup_type_name_only(symtab, "bool", (*a)->mutability)->type;
@@ -1514,7 +1629,7 @@ generic_type_t* determine_compatability_and_coerce(void* symtab, generic_type_t*
 
 			//We already know that these are basic types only here. We can
 			//apply the standard widening type coercion
-			basic_type_widening_type_coercion(a, b);
+			basic_type_widening_type_coercion(symtab, a, b);
 		
 			//Give this back once down
 			return *a;
@@ -1535,7 +1650,7 @@ generic_type_t* determine_compatability_and_coerce(void* symtab, generic_type_t*
 
 			//We already know that we only have basic types here. We can apply
 			//the standard widening conversion
-			basic_type_widening_type_coercion(a, b);
+			basic_type_widening_type_coercion(symtab, a, b);
 
 			//We'll give back *a once we're finished
 			return *a;
@@ -1613,7 +1728,7 @@ generic_type_t* determine_compatability_and_coerce(void* symtab, generic_type_t*
 
 			//We already know that we only have basic types here. We can apply
 			//the standard widening conversion
-			basic_type_widening_type_coercion(a, b);
+			basic_type_widening_type_coercion(symtab, a, b);
 
 			//We need to use either a bool or an i8 if they're signed. Internally,
 			//these are treated the same
@@ -2971,117 +3086,69 @@ void add_return_type_to_signature(function_type_t* signature, generic_type_t* re
 
 /**
  * Compute the operand type for a logical and/or operation. We perform floating point
- * coercion here. j
+ * coercion here.
  */
 generic_type_t* get_operand_type_for_logical_operation(void* symtab, generic_type_t* type_a, generic_type_t* type_b){
-	type_symtab_t* type_corrected_symtab = symtab;
-
-	//Are these floats or not?
-	u_int8_t typea_is_float = IS_FLOATING_POINT(type_a);
-	u_int8_t typeb_is_float = IS_FLOATING_POINT(type_b);
+	generic_type_t* a = type_a;
+	generic_type_t* b = type_b;
 
 	/**
-	 * Case 1: both floats - largest one wins
+	 * Extract out enum types now and use their underlying
+	 * integer type instead
 	 */
-	if(typea_is_float == TRUE && typeb_is_float == TRUE){
-		if(type_a->type_size > type_b->type_size){
-			return type_a;
-		} else {
-			return type_b;
-		}
-
-	/**
-	 * Case 2: type_a is a float, b is not
-	 */
-	} else if(typea_is_float == TRUE && typeb_is_float == FALSE){
-		//If type_a is large enough, just use that
-		if(type_a->type_size >= type_b->type_size){
-			return type_a;
-		//Otherwise just force an f64
-		} else {
-			return lookup_type_name_only(type_corrected_symtab, "f64", NOT_MUTABLE)->type;
-		}
-
-	/**
-	 * Case 3: type_b is a float, a is not
-	 */
-	} else if(typea_is_float == FALSE && typeb_is_float == TRUE){
-		//If type_b is large enough, just use that
-		if(type_b->type_size >= type_a->type_size){
-			return type_b;
-		//Otherwise just force an f64
-		} else {
-			return lookup_type_name_only(type_corrected_symtab, "f64", NOT_MUTABLE)->type;
-		}
-
-	/**
-	 * Case 4: no floats - largest wins
-	 */
-	} else {
-		if(type_a->type_size > type_b->type_size){
-			return type_a;
-		} else {
-			return type_b;
-		}
+	if(a->type_class == TYPE_CLASS_ENUMERATED){
+		a = a->internal_values.enum_integer_type;
 	}
+
+	if(b->type_class == TYPE_CLASS_ENUMERATED){
+		b = b->internal_values.enum_integer_type;
+	}
+
+	//Perform any floating point coercion first
+	handle_floating_point_coercion(symtab, &a, &b);
+
+	//Widen it
+	basic_type_widening_type_coercion(symtab, &a, &b);
+
+	//Now do the signedness coercion
+	basic_type_signedness_coercion(symtab, &a, &b);
+
+	//Give back whatever we got
+	return a;
 }
 
 
 /**
  * Compute the operand type for a relational operation. We perform floating point
- * coercion here. j
+ * and signedness coercion here.
  */
 generic_type_t* get_operand_type_for_relational_operation(void* symtab, generic_type_t* type_a, generic_type_t* type_b){
-	type_symtab_t* type_corrected_symtab = symtab;
-
-	//Are these floats or not?
-	u_int8_t typea_is_float = IS_FLOATING_POINT(type_a);
-	u_int8_t typeb_is_float = IS_FLOATING_POINT(type_b);
+	generic_type_t* a = type_a;
+	generic_type_t* b = type_b;
 
 	/**
-	 * Case 1: both floats - largest one wins
+	 * Extract out enum types now and use their underlying
+	 * integer type instead
 	 */
-	if(typea_is_float == TRUE && typeb_is_float == TRUE){
-		if(type_a->type_size > type_b->type_size){
-			return type_a;
-		} else {
-			return type_b;
-		}
-
-	/**
-	 * Case 2: type_a is a float, b is not
-	 */
-	} else if(typea_is_float == TRUE && typeb_is_float == FALSE){
-		//If type_a is large enough, just use that
-		if(type_a->type_size >= type_b->type_size){
-			return type_a;
-		//Otherwise just force an f64
-		} else {
-			return lookup_type_name_only(type_corrected_symtab, "f64", NOT_MUTABLE)->type;
-		}
-
-	/**
-	 * Case 3: type_b is a float, a is not
-	 */
-	} else if(typea_is_float == FALSE && typeb_is_float == TRUE){
-		//If type_b is large enough, just use that
-		if(type_b->type_size >= type_a->type_size){
-			return type_b;
-		//Otherwise just force an f64
-		} else {
-			return lookup_type_name_only(type_corrected_symtab, "f64", NOT_MUTABLE)->type;
-		}
-
-	/**
-	 * Case 4: no floats - largest wins
-	 */
-	} else {
-		if(type_a->type_size > type_b->type_size){
-			return type_a;
-		} else {
-			return type_b;
-		}
+	if(a->type_class == TYPE_CLASS_ENUMERATED){
+		a = a->internal_values.enum_integer_type;
 	}
+
+	if(b->type_class == TYPE_CLASS_ENUMERATED){
+		b = b->internal_values.enum_integer_type;
+	}
+
+	//Perform any floating point coercion first
+	handle_floating_point_coercion(symtab, &a, &b);
+
+	//Widen it
+	basic_type_widening_type_coercion(symtab, &a, &b);
+
+	//Now do the signedness coercion
+	basic_type_signedness_coercion(symtab, &a, &b);
+
+	//Give back whatever we got
+	return a;
 }
 
 
@@ -3157,6 +3224,37 @@ void add_parameter_to_function_type(generic_type_t* function_type, generic_type_
 			dynamic_array_add(&(internal_type->function_parameters), parameter);
 			
 			return;
+	}
+}
+
+
+/**
+ * Determine if a type is an integer or not
+ */
+u_int8_t is_integer_type(generic_type_t* type){
+	//We must have a basic type for it to be signed
+	if(type->type_class != TYPE_CLASS_BASIC){
+		//By default everything else(addresses, etc) is not signed
+		return FALSE;
+	}
+
+	//If we get here there's a chance it could be signed
+	ollie_token_t basic_type_token = type->basic_type_token;
+
+	switch(basic_type_token){
+		case CHAR:
+		case BOOL:
+		case I8:
+		case U8:
+		case I16:
+		case U16:
+		case I32:
+		case U32:
+		case I64:
+		case U64:
+			return TRUE;
+		default:
+			return FALSE;
 	}
 }
 
