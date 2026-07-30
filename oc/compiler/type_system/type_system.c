@@ -1013,6 +1013,8 @@ static inline void widen_basic_type_to_given_size(type_symtab_t* symtab, generic
 		WIDEN_FLOAT,
 	} widening_type_t;
 
+	printf("TYPE IS %s\n", (*type)->type_name.string);
+
 	//Let's first determine what general classication of type this is
 	widening_type_t classification;
 	switch((*type)->basic_type_token){
@@ -1389,26 +1391,16 @@ generic_type_t* determine_compatability_and_coerce(void* symtab, generic_type_t*
 	*a = dealias_type(*a);
 	*b = dealias_type(*b);
 
-	//Special treatment based on a's type class
-	switch((*a)->type_class){
-		//Dereference the enum int type
-		case TYPE_CLASS_ENUMERATED:
-			*a = (*a)->internal_values.enum_integer_type;
-			break;
-		//Do nothing
-		default:
-			break;
+	/**
+	 * If a or b are enumerated types we will just go right
+	 * to their underlying integer types
+	 */
+	if((*a)->type_class == TYPE_CLASS_ENUMERATED){
+		*a = (*a)->internal_values.enum_integer_type;
 	}
 
-	//Special treatment based on b's type class
-	switch((*b)->type_class){
-		//Dereference the enum int type
-		case TYPE_CLASS_ENUMERATED:
-			*b = (*b)->internal_values.enum_integer_type;
-			break;
-		//Do nothing
-		default:
-			break;
+	if((*b)->type_class == TYPE_CLASS_ENUMERATED){
+		*b = (*b)->internal_values.enum_integer_type;
 	}
 	
 	/**
