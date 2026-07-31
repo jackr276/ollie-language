@@ -13735,10 +13735,21 @@ static inline u_int8_t does_variable_dynamic_array_contain_variable(dynamic_arra
 }
 
 
+/**
+ * TODO
+ */
 static u_int8_t check_variable_for_definite_assignment(instruction_t* instruction, three_addr_var_t* variable, dynamic_array_t* may_not_have_been_initialized){
 	//This happens a lot - if it's NULL just leave
-	if(variable == NULL){
-		return TRUE;
+	if(variable == NULL || is_variable_ssa_eligible(variable) == FALSE){
+		return SUCCESS;
+	}
+
+	/**
+	 * The stack and instruction pointer are special cases that are exempt from this
+	 * kind of checking so leave if we see it
+	 */
+	if(variable == stack_pointer_variable || variable == instruction_pointer_var){
+		return SUCCESS;
 	}
 
 	/**
@@ -13747,21 +13758,36 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
 	 * initialization
 	 */
 	if(variable->ssa_generation == 0){
+		sprintf(error_info, "Variable %s is used before initialization", variable->linked_var->var_name.string);
+		//TODO LINE NUMBERS ARE NOT GOING TO WORK RIGHT
+		print_cfg_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
+		(*num_errors_ref)++;
+		return FAILURE;
 
-	} else if(){
+	/**
+	 * Not so obvious case - it being in this array means that it comes from a phi function
+	 * that itself had a parameter of generation 0, meaning that it's not a guarantee that
+	 * this wasn't initialized but it may not have been, which is still an error
+	 */
+	} else if(does_variable_dynamic_array_contain_variable(may_not_have_been_initialized, variable) == TRUE){
+		sprintf(error_info, "Variable %s may be used before initialization", variable->linked_var->var_name.string);
+		//TODO LINE NUMBERS ARE NOT GOING TO WORK RIGHT
+		print_cfg_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
+		(*num_errors_ref)++;
+		return FAILURE;
 
-	
 	/**
 	 * If we made it here then this worked and the variable is clean
 	 */
 	} else {
 		return SUCCESS;
 	}
-
 }
 
 
 /**
+ *
+ * TODO
  */
 static inline u_int8_t does_instruction_comply_with_definite_assignment(instruction_t* instruction, dynamic_array_t* may_not_have_been_initialized){
 	//By default assume SUCCESS(1)
@@ -13855,7 +13881,7 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
 
 
 /**
- * 
+ * TODO
  */
 static u_int8_t perform_definite_assignment_analysis_for_block(basic_block_t* block, dynamic_array_t* may_not_have_been_initialized){
 	//Assume success off the bat

@@ -426,6 +426,8 @@ struct instruction_t{
 	symtab_function_record_t* called_function;
 	//What block holds this?
 	void* block_contained_in;
+	//Instruction's line number
+	int32_t line_number;
 	//Is this operation critical?
 	u_int8_t mark;
 	//Is this a regular or inverse branch
