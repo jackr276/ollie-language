@@ -9607,7 +9607,6 @@ static inline generic_ast_node_t* expression_statement_no_ending_semicolon(ollie
 		//Go based on what we see up ahead of us
 		switch (lookahead.tok) {
 			case DECLARE:
-				//IMPORTANT - declares can/will be null if they're declaring a primitive type
 				current_expression_node = declare_statement(token_stream, FALSE, VISIBILITY_TYPE_PRIVATE);
 				break;
 
@@ -9623,16 +9622,13 @@ static inline generic_ast_node_t* expression_statement_no_ending_semicolon(ollie
 		}
 
 		//If this fails, the whole thing is over
-		if(current_expression_node != NULL
-			&& current_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		if(current_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			//It's already an error, so just send it back up
 			return current_expression_node;
 		}
 
-		//So long as we have something to add we'll add it
-		if(current_expression_node != NULL){
-			add_child_node(top_level_node, current_expression_node);
-		}
+		//Add this as a child to the top level node
+		add_child_node(top_level_node, current_expression_node);
 
 		//Refresh our token. If it's a comma - great. If not, we leave
 		lookahead = get_next_token(token_stream, &parser_line_num);
@@ -12060,14 +12056,17 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
  * be added as the child of the given parent node. A declare statement also performs all
  * needed type/repetition checks. Like all rules, this function returns a reference to the root
  * node that it's created.
+ *
+ * Declaration nodes are what we will use in the CFG constructor to stack allocate things
+ * if need be. It is not possible for us to know whether a declaration is a stack variable
+ * or not until we've parsed the entire CFG, so we'll need to hold off on stack region
+ * creation until then
  * 
  * NOTE: We have already seen and consume the "declare" keyword by the time that we get here
  *
  * BNF Rule: <declare-statement> ::= declare {<function_predeclaration> | {static}? <identifier> : <type-specifier>}
  */
 static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream, u_int8_t is_global, visibilty_type_t visibility){
-	//Freeze the current line number
-	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 	//Is it static - this is almost always false
@@ -12202,7 +12201,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 	//It was declared
 	declared_var->declare_or_let = 0;
 	//The line_number
-	declared_var->line_number = current_line;
+	declared_var->line_number = parser_line_num;
 	//Now that we're all good, we can add it into the symbol table
 	insert_variable(variable_symtab, declared_var);
 
@@ -12229,15 +12228,11 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 
 			//Fall through
 		case TYPE_CLASS_STRUCT:
-			//Actually create the node now
 			declaration_node = ast_node_alloc(AST_NODE_TYPE_DECL_STMT, SIDE_TYPE_LEFT);
-
-			//Also store this record with the root node
 			declaration_node->variable = declared_var;
-			//Store the type as well
 			declaration_node->inferred_type = declared_var->type_defined_as;
-			//Store the line number
-			declaration_node->line_number = current_line;
+			declaration_node->line_number = parser_line_num;
+
 			break;
 
 		/**
@@ -12259,13 +12254,10 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 				num_warnings++;
 			}
 
-			//Also store this record with the root node
 			declaration_node = ast_node_alloc(AST_NODE_TYPE_DECL_STMT, SIDE_TYPE_LEFT);
 			declaration_node->variable = declared_var;
-			//Store the type as well
 			declaration_node->inferred_type = declared_var->type_defined_as;
-			//Store the line number
-			declaration_node->line_number = current_line;
+			declaration_node->line_number = parser_line_num;
 
 			break;
 	}
