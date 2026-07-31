@@ -13987,6 +13987,30 @@ static inline u_int8_t perform_definite_assignment_analysis(cfg_t* cfg, variable
 
 
 /**
+ * Perform mutability checking on the variable symtab. This will check
+ * and display warnings if we are labeling a variable as mutable
+ * but then never mutating it
+ */
+static void perform_mutability_checking(cfg_t* cfg, variable_symtab_t* symtab){
+
+	for(int32_t i = 0; i < symtab->sheafs.current_index; i++){
+		symtab_variable_sheaf_t* sheaf = dynamic_array_get_at(&(symtab->sheafs), i);
+
+		for(int32_t i = 0; i < VARIABLE_KEYSPACE; i++){
+			symtab_variable_record_t* cursor = sheaf->records[i];
+
+			while(cursor != NULL){
+				//TODO
+
+
+				cursor = cursor->next;
+			}
+		}
+	}
+}
+
+
+/**
  * Build a cfg from the ground up
 */
 cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_int32_t* num_warnings){
@@ -14077,6 +14101,9 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	 * NOTE: this is a potential fail point for the CFG
 	 */
 	u_int8_t definite_assignment_analysis_result = perform_definite_assignment_analysis(cfg, results->variable_symtab);
+
+	//TODO DOC
+	perform_mutability_checking(cfg, results->variable_symtab);
 
 	//Update the result based on what our definite assignment analysis gave
 	cfg->result = definite_assignment_analysis_result == SUCCESS ? CFG_RESULT_SUCCESS : CFG_RESULT_FAILURE;
