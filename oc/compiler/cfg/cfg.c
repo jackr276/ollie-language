@@ -426,6 +426,7 @@ static inline u_int8_t is_variable_ssa_eligible(three_addr_var_t* variable){
 	switch(variable->variable_type){
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
 		case VARIABLE_TYPE_NON_TEMP:
+			//TODO CAN WE ADD THE EXTRA CHECK HERE
 			if(variable->linked_var != NULL){
 				return TRUE;
 			} else {
@@ -13749,6 +13750,14 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
 	 * kind of checking so leave if we see it
 	 */
 	if(variable == stack_pointer_variable || variable == instruction_pointer_var){
+		return SUCCESS;
+	}
+
+	/**
+	 * If the variable itself is a true variable but the underlying variable is ineligible(think static,
+	 * global vars) then we also skip
+	 */
+	if(variable->linked_var != NULL && is_symtab_variable_ssa_eligible(variable->linked_var) == FALSE){
 		return SUCCESS;
 	}
 
