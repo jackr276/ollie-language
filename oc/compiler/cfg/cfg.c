@@ -413,41 +413,6 @@ static inline u_int8_t is_result_package_empty(cfg_result_package_t* result_pack
 
 
 /**
- * Is a given variable SSA eligible? We do this by looking at the type of the
- * variable and whether or not the linked var is NULL. If the linked var is NULL
- * we would get segfaults
- */
-static inline u_int8_t is_variable_ssa_eligible(three_addr_var_t* variable){
-	//Sanity check
-	if(variable == NULL){
-		return FALSE;
-	}
-
-	switch(variable->variable_type){
-		case VARIABLE_TYPE_MEMORY_ADDRESS:
-		case VARIABLE_TYPE_NON_TEMP:
-			//TODO CAN WE ADD THE EXTRA CHECK HERE
-			if(variable->linked_var != NULL){
-				return TRUE;
-			} else {
-				return FALSE;
-			}
-		
-		/**
-		 * Return by copy addresses are *never* SSA eligible. This
-		 * would actually case the SSA system to crash because there
-		 * is no real assignment for this kind of variable
-		 */
-		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
-			return FALSE;
-
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
  * Is a given symtab variable SSA eligible?
  * 
  * Ineligible:
@@ -469,6 +434,44 @@ static inline u_int8_t is_symtab_variable_ssa_eligible(symtab_variable_record_t*
 			return FALSE;
 		default:
 			return TRUE;
+	}
+}
+
+
+/**
+ * Is a given variable SSA eligible? We do this by looking at the type of the
+ * variable and whether or not the linked var is NULL. If the linked var is NULL
+ * we would get segfaults
+ */
+static inline u_int8_t is_variable_ssa_eligible(three_addr_var_t* variable){
+	//Sanity check
+	if(variable == NULL){
+		return FALSE;
+	}
+
+	switch(variable->variable_type){
+		/**
+		 * If we have a linked variable, give back yes/no based on whether or
+		 * not the linked variable itself is eligible for SSA(criteria above)
+		 */
+		case VARIABLE_TYPE_MEMORY_ADDRESS:
+		case VARIABLE_TYPE_NON_TEMP:
+			if(variable->linked_var != NULL){
+				return is_symtab_variable_ssa_eligible(variable->linked_var);
+			} else {
+				return FALSE;
+			}
+		
+		/**
+		 * Return by copy addresses are *never* SSA eligible. This
+		 * would actually case the SSA system to crash because there
+		 * is no real assignment for this kind of variable
+		 */
+		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
+			return FALSE;
+
+		default:
+			return FALSE;
 	}
 }
 
@@ -13736,7 +13739,11 @@ static inline u_int8_t does_variable_dynamic_array_contain_variable(dynamic_arra
  * TODO
  */
 static u_int8_t check_variable_for_definite_assignment(instruction_t* instruction, three_addr_var_t* variable, dynamic_array_t* may_not_have_been_initialized){
-	//This happens a lot - if it's NULL just leave
+	/**
+	 * First guard - if the variable is NULL(common) or it's not 
+	 * SSA eligible(temp var, etc.) we can leave now. This is still
+	 * a SUCCESS because there's nothing wrong with this
+	 */
 	if(variable == NULL || is_variable_ssa_eligible(variable) == FALSE){
 		return SUCCESS;
 	}
@@ -13746,14 +13753,6 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
 	 * kind of checking so leave if we see it
 	 */
 	if(variable == stack_pointer_variable || variable == instruction_pointer_var){
-		return SUCCESS;
-	}
-
-	/**
-	 * If the variable itself is a true variable but the underlying variable is ineligible(think static,
-	 * global vars) then we also skip
-	 */
-	if(variable->linked_var != NULL && is_symtab_variable_ssa_eligible(variable->linked_var) == FALSE){
 		return SUCCESS;
 	}
 
