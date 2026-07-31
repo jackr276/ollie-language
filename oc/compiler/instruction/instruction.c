@@ -1149,7 +1149,7 @@ three_addr_var_t* emit_var_copy(three_addr_var_t* var){
  * Emit a push instruction. We only have one kind of pushing - quadwords - we don't
  * deal with getting granular when pushing
  */
-instruction_t* emit_push_instruction(three_addr_var_t* pushee){
+instruction_t* emit_push_instruction(three_addr_var_t* pushee, u_int32_t line_number){
 	//First we'll allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
@@ -1160,6 +1160,7 @@ instruction_t* emit_push_instruction(three_addr_var_t* pushee){
 	instruction->operands.x86.source_register1 = pushee;
 
 	//Finally give it back
+	instruction->line_number = line_number;
 	return instruction;
 }
 
@@ -1213,7 +1214,7 @@ instruction_t* emit_direct_gp_register_pop_instruction(general_purpose_register_
  * be used by the instruction selector when we need to insert pxor functions for clearing
  * SSE registers
  */
-instruction_t* emit_pxor_instruction(three_addr_var_t* destination, three_addr_var_t* source){
+instruction_t* emit_pxor_instruction(three_addr_var_t* destination, three_addr_var_t* source, u_int32_t line_number){
 	//First allocate
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
@@ -1225,6 +1226,7 @@ instruction_t* emit_pxor_instruction(three_addr_var_t* destination, three_addr_v
 	instruction->operands.x86.source_register1 = source;
 
 	//Now give it back
+	instruction->line_number = line_number;
 	return instruction;
 }
 
@@ -1233,7 +1235,7 @@ instruction_t* emit_pxor_instruction(three_addr_var_t* destination, three_addr_v
  * Emit a CLEAR instruction that is meant for the FP register to be zeroed out
  * This function only takes an assignee because that's all that we're clearing
  */
-instruction_t* emit_floating_point_clear_instruction(three_addr_var_t* assignee){
+instruction_t* emit_floating_point_clear_instruction(three_addr_var_t* assignee, u_int32_t line_number){
 	//First allocate
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
@@ -1244,6 +1246,7 @@ instruction_t* emit_floating_point_clear_instruction(three_addr_var_t* assignee)
 	instruction->operands.oir.assignee = assignee;
 
 	//And give it back
+	instruction->line_number = line_number;
 	return instruction;
 }
 
@@ -1252,7 +1255,7 @@ instruction_t* emit_floating_point_clear_instruction(three_addr_var_t* assignee)
  * Emit a pop instruction. We only have one kind of popping - quadwords - we don't
  * deal with getting granular when popping 
  */
-instruction_t* emit_pop_instruction(three_addr_var_t* popee){
+instruction_t* emit_pop_instruction(three_addr_var_t* popee, u_int32_t line_number){
 	//First we'll allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
@@ -1261,6 +1264,8 @@ instruction_t* emit_pop_instruction(three_addr_var_t* popee){
 
 	//We only ever have a source
 	instruction->operands.x86.source_register1 = popee;
+
+	instruction->line_number = line_number;
 
 	//Finally give it back
 	return instruction;
@@ -1272,7 +1277,7 @@ instruction_t* emit_pop_instruction(three_addr_var_t* popee){
  *
  * This would look something like lea 3(t5), t7
  */
-instruction_t* emit_lea_offset_only(three_addr_var_t* assignee, three_addr_var_t* address_operand1, three_addr_const_t* address_offset){
+instruction_t* emit_lea_offset_only(three_addr_var_t* assignee, three_addr_var_t* address_operand1, three_addr_const_t* address_offset, u_int32_t line_number){
 	//First we allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -1286,6 +1291,7 @@ instruction_t* emit_lea_offset_only(three_addr_var_t* assignee, three_addr_var_t
 	stmt->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 	//And now we give it back
+	stmt->line_number = line_number;
 	return stmt;
 }
 
@@ -1295,7 +1301,7 @@ instruction_t* emit_lea_offset_only(three_addr_var_t* assignee, three_addr_var_t
  *
  * This is designed to emit things like lea (t2, t3), t5
  */
-instruction_t* emit_lea_operands_only(three_addr_var_t* assignee, three_addr_var_t* address_operand1, three_addr_var_t* address_operand2){
+instruction_t* emit_lea_operands_only(three_addr_var_t* assignee, three_addr_var_t* address_operand1, three_addr_var_t* address_operand2, u_int32_t line_number){
 	//First we allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -1309,6 +1315,7 @@ instruction_t* emit_lea_operands_only(three_addr_var_t* assignee, three_addr_var
 	stmt->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
 
 	//And now we give it back
+	stmt->line_number = line_number;
 	return stmt;
 }
 
@@ -1316,7 +1323,7 @@ instruction_t* emit_lea_operands_only(three_addr_var_t* assignee, three_addr_var
 /**
  * Emit a statement that is in LEA form
  */
-instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, three_addr_var_t* address_operand1, three_addr_var_t* address_operand2, u_int64_t type_size){
+instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, three_addr_var_t* address_operand1, three_addr_var_t* address_operand2, u_int64_t type_size, u_int32_t line_number){
 	//First we allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -1333,6 +1340,7 @@ instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, thre
 	stmt->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
 
 	//And now we give it back
+	stmt->line_number = line_number;
 	return stmt;
 }
 
@@ -1340,7 +1348,7 @@ instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, thre
 /**
  * Emit a lea statement that is used for string calculation(rip relative)
  */
-instruction_t* emit_lea_rip_relative_constant(three_addr_var_t* assignee, three_addr_var_t* local_constant, three_addr_var_t* instruction_pointer){
+instruction_t* emit_lea_rip_relative_constant(three_addr_var_t* assignee, three_addr_var_t* local_constant, three_addr_var_t* instruction_pointer, u_int32_t line_number){
 	//First we allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -1355,6 +1363,7 @@ instruction_t* emit_lea_rip_relative_constant(three_addr_var_t* assignee, three_
 	stmt->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
 
 	//And now we give it back
+	stmt->line_number = line_number;
 	return stmt;
 }
 
@@ -1362,7 +1371,7 @@ instruction_t* emit_lea_rip_relative_constant(three_addr_var_t* assignee, three_
 /**
  * Emit a lea with the index and scale only
  */
-instruction_t* emit_lea_index_and_scale_only(three_addr_var_t* assignee, three_addr_var_t* index, u_int64_t scale){
+instruction_t* emit_lea_index_and_scale_only(three_addr_var_t* assignee, three_addr_var_t* index, u_int64_t scale, u_int32_t line_number){
 	//First we allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -1377,6 +1386,7 @@ instruction_t* emit_lea_index_and_scale_only(three_addr_var_t* assignee, three_a
 	stmt->addressing_mode = ADDRESSING_MODE_INDEX_AND_SCALE;
 
 	//And now we give it back
+	stmt->line_number = line_number;
 	return stmt;
 }
 
@@ -1384,7 +1394,7 @@ instruction_t* emit_lea_index_and_scale_only(three_addr_var_t* assignee, three_a
 /**
  * Directly emit an idle statement
  */
-instruction_t* emit_idle_instruction(){
+instruction_t* emit_idle_instruction(u_int32_t line_number){
 	//First we allocate
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -1392,6 +1402,7 @@ instruction_t* emit_idle_instruction(){
 	stmt->statement_type = THREE_ADDR_CODE_IDLE_STMT;
 
 	//And we're done
+	stmt->line_number = line_number;
 	return stmt;
 }
 
