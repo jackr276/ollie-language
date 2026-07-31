@@ -9687,7 +9687,6 @@ static inline generic_ast_node_t* expression_statement(ollie_token_stream_t* tok
 		//Go based on what we see up ahead of us
 		switch (lookahead.tok) {
 			case DECLARE:
-				//IMPORTANT - declares can/will be null if they're declaring a primitive type
 				current_expression_node = declare_statement(token_stream, FALSE, VISIBILITY_TYPE_PRIVATE);
 				break;
 
@@ -9703,16 +9702,13 @@ static inline generic_ast_node_t* expression_statement(ollie_token_stream_t* tok
 		}
 
 		//If this fails, the whole thing is over
-		if(current_expression_node != NULL
-			&& current_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		if(current_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			//It's already an error, so just send it back up
 			return current_expression_node;
 		}
 
-		//So long as we have something to add we'll add it
-		if(current_expression_node != NULL){
-			add_child_node(top_level_node, current_expression_node);
-		}
+		//Add the child node in
+		add_child_node(top_level_node, current_expression_node);
 
 		//Refresh our token. If it's a comma - great. If not, we leave
 		lookahead = get_next_token(token_stream, &parser_line_num);
@@ -12260,6 +12256,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 								declared_var->type_defined_as->type_name.string,
 								declared_var->var_name.string);
 				print_parse_message(MESSAGE_TYPE_WARNING, info, parser_line_num);
+				num_warnings++;
 			}
 
 			//Also store this record with the root node

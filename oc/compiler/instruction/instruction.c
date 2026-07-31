@@ -2501,7 +2501,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 		case THREE_ADDR_CODE_MEMORY_REGION_INITIALIZATION:
 			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
-			fprintf(fl, "<- initialize memory region\n");
+			fprintf(fl, " <- initialize memory region\n");
 			break;
 
 		case THREE_ADDR_CODE_TRUNCATING_ASSN_STMT:

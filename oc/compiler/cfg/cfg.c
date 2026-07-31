@@ -12943,8 +12943,6 @@ static void visit_declaration_statement(basic_block_t* current_block, generic_as
 		instruction_t* synthetic_initialization = emit_synthetic_memory_initialization(emit_var(node->variable));
 		add_statement(current_block, synthetic_initialization);
 
-		printf("HERE FOR %s\n\n\n", variable->var_name.string);
-
 	/**
 	 * If this is just a stack variable(something that's had it's memory address taken), then
 	 * we'll need to emit a synthetic initialization here
@@ -12953,8 +12951,6 @@ static void visit_declaration_statement(basic_block_t* current_block, generic_as
 		//Emit and add the synthetic initialization here
 		instruction_t* synthetic_initialization = emit_synthetic_memory_initialization(emit_var(node->variable));
 		add_statement(current_block, synthetic_initialization);
-
-		printf("HERE2 FOR %s\n\n\n", variable->var_name.string);
 	}
 
 	//TODO IDEA : we should have some kind of synthetic declaration statement for this
@@ -13439,10 +13435,6 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 	//a base address for an array
 	three_addr_var_t* assignee;
 
-	if(node->variable->stack_variable == TRUE){
-		printf("HERE\n\n\n");
-	}
-
 	//Based on what type we have, we'll need to do some special intialization
 	switch(type->type_class){
 		/**
@@ -13452,11 +13444,15 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_UNION:
-			//TODO basic initialization instruction here - we may also need to do this if the variable
-			//is a stack variable of any kind
-
 			//Create a stack region for this variable and store it in the associated region
 			node->variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
+
+			/**
+			 * Let's now emit the synthetic initialization for assignment
+			 * analysis purposes
+			 */
+			instruction_t* synethtic_initialization = emit_synthetic_memory_initialization(emit_var(node->variable));
+			add_statement(current_block, synethtic_initialization);
 
 			//Emit the memory address variable
 			assignee = emit_memory_address_var(node->variable);
@@ -13479,6 +13475,15 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 			
 		//Otherwise we just have a garden variety variable - no stack allocation required
 		default:
+			/**
+			 * If we have a stack variable we will emit the synthetic initialization
+			 * for assignment analysis purposes
+			 */
+			if(node->variable->stack_variable == TRUE){
+				instruction_t* synethtic_initialization = emit_synthetic_memory_initialization(emit_var(node->variable));
+				add_statement(current_block, synethtic_initialization);
+			}
+
 			//Emit it
 			assignee = emit_var(node->variable);
 
@@ -13796,10 +13801,8 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
 		sprintf(error_info, "Variable %s is used before initialization", variable->linked_var->var_name.string);
 		//TODO LINE NUMBERS ARE NOT GOING TO WORK RIGHT
 		print_cfg_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
-		//(*num_errors_ref)++;
-		//return FAILURE;
-		//TODO FIX
-		return SUCCESS;
+		(*num_errors_ref)++;
+		return FAILURE;
 
 	/**
 	 * Not so obvious case - it being in this array means that it comes from a phi function
@@ -13810,10 +13813,8 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
 		sprintf(error_info, "Variable %s may be used before initialization", variable->linked_var->var_name.string);
 		//TODO LINE NUMBERS ARE NOT GOING TO WORK RIGHT
 		print_cfg_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
-		//(*num_errors_ref)++;
-		//return FAILURE;
-		//TODO FIX
-		return SUCCESS;
+		(*num_errors_ref)++;
+		return FAILURE;
 
 	/**
 	 * If we made it here then this worked and the variable is clean
