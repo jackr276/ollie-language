@@ -13717,6 +13717,25 @@ static inline void convert_cfg_to_ssa_form(cfg_t* cfg, variable_symtab_t* variab
 
 
 /**
+ * This simple utility will scan a dynamic array of variables and invoke the variables_equal() function
+ * on each of them for the given variable
+ */
+static inline u_int8_t does_variable_dynamic_array_contain_variable(dynamic_array_t* array, three_addr_var_t* variable){
+	for(int32_t i = 0; i < array->current_index; i++){
+		three_addr_var_t* candidate = dynamic_array_get_at(array, i);
+
+		//If we have one equals then the whole thing works
+		if(variables_equal(candidate, variable) == TRUE){
+			return TRUE;
+		}
+	}
+
+	//If we made it here then no match
+	return FALSE;
+}
+
+
+/**
  */
 static inline u_int8_t does_instruction_comply_with_definite_assignment(instruction_t* instruction, dynamic_array_t* may_not_have_been_initialized){
 	//By default assume TRUE(1)
@@ -13760,14 +13779,31 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
 			three_addr_var_t* parameter = dynamic_array_get_at(&(instruction->parameters), i);
 
 			/**
-			 * If we 
+			 * If we see a parameter with a generation of 0, that means that it's 
+			 * never been initialized. We will add the LHS to the "may_not_have_been_initialized"
+			 * list for later checks
 			 */
 			if(parameter->ssa_generation == 0){
-				//TODO WE'LL need to hunt and see if the assignee
-				//is ever used later in the function here
+				dynamic_array_add(may_not_have_been_initialized, instruction->operands.oir.assignee);
+				overall_result = FAILURE;
+				
+				//We don't need to check any further for this
+				break;
+
+			/**
+			 * Just because it's not 0 doesn't mean we're safe. We must also check if this value
+			 * is inside of the "may not be initialized" list. If it is, then subsequently the
+			 * LHS of this instruction is also potentially uninitialized
+			 *
+			 */
+			} else if(does_variable_dynamic_array_contain_variable(may_not_have_been_initialized, parameter) == TRUE){
+				dynamic_array_add(may_not_have_been_initialized, instruction->operands.oir.assignee);
+				overall_result = FAILURE;
+				
+				//We don't need to check any further for this
+				break;
 			}
 		}
-
 	}
 
 	u_int8_t op1_result;
