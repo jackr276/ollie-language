@@ -204,10 +204,8 @@ struct symtab_variable_record_t{
 	u_int32_t static_variable_mangler;
 	//What is the enum member value
 	int32_t enum_member_value;
-	//The current generation of the variable - FOR SSA in CFG
-	u_int16_t current_generation;
 	//Current generation level(for SSA)
-	u_int16_t counter;
+	int32_t ssa_counter;
 	//What is the struct offset for this variable
 	u_int16_t struct_offset;
 	/**

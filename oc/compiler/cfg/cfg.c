@@ -2274,10 +2274,10 @@ static inline void lhs_new_name(three_addr_var_t* var){
 	symtab_variable_record_t* linked_var = var->linked_var;
 
 	//Grab the name out of the counter
-	u_int16_t generation_level = linked_var->counter;
+	int32_t generation_level = linked_var->ssa_counter;
 
 	//Now we increment the counter for the next go around
-	(linked_var->counter)++;
+	(linked_var->ssa_counter)++;
 
 	//We'll also push this generation level onto the stack
 	lightstack_push(&(linked_var->counter_stack), generation_level);
@@ -2294,10 +2294,10 @@ static inline void lhs_new_name(three_addr_var_t* var){
  */
 static inline void lhs_new_name_direct(symtab_variable_record_t* variable){
 	//Store the old generation level
-	u_int16_t generation_level = variable->counter;
+	u_int16_t generation_level = variable->ssa_counter;
 
 	//Increment the counter
-	(variable->counter)++;
+	(variable->ssa_counter)++;
 
 	//Push the old generation level onto here
 	lightstack_push(&(variable->counter_stack), generation_level);

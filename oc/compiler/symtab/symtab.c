@@ -646,8 +646,6 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t* name, symtab_
 	record->var_name = *name;
 	//Hash it and store it to avoid to repeated hashing
 	record->hash = hash_variable(name->string);
-	//The current generation is always 1 at first
-	record->current_generation = 1;
 
 	//This is just a regular variable(for now)
 	record->membership = NO_MEMBERSHIP;
@@ -678,8 +676,6 @@ symtab_variable_record_t* create_global_variable_record(dynamic_string_t* name, 
 	record->var_name = *name;
 	//Hash it and store it to avoid to repeated hashing
 	record->hash = hash_variable(name->string);
-	//The current generation is always 1 at first
-	record->current_generation = 1;
 
 	//Flag that this is a global variable
 	record->membership = GLOBAL_VARIABLE;
@@ -707,8 +703,6 @@ symtab_variable_record_t* create_static_variable_record(dynamic_string_t* name){
 	record->var_name = *name;
 	//Hash it and store it to avoid to repeated hashing
 	record->hash = hash_variable(name->string);
-	//The current generation is always 1 at first
-	record->current_generation = 1;
 
 	/**
 	 * This may change - but for right now we'll have a static variable mangler of 0. This
@@ -758,9 +752,6 @@ symtab_variable_record_t* create_temp_memory_address_variable(symtab_function_re
 	//Insert this into the variable symtab
 	insert_variable(variable_symtab, record);
 
-	//The current generation is always 1 at first
-	record->current_generation = 1;
-
 	//For eventual SSA generation
 	record->counter_stack.stack = NULL;
 	record->counter_stack.top_index = 0;
@@ -798,9 +789,6 @@ symtab_variable_record_t* create_ssa_compatible_temp_var(symtab_function_record_
 
 	//Insert this into the variable symtab
 	insert_variable(variable_symtab, record);
-
-	//The current generation is always 1 at first
-	record->current_generation = 1;
 
 	//For eventual SSA generation
 	record->counter_stack.stack = NULL;
@@ -845,9 +833,6 @@ symtab_variable_record_t* create_parameter_alias_variable(symtab_function_record
 
 	//Insert this into the variable symtab
 	insert_variable(variable_symtab, record);
-
-	//The current generation is always 1 at first
-	record->current_generation = 1;
 
 	//For eventual SSA generation
 	record->counter_stack.stack = NULL;
