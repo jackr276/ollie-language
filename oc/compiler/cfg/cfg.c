@@ -167,7 +167,7 @@ static cfg_result_package_t emit_string_initializer(basic_block_t* current_block
 static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* struct_initializer);
 static void emit_global_struct_initializer(generic_ast_node_t* struct_initializer, dynamic_array_t* intializer_values);
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_const_t* constant);
-static void visit_declaration_statement(generic_ast_node_t* node);
+static void visit_declaration_statement(basic_block_t* basic_block, generic_ast_node_t* node);
 static void visit_static_let_statement(generic_ast_node_t* node);
 static inline void visit_static_declare_statement(generic_ast_node_t* node);
 static inline void handle_raise_statement(basic_block_t* basic_block, generic_ast_node_t* node);
@@ -5539,6 +5539,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					 * Another nuance, if we have an array, say and int[], and we take the address, the user will
 					 * receive a type of int[]*(pointer to an array). In order to achieve this, we will need to create
 					 * a whole new stack variable to save the array
+					 *
+					 * TODO DO WE NEED THIS NOW OR CAN WE MOVE TO DECLARE?????
 					 */
 					if(is_variable_data_segment_variable(unary_expression_child->variable) == FALSE 
 						//Is it not on the stack already?
@@ -7150,7 +7152,7 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 		case AST_NODE_TYPE_DECL_STMT:
 			//Split based on the kind of variable that we have
 			if(expr_node->variable->membership != STATIC_VARIABLE){
-				visit_declaration_statement(expr_node);
+				visit_declaration_statement(basic_block, expr_node);
 			} else {
 				visit_static_declare_statement(expr_node);
 			}
@@ -12926,14 +12928,29 @@ static inline void visit_static_declare_statement(generic_ast_node_t* node){
  * we know that this is either a struct, array or union - it's something that
  * has to be allocated and placed onto the stack
  */
-static void visit_declaration_statement(generic_ast_node_t* node){
+static void visit_declaration_statement(basic_block_t* current_block, generic_ast_node_t* node){
+	symtab_variable_record_t* variable = node->variable;
+
+	/**
+	 * If this is a memory region, we'll need to create the stack region now
+	 * and emit a synthetic initialization statement
+	 */
+	if(is_memory_region(variable->type_defined_as) == TRUE){
+		//Create a stack region for this variable
+		node->variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
+
+	/**
+	 * If this is just a stack variable(something that's had it's memory address taken), then
+	 * we'll need to emit a synthetic initialization here
+	 */
+	} else if(variable->stack_variable == TRUE){
+
+	}
 
 	//TODO IDEA : we should have some kind of synthetic declaration statement for this
 	//that will just be scrapped *IF* this is a memory region. Becuase we are dealing with
 	//stack vars all of these are inherently initialized
 
-	//Create a stack region for this variable
-	node->variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
 }
 
 

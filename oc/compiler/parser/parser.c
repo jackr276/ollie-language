@@ -12244,7 +12244,10 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 			declaration_node->line_number = current_line;
 			break;
 
-		//Otherwise just leave
+		/**
+		 * We can't possible know whether or not these variables will require a stack allocation, 
+		 * so we'll make a node now and sort through that later in the CFG
+		 */
 		default:
 			/**
 			 * Special warning here - if the user is declaring a variable that is immutable
@@ -12259,26 +12262,18 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 				print_parse_message(MESSAGE_TYPE_WARNING, info, parser_line_num);
 			}
 
-			//If this is a global variable, then we also must ensure that a declaration exists
-			if(is_variable_data_segment_variable(declared_var) == TRUE){
-				//Actually create the node now
-				declaration_node = ast_node_alloc(AST_NODE_TYPE_DECL_STMT, SIDE_TYPE_LEFT);
-
-				//Also store this record with the root node
-				declaration_node->variable = declared_var;
-				//Store the type as well
-				declaration_node->inferred_type = declared_var->type_defined_as;
-				//Store the line number
-				declaration_node->line_number = current_line;
-			}
+			//Also store this record with the root node
+			declaration_node = ast_node_alloc(AST_NODE_TYPE_DECL_STMT, SIDE_TYPE_LEFT);
+			declaration_node->variable = declared_var;
+			//Store the type as well
+			declaration_node->inferred_type = declared_var->type_defined_as;
+			//Store the line number
+			declaration_node->line_number = current_line;
 
 			break;
 	}
 
-	/**
-	 * Return this. It will either be NULL or a generic node based on whether or not
-	 * a stack/global variable allocation was required
-	 */
+	//All declarations return a node, but most of them won't ever show up in the CFG
 	return declaration_node;
 }
 
