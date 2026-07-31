@@ -5527,43 +5527,12 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			switch(unary_expression_child->ast_node_type){
 				case AST_NODE_TYPE_IDENTIFIER:
 					/**
-					 * KEY DETAIL HERE: the variable may already be in the stack. If we're requesting
-					 * the address of a struct for example, we don't need to add said struct to the
-					 * stack - it is already there. We need to account for these nuances when
-					 * we do this
-					 *
-					 * We do not do this if it's a global/static variable, because global/static variables have their own unique storage
-					 * mechanism that is not stack related
-					 *
-					 *
-					 * Another nuance, if we have an array, say and int[], and we take the address, the user will
-					 * receive a type of int[]*(pointer to an array). In order to achieve this, we will need to create
-					 * a whole new stack variable to save the array
-					 *
-					 * TODO DO WE NEED THIS NOW OR CAN WE MOVE TO DECLARE?????
-					if(is_variable_data_segment_variable(unary_expression_child->variable) == FALSE 
-						//Is it not on the stack already?
-						&& unary_expression_child->variable->stack_region == NULL) {
-						//Create the stack region and store it in the variable
-						unary_expression_child->variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), unary_expression_child->variable->type_defined_as);
-					} 
-					 */
-
-					/**
-					 * Otherwise, this variable is already on the stack. As such, to get it's memory address,
+					 * This variable is already on the stack. As such, to get it's memory address,
 					 * all we need to do is take emit a specialized "memory address var" from the existing
-					 * stack region and slap it into a variable. One special thing here - we are going to
-					 * want to make sure that we stamp this memory address variable with the type that was
-					 * inferred in the parser in case we need it for later processing
+					 * stack region and slap it into a variable
 					 */
-					{
-					three_addr_var_t* memory_address_var = emit_memory_address_var(unary_expression_child->variable);
-
-					//And package the value up as what we want here
 					unary_package.type = CFG_RESULT_TYPE_VAR;
-					unary_package.result_value.result_var = memory_address_var;
-					}
-
+					unary_package.result_value.result_var = emit_memory_address_var(unary_expression_child->variable);
 					break;
 
 				/**
