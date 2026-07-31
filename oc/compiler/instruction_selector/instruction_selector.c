@@ -4455,6 +4455,16 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	}
 
 	/**
+	 * These statements by now have served their purpose - we can delete them as
+	 * they are no longer needed and have no assembly equivalent
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_MEMORY_REGION_INITIALIZATION){
+		delete_statement(window->instruction1);
+		reconstruct_window(window, window->instruction2);
+		changed = TRUE;
+	}
+
+	/**
 	 * Memory address rememediation - if we have non store/load
 	 * instructions and we want to remediate their memory addresses,
 	 * we can come through here and do so now. These may be situations
@@ -4465,7 +4475,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	perform_memory_address_remediations(window, window->instruction1, &changed);
 	perform_memory_address_remediations(window, window->instruction2, &changed);
 	perform_memory_address_remediations(window, window->instruction3, &changed);
-	
+
 	/**
 	 * ================== CONSTANT ASSINGNMENT FOLDING ==========================
 	 *
