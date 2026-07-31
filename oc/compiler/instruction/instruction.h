@@ -716,6 +716,12 @@ instruction_t* emit_binary_operation_with_const_instruction(three_addr_var_t* as
 instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1);
 
 /**
+ * Emit a synthetic memory initialization statement. These will always be wiped away by the
+ * optimizer
+ */
+instruction_t* emit_synthetic_memory_initialization(three_addr_var_t* memory_address_var);
+
+/**
  * Emit a statement that only uses two vars of the form var1 <- var2
  *
  * This truncating assignment instruction is designed specifically and only

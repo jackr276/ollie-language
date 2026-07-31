@@ -2499,6 +2499,11 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "\n");
 			break;
 
+		case THREE_ADDR_CODE_MEMORY_REGION_INITIALIZATION:
+			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, "<- initialize memory region\n");
+			break;
+
 		case THREE_ADDR_CODE_TRUNCATING_ASSN_STMT:
 			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, " <-(TRUNCATE)- ");
@@ -5589,6 +5594,21 @@ instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_add
 	//Let's now populate it with values
 	stmt->operands.oir.assignee = assignee;
 	stmt->operands.oir.operand1 = op1;
+
+	return stmt;
+}
+
+
+/**
+ * Emit a synthetic memory initialization statement. These will always be wiped away by the
+ * optimizer
+ */
+instruction_t* emit_synthetic_memory_initialization(three_addr_var_t* memory_address_var){
+	//First allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	stmt->statement_type = THREE_ADDR_CODE_MEMORY_REGION_INITIALIZATION;
+	stmt->operands.oir.assignee = memory_address_var;
 
 	return stmt;
 }
