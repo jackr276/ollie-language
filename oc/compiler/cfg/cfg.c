@@ -13735,19 +13735,63 @@ static inline u_int8_t does_variable_dynamic_array_contain_variable(dynamic_arra
 }
 
 
+static u_int8_t check_variable_for_definite_assignment(instruction_t* instruction, three_addr_var_t* variable, dynamic_array_t* may_not_have_been_initialized){
+	//This happens a lot - if it's NULL just leave
+	if(variable == NULL){
+		return TRUE;
+	}
+
+	/**
+	 * Obvious case - generation of 0 means it's never
+	 * been initialized so this is a pure use before
+	 * initialization
+	 */
+	if(variable->ssa_generation == 0){
+
+	} else if(){
+
+	
+	/**
+	 * If we made it here then this worked and the variable is clean
+	 */
+	} else {
+		return SUCCESS;
+	}
+
+}
+
+
 /**
  */
 static inline u_int8_t does_instruction_comply_with_definite_assignment(instruction_t* instruction, dynamic_array_t* may_not_have_been_initialized){
-	//By default assume TRUE(1)
-	u_int8_t overall_result = TRUE;
+	//By default assume SUCCESS(1)
+	u_int8_t overall_result = SUCCESS;
 
 	/**
 	 * Regular non-phi function handling involves us checking every
 	 * single variable to see if we have any "_0" variables in use.
 	 * "_0" is our canary SSA value that represents an uninitialzed
-	 * variable
+	 * variable. We will also need to make sure that each variable
+	 * is not a member of the "may_not_have_been_initialized" array.
+	 * This gets built up from phi functions who have values that may
+	 * have never been initialized
+	 *
+	 * We bitwise and the results together for this. One false in the chain
+	 * will make the whole thing 0(FAILURE)
 	 */
 	if(instruction->statement_type != THREE_ADDR_CODE_PHI_FUNC){
+		overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.operand1, may_not_have_been_initialized);
+		overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.operand2, may_not_have_been_initialized);
+		overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.address_operand1, may_not_have_been_initialized);
+		overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.address_operand2, may_not_have_been_initialized);
+
+		//Check all parameters as well
+		for(int32_t i = 0; i < instruction->parameters.current_index; i++){
+			three_addr_var_t* parameter = dynamic_array_get_at(&(instruction->parameters), i);
+
+			overall_result &= check_variable_for_definite_assignment(instruction, parameter, may_not_have_been_initialized);
+		}
+
 
 	/**
 	 * Phi-functions have special handling. If we have a phi
@@ -13805,11 +13849,6 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
 			}
 		}
 	}
-
-	u_int8_t op1_result;
-	u_int8_t op2_result;
-	u_int8_t address_op1_result;
-	u_int8_t address_op2_result;
 
 	return overall_result;
 }
