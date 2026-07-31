@@ -12952,10 +12952,6 @@ static void visit_declaration_statement(basic_block_t* current_block, generic_as
 		instruction_t* synthetic_initialization = emit_synthetic_memory_initialization(emit_var(node->variable));
 		add_statement(current_block, synthetic_initialization);
 	}
-
-	//TODO IDEA : we should have some kind of synthetic declaration statement for this
-	//that will just be scrapped *IF* this is a memory region. Becuase we are dealing with
-	//stack vars all of these are inherently initialized
 }
 
 
