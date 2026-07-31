@@ -5541,13 +5541,13 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					 * a whole new stack variable to save the array
 					 *
 					 * TODO DO WE NEED THIS NOW OR CAN WE MOVE TO DECLARE?????
-					 */
 					if(is_variable_data_segment_variable(unary_expression_child->variable) == FALSE 
 						//Is it not on the stack already?
 						&& unary_expression_child->variable->stack_region == NULL) {
 						//Create the stack region and store it in the variable
 						unary_expression_child->variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), unary_expression_child->variable->type_defined_as);
 					} 
+					 */
 
 					/**
 					 * Otherwise, this variable is already on the stack. As such, to get it's memory address,
@@ -5556,11 +5556,13 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					 * want to make sure that we stamp this memory address variable with the type that was
 					 * inferred in the parser in case we need it for later processing
 					 */
+					{
 					three_addr_var_t* memory_address_var = emit_memory_address_var(unary_expression_child->variable);
 
 					//And package the value up as what we want here
 					unary_package.type = CFG_RESULT_TYPE_VAR;
 					unary_package.result_value.result_var = memory_address_var;
+					}
 
 					break;
 
@@ -12932,22 +12934,16 @@ static void visit_declaration_statement(basic_block_t* current_block, generic_as
 	symtab_variable_record_t* variable = node->variable;
 
 	/**
-	 * If this is a memory region, we'll need to create the stack region now
-	 * and emit a synthetic initialization statement
+	 * If we have a memory region or a stack variable, we'll 
+	 * need to create the corresponding stack memory region here.
+	 * We'll also need a synthetic memory statement added for
+	 * the static analyzer
 	 */
-	if(is_memory_region(variable->type_defined_as) == TRUE){
+	if(is_memory_region(variable->type_defined_as) == TRUE
+		|| variable->stack_variable == TRUE){
 		//Create a stack region for this variable
 		node->variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
 
-		//Emit and add the synthetic initialization here
-		instruction_t* synthetic_initialization = emit_synthetic_memory_initialization(emit_var(node->variable));
-		add_statement(current_block, synthetic_initialization);
-
-	/**
-	 * If this is just a stack variable(something that's had it's memory address taken), then
-	 * we'll need to emit a synthetic initialization here
-	 */
-	} else if(variable->stack_variable == TRUE){
 		//Emit and add the synthetic initialization here
 		instruction_t* synthetic_initialization = emit_synthetic_memory_initialization(emit_var(node->variable));
 		add_statement(current_block, synthetic_initialization);
@@ -13472,10 +13468,14 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 		//Otherwise we just have a garden variety variable - no stack allocation required
 		default:
 			/**
-			 * If we have a stack variable we will emit the synthetic initialization
-			 * for assignment analysis purposes
+			 * If we have a stack variable we will handle the stack region here and
+			 * emit the synthetic initialization for assignment analysis purposes
 			 */
 			if(node->variable->stack_variable == TRUE){
+				//Create a stack region for this variable and store it in the associated region
+				node->variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
+
+				//Now emit the synthetic initialization
 				instruction_t* synethtic_initialization = emit_synthetic_memory_initialization(emit_var(node->variable));
 				add_statement(current_block, synethtic_initialization);
 			}

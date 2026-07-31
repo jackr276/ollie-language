@@ -62,5 +62,6 @@ pub fn main(arg:i32, argv:char**) -> i32{
 	@mutate_structure_pointer(&b);
 
 	//Grab the value from the internal array argument
-	ret a:y[1];
+	OUNIT: [exit_status = 32]
+	ret a:y[2];
 }

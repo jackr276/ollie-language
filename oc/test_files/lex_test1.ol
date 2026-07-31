@@ -38,5 +38,6 @@ pub fn main() -> i32 {
 	//Example call
 	i = @never_defined(2);
 
+	OUNIT: [exit_status = 3]
 	ret *i_ptr + *j_ptr;
 }
