@@ -13718,7 +13718,7 @@ static inline void convert_cfg_to_ssa_form(cfg_t* cfg, variable_symtab_t* variab
 
 /**
  */
-static inline u_int8_t does_instruction_comply_with_definite_assignment(instruction_t* instruction){
+static inline u_int8_t does_instruction_comply_with_definite_assignment(instruction_t* instruction, dynamic_array_t* may_not_have_been_initialized){
 	//By default assume TRUE(1)
 	u_int8_t overall_result = TRUE;
 
@@ -13731,9 +13731,17 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
 	if(instruction->statement_type != THREE_ADDR_CODE_PHI_FUNC){
 
 	/**
-	 * Phi-functions have special handling
+	 * Phi-functions have special handling. If we have a phi
+	 * function that has at least one _0 variable in it, then the
+	 * LHS value may not have been initialized
 	 *
-	 * TODO
+	 * x_3 <- phi(x_2, x_1, x_0)
+	 * x_4 <- x_3 + 1
+	 *
+	 * Fail there, x_3 may not have been initialized. We will maintain
+	 * a list of variables that may be uninitialized that will be cross
+	 * referenced by all other checks. The value x_3 in this case would go
+	 * into there
 	 */
 	} else {
 		/**
@@ -13751,6 +13759,9 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
 		for(int32_t i = 0; i < instruction->parameters.current_index; i++){
 			three_addr_var_t* parameter = dynamic_array_get_at(&(instruction->parameters), i);
 
+			/**
+			 * If we 
+			 */
 			if(parameter->ssa_generation == 0){
 				//TODO WE'LL need to hunt and see if the assignee
 				//is ever used later in the function here
@@ -13771,7 +13782,7 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
 /**
  * 
  */
-static u_int8_t perform_definite_assignment_analysis_for_block(basic_block_t* block){
+static u_int8_t perform_definite_assignment_analysis_for_block(basic_block_t* block, dynamic_array_t* may_not_have_been_initialized){
 	//Assume success off the bat
 	u_int8_t result = SUCCESS;
 
@@ -13795,7 +13806,7 @@ static u_int8_t perform_definite_assignment_analysis_for_block(basic_block_t* bl
 		 * thing fails. We will process all instructions to get a full picture of the
 		 * errors though
 		 */
-		if(does_instruction_comply_with_definite_assignment(cursor) == FALSE){
+		if(does_instruction_comply_with_definite_assignment(cursor, may_not_have_been_initialized) == FALSE){
 			result = FALSE;
 		}
 
@@ -13813,7 +13824,7 @@ static u_int8_t perform_definite_assignment_analysis_for_block(basic_block_t* bl
 		 * If anything in this child fails, our overall result is failure. We will
 		 * keep going to scan everything though
 		 */
-		if(perform_definite_assignment_analysis_for_block(child) == FALSE){
+		if(perform_definite_assignment_analysis_for_block(child, may_not_have_been_initialized) == FALSE){
 			result = FAILURE;
 		}
 	}
@@ -13839,6 +13850,12 @@ static inline u_int8_t perform_definite_assignment_analysis(cfg_t* cfg, variable
 	//Assume success off the bat
 	u_int8_t result = SUCCESS;
 
+	/**
+	 * Keep an array of variables that may not have been initialized in each function to make
+	 * scanning easier and less intensive. We'll allocate once and just wipe every time
+	 */
+	dynamic_array_t may_not_have_been_initialized = dynamic_array_alloc();
+
 	//Run through all functions
 	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Use the function entry to seed the search
@@ -13848,10 +13865,16 @@ static inline u_int8_t perform_definite_assignment_analysis(cfg_t* cfg, variable
 		 * Call into the recursive analyzer. If we have a failure, then the entire thing
 		 * goes into failure, but we will keep scanning to get all errors in at once
 		 */
-		if(perform_definite_assignment_analysis_for_block(function_entry) == FAILURE){
+		if(perform_definite_assignment_analysis_for_block(function_entry, &may_not_have_been_initialized) == FAILURE){
 			result = FAILURE;
 		}
+
+		//Clear it now that we're done with this function
+		clear_dynamic_array(&may_not_have_been_initialized);
 	}
+
+	//Done with this so scrap it now
+	dynamic_array_dealloc(&may_not_have_been_initialized);
 
 	return result;
 }
