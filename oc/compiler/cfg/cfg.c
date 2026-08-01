@@ -3393,6 +3393,8 @@ static inline void emit_user_defined_jump(basic_block_t* basic_block, symtab_lab
 
 /**
  * Emit the abstract machine code for a constant to variable assignment. 
+ *
+ * TODO SIZE TYPE
  */
 static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, generic_ast_node_t* constant_node){
 	//Initialize the constant result package

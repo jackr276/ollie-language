@@ -146,6 +146,7 @@ struct generic_ast_node_t{
 		int64_t signed_long_value;
 		u_int64_t unsigned_long_value;
 		int32_t signed_int_value;
+		u_int32_t size_value;
 		u_int32_t unsigned_int_value;
 		int16_t signed_short_value;
 		u_int16_t unsigned_short_value;

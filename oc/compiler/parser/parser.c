@@ -2452,10 +2452,8 @@ static generic_ast_node_t* sizeof_statement(ollie_token_stream_t* token_stream, 
 	 * type to store this. No coercion should be required for this
 	 */
 	const_node->constant_type = SIZE_CONST;
-	const_node->constant_value.unsigned_int_value = return_type->type_size;
+	const_node->constant_value.size_value = return_type->type_size;
 	const_node->inferred_type = immut_size;
-
-	//We cannot assign to this
 	const_node->is_assignable = FALSE;
 	const_node->line_number = parser_line_num;
 
@@ -2465,7 +2463,8 @@ static generic_ast_node_t* sizeof_statement(ollie_token_stream_t* token_stream, 
 
 
 /**
- * Handle a typesize expression
+ * Handle a typesize expression. Typesize statements always return variables of
+ * type "size", which is really treated as an unsigned 32 bit integer
  *
  * NOTE: by the time we get here, we have already seen and consumed the typesize token
  */
@@ -2484,9 +2483,11 @@ static generic_ast_node_t* typesize_statement(ollie_token_stream_t* token_stream
 	//Otherwise we'll push to the stack for checking
 	push_token(&grouping_stack, lookahead);
 
-	//Now we need to see a valid type-specifier. It is important to note that the type
-	//specifier requires that a type has actually been defined. If it wasn't defined,
-	//then this will return an error node
+	/**
+	 * Now we need to see a valid type-specifier. It is important to note that the type
+	 * specifier requires that a type has actually been defined. If it wasn't defined,
+	 * then this will return an error node
+	 */
 	generic_type_t* type_spec = type_specifier(token_stream);
 
 	//If it's an error
@@ -2496,8 +2497,6 @@ static generic_ast_node_t* typesize_statement(ollie_token_stream_t* token_stream
 
 	//Once we've done this, we can grab the actual size of the type-specifier
 	u_int32_t type_size = type_spec->type_size;
-
-	//And then we no longer need the type-spec node, we can just remove it
 
 	//Otherwise if we get here it actually was defined, so now we'll look for an R_PAREN
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -2515,17 +2514,15 @@ static generic_ast_node_t* typesize_statement(ollie_token_stream_t* token_stream
 	//Create a constant node
 	generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
 
-	//Add the line number
+	/**
+	 * Create this as a size constant. We should not need to coerce anything
+	 * at this point because we've set it up properly internally
+	 */
+	const_node->constant_type = SIZE_CONST;
+	const_node->constant_value.size_value = type_size;
+	const_node->inferred_type = immut_size;
+	const_node->is_assignable = FALSE;
 	const_node->line_number = parser_line_num;
-	//Add the constant
-	const_node->constant_type = INT_CONST;
-	//Store the actual value
-	const_node->constant_value.signed_int_value = type_size;
-	//These will be generic signed ints
-	const_node->inferred_type = immut_i32;
-
-	//Coerce it now that we have the minimum size
-	coerce_constant(const_node);
 
 	//Finally we'll return this constant node
 	return const_node;
@@ -2533,7 +2530,8 @@ static generic_ast_node_t* typesize_statement(ollie_token_stream_t* token_stream
 
 
 /**
- * Handle a paramcount expression
+ * Handle a paramcount expression. A paramcount expression will always return a 
+ * variable of type "size"
  *
  * NOTE: by the time we get here, we have already seen and consumed the typesize token
  *
@@ -2598,11 +2596,12 @@ static generic_ast_node_t* paramcount_statement(ollie_token_stream_t* token_stre
 	//Let's now allocate the final node and give it back
 	generic_ast_node_t* paramcount_node = ast_node_alloc(AST_NODE_TYPE_PARAMCOUNT_STMT, SIDE_TYPE_RIGHT);
 
-	//The type is always an i32
-	paramcount_node->inferred_type = immut_i32;
+	/**
+	 * A paramcount node can only ever have a type of "size" because
+	 * this is a size value. Internally sizes are like unsigned integers
+	 */
+	paramcount_node->inferred_type = immut_size;
 	paramcount_node->line_number = parser_line_num;
-
-	//Store the paramcount variable here - we will need this for down the road
 	paramcount_node->variable = returned_variable;
 
 	//And give it back
