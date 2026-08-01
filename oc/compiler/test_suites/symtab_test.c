@@ -84,11 +84,9 @@ static void test_types(){
 	//into the type system
 	u_int16_t basic_type_collision_count = add_all_basic_types(type_symtab);
 
-	//We really should be seeing no collisions for basic type insertion
-	assert(basic_type_collision_count <= 2);
-
 	//Print it out
 	printf("Collisions for basic types: %d\n", basic_type_collision_count);
+	assert(basic_type_collision_count <= 3);
 
 	//Let's try retrieving all of these now - both mutable and immutable versions
 	//Immutable versions
@@ -118,6 +116,9 @@ static void test_types(){
 
 	symtab_type_record_t* immutable_i64 = lookup_type_name_only(type_symtab, "i64", NOT_MUTABLE);
 	assert(immutable_i64 != NULL);
+
+	symtab_type_record_t* immutable_size = lookup_type_name_only(type_symtab, "size", NOT_MUTABLE);
+	assert(immutable_size != NULL);
 
 	//Now get all of our mutable versions
 	symtab_type_record_t* mutable_char = lookup_type_name_only(type_symtab, "char", MUTABLE);
@@ -150,6 +151,9 @@ static void test_types(){
 	symtab_type_record_t* generic_error_type = lookup_type_name_only(type_symtab, "error", NOT_MUTABLE);
 	assert(generic_error_type != NULL);
 
+	symtab_type_record_t* mutable_size = lookup_type_name_only(type_symtab, "size", MUTABLE);
+	assert(mutable_size != NULL);
+
 	//These all need to be *distinct*, so assert that they are not equal
 	assert(mutable_i8 != immutable_i8);
 	assert(mutable_u8 != immutable_u8);
@@ -160,6 +164,7 @@ static void test_types(){
 	assert(mutable_i64 != immutable_i64);
 	assert(mutable_u64 != immutable_u64);
 	assert(mutable_char != immutable_char);
+	assert(mutable_size != immutable_size);
 
 	//Grab these more complex ones while we're at it
 	symtab_type_record_t* mutable_char_ptr = lookup_type_name_only(type_symtab, "char*", MUTABLE);

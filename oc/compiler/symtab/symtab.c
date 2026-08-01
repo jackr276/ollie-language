@@ -1554,6 +1554,10 @@ u_int16_t add_all_basic_types(type_symtab_t* symtab){
 	//float64 type
 	type = create_basic_type("f64", F64, NOT_MUTABLE);
 	num_collisions += insert_type(symtab,  create_type_record(type));
+
+	//size type
+	type = create_size_type(NOT_MUTABLE);
+	num_collisions += insert_type(symtab, create_type_record(type));
 	// ================================ Immutable versions of our primitive types ================================
 	
 	// ================================ Mutable versions of our primitive types ================================
@@ -1620,6 +1624,9 @@ u_int16_t add_all_basic_types(type_symtab_t* symtab){
 	type = create_basic_type("f64", F64, MUTABLE);
 	num_collisions += insert_type(symtab,  create_type_record(type));
 
+	//size type
+	type = create_size_type(MUTABLE);
+	num_collisions += insert_type(symtab, create_type_record(type));
 	// ================================ Mutable versions of our primitive types ==============================
 	
 	// ================================ Specialized internal-only types ======================================
