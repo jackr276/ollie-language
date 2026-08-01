@@ -2996,7 +2996,7 @@ static void handle_source_spill(symtab_function_record_t* function, dynamic_arra
 		dummy->associated_live_range = *currently_spilled;
 
 		//Handle the load instruction
-		instruction_t* load_instruction = emit_load_instruction(dummy, stack_pointer, type_symtab, offset);
+		instruction_t* load_instruction = emit_load_instruction(dummy, stack_pointer, type_symtab, offset, target->line_number);
 
 		//Insert it before the target
 		insert_instruction_before_given(load_instruction, target);
@@ -3013,7 +3013,7 @@ static void handle_source_spill(symtab_function_record_t* function, dynamic_arra
  */
 static void handle_destination_spill(three_addr_var_t* var, instruction_t* instruction, u_int32_t offset){
 	//Let the helper do this for us
-	instruction_t* store = emit_store_instruction(var, stack_pointer, type_symtab, offset);
+	instruction_t* store = emit_store_instruction(var, stack_pointer, type_symtab, offset, instruction->line_number);
 
 	//Insert the store after the assignment
 	insert_instruction_after_given(store, instruction);
@@ -3929,8 +3929,8 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 		}
 
 		//Emit the store instruction and load instruction
-		instruction_t* store_instruction = emit_store_instruction(dynamic_array_get_at(&(lr_to_save->variables), 0), stack_pointer, type_symtab, stack_region->function_local_base_address);
-		instruction_t* load_instruction = emit_load_instruction(dynamic_array_get_at(&(lr_to_save->variables), 0), stack_pointer, type_symtab, stack_region->function_local_base_address);
+		instruction_t* store_instruction = emit_store_instruction(dynamic_array_get_at(&(lr_to_save->variables), 0), stack_pointer, type_symtab, stack_region->function_local_base_address, first_instruction->line_number);
+		instruction_t* load_instruction = emit_load_instruction(dynamic_array_get_at(&(lr_to_save->variables), 0), stack_pointer, type_symtab, stack_region->function_local_base_address, first_instruction->line_number);
 
 		//Insert the push instruction directly before the call instruction
 		insert_instruction_before_given(store_instruction, first_instruction);
@@ -4188,8 +4188,8 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 		}
 
 		//Emit the store instruction and load instruction
-		instruction_t* store_instruction = emit_store_instruction(dynamic_array_get_at(&(lr_to_save->variables), 0), stack_pointer, type_symtab, stack_region->function_local_base_address);
-		instruction_t* load_instruction = emit_load_instruction(dynamic_array_get_at(&(lr_to_save->variables), 0), stack_pointer, type_symtab, stack_region->function_local_base_address);
+		instruction_t* store_instruction = emit_store_instruction(dynamic_array_get_at(&(lr_to_save->variables), 0), stack_pointer, type_symtab, stack_region->function_local_base_address, first_instruction->line_number);
+		instruction_t* load_instruction = emit_load_instruction(dynamic_array_get_at(&(lr_to_save->variables), 0), stack_pointer, type_symtab, stack_region->function_local_base_address, first_instruction->line_number);
 
 		//Insert the push instruction directly before the first instruction
 		insert_instruction_before_given(store_instruction, first_instruction);
