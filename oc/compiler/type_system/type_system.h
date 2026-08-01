@@ -65,6 +65,7 @@ typedef enum{
  */
 typedef enum type_class_t {
 	TYPE_CLASS_BASIC,
+	TYPE_CLASS_SIZE,
 	TYPE_CLASS_ARRAY,
 	TYPE_CLASS_STRUCT,
 	TYPE_CLASS_ENUMERATED,
@@ -293,6 +294,12 @@ u_int8_t types_identical(generic_type_t* a, generic_type_t* b);
  * Dynamically allocate and create a basic type
 */
 generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type, mutability_type_t mutability);
+
+/**
+ * Create the size type with a given mutability. We'd only ever expect
+ * to call this on startup
+ */
+generic_type_t* create_size_type(mutability_type_t mutability);
 
 /**
  * Dynamically allocate and create an error type
