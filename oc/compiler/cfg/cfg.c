@@ -13750,7 +13750,6 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
 	 */
 	if(variable->ssa_generation == 0){
 		sprintf(error_info, "Variable %s is used before initialization", variable->linked_var->var_name.string);
-		//TODO LINE NUMBERS ARE NOT GOING TO WORK RIGHT
 		print_cfg_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
 		(*num_errors_ref)++;
 		return FAILURE;
@@ -13762,7 +13761,6 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
 	 */
 	} else if(does_variable_dynamic_array_contain_variable(may_not_have_been_initialized, variable) == TRUE){
 		sprintf(error_info, "Variable %s may be used before initialization", variable->linked_var->var_name.string);
-		//TODO LINE NUMBERS ARE NOT GOING TO WORK RIGHT
 		print_cfg_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
 		(*num_errors_ref)++;
 		return FAILURE;
@@ -13957,6 +13955,8 @@ static inline u_int8_t perform_definite_assignment_analysis(cfg_t* cfg, variable
 		 * Call into the recursive analyzer. If we have a failure, then the entire thing
 		 * goes into failure, but we will keep scanning to get all errors in at once
 		 */
+
+		//TODO WE MAY ACTUALLY WANT TO STOP FAILURES AT JUST ONE HERE
 		if(perform_definite_assignment_analysis_for_block(function_entry, &may_not_have_been_initialized) == FAILURE){
 			result = FAILURE;
 		}
