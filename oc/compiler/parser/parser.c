@@ -95,6 +95,7 @@ static generic_type_t* immut_f64 = NULL;
 static generic_type_t* mut_void = NULL;
 static generic_type_t* immut_void = NULL;
 static generic_type_t* immut_char_ptr = NULL;
+static generic_type_t* immut_size = NULL;
 static generic_type_t* generic_error = NULL;
 
 //The specialized nesting stack that we'll use to keep track of what kind of control structure we're in(loop, switch, defer, etc)
@@ -2403,17 +2404,16 @@ static generic_ast_node_t* sizeof_statement(ollie_token_stream_t* token_stream, 
 	//Otherwise we'll push to the stack for checking
 	push_token(&grouping_stack, lookahead);
 
-	//We now need to see a valid logical or expression. This expression will contain everything that we need to know, and the
-	//actual expression result will be unused. It's important to note that we will not actually evaluate the expression here at
-	//all - sall we can about is the return type
+	/**
+	 * We now need to see a valid logical or expression. This expression will contain everything that we need to know, and the
+	 * actual expression result will be unused. It's important to note that we will not actually evaluate the expression here at
+	 * all - sall we can about is the return type
+	 */
 	generic_ast_node_t* expr_node = logical_or_expression(token_stream, side);
 	
 	//If it's an error
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Unable to use sizeof on invalid expression",  parser_line_num);
-		num_errors++;
-		//It's already an error, so give it back that way
-		return expr_node;
+		return print_and_return_error("Invalid expression given to sizeof statement", parser_line_num);
 	}
 
 	//Otherwise if we get here it actually was defined, so now we'll look for an R_PAREN
@@ -2429,13 +2429,14 @@ static generic_ast_node_t* sizeof_statement(ollie_token_stream_t* token_stream, 
 		return print_and_return_error("Unmatched parenthesis detected in typesize expression", parser_line_num);
 	}
 
-	//Now we know that we have an entirely syntactically valid call to sizeof. Let's now extract the 
-	//type information for ourselves
+	/**
+	 * Now we know that we have an entirely syntactically valid call to sizeof. Let's now extract the
+	 * type information for ourselves
+	 */
 	generic_type_t* return_type = expr_node->inferred_type;
 
 	/**
-	 * If we have an elaborative type - that's an issue. We'll have to fail
-	 * out here
+	 * If we have an elaborative type - that's an issue. We'll have to fail out here
 	 */
 	if(return_type->type_class == TYPE_CLASS_ELABORATIVE){
 		sprintf(info, "Elaborative type \"%s\" does not have a compile-time known size. Use \"paramcount(...)\" to get the number of parameters",
@@ -2446,19 +2447,16 @@ static generic_ast_node_t* sizeof_statement(ollie_token_stream_t* token_stream, 
 	//Create a constant node
 	generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
 
-	//This will be an int const
-	const_node->constant_type = INT_CONST;
-	//Store the actual value of the type size
-	const_node->constant_value.signed_int_value = return_type->type_size;
-	//This will always end up as a generic signed int
-	const_node->inferred_type = immut_i32;
-
-	//Coerce it now that we have the minimum size
-	coerce_constant(const_node);
+	/**
+	 * Sizeof is a size value, so we will need to use a generic size 
+	 * type to store this. No coercion should be required for this
+	 */
+	const_node->constant_type = SIZE_CONST;
+	const_node->constant_value.unsigned_int_value = return_type->type_size;
+	const_node->inferred_type = immut_size;
 
 	//We cannot assign to this
 	const_node->is_assignable = FALSE;
-	//Store this too
 	const_node->line_number = parser_line_num;
 
 	//Finally we'll return this constant node
@@ -2617,11 +2615,14 @@ static generic_ast_node_t* paramcount_statement(ollie_token_stream_t* token_stre
  * to chain back up to an expression in general using () as an enclosure. Just like all rules, a primary expression
  * itself has a parent and will produce children. The reference to the primary expression itself is always returned
  *
+ * NOTE: typesize, sizeof and paramcount statments all return the ollie size type
+ *
  * BNF Rule: <primary-expression> ::= <identifier>
  * 									| <constant> 
  * 									| (<assignment_expression>)
  * 									| sizeof(<logical-or-expression>)
  * 									| typesize(<type-name>)
+ * 									| paramcount(<identifier>)
  * 									| <function-call>
  */
 static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream, side_type_t side){
@@ -15270,6 +15271,7 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	immut_f32 = lookup_type_name_only(type_symtab, "f32", NOT_MUTABLE)->type;
 	immut_f64 = lookup_type_name_only(type_symtab, "f64", NOT_MUTABLE)->type;
 	immut_void = lookup_type_name_only(type_symtab, "void", NOT_MUTABLE)->type;
+	immut_size = lookup_type_name_only(type_symtab, "size", NOT_MUTABLE)->type;
 	mut_void = lookup_type_name_only(type_symtab, "void", MUTABLE)->type;
 	immut_char_ptr = lookup_type_name_only(type_symtab, "char*", NOT_MUTABLE)->type;
 	generic_error = lookup_type_name_only(type_symtab, "error", NOT_MUTABLE)->type;
