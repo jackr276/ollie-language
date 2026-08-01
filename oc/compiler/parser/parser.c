@@ -9089,6 +9089,7 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 		case F64:
 		case CHAR:
 		case BOOL:
+		case SIZE:
 			//We will now grab this record from the symtable to make our life easier
 			record = lookup_type_name_only(type_symtab, lookahead.lexeme.string, mutability);
 
@@ -9101,7 +9102,7 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 
 			//This one is now all set to send up. We will not store any children if this is the case
 			return record;
-		
+
 		//Enumerated type
 		case ENUM:
 			//We know that this keyword is in the name, so we'll add it in
