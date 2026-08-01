@@ -3379,6 +3379,11 @@ variable_size_t get_type_size(generic_type_t* type){
 			size = get_type_size(type->internal_values.enum_integer_type);
 			break;
 
+		//Size types are always double words
+		case TYPE_CLASS_SIZE:
+			size = DOUBLE_WORD;
+			break;
+
 		//These are always 64 bits
 		case TYPE_CLASS_POINTER:
 		case TYPE_CLASS_ARRAY:
