@@ -719,48 +719,67 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 			//Extract the destination's basic type
 			dest_basic_type = destination_type->basic_type_token;
 
-			//Switch based on the type that we have here
-			switch(dest_basic_type){
+			//Null can never be assigned to anything
+			if(dest_basic_type == VOID){
+				return NULL;
+			}
+
+			/**
+			 * Once we get to this point, we know that we have something
+			 * in this set for destination type: F64,F32, U64, I64, U32, I32, U16, I16, U8, I8, Char
+			 * From here, we'll go based on the type size of the source type *if* the source
+			 * type is also a basic type.
+			 */
+			switch(true_source_type->type_class){
+				//Special exception - the source type is an enum. These are good to be used with ints
+				case TYPE_CLASS_ENUMERATED:
+					return destination_type;
+
+				case TYPE_CLASS_SIZE:
+
+
+				case TYPE_CLASS_BASIC:
+					break;
+					
+				//Anything else we return NULL
+				default:
+					return NULL;
+			}
+
+			if(true_source_type->type_class == TYPE_CLASS_ENUMERATED){
+				return destination_type;
+			}
+
+			//Once we get here, we know that the source type is a basic type. We now
+			//need to check that it's not a float or void
+			source_basic_type = true_source_type->basic_type_token;
+
+			//Go based on what we have here
+			switch(source_basic_type){
 				case VOID:
 					return NULL;
 
-				//Once we get to this point, we know that we have something
-				//in this set for destination type: F64,F32, U64, I64, U32, I32, U16, I16, U8, I8, Char
-				//From here, we'll go based on the type size of the source type *if* the source
-				//type is also a basic type. 
+				/**
+				 * For basic types, so long as the source is not physically larger than the
+				 * destination, ollie allows us to assign it. This is also true for going from
+				 * floats to ints or ints to floats, but this will generate internal conversion
+				 * logic
+				 */
 				default:
-					//Special exception - the source type is an enum. These are good to be used with ints
-					if(true_source_type->type_class == TYPE_CLASS_ENUMERATED){
+					if(true_source_type->type_size <= destination_type->type_size){
 						return destination_type;
-					}
-
-					//Now if the source type is not a basic type, we're done here
-					if(true_source_type->type_class != TYPE_CLASS_BASIC){
+					} else {
+						//These wouldn't fit
 						return NULL;
 					}
-					
-					//Once we get here, we know that the source type is a basic type. We now
-					//need to check that it's not a float or void
-					source_basic_type = true_source_type->basic_type_token;
-
-					//Go based on what we have here
-					switch(source_basic_type){
-						case VOID:
-							return NULL;
-
-						//For basic types, so long as the source is not physically larger than the
-						//destination, ollie allows us to assign it. This is also true for going from
-						//floats to ints or ints to floats, but this will generate internal conversion
-						//logic
-						default:
-							if(true_source_type->type_size <= destination_type->type_size){
-								return destination_type;
-							} else {
-								//These wouldn't fit
-								return NULL;
-							}
-					}
 			}
+
+
+		/**
+		 * If we are assigning
+		 */
+		case TYPE_CLASS_SIZE:
+			
 
 		//Error types are never assignable
 		case TYPE_CLASS_ERROR:
