@@ -2538,6 +2538,8 @@ dynamic_string_t generate_fully_qualified_function_name(symtab_function_record_t
 /**
  * Print a variable name out in a stylized way
  * Intended for error messages
+ *
+ * TODO REWORK
  */
 void print_variable_name(symtab_variable_record_t* record){
 	//Go based on the membership

@@ -740,11 +740,6 @@ void print_type_record(symtab_type_record_t* record);
 void print_function_name_to_buffer(char* buffer, symtab_function_record_t* record);
 
 /**
- * A helper method for function name printing
- */
-void print_function_name(symtab_function_record_t* record);
-
-/**
  * Record that a given source function calls the target
  *
  * This always goes as: source calls target

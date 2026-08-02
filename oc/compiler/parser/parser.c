@@ -669,9 +669,8 @@ static inline u_int8_t do_duplicate_functions_exist(char* name){
 	//Fail out here
 	if(found != NULL){
 		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
+		print_function_name_to_buffer(info, found);
 		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		//Also print out the function declaration
-		print_function_name(found);
 		num_errors++;
 
 		//Return TRUE here, they do exist
@@ -1108,11 +1107,8 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 			//If this is the case, the return type had better be void
 			if(current_function_signature->returns_void == FALSE){
 				sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name.string, current_function_signature->return_type->type_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				//Also print the function name
-				print_function_name(current_function);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+				print_function_name_to_buffer(info, current_function);
+				return print_and_return_error(info, parser_line_num);
 			}
 
 			//The handle statement rule is going to need to reprocess this so we will push it back
@@ -1129,12 +1125,10 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 			//If we get here, but we do expect a void return, then this is an issue
 			if(current_function_signature->returns_void == TRUE){
 				sprintf(info, "Function \"%s\" expects a return type of \"void\". Use \"ret;\" for return statements in this function", current_function->func_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				//Also print the function name
-				print_function_name(current_function);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+				print_function_name_to_buffer(info, current_function);
+				return print_and_return_error(info, parser_line_num);
 			}
+
 			//Put it back if no
 			push_back_token(token_stream, &parser_line_num);
 			
@@ -1161,11 +1155,8 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 	if(final_type == NULL){
 		sprintf(info, "Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"", current_function->func_name.string, current_function_signature->return_type->type_name.string,
 		  		expr_node->inferred_type->type_name.string);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		//Also print out the function
-		print_function_name(current_function);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		print_function_name_to_buffer(info, current_function);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Otherwise it worked, so we'll add it as a child of the other node
@@ -1220,10 +1211,8 @@ static generic_ast_node_t* raise_statement_in_handle_clause(ollie_token_stream_t
 	 */
 	if(function_type->raises_errors == FALSE){
 		sprintf(info, "Function \"%s\" does not raise errors. Redeclare using \"fn!\" in order to make the function errorable. Currently declared as:", current_function->func_name.string);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		print_function_name(current_function);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		print_function_name_to_buffer(info, current_function);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	/**
@@ -10369,11 +10358,8 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 		//If this is the case, the return type had better be void
 		if(current_function_signature->returns_void == FALSE){
 			sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name.string, current_function_signature->return_type->type_name.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			//Also print the function name
-			print_function_name(current_function);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+			print_function_name_to_buffer(info, current_function);
+			return print_and_return_error(info, parser_line_num);
 		}
 
 		//If we get out then we're fine
@@ -10383,11 +10369,8 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 		//If we get here, but we do expect a void return, then this is an issue
 		if(current_function_signature->returns_void == TRUE){
 			sprintf(info, "Function \"%s\" expects a return type of \"void\". Use \"ret;\" for return statements in this function", current_function->func_name.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			//Also print the function name
-			print_function_name(current_function);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+			print_function_name_to_buffer(info, current_function);
+			return print_and_return_error(info, parser_line_num);
 		}
 		//Put it back if no
 		push_back_token(token_stream, &parser_line_num);
@@ -10418,12 +10401,8 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 		  		current_function_signature->return_type->type_name.string,
 		  		(expr_node->inferred_type->mutability == MUTABLE ? "mut " : ""),
 		  		expr_node->inferred_type->type_name.string);
-
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		//Also print out the function
-		print_function_name(current_function);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		print_function_name_to_buffer(info, current_function);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	/**
@@ -10498,10 +10477,8 @@ static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream){
 	 */
 	if(function_type->raises_errors == FALSE){
 		sprintf(info, "Function \"%s\" does not raise errors. Redeclare using \"fn!\" in order to make the function errorable. Currently declared as:", current_function->func_name.string);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		print_function_name(current_function);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		print_function_name_to_buffer(info, current_function);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	/**
@@ -13849,10 +13826,9 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 		   					found_function->func_name.string,
 		   					generate_fully_qualified_namespace_name(function_symtab->current).string);
 		}
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		print_function_name(found_function);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+
+		print_function_name_to_buffer(info, found_function);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Check for duplicated functions
@@ -14187,11 +14163,8 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		   					function_record->func_name.string,
 		   					generate_fully_qualified_namespace_name(function_symtab->current).string);
 		}
-		print_parse_message(MESSAGE_TYPE_ERROR, info, current_line);
-		print_function_name(function_record);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		print_function_name_to_buffer(info, function_record);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//If the function record is NULL, that means we're defining completely fresh
@@ -14330,10 +14303,8 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	if(defining_predeclared_function == TRUE){
 		if(strcmp(type->type_name.string, function_signature->return_type->type_name.string) != 0){
 			sprintf(info, "Function \"%s\" was predeclared with a return type of \"%s\", this may not be altered. First defined here:", function_name.string, function_signature->return_type->type_name.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			print_function_name(function_record);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+			print_function_name_to_buffer(info, function_record);
+			return print_and_return_error(info, parser_line_num);
 		}
 	}
 
