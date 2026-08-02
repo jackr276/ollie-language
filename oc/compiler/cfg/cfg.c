@@ -3651,21 +3651,6 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 			constant_result_package.result_value.result_const = emitted_constant;
 			return constant_result_package;
 
-		/**
-		 * Size constants are really under the hood unsigned
-		 * 32 bit integers
-		 */
-		case SIZE_CONST:
-			emitted_constant = calloc(1, sizeof(three_addr_const_t));
-			emitted_constant->type = constant_node->inferred_type;
-			emitted_constant->const_type = INT_CONST_FORCE_U;
-
-			emitted_constant->constant_value.unsigned_integer_constant = constant_node->constant_value.size_value;
-
-			constant_result_package.type = CFG_RESULT_TYPE_CONST;
-			constant_result_package.result_value.result_const = emitted_constant;
-			return constant_result_package;
-
 		case LONG_CONST:
 			emitted_constant = calloc(1, sizeof(three_addr_const_t));
 			emitted_constant->type = constant_node->inferred_type;
@@ -12419,9 +12404,6 @@ static three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* con
 			break;
 		case FLOAT_CONST:
 			constant->constant_value.float_constant = const_node->constant_value.float_value;
-			break;
-		case SIZE_CONST:
-			constant->constant_value.unsigned_integer_constant = const_node->constant_value.size_value;
 			break;
 		/**
 		 * If we made it here, that specifically means that we are dealing with a char* constant. This is

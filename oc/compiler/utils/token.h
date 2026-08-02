@@ -103,7 +103,6 @@ typedef enum {
 	REL_ADDRESS_CONST, // For when we store things like .LC pointers(think global char*)
 	PADDING_CONST, // A padding const that represents the .zero for us in struct initializers
 	CHAR_CONST,
-	SIZE_CONST,//Special size const for use with size() statements
 	L_PAREN,
 	R_PAREN,
 	L_CURLY,

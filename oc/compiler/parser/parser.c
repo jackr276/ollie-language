@@ -2451,8 +2451,8 @@ static generic_ast_node_t* sizeof_statement(ollie_token_stream_t* token_stream, 
 	 * Sizeof is a size value, so we will need to use a generic size 
 	 * type to store this. No coercion should be required for this
 	 */
-	const_node->constant_type = SIZE_CONST;
-	const_node->constant_value.size_value = return_type->type_size;
+	const_node->constant_type = INT_CONST_FORCE_U;
+	const_node->constant_value.unsigned_int_value = return_type->type_size;
 	const_node->inferred_type = immut_size;
 	const_node->is_assignable = FALSE;
 	const_node->line_number = parser_line_num;
@@ -2518,8 +2518,8 @@ static generic_ast_node_t* typesize_statement(ollie_token_stream_t* token_stream
 	 * Create this as a size constant. We should not need to coerce anything
 	 * at this point because we've set it up properly internally
 	 */
-	const_node->constant_type = SIZE_CONST;
-	const_node->constant_value.size_value = type_size;
+	const_node->constant_type = INT_CONST_FORCE_U;
+	const_node->constant_value.unsigned_int_value = type_size;
 	const_node->inferred_type = immut_size;
 	const_node->is_assignable = FALSE;
 	const_node->line_number = parser_line_num;
