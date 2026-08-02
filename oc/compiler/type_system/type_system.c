@@ -385,6 +385,10 @@ static u_int8_t function_signatures_identical(generic_type_t* a, generic_type_t*
  * 		and vice versa. All of the internal conversion logic will happen in the instruction selector
  */
 generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_t* source_type){
+	//Always dealias these to be sure
+	source_type = dealias_type(source_type);
+	destination_type = dealias_type(destination_type);
+
 	//Predeclare these for now
 	ollie_token_t source_basic_type;
 	ollie_token_t dest_basic_type;
@@ -3272,6 +3276,9 @@ void add_parameter_to_function_type(generic_type_t* function_type, generic_type_
  * Determine if a type is an integer or not
  */
 u_int8_t is_integer_type(generic_type_t* type){
+	//Always dealias first
+	type = dealias_type(type);
+
 	//We must have a basic type for it to be signed
 	if(type->type_class != TYPE_CLASS_BASIC){
 		//By default everything else(addresses, etc) is not signed
@@ -3304,6 +3311,9 @@ u_int8_t is_integer_type(generic_type_t* type){
  * Is a type signed?
  */
 u_int8_t is_type_signed(generic_type_t* type){
+	//Call the dealiaser to be sure
+	type = dealias_type(type);
+
 	//We must have a basic type for it to be signed
 	if(type->type_class != TYPE_CLASS_BASIC){
 		//By default everything else(addresses, etc) is not signed
@@ -3331,6 +3341,9 @@ u_int8_t is_type_signed(generic_type_t* type){
  * Select the size based only on a type
  */
 variable_size_t get_type_size(generic_type_t* type){
+	//Always dealias the type to make sure we're using the real one
+	type = dealias_type(type);
+
 	//What the size will be
 	variable_size_t size;
 
