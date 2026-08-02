@@ -859,6 +859,7 @@ generic_type_t* types_assignable_constant(generic_type_t* destination_type, gene
 				//These are all bad
 				case F32:
 				case F64:
+				case F128:
 				case VOID:
 					return NULL;
 				default:
@@ -873,6 +874,18 @@ generic_type_t* types_assignable_constant(generic_type_t* destination_type, gene
 			switch(constant_source_type->basic_type_token){
 				case F32:
 				case F64:
+				case F128:
+				case VOID:
+					return NULL;
+				default:
+					return destination_type;
+			}
+
+		case TYPE_CLASS_SIZE:
+			switch(constant_source_type->basic_type_token){
+				case F32:
+				case F64:
+				case F128:
 				case VOID:
 					return NULL;
 				default:
@@ -885,6 +898,11 @@ generic_type_t* types_assignable_constant(generic_type_t* destination_type, gene
 		 * long as we can reasonably coerce them
 		 */
 		case TYPE_CLASS_BASIC:
+			//We can always coerce the size type to integers
+			if(constant_source_type->type_class == TYPE_CLASS_SIZE){
+				return destination_type;
+			}
+
 			//You can never assign to a void
 			if(destination_type->basic_type_token == VOID){
 				return NULL;
