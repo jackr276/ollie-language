@@ -11,11 +11,12 @@ pub fn used_uninit(input:i32) -> i32 {
 		x = 5;
 	}
 
-	//Could be used uninitialized
+	//Could be used uninitialized - should fail
 	ret x;
 }
 
 
 pub fn main() -> i32 {
+	OUNIT: [fail_to_compile]
 	ret 0;
 }
