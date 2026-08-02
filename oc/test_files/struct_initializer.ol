@@ -27,13 +27,15 @@ pub fn main(arg:i32, argv:char**) -> i32{
 		case 7 -> {
 			x = 2;
 		}
-		// Empty default
-		default -> {}
+		default -> {
+			x = 5;
+		}
 	}
 
 	//Very basic initializer
 	let tester:my_struct = {x, 7, 'a'};
 
 	//So it isn't optimized away
+	OUNIT: [exit_status = 3]
 	ret tester:x;
 }

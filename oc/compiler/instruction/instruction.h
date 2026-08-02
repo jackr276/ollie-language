@@ -426,6 +426,8 @@ struct instruction_t{
 	symtab_function_record_t* called_function;
 	//What block holds this?
 	void* block_contained_in;
+	//Instruction's line number
+	int32_t line_number;
 	//Is this operation critical?
 	u_int8_t mark;
 	//Is this a regular or inverse branch
@@ -635,7 +637,7 @@ three_addr_const_t* emit_stack_passed_parameter_offset_constant(stack_region_t* 
  * Emit a push instruction. We only have one kind of pushing - quadwords - we don't
  * deal with getting granular when pushing
  */
-instruction_t* emit_push_instruction(three_addr_var_t* pushee);
+instruction_t* emit_push_instruction(three_addr_var_t* pushee, u_int32_t line_number);
 
 /**
  * Sometimes we just want to push a given register. We're able to do this
@@ -659,59 +661,65 @@ instruction_t* emit_direct_gp_register_pop_instruction(general_purpose_register_
  * Emit a pop instruction. We only have one kind of popping - quadwords - we don't
  * deal with getting granular when popping 
  */
-instruction_t* emit_pop_instruction(three_addr_var_t* popee);
+instruction_t* emit_pop_instruction(three_addr_var_t* popee, u_int32_t line_number);
 
 /**
  * Emit a CLEAR instruction that is meant for the FP register to be zeroed out
  * This function only takes an assignee because that's all that we're clearing
  */
-instruction_t* emit_floating_point_clear_instruction(three_addr_var_t* assignee);
+instruction_t* emit_floating_point_clear_instruction(three_addr_var_t* assignee, u_int32_t line_number);
 
 /**
  * Emit a PXOR instruction that's already been instruction selected
  */
-instruction_t* emit_pxor_instruction(three_addr_var_t* destination, three_addr_var_t* source);
+instruction_t* emit_pxor_instruction(three_addr_var_t* destination, three_addr_var_t* source, u_int32_t line_number);
 
 /**
  * Emit a lea statement that has one operand and an offset
  */
-instruction_t* emit_lea_offset_only(three_addr_var_t* assignee, three_addr_var_t* address_operand1, three_addr_const_t* address_offset);
+instruction_t* emit_lea_offset_only(three_addr_var_t* assignee, three_addr_var_t* address_operand1, three_addr_const_t* address_offset, u_int32_t line_number);
 
 /**
  * Emit a lea statement that has no multiplier, only operands
  */
-instruction_t* emit_lea_operands_only(three_addr_var_t* assignee, three_addr_var_t* address_operand1, three_addr_var_t* address_operand2);
+instruction_t* emit_lea_operands_only(three_addr_var_t* assignee, three_addr_var_t* address_operand1, three_addr_var_t* address_operand2, u_int32_t line_number);
 
 /**
  * Emit a lea statement that has a multiplier and operands
  */
-instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, three_addr_var_t* address_operand1, three_addr_var_t* address_operand2, u_int64_t type_size);
+instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, three_addr_var_t* address_operand1, three_addr_var_t* address_operand2, u_int64_t type_size, u_int32_t line_number);
 
 /**
  * Emit a lea statement that is used for rip relative calculations
  */
-instruction_t* emit_lea_rip_relative_constant(three_addr_var_t* assignee, three_addr_var_t* local_constant_variable, three_addr_var_t* instruction_pointer);
+instruction_t* emit_lea_rip_relative_constant(three_addr_var_t* assignee, three_addr_var_t* local_constant_variable, three_addr_var_t* instruction_pointer, u_int32_t line_number);
 
 /**
  * Emit a lea with the index and scale only
  */
-instruction_t* emit_lea_index_and_scale_only(three_addr_var_t* assignee, three_addr_var_t* address_offset, u_int64_t address_scale);
+instruction_t* emit_lea_index_and_scale_only(three_addr_var_t* assignee, three_addr_var_t* address_offset, u_int64_t address_scale, u_int32_t line_number);
 
 /**
  * Emit a statement using three vars and a binary operator
  * ALL statements are of the form: assignee <- op1 operator op2
 */
-instruction_t* emit_binary_operation_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_var_t* op2); 
+instruction_t* emit_binary_operation_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_var_t* op2, u_int32_t line_number); 
 
 /**
  * Emit a statement using two vars and a constant
  */
-instruction_t* emit_binary_operation_with_const_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_const_t* op2); 
+instruction_t* emit_binary_operation_with_const_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_const_t* op2, u_int32_t line_number); 
 
 /**
  * Emit a statement that only uses two vars of the form var1 <- var2
  */
-instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1);
+instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, u_int32_t line_number);
+
+/**
+ * Emit a synthetic memory initialization statement. These will always be wiped away by the
+ * optimizer
+ */
+instruction_t* emit_synthetic_memory_initialization(three_addr_var_t* memory_address_var, u_int32_t line_number);
 
 /**
  * Emit a statement that only uses two vars of the form var1 <- var2
@@ -719,17 +727,17 @@ instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_add
  * This truncating assignment instruction is designed specifically and only
  * for the truncating cast AST node type
  */
-instruction_t* emit_truncating_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1);
+instruction_t* emit_truncating_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, u_int32_t line_number);
 
 /**
  * Emit a conditional movement statement. Unlike regular moves, we will also need to provide the conditional and conditional movement type for this
  */
-instruction_t* emit_conditional_movement_statement(three_addr_var_t* assignee, three_addr_var_t* if_assignee, three_addr_var_t* else_assignee, three_addr_var_t* conditional, conditional_movement_type_t movement_type);
+instruction_t* emit_conditional_movement_statement(three_addr_var_t* assignee, three_addr_var_t* if_assignee, three_addr_var_t* else_assignee, three_addr_var_t* conditional, conditional_movement_type_t movement_type, u_int32_t line_number);
 
 /**
  * Emit a conditional movement statement with the else being a constant. Unlike regular moves, we will also need to provide the conditional and conditional movement type for this
  */
-instruction_t* emit_conditional_movement_with_const_statement(three_addr_var_t* assignee, three_addr_var_t* if_assignee, three_addr_const_t* else_assignee, three_addr_var_t* conditional, conditional_movement_type_t movement_type);
+instruction_t* emit_conditional_movement_with_const_statement(three_addr_var_t* assignee, three_addr_var_t* if_assignee, three_addr_const_t* else_assignee, three_addr_var_t* conditional, conditional_movement_type_t movement_type, u_int32_t line_number);
 
 /**
  * Emit a memory copy statement from one memory region to another. This exists
@@ -738,121 +746,120 @@ instruction_t* emit_conditional_movement_with_const_statement(three_addr_var_t* 
  * Note that both the assignee and the op1 should be memory address variables when
  * we do this
  */
-instruction_t* emit_memory_copy_instruction(three_addr_var_t* assignee_memory_region, three_addr_var_t* source_memory_region, u_int64_t byte_amount_to_copy);
+instruction_t* emit_memory_copy_instruction(three_addr_var_t* assignee_memory_region, three_addr_var_t* source_memory_region, u_int64_t byte_amount_to_copy, u_int32_t line_number);
 
 /**
  * Emit a store statement that only uses the base address
  */
-instruction_t* emit_store_base_address_only(three_addr_var_t* base_address, three_addr_var_t* storee, generic_type_t* memory_write_type);
+instruction_t* emit_store_base_address_only(three_addr_var_t* base_address, three_addr_var_t* storee, generic_type_t* memory_write_type, u_int32_t line_number);
 
 /**
  * Emit a store with a base address and an index value(variable offset). This maps
  * to an addressing mode of REGISTERS_ONLY
  */
-instruction_t* emit_store_base_address_and_index(three_addr_var_t* base_address, three_addr_var_t* index, three_addr_var_t* storee, generic_type_t* memory_write_type);
+instruction_t* emit_store_base_address_and_index(three_addr_var_t* base_address, three_addr_var_t* index, three_addr_var_t* storee, generic_type_t* memory_write_type, u_int32_t line_number);
 
 /**
  * Emit a store with a base address and a constant offset value. This maps to 
  * an addressing mode of OFFSET_ONLY
  */
-instruction_t* emit_store_base_address_and_constant_offset(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type);
+instruction_t* emit_store_base_address_and_constant_offset(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type, u_int32_t line_number);
 
 /**
  * Emit a rip-relative store instruction. This maps to an addressing
  * mode of RIP_RELATIVE
  */
-instruction_t* emit_store_rip_relative(three_addr_var_t* instruction_pointer, three_addr_var_t* rip_relative_variable, three_addr_var_t* storee, generic_type_t* memory_write_type);
+instruction_t* emit_store_rip_relative(three_addr_var_t* instruction_pointer, three_addr_var_t* rip_relative_variable, three_addr_var_t* storee, generic_type_t* memory_write_type, u_int32_t line_number);
 
 /**
  * Emit a store with a base address and constant offset value. This specific
  * overload allows us to store a constant instead of a variable
  */
-instruction_t* emit_constant_store_base_address_and_constant_offset(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_const_t* storee, generic_type_t* memory_write_type);
+instruction_t* emit_constant_store_base_address_and_constant_offset(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_const_t* storee, generic_type_t* memory_write_type, u_int32_t line_number);
 
 /**
  * Emit a load instruction that only uses the base address
  */
-instruction_t* emit_load_base_address_only(three_addr_var_t* assignee, three_addr_var_t* base_address, generic_type_t* memory_read_type);
+instruction_t* emit_load_base_address_only(three_addr_var_t* assignee, three_addr_var_t* base_address, generic_type_t* memory_read_type, u_int32_t line_number);
 
 /**
  * Emit a load instruction with a base address and index value(variable offset). This maps
  * to an addressing mode of REGISTERS_ONLY
  */
-instruction_t* emit_load_base_address_and_index(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_var_t* index, generic_type_t* memory_read_type);
+instruction_t* emit_load_base_address_and_index(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_var_t* index, generic_type_t* memory_read_type, u_int32_t line_number);
 
 /**
  * Emit a load with a base address and a constant offset. This maps to an
  * addressing mode of OFFSET_ONLY
  */
-instruction_t* emit_load_base_address_and_constant_offset(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* constant_offset, generic_type_t* memory_read_type);
+instruction_t* emit_load_base_address_and_constant_offset(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* constant_offset, generic_type_t* memory_read_type, u_int32_t line_number);
 
 /**
  * Emit a rip-relative load. This maps to an addressing mode of RIP_RELATIVE
  */
-instruction_t* emit_load_rip_relative(three_addr_var_t* assignee, three_addr_var_t* rip_relative_variable, three_addr_var_t* instruction_pointer, generic_type_t* memory_read_type);
+instruction_t* emit_load_rip_relative(three_addr_var_t* assignee, three_addr_var_t* rip_relative_variable, three_addr_var_t* instruction_pointer, generic_type_t* memory_read_type, u_int32_t line_number);
 
 /**
  * Emit a statement that is assigning a const to a var i.e. var1 <- const
  */
-instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee, three_addr_const_t* constant);
+instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee, three_addr_const_t* constant, u_int32_t line_number);
 
 /**
  * Emit a load statement directly. This should only be used during spilling in the register allocator
  */
-instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_t* stack_pointer, type_symtab_t* symtab, u_int64_t offset);
+instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_t* stack_pointer, type_symtab_t* symtab, u_int64_t offset, u_int32_t line_number);
 
 /**
  * Emit a store statement directly. This should only be used during spilling in the register allocator
  */
-instruction_t* emit_store_instruction(three_addr_var_t* source, three_addr_var_t* stack_pointer, type_symtab_t* symtab, u_int64_t offset);
+instruction_t* emit_store_instruction(three_addr_var_t* source, three_addr_var_t* stack_pointer, type_symtab_t* symtab, u_int64_t offset, u_int32_t line_number);
 
 /**
  * Emit a return statement. The return statement can optionally have a node that we're returning.
  * Returnee may or may not be null
  */
-instruction_t* emit_ret_instruction(three_addr_var_t* returnee);
+instruction_t* emit_ret_instruction(three_addr_var_t* returnee, u_int32_t line_number);
 
 /**
  * Emit a raise statement. Unlike a ret statement we are guaranteed to have an op1 here
  * because we must always be raising an error
  */
-instruction_t* emit_raise_instruction(three_addr_var_t* raised_error);
+instruction_t* emit_raise_instruction(three_addr_var_t* raised_error, u_int32_t line_number);
 
 /**
  * Emit an increment instruction
  */
-instruction_t* emit_inc_instruction(three_addr_var_t* incrementee);
+instruction_t* emit_inc_instruction(three_addr_var_t* incrementee, u_int32_t line_number);
 
 /**
  * Emit a decrement instruction
  */
-instruction_t* emit_dec_instruction(three_addr_var_t* decrementee);
+instruction_t* emit_dec_instruction(three_addr_var_t* decrementee, u_int32_t line_number);
 
 /**
  * Emit a negation(negX) statement
  */
-instruction_t* emit_neg_instruction(three_addr_var_t* negatee);
+instruction_t* emit_neg_instruction(three_addr_var_t* negatee, u_int32_t line_number);
 
 /**
  * Emit a bitwise not instruction
  */
-instruction_t* emit_not_instruction(three_addr_var_t* var);
-
+instruction_t* emit_not_instruction(three_addr_var_t* var, u_int32_t line_number);
 
 /**
  * Emit a left shift statement
  */
-instruction_t* emit_left_shift_stmt_instruction(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount_var, three_addr_const_t* shift_amount_const);
+instruction_t* emit_left_shift_stmt_instruction(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount_var, three_addr_const_t* shift_amount_const, u_int32_t line_number);
 
 /**
  * Emit a right shift statement
  */
-instruction_t* emit_right_shift_instruction(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount, three_addr_const_t* shift_amount_const);
+instruction_t* emit_right_shift_instruction(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount, three_addr_const_t* shift_amount_const, u_int32_t line_number);
 
 /**
  * Emit a logical not instruction
  */
-instruction_t* emit_logical_not_instruction(three_addr_var_t* assignee, three_addr_var_t* op1);
+instruction_t* emit_logical_not_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, u_int32_t line_number);
 
 /**
  * Emit a jump statement. The jump statement can take on several different types of jump
@@ -877,7 +884,7 @@ instruction_t* emit_stack_deallocation_ir_statement(three_addr_const_t* bytes_to
 /**
  * Emit a branch statement
  */
-instruction_t* emit_branch_statement(void* if_block, void* else_block, three_addr_var_t* relies_on, branch_type_t branch_type);
+instruction_t* emit_branch_statement(void* if_block, void* else_block, three_addr_var_t* relies_on, branch_type_t branch_type, u_int32_t line_number);
 
 /**
  * Emit an indirect jump statement. The jump statement can take on several different types of jump
@@ -887,62 +894,57 @@ instruction_t* emit_indirect_jump_statement(void* jump_table, three_addr_var_t* 
 /**
  * Emit a function call statement. Once emitted, no paramters will have been added in
  */
-instruction_t* emit_function_call_instruction(symtab_function_record_t* func_record, three_addr_var_t* assigned_to);
+instruction_t* emit_function_call_instruction(symtab_function_record_t* func_record, three_addr_var_t* assigned_to, u_int32_t line_number);
 
 /**
  * Emit an indirect function call statement. Once emitted, no paramters will have been added in
  */
-instruction_t* emit_indirect_function_call_instruction(three_addr_var_t* function_pointer, three_addr_var_t* assigned_to);
+instruction_t* emit_indirect_function_call_instruction(three_addr_var_t* function_pointer, three_addr_var_t* assigned_to, u_int32_t line_number);
 
 /**
  * Emit an assembly inline statement. Once emitted, these statements are final and are ignored
  * by any future optimizations
  */
-instruction_t* emit_asm_inline_instruction(generic_ast_node_t* asm_inline_node);
-
-/**
- * Emit a phi function statement. Once emitted, these statements are for the exclusive use of the compiler
- */
-instruction_t* emit_phi_function(symtab_variable_record_t* variable);
+instruction_t* emit_asm_inline_instruction(generic_ast_node_t* asm_inline_node, u_int32_t line_number);
 
 /**
  * Emit a "test if not 0 three address code statement"
  */
-instruction_t* emit_test_if_not_zero_statement(three_addr_var_t* destination_variable, three_addr_var_t* being_tested);
+instruction_t* emit_test_if_not_zero_statement(three_addr_var_t* destination_variable, three_addr_var_t* being_tested, u_int32_t line_number);
 
 /**
  * Emit a "test if not 0 three address code statement"
  */
-instruction_t* emit_test_if_not_zero_for_const_statement(three_addr_var_t* destination_variable, three_addr_const_t* being_tested);
+instruction_t* emit_test_if_not_zero_for_const_statement(three_addr_var_t* destination_variable, three_addr_const_t* being_tested, u_int32_t line_number);
 
 /**
  * Emit an idle statement
  */
-instruction_t* emit_idle_instruction();
+instruction_t* emit_idle_instruction(u_int32_t line_number);
 
 /**
  * Emit a fully formed global variable OIR address calculation with offset lea
  *
  * This will always produce instructions like: t8 <- global_var(%rip)
  */
-instruction_t* emit_global_variable_address_calculation_with_offset_oir(three_addr_var_t* assignee, three_addr_var_t* global_variable, three_addr_var_t* instruction_pointer, three_addr_const_t* constant);
+instruction_t* emit_global_variable_address_calculation_with_offset_oir(three_addr_var_t* assignee, three_addr_var_t* global_variable, three_addr_var_t* instruction_pointer, three_addr_const_t* constant, u_int32_t line_number);
 
 /**
  * Emit a fully formed global variable OIR address calculation lea
  *
  * This will always produce instructions like: t8 <- global_var(%rip)
  */
-instruction_t* emit_global_variable_address_calculation_oir(three_addr_var_t* assignee, three_addr_var_t* global_variable, three_addr_var_t* instruction_pointer);
+instruction_t* emit_global_variable_address_calculation_oir(three_addr_var_t* assignee, three_addr_var_t* global_variable, three_addr_var_t* instruction_pointer, u_int32_t line_number);
 
 /**
  * Emit a fully formed global variable x86 address calculation lea
  */
-instruction_t* emit_global_variable_address_calculation_x86(three_addr_var_t* global_variable, three_addr_var_t* instruction_pointer, generic_type_t* u64);
+instruction_t* emit_global_variable_address_calculation_x86(three_addr_var_t* global_variable, three_addr_var_t* instruction_pointer, generic_type_t* u64, u_int32_t line_number);
 
 /**
  * Emit a starting offset calculation for the given elaborative param
  */
-instruction_t* emit_elaborative_param_starting_offset_calculation(three_addr_var_t* result, three_addr_var_t* elaborative_param);
+instruction_t* emit_elaborative_param_starting_offset_calculation(three_addr_var_t* result, three_addr_var_t* elaborative_param, u_int32_t line_number);
 
 /**
  * Are two variables equal? A helper method for searching

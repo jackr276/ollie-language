@@ -15,11 +15,12 @@ pub fn pointer_deref(x:i32*) -> i32 {
 
 pub fn main() -> i32 {
 	//Declare it
-	declare c:i32*;
+	declare c:mut i32*;
 
 	//This should *fail*. We're trying to use
 	//C without having ever initialized it
 	*c = 3;
 	
+	OUNIT: [fail_to_compile]
 	ret 0;
 }

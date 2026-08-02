@@ -1830,8 +1830,8 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
  * have that logic already in for when the branch statements are selected
  */
 static inline instruction_t* emit_test_not_zero_instruction(three_addr_var_t* destination_variable, three_addr_var_t* tested_variable, ollie_token_t* operator){
-	//Emit the instruction
-	instruction_t* test_if_not_zero = emit_test_if_not_zero_statement(destination_variable, tested_variable);
+	//Emit the instruction - we can just use a line number of 0 as it doesn't matter here
+	instruction_t* test_if_not_zero = emit_test_if_not_zero_statement(destination_variable, tested_variable, 0);
 
 	//If this is a floating point variable, update the pass-by-reference
 	//operator
@@ -2521,7 +2521,7 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 			case THREE_ADDR_CODE_ASSN_CONST_STMT:
 				//Emit the constant assignment and add it into the top level if block
 				if_assignee = emit_temp_var(if_assignment_statement->operands.oir.assignee->type);
-				instruction_t* const_assignment = emit_assignment_with_const_instruction(if_assignee, if_assignment_statement->operands.oir.constant_operand);
+				instruction_t* const_assignment = emit_assignment_with_const_instruction(if_assignee, if_assignment_statement->operands.oir.constant_operand, if_assignment_statement->line_number);
 
 				add_statement(top_level_if_block, const_assignment);
 				break;
@@ -2582,10 +2582,10 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		 */
 		conditional_movement_type_t movement_type = convert_branch_type_to_conditional_movement_type(branch_statement->branch_type);
 		if(else_assignee != NULL){
-			instruction_t* conditional_assignment = emit_conditional_movement_statement(branching_assignment_variable, if_assignee, else_assignee, branch_statement->relies_on, movement_type);
+			instruction_t* conditional_assignment = emit_conditional_movement_statement(branching_assignment_variable, if_assignee, else_assignee, branch_statement->relies_on, movement_type, branch_statement->line_number);
 			add_statement(top_level_if_block, conditional_assignment);
 		} else {
-			instruction_t* conditional_assignment = emit_conditional_movement_with_const_statement(branching_assignment_variable, if_assignee, else_assignee_const, branch_statement->relies_on, movement_type);
+			instruction_t* conditional_assignment = emit_conditional_movement_with_const_statement(branching_assignment_variable, if_assignee, else_assignee_const, branch_statement->relies_on, movement_type, branch_statement->line_number);
 			add_statement(top_level_if_block, conditional_assignment);
 		}
 

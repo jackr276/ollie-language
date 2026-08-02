@@ -141,6 +141,8 @@ typedef enum {
 	THREE_ADDR_CODE_MEMORY_COPY_STATEMENT,
 	//Specialized offset statement for elaborative params
 	THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET,
+	//Specialized synthetic initialization for memory regions
+	THREE_ADDR_CODE_MEMORY_REGION_INITIALIZATION
 } instruction_stmt_type_t;
 
 #endif /* OLLIE_INTERMEDIARY_REPRESENTATION_H */

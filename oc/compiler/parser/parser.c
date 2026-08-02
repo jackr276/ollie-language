@@ -669,9 +669,8 @@ static inline u_int8_t do_duplicate_functions_exist(char* name){
 	//Fail out here
 	if(found != NULL){
 		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
+		print_function_name_to_buffer(info, found);
 		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		//Also print out the function declaration
-		print_function_name(found);
 		num_errors++;
 
 		//Return TRUE here, they do exist
@@ -697,12 +696,8 @@ static inline u_int8_t do_duplicate_variables_exist(char* name){
 	//Means that we have a duplicate
 	if(found != NULL){
 		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_variable_name(found);
+		print_variable_name_to_buffer(info, found);
 		num_errors++;
-
-		//Give back true, they do exist
 		return TRUE;
 	}
 
@@ -725,11 +720,8 @@ static inline u_int8_t do_duplicate_member_variables_exist(char* name, generic_t
 	//Means that we have a duplicate
 	if(found != NULL){
 		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name, current_type->type_name.string);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		print_variable_name(found);
+		print_variable_name_to_buffer(info, found);
 		num_errors++;
-
-		//Give back true, they do exist
 		return TRUE;
 	}
 
@@ -1108,11 +1100,8 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 			//If this is the case, the return type had better be void
 			if(current_function_signature->returns_void == FALSE){
 				sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name.string, current_function_signature->return_type->type_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				//Also print the function name
-				print_function_name(current_function);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+				print_function_name_to_buffer(info, current_function);
+				return print_and_return_error(info, parser_line_num);
 			}
 
 			//The handle statement rule is going to need to reprocess this so we will push it back
@@ -1129,12 +1118,10 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 			//If we get here, but we do expect a void return, then this is an issue
 			if(current_function_signature->returns_void == TRUE){
 				sprintf(info, "Function \"%s\" expects a return type of \"void\". Use \"ret;\" for return statements in this function", current_function->func_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				//Also print the function name
-				print_function_name(current_function);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+				print_function_name_to_buffer(info, current_function);
+				return print_and_return_error(info, parser_line_num);
 			}
+
 			//Put it back if no
 			push_back_token(token_stream, &parser_line_num);
 			
@@ -1161,11 +1148,8 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 	if(final_type == NULL){
 		sprintf(info, "Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"", current_function->func_name.string, current_function_signature->return_type->type_name.string,
 		  		expr_node->inferred_type->type_name.string);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		//Also print out the function
-		print_function_name(current_function);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		print_function_name_to_buffer(info, current_function);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Otherwise it worked, so we'll add it as a child of the other node
@@ -1220,10 +1204,8 @@ static generic_ast_node_t* raise_statement_in_handle_clause(ollie_token_stream_t
 	 */
 	if(function_type->raises_errors == FALSE){
 		sprintf(info, "Function \"%s\" does not raise errors. Redeclare using \"fn!\" in order to make the function errorable. Currently declared as:", current_function->func_name.string);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		print_function_name(current_function);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		print_function_name_to_buffer(info, current_function);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	/**
@@ -2659,17 +2641,6 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 				if(found_var != NULL){
 					//Most common case - not an enum
 					if(found_var->membership != ENUM_MEMBER){
-						/**
-						 * If this is the right hand side and our variable is not initialized,
-						 * this is invalid as we are trying to use before initialization
-						 */
-						if(side == SIDE_TYPE_RIGHT 
-							&& is_variable_data_segment_variable(found_var) == FALSE
-							&& found_var->initialized == FALSE){
-							sprintf(info, "Attempt to use variable %s before initialization", found_var->var_name.string);
-							return print_and_return_error(info, parser_line_num);
-						}
-						
 						//We know that this is valid, so we can allocate the identifier
 						generic_ast_node_t* ident_node = ast_node_alloc(AST_NODE_TYPE_IDENTIFIER, side);
 
@@ -2977,11 +2948,6 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//If we have a variable, then this is definitely a mutation
-		if(left_hand_expression_tree->variable != NULL){
-			left_hand_expression_tree->variable->mutated = TRUE;
-		}
-
 	/**
 	 * If we are ending in an array accessor, we would see a tree structure like:
 	 * 			<postifx-node>
@@ -3001,11 +2967,6 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 				sprintf(info, "Attempt to mutate an immutable memory reference type \"%s\"", first_child->inferred_type->type_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
-		}
-
-		//If we have a variable, then this is definitely a mutation
-		if(left_hand_expression_tree->variable != NULL){
-			left_hand_expression_tree->variable->mutated = TRUE;
 		}
 
 	/**
@@ -3031,28 +2992,13 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 			}
 		}
 
-		//If we have a variable, then this is definitely a mutation
-		if(left_hand_expression_tree->variable != NULL){
-			left_hand_expression_tree->variable->mutated = TRUE;
-		}
-
 	} else {
 		//This is the case where we have a plain variable assignment
 		if(can_variable_be_assigned_to(assignee) == FALSE){
 			sprintf(info, "Variable \"%s\" is not mutable and cannot be assigned to outisde of an initial \"let\" statement. Use the \"mut\" keyword if you wish to mutate. First defined here:", assignee->var_name.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			print_variable_name(assignee);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+			print_variable_name_to_buffer(info, assignee);
+			return print_and_return_error(info, parser_line_num);
 		}
-
-		/**
-		 * Since we are not doing any kind of memory access here, now we can go
-		 * through and update our mutability/initialization. This counts as mutation
-		 * and initialization
-		 */
-		assignee->initialized = TRUE;
-		assignee->mutated = TRUE;
 	}
 
 	//Just give this back as a flag that we're fine
@@ -3768,9 +3714,6 @@ static generic_ast_node_t* postoperation(generic_type_t* current_type, generic_a
 			sprintf(info, "Attempt to mutate immutable variable \"%s\"", parent_node->variable->var_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
-
-		//This was assigned to
-		parent_node->variable->mutated = TRUE;
 	}
 
 	//Otherwise let's allocate this
@@ -4262,9 +4205,6 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 					sprintf(info, "Attempt to mutate immutable variable \"%s\"", cast_expr->variable->var_name.string);
 					return print_and_return_error(info, parser_line_num);
 				}
-
-				//This is a mutation
-				cast_expr->variable->mutated = TRUE;
 			}
 
 			//Force this to be an rvalue for the cfg constructor
@@ -7346,6 +7286,9 @@ static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_strea
 	lexitem_t lookahead;
 	generic_type_t* member_type = NULL;
 
+	//Cache this for later printing
+	u_int32_t token_index_of_declaration = token_stream->token_pointer;
+
 	//First thing that we need to see is an identifier
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
@@ -7367,8 +7310,8 @@ static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_strea
 	//Is this a duplicate? If so, we fail out
 	if(duplicate != NULL){
 		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name.string, struct_type->type_name.string);
+		print_variable_name_to_buffer(info, duplicate);
 		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		print_variable_name(duplicate);
 		num_errors++;
 		return NULL;
 	}
@@ -7443,9 +7386,7 @@ static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_strea
 	}
 	
 	//We'll first create the symtab record. NULL for no specific function
-	symtab_variable_record_t* member_record = create_variable_record(&name, NULL);
-	//Store the line number for error printing
-	member_record->line_number = parser_line_num;
+	symtab_variable_record_t* member_record = create_variable_record(&name, NULL, current_dependency_node, parser_line_num, token_index_of_declaration);
 	//Store what the type is
 	member_record->type_defined_as = member_type;
 
@@ -7989,6 +7930,9 @@ static u_int8_t struct_definer(ollie_token_stream_t* token_stream){
  * BNF Rule: <union-member> ::= <identifier>:<type-specifier> | define <anonymous-type-declaration>;
  */
 static symtab_variable_record_t* union_member(ollie_token_stream_t* token_stream, generic_type_t* union_type){
+	//Store the index where this was declared
+	u_int32_t token_index_of_declaration = token_stream->token_pointer;
+
 	//Our lookahead token
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
@@ -8092,7 +8036,7 @@ static symtab_variable_record_t* union_member(ollie_token_stream_t* token_stream
 	}
 
 	//Store the name and type
-	symtab_variable_record_t* union_member = create_variable_record(&name, NULL);
+	symtab_variable_record_t* union_member = create_variable_record(&name, NULL, current_dependency_node, parser_line_num, token_index_of_declaration);
 	union_member->type_defined_as = type;
 
 	//Give back our created member
@@ -8379,6 +8323,9 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 
 	//Now we will enter a do-while loop where we can continue to identifiers for our enums
 	do {
+		//Save this for later printing
+		u_int32_t token_index_of_declaration = token_stream->token_pointer;
+
 		//We need to see a valid identifier
 		lookahead = get_next_token(token_stream, &parser_line_num);
 
@@ -8409,13 +8356,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 
 		//If we make it here, then all of our checks passed and we don't have a duplicate name. We're now good
 		//to create the record and assign it a type
-		symtab_variable_record_t* member_record = create_variable_record(&(lookahead.lexeme), NULL);
-
-		//Store the line number
-		member_record->line_number = parser_line_num;
-
-		//By virtue of being an enum, this has been initialized 
-		member_record->initialized = TRUE;
+		symtab_variable_record_t* member_record = create_variable_record(&(lookahead.lexeme), NULL, current_dependency_node, parser_line_num, token_index_of_declaration);
 
 		//Now we can insert this into the symtab
 		insert_variable(variable_symtab, member_record);
@@ -9676,7 +9617,6 @@ static inline generic_ast_node_t* expression_statement_no_ending_semicolon(ollie
 		//Go based on what we see up ahead of us
 		switch (lookahead.tok) {
 			case DECLARE:
-				//IMPORTANT - declares can/will be null if they're declaring a primitive type
 				current_expression_node = declare_statement(token_stream, FALSE, VISIBILITY_TYPE_PRIVATE);
 				break;
 
@@ -9692,16 +9632,13 @@ static inline generic_ast_node_t* expression_statement_no_ending_semicolon(ollie
 		}
 
 		//If this fails, the whole thing is over
-		if(current_expression_node != NULL
-			&& current_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		if(current_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			//It's already an error, so just send it back up
 			return current_expression_node;
 		}
 
-		//So long as we have something to add we'll add it
-		if(current_expression_node != NULL){
-			add_child_node(top_level_node, current_expression_node);
-		}
+		//Add this as a child to the top level node
+		add_child_node(top_level_node, current_expression_node);
 
 		//Refresh our token. If it's a comma - great. If not, we leave
 		lookahead = get_next_token(token_stream, &parser_line_num);
@@ -9756,7 +9693,6 @@ static inline generic_ast_node_t* expression_statement(ollie_token_stream_t* tok
 		//Go based on what we see up ahead of us
 		switch (lookahead.tok) {
 			case DECLARE:
-				//IMPORTANT - declares can/will be null if they're declaring a primitive type
 				current_expression_node = declare_statement(token_stream, FALSE, VISIBILITY_TYPE_PRIVATE);
 				break;
 
@@ -9772,16 +9708,13 @@ static inline generic_ast_node_t* expression_statement(ollie_token_stream_t* tok
 		}
 
 		//If this fails, the whole thing is over
-		if(current_expression_node != NULL
-			&& current_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		if(current_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			//It's already an error, so just send it back up
 			return current_expression_node;
 		}
 
-		//So long as we have something to add we'll add it
-		if(current_expression_node != NULL){
-			add_child_node(top_level_node, current_expression_node);
-		}
+		//Add the child node in
+		add_child_node(top_level_node, current_expression_node);
 
 		//Refresh our token. If it's a comma - great. If not, we leave
 		lookahead = get_next_token(token_stream, &parser_line_num);
@@ -10420,11 +10353,8 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 		//If this is the case, the return type had better be void
 		if(current_function_signature->returns_void == FALSE){
 			sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name.string, current_function_signature->return_type->type_name.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			//Also print the function name
-			print_function_name(current_function);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+			print_function_name_to_buffer(info, current_function);
+			return print_and_return_error(info, parser_line_num);
 		}
 
 		//If we get out then we're fine
@@ -10434,11 +10364,8 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 		//If we get here, but we do expect a void return, then this is an issue
 		if(current_function_signature->returns_void == TRUE){
 			sprintf(info, "Function \"%s\" expects a return type of \"void\". Use \"ret;\" for return statements in this function", current_function->func_name.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			//Also print the function name
-			print_function_name(current_function);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+			print_function_name_to_buffer(info, current_function);
+			return print_and_return_error(info, parser_line_num);
 		}
 		//Put it back if no
 		push_back_token(token_stream, &parser_line_num);
@@ -10469,12 +10396,8 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 		  		current_function_signature->return_type->type_name.string,
 		  		(expr_node->inferred_type->mutability == MUTABLE ? "mut " : ""),
 		  		expr_node->inferred_type->type_name.string);
-
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		//Also print out the function
-		print_function_name(current_function);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		print_function_name_to_buffer(info, current_function);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	/**
@@ -10549,10 +10472,8 @@ static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream){
 	 */
 	if(function_type->raises_errors == FALSE){
 		sprintf(info, "Function \"%s\" does not raise errors. Redeclare using \"fn!\" in order to make the function errorable. Currently declared as:", current_function->func_name.string);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		print_function_name(current_function);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		print_function_name_to_buffer(info, current_function);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	/**
@@ -10877,7 +10798,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	}
 
 	//We will declare a new lexical scope here
-	initialize_variable_scope(variable_symtab);
+	initialize_variable_scope(variable_symtab, current_function);
 	initialize_type_scope(type_symtab);
 
 	//Push to stack for later matching
@@ -11320,7 +11241,7 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 	 * Important note: The parenthesized area of a for statement represents a new lexical scope
 	 * for variables. As such, we will initialize a new variable scope when we get here
 	 */
-	initialize_variable_scope(variable_symtab);
+	initialize_variable_scope(variable_symtab, current_function);
 	
 	//Let's see if we've got anything. Invoke the expression statement rule here
 	generic_ast_node_t* statement_chain = expression_statement(token_stream);
@@ -11467,7 +11388,7 @@ static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream
 
 	//Variable scope is configurable based on a function param
 	if(new_variable_scope_required == TRUE){
-		initialize_variable_scope(variable_symtab);
+		initialize_variable_scope(variable_symtab, current_function);
 	}
 
 	//Now we can keep going until we see a closing curly
@@ -12133,18 +12054,24 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
  * be added as the child of the given parent node. A declare statement also performs all
  * needed type/repetition checks. Like all rules, this function returns a reference to the root
  * node that it's created.
+ *
+ * Declaration nodes are what we will use in the CFG constructor to stack allocate things
+ * if need be. It is not possible for us to know whether a declaration is a stack variable
+ * or not until we've parsed the entire CFG, so we'll need to hold off on stack region
+ * creation until then
  * 
  * NOTE: We have already seen and consume the "declare" keyword by the time that we get here
  *
  * BNF Rule: <declare-statement> ::= declare {<function_predeclaration> | {static}? <identifier> : <type-specifier>}
  */
 static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream, u_int8_t is_global, visibilty_type_t visibility){
-	//Freeze the current line number
-	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 	//Is it static - this is almost always false
 	u_int8_t is_static = FALSE;
+
+	//Save the token pointer for our index of declaration(-1 because we've already seen the declare)
+	u_int32_t token_index_of_declaration = token_stream->token_pointer - 1;
 
 	//Let's see if we have a storage class
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -12218,12 +12145,8 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 	//Fail out here
 	if(found_var != NULL){
 		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_variable_name(found_var);
-		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		print_variable_name_to_buffer(info, found_var);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Now we need to see a colon
@@ -12262,20 +12185,18 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 	if(is_static == FALSE){
 		//Go based on it's global status
 		if(is_global == FALSE){
-			declared_var = create_variable_record(&name, current_function);
+			declared_var = create_variable_record(&name, current_function, current_dependency_node, parser_line_num, token_index_of_declaration);
 		} else {
-			declared_var = create_global_variable_record(&name, visibility);
+			declared_var = create_global_variable_record(&name, current_dependency_node, parser_line_num, token_index_of_declaration, visibility);
 		}
 	} else {
-		declared_var = create_static_variable_record(&name);
+		declared_var = create_static_variable_record(&name, current_dependency_node, parser_line_num, token_index_of_declaration);
 	}
 
 	//Store the type--make sure that we strip any aliasing off of it first
 	declared_var->type_defined_as = dealias_type(type_spec);
-	//It was declared
-	declared_var->declare_or_let = 0;
 	//The line_number
-	declared_var->line_number = current_line;
+	declared_var->line_number = parser_line_num;
 	//Now that we're all good, we can add it into the symbol table
 	insert_variable(variable_symtab, declared_var);
 
@@ -12302,22 +12223,17 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 
 			//Fall through
 		case TYPE_CLASS_STRUCT:
-			//Actually create the node now
 			declaration_node = ast_node_alloc(AST_NODE_TYPE_DECL_STMT, SIDE_TYPE_LEFT);
-
-			//Also store this record with the root node
 			declaration_node->variable = declared_var;
-			//Store the type as well
 			declaration_node->inferred_type = declared_var->type_defined_as;
-			//Store the line number
-			declaration_node->line_number = current_line;
-
-			//Since this is a memory region, it counts as being initialized by default
-			declared_var->initialized = TRUE;
+			declaration_node->line_number = parser_line_num;
 
 			break;
 
-		//Otherwise just leave
+		/**
+		 * We can't possible know whether or not these variables will require a stack allocation, 
+		 * so we'll make a node now and sort through that later in the CFG
+		 */
 		default:
 			/**
 			 * Special warning here - if the user is declaring a variable that is immutable
@@ -12330,31 +12246,18 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 								declared_var->type_defined_as->type_name.string,
 								declared_var->var_name.string);
 				print_parse_message(MESSAGE_TYPE_WARNING, info, parser_line_num);
+				num_warnings++;
 			}
 
-			//If this is a global variable, then we also must ensure that a declaration exists
-			if(is_variable_data_segment_variable(declared_var) == TRUE){
-				//Actually create the node now
-				declaration_node = ast_node_alloc(AST_NODE_TYPE_DECL_STMT, SIDE_TYPE_LEFT);
-
-				//Also store this record with the root node
-				declaration_node->variable = declared_var;
-				//Store the type as well
-				declaration_node->inferred_type = declared_var->type_defined_as;
-				//Store the line number
-				declaration_node->line_number = current_line;
-			}
-
-			//Since this is not a memory region, is does not count as being initialized
-			declared_var->initialized = FALSE;
+			declaration_node = ast_node_alloc(AST_NODE_TYPE_DECL_STMT, SIDE_TYPE_LEFT);
+			declaration_node->variable = declared_var;
+			declaration_node->inferred_type = declared_var->type_defined_as;
+			declaration_node->line_number = parser_line_num;
 
 			break;
 	}
 
-	/**
-	 * Return this. It will either be NULL or a generic node based on whether or not
-	 * a stack/global variable allocation was required
-	 */
+	//All declarations return a node, but most of them won't ever show up in the CFG
 	return declaration_node;
 }
 
@@ -12713,6 +12616,9 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	//What is our variable membership? By default we use the generic
 	variable_membership_t membership = NO_MEMBERSHIP;
 
+	//Extract the token pointer for our index of declaration(-1 because we've already consume let)
+	u_int32_t token_index_of_declaration = token_stream->token_pointer - 1;
+
 	//Let's first declare the root node
 	generic_ast_node_t* let_stmt_node = ast_node_alloc(AST_NODE_TYPE_LET_STMT, SIDE_TYPE_LEFT);
 
@@ -12772,11 +12678,8 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	//Fail out here
 	if(found_var != NULL){
 		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_variable_name(found_var); num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		print_variable_name_to_buffer(info, found_var);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Now we need to see a colon
@@ -12872,20 +12775,16 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	if(is_static == FALSE){
 		//Go based on it's global status
 		if(is_global == FALSE){
-			declared_var = create_variable_record(&name, current_function);
+			declared_var = create_variable_record(&name, current_function, current_dependency_node, parser_line_num, token_index_of_declaration);
 		} else {
-			declared_var = create_global_variable_record(&name, visibility);
+			declared_var = create_global_variable_record(&name, current_dependency_node, parser_line_num, token_index_of_declaration, visibility);
 		}
 	} else {
-		declared_var = create_static_variable_record(&name);
+		declared_var = create_static_variable_record(&name, current_dependency_node, parser_line_num, token_index_of_declaration);
 	}
 
 	//Store the type
 	declared_var->type_defined_as = type_spec;
-	//It was initialized
-	declared_var->initialized = TRUE;
-	//It was "letted" 
-	declared_var->declare_or_let = 1;
 	//Save the line num
 	declared_var->line_number = current_line;
 
@@ -13258,6 +13157,8 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 	lexitem_t lookahead;
 	//Did we see the params keyword or not
 	u_int8_t params_seen = FALSE;
+	//Save where we have the token pointer index of declaration
+	u_int32_t token_pointer_index_of_declaration = token_stream->token_pointer;
 
 	//Now we can optionally see the constant keyword here
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -13278,11 +13179,9 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 	//Fail out here
 	if(found_var != NULL){
 		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
+		print_variable_name_to_buffer(info, found_var);
 		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_variable_name(found_var);
 		num_errors++;
-		//Return NULL to signify failure
 		return NULL;
 	}
 
@@ -13343,7 +13242,7 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 	 * declaration. It is now incumbent on us to store it in the variable 
 	 * symbol table
 	 */
-	symtab_variable_record_t* param_record = create_variable_record(&name, current_function);
+	symtab_variable_record_t* param_record = create_variable_record(&name, current_function, current_dependency_node, parser_line_num, token_pointer_index_of_declaration);
 
 	/**
 	 * If we've seen the params keyword now is the time
@@ -13361,10 +13260,6 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 
 	//It is a function parameter
 	param_record->membership = FUNCTION_PARAMETER;
-	//We assume that it was initialized
-	param_record->initialized = TRUE;
-	//Add the line number
-	param_record->line_number = parser_line_num;
 	//Store the type as well, very important
 	param_record->type_defined_as = type;
 
@@ -13840,6 +13735,8 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	u_int8_t is_inlined = FALSE;
 	//Does this funtion raise errors? We know based on the ! after the fn keyword
 	u_int8_t raises_errors = FALSE;
+	//Save this to add into the record later
+	u_int32_t token_index_of_definition = token_stream->token_pointer;
 
 	//Lookahead token
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
@@ -13917,10 +13814,9 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 		   					found_function->func_name.string,
 		   					generate_fully_qualified_namespace_name(function_symtab->current).string);
 		}
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		print_function_name(found_function);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+
+		print_function_name_to_buffer(info, found_function);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Check for duplicated functions
@@ -13945,7 +13841,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	}
 
 	//Now that we've survived up to here, we can make the actual record
-	symtab_function_record_t* function_record = create_function_record(&function_name, current_dependency_node, visibility, is_inlined, raises_errors, parser_line_num);
+	symtab_function_record_t* function_record = create_function_record(&function_name, current_dependency_node, visibility, is_inlined, raises_errors, parser_line_num, token_index_of_definition);
 
 	//Now we need to see an lparen to begin the parameters
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -14133,6 +14029,9 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	//Does this function maintain a specific error list with the "raise" keyword
 	u_int8_t specific_error_list = FALSE;
 
+	//Cache the token index of definition that we're dealing with
+	u_int32_t token_index_of_definition = token_stream->token_pointer;
+
 	//Grab the token
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
@@ -14252,11 +14151,8 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		   					function_record->func_name.string,
 		   					generate_fully_qualified_namespace_name(function_symtab->current).string);
 		}
-		print_parse_message(MESSAGE_TYPE_ERROR, info, current_line);
-		print_function_name(function_record);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		print_function_name_to_buffer(info, function_record);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//If the function record is NULL, that means we're defining completely fresh
@@ -14274,7 +14170,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-		function_record = create_function_record(&function_name, current_dependency_node, visibility, is_inlined, raises_errors, parser_line_num);
+		function_record = create_function_record(&function_name, current_dependency_node, visibility, is_inlined, raises_errors, parser_line_num, token_index_of_definition);
 
 		//We'll put the function into the symbol table
 		//since we now know that everything worked
@@ -14343,7 +14239,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 * so that we include the function parameters in it. We need to remember to close
 	 * this once we leave
 	 */
-	initialize_variable_scope(variable_symtab);
+	initialize_variable_scope(variable_symtab, function_record);
 
 	/**
 	 * IMPORTANT: we need to hang onto this overarching function scope
@@ -14395,10 +14291,8 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	if(defining_predeclared_function == TRUE){
 		if(strcmp(type->type_name.string, function_signature->return_type->type_name.string) != 0){
 			sprintf(info, "Function \"%s\" was predeclared with a return type of \"%s\", this may not be altered. First defined here:", function_name.string, function_signature->return_type->type_name.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			print_function_name(function_record);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+			print_function_name_to_buffer(info, function_record);
+			return print_and_return_error(info, parser_line_num);
 		}
 	}
 
@@ -15272,8 +15166,8 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	//For the type and variable symtabs, their scope needs to be initialized before
 	//anything else happens
 	
-	//Initialize the variable scope
-	initialize_variable_scope(variable_symtab);
+	//Initialize the variable scope. The function contained in is NULL for this one
+	initialize_variable_scope(variable_symtab, NULL);
 	//Global variable scope here
 	initialize_type_scope(type_symtab);
 	//Functions only have one scope, need no initialization
@@ -15338,11 +15232,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 		 * closure
 		 */
 		flag_functions_that_require_initial_alignment(function_symtab);
-
-		//Check for any unused functions
-		check_for_unused_functions(function_symtab, &num_warnings);
-		//Check for any bad variable declarations
-		check_for_var_errors(variable_symtab, &num_warnings);
 
 		/**
 		 * One final thing that we need to do. Functions inside of namespaces

@@ -28,7 +28,9 @@ pub fn postfix_in_use(arg:i32) -> i32{
 			x = 2;
 		}
 		// Empty default
-		default -> {}
+		default -> {
+			x = 4;
+		}
 	}
 
 	//Very basic initializer
@@ -52,8 +54,10 @@ pub fn main(arg:i32, argv:char**) -> i32{
 		case 7 -> {
 			x = 2;
 		}
-		// Empty default
-		default -> {}
+
+		default -> {
+			x = 5;
+		}
 	}
 
 	//Very basic initializer
@@ -63,5 +67,6 @@ pub fn main(arg:i32, argv:char**) -> i32{
 	tester:x++;
 
 	//So it isn't optimized away
+	OUNIT: [exit_status = 4]
 	ret tester:x;
 }

@@ -31,9 +31,9 @@ struct front_end_results_package_t{
 	//Grouping stack
 	lex_stack_t grouping_stack;
 	//Number of errors
-	u_int16_t num_errors;
+	u_int32_t num_errors;
 	//Number of warnings
-	u_int16_t num_warnings;
+	u_int32_t num_warnings;
 	//The number of lines processed
 	u_int32_t lines_processed;
 	//Did we find a main function

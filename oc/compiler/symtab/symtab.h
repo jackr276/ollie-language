@@ -134,6 +134,8 @@ struct symtab_function_record_t{
 	label_symtab_t* user_defined_labels;
 	//What dependency graph node does this function come from?
 	dependency_graph_node_t* dependency_graph_node;
+	//Maintain a reference to the entry block
+	void* function_entry_block;
 	//The line number
 	u_int32_t line_number;
 	//A bitmap for all assigned general purpose registers
@@ -144,6 +146,11 @@ struct symtab_function_record_t{
 	u_int32_t called_by_count;
 	//Unique identifier that is not a name
 	u_int32_t function_id;
+	/**
+	 * For enhanced error printing - store the index where this function was defined. This
+	 * will allow us to just print out the actual source code in the event of an error
+	 */
+	u_int32_t token_index_of_definition;
 	//Has it been defined?(done to allow for predeclaration)(0 = declared only, 1 = defined)
 	u_int8_t defined;
 	//Has it ever been called?
@@ -189,6 +196,8 @@ struct symtab_variable_record_t{
 	symtab_variable_record_t* alias;
 	//The associate region that this variable is stored in
 	stack_region_t* stack_region;
+	//What node was this variable defined in
+	dependency_graph_node_t* node_defined_in;
 	//What is the ID of the lexical scope that this variable is in?
 	u_int32_t lexical_scope_id;
 	//The line number
@@ -202,10 +211,13 @@ struct symtab_variable_record_t{
 	u_int32_t static_variable_mangler;
 	//What is the enum member value
 	int32_t enum_member_value;
-	//The current generation of the variable - FOR SSA in CFG
-	u_int16_t current_generation;
 	//Current generation level(for SSA)
-	u_int16_t counter;
+	int32_t ssa_counter;
+	/**
+	 * For enhanced error printing - store the index where this variable was defined. This
+	 * will allow us to just print out the actual source code in the event of an error
+	 */
+	u_int32_t token_index_of_definition;
 	//What is the struct offset for this variable
 	u_int16_t struct_offset;
 	/**
@@ -214,10 +226,6 @@ struct symtab_variable_record_t{
 	 * This is what really matters to us in the register allocator
 	 */
 	u_int16_t class_relative_function_parameter_order;
-	//Was it initialized?
-	u_int8_t initialized;
-	//Has this been mutated
-	u_int8_t mutated;
 	//What type structure or language concept does this variable belong to?
 	variable_membership_t membership;
 	//Where does this variable get stored? By default we assume register, so
@@ -225,8 +233,6 @@ struct symtab_variable_record_t{
 	u_int8_t stack_variable;
 	//Is this a function parameter that is passed via stack?
 	u_int8_t passed_by_stack;
-	//Was it declared or letted
-	u_int8_t declare_or_let; /* 0 = declare, 1 = let */
 	//What's the visibility of this(only used for global variables)
 	visibilty_type_t visibility;
 };
@@ -297,6 +303,8 @@ struct symtab_variable_sheaf_t{
 	symtab_variable_sheaf_t* previous_level;
 	//How many records(names) we can have
 	symtab_variable_record_t* records[VARIABLE_KEYSPACE];
+	//What function in this in(it can be NULL)
+	symtab_function_record_t* function_contained_in;
 	//The lexical scope id
 	u_int32_t lexical_scope_id;
 };
@@ -453,9 +461,10 @@ macro_symtab_t* macro_symtab_alloc();
 module_symtab_t* module_symtab_alloc();
 
 /**
- * Initialize the variable symbol table scope
+ * Initialize the variable symbol table scope. It is possible that the function
+ * we are contained in would be NULL for the global variable scope
  */
-void initialize_variable_scope(variable_symtab_t* symtab);
+void initialize_variable_scope(variable_symtab_t* symtab, symtab_function_record_t* function_contained_in);
 
 /**
  * Initialize the type symbol table scope
@@ -475,17 +484,17 @@ void finalize_type_scope(type_symtab_t* symtab);
 /**
  * Create a record for the symbol table
  */
-symtab_variable_record_t* create_variable_record(dynamic_string_t* name, symtab_function_record_t* function_declared_in);
+symtab_variable_record_t* create_variable_record(dynamic_string_t* name, symtab_function_record_t* function_declared_in, dependency_graph_node_t* node_defined_in, u_int32_t line_number, u_int32_t token_index);
 
 /**
  * Create a global variable record
  */
-symtab_variable_record_t* create_global_variable_record(dynamic_string_t* name, visibilty_type_t visibility);
+symtab_variable_record_t* create_global_variable_record(dynamic_string_t* name, dependency_graph_node_t* node_defined_in, u_int32_t line_number, u_int32_t token_index, visibilty_type_t visibility);
 
 /**
  * Create a static variable record. These variables are really global vars
  */
-symtab_variable_record_t* create_static_variable_record(dynamic_string_t* name);
+symtab_variable_record_t* create_static_variable_record(dynamic_string_t* name, dependency_graph_node_t* node_defined_in, u_int32_t line_number, u_int32_t token_index);
 
 /**
  * Create a ternary variable record
@@ -520,7 +529,7 @@ void remediate_return_by_copy_gp_parameter_order(symtab_function_record_t* recor
 /**
  * Make a function record
  */
-symtab_function_record_t* create_function_record(dynamic_string_t* name, dependency_graph_node_t* dependency_contained_in, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number);
+symtab_function_record_t* create_function_record(dynamic_string_t* name, dependency_graph_node_t* dependency_contained_in, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number, u_int32_t token_index);
 
 /**
  * Create a namespace record and add it into the symtab. This will create the new namespace as a
@@ -705,11 +714,6 @@ symtab_type_record_t* lookup_array_type(type_symtab_t* symtab, generic_type_t* m
 symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, mutability_type_t mutability);
 
 /**
- * Check for and print out any unused functions
- */
-void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnings);
-
-/**
  * Run through and check for any unused vars, bad mut keywords, etc
  */
 void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings);
@@ -736,9 +740,14 @@ void print_type_record(symtab_type_record_t* record);
 void print_function_name_to_buffer(char* buffer, symtab_function_record_t* record);
 
 /**
- * A helper method for function name printing
+ * A helper method for variable name printing
  */
-void print_function_name(symtab_function_record_t* record);
+void print_variable_name_to_buffer(char* buffer, symtab_variable_record_t* record);
+
+/**
+ * A helper method for type name printing
+ */
+void print_type_name(symtab_type_record_t* record);
 
 /**
  * Record that a given source function calls the target
@@ -758,16 +767,6 @@ dynamic_string_t generate_fully_qualified_namespace_name(function_namespace_t* n
  * a freshly allocated dynamic string
  */
 dynamic_string_t generate_fully_qualified_function_name(symtab_function_record_t* function);
-
-/**
- * A helper method for variable name printing
- */
-void print_variable_name(symtab_variable_record_t* record);
-
-/**
- * A helper method for type name printing
- */
-void print_type_name(symtab_type_record_t* record);
 
 /**
  * Print the call graph's adjacency matrix out for debugging

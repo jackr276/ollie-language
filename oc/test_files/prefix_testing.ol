@@ -29,7 +29,7 @@ fn deref_after_add(x:mut i32*) -> i32{
 
 
 pub fn main(arg:i32, argv:char**) -> i32{
-	declare x:mut i32;
+	let x:mut i32 = 0;
 
 	switch(arg){
 		case 2 -> {
@@ -56,5 +56,6 @@ pub fn main(arg:i32, argv:char**) -> i32{
 	++tester:x;
 
 	//So it isn't optimized away
+	OUNIT:[exit_status = 5]
 	ret tester:x;
 }

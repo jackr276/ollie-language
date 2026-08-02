@@ -1109,7 +1109,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					 */
 					case THREE_ADDR_CODE_ASSN_STMT:
 						//Let the helper emit the statement
-						address_instruction = emit_global_variable_address_calculation_oir(instruction->operands.oir.assignee, instruction->operands.oir.operand1, instruction_pointer_variable);
+						address_instruction = emit_global_variable_address_calculation_oir(instruction->operands.oir.assignee, instruction->operands.oir.operand1, instruction_pointer_variable, instruction->line_number);
 
 						//Insert this after the given instruction
 						insert_instruction_after_given(address_instruction, instruction);
@@ -1129,7 +1129,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					 */
 					case THREE_ADDR_CODE_BIN_OP_STMT:
 						//Let the helper emit the statement. We will use a temp destination for this
-						address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->operands.oir.operand1, instruction_pointer_variable);
+						address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->operands.oir.operand1, instruction_pointer_variable, instruction->line_number);
 
 						//This goes in before the given one
 						insert_instruction_before_given(address_instruction, instruction);
@@ -1151,7 +1151,8 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						address_instruction = emit_global_variable_address_calculation_with_offset_oir(instruction->operands.oir.assignee,
 																					 					instruction->operands.oir.operand1,
 																					 					instruction_pointer_variable,
-																					 					instruction->operands.oir.constant_operand);
+																					 					instruction->operands.oir.constant_operand,
+																					 					instruction->line_number);
 
 						//Put this in for op1
 						instruction->operands.oir.operand1 = address_instruction->operands.oir.assignee;
@@ -1173,7 +1174,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					 */
 					case THREE_ADDR_CODE_STORE_STATEMENT:
 						//Let the helper emit the statement
-						address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->operands.oir.operand1, instruction_pointer_variable);
+						address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->operands.oir.operand1, instruction_pointer_variable, instruction->line_number);
 
 						//Put this right before the store
 						insert_instruction_before_given(address_instruction, instruction);
@@ -1189,7 +1190,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					 */
 					case THREE_ADDR_CODE_LEA_STMT:
 						//Let the helper emit the statement
-						address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->operands.oir.address_operand1, instruction_pointer_variable);
+						address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->operands.oir.address_operand1, instruction_pointer_variable, instruction->line_number);
 
 						//Put this right before the store
 						insert_instruction_before_given(address_instruction, instruction);
@@ -1282,7 +1283,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
 
 						//Now the lea for our calculation
-						instruction_t* lea_statement = emit_lea_offset_only(emit_temp_var(u64), stack_pointer_variable, offset_constant);
+						instruction_t* lea_statement = emit_lea_offset_only(emit_temp_var(u64), stack_pointer_variable, offset_constant, instruction->line_number);
 
 						//This lea goes in right before the store
 						insert_instruction_before_given(lea_statement, instruction);
@@ -1412,7 +1413,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				case THREE_ADDR_CODE_LEA_STMT:
 					if(stack_offset != 0){
 						//Emit the lea
-						instruction_t* above_lea = emit_lea_offset_only(emit_temp_var(i64), stack_pointer_variable, emit_direct_integer_or_char_constant(stack_offset, i64));
+						instruction_t* above_lea = emit_lea_offset_only(emit_temp_var(i64), stack_pointer_variable, emit_direct_integer_or_char_constant(stack_offset, i64), instruction->line_number);
 
 						//Insert it before the current instruction
 						insert_instruction_before_given(above_lea, instruction);
@@ -1485,7 +1486,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					stack_offset_constant->constant_adjustment = additional_offset;
 
 					//Now emit the address calculation
-					address_instruction = emit_lea_offset_only(emit_temp_var(u64), stack_pointer_variable, stack_offset_constant);
+					address_instruction = emit_lea_offset_only(emit_temp_var(u64), stack_pointer_variable, stack_offset_constant, instruction->line_number);
 
 					//This goes in right before the store does
 					insert_instruction_before_given(address_instruction, instruction);
@@ -1603,7 +1604,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					stack_offset_constant->constant_adjustment = additional_offset;
 					
 					//Emit the lea and put it right before our current statement
-					instruction_t* lea_statement = emit_lea_offset_only(emit_temp_var(i64), stack_pointer_variable, stack_offset_constant);
+					instruction_t* lea_statement = emit_lea_offset_only(emit_temp_var(i64), stack_pointer_variable, stack_offset_constant, instruction->line_number);
 					insert_instruction_before_given(lea_statement, instruction);
 
 					//Update the first address operand
@@ -1652,13 +1653,13 @@ static inline void emit_16_byte_copy_pair(instruction_t** last_instruction, thre
 	three_addr_const_t* dest_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
 
 	//First load the 16 bytes out of memory
-	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, double_quad_word);
+	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, double_quad_word, (*last_instruction)->line_number);
 
 	//The load goes right after whatever came first
 	insert_instruction_after_given(load_instruction, *last_instruction);
 
 	//Now emit the corresponding store to take that retrieved memory and put it into the destination
-	instruction_t* store_instruction = emit_store_base_address_and_constant_offset(dest_memory_address, dest_offset_constant, temporary_storage_variable, double_quad_word);
+	instruction_t* store_instruction = emit_store_base_address_and_constant_offset(dest_memory_address, dest_offset_constant, temporary_storage_variable, double_quad_word, (*last_instruction)->line_number);
 
 	//The store goes right after the load
 	insert_instruction_after_given(store_instruction, load_instruction);
@@ -1695,13 +1696,13 @@ static inline void emit_8_byte_copy_pair(instruction_t** last_instruction, three
 	three_addr_const_t* dest_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
 
 	//First load the 8 bytes out of memory
-	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i64);
+	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i64, (*last_instruction)->line_number);
 
 	//The load goes right after whatever came first
 	insert_instruction_after_given(load_instruction, *last_instruction);
 
 	//Now emit the corresponding store to take that retrieved memory and put it into the destination
-	instruction_t* store_instruction = emit_store_base_address_and_constant_offset(dest_memory_address, dest_offset_constant, temporary_storage_variable, i64);
+	instruction_t* store_instruction = emit_store_base_address_and_constant_offset(dest_memory_address, dest_offset_constant, temporary_storage_variable, i64, (*last_instruction)->line_number);
 
 	//The store goes right after the load
 	insert_instruction_after_given(store_instruction, load_instruction);
@@ -1738,13 +1739,13 @@ static inline void emit_4_byte_copy_pair(instruction_t** last_instruction, three
 	three_addr_const_t* dest_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
 
 	//First load the 4 bytes out of memory
-	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i32);
+	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i32, (*last_instruction)->line_number);
 
 	//The load goes right after whatever came first
 	insert_instruction_after_given(load_instruction, *last_instruction);
 
 	//Now emit the corresponding store to take that retrieved memory and put it into the destination
-	instruction_t* store_instruction = emit_store_base_address_and_constant_offset(dest_memory_address, dest_offset_constant, temporary_storage_variable, i32);
+	instruction_t* store_instruction = emit_store_base_address_and_constant_offset(dest_memory_address, dest_offset_constant, temporary_storage_variable, i32, (*last_instruction)->line_number);
 
 	//The store goes right after the load
 	insert_instruction_after_given(store_instruction, load_instruction);
@@ -1781,13 +1782,13 @@ static inline void emit_2_byte_copy_pair(instruction_t** last_instruction, three
 	three_addr_const_t* dest_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
 
 	//First load the 2 bytes out of memory
-	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i16);
+	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i16, (*last_instruction)->line_number);
 
 	//The load goes right after whatever came first
 	insert_instruction_after_given(load_instruction, *last_instruction);
 
 	//Now emit the corresponding store to take that retrieved memory and put it into the destination
-	instruction_t* store_instruction = emit_store_base_address_and_constant_offset(dest_memory_address, dest_offset_constant, temporary_storage_variable, i16);
+	instruction_t* store_instruction = emit_store_base_address_and_constant_offset(dest_memory_address, dest_offset_constant, temporary_storage_variable, i16, (*last_instruction)->line_number);
 
 	//The store goes right after the load
 	insert_instruction_after_given(store_instruction, load_instruction);
@@ -2025,7 +2026,7 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		three_addr_var_t* first_shift_result = emit_temp_var(type);
 
 		//Now we need to perform the first shift. We will force this to be signed so that an arithmetic shift is used
-		instruction_t* arithmetic_shift = emit_binary_operation_with_const_instruction(first_shift_result, mod_instruction->operands.oir.operand1, R_SHIFT, num_bits_first_shift);
+		instruction_t* arithmetic_shift = emit_binary_operation_with_const_instruction(first_shift_result, mod_instruction->operands.oir.operand1, R_SHIFT, num_bits_first_shift, mod_instruction->line_number);
 
 		//IMPORTANT - flag that we need to force this to be signed
 		arithmetic_shift->optional_storage.forced_signedness = FORCED_SIGNED;
@@ -2044,7 +2045,7 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		three_addr_var_t* bias_temp_var = emit_temp_var(type);
 
 		//Now we need to perform the logical right shift
-		instruction_t* logical_shift = emit_binary_operation_with_const_instruction(bias_temp_var, first_shift_result, R_SHIFT, bias_shift_constant);
+		instruction_t* logical_shift = emit_binary_operation_with_const_instruction(bias_temp_var, first_shift_result, R_SHIFT, bias_shift_constant, mod_instruction->line_number);
 
 		//IMPORTANT - flag that we need to force this to be unsigned so that it is a logical shift
 		logical_shift->optional_storage.forced_signedness = FORCED_UNSIGNED;
@@ -2059,7 +2060,7 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		three_addr_var_t* result = emit_temp_var(type);
 
 		//Emit a lea so that we end up with
-		instruction_t* addition = emit_lea_operands_only(result, mod_instruction->operands.oir.operand1, bias_temp_var);
+		instruction_t* addition = emit_lea_operands_only(result, mod_instruction->operands.oir.operand1, bias_temp_var, mod_instruction->line_number);
 
 		//Add this in right after the shift
 		insert_instruction_after_given(addition, logical_shift);
@@ -2071,7 +2072,7 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		three_addr_const_t* bitwise_and_constant = emit_direct_integer_or_char_constant(and_mask, type);
 
 		//Now the actual AND instruction
-		instruction_t* and_instruction = emit_binary_operation_with_const_instruction(result, result, SINGLE_AND, bitwise_and_constant);
+		instruction_t* and_instruction = emit_binary_operation_with_const_instruction(result, result, SINGLE_AND, bitwise_and_constant, mod_instruction->line_number);
 
 		//This goes right after the addition
 		insert_instruction_after_given(and_instruction, addition);
@@ -2081,7 +2082,7 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		 * it out. This will actually conclude all of the operations that we need to do for the official
 		 * optimization
 		 */
-		instruction_t* undo_mask = emit_binary_operation_instruction(result, result, MINUS, bias_temp_var);
+		instruction_t* undo_mask = emit_binary_operation_instruction(result, result, MINUS, bias_temp_var, mod_instruction->line_number);
 
 		//Add this in right after the and instruction
 		insert_instruction_after_given(undo_mask, and_instruction);
@@ -2090,7 +2091,7 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 		 * Final cleanup: move the safe dividend result into the actual assignee temp var from
 		 * the original instruction to maintain consistency
 		 */
-		instruction_t* result_movement = emit_assignment_instruction(mod_instruction->operands.oir.assignee, result);
+		instruction_t* result_movement = emit_assignment_instruction(mod_instruction->operands.oir.assignee, result, mod_instruction->line_number);
 
 		//Add this in after the undo instruction
 		insert_instruction_after_given(result_movement, undo_mask);
@@ -2154,7 +2155,7 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 				three_addr_var_t* operand1 = mod_instruction->operands.oir.operand1;
 
 				//Emit the move
-				instruction_t* move_instruction = emit_assignment_instruction(emit_temp_var(operand1->type), operand1);
+				instruction_t* move_instruction = emit_assignment_instruction(emit_temp_var(operand1->type), operand1, mod_instruction->line_number);
 
 				//Add it in right beforehand
 				insert_instruction_before_given(move_instruction, mod_instruction);
@@ -2179,7 +2180,7 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 			mod_instruction->op = SINGLE_AND;
 
 			//Now at the end, we'll just emit a final assignment over to the given assignee
-			instruction_t* final_assignment = emit_assignment_instruction(final_assignee, mod_instruction->operands.oir.assignee);
+			instruction_t* final_assignment = emit_assignment_instruction(final_assignee, mod_instruction->operands.oir.assignee, mod_instruction->line_number);
 
 			//Put this after the given
 			insert_instruction_after_given(final_assignment, mod_instruction);
@@ -4455,6 +4456,16 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	}
 
 	/**
+	 * These statements by now have served their purpose - we can delete them as
+	 * they are no longer needed and have no assembly equivalent
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_MEMORY_REGION_INITIALIZATION){
+		delete_statement(window->instruction1);
+		reconstruct_window(window, window->instruction2);
+		changed = TRUE;
+	}
+
+	/**
 	 * Memory address rememediation - if we have non store/load
 	 * instructions and we want to remediate their memory addresses,
 	 * we can come through here and do so now. These may be situations
@@ -4465,7 +4476,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	perform_memory_address_remediations(window, window->instruction1, &changed);
 	perform_memory_address_remediations(window, window->instruction2, &changed);
 	perform_memory_address_remediations(window, window->instruction3, &changed);
-	
+
 	/**
 	 * ================== CONSTANT ASSINGNMENT FOLDING ==========================
 	 *
@@ -5004,7 +5015,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					insert_instruction_after_given(setne, binary_operation);
 
 					//Now we'll need a final assignment
-					instruction_t* final_assignment = emit_assignment_instruction(final_assignee, setne->operands.oir.assignee);
+					instruction_t* final_assignment = emit_assignment_instruction(final_assignee, setne->operands.oir.assignee, binary_operation->line_number);
 
 					//This goes in after our other statement
 					insert_instruction_after_given(final_assignment, setne);
@@ -5823,13 +5834,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				//Otherwise, the value is not 0
 				} else {
 					//First we add a test instruction
-					instruction_t* test_instruction = test_instruction = emit_test_if_not_zero_statement(emit_temp_var(u8), current_instruction->operands.oir.operand1);
+					instruction_t* test_instruction = test_instruction = emit_test_if_not_zero_statement(emit_temp_var(u8), current_instruction->operands.oir.operand1, current_instruction->line_number);
 								
 					//The result of this will be used for our set instruction
 					instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8), test_instruction->operands.oir.assignee);
 
 					//Assign the two over
-					instruction_t* assignment = emit_assignment_instruction(current_instruction->operands.oir.assignee, setne_instruction->operands.oir.assignee);
+					instruction_t* assignment = emit_assignment_instruction(current_instruction->operands.oir.assignee, setne_instruction->operands.oir.assignee, current_instruction->line_number);
 
 					//Insert these both in beforehand
 					insert_instruction_before_given(test_instruction, current_instruction);
@@ -5859,13 +5870,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				//First option - the value is 0. If it is, then anything else is irrelevant
 				if(is_constant_value_zero(current_instruction->operands.oir.constant_operand) == TRUE){
 					//First we add a test instruction
-					instruction_t* test_instruction = test_instruction = emit_test_if_not_zero_statement(emit_temp_var(u8), current_instruction->operands.oir.operand1);
+					instruction_t* test_instruction = test_instruction = emit_test_if_not_zero_statement(emit_temp_var(u8), current_instruction->operands.oir.operand1, current_instruction->line_number);
 								
 					//The result of this will be used for our set instruction
 					instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8), test_instruction->operands.oir.assignee);
 
 					//Assign the two over
-					instruction_t* assignment = emit_assignment_instruction(current_instruction->operands.oir.assignee, setne_instruction->operands.oir.assignee);
+					instruction_t* assignment = emit_assignment_instruction(current_instruction->operands.oir.assignee, setne_instruction->operands.oir.assignee, current_instruction->line_number);
 
 					//Insert these both in beforehand
 					insert_instruction_before_given(test_instruction, current_instruction);
@@ -9734,7 +9745,7 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 							 */
 							default:
 								//Emit the rip offset address calculation here
-								rip_offset_lea = emit_global_variable_address_calculation_x86(base_address, instruction_pointer_variable, u64);
+								rip_offset_lea = emit_global_variable_address_calculation_x86(base_address, instruction_pointer_variable, u64, instruction->line_number);
 
 								//Insert this right before our instruction
 								insert_instruction_before_given(rip_offset_lea, instruction);
@@ -14390,7 +14401,7 @@ static inline void handle_load_instruction_base_address(instruction_t* load_stat
 					case GLOBAL_VARIABLE:
 					case STATIC_VARIABLE:
 						//Let the helper do the work
-						address_calculation = emit_global_variable_address_calculation_x86(base_address, instruction_pointer_variable, u64);
+						address_calculation = emit_global_variable_address_calculation_x86(base_address, instruction_pointer_variable, u64, load_statement->line_number);
 
 						//Now insert this before the given instruction
 						insert_instruction_before_given(address_calculation, load_statement);

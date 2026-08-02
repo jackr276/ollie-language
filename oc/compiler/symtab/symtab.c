@@ -37,12 +37,6 @@ static dynamic_string_t temporary_array_name;
 static u_int32_t variable_lexical_scope_id = 0;
 static u_int32_t type_lexical_scope_id = 0;
 
-/**
- * Print a generic warning for the symtab system
- */
-#define PRINT_WARNING(info, line_number) \
-	fprintf(stdout, "\n[LINE %d: COMPILER WARNING]: %s\n", line_number, info)
-
 
 //Define a list of salts that can be used for mutable types
 static const u_int64_t mutability_salts[] = {
@@ -199,10 +193,10 @@ module_symtab_t* module_symtab_alloc(){
 
 
 /**
- * Initialize a new lexical scope. This involves making a new sheaf and
- * adding it in
+ * Initialize the variable symbol table scope. It is possible that the function
+ * we are contained in would be NULL for the global variable scope
 */
-void initialize_variable_scope(variable_symtab_t* symtab){
+void initialize_variable_scope(variable_symtab_t* symtab, symtab_function_record_t* function_defined_in){
 	//Allocate the current sheaf
 	symtab_variable_sheaf_t* current = (symtab_variable_sheaf_t*)calloc(1, sizeof(symtab_variable_sheaf_t));
 
@@ -211,6 +205,9 @@ void initialize_variable_scope(variable_symtab_t* symtab){
 
 	//Get the unique ID for this lexical scpoe
 	current->lexical_scope_id = increment_and_get_variable_lexical_scope();
+
+	//What function are we in for this sheaf?
+	current->function_contained_in = function_defined_in;
 
 	//Now we'll link back to the previous one level
 	current->previous_level = symtab->current;
@@ -635,7 +632,7 @@ static inline u_int64_t hash_type(generic_type_t* type){
 /**
  * Dynamically allocate a variable record
 */
-symtab_variable_record_t* create_variable_record(dynamic_string_t* name, symtab_function_record_t* function_declared_in){
+symtab_variable_record_t* create_variable_record(dynamic_string_t* name, symtab_function_record_t* function_declared_in, dependency_graph_node_t* node_defined_in, u_int32_t line_number, u_int32_t token_index){
 	//Allocate it
 	symtab_variable_record_t* record = calloc(1, sizeof(symtab_variable_record_t));
 
@@ -643,11 +640,14 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t* name, symtab_
 	record->var_name = *name;
 	//Hash it and store it to avoid to repeated hashing
 	record->hash = hash_variable(name->string);
-	//The current generation is always 1 at first
-	record->current_generation = 1;
 
 	//This is just a regular variable(for now)
 	record->membership = NO_MEMBERSHIP;
+
+	//Store all of this information for eventual error printing
+	record->node_defined_in = node_defined_in;
+	record->line_number = line_number;
+	record->token_index_of_definition = token_index;
 
 	/**
 	 * Very Important: it is mandatory that we know what function this variable is in. If it
@@ -667,7 +667,7 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t* name, symtab_
 /**
  * Create a global variable record
  */
-symtab_variable_record_t* create_global_variable_record(dynamic_string_t* name, visibilty_type_t visibility){
+symtab_variable_record_t* create_global_variable_record(dynamic_string_t* name, dependency_graph_node_t* node_defined_in, u_int32_t line_number, u_int32_t token_index, visibilty_type_t visibility){
 	//Allocate it
 	symtab_variable_record_t* record = calloc(1, sizeof(symtab_variable_record_t));
 
@@ -675,11 +675,14 @@ symtab_variable_record_t* create_global_variable_record(dynamic_string_t* name, 
 	record->var_name = *name;
 	//Hash it and store it to avoid to repeated hashing
 	record->hash = hash_variable(name->string);
-	//The current generation is always 1 at first
-	record->current_generation = 1;
 
 	//Flag that this is a global variable
 	record->membership = GLOBAL_VARIABLE;
+
+	//Store all of this information for eventual error printing
+	record->node_defined_in = node_defined_in;
+	record->line_number = line_number;
+	record->token_index_of_definition = token_index;
 
 	//Store the visibility level
 	record->visibility = visibility;
@@ -696,7 +699,7 @@ symtab_variable_record_t* create_global_variable_record(dynamic_string_t* name, 
 /**
  * Create a static variable record. These variables are really global vars
  */
-symtab_variable_record_t* create_static_variable_record(dynamic_string_t* name){
+symtab_variable_record_t* create_static_variable_record(dynamic_string_t* name, dependency_graph_node_t* node_defined_in, u_int32_t line_number, u_int32_t token_index){
 	//Allocate it
 	symtab_variable_record_t* record = calloc(1, sizeof(symtab_variable_record_t));
 
@@ -704,14 +707,17 @@ symtab_variable_record_t* create_static_variable_record(dynamic_string_t* name){
 	record->var_name = *name;
 	//Hash it and store it to avoid to repeated hashing
 	record->hash = hash_variable(name->string);
-	//The current generation is always 1 at first
-	record->current_generation = 1;
 
 	/**
 	 * This may change - but for right now we'll have a static variable mangler of 0. This
 	 * will be used by the CFG in case we have a bunch
 	 */
 	record->static_variable_mangler = 0;
+
+	//Store all of this information for eventual error printing
+	record->node_defined_in = node_defined_in;
+	record->line_number = line_number;
+	record->token_index_of_definition = token_index;
 
 	//Flag this as static
 	record->membership = STATIC_VARIABLE;
@@ -745,7 +751,7 @@ symtab_variable_record_t* create_temp_memory_address_variable(symtab_function_re
 	dynamic_string_set(&string, variable_name);
 
 	//Now create and add the symtab record for this variable
-	symtab_variable_record_t* record = create_variable_record(&string, function);
+	symtab_variable_record_t* record = create_variable_record(&string, function, NULL, 0, 0);
 	//Store the type here
 	record->type_defined_as = type;
 
@@ -754,9 +760,6 @@ symtab_variable_record_t* create_temp_memory_address_variable(symtab_function_re
 	
 	//Insert this into the variable symtab
 	insert_variable(variable_symtab, record);
-
-	//The current generation is always 1 at first
-	record->current_generation = 1;
 
 	//For eventual SSA generation
 	record->counter_stack.stack = NULL;
@@ -789,15 +792,12 @@ symtab_variable_record_t* create_ssa_compatible_temp_var(symtab_function_record_
 	dynamic_string_set(&string, variable_name);
 
 	//Now create and add the symtab record for this variable
-	symtab_variable_record_t* record = create_variable_record(&string, function);
+	symtab_variable_record_t* record = create_variable_record(&string, function, NULL, 0, 0);
 	//Store the type here
 	record->type_defined_as = type;
 
 	//Insert this into the variable symtab
 	insert_variable(variable_symtab, record);
-
-	//The current generation is always 1 at first
-	record->current_generation = 1;
 
 	//For eventual SSA generation
 	record->counter_stack.stack = NULL;
@@ -829,7 +829,7 @@ symtab_variable_record_t* create_parameter_alias_variable(symtab_function_record
 	dynamic_string_set(&string, variable_name);
 
 	//Now create and add the symtab record for this variable
-	symtab_variable_record_t* record = create_variable_record(&string, function);
+	symtab_variable_record_t* record = create_variable_record(&string, function, aliases->node_defined_in, aliases->line_number, aliases->token_index_of_definition);
 	//Store the type here
 	record->type_defined_as = aliases->type_defined_as;
 
@@ -842,9 +842,6 @@ symtab_variable_record_t* create_parameter_alias_variable(symtab_function_record
 
 	//Insert this into the variable symtab
 	insert_variable(variable_symtab, record);
-
-	//The current generation is always 1 at first
-	record->current_generation = 1;
 
 	//For eventual SSA generation
 	record->counter_stack.stack = NULL;
@@ -1040,7 +1037,7 @@ void remediate_return_by_copy_gp_parameter_order(symtab_function_record_t* recor
 /**
  * Dynamically allocate a function record
 */
-symtab_function_record_t* create_function_record(dynamic_string_t* name, dependency_graph_node_t* dependency_contained_in, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number){
+symtab_function_record_t* create_function_record(dynamic_string_t* name, dependency_graph_node_t* dependency_contained_in, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number, u_int32_t token_index){
 	//Allocate it
 	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
 
@@ -1072,6 +1069,11 @@ symtab_function_record_t* create_function_record(dynamic_string_t* name, depende
 
 	//We know that we need to create this immediately
 	record->signature = create_function_pointer_type(visibility, is_inlined, line_number, raises_errors, NOT_MUTABLE);
+
+	/**
+	 * IMPOTANT - for error printing, we will store the function's token index of definition here
+	 */
+	record->token_index_of_definition = token_index;
 
 	//And give it back
 	return record;
@@ -1670,7 +1672,7 @@ symtab_variable_record_t* initialize_stack_pointer(type_symtab_t* types){
 	dynamic_string_set(&variable_name, "stack_pointer");
 
 	//Stack pointer has no current function
-	symtab_variable_record_t* stack_pointer = create_variable_record(&variable_name, NULL);
+	symtab_variable_record_t* stack_pointer = create_variable_record(&variable_name, NULL, NULL, 0, 0);
 	//Set this type as a label(address)
 	stack_pointer->type_defined_as = lookup_type_name_only(types, "u64", NOT_MUTABLE)->type;
 
@@ -1690,7 +1692,7 @@ symtab_variable_record_t* initialize_instruction_pointer(type_symtab_t* types){
 	dynamic_string_set(&variable_name, "rip");
 
 	//Instruction pointer has no given function
-	symtab_variable_record_t* instruction_pointer = create_variable_record(&variable_name, NULL);
+	symtab_variable_record_t* instruction_pointer = create_variable_record(&variable_name, NULL, NULL, 0, 0);
 	//Set this type as a label(address)
 	instruction_pointer->type_defined_as = lookup_type_name_only(types, "u64", NOT_MUTABLE)->type;
 
@@ -2364,95 +2366,108 @@ void print_type_record(symtab_type_record_t* record){
 
 
 /**
- * Print a function name into a string buffer
+ * Print a function name into a string buffer. We will be concatenating to this
+ * buffer that we assume is preallocated
  */
 void print_function_name_to_buffer(char* buffer, symtab_function_record_t* record){
-	//We'll first print to an internal one
-	char internal_buffer[ERROR_SIZE];
-	char temp_buffer[ERROR_SIZE / 5];
+	//Internal buffer for printing
+	char internal_buffer[1000];
 
-	if(record->signature->internal_types.function_type->visibility == VISIBILITY_TYPE_PUBLIC){
-		sprintf(internal_buffer, "\t---> %d | pub fn%s %s(", record->line_number, record->signature->internal_types.function_type->raises_errors == TRUE ? "!" : "", record->func_name.string);
-	} else {
-		sprintf(internal_buffer, "\t---> %d | fn%s %s(", record->line_number, record->signature->internal_types.function_type->raises_errors == TRUE ? "!" : "", record->func_name.string);
-	}
+	//Get out the original token stream
+	ollie_token_stream_t* original_token_stream = &(record->dependency_graph_node->token_stream);
 
-	//Extract the number of params
-	int32_t num_params = record->function_parameters.current_index;
+	//First print out the line number and attach to the internal buffer
+	sprintf(internal_buffer, "\n\t---> %d |", record->line_number);
+	strcat(buffer, internal_buffer);
 
-	//Print out the params
-	for(int32_t i = 0; i < num_params; i++){
-		symtab_variable_record_t* current_parameter = dynamic_array_get_at(&(record->function_parameters), i);
+	//Now run through and print the tokens out that correspond to this function's name
+	for(int32_t i = record->token_index_of_definition; i < original_token_stream->token_stream.current_index; i++){
+		//Extract the token
+		lexitem_t* token = token_array_get_pointer_at(&(original_token_stream->token_stream), i);
 
-		//Print if it's mutable
-		if(current_parameter->type_defined_as->mutability == MUTABLE){
-			strcat(internal_buffer, "mut ");
-		}
+		//Print with added spaces and concatenate to our buffer
+		sprintf(internal_buffer, " %s", lexitem_to_string(token));
+		strcat(buffer, internal_buffer);
 
-		//Get this into a temp buffer and then write it out
-		sprintf(temp_buffer, "%s : %s", current_parameter->var_name.string, current_parameter->type_defined_as->type_name.string);
-		strcat(internal_buffer, temp_buffer);
-
-		//Comma if needed
-		if(i < num_params - 1){
-			strcat(internal_buffer, ", ");
+		//End case - if we have one of these it means that we're at the end and should leave
+		if(token->tok == SEMICOLON || token->tok == L_CURLY){
+			break;
 		}
 	}
-
-	//Grab the signature out
-	function_type_t* signature = record->signature->internal_types.function_type;
-	sprintf(temp_buffer, ") -> %s", signature->return_type->type_name.string);
-	strcat(internal_buffer, temp_buffer);
-
-	//If it was defined implicitly, we'll print a semicol
-	if(record->defined == 0){
-		strcat(internal_buffer, ";\n");
-	} else {
-		strcat(internal_buffer, "{...\n");
-	}
-
-	//Now concatenate into the parameter buffer
-	strncat(buffer, internal_buffer, ERROR_SIZE);
 }
 
 
 /**
- * Print a function name out in a stylised way
+ * Print a variable name out in a stylized way. This is intended for error messages
  */
-void print_function_name(symtab_function_record_t* record){
-	if(record->signature->internal_types.function_type->visibility == VISIBILITY_TYPE_PUBLIC){
-		printf("\t---> %d | pub fn %s(", record->line_number, record->func_name.string);
-	} else {
-		printf("\t---> %d | fn %s(", record->line_number, record->func_name.string);
-	}
+void print_variable_name_to_buffer(char* buffer, symtab_variable_record_t* record){
+	//Internal buffer for printing
+	char internal_buffer[1000];
 
-	//Print out the params
-	for(int32_t i = 0; i < record->function_parameters.current_index; i++){
-		symtab_variable_record_t* current_parameter = dynamic_array_get_at(&(record->function_parameters), i);
+	switch(record->membership){
+		/**
+		 * For function parameters we just print out 
+		 * the function declaration
+		 */
+		case FUNCTION_PARAMETER:
+			print_function_name_to_buffer(buffer, record->function_declared_in);
+			break;
 
-		//Print if it's mutable
-		if(current_parameter->type_defined_as->mutability == MUTABLE){
-			printf("mut ");
-		}
+		/**
+		 * For everything else we will generate the string using the
+		 * token index that is stored inside of the record itself
+		 */
+		default:
+			//First print out the line number and attach to the internal buffer
+			sprintf(internal_buffer, "\n\t---> %d |", record->line_number);
+			strcat(buffer, internal_buffer);
 
-		printf("%s : %s", current_parameter->var_name.string, current_parameter->type_defined_as->type_name.string);
-		//Comma if needed
-		if(i < record->function_parameters.current_index - 1){
-			printf(", ");
-		}
-	}
+			//Get out the original token stream
+			ollie_token_stream_t* original_token_stream = &(record->node_defined_in->token_stream);
 
-	//Extract the signature
-	function_type_t* signature = record->signature->internal_types.function_type;
-	printf(") -> %s", signature->return_type->type_name.string);
+			for(int32_t i = record->token_index_of_definition; i < original_token_stream->token_stream.current_index; i++){
+				lexitem_t* token = token_array_get_pointer_at(&(original_token_stream->token_stream), i);
 
-	//If it was defined implicitly, we'll print a semicol
-	if(record->defined == 0){
-		printf(";\n");
-	} else {
-		printf("{...\n");
+				//Print with added spaces and concatenate to our buffer
+				sprintf(internal_buffer, " %s", lexitem_to_string(token));
+				strcat(buffer, internal_buffer);
+
+				//Generic fail cases
+				if(token->tok == SEMICOLON || token->tok == L_CURLY){
+					break;
+				}
+
+				//For enum members we'll need to look for the comma
+				if(record->membership == ENUM_MEMBER && token->tok == COMMA){
+					break;
+				}
+			}
+
+			break;
 	}
 }
+
+
+/**
+ * Print a type name. Intended for error messages
+ */
+void print_type_name(symtab_type_record_t* record){
+	//Print out where it was declared
+	if(record->type->type_class == TYPE_CLASS_BASIC){
+		printf("---> BASIC TYPE | ");
+	} else {
+		printf("---> %d | ", record->type->line_number);
+	}
+
+	//The mut specifier
+	if(record->type->mutability == MUTABLE){
+		printf("mut ");
+	}
+
+	//Then print out the name
+	printf("%s\n\n", record->type->type_name.string);
+}
+
 
 
 /**
@@ -2566,71 +2581,6 @@ dynamic_string_t generate_fully_qualified_function_name(symtab_function_record_t
 	dynamic_string_concatenate(&qualified_name, function->func_name.string);
 	
 	return qualified_name;
-}
-
-
-/**
- * Print a variable name out in a stylized way
- * Intended for error messages
- */
-void print_variable_name(symtab_variable_record_t* record){
-	//Go based on the membership
-	switch(record->membership){
-		case FUNCTION_PARAMETER:
-			print_function_name(record->function_declared_in);
-			break;
-		case ENUM_MEMBER:
-			//The var name
-			printf("{\n\t\t...\n\t\t...\t\t\n---> %d |\t %s", record->line_number, record->var_name.string);
-			break;
-		case STRUCT_MEMBER:
-			//The var name
-			printf("{\n\t\t...\n\t\t...\t\t\n---> %d |\t %s : %s", record->line_number, record->var_name.string, record->type_defined_as->type_name.string);
-			break;
-		default:
-			//Line num
-			printf("\n---> %d | ", record->line_number);
-
-			//Declare or let
-			record->declare_or_let == 0 ? printf("declare ") : printf("let ");
-
-			//The var name
-			printf("%s : ", record->var_name.string);
-
-			//The type name
-			printf("%s%s", (record->type_defined_as->mutability == MUTABLE ? "mut ": ""),
-		  					record->type_defined_as->type_name.string);
-			
-			//We'll print out some abbreviated stuff with the let record
-			if(record->declare_or_let == 1){
-				printf("= <initializer>;\n\n");
-			} else {
-				printf(";\n");
-			}
-
-			break;
-	}
-}
-
-
-/**
- * Print a type name. Intended for error messages
- */
-void print_type_name(symtab_type_record_t* record){
-	//Print out where it was declared
-	if(record->type->type_class == TYPE_CLASS_BASIC){
-		printf("---> BASIC TYPE | ");
-	} else {
-		printf("---> %d | ", record->type->line_number);
-	}
-
-	//The mut specifier
-	if(record->type->mutability == MUTABLE){
-		printf("mut ");
-	}
-
-	//Then print out the name
-	printf("%s\n\n", record->type->type_name.string);
 }
 
 
@@ -2755,163 +2705,6 @@ u_int8_t is_function_recursive(function_symtab_t* symtab, symtab_function_record
 
 	//Extract the value contained at transitive_closure[func_id][func_id]
 	return symtab->call_graph_transitive_closure[function_id * num_functions + function_id];
-}
-
-
-/**
- * Crawl the symtab and check for any unused functions. We generate some hopefully helpful
- * warnings here for the user
- */
-void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnings){
-	//For any/all error printing
-	char info[1000];
-	//For temporary holding
-	symtab_function_record_t* record;
-
-	//Create a min priority queue for ordering error messages
-	min_priority_queue_t queue = min_priority_queue_alloc();
-
-	//Run thorugh all of the namespaces
-	for(int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
-		//Grab the current sheaf to check
-		function_namespace_t* current_sheaf = dynamic_array_get_at(&(symtab->namespaces), _);
-
-		//Now run through the keyspace in this sheaf
-		for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
-			record = current_sheaf->records[i];
-
-			//We could have chaining here, so run through just in case
-			while(record != NULL){
-				//If one of these 3 error conditions is true, we will print a warning
-				if((record->called == 0 && record->defined == 0)
-					|| (record->called == 0 && record->defined == 1)
-					|| (record->called == 1 && record->defined == 0)){
-
-					//Enqueue using the line number as priority
-					min_priority_queue_enqueue(&queue, record, record->line_number);
-				}
-
-				//Advance record up
-				record = record->next;
-			}
-
-			//Now that we have everything loaded into a queue by line number, we will go through
-			//and print each individual error
-			while(min_priority_queue_is_empty(&queue) == FALSE){
-				//Get it off of the queue
-				record = min_priority_queue_dequeue(&queue);
-			
-				if(record->called == FALSE && record->defined == FALSE){
-					//Generate a warning here
-					(*num_warnings)++;
-
-					sprintf(info, "Function \"%s\" is never defined and never called. First defined here:", record->func_name.string);
-					PRINT_WARNING(info, record->line_number);
-					//Also print where the function was defined
-					print_function_name(record);
-
-				//Only generate here if we have a private function. Public functions may be called from external files
-				} else if(record->called == FALSE && record->defined == TRUE && record->visibility == VISIBILITY_TYPE_PRIVATE){
-					//Generate a warning here
-					(*num_warnings)++;
-
-					sprintf(info, "Function \"%s\" is defined but never called. First defined here:", record->func_name.string);
-					PRINT_WARNING(info, record->line_number);
-					//Also print where the function was defined
-					print_function_name(record);
-
-				} else if(record->called == 1 && record->defined == 0){
-					//Generate a warning here
-					(*num_warnings)++;
-
-					sprintf(info, "Function \"%s\" is called but never explicitly defined. First declared here:", record->func_name.string);
-					PRINT_WARNING(info, record->line_number);
-					//Also print where the function was defined
-					print_function_name(record);
-				}
-			}
-		}
-	}
-
-	//Destroy the queue
-	min_priority_queue_dealloc(&queue);
-}
-
-
-/**
- * If a variable is declared as "mut"(mutable) but is never assigned to throughout it's
- * entire lifetime, that mut keyword is not needed
- */
-void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
-	//For any/all error printing
-	char info[1000];
-	//For record holding
-	symtab_variable_record_t* record;
-
-	//Create a min priority queue for ordering error messages
-	min_priority_queue_t queue = min_priority_queue_alloc();
-
-	//So long as we have a sheaf
-	for(int32_t i = 0; i < symtab->sheafs.current_index; i++){
-		//Grab the actual sheaf out
-		symtab_variable_sheaf_t* sheaf = dynamic_array_get_at(&(symtab->sheafs), i);
-
-		//Now we'll run through every variable in here
-		for(int32_t i = 0; i < VARIABLE_KEYSPACE; i++){
-			record = sheaf->records[i];
-
-			//So long as the record is not NULL(we need to account for collisions)
-			while(record != NULL){
-				//If it's a label or struct, don't bother with it
-				switch(record->membership){
-					case STRUCT_MEMBER:
-						record = record->next;
-						continue;
-					default:
-						break;
-				}
-
-				//Only put it into the queue if it meets one of 2 warning conditions
-				if((record->initialized == FALSE && is_memory_address_type(record->type_defined_as) == FALSE)
-					|| (record->type_defined_as->mutability == MUTABLE && record->mutated == FALSE)){
-					//Add it into the priority queue. The priority goes by line number
-					min_priority_queue_enqueue(&queue, record, record->line_number);
-				}
-
-				//Push it up
-				record = record->next;
-			}
-		}
-	}
-
-	//Now that we've loaded up the priority queue, we will go through and print out appropriate error messages
-	while(min_priority_queue_is_empty(&queue) == FALSE){
-		//Dequeue the value
-		record = min_priority_queue_dequeue(&queue);
-
-		//We have a non initialized variable
-		if(record->initialized == FALSE && is_memory_address_type(record->type_defined_as) == FALSE){
-			sprintf(info, "Variable \"%s\" may never be initialized. First defined here:", record->var_name.string);
-			PRINT_WARNING(info, record->line_number);
-			print_variable_name(record);
-			(*num_warnings)++;
-			//Go to the next iteration
-			continue;
-		}
-
-		//If it's mutable but never mutated
-		if(record->type_defined_as->mutability == MUTABLE 
-			&& record->membership != FUNCTION_PARAMETER
-			&& record->mutated == FALSE){
-			sprintf(info, "Variable \"%s\" is declared as mutable but never mutated. Consider removing the \"mut\" keyword. First defined here:", record->var_name.string);
-			PRINT_WARNING(info, record->line_number);
-			print_variable_name(record);
-			(*num_warnings)++;
-		}
-	}
-
-	//Destroy the queue
-	min_priority_queue_dealloc(&queue);
 }
 
 

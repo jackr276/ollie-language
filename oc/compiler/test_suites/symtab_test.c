@@ -23,26 +23,26 @@ static void test_variables(){
 	variable_symtab_t* symtab = variable_symtab_alloc();
 
 	//We always initialize the scope
-	initialize_variable_scope(symtab);
+	initialize_variable_scope(symtab, NULL);
 
 	for(u_int8_t i = 0; i < 5; i++){
 		dynamic_string_t string = dynamic_string_alloc();
 		dynamic_string_set(&string, idents_l1[i]);
 
-		num_collisions += insert_variable(symtab, create_variable_record(&string, NULL));
+		num_collisions += insert_variable(symtab, create_variable_record(&string, NULL, NULL, 0, 0));
 	}
 
 	printf("Collisions: %d\n", num_collisions);
 	
 	//make a new scope
-	initialize_variable_scope(symtab);
+	initialize_variable_scope(symtab, NULL);
 	symtab_variable_record_t* found;
 
 	for(u_int8_t i = 0; i < 2; i++){
 		dynamic_string_t string = dynamic_string_alloc();
 		dynamic_string_set(&string, idents_l2[i]);
 
-		num_collisions += insert_variable(symtab, create_variable_record(&string, NULL));
+		num_collisions += insert_variable(symtab, create_variable_record(&string, NULL, NULL, 0, 0));
 	}
 
 
