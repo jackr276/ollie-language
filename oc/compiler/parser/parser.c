@@ -12070,8 +12070,8 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 	//Is it static - this is almost always false
 	u_int8_t is_static = FALSE;
 
-	//Save the token pointer for our index of declaration
-	u_int32_t token_index_of_declaration = token_stream->token_pointer;
+	//Save the token pointer for our index of declaration(-1 because we've already seen the declare)
+	u_int32_t token_index_of_declaration = token_stream->token_pointer - 1;
 
 	//Let's see if we have a storage class
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -12616,8 +12616,8 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	//What is our variable membership? By default we use the generic
 	variable_membership_t membership = NO_MEMBERSHIP;
 
-	//Extract the token pointer for our index of declaration
-	u_int32_t token_index_of_declaration = token_stream->token_pointer;
+	//Extract the token pointer for our index of declaration(-1 because we've already consume let)
+	u_int32_t token_index_of_declaration = token_stream->token_pointer - 1;
 
 	//Let's first declare the root node
 	generic_ast_node_t* let_stmt_node = ast_node_alloc(AST_NODE_TYPE_LET_STMT, SIDE_TYPE_LEFT);
