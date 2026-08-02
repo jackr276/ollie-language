@@ -28,7 +28,9 @@ pub fn main(arg:i32, argv:char**) -> i32{
 			x = 2;
 		}
 		// Empty default
-		default -> {}
+		default -> {
+			x = 5;
+		}
 	}
 
 	//Very basic initializer

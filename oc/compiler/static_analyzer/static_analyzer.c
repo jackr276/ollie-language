@@ -43,13 +43,9 @@ static inline char* extract_file_name_from_fully_qualified_name(char* fully_qual
 
 
 /**
- * Simply prints a parse message in a nice formatted way. For the CFG, there
- * are no parser line numbers
- *
- *
- * TODO REVAMP THIS
-*/
-static void print_cfg_message(error_message_type_t message_type, char* info, u_int32_t line_number){
+ * Print a static analyzer error message in a nice formatted way
+ */
+static void print_static_analyzer_message(error_message_type_t message_type, char* info, u_int32_t line_number){
 	//Mapped by index to the enum values
 	static const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
 
@@ -66,6 +62,7 @@ static void print_cfg_message(error_message_type_t message_type, char* info, u_i
 		fprintf(stdout, "\n[FILE: %s] --> [LINE %d | COMPILER %s]: %s\n", file_name, line_number, type[message_type], info);
 	}
 }
+
 
 /**
  * Run through an entire array of function blocks and reset the status for
@@ -932,8 +929,12 @@ static void convert_cfg_to_ssa_form(cfg_t* cfg, variable_symtab_t* variables){
 	rename_all_variables(cfg);
 }
 
+
 /**
- * TODO
+ * Does a given variable comply with the definite assignment rule? This function is
+ * blindly called by the instruction analyzer so we will guard against NULL variables
+ * and variables that are ineligible for SSA in here. This function also handles
+ * all of the error printing for variables that may not have been initialized
  */
 static u_int8_t check_variable_for_definite_assignment(instruction_t* instruction, three_addr_var_t* variable, dynamic_array_t* may_not_have_been_initialized){
 	/**
@@ -960,7 +961,7 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
 	 */
 	if(variable->ssa_generation == 0){
 		sprintf(error_info, "Variable %s is used before initialization", variable->linked_var->var_name.string);
-		print_cfg_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
+		print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
 		(*error_count)++;
 		return FAILURE;
 
@@ -971,7 +972,7 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
 	 */
 	} else if(does_variable_dynamic_array_contain_variable(may_not_have_been_initialized, variable) == TRUE){
 		sprintf(error_info, "Variable %s may be used before initialization", variable->linked_var->var_name.string);
-		print_cfg_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
+		print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
 		(*error_count)++;
 		return FAILURE;
 
@@ -985,8 +986,16 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
 
 
 /**
- *
- * TODO
+ * Does the given instruction comply with the definite assignment rules? There are two paths
+ * that this check will take:
+ * 
+ * 1.) We are not a phi function - in this case just check every variable in the RHS to see if
+ * 	  it's either completely uninitialized or may be uninitialized(see below). If any one of
+ * 	  the variables fails then the whole things fails
+ * 2.) We are a phi function - we must check every variable in the parameter list. If any
+ * 	   one in the parameter list is an _0 variable *OR* is in our "may_not_have_been_initialized"
+ * 	   list, then we will flag that LHS variable as potentially being uninitialized for future checks.
+ * 	   Since we do this scan from top to bottom in the function using dominators this check will work
  */
 static inline u_int8_t does_instruction_comply_with_definite_assignment(instruction_t* instruction, dynamic_array_t* may_not_have_been_initialized){
 	//By default assume SUCCESS(1)
@@ -1078,9 +1087,16 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
 }
 
 
-
 /**
- * TODO
+ * Perform definite assignment analysis on every instruction in a given block. We will scan
+ * through every instruction and call the helper. Note that one failure will not stop the
+ * entire analysis and we will always scan the entire thing no matter way
+ *
+ * This function recursively calls out to the dominator children of the block that it's analyzing.
+ * To run the full analysis you need to call this function initially with the function entry
+ * block
+ *
+ * NOTE: this function is recursive
  */
 static u_int8_t perform_definite_assignment_analysis_for_block(basic_block_t* block, dynamic_array_t* may_not_have_been_initialized){
 	//Assume success off the bat
@@ -1134,17 +1150,12 @@ static u_int8_t perform_definite_assignment_analysis_for_block(basic_block_t* bl
 
 
 /**
- * Perform the Ollie analyzer's version of definite assignment analysis. 
- *
- * This will include:
- * 	1.) Uninitialized/potentially uninitialized variable detection
- * 	2.) Unneccessary mutability detection
- *
- * TODO DOC
+ * Perform the Ollie analyzer's version of definite assignment analysis.
  *
  * We will scan all functions at once. If one function fails, we will still keep going to analyze
  * the rest of the program. However, one function failing does mean that the entire program fails
- * to compile in the end
+ * to compile in the end. All functions are scanned in dominator order meaning that we start
+ * from the top and work our way down through the dominator children
  */
 static inline u_int8_t perform_definite_assignment_analysis(cfg_t* cfg, variable_symtab_t* variables){
 	//Assume success off the bat
@@ -1170,8 +1181,6 @@ static inline u_int8_t perform_definite_assignment_analysis(cfg_t* cfg, variable
 		 * Call into the recursive analyzer. If we have a failure, then the entire thing
 		 * goes into failure, but we will keep scanning to get all errors in at once
 		 */
-
-		//TODO WE MAY ACTUALLY WANT TO STOP FAILURES AT JUST ONE HERE
 		if(perform_definite_assignment_analysis_for_block(function_entry, &may_not_have_been_initialized) == FAILURE){
 			result = FAILURE;
 		}
@@ -1223,14 +1232,14 @@ static void perform_mutability_checking(cfg_t* cfg, variable_symtab_t* symtab){
  * 		- This is a potential failure point
  * 	4.) Perform variable mutation analysis
  */
-cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end_results_package_t* results){
+cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end_results_package_t* results, u_int32_t* num_errors, u_int32_t* num_warnings){
 	//Cache these two for later use
 	instruction_pointer_var = cfg->instruction_pointer;
 	stack_pointer_var = cfg->stack_pointer;
 
 	//Cache these as well
-	error_count = &(results->num_errors);
-	warning_count = &(results->num_warnings);
+	error_count = num_errors;
+	warning_count = num_warnings;
 
 	/**
 	 * 1.) Mangle all static variable names with a unique number identifier at the very end
@@ -1262,7 +1271,7 @@ cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end
 	 */
 	perform_mutability_checking(cfg, results->variable_symtab);
 
-	//TODO DUMMY FOR NOW
+	//If we made it here then we have succeeded
 	return CFG_RESULT_SUCCESS;
 
 }

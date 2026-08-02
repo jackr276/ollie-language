@@ -12953,7 +12953,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	 * 		- This is a potential failure point
 	 * 	4.) Perform variable mutation analysis
  	 */
-	cfg->result = perform_all_static_analysis(cfg, results);
+	cfg->result = perform_all_static_analysis(cfg, results, num_errors_ref, num_warnings_ref);
 
 	//Once we get here, we're done with these two stacks
 	heap_stack_dealloc(&break_stack);	

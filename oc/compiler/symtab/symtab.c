@@ -37,12 +37,6 @@ static dynamic_string_t temporary_array_name;
 static u_int32_t variable_lexical_scope_id = 0;
 static u_int32_t type_lexical_scope_id = 0;
 
-/**
- * Print a generic warning for the symtab system
- */
-#define PRINT_WARNING(info, line_number) \
-	fprintf(stdout, "\n[LINE %d: COMPILER WARNING]: %s\n", line_number, info)
-
 
 //Define a list of salts that can be used for mutable types
 static const u_int64_t mutability_salts[] = {
@@ -2749,6 +2743,9 @@ u_int8_t is_function_recursive(function_symtab_t* symtab, symtab_function_record
 /**
  * Crawl the symtab and check for any unused functions. We generate some hopefully helpful
  * warnings here for the user
+ *
+ *
+ * TODO MOVE TO STATIC ANALYZER
  */
 void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnings){
 	//For any/all error printing

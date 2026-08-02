@@ -12,6 +12,7 @@
 //Link to CFG structure
 #include "../parser/parser.h"
 #include "../cfg/cfg.h"
+#include <sys/types.h>
 
 /**
  * Perform all static analysis on a given CFG. The functions
@@ -22,6 +23,6 @@
  * 		- This is a potential failure point
  * 	4.) Perform variable mutation analysis
  */
-cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end_results_package_t* results);
+cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end_results_package_t* results, u_int32_t* num_errors, u_int32_t* num_warnings);
 
 #endif /* STATIC_ANALYZER_H */
