@@ -6,6 +6,223 @@
 
 #include "static_analyzer.h"
 
+//========================================= General Utilities =============================================
+/**
+ * Run through an entire array of function blocks and reset the status for
+ * every single one. We assume that the caller knows what they are doing, and
+ * that the blocks inside of the array are really the correct blocks
+ */
+static inline void reset_visited_status_for_function(dynamic_array_t* function_blocks){
+	//Run through all of the blocks
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		//Extract the current block
+		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
+
+		//Flag it as false
+		current->visited = FALSE;
+	}
+}
+
+
+/**
+ * Run through an entire array of function blocks and reset the status and 
+ * "already_has_phi_func" fields for every single one. We assume that 
+ * the caller knows what they are doing, and that the blocks inside of 
+ * the array are really the correct blocks
+ */
+static inline void reset_status_for_phi_function_insertion(dynamic_array_t* function_blocks){
+	//Run through all of the blocks
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		//Extract the current block
+		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
+
+		//Flag it as false
+		current->visited = FALSE;
+
+		//Remove the phi function flag
+		current->already_has_phi_func = FALSE;
+	}
+}
+
+
+/**
+ * A special helper function that we use for dynamic arrays of variables. Since variables
+ * can be duplicated, we need to compare the symtab variable record, not the three address
+ * variable itself. This does a simple linear scan to search
+ */
+static inline u_int8_t does_variable_dynamic_array_contain_symtab_variable(dynamic_array_t* variable_array, symtab_variable_record_t* variable){
+	for(int32_t i = 0; i < variable_array->current_index; i++){
+		//Avoid a function call by grabbing directly
+		three_addr_var_t* candidate = variable_array->internal_array[i];
+
+		//Only a hit if the linked var matches
+		if(candidate->linked_var == variable){
+			return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+
+
+/**
+ * Add a phi statement into the basic block. Phi statements are always added, without exception,
+ * to the very front of the block
+ *
+ * This statement also takes care of the linking that we need to do. When we have a phi-function, we'll
+ * need to link it back to whichever variables it refers to
+ */
+static inline void add_phi_statement(basic_block_t* target, instruction_t* phi_statement){
+	//Counts as an instruction
+	target->number_of_instructions++;
+
+	//Mark the block that we're in
+	phi_statement->block_contained_in = target;
+
+	/**
+	 * Special case -- we're adding the head so this 
+	 * is now the head and the tail
+	 */
+	if(target->leader_statement == NULL){
+		target->leader_statement = phi_statement;
+		target->exit_statement = phi_statement;
+		return;
+
+	/**
+	 * Otherwise just do a regular insertion
+	 */
+	} else {
+		phi_statement->next_statement = target->leader_statement;
+		target->leader_statement->previous_statement = phi_statement;
+		target->leader_statement = phi_statement;
+	}
+}
+
+
+/**
+ * Is a given symtab variable SSA eligible?
+ * 
+ * Ineligible:
+ * 	Global variables
+ * 	Static variables
+ * 	Enum variables
+ * 	Struct variables
+ *
+ * These are all ineligible because they are fundamentally differnt than what an actual
+ * SSA variable is. For instance static and global variables are basically equivalent
+ * to variables stored in memory and as such do not count for SSA
+ */
+static inline u_int8_t is_symtab_variable_ssa_eligible(symtab_variable_record_t* variable){
+	switch(variable->membership){
+		case ENUM_MEMBER:
+		case STRUCT_MEMBER:
+		case STATIC_VARIABLE:
+		case GLOBAL_VARIABLE:
+			return FALSE;
+		default:
+			return TRUE;
+	}
+}
+
+
+/**
+ * Is a given variable SSA eligible? We do this by looking at the type of the
+ * variable and whether or not the linked var is NULL. If the linked var is NULL
+ * we would get segfaults
+ */
+static inline u_int8_t is_variable_ssa_eligible(three_addr_var_t* variable){
+	//Sanity check
+	if(variable == NULL){
+		return FALSE;
+	}
+
+	switch(variable->variable_type){
+		/**
+		 * If we have a linked variable, give back yes/no based on whether or
+		 * not the linked variable itself is eligible for SSA(criteria above)
+		 */
+		case VARIABLE_TYPE_MEMORY_ADDRESS:
+		case VARIABLE_TYPE_NON_TEMP:
+			if(variable->linked_var != NULL){
+				return is_symtab_variable_ssa_eligible(variable->linked_var);
+			} else {
+				return FALSE;
+			}
+		
+		/**
+		 * Return by copy addresses are *never* SSA eligible. This
+		 * would actually case the SSA system to crash because there
+		 * is no real assignment for this kind of variable
+		 */
+		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
+			return FALSE;
+
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Generate a new name for the given three address variable
+ *
+ * For a left hand side(assignment) new name:
+ * 	push the current SSA generation number onto the counter stack
+ * 	variable's SSA generation is the current number
+ * 	bump the SSA generation number for the next go 
+ */
+static inline void lhs_new_name(three_addr_var_t* var){
+	//Grab the linked variable out
+	symtab_variable_record_t* linked_var = var->linked_var;
+
+	//Grab the name out of the counter
+	int32_t generation_level = linked_var->ssa_counter;
+
+	//Now we increment the counter for the next go around
+	(linked_var->ssa_counter)++;
+
+	//We'll also push this generation level onto the stack
+	lightstack_push(&(linked_var->counter_stack), generation_level);
+
+	//Store the generation level in here
+	var->ssa_generation = generation_level;
+}
+
+
+/**
+ * For a left hand side(assignment) new name:
+ * 	push the current SSA generation number onto the counter stack
+ * 	bump the SSA generation number
+ */
+static inline void lhs_new_name_direct(symtab_variable_record_t* variable){
+	//Store the old generation level
+	u_int16_t generation_level = variable->ssa_counter;
+
+	//Increment the counter
+	(variable->ssa_counter)++;
+
+	//Push the old generation level onto here
+	lightstack_push(&(variable->counter_stack), generation_level);
+}
+
+
+/**
+ * For an RHS(use) new name:
+ * 	Get the generation number by peeking the stack and assigning
+ */
+static inline void rhs_new_name(three_addr_var_t* var){
+	//Grab the linked var out
+	symtab_variable_record_t* linked_var = var->linked_var;
+
+	//Grab the value off of the stack
+	u_int16_t generation_level = lightstack_peek(&(linked_var->counter_stack));
+
+	//Store the generation level in here
+	var->ssa_generation = generation_level;
+}
+
+//========================================= General Utilities =============================================
+
 
 /**
  * Since static variables also count for us as global variables, we need to
