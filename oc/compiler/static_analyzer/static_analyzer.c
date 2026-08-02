@@ -960,7 +960,8 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
 	 * initialization
 	 */
 	if(variable->ssa_generation == 0){
-		sprintf(error_info, "Variable %s is used before initialization", variable->linked_var->var_name.string);
+		sprintf(error_info, "Variable %s is used before initialization. First defined here: ", variable->linked_var->var_name.string);
+		print_variable_name_to_buffer(error_info, variable->linked_var);
 		print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
 		(*error_count)++;
 		return FAILURE;
@@ -971,7 +972,8 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
 	 * this wasn't initialized but it may not have been, which is still an error
 	 */
 	} else if(does_variable_dynamic_array_contain_variable(may_not_have_been_initialized, variable) == TRUE){
-		sprintf(error_info, "Variable %s may be used before initialization", variable->linked_var->var_name.string);
+		sprintf(error_info, "Variable %s may be used before initialization. First defined here: ", variable->linked_var->var_name.string);
+		print_variable_name_to_buffer(error_info, variable->linked_var);
 		print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
 		(*error_count)++;
 		return FAILURE;

@@ -2432,8 +2432,13 @@ void print_variable_name_to_buffer(char* buffer, symtab_variable_record_t* recor
 				sprintf(internal_buffer, " %s", lexitem_to_string(token));
 				strcat(buffer, internal_buffer);
 
-				//These are our terminal cases for the printer
-				if(token->tok == SEMICOLON || token->tok == L_CURLY || token->tok == COMMA){
+				//Generic fail cases
+				if(token->tok == SEMICOLON || token->tok == L_CURLY){
+					break;
+				}
+
+				//For enum members we'll need to look for the comma
+				if(record->membership == ENUM_MEMBER && token->tok == COMMA){
 					break;
 				}
 			}
