@@ -651,12 +651,7 @@ static inline u_int8_t can_variable_be_assigned_to(symtab_variable_record_t* var
 	generic_type_t* type = variable->type_defined_as;
 
 	//Otherwise, let's see if the type allows us to be mutated 
-	//If so - then we're fine. If not, then we fail
-	if(type->mutability == MUTABLE){
-		return TRUE;
-	} else {
-		return FALSE;
-	}
+	return type->mutability == MUTABLE ? TRUE : FALSE;
 }
 
 
@@ -9089,9 +9084,39 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 		case F64:
 		case CHAR:
 		case BOOL:
+			//We will now grab this record from the symtable to make our life easier
+			record = lookup_type_name_only(type_symtab, lookahead.lexeme.string, mutability);
+
+			//Sanity check, if this is null something is very wrong
+			if(record == NULL){
+				print_parse_message(MESSAGE_TYPE_ERROR, "Fatal internal compiler error. Primitive type could not be found in symtab", parser_line_num);
+				//Create and give back an error node
+				return NULL;
+			}
+
+			//This one is now all set to send up. We will not store any children if this is the case
+			return record;
+
+		/**
+		 * Size types are a unique case because they are core types but they are really aliases to a
+		 * U32. As such, we'll need to dealias them here
+		 */
 		case SIZE:
 			//We will now grab this record from the symtable to make our life easier
 			record = lookup_type_name_only(type_symtab, lookahead.lexeme.string, mutability);
+
+			//Sanity check, if this is null something is very wrong
+			if(record == NULL){
+				print_parse_message(MESSAGE_TYPE_ERROR, "Fatal internal compiler error. Primitive type could not be found in symtab", parser_line_num);
+				//Create and give back an error node
+				return NULL;
+			}
+
+			//Get the underlying type
+			generic_type_t* underlying_type = dealias_type(record->type);
+
+			//We will now grab this record from the symtable to make our life easier
+			record = lookup_type_name_only(type_symtab, underlying_type->type_name.string, mutability);
 
 			//Sanity check, if this is null something is very wrong
 			if(record == NULL){
