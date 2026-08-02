@@ -1157,7 +1157,7 @@ static u_int8_t perform_definite_assignment_analysis_for_block(basic_block_t* bl
  * to compile in the end. All functions are scanned in dominator order meaning that we start
  * from the top and work our way down through the dominator children
  */
-static inline u_int8_t perform_definite_assignment_analysis(cfg_t* cfg, variable_symtab_t* variables){
+static inline u_int8_t perform_definite_assignment_analysis(cfg_t* cfg){
 	//Assume success off the bat
 	u_int8_t result = SUCCESS;
 
@@ -1201,19 +1201,54 @@ static inline u_int8_t perform_definite_assignment_analysis(cfg_t* cfg, variable
  * and display warnings if we are labeling a variable as mutable
  * but then never mutating it
  */
-static void perform_mutability_checking(cfg_t* cfg, variable_symtab_t* symtab){
+static void perform_mutability_checking(variable_symtab_t* symtab){
+	char info[ERROR_SIZE * 3];
 
+	//Run through all sheafs(lexical scopes) in the symtab
 	for(int32_t i = 0; i < symtab->sheafs.current_index; i++){
 		symtab_variable_sheaf_t* sheaf = dynamic_array_get_at(&(symtab->sheafs), i);
 
+		//For each scope go through all record slots
 		for(int32_t i = 0; i < VARIABLE_KEYSPACE; i++){
+			//For each record slot grab a cursor and crawl
 			symtab_variable_record_t* cursor = sheaf->records[i];
 
+			//Keep going so long as we have things to drill into
 			while(cursor != NULL){
+				//If it's not mutable we don't care to check it
+				if(cursor->type_defined_as->mutability == NOT_MUTABLE){
+					cursor = cursor->next;
+					continue;
+				}
 
-				//TODO DEPENDENCY NODE
-				//TODO
+				//We do not currently support memory SSA
+				if(is_memory_address_type(cursor->type_defined_as) == TRUE){
+					cursor = cursor->next;
+					continue;
+				}
 
+				/**
+				 * If the symtab variable is not SSA eligible then this
+				 * is not going to work, we will move on
+				 *
+				 * We also don't bother with function parameters
+				 */
+				if(is_symtab_variable_ssa_eligible(cursor) == FALSE || cursor->membership == FUNCTION_PARAMETER){
+					cursor = cursor->next;
+					continue;
+				}
+
+				/**
+				 * Finally we get to here. If the ssa counter is 1, that means that the highest
+				 * ever SSA generation was 1, as in it was only assigned once. This means that
+				 * the variable was never actually mutated despite being called mutable. This
+				 * will trigger our warning
+				 */
+				if(cursor->ssa_counter == 1){
+					sprintf(info, "Variable \"%s\" is declared as mutable but never mutated. Consider removing the \"mut\" keyword. First defined here:", cursor->var_name.string);
+					print_variable_name_to_buffer(info, cursor);
+					(*warning_count)++;
+				}
 
 				cursor = cursor->next;
 			}
@@ -1316,7 +1351,7 @@ cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end
 	 *
 	 * NOTE: this is a potential fail point for the CFG
 	 */
-	if(perform_definite_assignment_analysis(cfg, results->variable_symtab) == FAILURE){
+	if(perform_definite_assignment_analysis(cfg) == FAILURE){
 		result = CFG_RESULT_FAILURE;
 	}
 
@@ -1331,7 +1366,7 @@ cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end
 	 * analysis there is no chance for failure here, this
 	 * just generates warnings
 	 */
-	perform_mutability_checking(cfg, results->variable_symtab);
+	perform_mutability_checking(results->variable_symtab);
 
 	//Give back whatever result we've have
 	return result;
