@@ -7,9 +7,9 @@
 
 pub fn invalid_elaborative_type(x:i32, y:i32, elaborative_type:params i32) -> i32 {
 	//Not going to work - we can't take this one's size
-	let size:i32 = sizeof(elaborative_type);
+	let num_params:i32 = sizeof(elaborative_type);
 
-	ret x + y + size;
+	ret x + y + num_params;
 }
 
 pub fn main() -> i32 {

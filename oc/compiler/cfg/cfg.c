@@ -5083,7 +5083,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 
 		//Everything else should be impossible
 		default:
-			printf("Fatal internal compiler error: Unreachable path hit for postinc in the CFG\n");
+			printf("Fatal internal compiler error: Unreachable path hit for postinc in the CFG with type %s\n", assignee->type->type_name.string);
 			exit(1);
 	}
 

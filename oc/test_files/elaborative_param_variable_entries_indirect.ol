@@ -7,7 +7,7 @@
 pub fn elaborative_param(x:i32, y:params i32) -> i32 {
 	let result:mut i32 = x;
 
-	for(let i:mut i32 = 0; i < paramcount(y); i++){
+	for(let i:mut size = 0; i < paramcount(y); i++){
 		result += y[i];
 	}
 
@@ -26,5 +26,7 @@ pub fn main() -> i32 {
 	let my_func:fn(i32, params i32) -> i32 = elaborative_param;
 
 	//Test using vars for the elaborative param
+	//Should return 1 + 5 + 6 + 7 + 8 + 9 = 36
+	OUNIT: [exit_status = 36]
 	ret @my_func(1, a, b, c, d, e);
 }

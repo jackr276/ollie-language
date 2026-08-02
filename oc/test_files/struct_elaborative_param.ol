@@ -18,7 +18,7 @@ pub fn elaborative_param_structs(struct_arr:params param_passed) -> i32 {
 	let result:mut i32 = 0;
 
 	//Run through and sum
-	for(let i:mut i32 = 0; i < paramcount(struct_arr); i++){
+	for(let i:mut size = 0; i < paramcount(struct_arr); i++){
 		//Grab a pointer out
 		let struct_ref:param_passed* = &(struct_arr[i]);
 			

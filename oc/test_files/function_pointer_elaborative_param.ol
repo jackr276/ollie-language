@@ -14,5 +14,6 @@ pub fn main() -> i32 {
 	//Use a function pointer to assign
 	let my_func:fn(i32, params i32) -> i32 = my_fn;
 
+	OUNIT: [exit_status = 11]
 	ret @my_func(2, 3, 4, 5, 6);
 }
