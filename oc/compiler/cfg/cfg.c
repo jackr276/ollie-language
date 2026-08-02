@@ -12275,7 +12275,7 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
  * A function definition will always be considered a leader statement. As such, it
  * will always have it's own separate block
  */
-static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_node){
+static void visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_node){
 	//Push the nesting level that we're in
 	push_nesting_level(&nesting_stack, NESTING_FUNCTION);
 
@@ -12403,9 +12403,6 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 
 	//Deallocate the current function's user defined jumps as well
 	dynamic_array_dealloc(&current_function_user_defined_jump_statements);
-
-	//We always return the start block
-	return function_starting_block;
 }
 
 
@@ -13454,30 +13451,19 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
  * that it could have are function defintions or more namespace decalarations, making
  * this rule recursive
  */
-static u_int8_t visit_namespace_declaration(cfg_t* cfg, generic_ast_node_t* namespace_declaration_node){
+static void visit_namespace_declaration(cfg_t* cfg, generic_ast_node_t* namespace_declaration_node){
 	//Grab a cursor to traverse
 	generic_ast_node_t* namespace_child = namespace_declaration_node->first_child;
-	//For our function definitions
-	basic_block_t* block;
 
 	//So long as we still have children
 	while(namespace_child != NULL){
 		switch(namespace_child->ast_node_type){
 			case AST_NODE_TYPE_FUNC_DEF:
-				block = visit_function_definition(cfg, namespace_child);
-
-				//-1 block id means it failed(very rare)
-				if(block->block_id == -1){
-					return FAILURE;
-				}
-				
+				visit_function_definition(cfg, namespace_child);
 				break;
 
 			case AST_NODE_TYPE_NAMESPACE_DECLARATION:
-				if(visit_namespace_declaration(cfg, namespace_child) == FAILURE){
-					return FAILURE;
-				}
-
+				visit_namespace_declaration(cfg, namespace_child);
 				break;
 				
 			//Some very weird error if we hit here. Hard exit to avoid dev confusion
@@ -13489,9 +13475,6 @@ static u_int8_t visit_namespace_declaration(cfg_t* cfg, generic_ast_node_t* name
 		//Bump it up
 		namespace_child = namespace_child->next_sibling;
 	}
-
-	//It worked so give back success
-	return SUCCESS;
 }
 
 
@@ -13499,13 +13482,9 @@ static u_int8_t visit_namespace_declaration(cfg_t* cfg, generic_ast_node_t* name
  * Visit the prog node for our CFG. This rule will simply multiplex to all other rules
  * between functions, let statements and declaration statements
  */
-static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
+static void visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 	//A prog node can decay into a function definition, a let statement or otherwise
 	generic_ast_node_t* ast_cursor = prog_node->first_child;
-	//Generic block holder
-	basic_block_t* block;
-	//Did we succeed or not?
-	u_int8_t success = TRUE;
 
 	//So long as the AST cursor is not null
 	while(ast_cursor != NULL){
@@ -13516,14 +13495,7 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 			 * let the helper deal with it
 			 */
 			case AST_NODE_TYPE_FUNC_DEF:
-				//Visit the function definition
-				block = visit_function_definition(cfg, ast_cursor);
-			
-				//If this failed, we're out
-				if(block->block_id == -1){
-					return FALSE;
-				}
-
+				visit_function_definition(cfg, ast_cursor);
 				break;
 
 			/**
@@ -13540,12 +13512,7 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 				break;
 
 			case AST_NODE_TYPE_NAMESPACE_DECLARATION:
-				success = visit_namespace_declaration(cfg, ast_cursor);
-
-				if(success == FAILURE){
-					return FAILURE;
-				}
-
+				visit_namespace_declaration(cfg, ast_cursor);
 				break;
 
 			//Some very weird error if we hit here. Hard exit to avoid dev confusion
@@ -13558,9 +13525,6 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 		//We now advance to the next sibling
 		ast_cursor = ast_cursor->next_sibling;
 	}
-
-	//Return true because it worked
-	return SUCCESS;
 }
 
 
@@ -14029,19 +13993,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	 * impossible for this to fail as we know that
 	 * the program is well-formed if it gets here
 	 */
-	visit_prog_node(cfg, generic_ast_node_t *prog_node)
-
-	if(visit_prog_node(cfg, results->root) == FALSE){
-		fprintf(stderr, "Fatal internal compiler error - CFG construction failed\n");
-		exit(1);
-	}
-
-	// -1 block ID, this means that the whole thing failed
-	if(visit_prog_node(cfg, results->root) == FALSE){
-		print_cfg_message(MESSAGE_TYPE_ERROR, "CFG was unable to be constructed", 0);
-		cfg->result = CFG_RESULT_FAILURE;
-		(*num_errors_ref)++;
-	}
+	visit_prog_node(cfg, results->root);
 
 	/**
 	 * Call out to do all SSA generation
