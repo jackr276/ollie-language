@@ -146,6 +146,11 @@ struct symtab_function_record_t{
 	u_int32_t called_by_count;
 	//Unique identifier that is not a name
 	u_int32_t function_id;
+	/**
+	 * For enhanced error printing - store the index where this function was defined. This
+	 * will allow us to just print out the actual source code in the event of an error
+	 */
+	u_int32_t token_index_of_definition;
 	//Has it been defined?(done to allow for predeclaration)(0 = declared only, 1 = defined)
 	u_int8_t defined;
 	//Has it ever been called?
@@ -206,6 +211,11 @@ struct symtab_variable_record_t{
 	int32_t enum_member_value;
 	//Current generation level(for SSA)
 	int32_t ssa_counter;
+	/**
+	 * For enhanced error printing - store the index where this variable was defined. This
+	 * will allow us to just print out the actual source code in the event of an error
+	 */
+	u_int32_t token_index_of_definition;
 	//What is the struct offset for this variable
 	u_int16_t struct_offset;
 	/**
@@ -519,7 +529,7 @@ void remediate_return_by_copy_gp_parameter_order(symtab_function_record_t* recor
 /**
  * Make a function record
  */
-symtab_function_record_t* create_function_record(dynamic_string_t* name, dependency_graph_node_t* dependency_contained_in, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number);
+symtab_function_record_t* create_function_record(dynamic_string_t* name, dependency_graph_node_t* dependency_contained_in, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number, u_int32_t token_index);
 
 /**
  * Create a namespace record and add it into the symtab. This will create the new namespace as a

@@ -13770,6 +13770,8 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	u_int8_t is_inlined = FALSE;
 	//Does this funtion raise errors? We know based on the ! after the fn keyword
 	u_int8_t raises_errors = FALSE;
+	//Save this to add into the record later
+	u_int32_t token_index_of_definition = token_stream->token_pointer;
 
 	//Lookahead token
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
@@ -13875,7 +13877,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	}
 
 	//Now that we've survived up to here, we can make the actual record
-	symtab_function_record_t* function_record = create_function_record(&function_name, current_dependency_node, visibility, is_inlined, raises_errors, parser_line_num);
+	symtab_function_record_t* function_record = create_function_record(&function_name, current_dependency_node, visibility, is_inlined, raises_errors, parser_line_num, token_index_of_definition);
 
 	//Now we need to see an lparen to begin the parameters
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -14063,6 +14065,9 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	//Does this function maintain a specific error list with the "raise" keyword
 	u_int8_t specific_error_list = FALSE;
 
+	//Cache the token index of definition that we're dealing with
+	u_int32_t token_index_of_definition = token_stream->token_pointer;
+
 	//Grab the token
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
@@ -14204,7 +14209,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-		function_record = create_function_record(&function_name, current_dependency_node, visibility, is_inlined, raises_errors, parser_line_num);
+		function_record = create_function_record(&function_name, current_dependency_node, visibility, is_inlined, raises_errors, parser_line_num, token_index_of_definition);
 
 		//We'll put the function into the symbol table
 		//since we now know that everything worked

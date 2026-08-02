@@ -19,7 +19,7 @@ static u_int32_t* warning_count;
 static dependency_graph_node_t* current_dependency_node;
 
 //Holder for all error info that we want to print
-static char error_info[ERROR_SIZE * 3];
+static char error_info[ERROR_SIZE * 5];
 
 //========================================= General Utilities =============================================
 
@@ -1244,36 +1244,27 @@ static void perform_function_usage_analysis(function_symtab_t* symtab){
 				 */
 				if(record->called == FALSE && record->defined == FALSE){
 					sprintf(error_info, "Function \"%s\" is never defined and never called. First defined here:", record->func_name.string);
+					print_function_name_to_buffer(error_info, record);
 					print_static_analyzer_message(MESSAGE_TYPE_WARNING, error_info, record->line_number);
 					(*warning_count)++;
-
-					//Also print where the function was defined
-					//TODO REVAMP THIS
-					print_function_name(record);
 
 				/**
 				 * If a function is defined but never called that's another kind of warning
 				 */
 				} else if(record->called == FALSE && record->defined == TRUE && record->visibility == VISIBILITY_TYPE_PRIVATE){
 					sprintf(error_info, "Function \"%s\" is defined but never called. First defined here:", record->func_name.string);
+					print_function_name_to_buffer(error_info, record);
 					print_static_analyzer_message(MESSAGE_TYPE_WARNING, error_info, record->line_number);
 					(*warning_count)++;
-
-					//Also print where the function was defined
-					//TODO REVAMP THIS
-					print_function_name(record);
 
 				/**
 				 * If a function is called but never defined that's another kind of issue TODO IS THIS JUST A WARNING???
 				 */
 				} else if(record->called == TRUE && record->defined == FALSE){
 					sprintf(error_info, "Function \"%s\" is called but never explicitly defined. First declared here:", record->func_name.string);
+					print_function_name_to_buffer(error_info, record);
 					print_static_analyzer_message(MESSAGE_TYPE_WARNING, error_info, record->line_number);
 					(*warning_count)++;
-
-					//Also print where the function was defined
-					//TODO REVAMP
-					print_function_name(record);
 				}
 
 				//Advance record up

@@ -1022,7 +1022,7 @@ void remediate_return_by_copy_gp_parameter_order(symtab_function_record_t* recor
 /**
  * Dynamically allocate a function record
 */
-symtab_function_record_t* create_function_record(dynamic_string_t* name, dependency_graph_node_t* dependency_contained_in, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number){
+symtab_function_record_t* create_function_record(dynamic_string_t* name, dependency_graph_node_t* dependency_contained_in, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number, u_int32_t token_index){
 	//Allocate it
 	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
 
@@ -1054,6 +1054,11 @@ symtab_function_record_t* create_function_record(dynamic_string_t* name, depende
 
 	//We know that we need to create this immediately
 	record->signature = create_function_pointer_type(visibility, is_inlined, line_number, raises_errors, NOT_MUTABLE);
+
+	/**
+	 * IMPOTANT - for error printing, we will store the function's token index of definition here
+	 */
+	record->token_index_of_definition = token_index;
 
 	//And give it back
 	return record;
@@ -2346,55 +2351,34 @@ void print_type_record(symtab_type_record_t* record){
 
 
 /**
- * Print a function name into a string buffer
+ * Print a function name into a string buffer. We will be concatenating to this
+ * buffer that we assume is preallocated
  */
 void print_function_name_to_buffer(char* buffer, symtab_function_record_t* record){
-	//We'll first print to an internal one
-	char internal_buffer[ERROR_SIZE];
-	char temp_buffer[ERROR_SIZE / 5];
+	//Internal buffer for printing
+	char internal_buffer[1000];
 
-	if(record->signature->internal_types.function_type->visibility == VISIBILITY_TYPE_PUBLIC){
-		sprintf(internal_buffer, "\t---> %d | pub fn%s %s(", record->line_number, record->signature->internal_types.function_type->raises_errors == TRUE ? "!" : "", record->func_name.string);
-	} else {
-		sprintf(internal_buffer, "\t---> %d | fn%s %s(", record->line_number, record->signature->internal_types.function_type->raises_errors == TRUE ? "!" : "", record->func_name.string);
-	}
+	//Get out the original token stream
+	ollie_token_stream_t* original_token_stream = &(record->dependency_graph_node->token_stream);
 
-	//Extract the number of params
-	int32_t num_params = record->function_parameters.current_index;
+	//First print out the line number and attach to the internal buffer
+	sprintf(internal_buffer, "\n\t---> %d |", record->line_number);
+	strcat(buffer, internal_buffer);
 
-	//Print out the params
-	for(int32_t i = 0; i < num_params; i++){
-		symtab_variable_record_t* current_parameter = dynamic_array_get_at(&(record->function_parameters), i);
+	//Now run through and print the tokens out that correspond to this function's name
+	for(int32_t i = record->token_index_of_definition; i < original_token_stream->token_stream.current_index; i++){
+		//Extract the token
+		lexitem_t* token = token_array_get_pointer_at(&(original_token_stream->token_stream), i);
 
-		//Print if it's mutable
-		if(current_parameter->type_defined_as->mutability == MUTABLE){
-			strcat(internal_buffer, "mut ");
-		}
+		//Print with added spaces and concatenate to our buffer
+		sprintf(internal_buffer, " %s", lexitem_to_string(token));
+		strcat(buffer, internal_buffer);
 
-		//Get this into a temp buffer and then write it out
-		sprintf(temp_buffer, "%s : %s", current_parameter->var_name.string, current_parameter->type_defined_as->type_name.string);
-		strcat(internal_buffer, temp_buffer);
-
-		//Comma if needed
-		if(i < num_params - 1){
-			strcat(internal_buffer, ", ");
+		//End case - if we have one of these it means that we're at the end and should leave
+		if(token->tok == SEMICOLON || token->tok == L_CURLY){
+			break;
 		}
 	}
-
-	//Grab the signature out
-	function_type_t* signature = record->signature->internal_types.function_type;
-	sprintf(temp_buffer, ") -> %s", signature->return_type->type_name.string);
-	strcat(internal_buffer, temp_buffer);
-
-	//If it was defined implicitly, we'll print a semicol
-	if(record->defined == 0){
-		strcat(internal_buffer, ";\n");
-	} else {
-		strcat(internal_buffer, "{...\n");
-	}
-
-	//Now concatenate into the parameter buffer
-	strncat(buffer, internal_buffer, ERROR_SIZE);
 }
 
 
