@@ -735,45 +735,57 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 				case TYPE_CLASS_ENUMERATED:
 					return destination_type;
 
+				/**
+				 * For size types, we can only assign them to other integers, so the checks here
+				 * will involve seeing if we have an integer destination type
+				 */
 				case TYPE_CLASS_SIZE:
-
+					//No floats allowed
+					if(dest_basic_type == F32 || dest_basic_type == F64 || dest_basic_type == F128){
+						return NULL;
+					}
+				
+					/**
+					 * Otherwise we just do the usual size check. A size type is always a 32
+					 * bit unsigned integer
+					 */
+					if(true_source_type->type_size <= destination_type->type_size){
+						return destination_type;
+					} else {
+						return NULL;
+					}
 
 				case TYPE_CLASS_BASIC:
-					break;
+					/**
+					 * Once we get here, we know that the source type is a basic type. We now
+					 * need to check that it's not a void
+					 */
+					source_basic_type = true_source_type->basic_type_token;
+
+					//You can never assign from VOID
+					if(source_basic_type == VOID){
+						return NULL;
+					}
+
+					/**
+					 * For basic types, so long as the source is not physically larger than the
+					 * destination, ollie allows us to assign it. This is also true for going from
+					 * floats to ints or ints to floats, but this will generate internal conversion
+					 * logic
+					 */
+					if(true_source_type->type_size <= destination_type->type_size){
+						return destination_type;
+					} else {
+						return NULL;
+					}
 					
 				//Anything else we return NULL
 				default:
 					return NULL;
 			}
 
-			if(true_source_type->type_class == TYPE_CLASS_ENUMERATED){
-				return destination_type;
-			}
-
-			//Once we get here, we know that the source type is a basic type. We now
-			//need to check that it's not a float or void
-			source_basic_type = true_source_type->basic_type_token;
-
-			//Go based on what we have here
-			switch(source_basic_type){
-				case VOID:
-					return NULL;
-
-				/**
-				 * For basic types, so long as the source is not physically larger than the
-				 * destination, ollie allows us to assign it. This is also true for going from
-				 * floats to ints or ints to floats, but this will generate internal conversion
-				 * logic
-				 */
-				default:
-					if(true_source_type->type_size <= destination_type->type_size){
-						return destination_type;
-					} else {
-						//These wouldn't fit
-						return NULL;
-					}
-			}
-
+			//Keep the compiler happy - we should never get here
+			return NULL;
 
 		/**
 		 * If we are assigning
