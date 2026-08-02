@@ -1319,7 +1319,8 @@ static void perform_function_usage_analysis(function_symtab_t* symtab){
  * 	2.) Converting the CFG into SSA form
  * 	3.) Perform definite assignment analysis
  * 		- This is a potential failure point
- * 	4.) Perform variable mutation analysis
+ * 	4.) Perform function call analysis
+ * 	5.) Perform variable mutation analysis
  */
 cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end_results_package_t* results, u_int32_t* num_errors, u_int32_t* num_warnings){
 	//By default assume success
