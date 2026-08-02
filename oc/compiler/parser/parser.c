@@ -7295,6 +7295,9 @@ static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_strea
 	lexitem_t lookahead;
 	generic_type_t* member_type = NULL;
 
+	//Cache this for later printing
+	u_int32_t token_index_of_declaration = token_stream->token_pointer;
+
 	//First thing that we need to see is an identifier
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
@@ -7392,9 +7395,7 @@ static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_strea
 	}
 	
 	//We'll first create the symtab record. NULL for no specific function
-	symtab_variable_record_t* member_record = create_variable_record(&name, NULL);
-	//Store the line number for error printing
-	member_record->line_number = parser_line_num;
+	symtab_variable_record_t* member_record = create_variable_record(&name, NULL, current_dependency_node, parser_line_num, token_index_of_declaration);
 	//Store what the type is
 	member_record->type_defined_as = member_type;
 
@@ -7938,6 +7939,9 @@ static u_int8_t struct_definer(ollie_token_stream_t* token_stream){
  * BNF Rule: <union-member> ::= <identifier>:<type-specifier> | define <anonymous-type-declaration>;
  */
 static symtab_variable_record_t* union_member(ollie_token_stream_t* token_stream, generic_type_t* union_type){
+	//Store the index where this was declared
+	u_int32_t token_index_of_declaration = token_stream->token_pointer;
+
 	//Our lookahead token
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
@@ -8041,7 +8045,7 @@ static symtab_variable_record_t* union_member(ollie_token_stream_t* token_stream
 	}
 
 	//Store the name and type
-	symtab_variable_record_t* union_member = create_variable_record(&name, NULL);
+	symtab_variable_record_t* union_member = create_variable_record(&name, NULL, current_dependency_node, parser_line_num, token_index_of_declaration);
 	union_member->type_defined_as = type;
 
 	//Give back our created member
@@ -8328,6 +8332,9 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 
 	//Now we will enter a do-while loop where we can continue to identifiers for our enums
 	do {
+		//Save this for later printing
+		u_int32_t token_index_of_declaration = token_stream->token_pointer;
+
 		//We need to see a valid identifier
 		lookahead = get_next_token(token_stream, &parser_line_num);
 
@@ -8358,10 +8365,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 
 		//If we make it here, then all of our checks passed and we don't have a duplicate name. We're now good
 		//to create the record and assign it a type
-		symtab_variable_record_t* member_record = create_variable_record(&(lookahead.lexeme), NULL);
-
-		//Store the line number
-		member_record->line_number = parser_line_num;
+		symtab_variable_record_t* member_record = create_variable_record(&(lookahead.lexeme), NULL, current_dependency_node, parser_line_num, token_index_of_declaration);
 
 		//Now we can insert this into the symtab
 		insert_variable(variable_symtab, member_record);
@@ -12075,6 +12079,9 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 	//Is it static - this is almost always false
 	u_int8_t is_static = FALSE;
 
+	//Save the token pointer for our index of declaration
+	u_int32_t token_index_of_declaration = token_stream->token_pointer;
+
 	//Let's see if we have a storage class
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
@@ -12191,18 +12198,16 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 	if(is_static == FALSE){
 		//Go based on it's global status
 		if(is_global == FALSE){
-			declared_var = create_variable_record(&name, current_function);
+			declared_var = create_variable_record(&name, current_function, current_dependency_node, parser_line_num, token_index_of_declaration);
 		} else {
-			declared_var = create_global_variable_record(&name, visibility);
+			declared_var = create_global_variable_record(&name, current_dependency_node, parser_line_num, token_index_of_declaration, visibility);
 		}
 	} else {
-		declared_var = create_static_variable_record(&name);
+		declared_var = create_static_variable_record(&name, current_dependency_node, parser_line_num, token_index_of_declaration);
 	}
 
 	//Store the type--make sure that we strip any aliasing off of it first
 	declared_var->type_defined_as = dealias_type(type_spec);
-	//It was declared
-	declared_var->declare_or_let = 0;
 	//The line_number
 	declared_var->line_number = parser_line_num;
 	//Now that we're all good, we can add it into the symbol table
@@ -12624,6 +12629,9 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	//What is our variable membership? By default we use the generic
 	variable_membership_t membership = NO_MEMBERSHIP;
 
+	//Extract the token pointer for our index of declaration
+	u_int32_t token_index_of_declaration = token_stream->token_pointer;
+
 	//Let's first declare the root node
 	generic_ast_node_t* let_stmt_node = ast_node_alloc(AST_NODE_TYPE_LET_STMT, SIDE_TYPE_LEFT);
 
@@ -12783,18 +12791,16 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	if(is_static == FALSE){
 		//Go based on it's global status
 		if(is_global == FALSE){
-			declared_var = create_variable_record(&name, current_function);
+			declared_var = create_variable_record(&name, current_function, current_dependency_node, parser_line_num, token_index_of_declaration);
 		} else {
-			declared_var = create_global_variable_record(&name, visibility);
+			declared_var = create_global_variable_record(&name, current_dependency_node, parser_line_num, token_index_of_declaration, visibility);
 		}
 	} else {
-		declared_var = create_static_variable_record(&name);
+		declared_var = create_static_variable_record(&name, current_dependency_node, parser_line_num, token_index_of_declaration);
 	}
 
 	//Store the type
 	declared_var->type_defined_as = type_spec;
-	//It was "letted" 
-	declared_var->declare_or_let = 1;
 	//Save the line num
 	declared_var->line_number = current_line;
 
@@ -13167,6 +13173,8 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 	lexitem_t lookahead;
 	//Did we see the params keyword or not
 	u_int8_t params_seen = FALSE;
+	//Save where we have the token pointer index of declaration
+	u_int32_t token_pointer_index_of_declaration = token_stream->token_pointer;
 
 	//Now we can optionally see the constant keyword here
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -13252,7 +13260,7 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 	 * declaration. It is now incumbent on us to store it in the variable 
 	 * symbol table
 	 */
-	symtab_variable_record_t* param_record = create_variable_record(&name, current_function);
+	symtab_variable_record_t* param_record = create_variable_record(&name, current_function, current_dependency_node, parser_line_num, token_pointer_index_of_declaration);
 
 	/**
 	 * If we've seen the params keyword now is the time
@@ -13270,8 +13278,6 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 
 	//It is a function parameter
 	param_record->membership = FUNCTION_PARAMETER;
-	//Add the line number
-	param_record->line_number = parser_line_num;
 	//Store the type as well, very important
 	param_record->type_defined_as = type;
 

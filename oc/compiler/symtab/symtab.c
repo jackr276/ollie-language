@@ -632,7 +632,7 @@ static inline u_int64_t hash_type(generic_type_t* type){
 /**
  * Dynamically allocate a variable record
 */
-symtab_variable_record_t* create_variable_record(dynamic_string_t* name, symtab_function_record_t* function_declared_in){
+symtab_variable_record_t* create_variable_record(dynamic_string_t* name, symtab_function_record_t* function_declared_in, dependency_graph_node_t* node_defined_in, u_int32_t line_number, u_int32_t token_index){
 	//Allocate it
 	symtab_variable_record_t* record = calloc(1, sizeof(symtab_variable_record_t));
 
@@ -643,6 +643,11 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t* name, symtab_
 
 	//This is just a regular variable(for now)
 	record->membership = NO_MEMBERSHIP;
+
+	//Store all of this information for eventual error printing
+	record->node_defined_in = node_defined_in;
+	record->line_number = line_number;
+	record->token_index_of_definition = token_index;
 
 	/**
 	 * Very Important: it is mandatory that we know what function this variable is in. If it
@@ -662,7 +667,7 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t* name, symtab_
 /**
  * Create a global variable record
  */
-symtab_variable_record_t* create_global_variable_record(dynamic_string_t* name, visibilty_type_t visibility){
+symtab_variable_record_t* create_global_variable_record(dynamic_string_t* name, dependency_graph_node_t* node_defined_in, u_int32_t line_number, u_int32_t token_index, visibilty_type_t visibility){
 	//Allocate it
 	symtab_variable_record_t* record = calloc(1, sizeof(symtab_variable_record_t));
 
@@ -673,6 +678,11 @@ symtab_variable_record_t* create_global_variable_record(dynamic_string_t* name, 
 
 	//Flag that this is a global variable
 	record->membership = GLOBAL_VARIABLE;
+
+	//Store all of this information for eventual error printing
+	record->node_defined_in = node_defined_in;
+	record->line_number = line_number;
+	record->token_index_of_definition = token_index;
 
 	//Store the visibility level
 	record->visibility = visibility;
@@ -689,7 +699,7 @@ symtab_variable_record_t* create_global_variable_record(dynamic_string_t* name, 
 /**
  * Create a static variable record. These variables are really global vars
  */
-symtab_variable_record_t* create_static_variable_record(dynamic_string_t* name){
+symtab_variable_record_t* create_static_variable_record(dynamic_string_t* name, dependency_graph_node_t* node_defined_in, u_int32_t line_number, u_int32_t token_index){
 	//Allocate it
 	symtab_variable_record_t* record = calloc(1, sizeof(symtab_variable_record_t));
 
@@ -703,6 +713,11 @@ symtab_variable_record_t* create_static_variable_record(dynamic_string_t* name){
 	 * will be used by the CFG in case we have a bunch
 	 */
 	record->static_variable_mangler = 0;
+
+	//Store all of this information for eventual error printing
+	record->node_defined_in = node_defined_in;
+	record->line_number = line_number;
+	record->token_index_of_definition = token_index;
 
 	//Flag this as static
 	record->membership = STATIC_VARIABLE;
@@ -736,7 +751,7 @@ symtab_variable_record_t* create_temp_memory_address_variable(symtab_function_re
 	dynamic_string_set(&string, variable_name);
 
 	//Now create and add the symtab record for this variable
-	symtab_variable_record_t* record = create_variable_record(&string, function);
+	symtab_variable_record_t* record = create_variable_record(&string, function, NULL, 0, 0);
 	//Store the type here
 	record->type_defined_as = type;
 
@@ -777,7 +792,7 @@ symtab_variable_record_t* create_ssa_compatible_temp_var(symtab_function_record_
 	dynamic_string_set(&string, variable_name);
 
 	//Now create and add the symtab record for this variable
-	symtab_variable_record_t* record = create_variable_record(&string, function);
+	symtab_variable_record_t* record = create_variable_record(&string, function, NULL, 0, 0);
 	//Store the type here
 	record->type_defined_as = type;
 
@@ -814,7 +829,7 @@ symtab_variable_record_t* create_parameter_alias_variable(symtab_function_record
 	dynamic_string_set(&string, variable_name);
 
 	//Now create and add the symtab record for this variable
-	symtab_variable_record_t* record = create_variable_record(&string, function);
+	symtab_variable_record_t* record = create_variable_record(&string, function, aliases->node_defined_in, aliases->line_number, aliases->token_index_of_definition);
 	//Store the type here
 	record->type_defined_as = aliases->type_defined_as;
 
@@ -1657,7 +1672,7 @@ symtab_variable_record_t* initialize_stack_pointer(type_symtab_t* types){
 	dynamic_string_set(&variable_name, "stack_pointer");
 
 	//Stack pointer has no current function
-	symtab_variable_record_t* stack_pointer = create_variable_record(&variable_name, NULL);
+	symtab_variable_record_t* stack_pointer = create_variable_record(&variable_name, NULL, NULL, 0, 0);
 	//Set this type as a label(address)
 	stack_pointer->type_defined_as = lookup_type_name_only(types, "u64", NOT_MUTABLE)->type;
 
@@ -1677,7 +1692,7 @@ symtab_variable_record_t* initialize_instruction_pointer(type_symtab_t* types){
 	dynamic_string_set(&variable_name, "rip");
 
 	//Instruction pointer has no given function
-	symtab_variable_record_t* instruction_pointer = create_variable_record(&variable_name, NULL);
+	symtab_variable_record_t* instruction_pointer = create_variable_record(&variable_name, NULL, NULL, 0, 0);
 	//Set this type as a label(address)
 	instruction_pointer->type_defined_as = lookup_type_name_only(types, "u64", NOT_MUTABLE)->type;
 
@@ -2522,22 +2537,12 @@ void print_variable_name(symtab_variable_record_t* record){
 			//Line num
 			printf("\n---> %d | ", record->line_number);
 
-			//Declare or let
-			record->declare_or_let == 0 ? printf("declare ") : printf("let ");
-
 			//The var name
 			printf("%s : ", record->var_name.string);
 
 			//The type name
 			printf("%s%s", (record->type_defined_as->mutability == MUTABLE ? "mut ": ""),
 		  					record->type_defined_as->type_name.string);
-			
-			//We'll print out some abbreviated stuff with the let record
-			if(record->declare_or_let == 1){
-				printf("= <initializer>;\n\n");
-			} else {
-				printf(";\n");
-			}
 
 			break;
 	}

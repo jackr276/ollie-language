@@ -196,6 +196,8 @@ struct symtab_variable_record_t{
 	symtab_variable_record_t* alias;
 	//The associate region that this variable is stored in
 	stack_region_t* stack_region;
+	//What node was this variable defined in
+	dependency_graph_node_t* node_defined_in;
 	//What is the ID of the lexical scope that this variable is in?
 	u_int32_t lexical_scope_id;
 	//The line number
@@ -231,8 +233,6 @@ struct symtab_variable_record_t{
 	u_int8_t stack_variable;
 	//Is this a function parameter that is passed via stack?
 	u_int8_t passed_by_stack;
-	//Was it declared or letted
-	u_int8_t declare_or_let; /* 0 = declare, 1 = let */
 	//What's the visibility of this(only used for global variables)
 	visibilty_type_t visibility;
 };
@@ -484,17 +484,17 @@ void finalize_type_scope(type_symtab_t* symtab);
 /**
  * Create a record for the symbol table
  */
-symtab_variable_record_t* create_variable_record(dynamic_string_t* name, symtab_function_record_t* function_declared_in);
+symtab_variable_record_t* create_variable_record(dynamic_string_t* name, symtab_function_record_t* function_declared_in, dependency_graph_node_t* node_defined_in, u_int32_t line_number, u_int32_t token_index);
 
 /**
  * Create a global variable record
  */
-symtab_variable_record_t* create_global_variable_record(dynamic_string_t* name, visibilty_type_t visibility);
+symtab_variable_record_t* create_global_variable_record(dynamic_string_t* name, dependency_graph_node_t* node_defined_in, u_int32_t line_number, u_int32_t token_index, visibilty_type_t visibility);
 
 /**
  * Create a static variable record. These variables are really global vars
  */
-symtab_variable_record_t* create_static_variable_record(dynamic_string_t* name);
+symtab_variable_record_t* create_static_variable_record(dynamic_string_t* name, dependency_graph_node_t* node_defined_in, u_int32_t line_number, u_int32_t token_index);
 
 /**
  * Create a ternary variable record
