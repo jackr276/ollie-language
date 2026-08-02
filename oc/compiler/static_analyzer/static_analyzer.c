@@ -1221,8 +1221,8 @@ static void perform_mutability_checking(variable_symtab_t* symtab){
 					continue;
 				}
 
-				//We do not currently support memory SSA
-				if(is_memory_address_type(cursor->type_defined_as) == TRUE){
+				//We do not currently support memory SSA so we have to skip
+				if(is_memory_address_type(cursor->type_defined_as) == TRUE || cursor->stack_variable == TRUE){
 					cursor = cursor->next;
 					continue;
 				}
@@ -1294,10 +1294,10 @@ static void perform_function_usage_analysis(function_symtab_t* symtab){
 					(*warning_count)++;
 
 				/**
-				 * If a function is called but never defined that's another kind of issue TODO IS THIS JUST A WARNING???
+				 * If a function is called but never defined that's another kind of issue 
 				 */
 				} else if(record->called == TRUE && record->defined == FALSE){
-					sprintf(error_info, "Function \"%s\" is called but never explicitly defined. First declared here:", record->func_name.string);
+					sprintf(error_info, "Function \"%s\" is called but never explicitly defined. If you are using Ollie in the standard way this will cause a runtime error. First declared here:", record->func_name.string);
 					print_function_name_to_buffer(error_info, record);
 					print_static_analyzer_message(MESSAGE_TYPE_WARNING, error_info, record->line_number);
 					(*warning_count)++;
