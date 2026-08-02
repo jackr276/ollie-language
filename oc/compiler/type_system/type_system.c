@@ -974,8 +974,6 @@ static inline generic_type_t* convert_to_unsigned_version(type_symtab_t* symtab,
 		case U32:
 		case I32:
 			return lookup_type_name_only(symtab, "u32", type->mutability)->type;
-		case SIZE:
-			return lookup_type_name_only(symtab, "size", type->mutability)->type;
 		case U64:
 		case I64:
 			return lookup_type_name_only(symtab, "u64", type->mutability)->type;
@@ -1047,7 +1045,6 @@ static inline void widen_basic_type_to_given_size(type_symtab_t* symtab, generic
 		case U16:
 		case U32:
 		case U64:
-		case SIZE:
 			classification = WIDEN_UNSIGNED;
 			break;
 
@@ -1173,7 +1170,6 @@ static inline void integer_to_floating_point(type_symtab_t* symtab, generic_type
 		case I16:
 		case U32:
 		case I32:
-		case SIZE:
 			*a = lookup_type_name_only(symtab, "f32", (*a)->mutability)->type;
 			
 			break;
@@ -3297,7 +3293,6 @@ u_int8_t is_integer_type(generic_type_t* type){
 		case U16:
 		case I32:
 		case U32:
-		case SIZE:
 		case I64:
 		case U64:
 			return TRUE;
