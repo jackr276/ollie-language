@@ -7,7 +7,7 @@
 pub fn elaborative_param(x:i32, y:params i32) -> i32 {
 	let result:mut i32 = x;
 
-	for(let i:mut i32 = 0; i < paramcount(y); i++){
+	for(let i:mut size = 0; i < paramcount(y); i++){
 		result += y[i];
 	}
 
@@ -23,5 +23,7 @@ pub fn main() -> i32 {
 	let e:i32 = 9;
 
 	// Test with a direct all
+	//Should return 1 + 5 + 6 + 7 + 8 + 9 = 36
+	OUNIT: [exit_status = 36]
 	ret @elaborative_param(1, a, b, c, d, e);
 }

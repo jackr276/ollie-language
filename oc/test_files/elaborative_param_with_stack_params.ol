@@ -11,7 +11,7 @@
 pub fn stress_test_elaborative(a:i32, b:i32, c:i32, d:char, e:char, f:char, g:i16, param_arr:params i32) -> i32 {
 	let result:mut i32 = a + b + c + d + e + f + g;
 
-	for(let i:mut i32 = 0; i < paramcount(param_arr); i++) {
+	for(let i:mut size = 0; i < paramcount(param_arr); i++) {
 		result += param_arr[i];
 	}
 	
