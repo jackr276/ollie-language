@@ -740,6 +740,16 @@ void print_type_record(symtab_type_record_t* record);
 void print_function_name_to_buffer(char* buffer, symtab_function_record_t* record);
 
 /**
+ * A helper method for variable name printing
+ */
+void print_variable_name_to_buffer(char* buffer, symtab_variable_record_t* record);
+
+/**
+ * A helper method for type name printing
+ */
+void print_type_name(symtab_type_record_t* record);
+
+/**
  * Record that a given source function calls the target
  *
  * This always goes as: source calls target
@@ -757,16 +767,6 @@ dynamic_string_t generate_fully_qualified_namespace_name(function_namespace_t* n
  * a freshly allocated dynamic string
  */
 dynamic_string_t generate_fully_qualified_function_name(symtab_function_record_t* function);
-
-/**
- * A helper method for variable name printing
- */
-void print_variable_name(symtab_variable_record_t* record);
-
-/**
- * A helper method for type name printing
- */
-void print_type_name(symtab_type_record_t* record);
 
 /**
  * Print the call graph's adjacency matrix out for debugging

@@ -2398,6 +2398,74 @@ void print_function_name_to_buffer(char* buffer, symtab_function_record_t* recor
 
 
 /**
+ * Print a variable name out in a stylized way. This is intended for error messages
+ */
+void print_variable_name_to_buffer(char* buffer, symtab_variable_record_t* record){
+	//Internal buffer for printing
+	char internal_buffer[1000];
+
+	switch(record->membership){
+		/**
+		 * For function parameters we just print out 
+		 * the function declaration
+		 */
+		case FUNCTION_PARAMETER:
+			print_function_name_to_buffer(buffer, record->function_declared_in);
+			break;
+
+		/**
+		 * For everything else we will generate the string using the
+		 * token index that is stored inside of the record itself
+		 */
+		default:
+			//First print out the line number and attach to the internal buffer
+			sprintf(internal_buffer, "\n\t---> %d |", record->line_number);
+			strcat(buffer, internal_buffer);
+
+			//Get out the original token stream
+			ollie_token_stream_t* original_token_stream = &(record->node_defined_in->token_stream);
+
+			for(int32_t i = record->token_index_of_definition; i < original_token_stream->token_stream.current_index; i++){
+				lexitem_t* token = token_array_get_pointer_at(&(original_token_stream->token_stream), i);
+
+				//Print with added spaces and concatenate to our buffer
+				sprintf(internal_buffer, " %s", lexitem_to_string(token));
+				strcat(buffer, internal_buffer);
+
+				//These are our terminal cases for the printer
+				if(token->tok == SEMICOLON || token->tok == L_CURLY || token->tok == COMMA){
+					break;
+				}
+			}
+
+			break;
+	}
+}
+
+
+/**
+ * Print a type name. Intended for error messages
+ */
+void print_type_name(symtab_type_record_t* record){
+	//Print out where it was declared
+	if(record->type->type_class == TYPE_CLASS_BASIC){
+		printf("---> BASIC TYPE | ");
+	} else {
+		printf("---> %d | ", record->type->line_number);
+	}
+
+	//The mut specifier
+	if(record->type->mutability == MUTABLE){
+		printf("mut ");
+	}
+
+	//Then print out the name
+	printf("%s\n\n", record->type->type_name.string);
+}
+
+
+
+/**
  * Generate the fully qualified namespace for a given namespace and return it inside of
  * a freshly allocated dynamic string
  *
@@ -2508,65 +2576,6 @@ dynamic_string_t generate_fully_qualified_function_name(symtab_function_record_t
 	dynamic_string_concatenate(&qualified_name, function->func_name.string);
 	
 	return qualified_name;
-}
-
-
-/**
- * Print a variable name out in a stylized way
- * Intended for error messages
- *
- * TODO REWORK
- */
-void print_variable_name(symtab_variable_record_t* record){
-	//Go based on the membership
-	switch(record->membership){
-		case FUNCTION_PARAMETER:
-			//TODO REVAMP
-			//print_function_name(record->function_declared_in);
-			//TODO
-			break;
-		case ENUM_MEMBER:
-			//The var name
-			printf("{\n\t\t...\n\t\t...\t\t\n---> %d |\t %s", record->line_number, record->var_name.string);
-			break;
-		case STRUCT_MEMBER:
-			//The var name
-			printf("{\n\t\t...\n\t\t...\t\t\n---> %d |\t %s : %s", record->line_number, record->var_name.string, record->type_defined_as->type_name.string);
-			break;
-		default:
-			//Line num
-			printf("\n---> %d | ", record->line_number);
-
-			//The var name
-			printf("%s : ", record->var_name.string);
-
-			//The type name
-			printf("%s%s", (record->type_defined_as->mutability == MUTABLE ? "mut ": ""),
-		  					record->type_defined_as->type_name.string);
-
-			break;
-	}
-}
-
-
-/**
- * Print a type name. Intended for error messages
- */
-void print_type_name(symtab_type_record_t* record){
-	//Print out where it was declared
-	if(record->type->type_class == TYPE_CLASS_BASIC){
-		printf("---> BASIC TYPE | ");
-	} else {
-		printf("---> %d | ", record->type->line_number);
-	}
-
-	//The mut specifier
-	if(record->type->mutability == MUTABLE){
-		printf("mut ");
-	}
-
-	//Then print out the name
-	printf("%s\n\n", record->type->type_name.string);
 }
 
 
