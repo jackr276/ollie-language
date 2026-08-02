@@ -1209,9 +1209,9 @@ static void perform_mutability_checking(variable_symtab_t* symtab){
 		symtab_variable_sheaf_t* sheaf = dynamic_array_get_at(&(symtab->sheafs), i);
 
 		//For each scope go through all record slots
-		for(int32_t i = 0; i < VARIABLE_KEYSPACE; i++){
+		for(int32_t j = 0; j  < VARIABLE_KEYSPACE; j++){
 			//For each record slot grab a cursor and crawl
-			symtab_variable_record_t* cursor = sheaf->records[i];
+			symtab_variable_record_t* cursor = sheaf->records[j];
 
 			//Keep going so long as we have things to drill into
 			while(cursor != NULL){
@@ -1239,17 +1239,18 @@ static void perform_mutability_checking(variable_symtab_t* symtab){
 				}
 
 				/**
-				 * Finally we get to here. If the ssa counter is 1, that means that the highest
-				 * ever SSA generation was 1, as in it was only assigned once. This means that
-				 * the variable was never actually mutated despite being called mutable. This
-				 * will trigger our warning
+				 * If the SSA counter is at 2, that means that the *next* LHS generation would have been
+				 * 2 *IF* it was ever hit. Since we are at 2, it means that we only did one LHS operation
+				 * with this value. Therefore, this tells us that the variable was never mutated
 				 */
-				if(cursor->ssa_counter == 1){
+				if(cursor->ssa_counter == 2){
 					sprintf(info, "Variable \"%s\" is declared as mutable but never mutated. Consider removing the \"mut\" keyword. First defined here:", cursor->var_name.string);
 					print_variable_name_to_buffer(info, cursor);
+					print_static_analyzer_message(MESSAGE_TYPE_WARNING, info, cursor->line_number);
 					(*warning_count)++;
 				}
 
+				//Bump up to the next record
 				cursor = cursor->next;
 			}
 		}
