@@ -6,7 +6,7 @@
 pub fn elaborative_param_arrays(arr_of_arr:params i32[4]) -> i32 {
 	let result:mut i32 = 0;
 
-	for(let i:mut i32 = 0; i < paramcount(arr_of_arr); i++){
+	for(let i:mut size = 0; i < paramcount(arr_of_arr); i++){
 		result += arr_of_arr[i][1];
 	}
 

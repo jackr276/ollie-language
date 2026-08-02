@@ -7,7 +7,7 @@
 pub fn elaborative_param(x:i32, y:params i32) -> i32 {
 	let result:mut i32 = x;
 
-	for(let i:mut i32 = 0; i < paramcount(y); i++){
+	for(let i:mut size = 0; i < paramcount(y); i++){
 		result += y[i];
 	}
 

@@ -18,7 +18,7 @@ pub fn elaborative_param(x:i32, y:i32, elaborative_params:params i32) -> i32 {
 	//Paramcount will get this for us
 	let count:i32 = paramcount(elaborative_params);
 
-	for(let i:mut i32 = 0; i < paramcount(elaborative_params); i++){
+	for(let i:mut size = 0; i < paramcount(elaborative_params); i++){
 		result += elaborative_params[i];
 	}
 
@@ -28,5 +28,6 @@ pub fn elaborative_param(x:i32, y:i32, elaborative_params:params i32) -> i32 {
 
 pub fn main() -> i32 {
 	//Here 4, 5 and 6 would go onto the stack
+	OUNIT: [exit_status = 18]
 	ret @elaborative_param(1, 2, 4, 5, 6);
 }

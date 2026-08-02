@@ -385,6 +385,10 @@ static u_int8_t function_signatures_identical(generic_type_t* a, generic_type_t*
  * 		and vice versa. All of the internal conversion logic will happen in the instruction selector
  */
 generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_t* source_type){
+	//Always dealias these to be sure
+	source_type = dealias_type(source_type);
+	destination_type = dealias_type(destination_type);
+
 	//Predeclare these for now
 	ollie_token_t source_basic_type;
 	ollie_token_t dest_basic_type;
@@ -719,48 +723,53 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 			//Extract the destination's basic type
 			dest_basic_type = destination_type->basic_type_token;
 
-			//Switch based on the type that we have here
-			switch(dest_basic_type){
-				case VOID:
-					return NULL;
+			//Null can never be assigned to anything
+			if(dest_basic_type == VOID){
+				return NULL;
+			}
 
-				//Once we get to this point, we know that we have something
-				//in this set for destination type: F64,F32, U64, I64, U32, I32, U16, I16, U8, I8, Char
-				//From here, we'll go based on the type size of the source type *if* the source
-				//type is also a basic type. 
-				default:
-					//Special exception - the source type is an enum. These are good to be used with ints
-					if(true_source_type->type_class == TYPE_CLASS_ENUMERATED){
-						return destination_type;
+			/**
+			 * Once we get to this point, we know that we have something
+			 * in this set for destination type: F64,F32, U64, I64, U32, I32, U16, I16, U8, I8, Char
+			 * From here, we'll go based on the type size of the source type *if* the source
+			 * type is also a basic type.
+			 */
+			switch(true_source_type->type_class){
+				//Special exception - the source type is an enum. These are good to be used with ints
+				case TYPE_CLASS_ENUMERATED:
+					return destination_type;
+
+				/**
+				 * For basic types, so long as the source is not physically larger than the
+				 * destination, ollie allows us to assign it. This is also true for going from
+				 * floats to ints or ints to floats, but this will generate internal conversion
+				 * logic
+				 */
+				case TYPE_CLASS_BASIC:
+					/**
+					 * Once we get here, we know that the source type is a basic type. We now
+					 * need to check that it's not a void
+					 */
+					source_basic_type = true_source_type->basic_type_token;
+
+					//You can never assign from VOID
+					if(source_basic_type == VOID){
+						return NULL;
 					}
 
-					//Now if the source type is not a basic type, we're done here
-					if(true_source_type->type_class != TYPE_CLASS_BASIC){
+					if(true_source_type->type_size <= destination_type->type_size){
+						return destination_type;
+					} else {
 						return NULL;
 					}
 					
-					//Once we get here, we know that the source type is a basic type. We now
-					//need to check that it's not a float or void
-					source_basic_type = true_source_type->basic_type_token;
-
-					//Go based on what we have here
-					switch(source_basic_type){
-						case VOID:
-							return NULL;
-
-						//For basic types, so long as the source is not physically larger than the
-						//destination, ollie allows us to assign it. This is also true for going from
-						//floats to ints or ints to floats, but this will generate internal conversion
-						//logic
-						default:
-							if(true_source_type->type_size <= destination_type->type_size){
-								return destination_type;
-							} else {
-								//These wouldn't fit
-								return NULL;
-							}
-					}
+				//Anything else we return NULL
+				default:
+					return NULL;
 			}
+
+			//Keep the compiler happy - we should never get here
+			return NULL;
 
 		//Error types are never assignable
 		case TYPE_CLASS_ERROR:
@@ -793,6 +802,7 @@ generic_type_t* types_assignable_constant(generic_type_t* destination_type, gene
 				//These are all bad
 				case F32:
 				case F64:
+				case F128:
 				case VOID:
 					return NULL;
 				default:
@@ -807,6 +817,7 @@ generic_type_t* types_assignable_constant(generic_type_t* destination_type, gene
 			switch(constant_source_type->basic_type_token){
 				case F32:
 				case F64:
+				case F128:
 				case VOID:
 					return NULL;
 				default:
@@ -1349,7 +1360,10 @@ generic_type_t* determine_ternary_compatibility(void* symtab, generic_type_t** a
 		}
 	}
 
-	//At this point if these are not basic types, we're done
+	/**
+	 * We'll need this to be a basic or size type to
+	 * have this work
+	 */
 	if((*a)->type_class != TYPE_CLASS_BASIC || (*b)->type_class != TYPE_CLASS_BASIC){
 		return NULL;
 	}
@@ -2142,6 +2156,32 @@ generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type, mut
 	type->memory_layout_type = MEMORY_LAYOUT_TYPE_CONTIGUOUS;
 
 	//Give back the pointer, it will need to be freed eventually
+	return type;
+}
+
+
+/**
+ * Create the size type with a given mutability. We'd only ever expect
+ * to call this on startup
+ */
+generic_type_t* create_size_type(generic_type_t* underlying_u32, mutability_type_t mutability){
+	generic_type_t* type = calloc(1, sizeof(generic_type_t));
+
+	//All size types are aliased
+	type->type_class = TYPE_CLASS_ALIAS;
+
+	//Give our name and mutability
+	type->type_name = dynamic_string_alloc();
+	dynamic_string_set(&(type->type_name), "size");
+	type->mutability = mutability;
+
+	//Save that we alias the underlying u32
+	type->internal_types.aliased_type = underlying_u32;
+
+	//The size type is always complete on definition and it is contiguous
+	type->type_complete = TRUE;
+	type->memory_layout_type = MEMORY_LAYOUT_TYPE_CONTIGUOUS;
+
 	return type;
 }
 
@@ -3232,6 +3272,9 @@ void add_parameter_to_function_type(generic_type_t* function_type, generic_type_
  * Determine if a type is an integer or not
  */
 u_int8_t is_integer_type(generic_type_t* type){
+	//Always dealias first
+	type = dealias_type(type);
+
 	//We must have a basic type for it to be signed
 	if(type->type_class != TYPE_CLASS_BASIC){
 		//By default everything else(addresses, etc) is not signed
@@ -3263,6 +3306,9 @@ u_int8_t is_integer_type(generic_type_t* type){
  * Is a type signed?
  */
 u_int8_t is_type_signed(generic_type_t* type){
+	//Call the dealiaser to be sure
+	type = dealias_type(type);
+
 	//We must have a basic type for it to be signed
 	if(type->type_class != TYPE_CLASS_BASIC){
 		//By default everything else(addresses, etc) is not signed
@@ -3290,6 +3336,9 @@ u_int8_t is_type_signed(generic_type_t* type){
  * Select the size based only on a type
  */
 variable_size_t get_type_size(generic_type_t* type){
+	//Always dealias the type to make sure we're using the real one
+	type = dealias_type(type);
+
 	//What the size will be
 	variable_size_t size;
 

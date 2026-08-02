@@ -295,6 +295,15 @@ u_int8_t types_identical(generic_type_t* a, generic_type_t* b);
 generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type, mutability_type_t mutability);
 
 /**
+ * Create the size type with a given mutability. We'd only ever expect
+ * to call this on startup
+ *
+ * NOTE: we should have an underlying U32 with the exact same mutability 
+ * as the given mutability
+ */
+generic_type_t* create_size_type(generic_type_t* underlying_u32, mutability_type_t mutability);
+
+/**
  * Dynamically allocate and create an error type
  */
 generic_type_t* create_error_type(char* type_name, u_int32_t line_number);
