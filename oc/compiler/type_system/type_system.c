@@ -2163,22 +2163,20 @@ generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type, mut
 /**
  * Create the size type with a given mutability. We'd only ever expect
  * to call this on startup
- *
- * TODO
  */
-generic_type_t* create_size_type(mutability_type_t mutability){
+generic_type_t* create_size_type(generic_type_t* underlying_u32, mutability_type_t mutability){
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
-	//Special size class and size token
-	type->type_class = TYPE_CLASS_SIZE;
-	type->basic_type_token = SIZE;
+	//All size types are aliased
+	type->type_class = TYPE_CLASS_ALIAS;
 
-	//These are always 4 byte integers
-	type->type_size = 4;
-	type->mutability = mutability;
-
+	//Give our name and mutability
 	type->type_name = dynamic_string_alloc();
 	dynamic_string_set(&(type->type_name), "size");
+	type->mutability = mutability;
+
+	//Save that we alias the underlying u32
+	type->internal_types.aliased_type = underlying_u32;
 
 	//The size type is always complete on definition and it is contiguous
 	type->type_complete = TRUE;
