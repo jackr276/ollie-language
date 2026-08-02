@@ -13524,7 +13524,6 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 					return FALSE;
 				}
 
-				//All good to move along
 				break;
 
 			/**
@@ -13630,46 +13629,6 @@ void reset_function_visited_status(basic_block_t* function_entry_block, u_int8_t
 			//Push on
 			current = temp;
 		}
-	}
-}
-
-
-/**
- * Since static variables also count for us as global variables, we need to
- * be able to handle a case where say, for instance, that two separate
- * functions have a static variable called "x". If we just left it as is,
- * we would have an ambiguous reference and the assembler woudl fail. To fix
- * this, we will mangle those names such that we now get "x.0" and "x.1" instead
- * of two "x"'s
- */
-static void mangle_static_variable_names(dynamic_array_t* global_variables){
-	//We'll keep a running id to mangle things
-	u_int32_t static_var_mangler = 0;
-	char mangler[100];
-
-	/**
-	 * Run through all of our global variables here
-	 */
-	for(int32_t i = 0; i < global_variables->current_index; i++){
-		//Extract our current candidate
-		global_variable_t* candidate = dynamic_array_get_at(global_variables, i);
-		
-		/**
-		 * Global variable name collision is already enforced by the symtab in the
-		 * parser so we can skip this for efficiency's sake
-		 */
-		if(candidate->variable->membership == GLOBAL_VARIABLE){
-			continue;
-		}
-
-		//Print this into the buffer
-		snprintf(mangler, 100, ".%d", static_var_mangler);
-		
-		//Now concatenate it to our variable name
-		dynamic_string_concatenate(&(candidate->variable->var_name), mangler);
-
-		//Bump it up for the next go around
-		static_var_mangler++;
 	}
 }
 
@@ -14064,17 +14023,25 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	//Store it in the CFG
 	cfg->instruction_pointer = instruction_pointer_var;
 
+	/**
+	 * Call into the visiter at the very top level using
+	 * the root of the CFG. It should in theory be
+	 * impossible for this to fail as we know that
+	 * the program is well-formed if it gets here
+	 */
+	visit_prog_node(cfg, generic_ast_node_t *prog_node)
+
+	if(visit_prog_node(cfg, results->root) == FALSE){
+		fprintf(stderr, "Fatal internal compiler error - CFG construction failed\n");
+		exit(1);
+	}
+
 	// -1 block ID, this means that the whole thing failed
 	if(visit_prog_node(cfg, results->root) == FALSE){
 		print_cfg_message(MESSAGE_TYPE_ERROR, "CFG was unable to be constructed", 0);
 		cfg->result = CFG_RESULT_FAILURE;
 		(*num_errors_ref)++;
 	}
-
-	/**
-	 * Correct any static variable name collisions that we may run into
-	 */
-	mangle_static_variable_names(&(cfg->global_variables));
 
 	/**
 	 * Call out to do all SSA generation
