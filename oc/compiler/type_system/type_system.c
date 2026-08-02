@@ -788,10 +788,45 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 			return NULL;
 
 		/**
-		 * If we are assigning
+		 * If we are assigning to a size type, we may only ever assign
+		 * other sizes and integers. Anything else will not work
 		 */
 		case TYPE_CLASS_SIZE:
-			
+			/**
+			 * All size types are assignable to eachother always
+			 */
+			if(true_source_type->type_class == TYPE_CLASS_SIZE){
+				return destination_type;
+			}
+
+			/**
+			 * Only basic types allowed from this point on
+			 */
+			if(true_source_type->type_class != TYPE_CLASS_BASIC){
+				return NULL;
+			}
+
+			//Extract this one's basic type token
+			source_basic_type = true_source_type->basic_type_token;
+
+			/**
+			 * Now that we know it's a basic type, we will
+			 * exclude all floats and just have a regular
+			 * integer check
+			 */
+			switch(source_basic_type){
+				case VOID:
+				case F32:
+				case F64:
+				case F128:
+					return NULL;
+				default:
+					if(true_source_type->type_size <= destination_type->type_size){
+						return destination_type;
+					} else {
+						return NULL;
+					}
+			}
 
 		//Error types are never assignable
 		case TYPE_CLASS_ERROR:
