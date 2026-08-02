@@ -15269,9 +15269,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 		 */
 		flag_functions_that_require_initial_alignment(function_symtab);
 
-		//Check for any unused functions
-		check_for_unused_functions(function_symtab, &num_warnings);
-
 		/**
 		 * One final thing that we need to do. Functions inside of namespaces
 		 * must have their name "mangled" so that we guarantee uniqueness. Now that

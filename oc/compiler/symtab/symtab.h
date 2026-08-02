@@ -704,11 +704,6 @@ symtab_type_record_t* lookup_array_type(type_symtab_t* symtab, generic_type_t* m
 symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, mutability_type_t mutability);
 
 /**
- * Check for and print out any unused functions
- */
-void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnings);
-
-/**
  * Run through and check for any unused vars, bad mut keywords, etc
  */
 void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings);

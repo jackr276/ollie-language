@@ -12951,7 +12951,8 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	 * 	2.) Converting the CFG into SSA form
 	 * 	3.) Perform definite assignment analysis
 	 * 		- This is a potential failure point
-	 * 	4.) Perform variable mutation analysis
+	 * 	4.) Perform unused function detectiion
+	 * 	5.) Perform variable mutation analysis
  	 */
 	cfg->result = perform_all_static_analysis(cfg, results, num_errors_ref, num_warnings_ref);
 

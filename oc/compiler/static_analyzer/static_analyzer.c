@@ -1222,6 +1222,68 @@ static void perform_mutability_checking(cfg_t* cfg, variable_symtab_t* symtab){
 }
 
 
+/**
+ * Crawl the function symtab and check for functions that 
+ * are unused. We will generate warnings for every function that
+ * is defined but never called
+ */
+static void perform_function_usage_analysis(function_symtab_t* symtab){
+	//Run thorugh all of the namespaces
+	for(int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
+		//Grab the current sheaf to check
+		function_namespace_t* current_sheaf = dynamic_array_get_at(&(symtab->namespaces), _);
+
+		//Now run through the keyspace in this sheaf
+		for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+			symtab_function_record_t* record = current_sheaf->records[i];
+
+			while(record != NULL){
+				/**
+				 * Warn case 1: we have a function that was declared
+				 * but never defined and never called
+				 */
+				if(record->called == FALSE && record->defined == FALSE){
+					sprintf(error_info, "Function \"%s\" is never defined and never called. First defined here:", record->func_name.string);
+					print_static_analyzer_message(MESSAGE_TYPE_WARNING, error_info, record->line_number);
+					(*warning_count)++;
+
+					//Also print where the function was defined
+					//TODO REVAMP THIS
+					print_function_name(record);
+
+				/**
+				 * If a function is defined but never called that's another kind of warning
+				 */
+				} else if(record->called == FALSE && record->defined == TRUE && record->visibility == VISIBILITY_TYPE_PRIVATE){
+					sprintf(error_info, "Function \"%s\" is defined but never called. First defined here:", record->func_name.string);
+					print_static_analyzer_message(MESSAGE_TYPE_WARNING, error_info, record->line_number);
+					(*warning_count)++;
+
+					//Also print where the function was defined
+					//TODO REVAMP THIS
+					print_function_name(record);
+
+				/**
+				 * If a function is called but never defined that's another kind of issue TODO IS THIS JUST A WARNING???
+				 */
+				} else if(record->called == TRUE && record->defined == FALSE){
+					sprintf(error_info, "Function \"%s\" is called but never explicitly defined. First declared here:", record->func_name.string);
+					print_static_analyzer_message(MESSAGE_TYPE_WARNING, error_info, record->line_number);
+					(*warning_count)++;
+
+					//Also print where the function was defined
+					//TODO REVAMP
+					print_function_name(record);
+				}
+
+				//Advance record up
+				record = record->next;
+			}
+		}
+	}
+}
+
+
 
 /**
  * Perform all static analysis on a given CFG. The functions
@@ -1233,6 +1295,9 @@ static void perform_mutability_checking(cfg_t* cfg, variable_symtab_t* symtab){
  * 	4.) Perform variable mutation analysis
  */
 cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end_results_package_t* results, u_int32_t* num_errors, u_int32_t* num_warnings){
+	//By default assume success
+	cfg_construction_result_type_t result = CFG_RESULT_SUCCESS;
+
 	//Cache these two for later use
 	instruction_pointer_var = cfg->instruction_pointer;
 	stack_pointer_var = cfg->stack_pointer;
@@ -1254,24 +1319,29 @@ cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end
 	convert_cfg_to_ssa_form(cfg, results->variable_symtab);
 
 	/**
-	 * Step 3: perform definite assignment analysis on the entire
+	 * 3.) perform definite assignment analysis on the entire
 	 * CFG. This process will verify that all variables are only
 	 * used after they are guaranteed to have been assigned
 	 *
 	 * NOTE: this is a potential fail point for the CFG
 	 */
 	if(perform_definite_assignment_analysis(cfg, results->variable_symtab) == FAILURE){
-		return CFG_RESULT_FAILURE;
+		result = CFG_RESULT_FAILURE;
 	}
 
 	/**
-	 * 4.) Perform mutability checking. Unlike definite assignment
+	 * 4.) Crawl the function symtab and generate warnings for functions
+	 * that are defined but not used
+	 */
+	perform_function_usage_analysis(results->function_symtab);
+
+	/**
+	 * 5.) Perform mutability checking. Unlike definite assignment
 	 * analysis there is no chance for failure here, this
 	 * just generates warnings
 	 */
 	perform_mutability_checking(cfg, results->variable_symtab);
 
-	//If we made it here then we have succeeded
-	return CFG_RESULT_SUCCESS;
-
+	//Give back whatever result we've have
+	return result;
 }
