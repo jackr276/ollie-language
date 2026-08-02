@@ -2383,45 +2383,6 @@ void print_function_name_to_buffer(char* buffer, symtab_function_record_t* recor
 
 
 /**
- * Print a function name out in a stylised way
- */
-void print_function_name(symtab_function_record_t* record){
-	if(record->signature->internal_types.function_type->visibility == VISIBILITY_TYPE_PUBLIC){
-		printf("\t---> %d | pub fn %s(", record->line_number, record->func_name.string);
-	} else {
-		printf("\t---> %d | fn %s(", record->line_number, record->func_name.string);
-	}
-
-	//Print out the params
-	for(int32_t i = 0; i < record->function_parameters.current_index; i++){
-		symtab_variable_record_t* current_parameter = dynamic_array_get_at(&(record->function_parameters), i);
-
-		//Print if it's mutable
-		if(current_parameter->type_defined_as->mutability == MUTABLE){
-			printf("mut ");
-		}
-
-		printf("%s : %s", current_parameter->var_name.string, current_parameter->type_defined_as->type_name.string);
-		//Comma if needed
-		if(i < record->function_parameters.current_index - 1){
-			printf(", ");
-		}
-	}
-
-	//Extract the signature
-	function_type_t* signature = record->signature->internal_types.function_type;
-	printf(") -> %s", signature->return_type->type_name.string);
-
-	//If it was defined implicitly, we'll print a semicol
-	if(record->defined == 0){
-		printf(";\n");
-	} else {
-		printf("{...\n");
-	}
-}
-
-
-/**
  * Generate the fully qualified namespace for a given namespace and return it inside of
  * a freshly allocated dynamic string
  *
@@ -2545,7 +2506,9 @@ void print_variable_name(symtab_variable_record_t* record){
 	//Go based on the membership
 	switch(record->membership){
 		case FUNCTION_PARAMETER:
-			print_function_name(record->function_declared_in);
+			//TODO REVAMP
+			//print_function_name(record->function_declared_in);
+			//TODO
 			break;
 		case ENUM_MEMBER:
 			//The var name
