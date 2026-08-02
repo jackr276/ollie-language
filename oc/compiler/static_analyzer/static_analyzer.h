@@ -9,4 +9,19 @@
 #ifndef STATIC_ANALYZER_H
 #define STATIC_ANALYZER_H
 
+//Link to CFG structure
+#include "../parser/parser.h"
+#include "../cfg/cfg.h"
+
+/**
+ * Perform all static analysis on a given CFG. The functions
+ * performed herein are:
+ * 	1.) Mangling static variable names
+ * 	2.) Converting the CFG into SSA form
+ * 	3.) Perform definite assignment analysis
+ * 		- This is a potential failure point
+ * 	4.) Perform variable mutation analysis
+ */
+cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end_results_package_t* results);
+
 #endif /* STATIC_ANALYZER_H */

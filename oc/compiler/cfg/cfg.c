@@ -20,6 +20,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include "../utils/queue/heap_queue.h"
+#include "../static_analyzer/static_analyzer.h"
 #include "../jump_table/jump_table.h"
 #include "../utils/stack/nesting_stack.h"
 #include "../utils/constants.h"
@@ -14091,8 +14092,18 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	//TODO DOC
 	perform_mutability_checking(cfg, results->variable_symtab);
 
-	//Update the result based on what our definite assignment analysis gave
-	cfg->result = definite_assignment_analysis_result == SUCCESS ? CFG_RESULT_SUCCESS : CFG_RESULT_FAILURE;
+	/**
+	 * Now that the CFG has been fully constructed, we will perform all static
+	 * analysis on the given structure. This call to the static analyzer 
+	 * will perform the following tasks:
+	 * 	
+	 * 	1.) Mangling static variable names
+	 * 	2.) Converting the CFG into SSA form
+	 * 	3.) Perform definite assignment analysis
+	 * 		- This is a potential failure point
+	 * 	4.) Perform variable mutation analysis
+ 	 */
+	cfg->result = perform_all_static_analysis(cfg, results);
 
 	//Once we get here, we're done with these two stacks
 	heap_stack_dealloc(&break_stack);	
