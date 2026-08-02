@@ -27,7 +27,6 @@ pub fn main(arg:i32, argv:char**) -> i32{
 		case 7 -> {
 			x = 2;
 		}
-		// Empty default
 		default -> {
 			x = 5;
 		}
@@ -37,5 +36,6 @@ pub fn main(arg:i32, argv:char**) -> i32{
 	let tester:my_struct = {x, 7, 'a'};
 
 	//So it isn't optimized away
+	OUNIT: [exit_status = 3]
 	ret tester:x;
 }
