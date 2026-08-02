@@ -6,6 +6,11 @@
 
 #include "static_analyzer.h"
 
+//Store these globally for easy access
+static three_addr_var_t* instruction_pointer_var;
+static three_addr_var_t* stack_pointer_var;
+
+
 //========================================= General Utilities =============================================
 /**
  * Run through an entire array of function blocks and reset the status for
@@ -62,6 +67,75 @@ static inline u_int8_t does_variable_dynamic_array_contain_symtab_variable(dynam
 	}
 
 	return FALSE;
+}
+
+
+/**
+ * Does the block assign this variable? We'll do a simple linear scan to find out
+ */
+static inline u_int8_t does_block_assign_variable(basic_block_t* block, symtab_variable_record_t* variable){
+	/**
+	 * If the linked variable to this var is ours, we do assign
+	 */
+	for(int32_t i = 0; i < block->assigned_variables.current_index; i++){
+		three_addr_var_t* var = dynamic_array_get_at(&(block->assigned_variables), i);
+		
+		//Now we'll compare the linked variable to the record
+		if(var->linked_var == variable){
+			return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+
+
+/**
+ * Add a variable into the DEF set. Unlike the use set, the only thing that we need to check and make sure of here
+ * is that the variable isn't already in there
+ */
+static inline void add_variable_to_def_set(three_addr_var_t* variable, basic_block_t* block){
+	//Is the variable NULL? If so then return
+	if(variable == NULL){
+		return;
+	}
+
+	//We do not need to bother tracking these variables - they are a sure thing
+	if(variable == instruction_pointer_var || variable == stack_pointer_var){
+		return;
+	}
+
+	/**
+	 * If we have variables that are temporary or "memory addresses", then
+	 * they are not going to change so we do not need to track them
+	 */
+	switch(variable->variable_type){
+		case VARIABLE_TYPE_TEMP:
+		case VARIABLE_TYPE_MEMORY_ADDRESS:
+		case VARIABLE_TYPE_FUNCTION_ADDRESS:
+		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+		case VARIABLE_TYPE_LOCAL_CONSTANT:
+			return;
+		default:
+			break;
+	}
+
+	//Extract the set that we'll be working with
+	dynamic_array_t* def_set = &(block->assigned_variables);
+
+	//Otherwise, let's make sure it's not also in DEF
+	for(int32_t i = 0; i < def_set->current_index; i++){
+		//Grab it out
+		three_addr_var_t* defined = dynamic_array_get_at(def_set, i);
+
+		//It's been defined in this block, so we don't care
+		if(variables_equal_no_ssa(defined, variable) == TRUE){
+			return;
+		}
+	}
+
+	//If we make it all of the way down here, then we can add it
+	dynamic_array_add(def_set, variable);
 }
 
 
@@ -795,6 +869,10 @@ static void convert_cfg_to_ssa_form(cfg_t* cfg, variable_symtab_t* variables){
  * 	4.) Perform variable mutation analysis
  */
 cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end_results_package_t* results){
+	//Cache these two for later use
+	instruction_pointer_var = cfg->instruction_pointer;
+	stack_pointer_var = cfg->stack_pointer;
+
 	/**
 	 * 1.) Mangle all static variable names with a unique number identifier at the very end
 	 * to avoid name collisions

@@ -1364,26 +1364,6 @@ void delete_statement(instruction_t* stmt){
 
 
 /**
- * Does the block assign this variable? We'll do a simple linear scan to find out
- */
-static inline u_int8_t does_block_assign_variable(basic_block_t* block, symtab_variable_record_t* variable){
-	/**
-	 * If the linked variable to this var is ours, we do assign
-	 */
-	for(int32_t i = 0; i < block->assigned_variables.current_index; i++){
-		three_addr_var_t* var = dynamic_array_get_at(&(block->assigned_variables), i);
-		
-		//Now we'll compare the linked variable to the record
-		if(var->linked_var == variable){
-			return TRUE;
-		}
-	}
-
-	return FALSE;
-}
-
-
-/**
  * A special helper function that we use for dynamic arrays of variables. Since variables
  * can be duplicated, we need to compare the symtab variable record, not the three address
  * variable itself
@@ -1478,7 +1458,6 @@ static void add_variable_to_use_set(three_addr_var_t* variable, basic_block_t* b
 	//If we make it all of the way down here, then we can add it
 	dynamic_array_add(use_set, variable);
 }
-
 
 
 /**
