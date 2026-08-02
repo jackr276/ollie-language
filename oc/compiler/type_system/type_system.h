@@ -65,7 +65,6 @@ typedef enum{
  */
 typedef enum type_class_t {
 	TYPE_CLASS_BASIC,
-	TYPE_CLASS_SIZE,
 	TYPE_CLASS_ARRAY,
 	TYPE_CLASS_STRUCT,
 	TYPE_CLASS_ENUMERATED,

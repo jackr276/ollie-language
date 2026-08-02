@@ -736,25 +736,11 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 					return destination_type;
 
 				/**
-				 * For size types, we can only assign them to other integers, so the checks here
-				 * will involve seeing if we have an integer destination type
+				 * For basic types, so long as the source is not physically larger than the
+				 * destination, ollie allows us to assign it. This is also true for going from
+				 * floats to ints or ints to floats, but this will generate internal conversion
+				 * logic
 				 */
-				case TYPE_CLASS_SIZE:
-					//No floats allowed
-					if(dest_basic_type == F32 || dest_basic_type == F64 || dest_basic_type == F128){
-						return NULL;
-					}
-				
-					/**
-					 * Otherwise we just do the usual size check. A size type is always a 32
-					 * bit unsigned integer
-					 */
-					if(true_source_type->type_size <= destination_type->type_size){
-						return destination_type;
-					} else {
-						return NULL;
-					}
-
 				case TYPE_CLASS_BASIC:
 					/**
 					 * Once we get here, we know that the source type is a basic type. We now
@@ -767,12 +753,6 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 						return NULL;
 					}
 
-					/**
-					 * For basic types, so long as the source is not physically larger than the
-					 * destination, ollie allows us to assign it. This is also true for going from
-					 * floats to ints or ints to floats, but this will generate internal conversion
-					 * logic
-					 */
 					if(true_source_type->type_size <= destination_type->type_size){
 						return destination_type;
 					} else {
@@ -786,47 +766,6 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 			//Keep the compiler happy - we should never get here
 			return NULL;
-
-		/**
-		 * If we are assigning to a size type, we may only ever assign
-		 * other sizes and integers. Anything else will not work
-		 */
-		case TYPE_CLASS_SIZE:
-			/**
-			 * All size types are assignable to eachother always
-			 */
-			if(true_source_type->type_class == TYPE_CLASS_SIZE){
-				return destination_type;
-			}
-
-			/**
-			 * Only basic types allowed from this point on
-			 */
-			if(true_source_type->type_class != TYPE_CLASS_BASIC){
-				return NULL;
-			}
-
-			//Extract this one's basic type token
-			source_basic_type = true_source_type->basic_type_token;
-
-			/**
-			 * Now that we know it's a basic type, we will
-			 * exclude all floats and just have a regular
-			 * integer check
-			 */
-			switch(source_basic_type){
-				case VOID:
-				case F32:
-				case F64:
-				case F128:
-					return NULL;
-				default:
-					if(true_source_type->type_size <= destination_type->type_size){
-						return destination_type;
-					} else {
-						return NULL;
-					}
-			}
 
 		//Error types are never assignable
 		case TYPE_CLASS_ERROR:
@@ -880,17 +819,6 @@ generic_type_t* types_assignable_constant(generic_type_t* destination_type, gene
 				default:
 					return destination_type;
 			}
-
-		case TYPE_CLASS_SIZE:
-			switch(constant_source_type->basic_type_token){
-				case F32:
-				case F64:
-				case F128:
-				case VOID:
-					return NULL;
-				default:
-					return destination_type;
-			}
 	
 		/**
 		 * For basic constant types, we are very loose with how our assignments
@@ -898,11 +826,6 @@ generic_type_t* types_assignable_constant(generic_type_t* destination_type, gene
 		 * long as we can reasonably coerce them
 		 */
 		case TYPE_CLASS_BASIC:
-			//We can always coerce the size type to integers
-			if(constant_source_type->type_class == TYPE_CLASS_SIZE){
-				return destination_type;
-			}
-
 			//You can never assign to a void
 			if(destination_type->basic_type_token == VOID){
 				return NULL;
@@ -1047,6 +970,8 @@ static inline generic_type_t* convert_to_unsigned_version(type_symtab_t* symtab,
 		case U32:
 		case I32:
 			return lookup_type_name_only(symtab, "u32", type->mutability)->type;
+		case SIZE:
+			return lookup_type_name_only(symtab, "size", type->mutability)->type;
 		case U64:
 		case I64:
 			return lookup_type_name_only(symtab, "u64", type->mutability)->type;
@@ -1118,6 +1043,7 @@ static inline void widen_basic_type_to_given_size(type_symtab_t* symtab, generic
 		case U16:
 		case U32:
 		case U64:
+		case SIZE:
 			classification = WIDEN_UNSIGNED;
 			break;
 
@@ -1243,6 +1169,7 @@ static inline void integer_to_floating_point(type_symtab_t* symtab, generic_type
 		case I16:
 		case U32:
 		case I32:
+		case SIZE:
 			*a = lookup_type_name_only(symtab, "f32", (*a)->mutability)->type;
 			
 			break;
@@ -1433,7 +1360,10 @@ generic_type_t* determine_ternary_compatibility(void* symtab, generic_type_t** a
 		}
 	}
 
-	//At this point if these are not basic types, we're done
+	/**
+	 * We'll need this to be a basic or size type to
+	 * have this work
+	 */
 	if((*a)->type_class != TYPE_CLASS_BASIC || (*b)->type_class != TYPE_CLASS_BASIC){
 		return NULL;
 	}
@@ -2233,6 +2163,8 @@ generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type, mut
 /**
  * Create the size type with a given mutability. We'd only ever expect
  * to call this on startup
+ *
+ * TODO
  */
 generic_type_t* create_size_type(mutability_type_t mutability){
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
@@ -3360,6 +3292,7 @@ u_int8_t is_integer_type(generic_type_t* type){
 		case U16:
 		case I32:
 		case U32:
+		case SIZE:
 		case I64:
 		case U64:
 			return TRUE;
@@ -3461,11 +3394,6 @@ variable_size_t get_type_size(generic_type_t* type){
 		case TYPE_CLASS_ENUMERATED:
 			//An enum is just an integer type, so we can just use the internal type for a size
 			size = get_type_size(type->internal_values.enum_integer_type);
-			break;
-
-		//Size types are always double words
-		case TYPE_CLASS_SIZE:
-			size = DOUBLE_WORD;
 			break;
 
 		//These are always 64 bits
