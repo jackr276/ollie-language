@@ -696,12 +696,8 @@ static inline u_int8_t do_duplicate_variables_exist(char* name){
 	//Means that we have a duplicate
 	if(found != NULL){
 		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_variable_name(found);
+		print_variable_name_to_buffer(info, found);
 		num_errors++;
-
-		//Give back true, they do exist
 		return TRUE;
 	}
 
@@ -724,11 +720,8 @@ static inline u_int8_t do_duplicate_member_variables_exist(char* name, generic_t
 	//Means that we have a duplicate
 	if(found != NULL){
 		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name, current_type->type_name.string);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		print_variable_name(found);
+		print_variable_name_to_buffer(info, found);
 		num_errors++;
-
-		//Give back true, they do exist
 		return TRUE;
 	}
 
@@ -3003,10 +2996,8 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 		//This is the case where we have a plain variable assignment
 		if(can_variable_be_assigned_to(assignee) == FALSE){
 			sprintf(info, "Variable \"%s\" is not mutable and cannot be assigned to outisde of an initial \"let\" statement. Use the \"mut\" keyword if you wish to mutate. First defined here:", assignee->var_name.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			print_variable_name(assignee);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+			print_variable_name_to_buffer(info, assignee);
+			return print_and_return_error(info, parser_line_num);
 		}
 	}
 
@@ -7319,8 +7310,8 @@ static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_strea
 	//Is this a duplicate? If so, we fail out
 	if(duplicate != NULL){
 		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name.string, struct_type->type_name.string);
+		print_variable_name_to_buffer(info, duplicate);
 		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		print_variable_name(duplicate);
 		num_errors++;
 		return NULL;
 	}
@@ -12154,12 +12145,8 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 	//Fail out here
 	if(found_var != NULL){
 		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_variable_name(found_var);
-		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		print_variable_name_to_buffer(info, found_var);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Now we need to see a colon
@@ -12691,11 +12678,8 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	//Fail out here
 	if(found_var != NULL){
 		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_variable_name(found_var); num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		print_variable_name_to_buffer(info, found_var);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Now we need to see a colon
@@ -13195,11 +13179,9 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 	//Fail out here
 	if(found_var != NULL){
 		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
+		print_variable_name_to_buffer(info, found_var);
 		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_variable_name(found_var);
 		num_errors++;
-		//Return NULL to signify failure
 		return NULL;
 	}
 
