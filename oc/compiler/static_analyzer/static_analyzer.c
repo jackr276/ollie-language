@@ -5,6 +5,7 @@
  */
 
 #include "static_analyzer.h"
+#include "../utils/queue/heap_queue.h"
 #include <sys/types.h>
 
 //Store these globally for easy access
@@ -969,6 +970,17 @@ static inline void populate_function_parameter_initialization_states(symtab_func
 }
 
 
+static inline u_int8_t compute_initialization_status_in_block(basic_block_t* block){
+
+	//TODO NEEDS TO RETURN CHANGED OR NOT
+}
+
+
+/**
+ * Use a worklist(queue) algorithm to populate the initialization statuses for all eligible
+ * variables in the given function. This is a while changed algorithm so it will go 
+ * until we have a convergence, i.e. until all variable states stop changing
+ */
 static void populate_initialization_statuses_in_function(basic_block_t* function_entry){
 	/**
 	 * Before we do anything - we know for a fact that all of our function parameters
@@ -977,26 +989,27 @@ static void populate_initialization_statuses_in_function(basic_block_t* function
 	 */
 	populate_function_parameter_initialization_states(function_entry->function_defined_in);
 
-	TODO sabotaged
-
 	/**
 	 * Allocate our worklist for our worklist algorithm and seed it with our function
 	 * entry block
 	 */
-	dynamic_array_t worklist = dynamic_array_alloc_initial_size(function_entry->function_defined_in->function_blocks.current_index);
-	dynamic_array_add(&worklist, function_entry);
+	heap_queue_t worklist = heap_queue_alloc();
+	enqueue(&worklist, function_entry);
 
 	/**
 	 * So long as the worklist isn't empty we keep iterating over
 	 * the blocks
 	 */
-	while(dynamic_array_is_empty(&worklist) == FALSE){
-		//Pop our block off the back to work on
-		basic_block_t* block = dynamic_array_delete_from_back(&worklist);
+	while(queue_is_empty(&worklist) == FALSE){
+		//Dequeue our block to work on
+		basic_block_t* block = dequeue(&worklist);
+
+		//TODO
 
 	}
 
-
+	//Destroy the queue now that we're done
+	heap_queue_dealloc(&worklist);
 }
 
 
