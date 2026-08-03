@@ -1028,7 +1028,6 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
 			overall_result &= check_variable_for_definite_assignment(instruction, parameter, may_not_have_been_initialized);
 		}
 
-
 	/**
 	 * Phi-functions have special handling. If we have a phi
 	 * function that has at least one _0 variable in it, then the
