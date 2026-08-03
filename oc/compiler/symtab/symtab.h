@@ -85,6 +85,18 @@ typedef struct label_symtab_t label_symtab_t;
 
 
 /**
+ * Track the initialization state of a variable
+ * during and after SSA generation for assignment
+ * analysis
+ */
+typedef enum {
+	VARIABLE_STATE_UNINITIALIZED,
+	VARIABLE_STATE_MAYBE_INITIALIZED,
+	VARIABLE_STATE_DEFINITELY_INITIALIZED
+} variable_initialization_state_t;
+
+
+/**
  * What is the membership that a variable has?
  */
 typedef enum variable_membership_t {
@@ -198,6 +210,14 @@ struct symtab_variable_record_t{
 	stack_region_t* stack_region;
 	//What node was this variable defined in
 	dependency_graph_node_t* node_defined_in;
+	/**
+	 * Maintain a map of SSA generations
+	 * to initialization states
+	 *
+	 * NOTE: this will only be allocated after we've done SSA
+	 * and know how many generations there are
+	 */
+	variable_initialization_state_t* initialization_state_map;
 	//What is the ID of the lexical scope that this variable is in?
 	u_int32_t lexical_scope_id;
 	//The line number
