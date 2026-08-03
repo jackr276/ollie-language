@@ -1224,6 +1224,24 @@ static u_int8_t perform_definite_assignment_analysis_for_block(basic_block_t* bl
 
 
 /**
+ * Function parameters are a unique case because we know that by the time we hit the function
+ * entry they are initialized. This preparatory step
+ */
+static inline void populate_function_parameter_initialization_states(symtab_function_record_t* function){
+	//Run through all of the parameters
+	for(int32_t i = 0; i < function->function_parameters.current_index; i++){
+		symtab_variable_record_t* parameter = dynamic_array_get_at(&(function->function_parameters), i);
+
+		/**
+		 * We know for a fact that the first generation of function parameters will *always*
+		 * be initialized so we need to populate that now
+		 */
+		parameter->initialization_state_map[1] = VARIABLE_STATE_DEFINITELY_INITIALIZED;
+	}
+}
+
+
+/**
  * Perform the Ollie analyzer's version of definite assignment analysis.
  *
  * We will scan all functions at once. If one function fails, we will still keep going to analyze
@@ -1244,6 +1262,12 @@ static inline u_int8_t perform_definite_assignment_analysis(cfg_t* cfg){
 		 * Update the dependency node so that we get accurate error printouts
 		 */
 		current_dependency_node = function_entry->function_defined_in->dependency_graph_node;
+
+		/**
+		 * First we need to handle the special treatment for function parameters. All function
+		 * parameters are initially populated when the function enters
+		 */
+		populate_function_parameter_initialization_states(function_entry->function_defined_in);
 
 		/**
 		 * Call into the recursive analyzer. If we have a failure, then the entire thing
