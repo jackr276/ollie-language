@@ -58,7 +58,11 @@ static void test_queue(){
 		//Give this the index value
 		*to_be_added = i;
 
+		//Add it in
 		enqueue(&queue, to_be_added);
+
+		//Verify that this is now in there
+		assert(heap_queue_contains(&queue, to_be_added) == TRUE);
 	}
 
 	//It should not be empty
@@ -83,6 +87,9 @@ static void test_queue(){
 
 		//Verify that they equal the right thing
 		assert(*dequeued == i);
+
+		//Verify that this is no longer in there
+		assert(heap_queue_contains(&queue, dequeued) == FALSE);
 	}
 
 	//One final dequeue to get the last int out
