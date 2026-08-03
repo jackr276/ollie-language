@@ -973,6 +973,7 @@ static inline void populate_function_parameter_initialization_states(symtab_func
 static inline u_int8_t compute_initialization_status_in_block(basic_block_t* block){
 
 	//TODO NEEDS TO RETURN CHANGED OR NOT
+	return FALSE;
 }
 
 
@@ -1004,8 +1005,20 @@ static void populate_initialization_statuses_in_function(basic_block_t* function
 		//Dequeue our block to work on
 		basic_block_t* block = dequeue(&worklist);
 
-		//TODO
+		/**
+		 * Compute/recompute the initialization status for every single symtab
+		 * variable in this block. If any one of the variables have a change
+		 * in status(usually this would be in the phi functions), we will enqueue
+		 * all of the successors of this block because a change in the parent
+		 * will often cause changes in the children
+		 */
+		u_int8_t changed = compute_initialization_status_in_block(block);
+		if(changed == TRUE){
+			for(int32_t i = 0; i < block->successors.current_index; i++){
+				//TODO WE WANT TO DO A UNIQUE ADDITION, SO CHECK FOR DUPLICATES
 
+			}
+		}
 	}
 
 	//Destroy the queue now that we're done
