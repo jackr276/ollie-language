@@ -1116,52 +1116,45 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
 	 * x_3 <- phi(x_2, x_1, x_0)
 	 * x_4 <- x_3 + 1
 	 *
-	 * Fail there, x_3 may not have been initialized. We will maintain
-	 * a list of variables that may be uninitialized that will be cross
-	 * referenced by all other checks. The value x_3 in this case would go
-	 * into there
+	 * x_3 will have a state of maybe_initialized, which will cause failures
+	 * in the forward analysis once the x_4 expression tries to sue it
 	 */
 	} else {
 		/**
-		 * Run through all of the parameters - all it takes is for one
-		 *
-		 * declare x:mut i32;
-		 *
-		 * if(<cond>){
-		 * 		x = 3;
-		 * } 
-		 *
-		 * ret x; <--- x may be used uninitialized here
-		 *
+		 * Assume that we are definitely initailized by default here
+		 */
+		variable_initialization_state_t initialization_result = VARIABLE_STATE_DEFINITELY_INITIALIZED;
+
+		/**
+		 * We will populate the initailization state of the assignee's SSA generation
+		 * with the merge of the states of all of it's parameters. If *at least one* parameter
+		 * is either uninitialized or maybe initialized, then the entire LHS goes into a state
+		 * of maybe initialized
 		 */
 		for(int32_t i = 0; i < instruction->parameters.current_index; i++){
 			three_addr_var_t* parameter = dynamic_array_get_at(&(instruction->parameters), i);
 
-			/**
-			 * If we see a parameter with a generation of 0, that means that it's 
-			 * never been initialized. We will add the LHS to the "may_not_have_been_initialized"
-			 * list for later checks
-			 */
-			if(parameter->ssa_generation == 0){
-				dynamic_array_add(may_not_have_been_initialized, instruction->operands.oir.assignee);
-				overall_result = FAILURE;
-				
-				//We don't need to check any further for this
-				break;
+			//Extract the parameter's intialization state
+			variable_initialization_state_t param_init_state = parameter->linked_var->initialization_state_map[parameter->ssa_generation];
 
 			/**
-			 * Just because it's not 0 doesn't mean we're safe. We must also check if this value
-			 * is inside of the "may not be initialized" list. If it is, then subsequently the
-			 * LHS of this instruction is also potentially uninitialized
+			 * If the initialization state of the parameter is anything but
+			 * intiailized, then this entire thing is now in the "maybe initialized"
+			 * state and we will not bother checking further
 			 */
-			} else if(does_variable_dynamic_array_contain_variable(may_not_have_been_initialized, parameter) == TRUE){
-				dynamic_array_add(may_not_have_been_initialized, instruction->operands.oir.assignee);
-				overall_result = FAILURE;
-				
-				//We don't need to check any further for this
+			if(param_init_state != VARIABLE_STATE_DEFINITELY_INITIALIZED){
+				initialization_result = VARIABLE_STATE_MAYBE_INITIALIZED;
 				break;
 			}
 		}
+
+		/**
+		 * Once we get here we know what our result is good or bad - we will
+		 * populate the SSA generation of the assignee with it in the init
+		 * state map
+		 */
+		three_addr_var_t* assignee = instruction->operands.oir.assignee;
+		assignee->linked_var->initialization_state_map[assignee->ssa_generation] = initialization_result;
 	}
 
 	return overall_result;
