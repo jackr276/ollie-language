@@ -950,6 +950,66 @@ static void convert_cfg_to_ssa_form(cfg_t* cfg, variable_symtab_t* variables){
 }
 
 
+
+/**
+ * Function parameters are a unique case because we know that by the time we hit the function
+ * entry they are initialized. This preparatory step
+ */
+static inline void populate_function_parameter_initialization_states(symtab_function_record_t* function){
+	//Run through all of the parameters
+	for(int32_t i = 0; i < function->function_parameters.current_index; i++){
+		symtab_variable_record_t* parameter = dynamic_array_get_at(&(function->function_parameters), i);
+
+		/**
+		 * We know for a fact that the first generation of function parameters will *always*
+		 * be initialized so we need to populate that now
+		 */
+		parameter->initialization_state_map[1] = VARIABLE_STATE_DEFINITELY_INITIALIZED;
+	}
+}
+
+
+static void populate_initialization_statuses_in_function(basic_block_t* function_entry){
+	/**
+	 * Before we do anything - we know for a fact that all of our function parameters
+	 * have been initialized by default - so we'll have to take care of all of those
+	 * first
+	 */
+	populate_function_parameter_initialization_states(function_entry->function_defined_in);
+
+	/**
+	 * Allocate our worklist for our worklist algorithm and seed it with our function
+	 * entry block
+	 */
+	dynamic_array_t worklist = dynamic_array_alloc_initial_size(function_entry->function_defined_in->function_blocks.current_index);
+	dynamic_array_add(&worklist, function_entry);
+
+	/**
+	 * So long as the worklist isn't empty we keep iterating over
+	 * the blocks
+	 */
+	while(dynamic_array_is_empty(&worklist) == FALSE){
+		//Pop our block off the back to work on
+		basic_block_t* block = dynamic_array_delete_from_back(&worklist);
+
+	}
+
+
+}
+
+
+/**
+ * Populate the initializtion statues for all SSA variables inside
+ * of the CFG. This entry helper crawls over every function and
+ * does it at a per-function level
+ */
+static inline void populate_initialization_statuses(cfg_t* cfg){
+	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+		populate_initialization_statuses_in_function(dynamic_array_get_at(&(cfg->function_entry_blocks), i));
+	}
+}
+
+
 /**
  * Does a given variable comply with the definite assignment rule? This function is
  * blindly called by the instruction analyzer so we will guard against NULL variables
@@ -1011,7 +1071,7 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
 		 *
 		 */
 		case VARIABLE_STATE_MAYBE_INITIALIZED:
-			sprintf(error_info, "Variable %s may be used before initialization. First defined here: ", variable->linked_var->var_name.string);
+			sprintf(error_info, "Variable %s_%d may be used before initialization. First defined here: ", variable->linked_var->var_name.string, variable->ssa_generation);
 			print_variable_name_to_buffer(error_info, variable->linked_var);
 			print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
 			(*error_count)++;
@@ -1224,24 +1284,6 @@ static u_int8_t perform_definite_assignment_analysis_for_block(basic_block_t* bl
 
 
 /**
- * Function parameters are a unique case because we know that by the time we hit the function
- * entry they are initialized. This preparatory step
- */
-static inline void populate_function_parameter_initialization_states(symtab_function_record_t* function){
-	//Run through all of the parameters
-	for(int32_t i = 0; i < function->function_parameters.current_index; i++){
-		symtab_variable_record_t* parameter = dynamic_array_get_at(&(function->function_parameters), i);
-
-		/**
-		 * We know for a fact that the first generation of function parameters will *always*
-		 * be initialized so we need to populate that now
-		 */
-		parameter->initialization_state_map[1] = VARIABLE_STATE_DEFINITELY_INITIALIZED;
-	}
-}
-
-
-/**
  * Perform the Ollie analyzer's version of definite assignment analysis.
  *
  * We will scan all functions at once. If one function fails, we will still keep going to analyze
@@ -1439,6 +1481,13 @@ cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end
 	 * basis for all of our future checks & optimizations
 	 */
 	convert_cfg_to_ssa_form(cfg, results->variable_symtab);
+
+	/**
+	 * 3.) Populate the intialization states for all variables in
+	 * the CFG using a forward dataflow analysis with a worklist
+	 * for each and every function
+	 */
+	populate_initialization_statuses(cfg);
 
 	/**
 	 * 3.) perform definite assignment analysis on the entire

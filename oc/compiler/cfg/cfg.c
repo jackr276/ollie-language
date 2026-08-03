@@ -1790,6 +1790,9 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
  *
  * Static and global variables are also completely exempt from this because they're assumed to
  * be in-memory from the start
+ *
+ *
+ * TOOD TF IS THIS??
  */
 static inline u_int8_t is_variable_undefined_initialization_eligible(symtab_variable_record_t* variable){
 	switch(variable->membership){
