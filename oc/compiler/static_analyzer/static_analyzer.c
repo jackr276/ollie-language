@@ -123,25 +123,6 @@ static inline u_int8_t does_variable_dynamic_array_contain_symtab_variable(dynam
 
 
 /**
- * This simple utility will scan a dynamic array of variables and invoke the variables_equal() function
- * on each of them for the given variable
- */
-static inline u_int8_t does_variable_dynamic_array_contain_variable(dynamic_array_t* array, three_addr_var_t* variable){
-	for(int32_t i = 0; i < array->current_index; i++){
-		three_addr_var_t* candidate = dynamic_array_get_at(array, i);
-
-		//If we have one equals then the whole thing works
-		if(variables_equal(candidate, variable) == TRUE){
-			return TRUE;
-		}
-	}
-
-	//If we made it here then no match
-	return FALSE;
-}
-
-
-/**
  * Does the block assign this variable? We'll do a simple linear scan to find out
  */
 static inline u_int8_t does_block_assign_variable(basic_block_t* block, symtab_variable_record_t* variable){
@@ -975,18 +956,21 @@ static void convert_cfg_to_ssa_form(cfg_t* cfg, variable_symtab_t* variables){
  * and variables that are ineligible for SSA in here. This function also handles
  * all of the error printing for variables that may not have been initialized
  *
- *
- * TODO we should map initialization states to SSA inside of the symtab variable itself
+ * We map initialization states to SSA inside of the symtab variable itself
  * while we're doing it
  *
  * In other words
  * x[ssa_gen = 0] = UNINITIALIZED
  * x[ssa_gen = 1] = INITIALIZED
  *
+ * We need to perform a lookup using the SSA generation inside of the symtab variable's
+ * hashmap to get the state that we're using it in
+ *
+ *
  * And we can have a maybe_initialized for Phi function merges. This gets rid of the need for that
  * dynamic array altogether and I think this will help us with the mutability checking too
  */
-static u_int8_t check_variable_for_definite_assignment(instruction_t* instruction, three_addr_var_t* variable, dynamic_array_t* may_not_have_been_initialized){
+static u_int8_t check_variable_for_definite_assignment(instruction_t* instruction, three_addr_var_t* variable){
 	/**
 	 * First guard - if the variable is NULL(common) or it's not 
 	 * SSA eligible(temp var, etc.) we can leave now. This is still
@@ -1005,34 +989,44 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
 	}
 
 	/**
-	 * Obvious case - generation of 0 means it's never
-	 * been initialized so this is a pure use before
-	 * initialization
+	 * Perform the map retrieval using the variable's SSA generation as the key
 	 */
-	if(variable->ssa_generation == 0){
-		sprintf(error_info, "Variable %s is used before initialization. First defined here: ", variable->linked_var->var_name.string);
-		print_variable_name_to_buffer(error_info, variable->linked_var);
-		print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
-		(*error_count)++;
-		return FAILURE;
+	variable_initialization_state_t initialization_state = variable->linked_var->initialization_state_map[variable->ssa_generation];
 
-	/**
-	 * Not so obvious case - it being in this array means that it comes from a phi function
-	 * that itself had a parameter of generation 0, meaning that it's not a guarantee that
-	 * this wasn't initialized but it may not have been, which is still an error
-	 */
-	} else if(does_variable_dynamic_array_contain_variable(may_not_have_been_initialized, variable) == TRUE){
-		sprintf(error_info, "Variable %s may be used before initialization. First defined here: ", variable->linked_var->var_name.string);
-		print_variable_name_to_buffer(error_info, variable->linked_var);
-		print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
-		(*error_count)++;
-		return FAILURE;
+	switch(initialization_state){
+		/**
+		 * Obvious case - it's never been initialized 
+		 * so this is a pure use before initialization
+		 */
+		case VARIABLE_STATE_UNINITIALIZED:
+			sprintf(error_info, "Variable %s is used before initialization. First defined here: ", variable->linked_var->var_name.string);
+			print_variable_name_to_buffer(error_info, variable->linked_var);
+			print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
+			(*error_count)++;
+			return FAILURE;
 
-	/**
-	 * If we made it here then this worked and the variable is clean
-	 */
-	} else {
-		return SUCCESS;
+		/**
+		 * Not so obvious case - there are some paths where this variable
+		 * is initialized and some where it is not. So, we will
+		 *
+		 */
+		case VARIABLE_STATE_MAYBE_INITIALIZED:
+			sprintf(error_info, "Variable %s may be used before initialization. First defined here: ", variable->linked_var->var_name.string);
+			print_variable_name_to_buffer(error_info, variable->linked_var);
+			print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
+			(*error_count)++;
+			return FAILURE;
+
+		/**
+		 * It definitely was initialized so we should be good to go here
+		 */
+		case VARIABLE_STATE_DEFINITELY_INITIALIZED:
+			return SUCCESS;
+
+		//Should never happen
+		default:
+			fprintf(stderr, "Fatal internal compiler error: variable found to be in an impossible initialization state\n");
+			exit(1);
 	}
 }
 
