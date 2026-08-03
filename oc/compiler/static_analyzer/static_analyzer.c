@@ -1032,6 +1032,35 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
 
 
 /**
+ * Populate the initialization status for an assignee of an instruction. Note
+ * that this is expected to be blindly called, so we need to do all of our eligibility
+ * checks here
+ */
+static inline void populate_assignee_initialization_status_as_initialized(three_addr_var_t* assignee){
+	/**
+	 * We'll be hitting this a lot so we check it first
+	 */
+	if(assignee == NULL || is_variable_ssa_eligible(assignee) == FALSE){
+		return;
+	}
+
+	/**
+	 * This should never happen but we want to be safe in case it does
+	 */
+	if(assignee == stack_pointer_var || assignee == instruction_pointer_var){
+		return;
+	}
+
+	/**
+	 * Now we can flag that this generation of the SSA is definitely
+	 * initialized inside of the map
+	 */
+	symtab_variable_record_t* linked_var = assignee->linked_var;
+	linked_var->initialization_state_map[assignee->ssa_generation] = VARIABLE_STATE_DEFINITELY_INITIALIZED;
+}
+
+
+/**
  * Does the given instruction comply with the definite assignment rules? There are two paths
  * that this check will take:
  * 
@@ -1043,7 +1072,7 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
  * 	   list, then we will flag that LHS variable as potentially being uninitialized for future checks.
  * 	   Since we do this scan from top to bottom in the function using dominators this check will work
  */
-static inline u_int8_t does_instruction_comply_with_definite_assignment(instruction_t* instruction, dynamic_array_t* may_not_have_been_initialized){
+static inline u_int8_t does_instruction_comply_with_definite_assignment(instruction_t* instruction){
 	//By default assume SUCCESS(1)
 	u_int8_t overall_result = SUCCESS;
 
@@ -1060,17 +1089,24 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
 	 * will make the whole thing 0(FAILURE)
 	 */
 	if(instruction->statement_type != THREE_ADDR_CODE_PHI_FUNC){
-		overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.operand1, may_not_have_been_initialized);
-		overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.operand2, may_not_have_been_initialized);
-		overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.address_operand1, may_not_have_been_initialized);
-		overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.address_operand2, may_not_have_been_initialized);
+		overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.operand1);
+		overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.operand2);
+		overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.address_operand1);
+		overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.address_operand2);
 
 		//Check all parameters as well
 		for(int32_t i = 0; i < instruction->parameters.current_index; i++){
 			three_addr_var_t* parameter = dynamic_array_get_at(&(instruction->parameters), i);
 
-			overall_result &= check_variable_for_definite_assignment(instruction, parameter, may_not_have_been_initialized);
+			overall_result &= check_variable_for_definite_assignment(instruction, parameter);
 		}
+
+		/**
+		 * Now if this instruction has an assignee, we're able to fill out that it
+		 * definitely has been assigned at this point. The helper will
+		 * fill out the generation map for us
+		 */
+		populate_assignee_initialization_status_as_initialized(instruction->operands.oir.assignee);
 
 	/**
 	 * Phi-functions have special handling. If we have a phi
@@ -1143,7 +1179,7 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
  *
  * NOTE: this function is recursive
  */
-static u_int8_t perform_definite_assignment_analysis_for_block(basic_block_t* block, dynamic_array_t* may_not_have_been_initialized){
+static u_int8_t perform_definite_assignment_analysis_for_block(basic_block_t* block){
 	//Assume success off the bat
 	u_int8_t result = SUCCESS;
 
@@ -1167,7 +1203,7 @@ static u_int8_t perform_definite_assignment_analysis_for_block(basic_block_t* bl
 		 * thing fails. We will process all instructions to get a full picture of the
 		 * errors though
 		 */
-		if(does_instruction_comply_with_definite_assignment(cursor, may_not_have_been_initialized) == FALSE){
+		if(does_instruction_comply_with_definite_assignment(cursor) == FALSE){
 			result = FALSE;
 		}
 
@@ -1185,7 +1221,7 @@ static u_int8_t perform_definite_assignment_analysis_for_block(basic_block_t* bl
 		 * If anything in this child fails, our overall result is failure. We will
 		 * keep going to scan everything though
 		 */
-		if(perform_definite_assignment_analysis_for_block(child, may_not_have_been_initialized) == FALSE){
+		if(perform_definite_assignment_analysis_for_block(child) == FALSE){
 			result = FAILURE;
 		}
 	}
@@ -1206,12 +1242,6 @@ static inline u_int8_t perform_definite_assignment_analysis(cfg_t* cfg){
 	//Assume success off the bat
 	u_int8_t result = SUCCESS;
 
-	/**
-	 * Keep an array of variables that may not have been initialized in each function to make
-	 * scanning easier and less intensive. We'll allocate once and just wipe every time
-	 */
-	dynamic_array_t may_not_have_been_initialized = dynamic_array_alloc();
-
 	//Run through all functions
 	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Use the function entry to seed the search
@@ -1226,16 +1256,10 @@ static inline u_int8_t perform_definite_assignment_analysis(cfg_t* cfg){
 		 * Call into the recursive analyzer. If we have a failure, then the entire thing
 		 * goes into failure, but we will keep scanning to get all errors in at once
 		 */
-		if(perform_definite_assignment_analysis_for_block(function_entry, &may_not_have_been_initialized) == FAILURE){
+		if(perform_definite_assignment_analysis_for_block(function_entry) == FAILURE){
 			result = FAILURE;
 		}
-
-		//Clear it now that we're done with this function
-		clear_dynamic_array(&may_not_have_been_initialized);
 	}
-
-	//Done with this so scrap it now
-	dynamic_array_dealloc(&may_not_have_been_initialized);
 
 	return result;
 }
