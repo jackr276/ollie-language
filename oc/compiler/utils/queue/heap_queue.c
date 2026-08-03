@@ -177,12 +177,18 @@ void heap_queue_clear(heap_queue_t* heap_queue){
  * scan to determine this
  */
 u_int8_t heap_queue_contains(heap_queue_t* heap_queue, void* ptr){
+	//You can't search for NULL - reject here
+	if(ptr == NULL){
+		fprintf(stderr, "Fatal internal compiler error: attempt to find a NULL ptr in a heap queue\n");
+		exit(1);
+	}
+
 	/**
 	 * Run through all of the elements and compare them
 	 * one by one. We do pointer comparison here
 	 */
-	for(int32_t i = 0; i < heap_queue->num_elements; i++){
-		int32_t index = (heap_queue->front + i) % heap_queue->capacity;
+	for(u_int32_t i = 0; i < heap_queue->num_elements; i++){
+		u_int32_t index = (heap_queue->front + i) % heap_queue->capacity;
 
 		//If we have at least one equality then return true
 		if(heap_queue->data[index] == ptr){

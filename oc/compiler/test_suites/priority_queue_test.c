@@ -1,11 +1,12 @@
 /**
  * Author: Jack Robbins
- * CI test coverage for the min & max priority queue implementations
+ * CI test coverage for the queue, min & max priority queue implementations
 */
 
-//Include both queue types
+//Include all queue types
 #include "../utils/queue/max_priority_queue.h"
 #include "../utils/queue/min_priority_queue.h"
+#include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
 #include <assert.h>
 #include <stdint.h>
@@ -44,6 +45,61 @@ static priority_queue_test_node_t* create_test_node(int64_t priority){
 
 
 /**
+ * Do everything to test the normal heap queue. There is no priority to test here
+ */
+static void test_queue(){
+	//Allocate the heap queue
+	heap_queue_t queue = heap_queue_alloc();
+
+	//Run through and add them all
+	for(int32_t i = 0; i < 900; i++){
+		int* to_be_added = calloc(1, sizeof(int));
+
+		//Give this the index value
+		*to_be_added = i;
+
+		enqueue(&queue, to_be_added);
+	}
+
+	//It should not be empty
+	assert(queue_is_empty(&queue) == FALSE);
+
+	//Enqueue the last int here
+	int* last_int = calloc(1, sizeof(int));
+	*last_int = 900;
+
+	//Verify that the last int is not in there
+	assert(heap_queue_contains(&queue, last_int) == FALSE);
+	
+	//Enqueue it
+	enqueue(&queue, last_int);
+
+	//Verify that the last int is in there now
+	assert(heap_queue_contains(&queue, last_int) == TRUE);
+
+	//Now run through and verify that they all come out
+	for(int32_t i = 0; i < 900; i++){
+		int* dequeued = dequeue(&queue);
+
+		//Verify that they equal the right thing
+		assert(*dequeued == i);
+	}
+
+	//One final dequeue to get the last int out
+	dequeue(&queue);
+
+	//Now we shouldn't have the last int in there
+	assert(heap_queue_contains(&queue, last_int) == FALSE);
+
+	//It should be empty
+	assert(queue_is_empty(&queue) == TRUE);
+
+	//When we're done deallocate
+	heap_queue_dealloc(&queue);
+}
+
+
+/**
  * Do everything to test the minimum priority queue
  */
 static void test_min_priority_queue(){
@@ -71,9 +127,6 @@ static void test_min_priority_queue(){
 		//Dequeue it
 		priority_queue_test_node_t* node = min_priority_queue_dequeue(&min_queue);
 
-		//Assert that 
-		printf("Dequeued node with priority %ld\n", node->priority);
-
 		//Asser that this is the case, the priority should be highest to lowest here
 		assert(node->priority == i);
 	}
@@ -91,9 +144,6 @@ static void test_min_priority_queue(){
 	for(u_int16_t i = 250; i < 500; i++){
 		//Dequeue it
 		priority_queue_test_node_t* node = min_priority_queue_dequeue(&min_queue);
-
-		//Assert that 
-		printf("Dequeued node with priority %ld\n", node->priority);
 
 		//Asser that this is the case, the priority should be highest to lowest here
 		assert(node->priority == i);
@@ -121,17 +171,11 @@ static void test_min_priority_queue(){
 		//Dequeue it
 		priority_queue_test_node_t* node = min_priority_queue_dequeue(&min_queue);
 
-		//Assert that 
-		printf("Dequeued node with priority %ld\n", node->priority);
-
 		//Asser that this is the case, the priority should be highest to lowest here
 		assert(node->priority == i);
 
 		//Dequeue it again(we had duplicates)
 		priority_queue_test_node_t* duplicate_node = min_priority_queue_dequeue(&min_queue);
-
-		//Assert that 
-		printf("Dequeued node with priority %ld\n", duplicate_node->priority);
 
 		//Asser that this is the case, the priority should be highest to lowest here
 		assert(duplicate_node->priority == i);
@@ -141,9 +185,6 @@ static void test_min_priority_queue(){
 	for(int16_t i = 785; i < 835; i++){
 		//Dequeue it
 		priority_queue_test_node_t* node = min_priority_queue_dequeue(&min_queue);
-
-		//Assert that 
-		printf("Dequeued node with priority %ld\n", node->priority);
 
 		//Asser that this is the case, the priority should be highest to lowest here
 		assert(node->priority == i);
@@ -182,9 +223,6 @@ static void test_max_priority_queue(){
 		//Dequeue it
 		priority_queue_test_node_t* node = max_priority_queue_dequeue(&max_queue);
 
-		//Assert that 
-		printf("Dequeued node with priority %ld\n", node->priority);
-
 		//Asser that this is the case, the priority should be highest to lowest here
 		assert(node->priority == i);
 	}
@@ -206,9 +244,6 @@ static void test_max_priority_queue(){
 	for(int16_t i = 835; i >= 785; i--){
 		//Dequeue it
 		priority_queue_test_node_t* node = max_priority_queue_dequeue(&max_queue);
-
-		//Assert that 
-		printf("Dequeued node with priority %ld\n", node->priority);
 
 		//Asser that this is the case, the priority should be highest to lowest here
 		assert(node->priority == i);
@@ -235,17 +270,11 @@ static void test_max_priority_queue(){
 		//Dequeue it
 		priority_queue_test_node_t* node = max_priority_queue_dequeue(&max_queue);
 
-		//Assert that 
-		printf("Dequeued node with priority %ld\n", node->priority);
-
 		//Asser that this is the case, the priority should be highest to lowest here
 		assert(node->priority == i);
 
 		//Dequeue it again(we had duplicates)
 		priority_queue_test_node_t* duplicate_node = max_priority_queue_dequeue(&max_queue);
-
-		//Assert that 
-		printf("Dequeued node with priority %ld\n", duplicate_node->priority);
 
 		//Asser that this is the case, the priority should be highest to lowest here
 		assert(duplicate_node->priority == i);
@@ -255,9 +284,6 @@ static void test_max_priority_queue(){
 	for(int16_t i = 249; i >= 0; i--){
 		//Dequeue it
 		priority_queue_test_node_t* node = max_priority_queue_dequeue(&max_queue);
-
-		//Assert that 
-		printf("Dequeued node with priority %ld\n", node->priority);
 
 		//Asser that this is the case, the priority should be highest to lowest here
 		assert(node->priority == i);
@@ -275,15 +301,17 @@ static void test_max_priority_queue(){
  * Just a single test runner here with some asserts
 */
 int main() {
+	printf("===================== Testing regular queue =======================\n");
+	test_queue();
+	printf("SUCCESS\n");
+
 	printf("===================== Testing min priority queue =======================\n");
-	//Invoke the min tester first
 	test_min_priority_queue();
-	printf("===================== Testing min priority queue =======================\n");
+	printf("SUCCESS\n");
 
 	printf("===================== Testing max priority queue =======================\n");
-	//Then the max tester
 	test_max_priority_queue();
-	printf("===================== Testing max priority queue =======================\n");
+	printf("SUCCESS\n");
 
 	return 0;
 }
