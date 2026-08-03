@@ -636,26 +636,6 @@ static inline u_int8_t is_type_commutative_for_operation(generic_type_t* type, o
 
 
 /**
- * Determine whether or not a variable is able to be assigned to
- *
- * A variable can only be assigned to if it is mutable. If the user
- * does something like:
- *
- * declare x:i32;
- * x = 5;
- *
- * This is inavlid, because you're violating the basic mutability constraint
- */
-static inline u_int8_t can_variable_be_assigned_to(symtab_variable_record_t* variable){
-	//Extract the type - it contains the mutability information
-	generic_type_t* type = variable->type_defined_as;
-
-	//Otherwise, let's see if the type allows us to be mutated 
-	return type->mutability == MUTABLE ? TRUE : FALSE;
-}
-
-
-/**
  * Determine whether or not a duplicate function exists with the given
  * name
  *
@@ -2996,14 +2976,6 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 				return print_and_return_error(info, parser_line_num);
 			}
 		}
-
-	} else {
-		//This is the case where we have a plain variable assignment
-		//if(can_variable_be_assigned_to(assignee) == FALSE){
-		//	sprintf(info, "Variable \"%s\" is not mutable and cannot be assigned to outside of an initial \"let\" statement. Use the \"mut\" keyword if you wish to mutate. First defined here:", assignee->var_name.string);
-		//	print_variable_name_to_buffer(info, assignee);
-		//	return print_and_return_error(info, parser_line_num);
-		//}
 	}
 
 	//Just give this back as a flag that we're fine
