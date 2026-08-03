@@ -901,6 +901,38 @@ static inline void rename_all_variables(cfg_t* cfg){
 
 
 /**
+ * Once we have all SSA generation handled, we know the maximum amount of SSA generations
+ * for each variable. As such, we can now go through and initialize all of the initialization
+ * state maps by dynamically allocating arrays of the required size(number of ssa generations)
+ * for each one
+ */
+static inline void create_all_initialization_state_maps(variable_symtab_t* variables){
+	//For every single lexical scope
+	for(int32_t i = 0; i < variables->sheafs.current_index; i++){
+		symtab_variable_sheaf_t* sheaf = dynamic_array_get_at(&(variables->sheafs), i);
+
+		//Traverse the entire record keyspace
+		for(int32_t j = 0; j < VARIABLE_KEYSPACE; j++){
+			symtab_variable_record_t* cursor = sheaf->records[j]; 
+
+			//Remember that records can be chained from hash collisions
+			while(cursor != NULL){
+				//If it's not SSA eligible then skip
+				if(is_symtab_variable_ssa_eligible(cursor) == FALSE || cursor->ssa_counter == 0){
+					cursor = cursor->next;
+					continue;
+				}
+
+				//Initialize the map to be all 0s(uninitialized) at first
+				cursor->initialization_state_map = calloc(cursor->ssa_counter, sizeof(variable_initialization_state_t));
+				cursor = cursor->next;
+			}
+		}
+	}
+}
+
+
+/**
  * This pass will do everything needed to convert the CFG into SSA(static single assignment) form.
  * As a reminder, static single assignment form is an IR form where every variable is assigned
  * only once
@@ -927,6 +959,13 @@ static void convert_cfg_to_ssa_form(cfg_t* cfg, variable_symtab_t* variables){
 	 * road
 	 */
 	rename_all_variables(cfg);
+
+	/**
+	 * Step 4: now that we've performed all variable renaming, we will initialize
+	 * the SSA generation to variable state maps inside of each symtab record
+	 * in preparation for definite assignment analysis
+	 */
+	create_all_initialization_state_maps(variables);
 }
 
 
