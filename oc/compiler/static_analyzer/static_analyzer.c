@@ -977,6 +977,8 @@ static void populate_initialization_statuses_in_function(basic_block_t* function
 	 */
 	populate_function_parameter_initialization_states(function_entry->function_defined_in);
 
+	TODO sabotaged
+
 	/**
 	 * Allocate our worklist for our worklist algorithm and seed it with our function
 	 * entry block
