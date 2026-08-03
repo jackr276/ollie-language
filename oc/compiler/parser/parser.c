@@ -2924,6 +2924,11 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 /**
  * Perform all mutability checking/bookkeeping for an assignment expression
  *
+ * NOTE: in Ollie, mutability for a memory region refers to actually assigning
+ * over the region itself and writing to it. There is a blanket ban on writing
+ * to immutable memory regions. However, reassigning them is fine if they're
+ * being initialized for the first time
+ *
  * Cases that we cover:
  * 1.) Attempting to assign to an immutable "field variable" - think struct/union field
  * 2.) Attempting to assign to an immutable array area
@@ -2994,11 +2999,11 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 
 	} else {
 		//This is the case where we have a plain variable assignment
-		if(can_variable_be_assigned_to(assignee) == FALSE){
-			sprintf(info, "Variable \"%s\" is not mutable and cannot be assigned to outisde of an initial \"let\" statement. Use the \"mut\" keyword if you wish to mutate. First defined here:", assignee->var_name.string);
-			print_variable_name_to_buffer(info, assignee);
-			return print_and_return_error(info, parser_line_num);
-		}
+		//if(can_variable_be_assigned_to(assignee) == FALSE){
+		//	sprintf(info, "Variable \"%s\" is not mutable and cannot be assigned to outside of an initial \"let\" statement. Use the \"mut\" keyword if you wish to mutate. First defined here:", assignee->var_name.string);
+		//	print_variable_name_to_buffer(info, assignee);
+		//	return print_and_return_error(info, parser_line_num);
+		//}
 	}
 
 	//Just give this back as a flag that we're fine
