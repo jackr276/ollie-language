@@ -64,6 +64,11 @@ u_int8_t queue_is_empty(heap_queue_t* heap_queue);
 void heap_queue_clear(heap_queue_t* heap_queue);
 
 /**
+ * Does the heap queue contain the given pointer?
+ */
+u_int8_t heap_queue_contains(heap_queue_t* heap_queue, void* ptr);
+
+/**
  * Deallocate an entire heap queue structure
  *
  * NOTE: Only the nodes are freed, not the underlying data
