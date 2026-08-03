@@ -2915,9 +2915,6 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
  * 3.) Attempting to assign to a type regularly after it has been initialized
  */
 static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_hand_expression_tree){
-	//Extract the 
-	symtab_variable_record_t* assignee = left_hand_expression_tree->variable;
-
 	/**
 	 * If we have a so-called "field variable", that means that this 
 	 * unary expression is a postfix access of some kind. This is important

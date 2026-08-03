@@ -1197,6 +1197,14 @@ static inline u_int8_t perform_definite_assignment_analysis(cfg_t* cfg){
 }
 
 
+static inline u_int8_t perform_mutability_analysis(cfg_t* cfg){
+
+	//TODO DUMMY
+	return SUCCESS;
+
+}
+
+
 /**
  * Perform mutability checking on the variable symtab. This will check
  * and display warnings if we are labeling a variable as mutable
@@ -1355,6 +1363,19 @@ cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end
 	 * NOTE: this is a potential fail point for the CFG
 	 */
 	if(perform_definite_assignment_analysis(cfg) == FAILURE){
+		result = CFG_RESULT_FAILURE;
+	}
+
+	/**
+	 * 4.) perform mutability analysis in a forward
+	 * traversal over the entire CFG. This process is
+	 * an Ollie-specific semantic that will guarantee
+	 * that immutable variables are not mutated
+	 * post assignment
+	 *
+	 * NOTE: this is a potential fail point for the CFG
+	 */
+	if(perform_mutability_analysis(cfg) == FAILURE){
 		result = CFG_RESULT_FAILURE;
 	}
 
