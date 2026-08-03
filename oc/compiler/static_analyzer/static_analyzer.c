@@ -935,6 +935,17 @@ static void convert_cfg_to_ssa_form(cfg_t* cfg, variable_symtab_t* variables){
  * blindly called by the instruction analyzer so we will guard against NULL variables
  * and variables that are ineligible for SSA in here. This function also handles
  * all of the error printing for variables that may not have been initialized
+ *
+ *
+ * TODO we should map initialization states to SSA inside of the symtab variable itself
+ * while we're doing it
+ *
+ * In other words
+ * x[ssa_gen = 0] = UNINITIALIZED
+ * x[ssa_gen = 1] = INITIALIZED
+ *
+ * And we can have a maybe_initialized for Phi function merges. This gets rid of the need for that
+ * dynamic array altogether and I think this will help us with the mutability checking too
  */
 static u_int8_t check_variable_for_definite_assignment(instruction_t* instruction, three_addr_var_t* variable, dynamic_array_t* may_not_have_been_initialized){
 	/**
