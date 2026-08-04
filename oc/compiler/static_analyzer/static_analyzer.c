@@ -1022,103 +1022,68 @@ static inline void populate_all_initialization_states(symtab_function_record_t* 
 
 
 /**
- * Compute the initialization status in the given block. This means that for every
- * instruction, we will update the assignee to be either initialized or maybe initialized.
- * The real point here where we would have changes are phi functions. As the iterative
- * forward dataflow works, we will be updating the phi parameters and thus we'll
- * have a lot of cases where the phi function's assignee goes from "maybe" to "definitely"
- * initialized
+ * TODO DOCUMENT
  */
-static inline u_int8_t compute_initialization_status_in_block(basic_block_t* block){
+static inline u_int8_t update_initialization_states_in_block(basic_block_t* block){
 	/**
 	 * Has there been a change in *at least* one initialization status
 	 * in an assignee in the block? By default assume no
 	 */
 	u_int8_t changed = FALSE;
 
-	//Crawl over every instruction in the block
+	/**
+	 * Crawl over every phi function in the block. These
+	 * are the only instructions that can be updated at this
+	 * point. Remember that phi functions always occur at the
+	 * start of each block, so the instant we see an instruction
+	 * that is not one we can stop processing and leave
+	 */
 	instruction_t* cursor = block->leader_statement;
-	while(cursor != NULL){
-		/**
-		 * If it's not a phi function, we will just update 
-		 * the assignee to be initialized if it isn't already
-		 */
-		if(cursor->statement_type != THREE_ADDR_CODE_PHI_FUNC){
-			//Extract
-			three_addr_var_t* assignee = cursor->operands.oir.assignee;
+	while(cursor != NULL && cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
+		//Extract and save for later
+		three_addr_var_t* assignee = cursor->operands.oir.assignee;
+		variable_initialization_state_t current_init_state = get_variable_initialization_state(assignee);
 
-			/**
-			 * It's not SSA eligible so we don't bother with this
-			 */
-			if(is_variable_ssa_eligible(assignee) == FALSE){
-				cursor = cursor->next_statement;
-				continue;
-			}
-
-			/**
-			 * If it's not definitely initialized then we'll make the change
-			 * and flag that this block did change
-			 */
-			if(get_variable_initialization_state(assignee) != VARIABLE_STATE_DEFINITELY_INITIALIZED){
-				set_variable_initialization_state(assignee, VARIABLE_STATE_DEFINITELY_INITIALIZED);
-				changed = TRUE;
-			}
+		//Assume that we're going to be definitely initialized for sure
+		variable_initialization_state_t new_init_state = VARIABLE_STATE_DEFINITELY_INITIALIZED;
 
 		/**
-		 * Otherwise we have a phi function. This will act as a sort of "merge" for us
-		 * where we'll scan the initialization states of all the phi function
-		 * parameters. If we see any one that is uninitialized or maybe uninitialized,
-		 * then the phi function's assignee is maybe uninitialized
+		 * This will act as a sort of "merge" for us where we'll scan the initialization states
+		 * of all the phi function parameters. If we see any one that is uninitialized or maybe
+		 * uninitialized, then the phi function's assignee is maybe uninitialized
 		 */
-		} else {
-			//Get the assignee and the current state
-			three_addr_var_t* assignee = cursor->operands.oir.assignee;
-			variable_initialization_state_t current_init_state = get_variable_initialization_state(assignee);
-
-			//Assume that we're going to be definitely initialized for sure
-			variable_initialization_state_t new_init_state = VARIABLE_STATE_DEFINITELY_INITIALIZED;
+		for(int32_t i = 0; i < cursor->parameters.current_index; i++){
+			three_addr_var_t* parameter = dynamic_array_get_at(&(cursor->parameters), i);
 
 			/**
-			 * Run through all the parameters to update the state
+			 * If we see at least one that is not definitely initialized, then this whole
+			 * thing goes to a state of maybe initialized
 			 */
-			for(int32_t i = 0; i < cursor->parameters.current_index; i++){
-				three_addr_var_t* parameter = dynamic_array_get_at(&(cursor->parameters), i);
-
-				/**
-				 * If we see at least one that is not definitely initialized, then this whole
-				 * thing goes to a state of maybe initialized
-				 */
-				if(get_variable_initialization_state(parameter) != VARIABLE_STATE_DEFINITELY_INITIALIZED){
-					new_init_state = VARIABLE_STATE_MAYBE_INITIALIZED;
-					break;
-				}
+			if(get_variable_initialization_state(parameter) != VARIABLE_STATE_DEFINITELY_INITIALIZED){
+				new_init_state = VARIABLE_STATE_MAYBE_INITIALIZED;
+				break;
 			}
+		}
 
-			/**
-			 * Save the new variable initialization state and record if there
-			 * was a change in state
-			 */
-			if(new_init_state != current_init_state){
-				set_variable_initialization_state(assignee, new_init_state);
-				changed = TRUE;
-			}
+		/**
+		 * Save the new variable initialization state and record if there
+		 * was a change in state
+		 */
+		if(new_init_state != current_init_state){
+			set_variable_initialization_state(assignee, new_init_state);
+			changed = TRUE;
 		}
 
 		//Bump up to the next one
 		cursor = cursor->next_statement;
 	}
 
-	//Flag that we've visited this block
-	block->visited = TRUE;
-
 	return changed;
 }
 
 
 /**
- * Use a worklist(queue) algorithm to populate the initialization statuses for all eligible
- * variables in the given function. This is a while changed algorithm so it will go 
- * until we have a convergence, i.e. until all variable states stop changing
+ * TODO DOCUMENT
  */
 static void perform_dataflow_analysis_for_function(basic_block_t* function_entry){
 	/**
@@ -1153,7 +1118,7 @@ static void perform_dataflow_analysis_for_function(basic_block_t* function_entry
 		for(int32_t i = postorder_traversal.current_index - 1; i >= 0; i--){
 			basic_block_t* block = dynamic_array_get_at(&postorder_traversal, i);
 
-			u_int8_t block_changed = compute_initialization_status_in_block(block);
+			u_int8_t block_changed = update_initialization_states_in_block(block);
 
 			changed |= block_changed;
 		}
