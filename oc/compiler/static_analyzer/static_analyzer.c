@@ -1085,13 +1085,12 @@ static inline u_int8_t update_initialization_states_in_block(basic_block_t* bloc
 /**
  * TODO DOCUMENT
  */
-static void perform_dataflow_analysis_for_function(basic_block_t* function_entry){
+static void perform_dataflow_analysis_for_function(basic_block_t* function_entry, dynamic_array_t* postorder_traversal){
 	/**
 	 * Get the post order traversal for this function. We will iterate over
 	 * it backwards to get the reverse post order traversal(level order)
 	 */
-	dynamic_array_t postorder_traversal = dynamic_array_alloc_initial_size(function_entry->function_defined_in->function_blocks.current_max_size);
-	get_post_order_traversal(&(function_entry->function_defined_in->function_blocks), function_entry, &postorder_traversal);
+	get_post_order_traversal(&(function_entry->function_defined_in->function_blocks), function_entry, postorder_traversal);
 
 	/**
 	 *  - we need to initialize ALL assignees as DEFINITELY_INITIALIZED and then
@@ -1105,7 +1104,7 @@ static void perform_dataflow_analysis_for_function(basic_block_t* function_entry
 	 *
 	 * TODO DOCUMENT
 	 */
-	populate_all_initialization_states(function_entry->function_defined_in, &postorder_traversal);
+	populate_all_initialization_states(function_entry->function_defined_in, postorder_traversal);
 
 	/**
 	 * TODO DOC
@@ -1115,8 +1114,8 @@ static void perform_dataflow_analysis_for_function(basic_block_t* function_entry
 		//Assume no change will happen at the start of each iteration
 		changed = FALSE;
 
-		for(int32_t i = postorder_traversal.current_index - 1; i >= 0; i--){
-			basic_block_t* block = dynamic_array_get_at(&postorder_traversal, i);
+		for(int32_t i = postorder_traversal->current_index - 1; i >= 0; i--){
+			basic_block_t* block = dynamic_array_get_at(postorder_traversal, i);
 
 			u_int8_t block_changed = update_initialization_states_in_block(block);
 
@@ -1131,9 +1130,24 @@ static void perform_dataflow_analysis_for_function(basic_block_t* function_entry
  * TODO DOC
  */
 static inline void perform_dataflow_analysis(cfg_t* cfg){
+	//Allocate a reusable holder for the postorder traversal
+	dynamic_array_t postorder_traversal = dynamic_array_alloc();
+
+	/**
+	 * Run through all of the function entry blocks and invoke the per-function
+	 * dataflow helper. We will use the reusable postorder traversal dynamic
+	 * array and just clear it upon each new function
+	 */
 	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
-		perform_dataflow_analysis_for_function(dynamic_array_get_at(&(cfg->function_entry_blocks), i));
+		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
+		perform_dataflow_analysis_for_function(function_entry, &postorder_traversal);
+
+		//This array will be reused - we just need to clear it out
+		clear_dynamic_array(&postorder_traversal);
 	}
+
+	//We can scrap this now that we're done
+	dynamic_array_dealloc(&postorder_traversal);
 }
 
 
