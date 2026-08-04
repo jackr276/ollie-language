@@ -40,6 +40,12 @@
 //User defined jump statement keyspace(per function)
 #define USER_DEFINED_LABELED_BLOCK_KEYSPACE 64
 
+/**
+ * Flag that tells us that the previous generation is invalid
+ * for SSA overwrite checks
+ */
+#define OVERWRITES_NOTHING -1
+
 //A variable symtab
 typedef struct variable_symtab_t variable_symtab_t;
 //A function symtab

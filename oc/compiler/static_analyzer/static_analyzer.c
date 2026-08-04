@@ -299,6 +299,9 @@ static inline u_int8_t is_variable_ssa_eligible(three_addr_var_t* variable){
  * 	push the current SSA generation number onto the counter stack
  * 	variable's SSA generation is the current number
  * 	bump the SSA generation number for the next go 
+ *
+ *
+ * 	TODO NEED TO DO OVERWRITE STORAGE
  */
 static inline void lhs_new_name(three_addr_var_t* var){
 	//Grab the linked variable out
@@ -322,6 +325,9 @@ static inline void lhs_new_name(three_addr_var_t* var){
  * For a left hand side(assignment) new name:
  * 	push the current SSA generation number onto the counter stack
  * 	bump the SSA generation number
+ *
+ *
+ * 	TODO NEED TO DO OVERWRITE STORAGE
  */
 static inline void lhs_new_name_direct(symtab_variable_record_t* variable){
 	//Store the old generation level
@@ -434,7 +440,8 @@ static inline void emit_synthetic_initializations(variable_symtab_t* symtab){
 
 				/**
 				 * We will need to maintain a map of what generations we've overwritten
-				 * whenever we have a new LHS assignment. We can allocate it now
+				 * whenever we have a new LHS assignment. We can allocate it now and it
+				 * will be populated by the renamer
 				 */
 				cursor->ssa_overwritten_generation_map = dynamic_integer_array_alloc();
 
@@ -447,6 +454,11 @@ static inline void emit_synthetic_initializations(variable_symtab_t* symtab){
 				/**
 				 * This counts as a definition for this variable inside of our
 				 * given function's entry block
+				 *
+				 *
+				 * TODO DO WE NEED THIS
+				 *
+				 *
 				 */
 				add_variable_to_def_set(starting_variable, cursor->function_declared_in->function_entry_block);
 
@@ -1284,6 +1296,7 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
 
 
 /**
+ *
  * TODO DOC
  * NOTE: we assume that the caller will never pass a phi function as a parameter
  */
