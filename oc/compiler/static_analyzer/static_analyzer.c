@@ -6,6 +6,7 @@
 
 #include "static_analyzer.h"
 #include "../utils/queue/heap_queue.h"
+#include <assert.h>
 #include <sys/types.h>
 
 //Store these globally for easy access
@@ -971,6 +972,26 @@ static inline void populate_function_parameter_initialization_states(symtab_func
 
 
 /**
+ * Get a variable's initialization state using the SSA gen to state mapping inside
+ * of the linked symtab variable
+ */
+static inline variable_initialization_state_t get_variable_initialization_state(three_addr_var_t* variable){
+	symtab_variable_record_t* linked_var = variable->linked_var;
+	return linked_var->initialization_state_map[variable->ssa_generation];
+}
+
+
+/**
+ * Set a variable's initialization state using the SSA gen to state mapping inside
+ * of the linked symtab variable
+ */
+static inline void set_variable_initialization_state(three_addr_var_t* variable, variable_initialization_state_t new_state){
+	symtab_variable_record_t* linked_var = variable->linked_var;
+	linked_var->initialization_state_map[variable->ssa_generation] = new_state;
+}
+
+
+/**
  * Compute the initialization status in the given block. This means that for every
  * instruction, we will update the assignee to be either initialized or maybe initialized.
  * The real point here where we would have changes are phi functions. As the iterative
@@ -997,14 +1018,25 @@ static inline u_int8_t compute_initialization_status_in_block(basic_block_t* blo
 			three_addr_var_t* assignee = cursor->operands.oir.assignee;
 
 			/**
+			 * It's not SSA eligible so we don't bother with this
+			 */
+			if(is_variable_ssa_eligible(assignee) == FALSE){
+				continue;
+			}
+
+			/**
 			 * If it's not definitely initialized then we'll make the change
 			 * and flag that this block did change
 			 */
-			if(assignee->linked_var->initialization_state_map[assignee->ssa_generation] != VARIABLE_STATE_DEFINITELY_INITIALIZED){
-				assignee->linked_var->initialization_state_map[assignee->ssa_generation] = VARIABLE_STATE_DEFINITELY_INITIALIZED;
+			if(get_variable_initialization_state(assignee) != VARIABLE_STATE_DEFINITELY_INITIALIZED){
+				set_variable_initialization_state(assignee, VARIABLE_STATE_DEFINITELY_INITIALIZED);
 				changed = TRUE;
 			}
 
+		/**
+		 * Otherwise we have a phi function. This will act as a sort of "merge" for us
+		 * where we'll scan the contents of all of this 
+		 */
 		} else {
 
 		}
