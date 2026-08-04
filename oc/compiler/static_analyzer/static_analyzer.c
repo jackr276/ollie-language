@@ -970,10 +970,47 @@ static inline void populate_function_parameter_initialization_states(symtab_func
 }
 
 
+/**
+ * Compute the initialization status in the given block. This means that for every
+ * instruction, we will update the assignee to be either initialized or maybe initialized.
+ * The real point here where we would have changes are phi functions. As the iterative
+ * forward dataflow works, we will be updating the phi parameters and thus we'll
+ * have a lot of cases where the phi function's assignee goes from "maybe" to "definitely"
+ * initialized
+ */
 static inline u_int8_t compute_initialization_status_in_block(basic_block_t* block){
+	/**
+	 * Has there been a change in *at least* one initialization status
+	 * in an assignee in the block? By default assume no
+	 */
+	u_int8_t changed = FALSE;
 
-	//TODO NEEDS TO RETURN CHANGED OR NOT
-	return FALSE;
+	//Crawl over every instruction in the block
+	instruction_t* cursor = block->leader_statement;
+	while(cursor != NULL){
+		/**
+		 * If it's not a phi function, we will just update 
+		 * the assignee to be initialized if it isn't already
+		 */
+		if(cursor->statement_type != THREE_ADDR_CODE_PHI_FUNC){
+			//Extract
+			three_addr_var_t* assignee = cursor->operands.oir.assignee;
+
+			/**
+			 * If it's not definitely initialized then we'll make the change
+			 * and flag that this block did change
+			 */
+			if(assignee->linked_var->initialization_state_map[assignee->ssa_generation] != VARIABLE_STATE_DEFINITELY_INITIALIZED){
+				assignee->linked_var->initialization_state_map[assignee->ssa_generation] = VARIABLE_STATE_DEFINITELY_INITIALIZED;
+				changed = TRUE;
+			}
+
+		} else {
+
+		}
+	}
+
+	return changed;
 }
 
 
