@@ -1110,6 +1110,17 @@ static void populate_initialization_statuses_in_function(basic_block_t* function
 	get_post_order_traversal(&(function_entry->function_defined_in->function_blocks), function_entry, &postorder_traversal);
 
 	/**
+	 * TODO - we need to initialize ALL assignees as DEFINITELY_INITIALIZED and then
+	 * let the RPO downgrade them as needed. This is why this is not working currently
+	 * and it will never work until we do this
+	 *
+	 * WE also don't ever need to check non-phis after the intialization step because
+	 * they're never going to change. The SSA semantic itself demands that they've 
+	 * been initialized. We only need to check phi functions in the actual traversal
+	 */
+	populate_all_initial_states(&postorder_traversal);
+
+	/**
 	 * TODO DOC
 	 */
 	u_int8_t changed;
@@ -1117,7 +1128,7 @@ static void populate_initialization_statuses_in_function(basic_block_t* function
 		//Assume no change will happen at the start of each iteration
 		changed = FALSE;
 
-		for(int32_t i = 0; i < postorder_traversal.current_index; i++){
+		for(int32_t i = postorder_traversal.current_index - 1; i >= 0; i--){
 			basic_block_t* block = dynamic_array_get_at(&postorder_traversal, i);
 
 			u_int8_t block_changed = compute_initialization_status_in_block(block);
