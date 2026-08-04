@@ -432,6 +432,12 @@ static inline void emit_synthetic_initializations(variable_symtab_t* symtab){
 					continue;
 				}
 
+				/**
+				 * We will need to maintain a map of what generations we've overwritten
+				 * whenever we have a new LHS assignment. We can allocate it now
+				 */
+				cursor->ssa_overwritten_generation_map = dynamic_integer_array_alloc();
+
 				//Emit the LHS new name directly here
 				lhs_new_name_direct(cursor);
 

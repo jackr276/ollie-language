@@ -14,6 +14,7 @@
 #include "../utils/stack/lightstack.h"
 #include "../utils/dynamic_set/dynamic_set.h"
 #include "../utils/dynamic_array/dynamic_array.h"
+#include "../utils/dynamic_integer_array/dynamic_integer_array.h"
 #include "../utils/constants.h"
 #include "../utils/visibility.h"
 #include "../dependency_graph/dependency_graph.h"
@@ -218,6 +219,13 @@ struct symtab_variable_record_t{
 	 * and know how many generations there are
 	 */
 	variable_initialization_state_t* initialization_state_map;
+	/**
+	 * Maintain a map of current SSA generations(the index)
+	 * and what SSA generation it explicitly overwrote. This
+	 * will be used in mutability checking and will be built up 
+	 * inside of the SSA renamer
+	 */
+	dynamic_integer_array_t ssa_overwritten_generation_map;
 	//What is the ID of the lexical scope that this variable is in?
 	u_int32_t lexical_scope_id;
 	//The line number
