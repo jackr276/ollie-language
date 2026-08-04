@@ -1114,10 +1114,20 @@ static void populate_initialization_statuses_in_function(basic_block_t* function
 		 * will often cause changes in the children
 		 */
 		u_int8_t changed = compute_initialization_status_in_block(block);
-		if(changed == TRUE){
-			for(int32_t i = 0; i < block->successors.current_index; i++){
-				//TODO WE WANT TO DO A UNIQUE ADDITION, SO CHECK FOR DUPLICATES
 
+		if(changed == TRUE){
+			/**
+			 * For each successor, if it isn't already queued up to be worked
+			 * on in our worklist we'll need to add it. This is because changes
+			 * in this parent block will propogate down to all successors who
+			 * may use the same variable
+			 */
+			for(int32_t i = 0; i < block->successors.current_index; i++){
+				basic_block_t* successor = dynamic_array_get_at(&(block->successors), i);
+
+				if(heap_queue_contains(&worklist, successor) == FALSE){
+					enqueue(&worklist, successor);
+				}
 			}
 		}
 	}
@@ -1361,7 +1371,7 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
  *
  * NOTE: this function is recursive
  */
-static u_int8_t perform_definite_assignment_analysis_for_block(basic_block_t* block){
+static u_int8_t perform_assignment_and_mutability_analysis_for_block(basic_block_t* block){
 	//Assume success off the bat
 	u_int8_t result = SUCCESS;
 
@@ -1420,7 +1430,7 @@ static u_int8_t perform_definite_assignment_analysis_for_block(basic_block_t* bl
  * to compile in the end. All functions are scanned in dominator order meaning that we start
  * from the top and work our way down through the dominator children
  */
-static inline u_int8_t perform_definite_assignment_analysis(cfg_t* cfg){
+static inline u_int8_t perform_definite_assignment_and_mutability_analysis(cfg_t* cfg){
 	//Assume success off the bat
 	u_int8_t result = SUCCESS;
 
@@ -1435,29 +1445,15 @@ static inline u_int8_t perform_definite_assignment_analysis(cfg_t* cfg){
 		current_dependency_node = function_entry->function_defined_in->dependency_graph_node;
 
 		/**
-		 * First we need to handle the special treatment for function parameters. All function
-		 * parameters are initially populated when the function enters
-		 */
-		populate_function_parameter_initialization_states(function_entry->function_defined_in);
-
-		/**
 		 * Call into the recursive analyzer. If we have a failure, then the entire thing
 		 * goes into failure, but we will keep scanning to get all errors in at once
 		 */
-		if(perform_definite_assignment_analysis_for_block(function_entry) == FAILURE){
+		if(perform_assignment_and_mutability_analysis_for_block(function_entry) == FAILURE){
 			result = FAILURE;
 		}
 	}
 
 	return result;
-}
-
-
-static inline u_int8_t perform_mutability_analysis(cfg_t* cfg){
-
-	//TODO DUMMY
-	return SUCCESS;
-
 }
 
 
@@ -1582,10 +1578,12 @@ static void perform_function_usage_analysis(function_symtab_t* symtab){
  * performed herein are:
  * 	1.) Mangling static variable names
  * 	2.) Converting the CFG into SSA form
- * 	3.) Perform definite assignment analysis
+ * 	3.) Populate all initialization states in preparation for
+ * 		later analysis
+ * 	3.) Perform definite assignment analysis & mutation analysis
  * 		- This is a potential failure point
  * 	4.) Perform function call analysis
- * 	5.) Perform variable mutation analysis
+ * 	5.) Perform mutability checking for variables that we never mutated
  */
 cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end_results_package_t* results, u_int32_t* num_errors, u_int32_t* num_warnings){
 	//By default assume success
