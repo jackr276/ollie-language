@@ -1079,6 +1079,9 @@ static inline u_int8_t compute_initialization_status_in_block(basic_block_t* blo
 		cursor = cursor->next_statement;
 	}
 
+	//Flag that we've visited this block
+	block->visited = TRUE;
+
 	return changed;
 }
 
@@ -1089,6 +1092,9 @@ static inline u_int8_t compute_initialization_status_in_block(basic_block_t* blo
  * until we have a convergence, i.e. until all variable states stop changing
  */
 static void populate_initialization_statuses_in_function(basic_block_t* function_entry){
+	//First reset this visited status
+	reset_visited_status_for_function(&(function_entry->function_defined_in->function_blocks));
+
 	/**
 	 * Before we do anything - we know for a fact that all of our function parameters
 	 * have been initialized by default - so we'll have to take care of all of those
@@ -1120,16 +1126,20 @@ static void populate_initialization_statuses_in_function(basic_block_t* function
 		 */
 		u_int8_t changed = compute_initialization_status_in_block(block);
 
-		if(changed == TRUE){
+		/**
+		 * Now an important caveat here - we will be enqueueing the successors
+		 * based on 2 different criteria:
+		 * 	1.) If the successor has never been visited then we have to visit regardless
+		 * 	2.) If the successor has been visited but changed == TRUE, we will revisit it
+		 */
+		for(int32_t i = 0; i < block->successors.current_index; i++){
+			basic_block_t* successor = dynamic_array_get_at(&(block->successors), i);
+			
 			/**
-			 * For each successor, if it isn't already queued up to be worked
-			 * on in our worklist we'll need to add it. This is because changes
-			 * in this parent block will propogate down to all successors who
-			 * may use the same variable
+			 * If we've never visited this before *or* there was a change,
+			 * we re-enqueue it if it's not in the queue already
 			 */
-			for(int32_t i = 0; i < block->successors.current_index; i++){
-				basic_block_t* successor = dynamic_array_get_at(&(block->successors), i);
-
+			if(successor->visited == FALSE || changed == TRUE){
 				if(heap_queue_contains(&worklist, successor) == FALSE){
 					enqueue(&worklist, successor);
 				}
@@ -1520,7 +1530,6 @@ cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end
 	 */
 	convert_cfg_to_ssa_form(cfg, results->variable_symtab);
 
-	printf("ENTERING CHECK\n");
 	/**
 	 * 3.) Populate the intialization states for all variables in
 	 * the CFG using a forward dataflow analysis with a worklist
@@ -1528,7 +1537,6 @@ cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end
 	 */
 	populate_initialization_statuses(cfg);
 
-	printf("EXITING CHECK\n");
 	/**
 	 * 3.) perform definite assignment analysis on the entire
 	 * CFG. This process will verify that all variables are only
