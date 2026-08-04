@@ -1223,6 +1223,7 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
 			sprintf(error_info, "Variable %s_%d may be used before initialization. First defined here: ", variable->linked_var->var_name.string, variable->ssa_generation);
 			print_variable_name_to_buffer(error_info, variable->linked_var);
 			print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
+			print_initialization_states_for_ssa_variable(variable->linked_var);
 			(*error_count)++;
 			return FAILURE;
 

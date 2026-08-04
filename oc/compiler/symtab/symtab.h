@@ -734,9 +734,10 @@ symtab_type_record_t* lookup_array_type(type_symtab_t* symtab, generic_type_t* m
 symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, mutability_type_t mutability);
 
 /**
- * Run through and check for any unused vars, bad mut keywords, etc
+ * Print out the initialization state array for a variable. This is a debugging
+ * only function
  */
-void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings);
+void print_initialization_states_for_ssa_variable(symtab_variable_record_t* variable);
 
 /**
  * A printing function for development purposes

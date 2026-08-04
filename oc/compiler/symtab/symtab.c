@@ -2001,6 +2001,39 @@ symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, m
 
 
 /**
+ * Print out the initialization state array for a variable. This is a debugging
+ * only function
+ */
+void print_initialization_states_for_ssa_variable(symtab_variable_record_t* variable){
+	printf("[");
+
+	for(int32_t i = 0; i < variable->ssa_counter; i++){
+		variable_initialization_state_t state = variable->initialization_state_map[i];
+
+		switch(state){
+			case VARIABLE_STATE_DEFINITELY_INITIALIZED:
+				printf("DEFINITELY_INITIALIZED");
+				break;
+			case VARIABLE_STATE_UNINITIALIZED:
+				printf("UNINITIALIZED");
+				break;
+			case VARIABLE_STATE_MAYBE_INITIALIZED:
+				printf("MAYBE_INITIALIZED");
+				break;
+		}
+
+
+		if(i != variable->ssa_counter - 1){
+			printf(", ");
+		}
+
+	}
+
+	printf("]\n");
+}
+
+
+/**
  * Lookup a label in the symtab
  */
 symtab_label_record_t* lookup_label(label_symtab_t* label_symtab, char* name){
