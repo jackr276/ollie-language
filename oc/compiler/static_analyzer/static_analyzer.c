@@ -1035,10 +1035,42 @@ static inline u_int8_t compute_initialization_status_in_block(basic_block_t* blo
 
 		/**
 		 * Otherwise we have a phi function. This will act as a sort of "merge" for us
-		 * where we'll scan the contents of all of this 
+		 * where we'll scan the initialization states of all the phi function
+		 * parameters. If we see any one that is uninitialized or maybe uninitialized,
+		 * then the phi function's assignee is maybe uninitialized
 		 */
 		} else {
+			//Get the assignee and the current state
+			three_addr_var_t* assignee = cursor->operands.oir.assignee;
+			variable_initialization_state_t current_init_state = get_variable_initialization_state(assignee);
 
+			//Assume that we're going to be definitely initialized for sure
+			variable_initialization_state_t new_init_state = VARIABLE_STATE_DEFINITELY_INITIALIZED;
+
+			/**
+			 * Run through all the parameters to update the state
+			 */
+			for(int32_t i = 0; i < cursor->parameters.current_index; i++){
+				three_addr_var_t* parameter = dynamic_array_get_at(&(cursor->parameters), i);
+
+				/**
+				 * If we see at least one that is not definitely initialized, then this whole
+				 * thing goes to a state of maybe initialized
+				 */
+				if(get_variable_initialization_state(parameter) != VARIABLE_STATE_DEFINITELY_INITIALIZED){
+					new_init_state = VARIABLE_STATE_MAYBE_INITIALIZED;
+					break;
+				}
+			}
+
+			/**
+			 * Save the new variable initialization state and record if there
+			 * was a change in state
+			 */
+			if(new_init_state != current_init_state){
+				set_variable_initialization_state(assignee, new_init_state);
+				changed = TRUE;
+			}
 		}
 	}
 
