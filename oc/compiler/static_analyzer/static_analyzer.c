@@ -5,7 +5,7 @@
  */
 
 #include "static_analyzer.h"
-#include "../utils/queue/heap_queue.h"
+#include "../graph_analyzer/graph_analyzer.h"
 #include <assert.h>
 #include <sys/types.h>
 #include <sys/ucontext.h>
@@ -1090,11 +1090,11 @@ static inline u_int8_t compute_initialization_status_in_block(basic_block_t* blo
  * Use a worklist(queue) algorithm to populate the initialization statuses for all eligible
  * variables in the given function. This is a while changed algorithm so it will go 
  * until we have a convergence, i.e. until all variable states stop changing
+ *
+ *
+ * TODO WE'RE MOVING THIS TO REVERSE POSTORDER (i.e. iterating over postorder backwards)
  */
 static void populate_initialization_statuses_in_function(basic_block_t* function_entry){
-	//First reset this visited status
-	reset_visited_status_for_function(&(function_entry->function_defined_in->function_blocks));
-
 	/**
 	 * Before we do anything - we know for a fact that all of our function parameters
 	 * have been initialized by default - so we'll have to take care of all of those
@@ -1103,52 +1103,29 @@ static void populate_initialization_statuses_in_function(basic_block_t* function
 	populate_function_parameter_initialization_states(function_entry->function_defined_in);
 
 	/**
-	 * Allocate our worklist for our worklist algorithm and seed it with our function
-	 * entry block
+	 * Get the post order traversal for this function. We will iterate over
+	 * it backwards to get the reverse post order traversal(level order)
 	 */
-	heap_queue_t worklist = heap_queue_alloc();
-	enqueue(&worklist, function_entry);
+	dynamic_array_t postorder_traversal = dynamic_array_alloc_initial_size(function_entry->function_defined_in->function_blocks.current_max_size);
+	get_post_order_traversal(&(function_entry->function_defined_in->function_blocks), function_entry, &postorder_traversal);
 
 	/**
-	 * So long as the worklist isn't empty we keep iterating over
-	 * the blocks
+	 * TODO DOC
 	 */
-	while(queue_is_empty(&worklist) == FALSE){
-		//Dequeue our block to work on
-		basic_block_t* block = dequeue(&worklist);
+	u_int8_t changed;
+	do {
+		//Assume no change will happen at the start of each iteration
+		changed = FALSE;
 
-		/**
-		 * Compute/recompute the initialization status for every single symtab
-		 * variable in this block. If any one of the variables have a change
-		 * in status(usually this would be in the phi functions), we will enqueue
-		 * all of the successors of this block because a change in the parent
-		 * will often cause changes in the children
-		 */
-		u_int8_t changed = compute_initialization_status_in_block(block);
+		for(int32_t i = 0; i < postorder_traversal.current_index; i++){
+			basic_block_t* block = dynamic_array_get_at(&postorder_traversal, i);
 
-		/**
-		 * Now an important caveat here - we will be enqueueing the successors
-		 * based on 2 different criteria:
-		 * 	1.) If the successor has never been visited then we have to visit regardless
-		 * 	2.) If the successor has been visited but changed == TRUE, we will revisit it
-		 */
-		for(int32_t i = 0; i < block->successors.current_index; i++){
-			basic_block_t* successor = dynamic_array_get_at(&(block->successors), i);
-			
-			/**
-			 * If we've never visited this before *or* there was a change,
-			 * we re-enqueue it if it's not in the queue already
-			 */
-			if(successor->visited == FALSE || changed == TRUE){
-				if(heap_queue_contains(&worklist, successor) == FALSE){
-					enqueue(&worklist, successor);
-				}
-			}
+			u_int8_t block_changed = compute_initialization_status_in_block(block);
+
+			changed |= block_changed;
 		}
-	}
 
-	//Destroy the queue now that we're done
-	heap_queue_dealloc(&worklist);
+	} while(changed == TRUE);
 }
 
 
