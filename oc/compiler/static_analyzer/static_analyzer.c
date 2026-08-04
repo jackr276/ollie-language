@@ -953,25 +953,6 @@ static void convert_cfg_to_ssa_form(cfg_t* cfg, variable_symtab_t* variables){
 }
 
 
-
-/**
- * Function parameters are a unique case because we know that by the time we hit the function
- * entry they are initialized. This preparatory step
- */
-static inline void populate_function_parameter_initialization_states(symtab_function_record_t* function){
-	//Run through all of the parameters
-	for(int32_t i = 0; i < function->function_parameters.current_index; i++){
-		symtab_variable_record_t* parameter = dynamic_array_get_at(&(function->function_parameters), i);
-
-		/**
-		 * We know for a fact that the first generation of function parameters will *always*
-		 * be initialized so we need to populate that now
-		 */
-		parameter->initialization_state_map[1] = VARIABLE_STATE_DEFINITELY_INITIALIZED;
-	}
-}
-
-
 /**
  * Get a variable's initialization state using the SSA gen to state mapping inside
  * of the linked symtab variable
@@ -989,6 +970,54 @@ static inline variable_initialization_state_t get_variable_initialization_state(
 static inline void set_variable_initialization_state(three_addr_var_t* variable, variable_initialization_state_t new_state){
 	symtab_variable_record_t* linked_var = variable->linked_var;
 	linked_var->initialization_state_map[variable->ssa_generation] = new_state;
+}
+
+
+/**
+ *
+ */
+static inline void populate_all_initialization_states(symtab_function_record_t* function, dynamic_array_t* postorder_traversal){
+	/**
+	 * Function parameters are a unique case because we know that by the time we hit the function
+	 * entry they are initialized. This preparatory step will acknowledge that fact by populating
+	 * all function parameters of generation one with a state of "definitely initialized"
+	 */
+	for(int32_t i = 0; i < function->function_parameters.current_index; i++){
+		symtab_variable_record_t* parameter = dynamic_array_get_at(&(function->function_parameters), i);
+
+		/**
+		 * We know for a fact that the first generation of function parameters will *always*
+		 * be initialized so we need to populate that now
+		 */
+		parameter->initialization_state_map[1] = VARIABLE_STATE_DEFINITELY_INITIALIZED;
+	}
+
+	/**
+	 * Now we will run through every block and set *everything* with an SSA eligible
+	 * assignee to be initialized. We do this becuase our forward analysis is an
+	 * optimistic algorithm. In other words, we will go through and assume that 
+	 * all variables are properly initialized at first and then downgrade them
+	 * in the checker as needed
+	 */
+	for(int32_t i = 0; i < postorder_traversal->current_index; i++){
+		basic_block_t* block = dynamic_array_get_at(postorder_traversal, i);
+		instruction_t* cursor = block->leader_statement;
+
+		/**
+		 * For each instruction, if we have an SSA eligible assignee, then
+		 * we are going to assume that it's initialized. This is true also
+		 * for phi functions at this stage, though that may change when
+		 * we perform the dataflow analysis
+		 */
+		while(cursor != NULL){
+			three_addr_var_t* assignee = cursor->operands.oir.assignee;
+			if(is_variable_ssa_eligible(assignee) == TRUE){
+				set_variable_initialization_state(assignee, VARIABLE_STATE_DEFINITELY_INITIALIZED);
+			}
+
+			cursor = cursor->next_statement;
+		}
+	}
 }
 
 
@@ -1090,18 +1119,8 @@ static inline u_int8_t compute_initialization_status_in_block(basic_block_t* blo
  * Use a worklist(queue) algorithm to populate the initialization statuses for all eligible
  * variables in the given function. This is a while changed algorithm so it will go 
  * until we have a convergence, i.e. until all variable states stop changing
- *
- *
- * TODO WE'RE MOVING THIS TO REVERSE POSTORDER (i.e. iterating over postorder backwards)
  */
-static void populate_initialization_statuses_in_function(basic_block_t* function_entry){
-	/**
-	 * Before we do anything - we know for a fact that all of our function parameters
-	 * have been initialized by default - so we'll have to take care of all of those
-	 * first
-	 */
-	populate_function_parameter_initialization_states(function_entry->function_defined_in);
-
+static void perform_dataflow_analysis_for_function(basic_block_t* function_entry){
 	/**
 	 * Get the post order traversal for this function. We will iterate over
 	 * it backwards to get the reverse post order traversal(level order)
@@ -1110,15 +1129,18 @@ static void populate_initialization_statuses_in_function(basic_block_t* function
 	get_post_order_traversal(&(function_entry->function_defined_in->function_blocks), function_entry, &postorder_traversal);
 
 	/**
-	 * TODO - we need to initialize ALL assignees as DEFINITELY_INITIALIZED and then
+	 *  - we need to initialize ALL assignees as DEFINITELY_INITIALIZED and then
 	 * let the RPO downgrade them as needed. This is why this is not working currently
 	 * and it will never work until we do this
 	 *
 	 * WE also don't ever need to check non-phis after the intialization step because
 	 * they're never going to change. The SSA semantic itself demands that they've 
 	 * been initialized. We only need to check phi functions in the actual traversal
+	 *
+	 *
+	 * TODO DOCUMENT
 	 */
-	populate_all_initial_states(&postorder_traversal);
+	populate_all_initialization_states(function_entry->function_defined_in, &postorder_traversal);
 
 	/**
 	 * TODO DOC
@@ -1141,13 +1163,11 @@ static void populate_initialization_statuses_in_function(basic_block_t* function
 
 
 /**
- * Populate the initializtion statues for all SSA variables inside
- * of the CFG. This entry helper crawls over every function and
- * does it at a per-function level
+ * TODO DOC
  */
-static inline void populate_initialization_statuses(cfg_t* cfg){
+static inline void perform_dataflow_analysis(cfg_t* cfg){
 	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
-		populate_initialization_statuses_in_function(dynamic_array_get_at(&(cfg->function_entry_blocks), i));
+		perform_dataflow_analysis_for_function(dynamic_array_get_at(&(cfg->function_entry_blocks), i));
 	}
 }
 
@@ -1523,8 +1543,10 @@ cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end
 	 * 3.) Populate the intialization states for all variables in
 	 * the CFG using a forward dataflow analysis with a worklist
 	 * for each and every function
+	 *
+	 * TODO DOC
 	 */
-	populate_initialization_statuses(cfg);
+	perform_dataflow_analysis(cfg);
 
 	/**
 	 * 3.) perform definite assignment analysis on the entire
