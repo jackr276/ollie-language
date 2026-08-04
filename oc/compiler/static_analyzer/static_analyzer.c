@@ -974,7 +974,11 @@ static inline void set_variable_initialization_state(three_addr_var_t* variable,
 
 
 /**
- *
+ * Before we can perform the actual dataflow analysis, we need to go through and populate the initialization
+ * states for all SSA generations. We do this by flagging every single SSA generation that gets assigned
+ * to as "definitely initialized". This works because our algorithm is an "optimistic" algorithm, meaning
+ * that we assume that everything is initialized properly and need to be proven wrong by the dataflow
+ * analysis
  */
 static inline void populate_all_initialization_states(symtab_function_record_t* function, dynamic_array_t* postorder_traversal){
 	/**
@@ -1015,6 +1019,7 @@ static inline void populate_all_initialization_states(symtab_function_record_t* 
 				set_variable_initialization_state(assignee, VARIABLE_STATE_DEFINITELY_INITIALIZED);
 			}
 
+			//Onto the next one
 			cursor = cursor->next_statement;
 		}
 	}
@@ -1083,9 +1088,12 @@ static inline u_int8_t update_initialization_states_in_block(basic_block_t* bloc
 
 
 /**
- * TODO DOCUMENT
+ * Perform dataflow analysis for a given function. The entire point of this helper
+ * is to make sure that every eligible variable has all of its SSA generations populated
+ * with correct initialization state information before we go and do mutability/definite
+ * assignment analysis on it
  */
-static void perform_dataflow_analysis_for_function(basic_block_t* function_entry, dynamic_array_t* postorder_traversal){
+static inline void perform_dataflow_analysis_for_function(basic_block_t* function_entry, dynamic_array_t* postorder_traversal){
 	/**
 	 * Get the post order traversal for this function. We will iterate over
 	 * it backwards to get the reverse post order traversal(level order)
@@ -1093,41 +1101,46 @@ static void perform_dataflow_analysis_for_function(basic_block_t* function_entry
 	get_post_order_traversal(&(function_entry->function_defined_in->function_blocks), function_entry, postorder_traversal);
 
 	/**
-	 *  - we need to initialize ALL assignees as DEFINITELY_INITIALIZED and then
-	 * let the RPO downgrade them as needed. This is why this is not working currently
-	 * and it will never work until we do this
-	 *
-	 * WE also don't ever need to check non-phis after the intialization step because
-	 * they're never going to change. The SSA semantic itself demands that they've 
-	 * been initialized. We only need to check phi functions in the actual traversal
-	 *
-	 *
-	 * TODO DOCUMENT
+	 * Before we can perform the actual dataflow analysis, we need to go through and populate the initialization
+	 * states for all SSA generations. We do this by flagging every single SSA generation that gets assigned
+	 * to as "definitely initialized". This works because our algorithm is an "optimistic" algorithm, meaning
+	 * that we assume that everything is initialized properly and need to be proven wrong by the dataflow
+	 * analysis
 	 */
 	populate_all_initialization_states(function_entry->function_defined_in, postorder_traversal);
 
 	/**
-	 * TODO DOC
+	 * While changed algorithm ensures that we allow all state changes to
+	 * fully propogate over the CFG. In practice this will always converge
+	 * because SSA is monotonic.
 	 */
 	u_int8_t changed;
 	do {
 		//Assume no change will happen at the start of each iteration
 		changed = FALSE;
 
+		/**
+		 * Run through everything in reverse postorder(just backwards over the
+		 * postorder array). We do this because dataflow is a forward flowing
+		 * operation so this converges faster
+		 */
 		for(int32_t i = postorder_traversal->current_index - 1; i >= 0; i--){
+			//Grab our block and let the helper update the phi functions in it
 			basic_block_t* block = dynamic_array_get_at(postorder_traversal, i);
-
 			u_int8_t block_changed = update_initialization_states_in_block(block);
 
+			//If at any point one block changes we need to recompute the whole thing
 			changed |= block_changed;
 		}
-
 	} while(changed == TRUE);
 }
 
 
 /**
- * TODO DOC
+ * Perform our dataflow analysis to populate the intiailization state information
+ * for all eligible variables. This information will be used by the mutation and
+ * definite assignment checker later on to catch "use uninitialized" and "may be
+ * used uninitialized" errors, as well as mutability violations
  */
 static inline void perform_dataflow_analysis(cfg_t* cfg){
 	//Allocate a reusable holder for the postorder traversal
@@ -1520,17 +1533,14 @@ cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end
 
 	/**
 	 * 3.) Populate the intialization states for all variables in
-	 * the CFG using a forward dataflow analysis with a worklist
-	 * for each and every function
-	 *
-	 * TODO DOC
+	 * the CFG using a forward dataflow analysis for each and every
+	 * function. When done, all eligible variables will have thier
+	 * initialization maps fully populated
 	 */
 	perform_dataflow_analysis(cfg);
 
 	/**
-	 * 3.) perform definite assignment analysis on the entire
-	 * CFG. This process will verify that all variables are only
-	 * used after they are guaranteed to have been assigned
+	 * 4.) Perform definite assignment and mutability analysi
 	 *
 	 * NOTE: this is a potential fail point for the CFG
 	 */
