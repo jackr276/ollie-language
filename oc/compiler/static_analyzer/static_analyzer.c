@@ -1027,7 +1027,12 @@ static inline void populate_all_initialization_states(symtab_function_record_t* 
 
 
 /**
- * TODO DOCUMENT
+ * Update initialization states in the block by checking every phi function's
+ * parameters and performing our merge operation on them. If we find at least
+ * one parameter is uninitialized/maybe initialized, then the phi function assignee
+ * turns to maybe initialized. The only thing that can do this is a phi function, so
+ * we don't need to do any propogation for non-phi functions which is a nice optimization
+ * for us
  */
 static inline u_int8_t update_initialization_states_in_block(basic_block_t* block){
 	/**
@@ -1179,10 +1184,6 @@ static inline void perform_dataflow_analysis(cfg_t* cfg){
  *
  * We need to perform a lookup using the SSA generation inside of the symtab variable's
  * hashmap to get the state that we're using it in
- *
- *
- * And we can have a maybe_initialized for Phi function merges. This gets rid of the need for that
- * dynamic array altogether and I think this will help us with the mutability checking too
  */
 static u_int8_t check_variable_for_definite_assignment(instruction_t* instruction, three_addr_var_t* variable){
 	/**
@@ -1220,10 +1221,9 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
 		 *
 		 */
 		case VARIABLE_STATE_MAYBE_INITIALIZED:
-			sprintf(error_info, "Variable %s_%d may be used before initialization. First defined here: ", variable->linked_var->var_name.string, variable->ssa_generation);
+			sprintf(error_info, "Variable %s may be used before initialization. First defined here: ", variable->linked_var->var_name.string);
 			print_variable_name_to_buffer(error_info, variable->linked_var);
 			print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
-			print_initialization_states_for_ssa_variable(variable->linked_var);
 			(*error_count)++;
 			return FAILURE;
 
@@ -1282,6 +1282,14 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
 }
 
 
+static inline u_int8_t does_instruction_comply_with_mutability_constraints(instruction_t* instruction){
+
+	//DUMMY
+	return TRUE;
+
+}
+
+
 /**
  * Perform definite assignment analysis on every instruction in a given block. We will scan
  * through every instruction and call the helper. Note that one failure will not stop the
@@ -1301,25 +1309,15 @@ static u_int8_t perform_initialization_and_mutability_analysis_for_block(basic_b
 	instruction_t* cursor = block->leader_statement;
 
 	/**
-	 * Go through every single statement and analyze every
-	 * variable within. If any of the statements is using
-	 * a _0 version, that counts as a use-before-initialize
-	 * and it is an error. If we have a phi-function that
-	 * has a _0 parameter, that is "maybe" use before initialize
-	 * and it is still an error
 	 *
-	 * NOTE: we do *NOT* check anything to do with the so-called "rip_offset_var". This 
-	 * is not a variable in the true sense so it's not worth it to mess around with it
+	 * TODO DOC
 	 */
 	while(cursor != NULL){
 		/**
-		 * Any one instruction failing definite assignment means that the whole
-		 * thing fails. We will process all instructions to get a full picture of the
-		 * errors though
+		 * TODO DOC
 		 */
-		if(does_instruction_comply_with_definite_assignment(cursor) == FALSE){
-			result = FALSE;
-		}
+		result &= does_instruction_comply_with_definite_assignment(cursor);
+		result &= does_instruction_comply_with_mutability_constraints(cursor);
 
 		cursor = cursor->next_statement;
 	}
@@ -1345,12 +1343,7 @@ static u_int8_t perform_initialization_and_mutability_analysis_for_block(basic_b
 
 
 /**
- * Perform the Ollie analyzer's version of definite assignment analysis.
- *
- * We will scan all functions at once. If one function fails, we will still keep going to analyze
- * the rest of the program. However, one function failing does mean that the entire program fails
- * to compile in the end. All functions are scanned in dominator order meaning that we start
- * from the top and work our way down through the dominator children
+ * TODO DOC
  */
 static inline u_int8_t perform_definite_assignment_and_mutability_analysis(cfg_t* cfg){
 	//Assume success off the bat
