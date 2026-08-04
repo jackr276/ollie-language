@@ -8,6 +8,7 @@
 #include "../utils/queue/heap_queue.h"
 #include <assert.h>
 #include <sys/types.h>
+#include <sys/ucontext.h>
 
 //Store these globally for easy access
 static three_addr_var_t* instruction_pointer_var;
@@ -1021,6 +1022,7 @@ static inline u_int8_t compute_initialization_status_in_block(basic_block_t* blo
 			 * It's not SSA eligible so we don't bother with this
 			 */
 			if(is_variable_ssa_eligible(assignee) == FALSE){
+				cursor = cursor->next_statement;
 				continue;
 			}
 
@@ -1072,6 +1074,9 @@ static inline u_int8_t compute_initialization_status_in_block(basic_block_t* blo
 				changed = TRUE;
 			}
 		}
+
+		//Bump up to the next one
+		cursor = cursor->next_statement;
 	}
 
 	return changed;
@@ -1187,12 +1192,7 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
 		return SUCCESS;
 	}
 
-	/**
-	 * Perform the map retrieval using the variable's SSA generation as the key
-	 */
-	variable_initialization_state_t initialization_state = variable->linked_var->initialization_state_map[variable->ssa_generation];
-
-	switch(initialization_state){
+	switch(get_variable_initialization_state(variable)){
 		/**
 		 * Obvious case - it's never been initialized 
 		 * so this is a pure use before initialization
@@ -1231,35 +1231,6 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
 
 
 /**
- * Populate the initialization status for an assignee of an instruction. Note
- * that this is expected to be blindly called, so we need to do all of our eligibility
- * checks here
- */
-static inline void populate_assignee_initialization_status_as_initialized(three_addr_var_t* assignee){
-	/**
-	 * We'll be hitting this a lot so we check it first
-	 */
-	if(assignee == NULL || is_variable_ssa_eligible(assignee) == FALSE){
-		return;
-	}
-
-	/**
-	 * This should never happen but we want to be safe in case it does
-	 */
-	if(assignee == stack_pointer_var || assignee == instruction_pointer_var){
-		return;
-	}
-
-	/**
-	 * Now we can flag that this generation of the SSA is definitely
-	 * initialized inside of the map
-	 */
-	symtab_variable_record_t* linked_var = assignee->linked_var;
-	linked_var->initialization_state_map[assignee->ssa_generation] = VARIABLE_STATE_DEFINITELY_INITIALIZED;
-}
-
-
-/**
  * Does the given instruction comply with the definite assignment rules? There are two paths
  * that this check will take:
  * 
@@ -1276,16 +1247,11 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
 	u_int8_t overall_result = SUCCESS;
 
 	/**
-	 * Regular non-phi function handling involves us checking every
-	 * single variable to see if we have any "_0" variables in use.
-	 * "_0" is our canary SSA value that represents an uninitialzed
-	 * variable. We will also need to make sure that each variable
-	 * is not a member of the "may_not_have_been_initialized" array.
-	 * This gets built up from phi functions who have values that may
-	 * have never been initialized
-	 *
-	 * We bitwise and the results together for this. One false in the chain
-	 * will make the whole thing 0(FAILURE)
+	 * We only check if we're not a phi function(phi functions have already
+	 * been handled by the initializer at this point). We will crawl
+	 * through every single variable in use. If at any point a variable
+	 * in use is not definitely initialized, we'll display the failure message
+	 * and record that this instruction violates definite assignment
 	 */
 	if(instruction->statement_type != THREE_ADDR_CODE_PHI_FUNC){
 		overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.operand1);
@@ -1299,61 +1265,6 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
 
 			overall_result &= check_variable_for_definite_assignment(instruction, parameter);
 		}
-
-		/**
-		 * Now if this instruction has an assignee, we're able to fill out that it
-		 * definitely has been assigned at this point. The helper will
-		 * fill out the generation map for us
-		 */
-		populate_assignee_initialization_status_as_initialized(instruction->operands.oir.assignee);
-
-	/**
-	 * Phi-functions have special handling. If we have a phi
-	 * function that has at least one _0 variable in it, then the
-	 * LHS value may not have been initialized
-	 *
-	 * x_3 <- phi(x_2, x_1, x_0)
-	 * x_4 <- x_3 + 1
-	 *
-	 * x_3 will have a state of maybe_initialized, which will cause failures
-	 * in the forward analysis once the x_4 expression tries to sue it
-	 */
-	} else {
-		/**
-		 * Assume that we are definitely initailized by default here
-		 */
-		variable_initialization_state_t initialization_result = VARIABLE_STATE_DEFINITELY_INITIALIZED;
-
-		/**
-		 * We will populate the initailization state of the assignee's SSA generation
-		 * with the merge of the states of all of it's parameters. If *at least one* parameter
-		 * is either uninitialized or maybe initialized, then the entire LHS goes into a state
-		 * of maybe initialized
-		 */
-		for(int32_t i = 0; i < instruction->parameters.current_index; i++){
-			three_addr_var_t* parameter = dynamic_array_get_at(&(instruction->parameters), i);
-
-			//Extract the parameter's intialization state
-			variable_initialization_state_t param_init_state = parameter->linked_var->initialization_state_map[parameter->ssa_generation];
-
-			/**
-			 * If the initialization state of the parameter is anything but
-			 * intiailized, then this entire thing is now in the "maybe initialized"
-			 * state and we will not bother checking further
-			 */
-			if(param_init_state != VARIABLE_STATE_DEFINITELY_INITIALIZED){
-				initialization_result = VARIABLE_STATE_MAYBE_INITIALIZED;
-				break;
-			}
-		}
-
-		/**
-		 * Once we get here we know what our result is good or bad - we will
-		 * populate the SSA generation of the assignee with it in the init
-		 * state map
-		 */
-		three_addr_var_t* assignee = instruction->operands.oir.assignee;
-		assignee->linked_var->initialization_state_map[assignee->ssa_generation] = initialization_result;
 	}
 
 	return overall_result;
@@ -1371,7 +1282,7 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
  *
  * NOTE: this function is recursive
  */
-static u_int8_t perform_assignment_and_mutability_analysis_for_block(basic_block_t* block){
+static u_int8_t perform_initialization_and_mutability_analysis_for_block(basic_block_t* block){
 	//Assume success off the bat
 	u_int8_t result = SUCCESS;
 
@@ -1413,7 +1324,7 @@ static u_int8_t perform_assignment_and_mutability_analysis_for_block(basic_block
 		 * If anything in this child fails, our overall result is failure. We will
 		 * keep going to scan everything though
 		 */
-		if(perform_definite_assignment_analysis_for_block(child) == FALSE){
+		if(perform_initialization_and_mutability_analysis_for_block(child) == FALSE){
 			result = FAILURE;
 		}
 	}
@@ -1448,7 +1359,7 @@ static inline u_int8_t perform_definite_assignment_and_mutability_analysis(cfg_t
 		 * Call into the recursive analyzer. If we have a failure, then the entire thing
 		 * goes into failure, but we will keep scanning to get all errors in at once
 		 */
-		if(perform_assignment_and_mutability_analysis_for_block(function_entry) == FAILURE){
+		if(perform_initialization_and_mutability_analysis_for_block(function_entry) == FAILURE){
 			result = FAILURE;
 		}
 	}
@@ -1609,6 +1520,7 @@ cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end
 	 */
 	convert_cfg_to_ssa_form(cfg, results->variable_symtab);
 
+	printf("ENTERING CHECK\n");
 	/**
 	 * 3.) Populate the intialization states for all variables in
 	 * the CFG using a forward dataflow analysis with a worklist
@@ -1616,6 +1528,7 @@ cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end
 	 */
 	populate_initialization_statuses(cfg);
 
+	printf("EXITING CHECK\n");
 	/**
 	 * 3.) perform definite assignment analysis on the entire
 	 * CFG. This process will verify that all variables are only
@@ -1623,20 +1536,7 @@ cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end
 	 *
 	 * NOTE: this is a potential fail point for the CFG
 	 */
-	if(perform_definite_assignment_analysis(cfg) == FAILURE){
-		result = CFG_RESULT_FAILURE;
-	}
-
-	/**
-	 * 4.) perform mutability analysis in a forward
-	 * traversal over the entire CFG. This process is
-	 * an Ollie-specific semantic that will guarantee
-	 * that immutable variables are not mutated
-	 * post assignment
-	 *
-	 * NOTE: this is a potential fail point for the CFG
-	 */
-	if(perform_mutability_analysis(cfg) == FAILURE){
+	if(perform_definite_assignment_and_mutability_analysis(cfg) == FAILURE){
 		result = CFG_RESULT_FAILURE;
 	}
 
