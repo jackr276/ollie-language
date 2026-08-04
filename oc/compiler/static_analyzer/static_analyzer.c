@@ -1242,16 +1242,13 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
 
 
 /**
- * Does the given instruction comply with the definite assignment rules? There are two paths
- * that this check will take:
+ * Does the given instruction comply with the definite assignment rules? We will check 
+ * every single eligible variable for compliance. If one variable fails, the whole thing
+ * fails out
  * 
- * 1.) We are not a phi function - in this case just check every variable in the RHS to see if
- * 	  it's either completely uninitialized or may be uninitialized(see below). If any one of
- * 	  the variables fails then the whole things fails
- * 2.) We are a phi function - we must check every variable in the parameter list. If any
- * 	   one in the parameter list is an _0 variable *OR* is in our "may_not_have_been_initialized"
- * 	   list, then we will flag that LHS variable as potentially being uninitialized for future checks.
- * 	   Since we do this scan from top to bottom in the function using dominators this check will work
+ * NOTE: we assume that the caller will never pass a phi function. Phi functions should never
+ * be included in definite assignment analysis because they are not real from the programmer's
+ * perspective
  */
 static inline u_int8_t does_instruction_comply_with_definite_assignment(instruction_t* instruction){
 	//By default assume SUCCESS(1)
@@ -1264,25 +1261,54 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
 	 * in use is not definitely initialized, we'll display the failure message
 	 * and record that this instruction violates definite assignment
 	 */
-	if(instruction->statement_type != THREE_ADDR_CODE_PHI_FUNC){
-		overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.operand1);
-		overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.operand2);
-		overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.address_operand1);
-		overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.address_operand2);
+	overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.operand1);
+	overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.operand2);
+	overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.address_operand1);
+	overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.address_operand2);
 
-		//Check all parameters as well
-		for(int32_t i = 0; i < instruction->parameters.current_index; i++){
-			three_addr_var_t* parameter = dynamic_array_get_at(&(instruction->parameters), i);
+	//Check all parameters as well
+	for(int32_t i = 0; i < instruction->parameters.current_index; i++){
+		three_addr_var_t* parameter = dynamic_array_get_at(&(instruction->parameters), i);
 
-			overall_result &= check_variable_for_definite_assignment(instruction, parameter);
-		}
+		overall_result &= check_variable_for_definite_assignment(instruction, parameter);
 	}
 
 	return overall_result;
 }
 
 
+/**
+ * TODO DOC
+ * NOTE: we assume that the caller will never pass a phi function as a parameter
+ */
 static inline u_int8_t does_instruction_comply_with_mutability_constraints(instruction_t* instruction){
+	three_addr_var_t* assignee = instruction->operands.oir.assignee;
+
+	/**
+	 * First guard - if the variable is NULL(common) or it's not 
+	 * SSA eligible(temp var, etc.) we can leave now. This is still
+	 * a SUCCESS because there's nothing wrong with this
+	 */
+	if(assignee == NULL || is_variable_ssa_eligible(assignee) == FALSE){
+		return SUCCESS;
+	}
+
+	/**
+	 * The stack and instruction pointer are special cases that are exempt from this
+	 * kind of checking so leave if we see it
+	 */
+	if(assignee == stack_pointer_var || assignee == instruction_pointer_var){
+		return SUCCESS;
+	}
+
+	/**
+	 * If the assignee is mutable, then it can be assigned to all we want
+	 * so we always succeed here
+	 */
+	if(assignee->type->mutability == MUTABLE){
+		return SUCCESS;
+	}
+
 
 	//DUMMY
 	return TRUE;
@@ -1313,6 +1339,11 @@ static u_int8_t perform_initialization_and_mutability_analysis_for_block(basic_b
 	 * TODO DOC
 	 */
 	while(cursor != NULL){
+		if(cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
+			cursor = cursor->next_statement;
+			continue;
+		}
+
 		/**
 		 * TODO DOC
 		 */
