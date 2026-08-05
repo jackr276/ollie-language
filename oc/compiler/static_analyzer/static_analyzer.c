@@ -707,8 +707,19 @@ static inline void insert_phi_functions(variable_symtab_t* var_symtab){
 					for(int32_t l = 0; l < node->dominance_frontier.current_index; l++){
 						basic_block_t* df_node = dynamic_array_get_at(&(node->dominance_frontier), l);
 
-						//If this already has a phi function for this run we skip it
+						/**
+						 * If this already has a phi function for this run we skip it
+						 */
 						if(df_node->already_has_phi_func == TRUE){
+							continue;
+						}
+
+						/**
+						 * Function exit block - these blocks exist purely
+						 * to make graph analyis nice. We don't ever need
+						 * a phi function in them though
+						 */
+						if(df_node->block_type == BLOCK_TYPE_FUNC_EXIT){
 							continue;
 						}
 
