@@ -607,6 +607,7 @@ static instruction_t* emit_phi_function(symtab_variable_record_t* variable){
  * 			for each dominance frontier block D of block B:
  * 				if D already has a phi function for V: <-------- avoid double insertions
  * 					continue
+ * 	TODO UPDATE
  *
  * 				if a variable is not LIVE_OUT AND it's not USED at D:
  * 					continue
@@ -726,28 +727,27 @@ static inline void insert_phi_functions(variable_symtab_t* var_symtab){
 						/**
 						 * ----------------------------------------
 						 *  CRITERION:
-						 *  If a variable is NOT Live-out at the join node,
-						 *  that means that it is not LIVE-IN at any of
-						 *  the successors of that block. If a variable
-						 *  is not active(used) at the join node either,
-						 *  that means that the phi function is useless.
 						 *
-						 * So, we will skip inserting a phi function
-						 * if the variable is not used and not LIVE_OUT
-						 * at N
+						 *  1.) For mutable variables - we generate a pruned
+						 *  	SSA form, meaning that if a variable is NOT
+						 *  	Live-out at the join node, that means that
+						 *  	it is not LIVE-IN at any of the successors of
+						 *  	that block. If a variable is not active(used) at
+						 *  	the join node either, that means that the phi
+						 *  	function is useless. So, we will skip inserting a phi function
+						 *  	if the variable is not used and not LIVE_OUT at N
 						 *
-						 *
-						 * TODO WE NEED TO CHANGE THE CRITERIA TO LIVE_IN FOR
-						 * MUTABILITY CHECKING & SEMANTIC PHI CHECKING
-						 *
-						 * We should only be checking for live in here. We also
-						 * need to avoid pruning the SSA at this point for mutability
-						 * checking because we are going to rely on it
+						 *  2.) For immutable variables - we are going to need
+						 *  	all phi functions to verify that we are not mutating.
+						 *  	Therefore, we will always insert phi functions for 
+						 *  	mutability analysis
 						 * ----------------------------------------
 						 */
-						if(does_variable_dynamic_array_contain_symtab_variable(&(df_node->used_before_definition), record) == FALSE 
-							&& does_variable_dynamic_array_contain_symtab_variable(&(df_node->live_out), record) == FALSE){
-							continue;
+						if(record->type_defined_as->mutability == MUTABLE){
+							if(does_variable_dynamic_array_contain_symtab_variable(&(df_node->used_before_definition), record) == FALSE 
+								&& does_variable_dynamic_array_contain_symtab_variable(&(df_node->live_out), record) == FALSE){
+								continue;
+							}
 						}
 
 						/**
@@ -1453,9 +1453,10 @@ static inline u_int8_t does_instruction_comply_with_mutability_constraints(instr
 		return SUCCESS;
 	}
 
-	printf("MADE IT HERE FOR %s\n", linked_var->var_name.string);
+	//TODO DELETE
+	//printf("MADE IT HERE FOR %s\n", linked_var->var_name.string);
 
-	printf("GENERATION %d overwrites GENERATION %d", assignee->ssa_generation, overwritten_generation);
+	//printf("GENERATION %d overwrites GENERATION %d", assignee->ssa_generation, overwritten_generation);
 
 	/**
 	 * Otherwise, we'll need to lookup what the state of the overwritten
