@@ -6338,6 +6338,8 @@ three_addr_const_t* emit_direct_integer_or_char_constant(int64_t value, generic_
 
 /**
  * Emit a negation statement
+ *
+ * TODO THINK THAT THIS IS WRONG
  */
 instruction_t* emit_neg_instruction(three_addr_var_t* negatee, u_int32_t line_number){
 	//First we'll create the negation
@@ -6367,6 +6369,8 @@ instruction_t* emit_neg_instruction(three_addr_var_t* negatee, u_int32_t line_nu
 
 /**
  * Emit a not instruction 
+ *
+ * TODO THINK THAT THIS IS WRONG
  */
 instruction_t* emit_not_instruction(three_addr_var_t* var, u_int32_t line_number){
 	//First allocate it
