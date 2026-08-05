@@ -669,8 +669,8 @@ static inline void insert_phi_functions(variable_symtab_t* var_symtab){
 				dynamic_array_t* function_blocks = &(variable_function->function_blocks);
 
 				/**
-				 * Since we use the "visited" tag to keep track of whether or not a block
-				 * was ever on the worklist, we'll need to reset this here
+				 * Reset the "has_phi_function" tag on all of our blocks
+				 * for the next go around
 				 */
 				reset_status_for_phi_function_insertion(function_blocks);
 
@@ -761,16 +761,12 @@ static inline void insert_phi_functions(variable_symtab_t* var_symtab){
 						//Add the phi statement into the block	
 						add_phi_statement(df_node, phi_stmt);
 
-						//Flag that this already has a phi function 
-						df_node->already_has_phi_func = TRUE;
-
 						/**
-						 * If we haven't visited this block yet then we'll add it to our worklist
-						 * for the next go around
+						 * Flag that this already has a phi function and add it
+						 * to the worklist
 						 */
-						if(df_node->visited == FALSE){
-							dynamic_array_add(&worklist, df_node);
-						}
+						df_node->already_has_phi_func = TRUE;
+						dynamic_array_add(&worklist, df_node);
 					}
 				}
 
