@@ -1438,6 +1438,10 @@ static inline u_int8_t does_instruction_comply_with_mutability_constraints(instr
 		return SUCCESS;
 	}
 
+	printf("MADE IT HERE FOR %s\n", linked_var->var_name.string);
+
+	printf("GENERATION %d overwrites GENERATION %d", assignee->ssa_generation, overwritten_generation);
+
 	/**
 	 * Otherwise, we'll need to lookup what the state of the overwritten
 	 * generation was. If it was definitely or maybe initialized, then
@@ -1455,7 +1459,7 @@ static inline u_int8_t does_instruction_comply_with_mutability_constraints(instr
 		 * This is a potential mutation - still a violation for us
 		 */
 		case VARIABLE_STATE_MAYBE_INITIALIZED:
-			sprintf(error_info, "Variable %s was declared with an immutable type but may be mutated. First defined here:\n", linked_var->var_name.string);
+			sprintf(error_info, "Variable %s was declared with an immutable type but may be mutated. First defined here:", linked_var->var_name.string);
 			print_variable_name_to_buffer(error_info, linked_var);
 			print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
 			(*error_count)++;
@@ -1465,7 +1469,7 @@ static inline u_int8_t does_instruction_comply_with_mutability_constraints(instr
 		 * This is a definite mutation - definite violation
 		 */
 		case VARIABLE_STATE_DEFINITELY_INITIALIZED:
-			sprintf(error_info, "Variable %s was declared with an immutable type but is mutated. First defined here:\n", linked_var->var_name.string);
+			sprintf(error_info, "Variable %s was declared with an immutable type but is mutated. First defined here:", linked_var->var_name.string);
 			print_variable_name_to_buffer(error_info, linked_var);
 			print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
 			(*error_count)++;
