@@ -1418,10 +1418,52 @@ static inline u_int8_t does_instruction_comply_with_mutability_constraints(instr
 		return SUCCESS;
 	}
 
+	/**
+	 * Once we get here, we'll need to get what this instruction overwrites. We do this
+	 * by indexing into the overwritten generation map using the ssa generation on the
+	 * three address variable. The result will either be a valid generation that we can
+	 * use to see if it was initialized or it's -1
+	 */
+	symtab_variable_record_t* linked_var = assignee->linked_var;
+	int32_t overwritten_generation = linked_var->ssa_overwritten_generation_map.internal_array[assignee->ssa_generation];
 
-	//DUMMY
-	return TRUE;
+	/**
+	 * This should actually never happen because Ollie uses
+	 * synthetic initialization values. However if it did
+	 * happen, this would count as an initialization so
+	 * we will take it
+	 */
+	if(overwritten_generation == OVERWRITES_NOTHING){
+		return SUCCESS;
+	}
 
+	/**
+	 * Otherwise, we'll need to lookup what the state of the overwritten
+	 * generation was. If it was definitely or maybe initialized, then
+	 * this is a mutation and therefore not allowed
+	 */
+	variable_initialization_state_t overwritten_init_state = linked_var->initialization_state_map[overwritten_generation];
+	switch(overwritten_init_state){
+		/**
+		 * Uninitialized - all good for us
+		 */
+		case VARIABLE_STATE_UNINITIALIZED:
+			return SUCCESS;
+
+		/**
+		 * This is a potential mutation - still a violation for us
+		 */
+		case VARIABLE_STATE_MAYBE_INITIALIZED:
+
+
+		case VARIABLE_STATE_DEFINITELY_INITIALIZED:
+			
+
+		//Should never happen but just in case
+		default:
+			fprintf(stderr, "Fatal internal compiler error: unknown initialization type found on variable\n");
+			exit(1);
+	}
 }
 
 
