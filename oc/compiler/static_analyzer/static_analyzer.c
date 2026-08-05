@@ -302,22 +302,45 @@ static inline u_int8_t is_variable_ssa_eligible(three_addr_var_t* variable){
  *
  *
  * 	TODO NEED TO DO OVERWRITE STORAGE
+ *
+ * 	REWRITE THE GENERATION LEVELS HERE TO BE CLEARER
  */
 static inline void lhs_new_name(three_addr_var_t* var){
 	//Grab the linked variable out
 	symtab_variable_record_t* linked_var = var->linked_var;
 
 	//Grab the name out of the counter
-	int32_t generation_level = linked_var->ssa_counter;
+	int32_t current_generation_level = linked_var->ssa_counter;
+
+	/**
+	 * Get the generation level that is overwritten. We do this
+	 * by peeking on the lighstack. If there is nothing on the
+	 * lighstack, we'll use a sentinel value of -1 to show
+	 * that it overwrites nothing
+	 */
+	int32_t overwritten_generation_level;
+	if(var->linked_var->counter_stack.top_index != 0){
+		overwritten_generation_level = lightstack_peek(&(linked_var->counter_stack));
+	} else {
+		overwritten_generation_level = OVERWRITES_NOTHING;
+	}
 
 	//Now we increment the counter for the next go around
 	(linked_var->ssa_counter)++;
 
-	//We'll also push this generation level onto the stack
-	lightstack_push(&(linked_var->counter_stack), generation_level);
+	//Put the current generation level on the stack
+	lightstack_push(&(linked_var->counter_stack), current_generation_level);
 
-	//Store the generation level in here
-	var->ssa_generation = generation_level;
+	//Update the three address variable itself
+	var->ssa_generation = current_generation_level;
+
+	/**
+	 *
+	 */
+}
+
+static inline void phi_function_lhs_new_name(three_addr_var_t* phi_assignee){
+
 }
 
 
@@ -328,16 +351,18 @@ static inline void lhs_new_name(three_addr_var_t* var){
  *
  *
  * 	TODO NEED TO DO OVERWRITE STORAGE
+ *
+ * 	REWRITE THE GENERATION LEVELS HERE TO BE CLEARER
  */
 static inline void lhs_new_name_direct(symtab_variable_record_t* variable){
-	//Store the old generation level
-	u_int16_t generation_level = variable->ssa_counter;
+	//Store the current one
+	u_int16_t current_generation_level = variable->ssa_counter;
 
-	//Increment the counter
+	//Bump it up for the next go around
 	(variable->ssa_counter)++;
 
-	//Push the old generation level onto here
-	lightstack_push(&(variable->counter_stack), generation_level);
+	//Push the now old generation level onto the stack
+	lightstack_push(&(variable->counter_stack), current_generation_level);
 }
 
 
@@ -747,6 +772,7 @@ static void rename_block(basic_block_t* entry){
 	while(cursor != NULL){
 		switch(cursor->statement_type){
 			case THREE_ADDR_CODE_PHI_FUNC:
+				//TODO DIFFERENT NEW NAME FOR PHI
 				lhs_new_name(cursor->operands.oir.assignee);
 				break;
 				
