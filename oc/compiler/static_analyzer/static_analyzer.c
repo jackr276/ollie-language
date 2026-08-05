@@ -724,6 +724,14 @@ static inline void insert_phi_functions(variable_symtab_t* var_symtab){
 						 * So, we will skip inserting a phi function
 						 * if the variable is not used and not LIVE_OUT
 						 * at N
+						 *
+						 *
+						 * TODO WE NEED TO CHANGE THE CRITERIA TO LIVE_IN FOR
+						 * MUTABILITY CHECKING & SEMANTIC PHI CHECKING
+						 *
+						 * We should only be checking for live in here. We also
+						 * need to avoid pruning the SSA at this point for mutability
+						 * checking because we are going to rely on it
 						 * ----------------------------------------
 						 */
 						if(does_variable_dynamic_array_contain_symtab_variable(&(df_node->used_before_definition), record) == FALSE 
