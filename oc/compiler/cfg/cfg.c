@@ -4709,13 +4709,20 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//The assignee comes from the package
 			assignee = unpack_result_package(&unary_package, current_block, unary_expression_parent->line_number);
 
+			//Assign over to a temp var that we will be notting
+			assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee, unary_expression_parent->line_number);
+			add_statement(current_block, assignment);
+
+			//Now emit annd add the bitwise not on the temp var
+			instruction_t* bitwise_not = emit_not_instruction(assignment->operands.oir.assignee, unary_expression_parent->line_number);
+			add_statement(current_block, bitwise_not);
+
 			//The new assignee will come from this helper
 			unary_package.type = CFG_RESULT_TYPE_VAR;
-			unary_package.result_value.result_var = emit_bitwise_not_expr_code(current_block, assignee, unary_expression_parent->line_number);
+			unary_package.result_value.result_var = bitwise_not->operands.oir.assignee;
 
 			//Give the package back
 			return unary_package;
-
 
 		/**
 		 * Arithmetic negation operator
@@ -4740,14 +4747,10 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 			//We'll need to assign to a temp here, these are only ever on the RHS
 			assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee, unary_expression_child->line_number);
-
-			//Add this into the block
 			add_statement(current_block, assignment);
 
 			//Now emit the instruction itself
 			instruction_t* negation_instruction = emit_neg_instruction(assignment->operands.oir.assignee, unary_expression_child->line_number);
-
-			//Now get the whole statement into the block
 			add_statement(current_block, negation_instruction);
 
 			//Rewrite the assignee to be this now
