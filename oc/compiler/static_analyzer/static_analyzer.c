@@ -303,12 +303,7 @@ static inline u_int8_t is_variable_ssa_eligible(three_addr_var_t* variable){
  * 	- Push the current generation level to the lightstack because it's now 
  * 	  the previous generation for the next go around
  * 	- Store the SSA generation to the three address variable
- *  - Store the mapp
- *
- *
- * 	TODO NEED TO DO OVERWRITE STORAGE
- *
- * 	REWRITE THE GENERATION LEVELS HERE TO BE CLEARER
+ *  - Store the overwrite mapping such that map[new_generation] = previous(overwritten) generation
  */
 static inline void lhs_new_name(three_addr_var_t* var){
 	//Grab the linked variable out
@@ -324,7 +319,7 @@ static inline void lhs_new_name(three_addr_var_t* var){
 	 * that it overwrites nothing
 	 */
 	int32_t overwritten_generation_level;
-	if(var->linked_var->counter_stack.top_index != 0){
+	if(linked_var->counter_stack.top_index != 0){
 		overwritten_generation_level = lightstack_peek(&(linked_var->counter_stack));
 	} else {
 		overwritten_generation_level = OVERWRITES_NOTHING;
@@ -341,8 +336,12 @@ static inline void lhs_new_name(three_addr_var_t* var){
 
 	/**
 	 * Variable overwrite mapping - use the current generation
-	 * level as an index and 
+	 * level as an index and the overwritten generation as a value
+	 *
+	 * First we'll resize if it's needed
 	 */
+	dynamic_integer_array_resize_to_fit_index_if_needed(&(linked_var->ssa_overwritten_generation_map), current_generation_level);
+	linked_var->ssa_overwritten_generation_map.internal_array[current_generation_level] = overwritten_generation_level;
 }
 
 static inline void phi_function_lhs_new_name(three_addr_var_t* phi_assignee){
@@ -351,24 +350,46 @@ static inline void phi_function_lhs_new_name(three_addr_var_t* phi_assignee){
 
 
 /**
- * For a left hand side(assignment) new name:
- * 	push the current SSA generation number onto the counter stack
- * 	bump the SSA generation number
- *
- *
- * 	TODO NEED TO DO OVERWRITE STORAGE
- *
- * 	REWRITE THE GENERATION LEVELS HERE TO BE CLEARER
+ * For a left hand side(assignment) new name without an explicit three_addr_var:
+ * 	- Grab the next generation level from the counter
+ * 	- Use the lightstack to get the generation level that we're overwriting
+ * 	  if it exists
+ * 	- Incrememnt the counter for the next go around
+ * 	- Push the current generation level to the lightstack because it's now 
+ * 	  the previous generation for the next go around
+ *  - Store the overwrite mapping such that map[new_generation] = previous(overwritten) generation
  */
 static inline void lhs_new_name_direct(symtab_variable_record_t* variable){
-	//Store the current one
-	u_int16_t current_generation_level = variable->ssa_counter;
+	//Grab the name out of the counter
+	int32_t current_generation_level = variable->ssa_counter;
 
-	//Bump it up for the next go around
+	/**
+	 * Get the generation level that is overwritten. We do this
+	 * by peeking on the lighstack. If there is nothing on the
+	 * lighstack, we'll use a sentinel value of -1 to show
+	 * that it overwrites nothing
+	 */
+	int32_t overwritten_generation_level;
+	if(variable->counter_stack.top_index != 0){
+		overwritten_generation_level = lightstack_peek(&(variable->counter_stack));
+	} else {
+		overwritten_generation_level = OVERWRITES_NOTHING;
+	}
+
+	//Now we increment the counter for the next go around
 	(variable->ssa_counter)++;
 
-	//Push the now old generation level onto the stack
+	//Put the current generation level on the stack
 	lightstack_push(&(variable->counter_stack), current_generation_level);
+
+	/**
+	 * Variable overwrite mapping - use the current generation
+	 * level as an index and the overwritten generation as a value
+	 *
+	 * First we'll resize if it's needed
+	 */
+	dynamic_integer_array_resize_to_fit_index_if_needed(&(variable->ssa_overwritten_generation_map), current_generation_level);
+	variable->ssa_overwritten_generation_map.internal_array[current_generation_level] = overwritten_generation_level;
 }
 
 
