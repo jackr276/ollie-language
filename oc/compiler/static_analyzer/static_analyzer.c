@@ -344,8 +344,41 @@ static inline void lhs_new_name(three_addr_var_t* var){
 	linked_var->ssa_overwritten_generation_map.internal_array[current_generation_level] = overwritten_generation_level;
 }
 
-static inline void phi_function_lhs_new_name(three_addr_var_t* phi_assignee){
 
+/**
+ * For a left hand size(assignment) for a phi function specifically:
+ * 	- Grab the next generation level from the counter
+ * 	- Incrememnt the counter for the next go around
+ * 	- Push the current generation level to the lightstack because it's now 
+ * 	  the previous generation for the next go around
+ *  - Store the overwrite mapping such that map[new_generation] = -1. This is because
+ *    phi functions do not explicitly overwrite one value only. They instead overwrite
+ *    multiple values potentially
+ */
+static inline void phi_function_lhs_new_name(three_addr_var_t* phi_assignee){
+	//Grab the linked variable out
+	symtab_variable_record_t* linked_var = phi_assignee->linked_var;
+
+	//Grab the name out of the counter
+	int32_t current_generation_level = linked_var->ssa_counter;
+
+	//Now we increment the counter for the next go around
+	(linked_var->ssa_counter)++;
+
+	//Put the current generation level on the stack
+	lightstack_push(&(linked_var->counter_stack), current_generation_level);
+
+	//Update the three address variable itself
+	phi_assignee->ssa_generation = current_generation_level;
+
+	/**
+	 * Variable overwrite mapping - use the current generation
+	 * level as an index and the overwritten generation as a value
+	 *
+	 * First we'll resize if it's needed
+	 */
+	dynamic_integer_array_resize_to_fit_index_if_needed(&(linked_var->ssa_overwritten_generation_map), current_generation_level);
+	linked_var->ssa_overwritten_generation_map.internal_array[current_generation_level] = OVERWRITES_NOTHING;
 }
 
 
@@ -799,8 +832,12 @@ static void rename_block(basic_block_t* entry){
 	while(cursor != NULL){
 		switch(cursor->statement_type){
 			case THREE_ADDR_CODE_PHI_FUNC:
-				//TODO DIFFERENT NEW NAME FOR PHI
-				lhs_new_name(cursor->operands.oir.assignee);
+				/**
+				 * Phi functions are a special case because they overwrite
+				 * multiple definitions, not just one. We'll use a special
+				 * rule to account for this
+				 */
+				phi_function_lhs_new_name(cursor->operands.oir.assignee);
 				break;
 				
 			/**
