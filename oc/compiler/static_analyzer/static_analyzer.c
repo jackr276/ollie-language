@@ -296,9 +296,14 @@ static inline u_int8_t is_variable_ssa_eligible(three_addr_var_t* variable){
  * Generate a new name for the given three address variable
  *
  * For a left hand side(assignment) new name:
- * 	push the current SSA generation number onto the counter stack
- * 	variable's SSA generation is the current number
- * 	bump the SSA generation number for the next go 
+ * 	- Grab the next generation level from the counter
+ * 	- Use the lightstack to get the generation level that we're overwriting
+ * 	  if it exists
+ * 	- Incrememnt the counter for the next go around
+ * 	- Push the current generation level to the lightstack because it's now 
+ * 	  the previous generation for the next go around
+ * 	- Store the SSA generation to the three address variable
+ *  - Store the mapp
  *
  *
  * 	TODO NEED TO DO OVERWRITE STORAGE
@@ -335,7 +340,8 @@ static inline void lhs_new_name(three_addr_var_t* var){
 	var->ssa_generation = current_generation_level;
 
 	/**
-	 *
+	 * Variable overwrite mapping - use the current generation
+	 * level as an index and 
 	 */
 }
 

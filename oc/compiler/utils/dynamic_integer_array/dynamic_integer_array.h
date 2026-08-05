@@ -68,6 +68,12 @@ void dynamic_integer_array_add(dynamic_integer_array_t* array, int32_t value);
 void clear_dynamic_integer_array(dynamic_integer_array_t* array);
 
 /**
+ * Resize a dynamic integer array to fit an index if needed. If not
+ * needed then we won't change anything
+ */
+void dynamic_integer_array_resize_to_fit_index_if_needed(dynamic_integer_array_t* array, int32_t index);
+
+/**
  * Get an element at a specified index. Do not remove the element
  */
 int32_t dynamic_integer_array_get_at(dynamic_integer_array_t* array, int32_t index);
