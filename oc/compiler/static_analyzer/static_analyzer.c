@@ -594,7 +594,6 @@ static instruction_t* emit_phi_function(symtab_variable_record_t* variable){
  * 			for each dominance frontier block D of block B:
  * 				if D already has a phi function for V: <-------- avoid double insertions
  * 					continue
- * 	TODO UPDATE
  *
  * 				if a variable is not LIVE_IN 
  * 					continue
@@ -703,36 +702,27 @@ static inline void insert_phi_functions(variable_symtab_t* var_symtab){
 						}
 
 						/**
-						 * If the variable is not LIVE_IN at the given
-						 * block,  we do not need to know the value
-						 * at the start of the block. We only need to insert
-						 * phi functions where a variable is LIVE_IN because
-						 * a variable being LIVE_IN means that we need
-						 * it's definition at the start of the block
+						 * If a variable is LIVE_IN at the given block, we need
+						 * to know the value at the start of the block. Our
+						 * normal phi function insertion case revolves around the variable
+						 * being LIVE_IN at the block and most of the time, this is all we need to 
+						 * insert
 						 */
-						if(does_variable_dynamic_array_contain_symtab_variable(&(df_node->live_in), record) == FALSE){
-							continue;
-						}
+						if(does_variable_dynamic_array_contain_symtab_variable(&(df_node->live_in), record) == TRUE){
+							instruction_t* phi_stmt = emit_phi_function(record);
 
-						/**
-						 * If we make it here that means that we don't already have one, so we'll add it
-						 *
-						 * This only emits the skeleton of a phi function - variables will be added
-						 * later
-						 */
-						instruction_t* phi_stmt = emit_phi_function(record);
+							//Add the phi statement into the block	
+							add_phi_statement(df_node, phi_stmt);
 
-						//Add the phi statement into the block	
-						add_phi_statement(df_node, phi_stmt);
-
-						/**
-						 * If the dominance frontier node has never been on the worklist before, we'll
-						 * need to add it to the worklist now and flag that it's been here
-						 * to avoid reprocessing
-						 */
-						if(df_node->visited == FALSE){
-							df_node->visited = TRUE;
-							dynamic_array_add(&worklist, df_node);
+							/**
+							 * If the dominance frontier node has never been on the worklist before, we'll
+							 * need to add it to the worklist now and flag that it's been here
+							 * to avoid reprocessing
+							 */
+							if(df_node->visited == FALSE){
+								df_node->visited = TRUE;
+								dynamic_array_add(&worklist, df_node);
+							}
 						}
 					}
 				}
@@ -1419,11 +1409,6 @@ static inline u_int8_t does_instruction_comply_with_mutability_constraints(instr
 	if(overwritten_generation == OVERWRITES_NOTHING){
 		return SUCCESS;
 	}
-
-	//TODO DELETE
-	printf("MADE IT HERE FOR %s\n", linked_var->var_name.string);
-
-	printf("GENERATION %d overwrites GENERATION %d", assignee->ssa_generation, overwritten_generation);
 
 	/**
 	 * Otherwise, we'll need to lookup what the state of the overwritten
