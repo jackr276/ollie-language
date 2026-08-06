@@ -28,9 +28,6 @@
 #include "../graph_analyzer/graph_analyzer.h"
 
 
-
-//TODO VARIABLE SCOPE TRACKING IS NEEDED FOR ALL OF THIS
-
 //Keep global references to the number of errors and warnings
 u_int32_t* num_errors_ref;
 u_int32_t* num_warnings_ref;
@@ -48,6 +45,8 @@ static three_addr_var_t* stack_pointer_variable = NULL;
 static three_addr_var_t* instruction_pointer_var = NULL;
 //Keep a record for the variable symtab
 static variable_symtab_t* variable_symtab;
+//What is our current lexical scope?
+static symtab_variable_sheaf_t* current_lexical_scope = NULL;
 //Store for use
 static generic_type_t* char_type = NULL;
 static generic_type_t* u8 = NULL;
@@ -218,6 +217,19 @@ static void print_cfg_message(error_message_type_t message_type, char* info, u_i
 	} else {
 		fprintf(stdout, "\n[FILE: %s] --> [LINE %d | COMPILER %s]: %s\n", file_name, line_number, type[message_type], info);
 	}
+}
+
+
+/**
+ * TODO - we NEED to place these wherever we initialize_variable_scope
+ * in the parser. Yeah it's going to suck but it's the only way
+ */
+static inline void enter_lexical_scope(){
+
+}
+
+static inline void exit_lexical_scope(){
+	
 }
 
 
@@ -931,6 +943,9 @@ static basic_block_t* basic_block_alloc_and_estimate(){
 	//By default we're normal here
 	created->block_type = BLOCK_TYPE_NORMAL;
 
+	//Store the current lexical scope
+	created->lexical_scope_contained_in = current_lexical_scope;
+
 	//What is the estimated execution cost of this block? We will
 	//rely entirely on the nesting stack to do this for us
 	created->estimated_execution_frequency = get_estimated_execution_frequency_from_nesting_stack(&nesting_stack);
@@ -961,6 +976,9 @@ static basic_block_t* labeled_block_alloc(symtab_label_record_t* label){
 
 	//We'll mark this to indicate that this is a labeled block
 	created->block_type = BLOCK_TYPE_LABEL;
+
+	//Store the current lexical scope
+	created->lexical_scope_contained_in = current_lexical_scope;
 
 	//What is the estimated execution cost of this block? Rely on the nesting stack
 	//to do this

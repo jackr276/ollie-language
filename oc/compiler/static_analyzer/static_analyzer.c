@@ -751,10 +751,19 @@ static inline void insert_phi_functions(variable_symtab_t* var_symtab){
 
 						/**
 						 * TODO DOCUMENT
+						 *
+						 * TODO MAY OR MAY NOT NEED
+						 *
+						 * Deal is we need those phi functions there semantically somehow. Yeah it's not
+						 * easy but if we want this to work, we need correctly inserted phi functions
+						 * at the join nodes where our variable is immutable. If we don't have that
+						 * then we may as well just stop here and give up on this
 						 */
 						} else if(record->is_user_defined == TRUE 
 									&& record->type_defined_as->mutability == NOT_MUTABLE
 									&& is_variable_in_scope(df_node->lexical_scope_contained_in, record->lexical_scope_id) == TRUE){
+							
+							/**
 							instruction_t* phi_stmt = emit_phi_function(record);
 
 							//Add the phi statement into the block	
@@ -763,15 +772,14 @@ static inline void insert_phi_functions(variable_symtab_t* var_symtab){
 							//Flag that this now already has a phi function
 							df_node->already_has_phi_func = TRUE;
 
-							/**
 							 * If the dominance frontier node has never been on the worklist before, we'll
 							 * need to add it to the worklist now and flag that it's been here
 							 * to avoid reprocessing
-							 */
 							if(df_node->visited == FALSE){
 								df_node->visited = TRUE;
 								dynamic_array_add(&worklist, df_node);
 							}
+							 */
 						}
 					}
 				}
