@@ -931,9 +931,6 @@ static basic_block_t* basic_block_alloc_and_estimate(){
 	//By default we're normal here
 	created->block_type = BLOCK_TYPE_NORMAL;
 
-	//What lexical scope is this block in?
-	created->lexical_scope_contained_in = variable_symtab->current;
-
 	//What is the estimated execution cost of this block? We will
 	//rely entirely on the nesting stack to do this for us
 	created->estimated_execution_frequency = get_estimated_execution_frequency_from_nesting_stack(&nesting_stack);
@@ -964,11 +961,6 @@ static basic_block_t* labeled_block_alloc(symtab_label_record_t* label){
 
 	//We'll mark this to indicate that this is a labeled block
 	created->block_type = BLOCK_TYPE_LABEL;
-
-	//What lexical scope is this block in?
-	//
-	//TODO WRONG - NEEDS TO BE FROM THE AST NODE ITSELF
-	created->lexical_scope_contained_in = variable_symtab->current;
 
 	//What is the estimated execution cost of this block? Rely on the nesting stack
 	//to do this
