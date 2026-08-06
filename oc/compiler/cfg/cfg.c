@@ -12158,6 +12158,13 @@ static inline void visit_static_declare_statement(generic_ast_node_t* node){
  */
 static void visit_declaration_statement(basic_block_t* current_block, generic_ast_node_t* node){
 	symtab_variable_record_t* variable = node->variable;
+	
+	/**
+	 * Record that this variable was *defined* in this
+	 * block. Notice how it's *defined* and NOT *initialized*,
+	 * they mean two different things
+	 */
+	variable->block_defined_in = current_block;
 
 	/**
 	 * If we have a memory region or a stack variable, we'll 
@@ -12643,6 +12650,16 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 	//Create the return package here
 	cfg_result_package_t let_results = {starting_block, starting_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
+	//Extract the variable
+	symtab_variable_record_t* variable = node->variable;
+
+	/**
+	 * Record that this variable was *defined* in this
+	 * block. Notice how it's *defined* and NOT *initialized*,
+	 * they mean two different things
+	 */
+	variable->block_defined_in = starting_block;
+
 	//The current block is the start block
 	basic_block_t* current_block = starting_block;
 
@@ -12663,13 +12680,13 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_UNION:
 			//Create a stack region for this variable and store it in the associated region
-			node->variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
+			variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
 
 			/**
 			 * Let's now emit the synthetic initialization for assignment
 			 * analysis purposes
 			 */
-			instruction_t* synethtic_initialization = emit_synthetic_memory_initialization(emit_var(node->variable), node->line_number);
+			instruction_t* synethtic_initialization = emit_synthetic_memory_initialization(emit_var(variable), node->line_number);
 			add_statement(current_block, synethtic_initialization);
 
 			//Emit the memory address variable
@@ -12699,15 +12716,15 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 			 */
 			if(node->variable->stack_variable == TRUE){
 				//Create a stack region for this variable and store it in the associated region
-				node->variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
+				variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
 
 				//Now emit the synthetic initialization
-				instruction_t* synethtic_initialization = emit_synthetic_memory_initialization(emit_var(node->variable), node->line_number);
+				instruction_t* synethtic_initialization = emit_synthetic_memory_initialization(emit_var(variable), node->line_number);
 				add_statement(current_block, synethtic_initialization);
 			}
 
 			//Emit it
-			assignee = emit_var(node->variable);
+			assignee = emit_var(variable);
 
 			//Let the helper rule deal with the rest here
 			return emit_simple_initialization(current_block, assignee, node->first_child);
