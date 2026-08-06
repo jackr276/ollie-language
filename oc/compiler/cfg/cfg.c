@@ -11475,6 +11475,12 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 		symtab_variable_record_t* parameter = dynamic_array_get_at(&(function_record->function_parameters), i);
 
 		/**
+		 * Store that this parameter was *defined* inside of the function entry block. Notice
+		 * how it's *defined* and NOT *initialized*, they mean two different things
+		 */
+		parameter->block_defined_in = function_entry_block;
+
+		/**
 		 * Parameter aliasing:
 		 *
 		 * To avoid any issues with precoloring interference way down the line
@@ -11498,6 +11504,12 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 			&& parameter->type_defined_as->type_class != TYPE_CLASS_ELABORATIVE){
 			//Create the aliased variable
 			symtab_variable_record_t* alias = create_parameter_alias_variable(current_function, parameter, variable_symtab, increment_and_get_temp_id());
+
+			/**
+			 * Store that this alias was *defined* inside of the function entry block. Notice
+			 * how it's *defined* and NOT *initialized*, they mean two different things
+			 */
+			alias->block_defined_in = function_entry_block;
 
 			//Very important that we emit this first for the below reason
 			three_addr_var_t* parameter_var = emit_var(parameter);
@@ -11595,6 +11607,9 @@ static void visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_n
 		/**
 		 * If we are able to merge these two blocks, then we will. If we are not, then we will
 		 * emit a jump from the function's start to the compound statement start
+		 *
+		 *
+		 * TODO VERY UNCERTAIN ABOUT THIS
 		 */
 		if(can_blocks_be_merged(function_starting_block, compound_statement_results.starting_block) == TRUE){
 			//Merge the two since we can

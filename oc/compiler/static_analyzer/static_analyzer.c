@@ -563,6 +563,18 @@ static instruction_t* emit_phi_function(symtab_variable_record_t* variable){
 	return stmt;
 }
 
+static inline u_int8_t does_block_dominate_target(basic_block_t* block, basic_block_t* target){
+	for(int32_t i = 0; i < block->dominator_children.current_index; i++){
+		basic_block_t* dominator_child = dynamic_array_get_at(&(block->dominator_children), i);
+
+		if(dominator_child == target){
+			return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+
 
 /**
  */
@@ -656,7 +668,6 @@ static inline void pruned_phi_function_insertion(symtab_variable_record_t* varia
 }
 
 
-
 /**
  */
 static inline void non_pruned_phi_function_insertion(symtab_variable_record_t* variable, dynamic_array_t* worklist){
@@ -668,6 +679,13 @@ static inline void non_pruned_phi_function_insertion(symtab_variable_record_t* v
 	 */
 	symtab_function_record_t* variable_function = variable->function_declared_in;
 	dynamic_array_t* function_blocks = &(variable_function->function_blocks);
+
+	/**
+	 * Extract what block this variable was defined in. Note that defined in
+	 * does not mean where it was initialized. It means the literal block 
+	 * where the variable itself was declared by the user
+	 */
+	basic_block_t* block_defined_in = variable->block_defined_in;
 
 	/**
 	 * Reset the "has_phi_function" tag on all of our blocks
@@ -714,6 +732,10 @@ static inline void non_pruned_phi_function_insertion(symtab_variable_record_t* v
 			 * If this already has a phi function for this run we skip it
 			 */
 			if(df_node->already_has_phi_func == TRUE){
+				continue;
+			}
+
+			if(does_block_dominate_target(block_defined_in, df_node) == FALSE){
 				continue;
 			}
 
