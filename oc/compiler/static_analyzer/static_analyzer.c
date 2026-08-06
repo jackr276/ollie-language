@@ -714,6 +714,9 @@ static inline void insert_phi_functions(variable_symtab_t* var_symtab){
 							//Add the phi statement into the block	
 							add_phi_statement(df_node, phi_stmt);
 
+							//Flag that this now already has a phi function
+							df_node->already_has_phi_func = TRUE;
+
 							/**
 							 * If the dominance frontier node has never been on the worklist before, we'll
 							 * need to add it to the worklist now and flag that it's been here
@@ -724,6 +727,27 @@ static inline void insert_phi_functions(variable_symtab_t* var_symtab){
 								dynamic_array_add(&worklist, df_node);
 							}
 
+						/**
+						 * TODO DOCUMENT
+						 */
+						} else if(record->is_user_defined == TRUE && record->type_defined_as->mutability == NOT_MUTABLE){
+							instruction_t* phi_stmt = emit_phi_function(record);
+
+							//Add the phi statement into the block	
+							add_phi_statement(df_node, phi_stmt);
+
+							//Flag that this now already has a phi function
+							df_node->already_has_phi_func = TRUE;
+
+							/**
+							 * If the dominance frontier node has never been on the worklist before, we'll
+							 * need to add it to the worklist now and flag that it's been here
+							 * to avoid reprocessing
+							 */
+							if(df_node->visited == FALSE){
+								df_node->visited = TRUE;
+								dynamic_array_add(&worklist, df_node);
+							}
 						}
 					}
 				}
