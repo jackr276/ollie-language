@@ -46,7 +46,7 @@ static three_addr_var_t* stack_pointer_variable = NULL;
 static three_addr_var_t* instruction_pointer_var = NULL;
 //Keep a record for the variable symtab
 static variable_symtab_t* variable_symtab;
-//What is our current lexical scope?
+//Store our current lexical scope
 static symtab_variable_sheaf_t* current_lexical_scope = NULL;
 //Store for use
 static generic_type_t* char_type = NULL;
@@ -10856,8 +10856,16 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
  * We make use of the "direct successor" nodes as a direct path through the compound statement, if such a path exists
  */
 static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_node){
+	/**
+	 * Some compound statements do not require new scopes. We will extract this
+	 * flag here to help us with our scope tracking
+	 */
+	u_int8_t did_compound_statement_need_new_scope = root_node->optional_storage.did_compound_stmt_need_new_scope;
+
 	//Enter into the compound statement's lexical scope
-	enter_lexical_scope(root_node);
+	if(did_compound_statement_need_new_scope == TRUE){
+		enter_lexical_scope(root_node);
+	}
 
 	//Everything to begin with is completely null'd out
 	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
@@ -10908,8 +10916,12 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				results.starting_block = starting_block;
 				results.final_block = current_block;
 
+				//Update the scope if appropriate
+				if(did_compound_statement_need_new_scope == TRUE){
+					exit_lexical_scope();
+				}
+
 				//We're done here - get out
-				exit_lexical_scope();
 				return results;
 
 			case AST_NODE_TYPE_RET_STMT:
@@ -10936,8 +10948,12 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				results.starting_block = starting_block;
 				results.final_block = current_block;
 
+				//Update the scope if appropriate
+				if(did_compound_statement_need_new_scope == TRUE){
+					exit_lexical_scope();
+				}
+
 				//We're completely done here
-				exit_lexical_scope();
 				return results;
 		
 			case AST_NODE_TYPE_IF_STMT:
@@ -11049,11 +11065,15 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					//Package and return
 					results = (cfg_result_package_t){starting_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
+					//Update the scope if appropriate
+					if(did_compound_statement_need_new_scope == TRUE){
+						exit_lexical_scope();
+					}
+
 					/**
 					 * We're done here, so return the starting block. There is no 
 					 * point in going on
 					 */
-					exit_lexical_scope();
 					return results;
 
 				//Otherwise, we have a conditional continue here
@@ -11104,8 +11124,12 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					//Package and return
 					results = (cfg_result_package_t){starting_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
+					//Update the scope if appropriate
+					if(did_compound_statement_need_new_scope == TRUE){
+						exit_lexical_scope();
+					}
+
 					//For a regular break statement, this is it, so we just get out
-					exit_lexical_scope();
 					return results;
 
 				//Otherwise, we have a conditional break, which will generate a conditional jump instruction
@@ -11351,8 +11375,12 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 	results.starting_block = starting_block;
 	results.final_block = current_block;
 
-	//Give back results
-	exit_lexical_scope();
+	//Update the scope if appropriate
+	if(did_compound_statement_need_new_scope == TRUE){
+		exit_lexical_scope();
+	}
+
+	//Give back the results
 	return results;
 }
 

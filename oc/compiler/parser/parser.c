@@ -158,6 +158,13 @@ static inline symtab_type_record_t* parse_pointer_type(symtab_type_record_t* cur
  * symtab
  */
 static inline generic_ast_node_t* ast_node_alloc_wrapper(ast_node_type_t node_type, side_type_t side){
+	//Can't be too careful
+	if(variable_symtab->current == NULL){
+		fprintf(stderr, "Fatal internal compiler error: attempt to initialize a node outside of any known scope\n");
+		exit(1);
+	}
+
+
 	return ast_node_alloc(node_type, side, variable_symtab->current);
 }
 
@@ -11373,6 +11380,9 @@ static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream
 	//Now if we make it here, we're safe to create the actual node
 	generic_ast_node_t* compound_stmt_node = ast_node_alloc_wrapper(AST_NODE_TYPE_COMPOUND_STMT, SIDE_TYPE_LEFT);
 
+	//Store this for later scope tracking
+	compound_stmt_node->optional_storage.did_compound_stmt_need_new_scope = new_variable_scope_required;
+
 	//Now we can keep going until we see a closing curly
 	//We'll seed the search
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -14101,13 +14111,6 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 */
 	INITIALIZE_NULL_DYNAMIC_ARRAY(current_function_jump_statements);
 
-	/**
-	 * We also have the AST function node, this will be intialized immediately
-	 * It also requires a symtab record of the function, but this will be assigned
-	 * later once we have it
-	 */
-	generic_ast_node_t* function_node = ast_node_alloc_wrapper(AST_NODE_TYPE_FUNC_DEF, SIDE_TYPE_LEFT);
-
 	//Now we must see a valid identifier as the name
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
@@ -14210,18 +14213,25 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		}
 	}
 
-	//Associate this with the function node
-	function_node->func_record = function_record;
-
-	//Extract the signature for ease of use
-	function_type_t* function_signature = function_record->signature->internal_types.function_type;
-
 	/**
 	 * We'll need to initialize a new variable scope here. This variable scope is designed
 	 * so that we include the function parameters in it. We need to remember to close
 	 * this once we leave
 	 */
 	initialize_variable_scope(variable_symtab, function_record);
+
+	/**
+	 * We also have the AST function node, this will be intialized immediately
+	 * It also requires a symtab record of the function, but this will be assigned
+	 * later once we have it
+	 */
+	generic_ast_node_t* function_node = ast_node_alloc_wrapper(AST_NODE_TYPE_FUNC_DEF, SIDE_TYPE_LEFT);
+
+	//Associate this with the function node
+	function_node->func_record = function_record;
+
+	//Extract the signature for ease of use
+	function_type_t* function_signature = function_record->signature->internal_types.function_type;
 
 	/**
 	 * IMPORTANT: we need to hang onto this overarching function scope
