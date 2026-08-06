@@ -565,6 +565,107 @@ static instruction_t* emit_phi_function(symtab_variable_record_t* variable){
 
 
 /**
+ */
+static inline void pruned_phi_function_insertion(symtab_variable_record_t* variable, dynamic_array_t* worklist){
+	/**
+	 * To improve efficiency, we will grab the list of all blocks for the given
+	 * function that this variable was contained within and only scan those. Remember
+	 * that things like global variables are ineligible for SSA to begin with
+	 * due to how they are stored, so this is fine for us
+	 */
+	symtab_function_record_t* variable_function = variable->function_declared_in;
+	dynamic_array_t* function_blocks = &(variable_function->function_blocks);
+
+	/**
+	 * Reset the "has_phi_function" tag on all of our blocks
+	 * for the next go around
+	 */
+	reset_status_for_phi_function_insertion(function_blocks);
+
+	/**
+	 * Queue up every block that we have on record as assigning this
+	 * given variable
+	 */
+	for(int32_t k = 0; k < function_blocks->current_index; k++){
+		basic_block_t* block = dynamic_array_get_at(function_blocks, k);
+
+		/**
+		 * Enqueue to our worklist if the block assigns this variable. Also flag
+		 * the visited tag on the block so that we don't end up reprocessing this
+		 */
+		if(does_block_assign_variable(block, variable) == TRUE){
+			dynamic_array_add(worklist, block);
+
+			//Visited acts as our "Ever on worklist" flag
+			block->visited = TRUE;
+		}
+	}
+
+	//So long as the worklist is not empty
+	while(dynamic_array_is_empty(worklist) == FALSE){
+		//O(1) removal delete from back
+		basic_block_t* node = dynamic_array_delete_from_back(worklist);
+
+		/**
+		 * For each block that assigns our variable, run through
+		 * every block in that block's dominance frontier(just barely
+		 * not dominated by that block). If the block in the dominance
+		 * frontier either uses the variable, *or* the variable is
+		 * live_out at that block, we'll need to insert a phi function
+		 * join node
+		 */
+		for(int32_t l = 0; l < node->dominance_frontier.current_index; l++){
+			basic_block_t* df_node = dynamic_array_get_at(&(node->dominance_frontier), l);
+
+			/**
+			 * If this already has a phi function for this run we skip it
+			 */
+			if(df_node->already_has_phi_func == TRUE){
+				continue;
+			}
+
+			/**
+			 * If a variable is LIVE_IN at the given block, we need
+			 * to know the value at the start of the block. Our
+			 * normal phi function insertion case revolves around the variable
+			 * being LIVE_IN at the block and most of the time, this is all we need to 
+			 * insert
+			 */
+			if(does_variable_dynamic_array_contain_symtab_variable(&(df_node->live_in), variable) == FALSE){
+				continue;
+			}
+
+			//Add the phi statement into the block	
+			instruction_t* phi_stmt = emit_phi_function(variable);
+			add_phi_statement(df_node, phi_stmt);
+
+			//Flag that this now already has a phi function
+			df_node->already_has_phi_func = TRUE;
+
+			/**
+			 * If the dominance frontier node has never been on the worklist before, we'll
+			 * need to add it to the worklist now and flag that it's been here
+			 * to avoid reprocessing
+			 */
+			if(df_node->visited == FALSE){
+				df_node->visited = TRUE;
+				dynamic_array_add(worklist, df_node);
+			}
+		}
+	}
+}
+
+
+
+/**
+ */
+static inline void non_pruned_phi_function_insertion(symtab_variable_record_t* variable, dynamic_array_t* worklist){
+
+}
+
+
+
+/**
  * if(x0 == 0){
  * 	x1 = 2;
  * } else {
@@ -641,122 +742,7 @@ static inline void insert_phi_functions(variable_symtab_t* var_symtab){
 					continue;
 				}
 
-				/**
-				 * To improve efficiency, we will grab the list of all blocks for the given
-				 * function that this variable was contained within and only scan those. Remember
-				 * that things like global variables are ineligible for SSA to begin with
-				 * due to how they are stored, so this is fine for us
-				 */
-				symtab_function_record_t* variable_function = record->function_declared_in;
-				dynamic_array_t* function_blocks = &(variable_function->function_blocks);
-
-				/**
-				 * Reset the "has_phi_function" tag on all of our blocks
-				 * for the next go around
-				 */
-				reset_status_for_phi_function_insertion(function_blocks);
-
-				/**
-				 * Queue up every block that we have on record as assigning this
-				 * given variable
-				 */
-				for(int32_t k = 0; k < function_blocks->current_index; k++){
-					basic_block_t* block = dynamic_array_get_at(function_blocks, k);
-
-					/**
-					 * Enqueue to our worklist if the block assigns this variable. Also flag
-					 * the visited tag on the block so that we don't end up reprocessing this
-					 */
-					if(does_block_assign_variable(block, record) == TRUE){
-						dynamic_array_add(&worklist, block);
-
-						//Visited acts as our "Ever on worklist" flag
-						block->visited = TRUE;
-					}
-				}
-
-				//So long as the worklist is not empty
-				while(dynamic_array_is_empty(&worklist) == FALSE){
-					//O(1) removal delete from back
-					basic_block_t* node = dynamic_array_delete_from_back(&worklist);
-
-					/**
-					 * For each block that assigns our variable, run through
-					 * every block in that block's dominance frontier(just barely
-					 * not dominated by that block). If the block in the dominance
-					 * frontier either uses the variable, *or* the variable is
-					 * live_out at that block, we'll need to insert a phi function
-					 * join node
-					 */
-					for(int32_t l = 0; l < node->dominance_frontier.current_index; l++){
-						basic_block_t* df_node = dynamic_array_get_at(&(node->dominance_frontier), l);
-
-						/**
-						 * If this already has a phi function for this run we skip it
-						 */
-						if(df_node->already_has_phi_func == TRUE){
-							continue;
-						}
-
-						/**
-						 * If a variable is LIVE_IN at the given block, we need
-						 * to know the value at the start of the block. Our
-						 * normal phi function insertion case revolves around the variable
-						 * being LIVE_IN at the block and most of the time, this is all we need to 
-						 * insert
-						 */
-						if(does_variable_dynamic_array_contain_symtab_variable(&(df_node->live_in), record) == TRUE){
-							instruction_t* phi_stmt = emit_phi_function(record);
-
-							//Add the phi statement into the block	
-							add_phi_statement(df_node, phi_stmt);
-
-							//Flag that this now already has a phi function
-							df_node->already_has_phi_func = TRUE;
-
-							/**
-							 * If the dominance frontier node has never been on the worklist before, we'll
-							 * need to add it to the worklist now and flag that it's been here
-							 * to avoid reprocessing
-							 */
-							if(df_node->visited == FALSE){
-								df_node->visited = TRUE;
-								dynamic_array_add(&worklist, df_node);
-							}
-
-						/**
-						 * TODO DOCUMENT
-						 *
-						 * TODO MAY OR MAY NOT NEED
-						 *
-						 * Deal is we need those phi functions there semantically somehow. Yeah it's not
-						 * easy but if we want this to work, we need correctly inserted phi functions
-						 * at the join nodes where our variable is immutable. If we don't have that
-						 * then we may as well just stop here and give up on this
-						 */
-						} else if(record->is_user_defined == TRUE 
-									&& record->type_defined_as->mutability == NOT_MUTABLE){
-							
-							/**
-							instruction_t* phi_stmt = emit_phi_function(record);
-
-							//Add the phi statement into the block	
-							add_phi_statement(df_node, phi_stmt);
-
-							//Flag that this now already has a phi function
-							df_node->already_has_phi_func = TRUE;
-
-							 * If the dominance frontier node has never been on the worklist before, we'll
-							 * need to add it to the worklist now and flag that it's been here
-							 * to avoid reprocessing
-							if(df_node->visited == FALSE){
-								df_node->visited = TRUE;
-								dynamic_array_add(&worklist, df_node);
-							}
-							 */
-						}
-					}
-				}
+				pruned_phi_function_insertion(record, &worklist);
 
 				//Wipe the worklist now
 				clear_dynamic_array(&worklist);
