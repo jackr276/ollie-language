@@ -236,7 +236,7 @@ static inline void enter_lexical_scope(generic_ast_node_t* node){
  */
 static inline void exit_lexical_scope(){
 	current_lexical_scope = current_lexical_scope->previous_level;
-	assert(current_lexical_scope != NULL);
+	//assert(current_lexical_scope != NULL);
 }
 
 

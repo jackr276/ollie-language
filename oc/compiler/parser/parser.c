@@ -11211,6 +11211,12 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 	//Push this nesting level onto the stack
 	push_nesting_level(&nesting_stack, NESTING_LOOP_STATEMENT);
 
+	/**
+	 * Important note: The parenthesized area of a for statement represents a new lexical scope
+	 * for variables. As such, we will initialize a new variable scope when we get here
+	 */
+	initialize_variable_scope(variable_symtab, current_function);
+
 	//We've already seen the for keyword, so let's create the root level node
 	generic_ast_node_t* for_stmt_node = ast_node_alloc_wrapper(AST_NODE_TYPE_FOR_STMT, SIDE_TYPE_LEFT);
 	for_stmt_node->line_number = parser_line_num; 
@@ -11225,12 +11231,6 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 
 	//Push to the stack for later matching
 	push_token(&grouping_stack, lookahead);
-
-	/**
-	 * Important note: The parenthesized area of a for statement represents a new lexical scope
-	 * for variables. As such, we will initialize a new variable scope when we get here
-	 */
-	initialize_variable_scope(variable_symtab, current_function);
 	
 	//Let's see if we've got anything. Invoke the expression statement rule here
 	generic_ast_node_t* statement_chain = expression_statement(token_stream);
