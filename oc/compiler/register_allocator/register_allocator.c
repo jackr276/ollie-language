@@ -929,6 +929,10 @@ static inline void handle_live_ranges_for_instruction(dynamic_array_t* SSE_live_
 		case NEGW:
 		case NEGL:
 		case NEGQ:
+		case NOTB:
+		case NOTW:
+		case NOTL:
+		case NOTQ:
 			//For non-temp vars, this should take care of itself
 			if(instruction->operands.x86.destination_register->variable_type == VARIABLE_TYPE_NON_TEMP){
 				assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->operands.x86.destination_register);

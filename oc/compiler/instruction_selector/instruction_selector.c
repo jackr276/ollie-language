@@ -14325,6 +14325,7 @@ static inline void handle_not_instruction(instruction_t* instruction){
 	}
 
 	//Now we'll just translate the assignee to be the destination(and source in this case) register
+	instruction->operands.x86.source_register1 = instruction->operands.oir.operand1;
 	instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
 }
 

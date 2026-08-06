@@ -3367,27 +3367,6 @@ static inline three_addr_var_t* emit_sse_dec_code(basic_block_t* basic_block, th
 
 
 /**
- * Emit a bitwise not statement 
- */
-static inline three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, three_addr_var_t* var, u_int32_t line_number){
-	//Emit a copy so that we are distinct
-	three_addr_var_t* assignee = emit_var_copy(var);
-
-	//First we'll create it here
-	instruction_t* not_stmt = emit_not_instruction(assignee, line_number);
-
-	//We will still save op1 here, for tracking reasons
-	not_stmt->operands.oir.operand1 = var;
-
-	//Add this into the block
-	add_statement(basic_block, not_stmt);
-
-	//Give back the assignee
-	return not_stmt->operands.oir.assignee;
-}
-
-
-/**
  * Emit a binary operation statement with a constant built in
  */
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_const_t* constant, u_int32_t line_number){
@@ -4679,24 +4658,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 			//Give back the final unary package
 			return unary_package;
-	
-		//Bitwise not operator
-		case B_NOT:
-			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			unary_package = emit_unary_expression(current_block, unary_expression_child);
-
-			//Update the current block
-			current_block = unary_package.final_block;
-
-			//The assignee comes from the package
-			assignee = unpack_result_package(&unary_package, current_block, unary_expression_parent->line_number);
-
-			//The new assignee will come from this helper
-			unary_package.type = CFG_RESULT_TYPE_VAR;
-			unary_package.result_value.result_var = emit_bitwise_not_expr_code(current_block, assignee, unary_expression_parent->line_number);
-
-			//Give the package back
-			return unary_package;
 
 		//Logical not operator
 		case EXCLAMATION:
@@ -4731,13 +4692,49 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 			//Give the package back
 			return unary_package;
+	
+		/**
+		 * Bitwise not operation
+		 * x = ~a
+		 *
+		 * Becomes:
+		 * t <- a
+		 * negl t
+		 * x <- t
+		 */
+		case B_NOT:
+			//The very first thing that we'll do is emit the assignee that comes after the unary expression
+			unary_package = emit_unary_expression(current_block, unary_expression_child);
+
+			//Update the current block
+			current_block = unary_package.final_block;
+
+			//The assignee comes from the package
+			assignee = unpack_result_package(&unary_package, current_block, unary_expression_parent->line_number);
+
+			//Assign over to a temp var that we will be notting
+			assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee, unary_expression_parent->line_number);
+			add_statement(current_block, assignment);
+
+			//Now emit annd add the bitwise not on the temp var
+			instruction_t* bitwise_not = emit_not_instruction(assignment->operands.oir.assignee, unary_expression_parent->line_number);
+			add_statement(current_block, bitwise_not);
+
+			//The new assignee will come from this helper
+			unary_package.type = CFG_RESULT_TYPE_VAR;
+			unary_package.result_value.result_var = bitwise_not->operands.oir.assignee;
+
+			//Give the package back
+			return unary_package;
 
 		/**
 		 * Arithmetic negation operator
-		 * x = -a;
-		 * t <- a;
-		 * negl t;
-		 * x <- t;
+		 * x = -a
+		 *
+		 * Becomes:
+		 * t <- a
+		 * negl t
+		 * x <- t
 		 *
 		 * Uses strategy of: negl rdx
 		 */
@@ -4753,14 +4750,10 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 			//We'll need to assign to a temp here, these are only ever on the RHS
 			assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee, unary_expression_child->line_number);
-
-			//Add this into the block
 			add_statement(current_block, assignment);
 
 			//Now emit the instruction itself
 			instruction_t* negation_instruction = emit_neg_instruction(assignment->operands.oir.assignee, unary_expression_child->line_number);
-
-			//Now get the whole statement into the block
 			add_statement(current_block, negation_instruction);
 
 			//Rewrite the assignee to be this now
