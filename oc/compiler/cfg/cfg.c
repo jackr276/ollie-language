@@ -27,6 +27,10 @@
 #include "../utils/parameter_result_array/parameter_result_array.h"
 #include "../graph_analyzer/graph_analyzer.h"
 
+
+
+//TODO VARIABLE SCOPE TRACKING IS NEEDED FOR ALL OF THIS
+
 //Keep global references to the number of errors and warnings
 u_int32_t* num_errors_ref;
 u_int32_t* num_warnings_ref;
@@ -962,6 +966,8 @@ static basic_block_t* labeled_block_alloc(symtab_label_record_t* label){
 	created->block_type = BLOCK_TYPE_LABEL;
 
 	//What lexical scope is this block in?
+	//
+	//TODO WRONG - NEEDS TO BE FROM THE AST NODE ITSELF
 	created->lexical_scope_contained_in = variable_symtab->current;
 
 	//What is the estimated execution cost of this block? Rely on the nesting stack

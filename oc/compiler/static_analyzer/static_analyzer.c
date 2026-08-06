@@ -534,9 +534,6 @@ static inline void emit_synthetic_initializations(variable_symtab_t* symtab){
 				//Emit the LHS new name directly here
 				lhs_new_name_direct(cursor);
 
-				//Emit the three address representation
-				three_addr_var_t* starting_variable = emit_var(cursor);
-
 				//Bump up to the next record(remember they can be chained)
 				cursor = cursor->next;
 			}
