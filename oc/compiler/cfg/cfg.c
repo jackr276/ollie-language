@@ -221,15 +221,19 @@ static void print_cfg_message(error_message_type_t message_type, char* info, u_i
 
 
 /**
- * TODO - we NEED to place these wherever we initialize_variable_scope
- * in the parser. Yeah it's going to suck but it's the only way
+ * Enter into the lexical scope provided on the node
  */
-static inline void enter_lexical_scope(){
-
+static inline void enter_lexical_scope(generic_ast_node_t* node){
+	current_lexical_scope = node->lexical_scope;
 }
 
+
+/**
+ * Work our way back up the lexical scope chain by going up
+ * one level. This effectively similuates leaving a {} block
+ */
 static inline void exit_lexical_scope(){
-	
+	current_lexical_scope = current_lexical_scope->previous_level;
 }
 
 
@@ -10279,6 +10283,9 @@ static cfg_result_package_t visit_exhaustive_ollie_switch_statement(generic_ast_
  * will be put in the exact orientation that the user wants
  */
 static inline cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node){
+	//Enter into the switch's lexical scope
+	enter_lexical_scope(root_node);
+
 	/**
 	 * First case - is this even switch eligible? If it isn't,
 	 * then we need to convert this into an if-else-if statement
@@ -10300,6 +10307,9 @@ static inline cfg_result_package_t visit_switch_statement(generic_ast_node_t* ro
 	} else {
 		return visit_exhaustive_ollie_switch_statement(root_node);
 	}
+
+	//Exit out of the switch's lexical scope
+	exit_lexical_scope();
 }
 
 
