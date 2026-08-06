@@ -13,6 +13,7 @@
 */
 
 #include "cfg.h"
+#include <assert.h>
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -225,6 +226,7 @@ static void print_cfg_message(error_message_type_t message_type, char* info, u_i
  */
 static inline void enter_lexical_scope(generic_ast_node_t* node){
 	current_lexical_scope = node->lexical_scope;
+	assert(current_lexical_scope != NULL);
 }
 
 
@@ -234,6 +236,7 @@ static inline void enter_lexical_scope(generic_ast_node_t* node){
  */
 static inline void exit_lexical_scope(){
 	current_lexical_scope = current_lexical_scope->previous_level;
+	assert(current_lexical_scope != NULL);
 }
 
 
@@ -8250,6 +8253,9 @@ static inline u_int8_t can_blocks_be_merged(basic_block_t* a, basic_block_t* b){
  * 	 					logical or statement?
  */
 static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
+	//Enter into the for statement's lexical scope
+	enter_lexical_scope(root_node);
+
 	//Initialize the return package
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
@@ -8376,6 +8382,9 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//Now that we're done, we'll need to remove these both from the stack
 	pop(&continue_stack);
 	pop(&break_stack);
+
+	//Exit out of the for statement's lexical scope
+	exit_lexical_scope();
 
 	//Give back the result package here
 	return result_package;
@@ -9727,6 +9736,9 @@ static cfg_result_package_t convert_c_style_switch_to_if_statement(generic_ast_n
  * This rule is specifically for the c-style switch statements
  */
 static inline cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* root_node){
+	//Enter into the switch's lexical scope
+	enter_lexical_scope(root_node);
+
 	/**
 	 * If a given switch is flagged as ineligible, we'll need to 
 	 * use a special helper to convert it to an if statement
@@ -9746,6 +9758,9 @@ static inline cfg_result_package_t visit_c_style_switch_statement(generic_ast_no
 	} else {
 		return visit_exhaustive_c_style_switch_statement(root_node);
 	}
+
+	//Exit out of the switch's leixcal scope
+	exit_lexical_scope();
 }
 
 
@@ -10841,6 +10856,9 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
  * We make use of the "direct successor" nodes as a direct path through the compound statement, if such a path exists
  */
 static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_node){
+	//Enter into the compound statement's lexical scope
+	enter_lexical_scope(root_node);
+
 	//Everything to begin with is completely null'd out
 	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
 	//A generic results package that we can use in any of our processing
@@ -10891,6 +10909,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				results.final_block = current_block;
 
 				//We're done here - get out
+				exit_lexical_scope();
 				return results;
 
 			case AST_NODE_TYPE_RET_STMT:
@@ -10918,6 +10937,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				results.final_block = current_block;
 
 				//We're completely done here
+				exit_lexical_scope();
 				return results;
 		
 			case AST_NODE_TYPE_IF_STMT:
@@ -11033,6 +11053,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					 * We're done here, so return the starting block. There is no 
 					 * point in going on
 					 */
+					exit_lexical_scope();
 					return results;
 
 				//Otherwise, we have a conditional continue here
@@ -11084,6 +11105,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					results = (cfg_result_package_t){starting_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 					//For a regular break statement, this is it, so we just get out
+					exit_lexical_scope();
 					return results;
 
 				//Otherwise, we have a conditional break, which will generate a conditional jump instruction
@@ -11330,6 +11352,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 	results.final_block = current_block;
 
 	//Give back results
+	exit_lexical_scope();
 	return results;
 }
 
@@ -11575,6 +11598,9 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
  * will always have it's own separate block
  */
 static void visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_node){
+	//Enter into this function's lexical scope
+	enter_lexical_scope(function_node);
+
 	//Push the nesting level that we're in
 	push_nesting_level(&nesting_stack, NESTING_FUNCTION);
 
@@ -11702,6 +11728,9 @@ static void visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_n
 
 	//Deallocate the current function's user defined jumps as well
 	dynamic_array_dealloc(&current_function_user_defined_jump_statements);
+	
+	//Leave this function's lexical scope
+	exit_lexical_scope();
 }
 
 
@@ -12785,6 +12814,9 @@ static void visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 	//A prog node can decay into a function definition, a let statement or otherwise
 	generic_ast_node_t* ast_cursor = prog_node->first_child;
 
+	//Enter into the prog node's lexical scope
+	enter_lexical_scope(prog_node);
+
 	//So long as the AST cursor is not null
 	while(ast_cursor != NULL){
 		//Switch based on the class of cursor that we have here
@@ -12824,6 +12856,9 @@ static void visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 		//We now advance to the next sibling
 		ast_cursor = ast_cursor->next_sibling;
 	}
+
+	//Now that we're done, leave the scope
+	exit_lexical_scope();
 }
 
 

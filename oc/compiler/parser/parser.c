@@ -11,6 +11,7 @@
  *
  * NEXT IN LINE: Control Flow Graph, OIR constructor, SSA form implementation
 */
+#include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <limits.h>
@@ -11361,9 +11362,6 @@ static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream
 	//Push onto the grouping stack so we can check matching
 	push_token(&grouping_stack, lookahead);
 
-	//Now if we make it here, we're safe to create the actual node
-	generic_ast_node_t* compound_stmt_node = ast_node_alloc_wrapper(AST_NODE_TYPE_COMPOUND_STMT, SIDE_TYPE_LEFT);
-
 	//No matter what we need a new type scope 
 	initialize_type_scope(type_symtab);
 
@@ -11371,6 +11369,9 @@ static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream
 	if(new_variable_scope_required == TRUE){
 		initialize_variable_scope(variable_symtab, current_function);
 	}
+
+	//Now if we make it here, we're safe to create the actual node
+	generic_ast_node_t* compound_stmt_node = ast_node_alloc_wrapper(AST_NODE_TYPE_COMPOUND_STMT, SIDE_TYPE_LEFT);
 
 	//Now we can keep going until we see a closing curly
 	//We'll seed the search
