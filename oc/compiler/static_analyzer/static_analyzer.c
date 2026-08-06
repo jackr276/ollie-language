@@ -498,6 +498,7 @@ static instruction_t* emit_phi_function(symtab_variable_record_t* variable){
  * }
  * 
  * x3 <- phi(x1, x2)
+ * t4 <- x3 + 1 <------ use that requires x3 be known at the start of the block
  *
  * This means that x3 is x1 if it comes from the first branch and x2 if it comes
  * from the second branch
@@ -513,28 +514,23 @@ static instruction_t* emit_phi_function(symtab_variable_record_t* variable){
  * 		While worklist is not empty:
  * 			Remove block B from the worklist
  *
- * 			if B was ever on the worklist: 	<------ avoid revisiting blocks
- * 				continue
- *
  * 			for each dominance frontier block D of block B:
  * 				if D already has a phi function for V: <-------- avoid double insertions
  * 					continue
  *
- * 				if a variable is not LIVE_OUT AND it's not USED at D:
+ * 				if a variable is not LIVE_IN 
  * 					continue
  *
  * 				Add the phi function
- * 				Add D to the worklist
- * 				Flag D as having been on the worklist
+ * 				Flag D as having a phi function
  *
+ * 				if(D has never been on the worklist):
+ * 					Add D to the worklist
+ * 					Flag D as having been on the worklist
  *
  * We will use the "visited" tag to keep track of whether or not we've already
- * evaluated this block or not. We will need to reset this for every variable
- *
- * The phi function inserter runs over the entire CFG(so all functions, files, everything).
- * We may change this in the future, but doing this over the entire CFG allows us to keep
- * all of our work down to very few allocations(one initial worklist allocation + some
- * resizes) which is a big win if we have 100s or 1000s of functions to do
+ * evaluated had this block on the worklist or not. We will need to reset this
+ * for the function blocks for each variable that we compute
  */
 static inline void insert_phi_functions(variable_symtab_t* var_symtab){
 	/**
@@ -599,6 +595,8 @@ static inline void insert_phi_functions(variable_symtab_t* var_symtab){
 					 */
 					if(does_block_assign_variable(block, record) == TRUE){
 						dynamic_array_add(&worklist, block);
+
+						//Visited acts as our "Ever on worklist" flag
 						block->visited = TRUE;
 					}
 				}
@@ -625,21 +623,14 @@ static inline void insert_phi_functions(variable_symtab_t* var_symtab){
 						}
 
 						/**
-						 * ----------------------------------------
-						 *  CRITERION:
-						 *  If a variable is NOT Live-out at the join node,
-						 *  that means that it is not LIVE-IN at any of
-						 *  the successors of that block. If a variable
-						 *  is not active(used) at the join node either,
-						 *  that means that the phi function is useless.
-						 *
-						 * So, we will skip inserting a phi function
-						 * if the variable is not used and not LIVE_OUT
-						 * at N
-						 * ----------------------------------------
+						 * If the variable is not LIVE_IN at the given
+						 * block,  we do not need to know the value
+						 * at the start of the block. We only need to insert
+						 * phi functions where a variable is LIVE_IN because
+						 * a variable being LIVE_IN means that we need
+						 * it's definition at the start of the block
 						 */
-						if(does_variable_dynamic_array_contain_symtab_variable(&(df_node->used_before_definition), record) == FALSE 
-							&& does_variable_dynamic_array_contain_symtab_variable(&(df_node->live_out), record) == FALSE){
+						if(does_variable_dynamic_array_contain_symtab_variable(&(df_node->live_in), record) == FALSE){
 							continue;
 						}
 
@@ -658,10 +649,12 @@ static inline void insert_phi_functions(variable_symtab_t* var_symtab){
 						df_node->already_has_phi_func = TRUE;
 
 						/**
-						 * If we haven't visited this block yet then we'll add it to our worklist
-						 * for the next go around
+						 * If the dominance frontier node has never been on the worklist before, we'll
+						 * need to add it to the worklist now and flag that it's been here
+						 * to avoid reprocessing
 						 */
 						if(df_node->visited == FALSE){
+							df_node->visited = TRUE;
 							dynamic_array_add(&worklist, df_node);
 						}
 					}
