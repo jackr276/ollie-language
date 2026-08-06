@@ -8317,7 +8317,7 @@ u_int8_t does_subtree_define_variable(generic_ast_node_t* root, symtab_variable_
  * that they want to use. It is assumed that the user already knows the proper type and takes appropriate action based
  * on that
 */
-generic_ast_node_t* ast_node_alloc(ast_node_type_t ast_node_type, side_type_t side){
+generic_ast_node_t* ast_node_alloc(ast_node_type_t ast_node_type, side_type_t side, symtab_variable_sheaf_t* lexical_scope){
 	//We always have a generic AST node
 	generic_ast_node_t* node = calloc(1, sizeof(generic_ast_node_t));
 
@@ -8326,6 +8326,9 @@ generic_ast_node_t* ast_node_alloc(ast_node_type_t ast_node_type, side_type_t si
 
 	//Assign the class
 	node->ast_node_type = ast_node_type;
+
+	//Store the lexical scope that we're in
+	node->lexical_scope = lexical_scope;
 
 	//Assign the side of the node
 	node->side = side;

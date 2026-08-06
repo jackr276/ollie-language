@@ -158,6 +158,8 @@ struct generic_ast_node_t{
 	//The string value could hold an identifier, string constant, or it could hold
 	//an assembly inline statement. It all depends based on context
 	dynamic_string_t string_value;
+	//What scope is this ast node inside of?
+	symtab_variable_sheaf_t* lexical_scope;
 	//What line number is this from
 	u_int32_t line_number;
 	//Store a binary operator(if one exists)
@@ -191,7 +193,7 @@ void initialize_ast_system();
 /**
  * Global node allocation function
  */
-generic_ast_node_t* ast_node_alloc(ast_node_type_t ast_node_type, side_type_t side);
+generic_ast_node_t* ast_node_alloc(ast_node_type_t ast_node_type, side_type_t side, symtab_variable_sheaf_t* lexical_scope);
 
 /**
  * Perform a deep copy on a subtree

@@ -1483,8 +1483,7 @@ static inline u_int8_t does_instruction_comply_with_mutability_constraints(instr
 			print_variable_name_to_buffer(error_info, linked_var);
 			print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
 			(*error_count)++;
-			//return FAILURE;
-			return SUCCESS;
+			return FAILURE;
 
 		/**
 		 * This is a definite mutation - definite violation
@@ -1494,8 +1493,7 @@ static inline u_int8_t does_instruction_comply_with_mutability_constraints(instr
 			print_variable_name_to_buffer(error_info, linked_var);
 			print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
 			(*error_count)++;
-			//return FAILURE;
-			return SUCCESS;
+			return FAILURE;
 
 		//Should never happen but just in case
 		default:
