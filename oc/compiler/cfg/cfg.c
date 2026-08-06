@@ -11611,26 +11611,26 @@ static void visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_n
 		 *
 		 * TODO VERY UNCERTAIN ABOUT THIS
 		 */
-		if(can_blocks_be_merged(function_starting_block, compound_statement_results.starting_block) == TRUE){
+		//if(can_blocks_be_merged(function_starting_block, compound_statement_results.starting_block) == TRUE){
 			//Merge the two since we can
- 			compound_statement_exit_block = merge_blocks(function_starting_block, compound_statement_results.starting_block);
+ 		//	compound_statement_exit_block = merge_blocks(function_starting_block, compound_statement_results.starting_block);
 
 			/**
 			 * Due to the way that the merging works, we need to make sure that the reassignment
 			 * is valid. If it's just one big block, then the prior assignment above is actually
 			 * fine
 			 */
-			if(compound_statement_results.starting_block != compound_statement_results.final_block){
-				compound_statement_exit_block = compound_statement_results.final_block;
-			}
+		//	if(compound_statement_results.starting_block != compound_statement_results.final_block){
+		//		compound_statement_exit_block = compound_statement_results.final_block;
+		//	}
 
-		} else {
+		//} else {
 			//Could not merge, just jump into this block
 			emit_jump(function_starting_block, compound_statement_results.starting_block);
 
 			//We can just straight assign here
 			compound_statement_exit_block = compound_statement_results.final_block;
-		}
+		//}
 
 		//If these two are not equal, we'll add a successor as the exit block
 		if(compound_statement_exit_block != function_exit_block){

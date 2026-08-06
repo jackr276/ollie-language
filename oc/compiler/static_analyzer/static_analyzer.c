@@ -563,13 +563,17 @@ static instruction_t* emit_phi_function(symtab_variable_record_t* variable){
 	return stmt;
 }
 
-static inline u_int8_t does_block_dominate_target(basic_block_t* block, basic_block_t* target){
-	for(int32_t i = 0; i < block->dominator_children.current_index; i++){
-		basic_block_t* dominator_child = dynamic_array_get_at(&(block->dominator_children), i);
 
-		if(dominator_child == target){
+//TODO DOC ME
+static inline u_int8_t does_block_dominate_target(basic_block_t* block, basic_block_t* target){
+	basic_block_t* current = target;
+
+	while(current != NULL){
+		if(current == block){
 			return TRUE;
 		}
+
+		current = current->dominator_info.immediate_dominator;
 	}
 
 	return FALSE;
@@ -736,6 +740,7 @@ static inline void non_pruned_phi_function_insertion(symtab_variable_record_t* v
 			}
 
 			if(does_block_dominate_target(block_defined_in, df_node) == FALSE){
+				printf("VARIABLE %s: DEFINED IN BLOCK .L%d does NOT dominate DF node .L%d\n", variable->var_name.string, block_defined_in->block_id, df_node->block_id);
 				continue;
 			}
 
